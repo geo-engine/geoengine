@@ -1,10 +1,10 @@
 import {Component, OnInit, ChangeDetectionStrategy, inject} from '@angular/core';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatCard} from '@angular/material/card';
+import {MatIcon} from '@angular/material/icon';
+import {MatList, MatListItem, MatListItemIcon, MatListItemMeta, MatDivider} from '@angular/material/list';
 import {NotificationService, Notification} from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatCard} from '@angular/material/card';
-import {MatList, MatListItem, MatListItemIcon, MatListItemMeta, MatDivider} from '@angular/material/list';
-import {MatIcon} from '@angular/material/icon';
-import {MatIconButton, MatButton} from '@angular/material/button';
 
 @Component({
     selector: 'geoengine-notifications',

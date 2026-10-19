@@ -1,14 +1,14 @@
-import {ChangeDetectionStrategy, Component, OnInit, inject, signal} from '@angular/core';
-import {CoreConfig} from '../../config.service';
-import {User} from '../user.model';
-import {geoengineValidators, NotificationService, UserService, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
-import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatFormField, MatInput} from '@angular/material/input';
-import {MatButton} from '@angular/material/button';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {HttpErrorResponse} from '@angular/common/http';
+import {ChangeDetectionStrategy, Component, OnInit, inject, signal} from '@angular/core';
 import {required, form, FormField} from '@angular/forms/signals';
+import {MatButton} from '@angular/material/button';
+import {MatFormField, MatInput} from '@angular/material/input';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {firstValueFrom} from 'rxjs';
+import {geoengineValidators, NotificationService, UserService, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
+import {CoreConfig} from '../../config.service';
+import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
+import {User} from '../user.model';
 
 enum FormStatus {
     LoggedOut,

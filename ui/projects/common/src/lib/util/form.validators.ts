@@ -1,8 +1,8 @@
+import {AbstractControl, AsyncValidatorFn, FormArray, FormGroup, ValidationErrors, ValidatorFn, Validators} from '@angular/forms';
+import {PathKind, SchemaPath, SchemaPathRules, validate} from '@angular/forms/signals';
+import {Moment} from 'moment';
 import {Observable, Observer} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {AbstractControl, AsyncValidatorFn, FormArray, FormGroup, ValidationErrors, ValidatorFn, Validators} from '@angular/forms';
-import {Moment} from 'moment';
-import {PathKind, SchemaPath, SchemaPathRules, validate} from '@angular/forms/signals';
 
 const isFiniteNumber = (value: unknown): value is number => value !== null && value !== undefined && isFinite(Number(value));
 
@@ -245,7 +245,6 @@ const nullOrUndefined = (value: unknown): boolean => value === undefined || valu
  * @param compareValueProvider: function deriving the min value
  * @param options: {checkEqual: true} enables checking for equal, {checkAbove: true} for above and {checkBelow: true] for below.
  */
-// eslint-disable-next-line prefer-arrow/prefer-arrow-functions
 export function valueRelation(
     controlValueProvider: (control: AbstractControl) => number,
     compareValueProvider: (control: AbstractControl) => number,

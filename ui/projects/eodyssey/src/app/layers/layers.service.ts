@@ -1,9 +1,9 @@
 import {computed, effect, inject, linkedSignal, resource, ResourceRef, Service, signal, untracked} from '@angular/core';
-import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
-import {MapService} from '@geoengine/core';
-import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
-import {toLonLat} from 'ol/proj';
 import {unByKey} from 'ol/Observable';
+import {toLonLat} from 'ol/proj';
+import {CollectionItem, TimeStepFromJSON} from '@geoengine/api-client';
+import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeStepDictTotimeStepDuration} from '@geoengine/common';
+import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
 import {DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';

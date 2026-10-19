@@ -1,3 +1,4 @@
+import {NgClass} from '@angular/common';
 import {ChangeDetectionStrategy, Component, forwardRef, HostListener, OnDestroy, OnInit, inject, input} from '@angular/core';
 import {
     ControlValueAccessor,
@@ -8,10 +9,10 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatFormField, MatLabel, MatHint, MatInput} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {combineLatest, first, from, map, mergeMap, Observable, of, Subject, takeUntil} from 'rxjs';
-import {BBoxDict, RasterResultDescriptorDict, UUID} from '../../../backend/backend.model';
-import {ProjectService} from '../../../project/project.service';
-import {SpatialReferenceService} from '../../../spatial-references/spatial-reference.service';
 import {
     Colorizer,
     ColorMapSelectorComponent,
@@ -29,10 +30,9 @@ import {
     VegaChartData,
     FxFlexDirective,
 } from '@geoengine/common';
-import {MatFormField, MatLabel, MatHint, MatInput} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {NgClass} from '@angular/common';
+import {BBoxDict, RasterResultDescriptorDict, UUID} from '../../../backend/backend.model';
+import {ProjectService} from '../../../project/project.service';
+import {SpatialReferenceService} from '../../../spatial-references/spatial-reference.service';
 
 const COLORMAPS = ALL_COLORMAPS;
 

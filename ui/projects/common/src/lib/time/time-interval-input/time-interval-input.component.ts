@@ -1,6 +1,4 @@
 import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, forwardRef, inject, input} from '@angular/core';
-import {Subscription} from 'rxjs';
-import moment, {Moment} from 'moment';
 import {
     AbstractControl,
     ControlValueAccessor,
@@ -16,10 +14,12 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {Time, TimeStepDuration} from '../time.model';
-import {TimeInputComponent} from '../time-input/time-input.component';
-import {FxLayoutDirective, FxLayoutAlignDirective} from '../../util/directives/flexbox-legacy.directive';
 import {MatSlideToggle} from '@angular/material/slide-toggle';
+import moment, {Moment} from 'moment';
+import {Subscription} from 'rxjs';
+import {FxLayoutDirective, FxLayoutAlignDirective} from '../../util/directives/flexbox-legacy.directive';
+import {TimeInputComponent} from '../time-input/time-input.component';
+import {Time, TimeStepDuration} from '../time.model';
 
 const startBeforeEndValidator = (control: AbstractControl): ValidationErrors | null => {
     if (!(control instanceof UntypedFormGroup)) {

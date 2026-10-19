@@ -1,17 +1,20 @@
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit, inject} from '@angular/core';
-import {
-    DatasetService,
-    MapService,
-    ProjectService,
-    VectorResultDescriptorDict,
-    WGS_84,
-    SpatialReferenceService,
-    NamedDataDict,
-    CoreModule,
-} from '@geoengine/core';
-import {BehaviorSubject, combineLatest, combineLatestWith, first, from, mergeMap, Observable, of, Subscription, tap} from 'rxjs';
-import {DataSelectionService} from '../data-selection.service';
+import {FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatExpansionPanel, MatExpansionPanelHeader} from '@angular/material/expansion';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatDivider} from '@angular/material/list';
+import {MatProgressBar} from '@angular/material/progress-bar';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatSelect} from '@angular/material/select';
+import {MatSlideToggle} from '@angular/material/slide-toggle';
+import {MatSlider, MatSliderThumb} from '@angular/material/slider';
 import moment from 'moment';
+import {MatSelectSearchComponent} from 'ngx-mat-select-search';
+import {BehaviorSubject, combineLatest, combineLatestWith, first, from, mergeMap, Observable, of, Subscription, tap} from 'rxjs';
+import {PlotOperator, RasterOperator, TypedRasterOperator, TypedVectorOperator, VectorOperator} from '@geoengine/api-client';
 import {
     ClusteredPointSymbology,
     Dataset,
@@ -30,21 +33,18 @@ import {
     FxLayoutAlignDirective,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatSelectSearchComponent} from 'ngx-mat-select-search';
-import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {MatProgressBar} from '@angular/material/progress-bar';
-import {MatExpansionPanel, MatExpansionPanelHeader} from '@angular/material/expansion';
-import {MatDivider} from '@angular/material/list';
-import {MatSlideToggle} from '@angular/material/slide-toggle';
-import {MatSlider, MatSliderThumb} from '@angular/material/slider';
-import {MatButton} from '@angular/material/button';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {
+    DatasetService,
+    MapService,
+    ProjectService,
+    VectorResultDescriptorDict,
+    WGS_84,
+    SpatialReferenceService,
+    NamedDataDict,
+    CoreModule,
+} from '@geoengine/core';
 import {AttributionsComponent} from '../attributions/attributions.component';
-import {AsyncPipe} from '@angular/common';
-import {PlotOperator, RasterOperator, TypedRasterOperator, TypedVectorOperator, VectorOperator} from '@geoengine/api-client';
+import {DataSelectionService} from '../data-selection.service';
 
 interface EnvironmentLayer {
     name: string;

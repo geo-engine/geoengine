@@ -1,16 +1,16 @@
 import {DataSource} from '@angular/cdk/collections';
 import {CdkFixedSizeVirtualScroll, CdkVirtualForOf, CdkVirtualScrollViewport} from '@angular/cdk/scrolling';
-import {AfterContentInit, Component, inject, viewChild, output, input, effect, signal, ChangeDetectionStrategy} from '@angular/core';
-import {LayerProviderListing} from '@geoengine/api-client';
-import {BehaviorSubject, concatMap, firstValueFrom, Observable, range, scan, startWith, Subject} from 'rxjs';
-import {LayersService} from '@geoengine/common';
-import {MatDialog} from '@angular/material/dialog';
-import {AddProviderComponent} from '../add-provider/add-provider.component';
 import {AsyncPipe} from '@angular/common';
+import {AfterContentInit, Component, inject, viewChild, output, input, effect, signal, ChangeDetectionStrategy} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatDialog} from '@angular/material/dialog';
+import {MatIcon} from '@angular/material/icon';
 import {MatListItem, MatNavList} from '@angular/material/list';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {MatIcon} from '@angular/material/icon';
-import {MatButton} from '@angular/material/button';
+import {BehaviorSubject, concatMap, firstValueFrom, Observable, range, scan, startWith, Subject} from 'rxjs';
+import {LayerProviderListing} from '@geoengine/api-client';
+import {LayersService} from '@geoengine/common';
+import {AddProviderComponent} from '../add-provider/add-provider.component';
 
 @Component({
     selector: 'geoengine-manager-provider-list',

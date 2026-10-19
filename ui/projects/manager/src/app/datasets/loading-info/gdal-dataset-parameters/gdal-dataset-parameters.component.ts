@@ -1,12 +1,12 @@
 import {ChangeDetectionStrategy, Component, input} from '@angular/core';
 import {FormArray, FormControl, FormGroup, NG_VALUE_ACCESSOR, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {DataPath, FileNotFoundHandling, GdalDatasetParameters, RasterPropertiesEntryType} from '@geoengine/api-client';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
 import {MatIconButton, MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {MatSlideToggle} from '@angular/material/slide-toggle';
+import {DataPath, FileNotFoundHandling, GdalDatasetParameters, RasterPropertiesEntryType} from '@geoengine/api-client';
 
 export interface GdalMetadataMapping {
     sourceKey: RasterPropertiesKey;

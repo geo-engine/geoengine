@@ -1,9 +1,9 @@
 import {NgModule} from '@angular/core';
 import {RouterModule, Routes} from '@angular/router';
-import {NavigationComponent} from './navigation/navigation.component';
-import {LogInGuard} from './util/guards/log-in.guard';
 import {BackendAvailableGuard, CanRegisterGuard, LoginComponent, RegisterComponent} from '@geoengine/common';
+import {NavigationComponent} from './navigation/navigation.component';
 import {OidcPopupComponent} from './oidc-popup/oidc-popup.component';
+import {LogInGuard} from './util/guards/log-in.guard';
 
 export const routes: (subdir: string) => Routes = (subdir) => [
     {path: '', redirectTo: 'navigation', pathMatch: 'full'},

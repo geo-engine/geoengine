@@ -1,6 +1,4 @@
-import {BehaviorSubject, concat, Observable, of, ReplaySubject} from 'rxjs';
-import {map, mergeMap, tap} from 'rxjs/operators';
-
+import {AsyncPipe} from '@angular/common';
 import {
     AfterViewInit,
     ChangeDetectionStrategy,
@@ -13,10 +11,26 @@ import {
     inject,
     viewChild,
 } from '@angular/core';
+import {MatButton} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
 import {MatIconRegistry, MatIcon} from '@angular/material/icon';
 import {MatDrawerToggleResult, MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
 import {MatTabGroup} from '@angular/material/tabs';
+import {MatToolbar} from '@angular/material/toolbar';
+import {MatTooltip} from '@angular/material/tooltip';
+import {DomSanitizer} from '@angular/platform-browser';
+import {ActivatedRoute, ParamMap} from '@angular/router';
+import {BehaviorSubject, concat, Observable, of, ReplaySubject} from 'rxjs';
+import {map, mergeMap, tap} from 'rxjs/operators';
+import {
+    Layer,
+    LayersService,
+    NotificationService,
+    RandomColorService,
+    UserService,
+    AsyncNumberSanitizer,
+    AsyncValueDefault,
+} from '@geoengine/common';
 import {
     AddDataButton,
     AddDataComponent,
@@ -44,25 +58,10 @@ import {
     MapResolutionExtentOverlayComponent,
     TabsComponent,
 } from '@geoengine/core';
-import {DomSanitizer} from '@angular/platform-browser';
-import {ActivatedRoute, ParamMap} from '@angular/router';
 import {AppConfig} from './app-config.service';
+import {GfBioCollectionDialogComponent as GfBioCollectionDialogComponent} from './gfbio-collection/gfbio-collection-dialog.component';
 import {HelpComponent} from './help/help.component';
 import {SplashDialogComponent} from './splash-dialog/splash-dialog.component';
-import {GfBioCollectionDialogComponent as GfBioCollectionDialogComponent} from './gfbio-collection/gfbio-collection-dialog.component';
-import {
-    Layer,
-    LayersService,
-    NotificationService,
-    RandomColorService,
-    UserService,
-    AsyncNumberSanitizer,
-    AsyncValueDefault,
-} from '@geoengine/common';
-import {MatToolbar} from '@angular/material/toolbar';
-import {MatButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
-import {AsyncPipe} from '@angular/common';
 
 @Component({
     selector: 'geoengine-root',

@@ -1,8 +1,8 @@
 import {ChangeDetectorRef, Component, OnDestroy, OnInit, inject, ChangeDetectionStrategy} from '@angular/core';
-import {Quota, UserService} from '@geoengine/common';
-import {Subscription, timer} from 'rxjs';
 import {MatIconButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
+import {Subscription, timer} from 'rxjs';
+import {Quota, UserService} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-quota-info',

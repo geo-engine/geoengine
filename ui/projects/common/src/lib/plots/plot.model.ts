@@ -1,7 +1,7 @@
+import {VisualizationSpec} from 'vega-embed';
+import {Plot as PlotDict} from '@geoengine/api-client';
 import {UUID} from '../datasets/dataset.model';
 import {ToDict} from '../time/time.model';
-import {Plot as PlotDict} from '@geoengine/api-client';
-import {VisualizationSpec} from 'vega-embed';
 
 export type PlotType = 'JSON' | 'PNG';
 

@@ -11,6 +11,11 @@ import {
     linkedSignal,
     effect,
 } from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatIconButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {Measurement} from '@geoengine/api-client';
+import {ClassificationMeasurement} from '../../layers/measurement';
 import {WHITE} from '../color';
 import {
     ColorAttributeInput,
@@ -18,11 +23,6 @@ import {
     ColorAttributeInputComponent,
 } from '../color-attribute-input/color-attribute-input.component';
 import {ColorBreakpoint} from '../color-breakpoint.model';
-import {Measurement} from '@geoengine/api-client';
-import {ClassificationMeasurement} from '../../layers/measurement';
-import {FormsModule} from '@angular/forms';
-import {MatIconButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 
 @Component({
     selector: 'geoengine-color-table-editor',

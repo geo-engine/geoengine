@@ -1,5 +1,4 @@
-import {Observable, BehaviorSubject, of, concat} from 'rxjs';
-import {map, mergeMap, tap} from 'rxjs/operators';
+import {AsyncPipe} from '@angular/common';
 import {
     AfterViewInit,
     ChangeDetectionStrategy,
@@ -12,8 +11,16 @@ import {
     inject,
     viewChild,
 } from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
 import {MatDrawerToggleResult, MatSidenav, MatSidenavContainer} from '@angular/material/sidenav';
 import {MatTabGroup} from '@angular/material/tabs';
+import {MatToolbar} from '@angular/material/toolbar';
+import {MatTooltip} from '@angular/material/tooltip';
+import {Observable, BehaviorSubject, of, concat} from 'rxjs';
+import {ReplaySubject} from 'rxjs';
+import {map, mergeMap, tap} from 'rxjs/operators';
+import {Layer, LayersService, UserService, AsyncNumberSanitizer, AsyncValueDefault} from '@geoengine/common';
 import {
     AddDataComponent,
     AddDataButton,
@@ -34,13 +41,6 @@ import {
     CoreModule,
 } from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
-import {ReplaySubject} from 'rxjs';
-import {Layer, LayersService, UserService, AsyncNumberSanitizer, AsyncValueDefault} from '@geoengine/common';
-import {MatToolbar} from '@angular/material/toolbar';
-import {MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatTooltip} from '@angular/material/tooltip';
-import {AsyncPipe} from '@angular/common';
 
 @Component({
     selector: 'geoengine-main',

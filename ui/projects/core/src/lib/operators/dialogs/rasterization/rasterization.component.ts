@@ -1,9 +1,14 @@
+import {NgTemplateOutlet, AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, OnDestroy, inject, viewChild} from '@angular/core';
 import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-import {mergeMap} from 'rxjs/operators';
-import {UUID} from '../../../backend/backend.model';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
+import {MatTabGroup, MatTab} from '@angular/material/tabs';
 import {BehaviorSubject, combineLatest, from, Observable, of, Subscription} from 'rxjs';
+import {mergeMap} from 'rxjs/operators';
+import {ProcessingGraph, RasterizationParameters} from '@geoengine/api-client';
 import {
     Layer,
     NotificationService,
@@ -14,17 +19,12 @@ import {
     AsyncValueDefault,
     errorMessage,
 } from '@geoengine/common';
+import {UUID} from '../../../backend/backend.model';
 import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
-import {ProcessingGraph, RasterizationParameters} from '@geoengine/api-client';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatTabGroup, MatTab} from '@angular/material/tabs';
-import {NgTemplateOutlet, AsyncPipe} from '@angular/common';
-import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
 
 interface RasterizationForm {

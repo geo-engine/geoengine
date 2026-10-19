@@ -1,6 +1,6 @@
 import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
-import {DashboardComponent} from './dashboard/dashboard.component';
 import {CoreConfig, CoreModule} from '@geoengine/core';
+import {DashboardComponent} from './dashboard/dashboard.component';
 import {DataSelectionService} from './data-selection.service';
 
 @Component({

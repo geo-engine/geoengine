@@ -1,5 +1,5 @@
-import OlMap from 'ol/Map';
 import {DoubleClickZoom} from 'ol/interaction';
+import OlMap from 'ol/Map';
 
 export function setMapDoubleClickZoom(map: OlMap, enabled: boolean): void {
     map.getInteractions()

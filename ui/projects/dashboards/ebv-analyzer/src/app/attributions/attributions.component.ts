@@ -1,8 +1,8 @@
 import {BreakpointObserver, Breakpoints} from '@angular/cdk/layout';
-import {Component, ChangeDetectionStrategy, HostBinding, inject} from '@angular/core';
-import {Observable, map} from 'rxjs';
-import {MatGridList, MatGridTile} from '@angular/material/grid-list';
 import {AsyncPipe} from '@angular/common';
+import {Component, ChangeDetectionStrategy, HostBinding, inject} from '@angular/core';
+import {MatGridList, MatGridTile} from '@angular/material/grid-list';
+import {Observable, map} from 'rxjs';
 import {AsyncStringSanitizer} from '@geoengine/common';
 
 @Component({
@@ -28,7 +28,7 @@ export class AttributionsComponent {
         );
         this.rowHeight = this.colSpan.pipe(
             map((span) => {
-                return span == 1 ? '1:1' : '1:2';
+                return span === 1 ? '1:1' : '1:2';
             }),
         );
     }

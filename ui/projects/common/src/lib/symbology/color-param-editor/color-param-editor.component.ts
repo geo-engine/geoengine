@@ -1,17 +1,17 @@
 import {Component, ChangeDetectionStrategy, forwardRef, HostListener, input} from '@angular/core';
 import {ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule} from '@angular/forms';
-import {BLACK, Color} from '../../colors/color';
-import {ColorAttributeInput, ColorAttributeInputComponent} from '../../colors/color-attribute-input/color-attribute-input.component';
-import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
-import {Colorizer, LinearGradient, PaletteColorizer} from '../../colors/colorizer.model';
-import {ColorParam, DerivedColor, StaticColor} from '../symbology.model';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
-import {ColorBreakpointInputComponent} from '../../colors/color-breakpoint-input/color-breakpoint-input.component';
-import {FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
 import {MatIconButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {BLACK, Color} from '../../colors/color';
+import {ColorAttributeInput, ColorAttributeInputComponent} from '../../colors/color-attribute-input/color-attribute-input.component';
+import {ColorBreakpointInputComponent} from '../../colors/color-breakpoint-input/color-breakpoint-input.component';
+import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
+import {Colorizer, LinearGradient, PaletteColorizer} from '../../colors/colorizer.model';
+import {FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
+import {ColorParam, DerivedColor, StaticColor} from '../symbology.model';
 
 /**
  * An edit component for `ColorParam`

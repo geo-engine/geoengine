@@ -1,13 +1,13 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject, input} from '@angular/core';
-import {mergeMap, BehaviorSubject, combineLatest, of, forkJoin, Observable, map, from} from 'rxjs';
-import {LayerCollectionListingDict, ProjectService, ProviderLayerCollectionIdDict} from '@geoengine/core';
-import {DataRange, DataSelectionService} from '../data-selection.service';
-import {LayersService, RasterLayer, RasterSymbology, Time, CommonModule, AsyncValueDefault} from '@geoengine/common';
-import {CollectionItem, LayerCollection, LayerListing, ProviderLayerId} from '@geoengine/api-client';
+import {MatButton} from '@angular/material/button';
 import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
-import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {mergeMap, BehaviorSubject, combineLatest, of, forkJoin, Observable, map, from} from 'rxjs';
+import {CollectionItem, LayerCollection, LayerListing, ProviderLayerId} from '@geoengine/api-client';
+import {LayersService, RasterLayer, RasterSymbology, Time, CommonModule, AsyncValueDefault} from '@geoengine/common';
+import {LayerCollectionListingDict, ProjectService, ProviderLayerCollectionIdDict} from '@geoengine/core';
+import {DataRange, DataSelectionService} from '../data-selection.service';
 
 @Component({
     selector: 'geoengine-accordion-entry',

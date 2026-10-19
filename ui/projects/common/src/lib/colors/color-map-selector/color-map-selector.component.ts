@@ -1,3 +1,4 @@
+import {NgClass, KeyValuePipe} from '@angular/common';
 import {
     ChangeDetectionStrategy,
     ChangeDetectorRef,
@@ -11,19 +12,18 @@ import {
     output,
 } from '@angular/core';
 import {FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {Subscription} from 'rxjs';
-import {Color, RgbaTuple} from '../color';
-import {ColorBreakpoint} from '../color-breakpoint.model';
-import {geoengineValidators} from '../../util/form.validators';
-import {ALL_COLORMAPS} from '../colormaps/colormaps';
-import {FxLayoutDirective, FxLayoutAlignDirective, FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {NgClass, KeyValuePipe} from '@angular/common';
-import {MatSelect} from '@angular/material/select';
 import {MatOption} from '@angular/material/autocomplete';
 import {MatCheckbox} from '@angular/material/checkbox';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {MatSlider, MatSliderThumb} from '@angular/material/slider';
+import {Subscription} from 'rxjs';
+import {FxLayoutDirective, FxLayoutAlignDirective, FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
+import {geoengineValidators} from '../../util/form.validators';
 import {ColorBreakpointsCssGradientPipe, RgbaArrayCssGradientPipe} from '../../util/pipes/color-gradients.pipe';
+import {Color, RgbaTuple} from '../color';
+import {ColorBreakpoint} from '../color-breakpoint.model';
+import {ALL_COLORMAPS} from '../colormaps/colormaps';
 
 interface ColorMapSelectorForm {
     bounds: FormGroup<{min: FormControl<number>; max: FormControl<number>}>;

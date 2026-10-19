@@ -1,6 +1,6 @@
 import {Injectable, inject} from '@angular/core';
-import {UploadFileLayersResponse, UploadFilesResponse, UploadsApi} from '@geoengine/api-client';
 import {ReplaySubject, firstValueFrom} from 'rxjs';
+import {UploadFileLayersResponse, UploadFilesResponse, UploadsApi} from '@geoengine/api-client';
 import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
 
 @Injectable({

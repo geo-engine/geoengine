@@ -1,9 +1,9 @@
 import {Injectable, inject} from '@angular/core';
 import moment from 'moment';
 import {from, mergeMap, Observable} from 'rxjs';
+import {Dataset, RandomColorService, RasterLayer, RasterSymbology, Time, UserService} from '@geoengine/common';
 import {DatasetService, BackendService, ProjectService} from '@geoengine/core';
 import {DataSelectionService} from './data-selection.service';
-import {Dataset, RandomColorService, RasterLayer, RasterSymbology, Time, UserService} from '@geoengine/common';
 
 @Injectable()
 export class AppDatasetService extends DatasetService {

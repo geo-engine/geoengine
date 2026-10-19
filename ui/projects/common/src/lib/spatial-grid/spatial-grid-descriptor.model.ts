@@ -1,7 +1,7 @@
 import {SpatialGridDescriptor as SpatialGridDescriptorDict, SpatialGridDescriptorState} from '@geoengine/api-client';
-import {ToDict} from '../time/time.model';
-import {BoundingBox2D} from '../spatial-bounds/bounding-box';
 import {SpatialGridDefinition} from './spatial-grid-definition.model';
+import {BoundingBox2D} from '../spatial-bounds/bounding-box';
+import {ToDict} from '../time/time.model';
 
 export class SpatialGridDescriptor implements ToDict<SpatialGridDescriptorDict> {
     readonly spatialGrid: SpatialGridDefinition;
@@ -17,7 +17,7 @@ export class SpatialGridDescriptor implements ToDict<SpatialGridDescriptorDict> 
     }
 
     toDict(): SpatialGridDescriptorDict {
-        if (this.descriptor == 'source') {
+        if (this.descriptor === 'source') {
             return {
                 spatialGrid: this.spatialGrid.toDict(),
                 descriptor: SpatialGridDescriptorState.Source,

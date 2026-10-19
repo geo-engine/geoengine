@@ -1,4 +1,5 @@
 import {CdkPortalOutlet, ComponentPortal} from '@angular/cdk/portal';
+import {AsyncPipe} from '@angular/common';
 import {
     Component,
     ChangeDetectionStrategy,
@@ -12,18 +13,17 @@ import {
     input,
     viewChild,
 } from '@angular/core';
-import {Observable, Subscription} from 'rxjs';
-import {map} from 'rxjs/operators';
-import {CoreConfig} from '../config.service';
-import {LayoutService} from '../layout.service';
-import {clamp} from '../util/math';
-import {TabContent, TabsService} from './tabs.service';
 import {MatButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
 import {MatIcon} from '@angular/material/icon';
 import {MatTabNav, MatTabLink, MatTabNavPanel} from '@angular/material/tabs';
+import {MatTooltip} from '@angular/material/tooltip';
+import {Observable, Subscription} from 'rxjs';
+import {map} from 'rxjs/operators';
 import {FxFlexDirective} from '@geoengine/common';
-import {AsyncPipe} from '@angular/common';
+import {CoreConfig} from '../config.service';
+import {LayoutService} from '../layout.service';
+import {TabContent, TabsService} from './tabs.service';
+import {clamp} from '../util/math';
 
 const TAB_WIDTH_PCT_MIN = 10;
 const TAB_WIDTH_PCT_MAX = 20;

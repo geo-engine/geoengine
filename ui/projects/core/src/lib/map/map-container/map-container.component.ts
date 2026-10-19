@@ -1,6 +1,3 @@
-import {combineLatest, Observable, Subscription} from 'rxjs';
-import {first, map as rxMap, mergeMap, startWith} from 'rxjs/operators';
-
 import {
     AfterViewInit,
     ChangeDetectionStrategy,
@@ -19,51 +16,45 @@ import {
     viewChildren,
     signal,
 } from '@angular/core';
-
-import OlMap from 'ol/Map';
-import OlView from 'ol/View';
+import {MatGridList, MatGridListModule, MatGridTile} from '@angular/material/grid-list';
+import {ol as flatgeobuf} from 'flatgeobuf';
+import OlAttribution from 'ol/control/Attribution';
+import {containsCoordinate, getCenter} from 'ol/extent';
 import {FeatureLike as OlFeatureLike} from 'ol/Feature';
 import OlFeature from 'ol/Feature';
-
+import OlFormatMVT from 'ol/format/MVT';
+import {Type as OlGeometryType} from 'ol/geom/Geometry';
+import OlGeometry from 'ol/geom/Geometry';
+import OlGeomPoint from 'ol/geom/Point';
+import OlInteractionDraw, {GeometryFunction} from 'ol/interaction/Draw';
+import OlInteractionSelect from 'ol/interaction/Select';
+import {SelectEvent as OlSelectEvent} from 'ol/interaction/Select';
 import OlLayer from 'ol/layer/Layer';
 import OlLayerTile from 'ol/layer/Tile';
 import OlLayerVector from 'ol/layer/Vector';
 import OlLayerVectorTile from 'ol/layer/VectorTile';
-
+import OlMap from 'ol/Map';
 import OlSource from 'ol/source/Source';
 import OlTileWmsSource from 'ol/source/TileWMS';
 import OlSourceVector from 'ol/source/Vector';
 import OlSourceVectorTile from 'ol/source/VectorTile';
-
-import {Type as OlGeometryType} from 'ol/geom/Geometry';
-import OlGeomPoint from 'ol/geom/Point';
-import OlFormatMVT from 'ol/format/MVT';
-import {ol as flatgeobuf} from 'flatgeobuf';
-
+import OlCircleStyle from 'ol/style/Circle';
 import OlStyleFill from 'ol/style/Fill';
 import OlStyleStroke from 'ol/style/Stroke';
 import OlStyleStyle, {StyleLike as OlStyleLike} from 'ol/style/Style';
-import OlCircleStyle from 'ol/style/Circle';
-
-import OlInteractionDraw, {GeometryFunction} from 'ol/interaction/Draw';
-import OlInteractionSelect from 'ol/interaction/Select';
-import {SelectEvent as OlSelectEvent} from 'ol/interaction/Select';
-import OlGeometry from 'ol/geom/Geometry';
-import OlAttribution from 'ol/control/Attribution';
-
-import {MapLayerComponent} from '../map-layer.component';
-
-import {FeatureSelection, ProjectService} from '../../project/project.service';
-import {Extent, MapService} from '../map.service';
-import {Basemap, CoreConfig, DrawSettingsStyle, VectorTiles, Wms} from '../../config.service';
-import {MatGridList, MatGridListModule, MatGridTile} from '@angular/material/grid-list';
-import {SpatialReferenceService, WGS_84} from '../../spatial-references/spatial-reference.service';
-import {containsCoordinate, getCenter} from 'ol/extent';
+import OlView from 'ol/View';
 import {applyBackground, stylefunction} from 'ol-mapbox-style';
+import {combineLatest, Observable, Subscription} from 'rxjs';
+import {first, map as rxMap, mergeMap, startWith} from 'rxjs/operators';
 import {olExtentToTuple, SpatialReference, Symbology, VectorSymbology} from '@geoengine/common';
+import {Basemap, CoreConfig, DrawSettingsStyle, VectorTiles, Wms} from '../../config.service';
+import {FeatureSelection, ProjectService} from '../../project/project.service';
+import {SpatialReferenceService, WGS_84} from '../../spatial-references/spatial-reference.service';
+import {MapLayerComponent} from '../map-layer.component';
+import {Extent, MapService} from '../map.service';
+import {setMapsDoubleClickZoom} from './map-utils';
 import {allowedBasemapProjections, BasemapService} from '../../layers/basemap.service';
 import {AsyncSequencer} from '../../util/sequencer';
-import {setMapsDoubleClickZoom} from './map-utils';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MapLayer = MapLayerComponent<OlLayer<OlSource, any>, OlSource, Symbology>;

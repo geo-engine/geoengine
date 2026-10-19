@@ -1,9 +1,9 @@
 import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
-import {Router} from '@angular/router';
-import {FxLayoutDirective, FxLayoutAlignDirective} from '@geoengine/common';
+import {MatButton} from '@angular/material/button';
 import {MatCard, MatCardTitle, MatCardMdImage, MatCardContent, MatCardActions} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
-import {MatButton} from '@angular/material/button';
+import {Router} from '@angular/router';
+import {FxLayoutDirective, FxLayoutAlignDirective} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-not-found-page',

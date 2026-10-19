@@ -1,6 +1,6 @@
-import {describe, expect, it} from 'vitest';
 import OlGeomLineString from 'ol/geom/LineString';
 import OlGeomPolygon from 'ol/geom/Polygon';
+import {describe, expect, it} from 'vitest';
 import {formatLength, measureLengthInMeters, measureAreaInSquareMeters, formatArea} from './measure.directive';
 
 describe('formatArea', () => {

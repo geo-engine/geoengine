@@ -1,9 +1,14 @@
 import {DataSource} from '@angular/cdk/collections';
 import {CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf} from '@angular/cdk/scrolling';
+import {AsyncPipe} from '@angular/common';
 import {AfterContentInit, Component, inject, output, viewChild, ChangeDetectionStrategy} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatButton} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
-import {DatasetsService} from '@geoengine/common';
-import {DatasetListing} from '@geoengine/api-client';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
+import {MatNavList, MatListItem, MatListItemTitle, MatListItemLine} from '@angular/material/list';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {
     BehaviorSubject,
     Observable,
@@ -17,14 +22,9 @@ import {
     skip,
     startWith,
 } from 'rxjs';
+import {DatasetListing} from '@geoengine/api-client';
+import {DatasetsService} from '@geoengine/common';
 import {AddDatasetComponent} from '../add-dataset/add-dataset.component';
-import {MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatNavList, MatListItem, MatListItemTitle, MatListItemLine} from '@angular/material/list';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
-import {FormsModule} from '@angular/forms';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {AsyncPipe} from '@angular/common';
 
 @Component({
     selector: 'geoengine-manager-dataset-list',

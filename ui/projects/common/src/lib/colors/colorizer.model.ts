@@ -1,11 +1,11 @@
-import {Color, RgbaColorDict, colorToDict, rgbaColorFromDict} from './color';
-import {ColorBreakpoint} from './color-breakpoint.model';
 import {
     Colorizer as ColorizerDict,
     LinearGradient as LinearGradientDict,
     LogarithmicGradient as LogarithmicGradientDict,
     PaletteColorizer as PaletteColorizerDict,
 } from '@geoengine/api-client';
+import {Color, RgbaColorDict, colorToDict, rgbaColorFromDict} from './color';
+import {ColorBreakpoint} from './color-breakpoint.model';
 
 export type ColorizerType = 'linearGradient' | 'logarithmicGradient' | 'palette';
 

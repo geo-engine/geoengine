@@ -1,13 +1,13 @@
 import {Component, inject, input, output, viewChild, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl} from '@angular/forms';
+import {MatButton} from '@angular/material/button';
 import {MatDialog} from '@angular/material/dialog';
-import {CollectionNavigation, ConfirmationComponent, LayerCollectionListComponent, LayersService, CommonModule} from '@geoengine/common';
-import {LayerCollectionListing, LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
+import {MatIcon} from '@angular/material/icon';
 import {firstValueFrom} from 'rxjs';
+import {LayerCollectionListing, LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
+import {CollectionNavigation, ConfirmationComponent, LayerCollectionListComponent, LayersService, CommonModule} from '@geoengine/common';
 import {AddLayerItemComponent} from '../add-layer-item/add-layer-item.component';
 import {ItemId} from '../layers.component';
-import {MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 
 export interface CollectionForm {
     name: FormControl<string>;

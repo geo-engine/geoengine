@@ -1,16 +1,16 @@
-import {Component, inject, input, ChangeDetectionStrategy} from '@angular/core';
 import {BreakpointObserver, Breakpoints} from '@angular/cdk/layout';
-import {Observable} from 'rxjs';
-import {map, shareReplay} from 'rxjs/operators';
-import {Router} from '@angular/router';
-import {AppConfig} from '../app-config.service';
-import {UserService} from '@geoengine/common';
+import {AsyncPipe} from '@angular/common';
+import {Component, inject, input, ChangeDetectionStrategy} from '@angular/core';
+import {MatNavList, MatListItem} from '@angular/material/list';
 import {MatSidenavContainer, MatSidenav, MatSidenavContent} from '@angular/material/sidenav';
 import {MatToolbar} from '@angular/material/toolbar';
-import {MatNavList, MatListItem} from '@angular/material/list';
+import {Router} from '@angular/router';
+import {Observable} from 'rxjs';
+import {map, shareReplay} from 'rxjs/operators';
+import {UserService} from '@geoengine/common';
+import {AppConfig} from '../app-config.service';
 import {DatasetsComponent} from '../datasets/datasets.component';
 import {LayersComponent} from '../layers/layers.component';
-import {AsyncPipe} from '@angular/common';
 import {ProvidersComponent} from '../providers/providers.component';
 
 export enum NavigationType {

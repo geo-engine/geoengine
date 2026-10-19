@@ -1,17 +1,17 @@
-import {Component, OnInit, ChangeDetectionStrategy, AfterViewInit, inject, input, viewChild} from '@angular/core';
-import {DatasetService} from '../dataset.service';
 import {DataSource} from '@angular/cdk/collections';
-import {BehaviorSubject, EMPTY, Observable, range, Subject} from 'rxjs';
 import {CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf} from '@angular/cdk/scrolling';
-import {concatMap, filter, first, scan, tap} from 'rxjs/operators';
-import {LayoutService} from '../../layout.service';
-import {UUID} from '../../backend/backend.model';
-import {Dataset} from '@geoengine/common';
-import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatNavList} from '@angular/material/list';
-import {DatasetComponent} from '../dataset/dataset.component';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {AsyncPipe} from '@angular/common';
+import {Component, OnInit, ChangeDetectionStrategy, AfterViewInit, inject, input, viewChild} from '@angular/core';
+import {MatNavList} from '@angular/material/list';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {BehaviorSubject, EMPTY, Observable, range, Subject} from 'rxjs';
+import {concatMap, filter, first, scan, tap} from 'rxjs/operators';
+import {Dataset} from '@geoengine/common';
+import {UUID} from '../../backend/backend.model';
+import {LayoutService} from '../../layout.service';
+import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
+import {DatasetComponent} from '../dataset/dataset.component';
+import {DatasetService} from '../dataset.service';
 
 @Component({
     selector: 'geoengine-dataset-list',

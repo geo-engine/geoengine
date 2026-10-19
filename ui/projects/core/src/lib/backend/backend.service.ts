@@ -1,6 +1,14 @@
-import {Injectable, inject} from '@angular/core';
 import {HttpClient, HttpEvent, HttpHeaders, HttpParams} from '@angular/common/http';
+import {Injectable, inject} from '@angular/core';
 import {Observable, Subject} from 'rxjs';
+import {
+    ProjectLayer as ProjectLayerDict,
+    Project as ProjectDict,
+    Dataset as DatasetDict,
+    Layer as LayerDict,
+    Plot as PlotDict,
+} from '@geoengine/api-client';
+import {bboxDictToExtent, unixTimestampToIsoString} from '@geoengine/common';
 import {CoreConfig} from '../config.service';
 import {
     CreateProjectResponseDict,
@@ -29,14 +37,6 @@ import {
     RoleDescription,
     WfsParamsDict,
 } from './backend.model';
-import {
-    ProjectLayer as ProjectLayerDict,
-    Project as ProjectDict,
-    Dataset as DatasetDict,
-    Layer as LayerDict,
-    Plot as PlotDict,
-} from '@geoengine/api-client';
-import {bboxDictToExtent, unixTimestampToIsoString} from '@geoengine/common';
 
 @Injectable({
     providedIn: 'root',

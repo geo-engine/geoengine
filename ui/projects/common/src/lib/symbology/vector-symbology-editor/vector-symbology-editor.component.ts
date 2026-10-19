@@ -1,4 +1,19 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, OnChanges, SimpleChanges, OnInit, inject, input, output} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardContent} from '@angular/material/card';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
+import {MatSlideToggle} from '@angular/material/slide-toggle';
+import {ReplaySubject} from 'rxjs';
+import {FeatureDataType} from '@geoengine/api-client';
+import {BLACK, WHITE} from '../../colors/color';
+import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
+import {AsyncValueDefault} from '../../util/pipes/async-converters.pipe';
+import {ColorParamEditorComponent} from '../color-param-editor/color-param-editor.component';
+import {NumberParamEditorComponent} from '../number-param-editor/number-param-editor.component';
 import {
     ClusteredPointSymbology,
     ColorParam,
@@ -14,21 +29,6 @@ import {
     TextSymbology,
     VectorSymbology,
 } from '../symbology.model';
-import {ReplaySubject} from 'rxjs';
-import {BLACK, WHITE} from '../../colors/color';
-import {FeatureDataType} from '@geoengine/api-client';
-import {ProcessingGraphsService} from '../../processing-graphs/processing-graphs.service';
-import {MatCard, MatCardHeader, MatCardAvatar, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {MatIcon} from '@angular/material/icon';
-import {MatSlideToggle} from '@angular/material/slide-toggle';
-import {ColorParamEditorComponent} from '../color-param-editor/color-param-editor.component';
-import {FormsModule} from '@angular/forms';
-import {NumberParamEditorComponent} from '../number-param-editor/number-param-editor.component';
-import {MatFormField, MatLabel} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {AsyncPipe} from '@angular/common';
-import {AsyncValueDefault} from '../../util/pipes/async-converters.pipe';
 
 /**
  * An editor for generating raster symbologies.

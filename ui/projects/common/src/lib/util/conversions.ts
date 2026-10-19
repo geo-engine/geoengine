@@ -1,8 +1,8 @@
 import {utc} from 'moment';
 import {Feature as OlFeature} from 'ol';
+import {Extent as OlExtent} from 'ol/extent';
 import OlFormatGeoJson from 'ol/format/GeoJSON';
 import OlGeometry from 'ol/geom/Geometry';
-import {Extent as OlExtent} from 'ol/extent';
 import {Observable, ReplaySubject} from 'rxjs';
 import {BoundingBox2D as BBoxDict, ResponseError} from '@geoengine/api-client';
 import {Time} from '../time/time.model';
@@ -150,7 +150,6 @@ export function estimateTimeFormat(timeSteps: Array<Time>): string {
 /**
  * Used as filter argument for T | undefined
  */
-// eslint-disable-next-line prefer-arrow/prefer-arrow-functions
 export function isDefined<T>(arg: T | null | undefined): arg is T {
     return arg !== null && arg !== undefined;
 }

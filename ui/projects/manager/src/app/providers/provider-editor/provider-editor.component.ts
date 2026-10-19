@@ -1,4 +1,10 @@
 import {Component, inject, output, input, ChangeDetectionStrategy, Signal, computed, resource, effect, signal} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardContent, MatCardHeader, MatCardSubtitle, MatCardTitle} from '@angular/material/card';
+import {MatDialog} from '@angular/material/dialog';
+import {MatHint} from '@angular/material/form-field';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {firstValueFrom} from 'rxjs';
 import {
     LayerProviderListing,
     Permission,
@@ -7,16 +13,9 @@ import {
     WildliveDataConnectorDefinitionTypeEnum,
 } from '@geoengine/api-client';
 import {ConfirmationComponent, errorToText, LayersService, PermissionsService} from '@geoengine/common';
-import {firstValueFrom} from 'rxjs';
-import {MatDialog} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppConfig} from '../../app-config.service';
-import {ProviderInputComponent} from '../provider-input/provider-input.component';
-
-import {MatCard, MatCardContent, MatCardHeader, MatCardSubtitle, MatCardTitle} from '@angular/material/card';
-import {MatHint} from '@angular/material/form-field';
 import {PermissionsComponent} from '../../permissions/permissions.component';
-import {MatButton} from '@angular/material/button';
+import {ProviderInputComponent} from '../provider-input/provider-input.component';
 
 export enum ProviderType {
     ARUNA = 'Aruna',
@@ -74,7 +73,7 @@ export class ProviderEditorComponent {
         params: () => ({providerId: this.providerListing().id}),
         loader: async ({params}): Promise<boolean> => {
             const permissions = await this.permissionsService.getPermissions('provider', params.providerId, 0, 1);
-            return permissions.length < 1 || permissions[0].permission != Permission.Owner;
+            return permissions.length < 1 || permissions[0].permission !== Permission.Owner;
         },
     });
 

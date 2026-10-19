@@ -1,3 +1,5 @@
+import {Breakpoints, BreakpointObserver} from '@angular/cdk/layout';
+import {AsyncPipe} from '@angular/common';
 import {
     AfterContentInit,
     AfterViewInit,
@@ -12,15 +14,18 @@ import {
     viewChild,
     WritableSignal,
 } from '@angular/core';
-import {Breakpoints, BreakpointObserver} from '@angular/cdk/layout';
-import {AsyncPipe} from '@angular/common';
-import {MatGridListModule} from '@angular/material/grid-list';
-import {MatMenuModule} from '@angular/material/menu';
-import {MatIconModule} from '@angular/material/icon';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
+import {MatGridListModule} from '@angular/material/grid-list';
+import {MatIconModule} from '@angular/material/icon';
+import {MatMenuModule} from '@angular/material/menu';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {Router} from '@angular/router';
+import {utc} from 'moment';
+import proj4 from 'proj4';
 import {firstValueFrom} from 'rxjs';
-import {BackendService, BBoxDict, CoreModule, DatasetService, MapContainerComponent, ProjectService, WfsParamsDict} from '@geoengine/core';
+import {ComputationQuota, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
 import {
     extentToBboxDict,
     PolygonSymbology,
@@ -36,13 +41,8 @@ import {
     UserService,
     NotificationService,
 } from '@geoengine/common';
-import {utc} from 'moment';
+import {BackendService, BBoxDict, CoreModule, DatasetService, MapContainerComponent, ProjectService, WfsParamsDict} from '@geoengine/core';
 import {DataSelectionService} from '../data-selection.service';
-import {ComputationQuota, ProcessingGraph, RasterOperator, VectorOperator} from '@geoengine/api-client';
-import {toSignal} from '@angular/core/rxjs-interop';
-import {Router} from '@angular/router';
-import proj4 from 'proj4';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {QuotaLogComponent} from '../quota-log/quota-log.component';
 
 interface SelectedProperty {

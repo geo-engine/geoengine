@@ -1,9 +1,9 @@
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, inject, viewChild} from '@angular/core';
-import {BehaviorSubject, Subscription} from 'rxjs';
 import {MatPaginator} from '@angular/material/paginator';
 import {MatTableDataSource, MatTable, MatColumnDef, MatCellDef, MatCell, MatRowDef, MatRow} from '@angular/material/table';
+import {BehaviorSubject, Subscription} from 'rxjs';
 import {UserService} from '@geoengine/common';
-import {AsyncPipe} from '@angular/common';
 
 @Component({
     selector: 'geoengine-roles',

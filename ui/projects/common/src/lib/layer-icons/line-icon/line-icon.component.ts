@@ -1,6 +1,6 @@
 import {Component, ChangeDetectionStrategy, input} from '@angular/core';
-import {IconStyle} from '../../symbology/symbology.model';
 import {BLACK, Color} from '../../colors/color';
+import {IconStyle} from '../../symbology/symbology.model';
 
 /**
  * A simple interface to specify the style of a line icon.

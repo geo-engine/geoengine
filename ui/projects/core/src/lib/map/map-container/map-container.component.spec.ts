@@ -1,7 +1,6 @@
-import {describe, expect, it, beforeAll} from 'vitest';
-import OlMap from 'ol/Map';
 import {defaults as defaultInteractions, DoubleClickZoom} from 'ol/interaction';
-
+import OlMap from 'ol/Map';
+import {describe, expect, it, beforeAll} from 'vitest';
 import {setMapDoubleClickZoom} from './map-utils';
 
 beforeAll(() => {

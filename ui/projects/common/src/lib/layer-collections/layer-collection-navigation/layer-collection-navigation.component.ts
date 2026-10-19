@@ -1,3 +1,4 @@
+import {AsyncPipe} from '@angular/common';
 import {
     Component,
     ElementRef,
@@ -14,7 +15,16 @@ import {
     output,
     viewChild,
 } from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatAutocompleteTrigger, MatAutocomplete, MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
 import {MatInput, MatFormField, MatPrefix, MatLabel} from '@angular/material/input';
+import {MatMenuTrigger, MatMenu} from '@angular/material/menu';
+import {MatSelect} from '@angular/material/select';
+import {MatToolbar} from '@angular/material/toolbar';
+import {MatTooltip} from '@angular/material/tooltip';
+import {BehaviorSubject, Observable, debounceTime, distinctUntilChanged, switchMap} from 'rxjs';
 import {
     LayerCollectionListing,
     LayerListing,
@@ -23,21 +33,11 @@ import {
     SearchType,
     SearchTypes,
 } from '@geoengine/api-client';
-import {BehaviorSubject, Observable, debounceTime, distinctUntilChanged, switchMap} from 'rxjs';
-import {LayerCollectionItem, LayerCollectionItemOrSearch, LayerCollectionSearch} from '../layer-collection.model';
 import {CommonConfig} from '../../config.service';
-import {LayersService} from '../layers.service';
 import {UUID} from '../../datasets/dataset.model';
 import {CollectionNavigation, LayerCollectionListComponent} from '../layer-collection-list/layer-collection-list.component';
-import {MatIcon} from '@angular/material/icon';
-import {FormsModule} from '@angular/forms';
-import {MatAutocompleteTrigger, MatAutocomplete, MatOption} from '@angular/material/autocomplete';
-import {MatButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
-import {MatMenuTrigger, MatMenu} from '@angular/material/menu';
-import {MatToolbar} from '@angular/material/toolbar';
-import {MatSelect} from '@angular/material/select';
-import {AsyncPipe} from '@angular/common';
+import {LayerCollectionItem, LayerCollectionItemOrSearch, LayerCollectionSearch} from '../layer-collection.model';
+import {LayersService} from '../layers.service';
 
 @Component({
     selector: 'geoengine-layer-collection-navigation',
@@ -465,7 +465,7 @@ class BreadcrumbNavigation {
     }
 
     private emitCollectionSelection(): void {
-        if (this.activeTrail.length == 0) {
+        if (this.activeTrail.length === 0) {
             this.collectionSelection(undefined);
         } else {
             const collectionId = this.activeTrail[this.activeTrail.length - 1];

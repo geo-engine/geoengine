@@ -1,9 +1,9 @@
 import {GeoTransform as GeoTransformDict} from '@geoengine/api-client';
-import {ToDict} from '../time/time.model';
-import {Coordinate2D} from '../spatial-features/coordinate.model';
-import {GridIdx2D} from './grid-idx.model';
 import {GridBoundingBox2D} from './grid-bounding-box.model';
+import {GridIdx2D} from './grid-idx.model';
 import {BoundingBox2D} from '../spatial-bounds/bounding-box';
+import {Coordinate2D} from '../spatial-features/coordinate.model';
+import {ToDict} from '../time/time.model';
 
 export class GeoTransform implements ToDict<GeoTransformDict> {
     readonly originCoordinate: Coordinate2D;

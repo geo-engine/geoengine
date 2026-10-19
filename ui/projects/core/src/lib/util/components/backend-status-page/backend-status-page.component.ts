@@ -1,15 +1,15 @@
 import {ChangeDetectorRef, Component, inject, ChangeDetectionStrategy} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent, MatCardActions} from '@angular/material/card';
+import {MatLine} from '@angular/material/grid-list';
+import {MatIcon} from '@angular/material/icon';
+import {MatListItem} from '@angular/material/list';
 import {Router} from '@angular/router';
 import {first, skipWhile, Subscription} from 'rxjs';
+import {UserService, FxLayoutDirective, FxLayoutAlignDirective} from '@geoengine/common';
 import {BackendInfoDict} from '../../../backend/backend.model';
 import {BackendService} from '../../../backend/backend.service';
 import {BackendStatus} from '../../../users/user.model';
-import {UserService, FxLayoutDirective, FxLayoutAlignDirective} from '@geoengine/common';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent, MatCardActions} from '@angular/material/card';
-import {MatIcon} from '@angular/material/icon';
-import {MatListItem} from '@angular/material/list';
-import {MatLine} from '@angular/material/grid-list';
-import {MatButton} from '@angular/material/button';
 
 @Component({
     selector: 'geoengine-backend-status-page',

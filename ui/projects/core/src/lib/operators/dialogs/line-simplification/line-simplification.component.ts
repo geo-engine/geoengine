@@ -1,8 +1,15 @@
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, OnInit, inject} from '@angular/core';
 import {FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-import {mergeMap} from 'rxjs/operators';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatCheckbox} from '@angular/material/checkbox';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {BehaviorSubject, from} from 'rxjs';
+import {mergeMap} from 'rxjs/operators';
+import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
 import {
     Layer,
     NotificationService,
@@ -12,18 +19,11 @@ import {
     AsyncValueDefault,
     errorMessage,
 } from '@geoengine/common';
-import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatCheckbox} from '@angular/material/checkbox';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 interface LineSimplificationForm {
     name: FormControl<string>;

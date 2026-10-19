@@ -1,5 +1,4 @@
-import {map, mergeMap} from 'rxjs/operators';
-import {BehaviorSubject, combineLatest, Observable, of, Subscription} from 'rxjs';
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, OnDestroy, inject, input, viewChild} from '@angular/core';
 import {
     AbstractControl,
@@ -11,10 +10,15 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-import {UUID} from '../../../backend/backend.model';
-import {LayoutService, SidenavConfig} from '../../../layout.service';
-import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
+import {MatMenuTrigger, MatMenu, MatMenuItem} from '@angular/material/menu';
+import {MatSelect} from '@angular/material/select';
+import {BehaviorSubject, combineLatest, Observable, of, Subscription} from 'rxjs';
+import {map, mergeMap} from 'rxjs/operators';
+import {NeighborhoodAggregate, NeighborhoodKernel, ProcessingGraph, RasterOperator} from '@geoengine/api-client';
 import {
     Layer,
     RasterLayer,
@@ -29,18 +33,14 @@ import {
     errorToText,
     errorMessage,
 } from '@geoengine/common';
-import {NeighborhoodAggregate, NeighborhoodKernel, ProcessingGraph, RasterOperator} from '@geoengine/api-client';
+import {UUID} from '../../../backend/backend.model';
+import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
+import {LayoutService, SidenavConfig} from '../../../layout.service';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatMenuTrigger, MatMenu, MatMenuItem} from '@angular/material/menu';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 interface NeighborhoodAggregateForm {
     rasterLayer: FormControl<RasterLayer | undefined>;

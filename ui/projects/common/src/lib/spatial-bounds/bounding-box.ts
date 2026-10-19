@@ -1,7 +1,7 @@
 import {Extent} from 'ol/extent';
+import {BoundingBox2D as BBoxDict, SpatialPartition2D as SpatialPartitionDict} from '@geoengine/api-client';
 import {Coordinate2D} from '../spatial-features/coordinate.model';
 import {ToDict} from '../time/time.model';
-import {BoundingBox2D as BBoxDict, SpatialPartition2D as SpatialPartitionDict} from '@geoengine/api-client';
 
 export class BoundingBox2D implements ToDict<BBoxDict> {
     private readonly inner: [number, number, number, number];

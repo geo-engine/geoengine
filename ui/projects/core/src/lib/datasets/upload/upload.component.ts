@@ -1,11 +1,14 @@
+import {AsyncPipe} from '@angular/common';
 import {HttpEventType} from '@angular/common/http';
 import {Component, ChangeDetectionStrategy, ChangeDetectorRef, OnDestroy, inject, viewChild} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatButton} from '@angular/material/button';
+import {MatFormField, MatLabel, MatInput, MatPrefix} from '@angular/material/input';
+import {MatProgressBar} from '@angular/material/progress-bar';
 import {MatStepper, MatStep, MatStepLabel} from '@angular/material/stepper';
 import {Subject, Subscription} from 'rxjs';
 import {mergeMap} from 'rxjs/operators';
-import {UUID} from '../../backend/backend.model';
-import {ProjectService} from '../../project/project.service';
+import {AddDataset, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion, TimeGranularity} from '@geoengine/api-client';
 import {
     DatasetsService,
     NotificationService,
@@ -15,14 +18,11 @@ import {
     timeStepGranularityOptions,
     errorMessage,
 } from '@geoengine/common';
-import {DatasetService} from '../dataset.service';
-import {AddDataset, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion, TimeGranularity} from '@geoengine/api-client';
+import {UUID} from '../../backend/backend.model';
+import {ProjectService} from '../../project/project.service';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
+import {DatasetService} from '../dataset.service';
 import {DragAndDropComponent} from '../drag-and-drop/drag-and-drop.component';
-import {MatButton} from '@angular/material/button';
-import {MatProgressBar} from '@angular/material/progress-bar';
-import {MatFormField, MatLabel, MatInput, MatPrefix} from '@angular/material/input';
-import {AsyncPipe} from '@angular/common';
 
 interface NameDescription {
     name: FormControl<string>;

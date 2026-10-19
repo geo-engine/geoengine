@@ -1,10 +1,10 @@
-import {Component, OnDestroy, inject, ChangeDetectionStrategy} from '@angular/core';
-import {Subscription} from 'rxjs';
-import {Session} from '../session.model';
 import {Clipboard} from '@angular/cdk/clipboard';
-import {NotificationService, UserService} from '@geoengine/common';
+import {Component, OnDestroy, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MatIconButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
+import {Subscription} from 'rxjs';
+import {NotificationService, UserService} from '@geoengine/common';
+import {Session} from '../session.model';
 
 @Component({
     selector: 'geoengine-user-session',

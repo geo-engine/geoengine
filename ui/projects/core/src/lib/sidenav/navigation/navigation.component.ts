@@ -1,17 +1,17 @@
-import {Subscription, Observable, combineLatest, of as observableOf} from 'rxjs';
+import {AsyncPipe} from '@angular/common';
 import {Component, OnInit, ChangeDetectionStrategy, OnDestroy, ChangeDetectorRef, inject, input} from '@angular/core';
-import {LayoutService, SidenavConfig} from '../../layout.service';
-import {ThemePalette} from '@angular/material/core';
-import {distinctUntilChanged, map, mergeScan} from 'rxjs/operators';
-import {CoreConfig} from '../../config.service';
-import {SidenavRef} from '../sidenav-ref.service';
-import {OidcComponent} from '../../users/oidc/oidc.component';
-import {UserService, AsyncStringSanitizer} from '@geoengine/common';
 import {MatIconButton} from '@angular/material/button';
-import {MatTooltip} from '@angular/material/tooltip';
+import {ThemePalette} from '@angular/material/core';
 import {MatIcon} from '@angular/material/icon';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {AsyncPipe} from '@angular/common';
+import {MatTooltip} from '@angular/material/tooltip';
+import {Subscription, Observable, combineLatest, of as observableOf} from 'rxjs';
+import {distinctUntilChanged, map, mergeScan} from 'rxjs/operators';
+import {UserService, AsyncStringSanitizer} from '@geoengine/common';
+import {CoreConfig} from '../../config.service';
+import {LayoutService, SidenavConfig} from '../../layout.service';
+import {OidcComponent} from '../../users/oidc/oidc.component';
+import {SidenavRef} from '../sidenav-ref.service';
 
 /**
  * Button config for the sidenav navigation

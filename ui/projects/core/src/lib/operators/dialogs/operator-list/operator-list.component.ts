@@ -1,36 +1,5 @@
-import {BehaviorSubject, combineLatest, Observable, ReplaySubject} from 'rxjs';
-import {map} from 'rxjs/operators';
-
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, OnChanges, OnInit, SimpleChanges, Type, inject, input} from '@angular/core';
-import {LayoutService} from '../../../layout.service';
-import {StatisticsPlotComponent} from '../statistics-plot/statistics-plot.component';
-import {HistogramOperatorComponent} from '../histogram-operator/histogram-operator.component';
-import {BoxPlotOperatorComponent} from '../boxplot-operator/boxplot-operator.component';
-import {MeanRasterPixelValuesOverTimeDialogComponent} from '../mean-raster-pixel-values-over-time-dialog/mean-raster-pixel-values-over-time-dialog.component';
-import {PointInPolygonFilterOperatorComponent} from '../point-in-polygon-filter/point-in-polygon-filter.component';
-import {RasterVectorJoinComponent} from '../raster-vector-join/raster-vector-join.component';
-import {FeatureAttributeOvertimeComponent} from '../feature-attribute-over-time/feature-attribute-over-time.component';
-import {TemporalRasterAggregationComponent} from '../temporal-raster-aggregation/temporal-raster-aggregation.component';
-import {ScatterplotOperatorComponent} from '../scatterplot-operator/scatterplot-operator.component';
-import {ExpressionOperatorComponent} from '../expression-operator/expression-operator.component';
-import {ClassHistogramOperatorComponent} from '../class-histogram-operator/class-histogram-operator.component';
-import {ColumnRangeFilterComponent} from '../column-range-filter/column-range-filter.component';
-import {RasterTypeConversionComponent} from '../raster-type-conversion/raster-type-conversion.component';
-import {InterpolationComponent} from '../interpolation/interpolation.component';
-import {DownsamplingComponent} from '../downsampling/downsampling.component';
-import {RasterScalingComponent} from '../raster-scaling/raster-scaling.component';
-import {NeighborhoodAggregateComponent} from '../neighborhood-aggregate/neighborhood-aggregate.component';
-import {TimeShiftComponent} from '../time-shift/time-shift.component';
-import {PieChartComponent} from '../pie-chart/pie-chart.component';
-import {RasterizationComponent} from '../rasterization/rasterization.component';
-import {LineSimplificationComponent} from '../line-simplification/line-simplification.component';
-import {RasterStackerComponent} from '../raster-stacker/raster-stacker.component';
-import {VectorExpressionComponent} from '../vector-expression/vector-expression.component';
-import {BandwiseExpressionOperatorComponent} from '../bandwise-expression-operator/bandwise-expression-operator.component';
-import {BandNeighborhoodAggregateComponent} from '../band-neighborhood-aggregate/band-neighborhood-aggregate.component';
-import {createIconDataUrl} from '@geoengine/common';
-import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {SidenavSearchComponent} from '../../../sidenav/sidenav-search/sidenav-search.component';
 import {
     MatNavList,
     MatListSubheaderCssMatStyler,
@@ -39,9 +8,39 @@ import {
     MatListItemTitle,
     MatListItemLine,
 } from '@angular/material/list';
-import {AsyncPipe} from '@angular/common';
+import {BehaviorSubject, combineLatest, Observable, ReplaySubject} from 'rxjs';
+import {map} from 'rxjs/operators';
+import {createIconDataUrl} from '@geoengine/common';
+import {LayoutService} from '../../../layout.service';
+import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
+import {SidenavSearchComponent} from '../../../sidenav/sidenav-search/sidenav-search.component';
 import {HighlightPipe} from '../../../util/pipes/highlight.pipe';
 import {SafeHtmlPipe} from '../../../util/pipes/safe-html.pipe';
+import {BandNeighborhoodAggregateComponent} from '../band-neighborhood-aggregate/band-neighborhood-aggregate.component';
+import {BandwiseExpressionOperatorComponent} from '../bandwise-expression-operator/bandwise-expression-operator.component';
+import {BoxPlotOperatorComponent} from '../boxplot-operator/boxplot-operator.component';
+import {ClassHistogramOperatorComponent} from '../class-histogram-operator/class-histogram-operator.component';
+import {ColumnRangeFilterComponent} from '../column-range-filter/column-range-filter.component';
+import {DownsamplingComponent} from '../downsampling/downsampling.component';
+import {ExpressionOperatorComponent} from '../expression-operator/expression-operator.component';
+import {FeatureAttributeOvertimeComponent} from '../feature-attribute-over-time/feature-attribute-over-time.component';
+import {HistogramOperatorComponent} from '../histogram-operator/histogram-operator.component';
+import {InterpolationComponent} from '../interpolation/interpolation.component';
+import {LineSimplificationComponent} from '../line-simplification/line-simplification.component';
+import {MeanRasterPixelValuesOverTimeDialogComponent} from '../mean-raster-pixel-values-over-time-dialog/mean-raster-pixel-values-over-time-dialog.component';
+import {NeighborhoodAggregateComponent} from '../neighborhood-aggregate/neighborhood-aggregate.component';
+import {PieChartComponent} from '../pie-chart/pie-chart.component';
+import {PointInPolygonFilterOperatorComponent} from '../point-in-polygon-filter/point-in-polygon-filter.component';
+import {RasterScalingComponent} from '../raster-scaling/raster-scaling.component';
+import {RasterStackerComponent} from '../raster-stacker/raster-stacker.component';
+import {RasterTypeConversionComponent} from '../raster-type-conversion/raster-type-conversion.component';
+import {RasterVectorJoinComponent} from '../raster-vector-join/raster-vector-join.component';
+import {RasterizationComponent} from '../rasterization/rasterization.component';
+import {ScatterplotOperatorComponent} from '../scatterplot-operator/scatterplot-operator.component';
+import {StatisticsPlotComponent} from '../statistics-plot/statistics-plot.component';
+import {TemporalRasterAggregationComponent} from '../temporal-raster-aggregation/temporal-raster-aggregation.component';
+import {TimeShiftComponent} from '../time-shift/time-shift.component';
+import {VectorExpressionComponent} from '../vector-expression/vector-expression.component';
 
 /**
  * This type encapsulates…

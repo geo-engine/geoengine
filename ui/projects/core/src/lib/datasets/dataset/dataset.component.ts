@@ -1,8 +1,8 @@
 import {Component, OnInit, ChangeDetectionStrategy, inject, input} from '@angular/core';
-import {DatasetService} from '../dataset.service';
-import {createIconDataUrl, Dataset} from '@geoengine/common';
 import {MatListItem, MatListItemIcon, MatListItemTitle, MatListItemLine} from '@angular/material/list';
 import {MatTooltip} from '@angular/material/tooltip';
+import {createIconDataUrl, Dataset} from '@geoengine/common';
+import {DatasetService} from '../dataset.service';
 
 @Component({
     selector: 'geoengine-dataset',

@@ -17,14 +17,13 @@ import {
     LayerProviderListing,
     TypedDataProviderDefinition,
 } from '@geoengine/api-client';
-
-import {apiConfigurationWithAccessKey, UserService} from '../user/user.service';
 import {UUID} from '../datasets/dataset.model';
-import {ProcessingGraphsService} from '../processing-graphs/processing-graphs.service';
 import {LayerMetadata, RasterLayerMetadata, VectorLayerMetadata} from '../layers/layer-metadata.model';
-import {RandomColorService} from '../util/services/random-color.service';
 import {Layer, RasterLayer, VectorLayer} from '../layers/layer.model';
+import {ProcessingGraphsService} from '../processing-graphs/processing-graphs.service';
 import {RasterSymbology, VectorSymbology, VectorSymbologyDict} from '../symbology/symbology.model';
+import {apiConfigurationWithAccessKey, UserService} from '../user/user.service';
+import {RandomColorService} from '../util/services/random-color.service';
 import {createVectorSymbology} from '../util/symbologies';
 
 @Injectable({

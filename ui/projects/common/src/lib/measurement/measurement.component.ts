@@ -1,11 +1,11 @@
+import {KeyValuePipe} from '@angular/common';
 import {Component, model, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ClassificationMeasurement, ContinuousMeasurement, Measurement, UnitlessMeasurement} from '@geoengine/api-client';
-import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {MatIconButton} from '@angular/material/button';
+import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
 import {MatIcon} from '@angular/material/icon';
-import {KeyValuePipe} from '@angular/common';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
+import {ClassificationMeasurement, ContinuousMeasurement, Measurement, UnitlessMeasurement} from '@geoengine/api-client';
 
 enum MeasurementType {
     Classification = 'classification',

@@ -1,11 +1,11 @@
 import {Component, OnChanges, SimpleChanges, input, output, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {geoengineValidators} from '@geoengine/common';
-import {Provenance} from '@geoengine/api-client';
-import {MatDivider} from '@angular/material/list';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {MatIconButton, MatButton} from '@angular/material/button';
 import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
+import {MatDivider} from '@angular/material/list';
+import {Provenance} from '@geoengine/api-client';
+import {geoengineValidators} from '@geoengine/common';
 
 interface ProvenanceListForm {
     provenance: FormArray<FormGroup<ProvenanceForm>>;

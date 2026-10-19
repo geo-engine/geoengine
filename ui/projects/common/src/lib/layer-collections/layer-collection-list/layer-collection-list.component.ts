@@ -1,3 +1,6 @@
+import {DataSource} from '@angular/cdk/collections';
+import {CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf} from '@angular/cdk/scrolling';
+import {AsyncPipe} from '@angular/common';
 import {
     Component,
     ChangeDetectionStrategy,
@@ -9,26 +12,23 @@ import {
     output,
     viewChild,
 } from '@angular/core';
-import {DataSource} from '@angular/cdk/collections';
+import {MatIconButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatNavList, MatListItem, MatListItemIcon, MatListItemTitle, MatListItemLine} from '@angular/material/list';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {BehaviorSubject, EMPTY, from, Observable, range, Subject} from 'rxjs';
-import {CdkVirtualScrollViewport, CdkFixedSizeVirtualScroll, CdkVirtualForOf} from '@angular/cdk/scrolling';
 import {concatMap, scan, startWith, tap} from 'rxjs/operators';
-import {LayerCollectionSearch} from '../layer-collection.model';
 import {
     CollectionItem as LayerCollectionItemDict,
     ProviderLayerCollectionId as ProviderLayerCollectionIdDict,
     LayerListing,
     LayerCollectionListing,
 } from '@geoengine/api-client';
-import {LayersService} from '../layers.service';
-import {createIconDataUrl} from '../../util/icons';
 import {LayoutService} from '../../layout.service';
-import {MatNavList, MatListItem, MatListItemIcon, MatListItemTitle, MatListItemLine} from '@angular/material/list';
-import {MatIcon} from '@angular/material/icon';
-import {MatIconButton} from '@angular/material/button';
+import {createIconDataUrl} from '../../util/icons';
 import {LayerCollectionLayerComponent} from '../layer-collection-layer/layer-collection-layer.component';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {AsyncPipe} from '@angular/common';
+import {LayerCollectionSearch} from '../layer-collection.model';
+import {LayersService} from '../layers.service';
 
 /**
  * Enum representing the different modes of collection navigation.

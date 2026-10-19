@@ -1,6 +1,6 @@
 import {Directive, TemplateRef, Component, ViewContainerRef, OnDestroy, inject} from '@angular/core';
-import {UserService} from '@geoengine/common';
 import {Subscription} from 'rxjs';
+import {UserService} from '@geoengine/common';
 
 @Directive({
     selector: '[geoengineIfGuest]',

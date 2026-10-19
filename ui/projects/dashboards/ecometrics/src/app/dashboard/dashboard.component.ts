@@ -1,3 +1,6 @@
+import {Breakpoints, BreakpointObserver} from '@angular/cdk/layout';
+import {AsyncPipe} from '@angular/common';
+import {HttpResponse} from '@angular/common/http';
 import {
     AfterViewInit,
     ChangeDetectionStrategy,
@@ -9,25 +12,19 @@ import {
     viewChild,
     WritableSignal,
 } from '@angular/core';
-import {Breakpoints, BreakpointObserver} from '@angular/cdk/layout';
-import {AsyncPipe} from '@angular/common';
-import {MatGridListModule} from '@angular/material/grid-list';
-import {MatMenuModule} from '@angular/material/menu';
-import {MatIconModule} from '@angular/material/icon';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatCardModule} from '@angular/material/card';
+import {MatGridListModule} from '@angular/material/grid-list';
+import {MatIconModule} from '@angular/material/icon';
+import {MatMenuModule} from '@angular/material/menu';
+import {MatSelectChange} from '@angular/material/select';
+import {utc} from 'moment';
+import OlFormatGeoJson from 'ol/format/GeoJSON';
+import {createBox} from 'ol/interaction/Draw';
+import proj4 from 'proj4';
 import {firstValueFrom, lastValueFrom} from 'rxjs';
-import {
-    AutoCreateDatasetDict,
-    CoreModule,
-    DatasetService,
-    Extent,
-    LayoutService,
-    MapContainerComponent,
-    ProjectService,
-    UploadResponseDict,
-    WGS_84,
-} from '@geoengine/core';
+import {ProcessingGraph, RasterOperator, TypedPlotOperator} from '@geoengine/api-client';
 import {
     ALL_COLORMAPS,
     Color,
@@ -47,16 +44,19 @@ import {
     UserService,
     VectorLayer,
 } from '@geoengine/common';
-import {utc} from 'moment';
+import {
+    AutoCreateDatasetDict,
+    CoreModule,
+    DatasetService,
+    Extent,
+    LayoutService,
+    MapContainerComponent,
+    ProjectService,
+    UploadResponseDict,
+    WGS_84,
+} from '@geoengine/core';
 import {DataRange, DataSelectionService} from '../data-selection.service';
-import {MatSelectChange} from '@angular/material/select';
-import {ProcessingGraph, RasterOperator, TypedPlotOperator} from '@geoengine/api-client';
-import {createBox} from 'ol/interaction/Draw';
-import OlFormatGeoJson from 'ol/format/GeoJSON';
-import {HttpResponse} from '@angular/common/http';
-import proj4 from 'proj4';
 import {LegendComponent} from '../legend/legend.component';
-import {toSignal} from '@angular/core/rxjs-interop';
 
 interface Indicator {
     name: string;

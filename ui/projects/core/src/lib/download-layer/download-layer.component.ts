@@ -1,14 +1,15 @@
 import {HttpEventType} from '@angular/common/http';
 import {ChangeDetectionStrategy, Component, effect, inject, input, OnInit} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
 import {FormControl, FormGroup, ValidatorFn, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import moment from 'moment';
 import {combineLatest, mergeMap} from 'rxjs';
-import {RasterResultDescriptorDict, WcsParamsDict, WfsParamsDict} from '../backend/backend.model';
-import {BackendService} from '../backend/backend.service';
-import {MapService} from '../map/map.service';
-import {ProjectService} from '../project/project.service';
-import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
-import {bboxAsOgcString, gridOffsetsAsOgcString, gridOriginAsOgcString} from '../util/spatial_reference';
+import {TypedResultDescriptor} from '@geoengine/api-client';
 import {
     Layer,
     SpatialReference,
@@ -25,15 +26,14 @@ import {
     CommonModule,
     errorMessage,
 } from '@geoengine/common';
-import {TypedResultDescriptor} from '@geoengine/api-client';
+import {RasterResultDescriptorDict, WcsParamsDict, WfsParamsDict} from '../backend/backend.model';
+import {BackendService} from '../backend/backend.service';
 import {CoreConfig} from '../config.service';
-import {toSignal} from '@angular/core/rxjs-interop';
+import {MapService} from '../map/map.service';
+import {ProjectService} from '../project/project.service';
 import {SidenavHeaderComponent} from '../sidenav/sidenav-header/sidenav-header.component';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {MatButton} from '@angular/material/button';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
+import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
+import {bboxAsOgcString, gridOffsetsAsOgcString, gridOriginAsOgcString} from '../util/spatial_reference';
 
 export interface DownloadLayerForm {
     bboxMinX: FormControl<number>;

@@ -1,4 +1,5 @@
 import {Injectable, inject} from '@angular/core';
+import {ReplaySubject, firstValueFrom} from 'rxjs';
 import {
     DataPath,
     Dataset,
@@ -15,7 +16,6 @@ import {
     Volume,
     VolumeFileLayersResponse,
 } from '@geoengine/api-client';
-import {ReplaySubject, firstValueFrom} from 'rxjs';
 import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
 
 @Injectable({

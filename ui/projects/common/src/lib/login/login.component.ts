@@ -1,26 +1,26 @@
+import {HttpErrorResponse} from '@angular/common/http';
 import {ChangeDetectionStrategy, Component, input, OnInit, inject, signal} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {email, required, form, FormField} from '@angular/forms/signals';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardSubtitle, MatCardContent, MatCardActions} from '@angular/material/card';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatInput} from '@angular/material/input';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatTooltip} from '@angular/material/tooltip';
 import {Router, RouterLink, ActivatedRoute} from '@angular/router';
+import {firstValueFrom} from 'rxjs';
 import {CommonConfig} from '../config.service';
-import {UserService} from '../user/user.service';
-import {geoengineValidators} from '../util/form.validators';
-import {User} from '../user/user.model';
 import {NotificationService} from '../notification.service';
+import {User} from '../user/user.model';
+import {UserService} from '../user/user.service';
 import {
     FxLayoutDirective,
     FxLayoutAlignDirective,
     FxLayoutGapDirective,
     FxFlexDirective,
 } from '../util/directives/flexbox-legacy.directive';
-import {MatCard, MatCardHeader, MatCardSubtitle, MatCardContent, MatCardActions} from '@angular/material/card';
-import {MatButton} from '@angular/material/button';
-import {MatFormField, MatInput} from '@angular/material/input';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {MatIcon} from '@angular/material/icon';
-import {MatTooltip} from '@angular/material/tooltip';
-import {email, required, form, FormField} from '@angular/forms/signals';
-import {FormsModule} from '@angular/forms';
-import {firstValueFrom} from 'rxjs';
-import {HttpErrorResponse} from '@angular/common/http';
+import {geoengineValidators} from '../util/form.validators';
 
 enum FormStatus {
     LoggedOut,

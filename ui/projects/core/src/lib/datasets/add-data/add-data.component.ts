@@ -1,14 +1,14 @@
 import {Component, ChangeDetectionStrategy, inject, input} from '@angular/core';
+import {MatIcon} from '@angular/material/icon';
+import {MatNavList, MatListItem, MatListItemIcon, MatListItemTitle, MatListItemLine} from '@angular/material/list';
 import {concatMap, first, from, Observable, range, reduce, takeWhile} from 'rxjs';
+import {LayersService} from '@geoengine/common';
+import {LayerCollectionSelectionComponent} from '../../layer-collections/layer-collection-selection.component';
 import {LayoutService, SidenavConfig} from '../../layout.service';
+import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 import {AddProcessingGraphComponent} from '../add-processing-graph/add-processing-graph.component';
 import {DrawFeaturesComponent} from '../draw-features/draw-features.component';
 import {UploadComponent} from '../upload/upload.component';
-import {LayersService} from '@geoengine/common';
-import {LayerCollectionSelectionComponent} from '../../layer-collections/layer-collection-selection.component';
-import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatNavList, MatListItem, MatListItemIcon, MatListItemTitle, MatListItemLine} from '@angular/material/list';
-import {MatIcon} from '@angular/material/icon';
 
 export interface AddDataButton {
     name: string;

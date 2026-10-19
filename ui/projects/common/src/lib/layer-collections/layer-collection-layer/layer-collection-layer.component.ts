@@ -1,12 +1,12 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, input, OnChanges, SimpleChanges, inject, output} from '@angular/core';
-import {LayerListing as LayerCollectionLayerDict, ProviderLayerId as ProviderLayerIdDict} from '@geoengine/api-client';
-import {LayersService} from '../layers.service';
-import {VectorDataTypes} from '../../operators/datatype.model';
-import {RasterLayerMetadata, VectorLayerMetadata} from '../../layers/layer-metadata.model';
-import {MatIcon} from '@angular/material/icon';
 import {MatIconButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
 import {MatProgressBar} from '@angular/material/progress-bar';
+import {LayerListing as LayerCollectionLayerDict, ProviderLayerId as ProviderLayerIdDict} from '@geoengine/api-client';
+import {RasterLayerMetadata, VectorLayerMetadata} from '../../layers/layer-metadata.model';
+import {VectorDataTypes} from '../../operators/datatype.model';
 import {LayerCollectionLayerDetailsComponent} from '../layer-collection-layer-details/layer-collection-layer-details.component';
+import {LayersService} from '../layers.service';
 
 @Component({
     selector: 'geoengine-layer-collection-layer',

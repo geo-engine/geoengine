@@ -1,8 +1,8 @@
 import {Component, ChangeDetectionStrategy, inject, input} from '@angular/core';
 import {LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
+import {CommonModule} from '@geoengine/common';
 import {ProjectService} from '../project/project.service';
 import {SidenavHeaderComponent} from '../sidenav/sidenav-header/sidenav-header.component';
-import {CommonModule} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-collection-layer-selection',

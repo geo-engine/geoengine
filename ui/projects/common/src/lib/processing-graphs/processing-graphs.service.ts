@@ -1,8 +1,8 @@
 import {Injectable, inject} from '@angular/core';
-import {ProcessingGraph, ProcessingGraphsApi, ProvenanceEntry, TypedResultDescriptor} from '@geoengine/api-client';
 import {ReplaySubject, firstValueFrom} from 'rxjs';
-import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
+import {ProcessingGraph, ProcessingGraphsApi, ProvenanceEntry, TypedResultDescriptor} from '@geoengine/api-client';
 import {UUID} from '../datasets/dataset.model';
+import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
 
 @Injectable({
     providedIn: 'root',

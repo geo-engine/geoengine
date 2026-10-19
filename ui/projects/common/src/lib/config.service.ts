@@ -1,7 +1,7 @@
 import {Injectable} from '@angular/core';
-import {Configuration, DefaultConfig} from '@geoengine/api-client';
 import * as Immutable from 'immutable';
 import {mergeWith} from 'immutable';
+import {Configuration, DefaultConfig} from '@geoengine/api-client';
 
 /**
  * The structure of the config file containing the URL of the backend API and the branding information.

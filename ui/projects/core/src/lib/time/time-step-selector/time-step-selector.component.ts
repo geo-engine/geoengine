@@ -1,11 +1,11 @@
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, SimpleChanges, inject, input} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatSlider, MatSliderThumb} from '@angular/material/slider';
 import {Observable, combineLatest, BehaviorSubject} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {ProjectService} from '../../project/project.service';
 import {Time, FxLayoutDirective, FxLayoutAlignDirective} from '@geoengine/common';
-import {MatSlider, MatSliderThumb} from '@angular/material/slider';
-import {FormsModule} from '@angular/forms';
-import {AsyncPipe} from '@angular/common';
+import {ProjectService} from '../../project/project.service';
 
 @Component({
     selector: 'geoengine-time-step-selector',

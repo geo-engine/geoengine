@@ -1,3 +1,4 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, AfterViewInit, OnDestroy, inject} from '@angular/core';
 import {
     Validators,
@@ -10,9 +11,15 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
+import {MatSelect} from '@angular/material/select';
 import {BehaviorSubject, combineLatest, firstValueFrom, from, Observable, of, ReplaySubject, Subscription} from 'rxjs';
 import {map, mergeMap, startWith} from 'rxjs/operators';
+import {ProcessingGraph, VectorOperator, OutputColumn, VectorExpressionParameters} from '@geoengine/api-client';
 import {
     Measurement,
     RandomColorService,
@@ -35,20 +42,12 @@ import {
     errorToText,
     errorMessage,
 } from '@geoengine/common';
-
-import {ProcessingGraph, VectorOperator, OutputColumn, VectorExpressionParameters} from '@geoengine/api-client';
-import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
 import {DialogSectionHeadingComponent} from '../../../dialogs/dialog-section-heading/dialog-section-heading.component';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
+import {ProjectService} from '../../../project/project.service';
+import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
+import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 const MAX_NUMBER_OF_COLUMNS = 8;
 const ALLOWED_EXPRESSION_COLUMN_TYPES = [VectorColumnDataTypes.Float, VectorColumnDataTypes.Int];

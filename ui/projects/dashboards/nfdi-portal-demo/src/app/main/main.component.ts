@@ -1,6 +1,12 @@
-import {Observable, BehaviorSubject, first} from 'rxjs';
+import {ComponentPortal, CdkPortalOutlet} from '@angular/cdk/portal';
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, HostListener, OnInit, ViewContainerRef, inject, viewChild} from '@angular/core';
 import {MatIconRegistry} from '@angular/material/icon';
+import {MatSidenav} from '@angular/material/sidenav';
+import {MatToolbar, MatToolbarRow} from '@angular/material/toolbar';
+import {DomSanitizer} from '@angular/platform-browser';
+import {Observable, BehaviorSubject, first} from 'rxjs';
+import {Layer, RandomColorService, UserService, FxFlexDirective} from '@geoengine/common';
 import {
     LayoutService,
     ProjectService,
@@ -10,16 +16,10 @@ import {
     WEB_MERCATOR,
     CoreModule,
 } from '@geoengine/core';
-import {DomSanitizer} from '@angular/platform-browser';
 import {AppConfig} from '../app-config.service';
-import {ComponentPortal, CdkPortalOutlet} from '@angular/cdk/portal';
 import {DataSelectionService} from '../data-selection.service';
-import {SpeciesSelectorComponent} from '../species-selector/species-selector.component';
-import {Layer, RandomColorService, UserService, FxFlexDirective} from '@geoengine/common';
-import {MatToolbar, MatToolbarRow} from '@angular/material/toolbar';
 import {LegendComponent} from '../legend/legend.component';
-import {MatSidenav} from '@angular/material/sidenav';
-import {AsyncPipe} from '@angular/common';
+import {SpeciesSelectorComponent} from '../species-selector/species-selector.component';
 
 @Component({
     selector: 'geoengine-main',

@@ -1,7 +1,5 @@
-import {BehaviorSubject, ReplaySubject} from 'rxjs';
-import {map, mergeMap} from 'rxjs/operators';
+import {AsyncPipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, AfterViewInit, inject} from '@angular/core';
-import {ProjectService} from '../project.service';
 import {
     FormControl,
     FormGroup,
@@ -13,14 +11,16 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {BackendService} from '../../backend/backend.service';
-import {UUID} from '../../backend/backend.model';
-import {NotificationService, UserService, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
-import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
 import {MatButton} from '@angular/material/button';
 import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {AsyncPipe} from '@angular/common';
+import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
+import {BehaviorSubject, ReplaySubject} from 'rxjs';
+import {map, mergeMap} from 'rxjs/operators';
+import {NotificationService, UserService, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
+import {UUID} from '../../backend/backend.model';
+import {BackendService} from '../../backend/backend.service';
+import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
+import {ProjectService} from '../project.service';
 
 const notCurrentProject =
     (currentProjectId: () => string): ValidatorFn =>

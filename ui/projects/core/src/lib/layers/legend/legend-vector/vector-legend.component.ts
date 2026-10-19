@@ -1,5 +1,6 @@
 import {ChangeDetectionStrategy, Component, OnInit, input} from '@angular/core';
-
+import {MatIcon} from '@angular/material/icon';
+import {MatDivider} from '@angular/material/list';
 import {
     BLACK,
     ClusteredPointSymbology,
@@ -26,8 +27,6 @@ import {
     PolygonIconComponent,
     FxFlexDirective,
 } from '@geoengine/common';
-import {MatIcon} from '@angular/material/icon';
-import {MatDivider} from '@angular/material/list';
 
 @Component({
     selector: 'geoengine-vector-legend',

@@ -1,12 +1,12 @@
-import {AppConfig} from './app/app-config.service';
-import {CoreConfig, MapService, ProjectService, SidenavRef, SpatialReferenceService, CoreModule} from '@geoengine/core';
-import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
-import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
 import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
+import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
+import {provideNativeDateAdapter} from '@angular/material/core';
 import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
+import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
+import {CoreConfig, MapService, ProjectService, SidenavRef, SpatialReferenceService, CoreModule} from '@geoengine/core';
+import {AppConfig} from './app/app-config.service';
 import {AppRoutingModule} from './app/app-routing.module';
 import {AppComponent} from './app/app.component';
-import {provideNativeDateAdapter} from '@angular/material/core';
 
 bootstrapApplication(AppComponent, {
     providers: [

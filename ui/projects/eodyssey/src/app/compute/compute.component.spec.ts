@@ -1,13 +1,13 @@
-import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideZonelessChangeDetection, Signal, signal, WritableSignal} from '@angular/core';
+import {ComponentFixture, TestBed} from '@angular/core/testing';
+import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import OlFeature from 'ol/Feature';
+import OlGeometry from 'ol/geom/Geometry';
 import OlGeomPolygon from 'ol/geom/Polygon';
 import OlLayerVector from 'ol/layer/Vector';
 import OlSourceVector from 'ol/source/Vector';
-import OlGeometry from 'ol/geom/Geometry';
-import {MatDialog, MatDialogModule} from '@angular/material/dialog';
-import {BackendService, CoreConfig, MapService, ProjectService} from '@geoengine/core';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
 import {
     BoundingBox2D,
     CommonConfig,
@@ -25,10 +25,10 @@ import {
     SpatialReference,
     UserService,
 } from '@geoengine/common';
-import {PlotOutputFormat, WrappedPlotOutput} from '@geoengine/api-client';
+import {BackendService, CoreConfig, MapService, ProjectService} from '@geoengine/core';
 import {ComputeComponent} from './compute.component';
-import {EOdysseyLayerService} from '../layers/layers.service';
 import {DataSourceLayer} from '../layers/data-sources';
+import {EOdysseyLayerService} from '../layers/layers.service';
 
 describe('ComputeComponent', () => {
     let fixture: ComponentFixture<ComputeComponent>;

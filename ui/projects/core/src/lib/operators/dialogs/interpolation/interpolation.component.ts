@@ -1,12 +1,15 @@
+import {AsyncPipe} from '@angular/common';
 import {AfterViewInit, ChangeDetectionStrategy, Component, OnDestroy, inject, viewChild} from '@angular/core';
 import {FormControl, FormBuilder, FormGroup, Validators, ValidatorFn, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../../../project/project.service';
-
-import {mergeMap, tap} from 'rxjs/operators';
-import {UUID} from '../../../backend/backend.model';
-import {BehaviorSubject, combineLatest, from, Observable, of, Subscription} from 'rxjs';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
+import {MatSelect} from '@angular/material/select';
 import {Layer} from 'ol/layer';
-import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
+import {BehaviorSubject, combineLatest, from, Observable, of, Subscription} from 'rxjs';
+import {mergeMap, tap} from 'rxjs/operators';
+import {ProcessingGraph, RasterOperator, InterpolationResolution} from '@geoengine/api-client';
 import {
     NotificationService,
     RasterDataTypes,
@@ -19,17 +22,13 @@ import {
     errorToText,
     errorMessage,
 } from '@geoengine/common';
-import {ProcessingGraph, RasterOperator, InterpolationResolution} from '@geoengine/api-client';
+import {UUID} from '../../../backend/backend.model';
+import {SymbologyCreatorComponent} from '../../../layers/symbology/symbology-creator/symbology-creator.component';
+import {ProjectService} from '../../../project/project.service';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
-import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
-import {MatIconButton, MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
 import {LayerSelectionComponent} from '../helpers/layer-selection/layer-selection.component';
-import {MatFormField, MatLabel, MatInput, MatHint} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
+import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {OperatorOutputNameComponent} from '../helpers/operator-output-name/operator-output-name.component';
-import {AsyncPipe} from '@angular/common';
 
 @Component({
     selector: 'geoengine-interpolation',

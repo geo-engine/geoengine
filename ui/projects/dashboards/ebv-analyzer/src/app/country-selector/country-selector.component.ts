@@ -1,13 +1,13 @@
+import {AsyncPipe} from '@angular/common';
 import {Component, OnInit, ChangeDetectionStrategy, AfterViewInit, OnDestroy, inject, viewChild} from '@angular/core';
 import {FormControl, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ReplaySubject, Subject} from 'rxjs';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatFormField} from '@angular/material/input';
 import {MatSelect} from '@angular/material/select';
+import {MatSelectSearchComponent} from 'ngx-mat-select-search';
+import {ReplaySubject, Subject} from 'rxjs';
 import {takeUntil, take} from 'rxjs/operators';
 import {CountryProviderService, Country} from '../country-provider.service';
-import {MatFormField} from '@angular/material/input';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatSelectSearchComponent} from 'ngx-mat-select-search';
-import {AsyncPipe} from '@angular/common';
 
 @Component({
     selector: 'geoengine-ebv-country-selector',

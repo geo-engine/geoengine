@@ -1,7 +1,7 @@
-import {AfterViewInit, Component, computed, effect, inject, isDevMode, signal, ChangeDetectionStrategy} from '@angular/core';
-import {AppConfig} from '../app-config.service';
 import {KeyValuePipe, Location} from '@angular/common';
+import {AfterViewInit, Component, computed, effect, inject, isDevMode, signal, ChangeDetectionStrategy} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
+import {AppConfig} from '../app-config.service';
 
 export interface OidcPopupMessage {
     oidcParams: [string, string][];

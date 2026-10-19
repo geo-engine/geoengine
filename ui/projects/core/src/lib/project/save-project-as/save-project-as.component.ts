@@ -1,12 +1,12 @@
-import {BehaviorSubject} from 'rxjs';
+import {AsyncPipe} from '@angular/common';
 import {Component, ChangeDetectionStrategy, AfterViewInit, inject} from '@angular/core';
 import {FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ProjectService} from '../project.service';
+import {MatButton} from '@angular/material/button';
+import {MatFormField, MatInput, MatHint} from '@angular/material/input';
+import {BehaviorSubject} from 'rxjs';
 import {geoengineValidators, NotificationService, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
-import {MatFormField, MatInput, MatHint} from '@angular/material/input';
-import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {ProjectService} from '../project.service';
 
 @Component({
     selector: 'geoengine-save-project-as',

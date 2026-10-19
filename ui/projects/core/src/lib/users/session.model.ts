@@ -1,7 +1,7 @@
 import {Moment} from 'moment';
-import {STRectangleDict, UUID} from '../backend/backend.model';
-import {User} from './user.model';
 import {Configuration} from '@geoengine/api-client';
+import {User} from './user.model';
+import {STRectangleDict, UUID} from '../backend/backend.model';
 
 /**
  * A user session after login

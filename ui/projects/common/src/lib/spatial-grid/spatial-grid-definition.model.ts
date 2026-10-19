@@ -1,9 +1,9 @@
 import {SpatialGridDefinition as SpatialGridDefinitionDict} from '@geoengine/api-client';
-import {ToDict} from '../time/time.model';
 import {GeoTransform} from './geo-transform.model';
 import {GridBoundingBox2D} from './grid-bounding-box.model';
 import {BoundingBox2D} from '../spatial-bounds/bounding-box';
 import {Coordinate2D} from '../spatial-features/coordinate.model';
+import {ToDict} from '../time/time.model';
 
 export class SpatialGridDefinition implements ToDict<SpatialGridDefinitionDict> {
     readonly geoTransform: GeoTransform;

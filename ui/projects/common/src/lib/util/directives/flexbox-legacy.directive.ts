@@ -112,6 +112,10 @@ export class FxLayoutAlignDirective implements OnChanges {
                 this.el.nativeElement.style.justifyContent = 'space-between';
                 this.el.nativeElement.style.alignItems = 'stretch';
                 break;
+            case 'space-between start':
+                this.el.nativeElement.style.justifyContent = 'space-between';
+                this.el.nativeElement.style.alignItems = 'flex-start';
+                break;
             case 'space-between center':
                 this.el.nativeElement.style.justifyContent = 'space-between';
                 this.el.nativeElement.style.alignItems = 'center';

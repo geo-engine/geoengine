@@ -1,11 +1,8 @@
-import {Color, RgbaTuple, WHITE, BLACK, rgbaColorFromDict, colorToDict, TRANSPARENT} from '../colors/color';
 import {Feature as OlFeature} from 'ol';
-import {Circle as OlStyleCircle, Fill as OlStyleFill, Stroke as OlStyleStroke, Style as OlStyle, Text as OlStyleText} from 'ol/style';
-import {StyleFunction as OlStyleFunction} from 'ol/style/Style';
-import {Colorizer, LinearGradient, LogarithmicGradient, PaletteColorizer} from '../colors/colorizer.model';
 import {FeatureLike} from 'ol/Feature';
 import OlGeometry from 'ol/geom/Geometry';
-import {ColorBreakpoint} from '../colors/color-breakpoint.model';
+import {Circle as OlStyleCircle, Fill as OlStyleFill, Stroke as OlStyleStroke, Style as OlStyle, Text as OlStyleText} from 'ol/style';
+import {StyleFunction as OlStyleFunction} from 'ol/style/Style';
 import {
     Symbology as SymbologyDict,
     PointSymbology as PointSymbologyDict,
@@ -21,12 +18,15 @@ import {
     RasterColorizer as RasterColorizerDict,
     MultiBandRasterColorizer as MultiBandRasterColorizerDict,
 } from '@geoengine/api-client';
-import {PointIconStyle} from '../layer-icons/point-icon/point-icon.component';
+import {Color, RgbaTuple, WHITE, BLACK, rgbaColorFromDict, colorToDict, TRANSPARENT} from '../colors/color';
+import {ColorBreakpoint} from '../colors/color-breakpoint.model';
+import {Colorizer, LinearGradient, LogarithmicGradient, PaletteColorizer} from '../colors/colorizer.model';
 import {LineIconStyle} from '../layer-icons/line-icon/line-icon.component';
+import {PointIconStyle} from '../layer-icons/point-icon/point-icon.component';
 import {PolygonIconStyle} from '../layer-icons/polygon-icon/polygon-icon.component';
-import {Time} from '../time/time.model';
 import {BoundingBox2D} from '../spatial-bounds/bounding-box';
 import {SpatialReference} from '../spatial-references/spatial-reference.model';
+import {Time} from '../time/time.model';
 
 /**
  * List of the symbology types used in geoengine

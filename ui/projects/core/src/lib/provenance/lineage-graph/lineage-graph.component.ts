@@ -1,22 +1,21 @@
+import {AsyncPipe} from '@angular/common';
+import {Component, ChangeDetectionStrategy, ElementRef, AfterViewInit, inject, viewChild} from '@angular/core';
+import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
+import {MatLine} from '@angular/material/grid-list';
+import {MatList, MatListItem, MatListSubheaderCssMatStyler, MatDivider} from '@angular/material/list';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatTooltip} from '@angular/material/tooltip';
+import * as d3 from 'd3';
+import * as dagreD3 from 'dagre-d3';
 import {BehaviorSubject, Observable, ReplaySubject, from} from 'rxjs';
 import {map} from 'rxjs/operators';
-import {Component, ChangeDetectionStrategy, ElementRef, AfterViewInit, inject, viewChild} from '@angular/core';
-import * as dagreD3 from 'dagre-d3';
-import * as d3 from 'd3';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
+import {TypedOperator} from '@geoengine/api-client';
+import {createIconDataUrl, Layer, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
 import {OperatorParams} from '../../backend/backend.model';
+import {DialogHeaderComponent} from '../../dialogs/dialog-header/dialog-header.component';
+import {DialogSectionHeadingComponent} from '../../dialogs/dialog-section-heading/dialog-section-heading.component';
 import {LayoutService} from '../../layout.service';
 import {ProjectService} from '../../project/project.service';
-
-import {createIconDataUrl, Layer, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
-import {TypedOperator} from '@geoengine/api-client';
-import {DialogHeaderComponent} from '../../dialogs/dialog-header/dialog-header.component';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {DialogSectionHeadingComponent} from '../../dialogs/dialog-section-heading/dialog-section-heading.component';
-import {MatList, MatListItem, MatListSubheaderCssMatStyler, MatDivider} from '@angular/material/list';
-import {MatLine} from '@angular/material/grid-list';
-import {MatTooltip} from '@angular/material/tooltip';
-import {AsyncPipe} from '@angular/common';
 
 const GRAPH_STYLE = {
     general: {

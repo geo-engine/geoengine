@@ -1,5 +1,5 @@
-import {VegaChartData} from './plot.model';
 import {PlotDataTable, vegaDataValues} from './plot-data';
+import {VegaChartData} from './plot.model';
 
 /**
  * The statistics of one band or attribute, as computed by the `Statistics` plot operator.

@@ -1,8 +1,8 @@
 import {Component, Inject, inject} from '@angular/core';
 import {FormArray, FormControl} from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogRef, MatDialogTitle} from '@angular/material/dialog';
-import {CollectionNavigation, LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, CommonModule} from '@geoengine/common';
 import {LayerCollectionListing, LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
+import {CollectionNavigation, LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, CommonModule} from '@geoengine/common';
 import {ItemType} from '../layers.component';
 
 export interface CollectionForm {

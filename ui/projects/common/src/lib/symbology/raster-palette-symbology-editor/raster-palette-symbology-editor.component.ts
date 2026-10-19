@@ -1,14 +1,14 @@
 import {Component, ChangeDetectionStrategy, OnChanges, SimpleChanges, input, model, viewChild} from '@angular/core';
-import {PaletteColorizer} from '../../colors/colorizer.model';
-import {ColorAttributeInput, ColorAttributeInputComponent} from '../../colors/color-attribute-input/color-attribute-input.component';
-import {Color} from '../../colors/color';
-import {ColorMapSelectorComponent} from '../../colors/color-map-selector/color-map-selector.component';
-import {ColorTableEditorComponent} from '../../colors/color-table-editor/color-table-editor.component';
-import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
-import {Measurement} from '@geoengine/api-client';
+import {FormsModule} from '@angular/forms';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
 import {MatIcon} from '@angular/material/icon';
-import {FormsModule} from '@angular/forms';
+import {Measurement} from '@geoengine/api-client';
+import {Color} from '../../colors/color';
+import {ColorAttributeInput, ColorAttributeInputComponent} from '../../colors/color-attribute-input/color-attribute-input.component';
+import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
+import {ColorMapSelectorComponent} from '../../colors/color-map-selector/color-map-selector.component';
+import {ColorTableEditorComponent} from '../../colors/color-table-editor/color-table-editor.component';
+import {PaletteColorizer} from '../../colors/colorizer.model';
 
 /**
  * An editor for generating raster symbologies.

@@ -1,6 +1,4 @@
 import {Component, input, ChangeDetectionStrategy} from '@angular/core';
-import {BoundingBox2D, GeoTransform, GridBoundingBox2D} from '@geoengine/common';
-import {RasterBandDescriptor, TypedRasterResultDescriptor, RegularTimeDimension} from '@geoengine/api-client';
 import {FormsModule} from '@angular/forms';
 import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {
@@ -15,6 +13,8 @@ import {
     MatRowDef,
     MatRow,
 } from '@angular/material/table';
+import {RasterBandDescriptor, TypedRasterResultDescriptor, RegularTimeDimension} from '@geoengine/api-client';
+import {BoundingBox2D, GeoTransform, GridBoundingBox2D} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-manager-raster-result-descriptor',

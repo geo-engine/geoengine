@@ -9,8 +9,8 @@ import {
     inject,
     input,
 } from '@angular/core';
-
 import {ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule} from '@angular/forms';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import moment, {Moment, unitOfTime} from 'moment';
 import {
     FxLayoutDirective,
@@ -18,7 +18,6 @@ import {
     FxLayoutAlignDirective,
     FxFlexDirective,
 } from '../../util/directives/flexbox-legacy.directive';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 
 @Component({
     selector: 'geoengine-time-input',

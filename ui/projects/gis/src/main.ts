@@ -1,4 +1,8 @@
-import {AppConfig} from './app/app-config.service';
+import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
+import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
+import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
+import {provideAnimations} from '@angular/platform-browser/animations';
+import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
 import {
     CoreConfig,
     LayoutService,
@@ -9,14 +13,10 @@ import {
     TabsService,
     CoreModule,
 } from '@geoengine/core';
-import {CommonConfig, NotificationService, RandomColorService, UserService} from '@geoengine/common';
-import {provideAppInitializer, inject, importProvidersFrom, provideZonelessChangeDetection} from '@angular/core';
-import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
-import {provideAnimations} from '@angular/platform-browser/animations';
-import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
+import {AppConfig as ManagerAppConfig} from '@geoengine/manager';
+import {AppConfig} from './app/app-config.service';
 import {AppRoutingModule} from './app/app-routing.module';
 import {AppComponent} from './app/app.component';
-import {AppConfig as ManagerAppConfig} from '@geoengine/manager';
 
 bootstrapApplication(AppComponent, {
     providers: [

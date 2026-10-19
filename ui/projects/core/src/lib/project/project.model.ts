@@ -1,4 +1,4 @@
-import {UUID, ToDict, STRectangleDict, BBoxDict} from '../backend/backend.model';
+import {Project as ProjectDict, ProjectVersion} from '@geoengine/api-client';
 import {
     Layer,
     Plot,
@@ -8,7 +8,7 @@ import {
     timeStepDictTotimeStepDuration,
     timeStepDurationToTimeStepDict,
 } from '@geoengine/common';
-import {Project as ProjectDict, ProjectVersion} from '@geoengine/api-client';
+import {UUID, ToDict, STRectangleDict, BBoxDict} from '../backend/backend.model';
 
 export class Project implements ToDict<ProjectDict> {
     readonly id: UUID;

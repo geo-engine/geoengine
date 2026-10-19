@@ -11,17 +11,16 @@ import {
     signal,
     untracked,
 } from '@angular/core';
-import {ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR} from '@angular/forms';
-import {firstValueFrom} from 'rxjs';
-import {ProjectService} from '../../../../project/project.service';
-import {Layer, LayerCollectionLayerDetailsComponent, LayerMetadata, ResultType, ResultTypes} from '@geoengine/common';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {MatButtonModule} from '@angular/material/button';
-import {MatIconModule} from '@angular/material/icon';
-
-import {MatSelectModule} from '@angular/material/select';
 import {toSignal} from '@angular/core/rxjs-interop';
+import {ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR} from '@angular/forms';
+import {MatButtonModule} from '@angular/material/button';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatIconModule} from '@angular/material/icon';
 import {MatInputModule} from '@angular/material/input';
+import {MatSelectModule} from '@angular/material/select';
+import {firstValueFrom} from 'rxjs';
+import {Layer, LayerCollectionLayerDetailsComponent, LayerMetadata, ResultType, ResultTypes} from '@geoengine/common';
+import {ProjectService} from '../../../../project/project.service';
 
 /**
  * This component allows selecting one layer.

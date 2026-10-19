@@ -1,25 +1,25 @@
+import {AsyncPipe} from '@angular/common';
+import {HttpEventType, HttpResponse} from '@angular/common/http';
 import {ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
+import {MatFormField, MatInput} from '@angular/material/input';
+import {MatProgressSpinner} from '@angular/material/progress-spinner';
+import {MatSelect} from '@angular/material/select';
 import OlFormatGeoJson from 'ol/format/GeoJSON';
 import {Type as OlGeometryType} from 'ol/geom/Geometry';
 import {BehaviorSubject, of, Subject, Subscription} from 'rxjs';
-import {ProjectService} from '../../project/project.service';
-import {MapService} from '../../map/map.service';
-import {DatasetService} from '../dataset.service';
-import {HttpEventType, HttpResponse} from '@angular/common/http';
-import {AutoCreateDatasetDict, UploadResponseDict, UUID} from '../../backend/backend.model';
 import {mergeMap} from 'rxjs/operators';
-import {WGS_84} from '../../spatial-references/spatial-reference.service';
 import {NotificationService, ResultType, ResultTypes, SpatialReference, errorMessage} from '@geoengine/common';
-import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
+import {AutoCreateDatasetDict, UploadResponseDict, UUID} from '../../backend/backend.model';
 import {DialogHelpComponent} from '../../dialogs/dialog-help/dialog-help.component';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {MatFormField, MatInput} from '@angular/material/input';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
-import {MatButton} from '@angular/material/button';
-import {FormsModule} from '@angular/forms';
-import {MatProgressSpinner} from '@angular/material/progress-spinner';
-import {AsyncPipe} from '@angular/common';
+import {MapService} from '../../map/map.service';
+import {ProjectService} from '../../project/project.service';
+import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
+import {WGS_84} from '../../spatial-references/spatial-reference.service';
+import {DatasetService} from '../dataset.service';
 
 enum State {
     Start = 1,

@@ -1,5 +1,14 @@
 import {Component, signal, inject, ChangeDetectionStrategy} from '@angular/core';
 import {FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {MatButton} from '@angular/material/button';
+import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
+import {MAT_DIALOG_DATA, MatDialog, MatDialogRef, MatDialogTitle} from '@angular/material/dialog';
+import {MatIcon} from '@angular/material/icon';
+import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {filter, firstValueFrom, merge} from 'rxjs';
+import {LayerCollectionListing, LayerListing, ProcessingGraph, ProviderLayerCollectionId} from '@geoengine/api-client';
 import {
     CollectionNavigation,
     ConfirmationComponent,
@@ -12,16 +21,7 @@ import {
     FxLayoutDirective,
     FxFlexDirective,
 } from '@geoengine/common';
-import {LayerCollectionListing, LayerListing, ProcessingGraph, ProviderLayerCollectionId} from '@geoengine/api-client';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {MAT_DIALOG_DATA, MatDialog, MatDialogRef, MatDialogTitle} from '@angular/material/dialog';
-import {filter, firstValueFrom, merge} from 'rxjs';
 import {ItemId, ItemType} from '../layers.component';
-import {MatButton} from '@angular/material/button';
-import {MatIcon} from '@angular/material/icon';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {MatButtonToggleGroup, MatButtonToggle} from '@angular/material/button-toggle';
-import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
 
 export interface AddLayerItemForm {
     itemType: FormControl<ItemType>;

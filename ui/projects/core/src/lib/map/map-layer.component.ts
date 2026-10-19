@@ -13,22 +13,16 @@ import {
     output,
     resource,
 } from '@angular/core';
-import {Observable, Subject, Subscription} from 'rxjs';
-
-import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
-import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
-import OlImageTile from 'ol/ImageTile';
-import {get as olGetProj} from 'ol/proj';
-import TileGrid from 'ol/tilegrid/TileGrid';
 import type {EventsKey} from 'ol/events';
-import {unByKey} from 'ol/Observable';
-import {CoreConfig} from '../config.service';
-import {NotificationService} from '@geoengine/common';
-import {ProjectService} from '../project/project.service';
-import {LoadingState} from '../project/loading-state.model';
-import {BackendService} from '../backend/backend.service';
-import {UUID} from '../backend/backend.model';
 import OlFeature from 'ol/Feature';
+import OlImageTile from 'ol/ImageTile';
+import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
+import {unByKey} from 'ol/Observable';
+import {get as olGetProj} from 'ol/proj';
+import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
+import TileGrid from 'ol/tilegrid/TileGrid';
+import {Observable, Subject, Subscription} from 'rxjs';
+import {NotificationService} from '@geoengine/common';
 import {
     RasterColorizer,
     RasterData,
@@ -40,6 +34,8 @@ import {
     VectorSymbology,
     olExtentToTuple,
 } from '@geoengine/common';
+import {UUID} from '../backend/backend.model';
+import {CoreConfig} from '../config.service';
 import {AbortableTileLayer} from './abortable-tile-layer';
 import {
     TileDiagnostic,
@@ -51,6 +47,9 @@ import {
     currentViewport,
     tileExtentInViewProjection,
 } from './tile-loader';
+import {BackendService} from '../backend/backend.service';
+import {LoadingState} from '../project/loading-state.model';
+import {ProjectService} from '../project/project.service';
 
 /**
  * The `ol-layer` component represents a single layer object of open layers.

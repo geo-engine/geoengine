@@ -1,7 +1,7 @@
-import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogRef, MatDialogTitle, MatDialogContent, MatDialogActions, MatDialogClose} from '@angular/material/dialog';
 import {CdkScrollable} from '@angular/cdk/scrolling';
+import {Component, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MatButton} from '@angular/material/button';
+import {MAT_DIALOG_DATA, MatDialogRef, MatDialogTitle, MatDialogContent, MatDialogActions, MatDialogClose} from '@angular/material/dialog';
 
 @Component({
     selector: 'geoengine-confirmation-dialog',

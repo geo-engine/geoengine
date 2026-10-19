@@ -1,10 +1,10 @@
-import {Component, OnInit, inject, ChangeDetectionStrategy} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogContent} from '@angular/material/dialog';
-import {DialogHeaderComponent} from '../../../dialogs/dialog-header/dialog-header.component';
 import {CdkScrollable} from '@angular/cdk/scrolling';
-import {MatTooltip} from '@angular/material/tooltip';
+import {Component, OnInit, inject, ChangeDetectionStrategy} from '@angular/core';
 import {MatMiniFabButton} from '@angular/material/button';
+import {MAT_DIALOG_DATA, MatDialogContent} from '@angular/material/dialog';
 import {MatIcon} from '@angular/material/icon';
+import {MatTooltip} from '@angular/material/tooltip';
+import {DialogHeaderComponent} from '../../../dialogs/dialog-header/dialog-header.component';
 import {MediaviewPlaylistComponent} from '../playlist/mediaview.playlist.component';
 
 @Component({

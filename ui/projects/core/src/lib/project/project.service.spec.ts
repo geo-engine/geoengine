@@ -1,16 +1,8 @@
-import {beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
-import {Project} from './project.model';
-import {ProjectService} from './project.service';
+import {TestBed} from '@angular/core/testing';
 import moment from 'moment';
-import {Session} from '../users/session.model';
-import {User} from '../users/user.model';
 import {firstValueFrom, NEVER, of, BehaviorSubject} from 'rxjs';
-import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
-import {CreateProjectResponseDict, UUID} from '../backend/backend.model';
-import {MapService, ViewportSize} from '../map/map.service';
-import {BackendService} from '../backend/backend.service';
-import {SpatialReferenceService, WGS_84} from '../spatial-references/spatial-reference.service';
 import {first, map, mergeMap, tap} from 'rxjs/operators';
+import {beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
 import {Configuration, DefaultConfig} from '@geoengine/api-client';
 import {
     LayersService,
@@ -21,7 +13,15 @@ import {
     Time,
     UserService,
 } from '@geoengine/common';
-import {TestBed} from '@angular/core/testing';
+import {Project} from './project.model';
+import {ProjectService} from './project.service';
+import {CreateProjectResponseDict, UUID} from '../backend/backend.model';
+import {BackendService} from '../backend/backend.service';
+import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
+import {MapService, ViewportSize} from '../map/map.service';
+import {SpatialReferenceService, WGS_84} from '../spatial-references/spatial-reference.service';
+import {Session} from '../users/session.model';
+import {User} from '../users/user.model';
 
 describe('test project methods in projectService', () => {
     let notificationServiceSpy: {

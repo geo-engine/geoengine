@@ -10,7 +10,21 @@ import {
     FormsModule,
     ReactiveFormsModule,
 } from '@angular/forms';
-import {GdalDatasetParametersComponent, GdalDatasetParametersForm} from '../gdal-dataset-parameters/gdal-dataset-parameters.component';
+import {MatOption} from '@angular/material/autocomplete';
+import {MatButton} from '@angular/material/button';
+import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
+import {MatDivider, MatNavList, MatListItem, MatListItemTitle, MatListItemLine} from '@angular/material/list';
+import {MatSelect} from '@angular/material/select';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import moment from 'moment';
+import {
+    DataPath,
+    GdalDatasetParameters,
+    GdalMetaDataList,
+    MetaDataDefinition,
+    RasterDataType,
+    RasterResultDescriptor,
+} from '@geoengine/api-client';
 import {
     CommonModule,
     DatasetsService,
@@ -23,21 +37,7 @@ import {
     SpatialGridDefinition,
     SpatialGridDescriptor,
 } from '@geoengine/common';
-import moment from 'moment';
-import {
-    DataPath,
-    GdalDatasetParameters,
-    GdalMetaDataList,
-    MetaDataDefinition,
-    RasterDataType,
-    RasterResultDescriptor,
-} from '@geoengine/api-client';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {MatFormField, MatLabel, MatInput, MatError} from '@angular/material/input';
-import {MatButton} from '@angular/material/button';
-import {MatDivider, MatNavList, MatListItem, MatListItemTitle, MatListItemLine} from '@angular/material/list';
-import {MatSelect} from '@angular/material/select';
-import {MatOption} from '@angular/material/autocomplete';
+import {GdalDatasetParametersComponent, GdalDatasetParametersForm} from '../gdal-dataset-parameters/gdal-dataset-parameters.component';
 
 export interface GdalMetadataListForm {
     timeSlices: FormArray<FormGroup<TimeSliceForm>>;
@@ -400,11 +400,11 @@ export const overlappingTimeIntervalsValidator =
     (control: AbstractControl): ValidationErrors | null => {
         const timeIntervalIntersects = (a: TimeInterval, b: TimeInterval): boolean => {
             // instants must be distinct
-            if (a.start == a.end || b.start == b.end) {
-                return a.start == b.start;
+            if (a.start === a.end || b.start === b.end) {
+                return a.start === b.start;
             }
             // touching intervals are not overlapping
-            if (a.start == b.end || b.start == a.end) {
+            if (a.start === b.end || b.start === a.end) {
                 return false;
             }
             // check if start of one interval is within the other

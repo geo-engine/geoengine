@@ -1,14 +1,12 @@
-import {Observable, Subscription} from 'rxjs';
-
-import ImageTile from 'ol/ImageTile';
-import Tile from 'ol/Tile';
-import TileState from 'ol/TileState';
-import TileGrid from 'ol/tilegrid/TileGrid';
-import {createEmpty, extend, getIntersection, intersects as olIntersects, isEmpty} from 'ol/extent';
-import {equivalent, transformExtent, type Projection} from 'ol/proj';
 import type {NearestDirectionFunction} from 'ol/array';
+import {createEmpty, extend, getIntersection, intersects as olIntersects, isEmpty} from 'ol/extent';
+import ImageTile from 'ol/ImageTile';
+import {equivalent, transformExtent, type Projection} from 'ol/proj';
+import Tile from 'ol/Tile';
+import TileGrid from 'ol/tilegrid/TileGrid';
+import TileState from 'ol/TileState';
+import {Observable, Subscription} from 'rxjs';
 import {olExtentToTuple} from '@geoengine/common';
-
 import {Extent} from './map.service';
 
 export type TileLoadState = 'idle' | 'loading' | 'error';

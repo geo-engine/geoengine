@@ -1,16 +1,13 @@
 import {Injectable, inject} from '@angular/core';
-import {merge, Observable, of} from 'rxjs';
-import {map, mergeMap} from 'rxjs/operators';
-import {BBoxDict, SpatialReferenceSpecificationDict, SrsString, UUID} from '../backend/backend.model';
-import {BackendService} from '../backend/backend.service';
+import {getIntersection} from 'ol/extent';
 import {get as olGetProjection, addProjection as olAddProjection} from 'ol/proj';
+import {transformExtent} from 'ol/proj';
 import {register as olProj4Register} from 'ol/proj/proj4';
 import OlProjection from 'ol/proj/Projection';
 import {Units} from 'ol/proj/Units';
 import proj4 from 'proj4';
-import {CoreConfig} from '../config.service';
-import {transformExtent} from 'ol/proj';
-import {getIntersection} from 'ol/extent';
+import {merge, Observable, of} from 'rxjs';
+import {map, mergeMap} from 'rxjs/operators';
 import {
     bboxDictToExtent,
     extentToBboxDict,
@@ -19,6 +16,9 @@ import {
     SpatialReferenceSpecification,
     UserService,
 } from '@geoengine/common';
+import {BBoxDict, SpatialReferenceSpecificationDict, SrsString, UUID} from '../backend/backend.model';
+import {BackendService} from '../backend/backend.service';
+import {CoreConfig} from '../config.service';
 
 export const WEB_MERCATOR = new NamedSpatialReference('WGS 84 / Pseudomercator', 'EPSG:3857');
 export const WGS_84 = new NamedSpatialReference('WGS 84', 'EPSG:4326');

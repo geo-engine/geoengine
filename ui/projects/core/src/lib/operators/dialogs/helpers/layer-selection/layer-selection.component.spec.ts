@@ -1,11 +1,11 @@
 import {ChangeDetectionStrategy, Component, signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {form, FormField} from '@angular/forms/signals';
-import {Layer, LayerMetadata, ResultTypes} from '@geoengine/common';
 import {Observable, of} from 'rxjs';
 import {describe, expect, it} from 'vitest';
-import {ProjectService} from '../../../../project/project.service';
+import {Layer, LayerMetadata, ResultTypes} from '@geoengine/common';
 import {LayerSelectionComponent} from './layer-selection.component';
+import {ProjectService} from '../../../../project/project.service';
 
 const rasterLayer = {name: 'raster layer'} as Layer;
 

@@ -1,17 +1,17 @@
 import {Component, OnChanges, signal, SimpleChanges, WritableSignal, inject, input, output, ChangeDetectionStrategy} from '@angular/core';
 import {FormArray, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {MatDialog} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {CollectionNavigation, ConfirmationComponent, errorToText, LayersService} from '@geoengine/common';
-import {LayerCollection, LayerCollectionListing, LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
-import {firstValueFrom} from 'rxjs';
-import {AppConfig} from '../../app-config.service';
-import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
-import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
 import {MatIconButton, MatButton} from '@angular/material/button';
+import {MatCard, MatCardHeader, MatCardTitle, MatCardContent} from '@angular/material/card';
+import {MatDialog} from '@angular/material/dialog';
 import {MatIcon} from '@angular/material/icon';
-import {LayerCollectionChildListComponent} from '../layer-collection-child-list/layer-collection-child-list.component';
+import {MatFormField, MatLabel, MatInput} from '@angular/material/input';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {firstValueFrom} from 'rxjs';
+import {LayerCollection, LayerCollectionListing, LayerListing, ProviderLayerCollectionId} from '@geoengine/api-client';
+import {CollectionNavigation, ConfirmationComponent, errorToText, LayersService} from '@geoengine/common';
+import {AppConfig} from '../../app-config.service';
 import {PermissionsComponent} from '../../permissions/permissions.component';
+import {LayerCollectionChildListComponent} from '../layer-collection-child-list/layer-collection-child-list.component';
 
 export interface CollectionForm {
     name: FormControl<string>;

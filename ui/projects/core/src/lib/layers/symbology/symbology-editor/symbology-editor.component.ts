@@ -1,4 +1,7 @@
+import {AsyncPipe} from '@angular/common';
 import {ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, viewChild} from '@angular/core';
+import {MatButton} from '@angular/material/button';
+import {BehaviorSubject, Subscription, combineLatest} from 'rxjs';
 import {
     Layer,
     RasterLayer,
@@ -12,13 +15,10 @@ import {
     CommonModule,
     AsyncValueDefault,
 } from '@geoengine/common';
-import {BehaviorSubject, Subscription, combineLatest} from 'rxjs';
-import {ProjectService} from '../../../project/project.service';
-import {MapService} from '../../../map/map.service';
-import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {DialogHelpComponent} from '../../../dialogs/dialog-help/dialog-help.component';
-import {MatButton} from '@angular/material/button';
-import {AsyncPipe} from '@angular/common';
+import {MapService} from '../../../map/map.service';
+import {ProjectService} from '../../../project/project.service';
+import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 
 @Component({
     selector: 'geoengine-symbology-editor',

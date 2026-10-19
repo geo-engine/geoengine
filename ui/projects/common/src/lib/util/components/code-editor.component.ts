@@ -1,10 +1,10 @@
 import {Component, ChangeDetectionStrategy, AfterViewInit, ElementRef, input, signal, viewChild, computed, effect} from '@angular/core';
 import {NG_VALUE_ACCESSOR, ControlValueAccessor} from '@angular/forms';
-import {EditorView, ViewUpdate, lineNumbers, drawSelection, Panel, showPanel, PanelConstructor} from '@codemirror/view';
-import {syntaxHighlighting, defaultHighlightStyle} from '@codemirror/language';
-import {Compartment, EditorState} from '@codemirror/state';
 import {json} from '@codemirror/lang-json';
 import {rust} from '@codemirror/lang-rust';
+import {syntaxHighlighting, defaultHighlightStyle} from '@codemirror/language';
+import {Compartment, EditorState} from '@codemirror/state';
+import {EditorView, ViewUpdate, lineNumbers, drawSelection, Panel, showPanel, PanelConstructor} from '@codemirror/view';
 
 type Language = 'Rust' | 'JSON';
 

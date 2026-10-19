@@ -1,8 +1,8 @@
 import {OnInit, ViewContainerRef, inject, ChangeDetectionStrategy} from '@angular/core';
 import {Component} from '@angular/core';
 import {Router, RouterOutlet} from '@angular/router';
-import {UserService} from '@geoengine/common';
 import {firstValueFrom} from 'rxjs';
+import {UserService} from '@geoengine/common';
 
 @Component({
     selector: 'geoengine-root',
