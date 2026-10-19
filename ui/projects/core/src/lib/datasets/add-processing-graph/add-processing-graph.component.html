@@ -18,8 +18,8 @@
 
     <mat-form-field appearance="fill">
         <mat-label>Processing Graph Id</mat-label>
-        <input matInput type="text" formControlName="workflowId" />
-        @if (form.controls.workflowId.errors) {
+        <input matInput type="text" formControlName="processingGraphId" />
+        @if (form.controls.processingGraphId.errors) {
             <mat-hint class="error">Must be valid UUID</mat-hint>
         }
     </mat-form-field>

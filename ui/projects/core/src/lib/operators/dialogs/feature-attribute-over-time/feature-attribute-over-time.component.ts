@@ -124,7 +124,7 @@ export class FeatureAttributeOvertimeComponent implements AfterViewInit, OnDestr
         const idAttribute = this.form.controls['idAttribute'].value as string;
         const valueAttribute = this.form.controls['valueAttribute'].value as string;
 
-        const outputName: string = this.form.controls['name'].value;
+        const outputName = this.form.controls['name'].value as string;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(

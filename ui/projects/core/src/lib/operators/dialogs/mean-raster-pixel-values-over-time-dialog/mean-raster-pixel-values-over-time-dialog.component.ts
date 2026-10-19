@@ -101,11 +101,11 @@ export class MeanRasterPixelValuesOverTimeDialogComponent implements AfterViewIn
      * The plot is added to the plot view.
      */
     add(): void {
-        const inputLayer: RasterLayer = this.form.controls['layer'].value;
-        const outputName: string = this.form.controls['name'].value;
+        const inputLayer = this.form.controls['layer'].value as RasterLayer;
+        const outputName = this.form.controls['name'].value as string;
 
-        const timePosition: TimePosition = this.form.controls['timePosition'].value;
-        const area: boolean = this.form.controls['area'].value;
+        const timePosition = this.form.controls['timePosition'].value as TimePosition;
+        const area = this.form.controls['area'].value as boolean;
 
         const params: MeanRasterPixelValuesOverTimeParameters = {
             timePosition,

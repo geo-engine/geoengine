@@ -477,7 +477,7 @@ const correctNeighborhoodDimensions = (
                 break;
             }
 
-            const weights: Array<Array<number>> = weightsMatrixForm.value;
+            const weights = weightsMatrixForm.value as Array<Array<number>>;
             rows = weights.length;
             cols = rows > 0 ? weights[0].length : 0;
 
@@ -493,7 +493,7 @@ const correctNeighborhoodDimensions = (
                 break;
             }
 
-            const dimensions: [number, number] = dimensionsForm.value;
+            const dimensions = dimensionsForm.value as [number, number];
             rows = dimensions[0];
             cols = dimensions[1];
 

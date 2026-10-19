@@ -1,6 +1,6 @@
 import {HttpEventType} from '@angular/common/http';
 import {ChangeDetectionStrategy, Component, effect, inject, input, OnInit} from '@angular/core';
-import {FormControl, FormGroup, UntypedFormBuilder, ValidatorFn, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormGroup, ValidatorFn, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import moment from 'moment';
 import {combineLatest, mergeMap} from 'rxjs';
 import {RasterResultDescriptorDict, WcsParamsDict, WfsParamsDict} from '../backend/backend.model';
@@ -83,7 +83,6 @@ export class DownloadLayerComponent implements OnInit {
     protected readonly mapService = inject(MapService);
     protected readonly notificationService = inject(NotificationService);
     protected readonly spatialReferenceService = inject(SpatialReferenceService);
-    private readonly formBuilder = inject(UntypedFormBuilder);
     public readonly config = inject(CoreConfig);
 
     readonly layer = input.required<Layer>();
@@ -108,7 +107,7 @@ export class DownloadLayerComponent implements OnInit {
         // initialize with the current time to have a defined value
         const time = new Time(moment.utc(), moment.utc());
 
-        this.form = this.formBuilder.group({
+        this.form = new FormGroup<DownloadLayerForm>({
             bboxMinX: new FormControl(-180.0, {
                 nonNullable: true,
                 validators: [Validators.required],

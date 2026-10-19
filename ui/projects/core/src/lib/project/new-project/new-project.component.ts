@@ -1,12 +1,13 @@
 import {BehaviorSubject, zip} from 'rxjs';
 import {first, mergeMap} from 'rxjs/operators';
 import {Component, ChangeDetectionStrategy, AfterViewInit, inject} from '@angular/core';
-import {UntypedFormGroup, UntypedFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
+import {FormControl, FormGroup, NonNullableFormBuilder, Validators, FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ProjectService} from '../project.service';
 import {SpatialReferenceService, WEB_MERCATOR} from '../../spatial-references/spatial-reference.service';
 import {
     NamedSpatialReference,
     NotificationService,
+    SpatialReference,
     SpatialReferenceSpecification,
     Time,
     extentToBboxDict,
@@ -41,33 +42,33 @@ import {AsyncPipe} from '@angular/common';
     ],
 })
 export class NewProjectComponent implements AfterViewInit {
-    protected formBuilder = inject(UntypedFormBuilder);
+    protected formBuilder = inject(NonNullableFormBuilder);
     protected projectService = inject(ProjectService);
     protected notificationService = inject(NotificationService);
     protected spatialReferenceService = inject(SpatialReferenceService);
 
     spatialReferenceOptions: Array<NamedSpatialReference>;
 
-    form: UntypedFormGroup;
+    form: FormGroup<{name: FormControl<string>; spatialReference: FormControl<SpatialReference>}>;
 
     created$ = new BehaviorSubject(false);
 
     constructor() {
         this.spatialReferenceOptions = this.spatialReferenceService.getSpatialReferences();
         this.form = this.formBuilder.group({
-            name: [
+            name: this.formBuilder.control(
                 '',
                 Validators.required,
                 // TODO: check for uniqueness
                 // geoengineValidators.uniqueProjectName(this.storageService),
-            ],
-            spatialReference: [WEB_MERCATOR, Validators.required],
+            ),
+            spatialReference: this.formBuilder.control(WEB_MERCATOR.spatialReference, Validators.required),
         });
         this.projectService
             .getSpatialReferenceStream()
             .pipe(first())
             .subscribe((spatialReference) => {
-                this.form.controls['spatialReference'].setValue(spatialReference);
+                this.form.controls.spatialReference.setValue(spatialReference);
             });
     }
 
@@ -79,13 +80,13 @@ export class NewProjectComponent implements AfterViewInit {
      * Create a new project and switch to it.
      */
     create(): void {
-        const spatialReference = this.form.controls['spatialReference'].value;
+        const spatialReference = this.form.controls.spatialReference.value;
 
         zip(this.projectService.getTimeStream(), this.spatialReferenceService.getSpatialReferenceSpecification(spatialReference.srsString))
             .pipe(
                 first(),
                 mergeMap(([time, spec]: [Time, SpatialReferenceSpecification]) => {
-                    const projectName: string = this.form.controls['name'].value;
+                    const projectName = this.form.controls.name.value;
 
                     return this.projectService.createProject({
                         name: projectName,

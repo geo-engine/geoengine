@@ -126,8 +126,8 @@ export class InterpolationComponent implements AfterViewInit, OnDestroy {
             return; // don't add while loading
         }
 
-        const inputLayer: RasterLayer = this.form.controls['layer'].value;
-        const outputName: string = this.form.controls['name'].value;
+        const inputLayer = this.form.controls['layer'].value as RasterLayer;
+        const outputName = this.form.controls['name'].value as string;
 
         const interpolationMethod = this.form.controls['interpolationMethod'].value as 'nearestNeighbor' | 'biLinear';
         const outputResolution: InterpolationResolution = this.getoutputResolution();
@@ -182,19 +182,19 @@ export class InterpolationComponent implements AfterViewInit, OnDestroy {
     }
 
     private getoutputResolution(): InterpolationResolution {
-        const outputResolution = this.form.controls['outputResolution'].value;
+        const outputResolution = this.form.controls['outputResolution'].value as string;
 
         if (outputResolution === 'fraction') {
             return {
                 type: 'fraction',
-                x: this.form.controls['outputResolutionX'].value,
-                y: this.form.controls['outputResolutionY'].value,
+                x: this.form.controls['outputResolutionX'].value as number,
+                y: this.form.controls['outputResolutionY'].value as number,
             };
         } else if (outputResolution === 'resolution') {
             return {
                 type: 'resolution',
-                x: this.form.controls['outputResolutionX'].value,
-                y: this.form.controls['outputResolutionY'].value,
+                x: this.form.controls['outputResolutionX'].value as number,
+                y: this.form.controls['outputResolutionY'].value as number,
             };
         }
 

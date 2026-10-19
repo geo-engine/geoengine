@@ -3,8 +3,9 @@ import {map, mergeMap} from 'rxjs/operators';
 import {Component, ChangeDetectionStrategy, AfterViewInit, inject} from '@angular/core';
 import {ProjectService} from '../project.service';
 import {
-    UntypedFormBuilder,
-    UntypedFormGroup,
+    FormControl,
+    FormGroup,
+    NonNullableFormBuilder,
     Validators,
     AbstractControl,
     ValidatorFn,
@@ -64,9 +65,9 @@ export class LoadProjectComponent implements AfterViewInit {
     protected backend = inject(BackendService);
     protected userService = inject(UserService);
     protected notificationService = inject(NotificationService);
-    protected formBuilder = inject(UntypedFormBuilder);
+    protected formBuilder = inject(NonNullableFormBuilder);
 
-    form: UntypedFormGroup;
+    form: FormGroup<{projectId: FormControl<UUID>}>;
 
     projects$ = new ReplaySubject<Array<ProjectListing>>(1);
     loading$ = new BehaviorSubject<boolean>(true);
@@ -79,7 +80,10 @@ export class LoadProjectComponent implements AfterViewInit {
         });
 
         this.form = this.formBuilder.group({
-            projectId: [this.currentProjectId, Validators.compose([Validators.required, notCurrentProject(() => this.currentProjectId)])],
+            projectId: this.formBuilder.control(
+                this.currentProjectId,
+                Validators.compose([Validators.required, notCurrentProject(() => this.currentProjectId)]),
+            ),
         });
 
         this.userService
@@ -116,10 +120,10 @@ export class LoadProjectComponent implements AfterViewInit {
     }
 
     load(): void {
-        const newProjectId: string = this.form.controls['projectId'].value;
+        const newProjectId = this.form.controls.projectId.value;
         this.projectService.loadAndSetProject(newProjectId).subscribe((project) => {
             this.currentProjectId = newProjectId;
-            setTimeout(() => this.form.controls['projectId'].updateValueAndValidity({emitEvent: true}));
+            setTimeout(() => this.form.controls.projectId.updateValueAndValidity({emitEvent: true}));
 
             this.notificationService.info(`Switched to project »${project.name}«`);
         });

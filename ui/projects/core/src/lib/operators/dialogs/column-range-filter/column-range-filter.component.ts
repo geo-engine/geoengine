@@ -26,7 +26,7 @@ import {
     FxLayoutAlignDirective,
     CommonModule,
 } from '@geoengine/common';
-import {ProcessingGraph, VectorOperator} from '@geoengine/api-client';
+import {ProcessingGraph, StringOrNumberRange, VectorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
 import {OperatorDialogContainerComponent} from '../helpers/operator-dialog-container/operator-dialog-container.component';
 import {MatIconButton, MatButton} from '@angular/material/button';
@@ -50,6 +50,9 @@ interface FilterForm {
     ranges: FormArray<FormGroup<RangeForm>>;
     histogram: FormControl<ReplaySubject<VegaChartData> | null>;
 }
+
+type FilterValue = FormGroup<FilterForm>['value'];
+type RangeValue = FormGroup<RangeForm>['value'];
 
 interface RangeForm {
     min: FormControl<string>;
@@ -279,11 +282,9 @@ export class ColumnRangeFilterComponent implements OnDestroy {
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    createWorkflow(filterValues: any, index: number, inputWorkflow: ProcessingGraph): ProcessingGraph {
-        // TODO: create a type for filterValues
+    createWorkflow(filterValues: Array<FilterValue>, index: number, inputWorkflow: ProcessingGraph): ProcessingGraph {
         if (index === filterValues.length) return inputWorkflow;
-        const attribute = filterValues[index]['attribute'] as string;
+        const attribute = filterValues[index].attribute!;
         const nestedWorkflow = this.createWorkflow(filterValues, index + 1, inputWorkflow);
         return {
             type: 'Vector',
@@ -301,15 +302,10 @@ export class ColumnRangeFilterComponent implements OnDestroy {
         };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    extractRanges(formRanges: any, attribute: string): any[][] {
-        // TODO: create a type for formRanges
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const filterRanges: any[][] = [];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        formRanges.forEach((range: any) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const minMax: any[] = [];
+    extractRanges(formRanges: Array<RangeValue> | undefined, attribute: string): Array<StringOrNumberRange> {
+        const filterRanges: Array<StringOrNumberRange> = [];
+        (formRanges ?? []).forEach((range) => {
+            const minMax: Array<string | number | undefined> = [];
             if (this.isAttributeText(attribute)) {
                 minMax.push(range.min);
                 minMax.push(range.max);
@@ -317,7 +313,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
                 minMax.push(isNaN(Number(range.min)) ? range.min : Number(range.min));
                 minMax.push(isNaN(Number(range.max)) ? range.max : Number(range.max));
             }
-            filterRanges.push(minMax);
+            filterRanges.push(minMax as StringOrNumberRange);
         });
         return filterRanges;
     }

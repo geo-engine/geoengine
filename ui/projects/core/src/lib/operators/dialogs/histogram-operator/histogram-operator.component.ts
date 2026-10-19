@@ -149,7 +149,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
             this.form.controls['rangeType'].valueChanges.subscribe(() => this.form.controls['range'].updateValueAndValidity()),
         );
 
-        this.isVectorLayer$ = this.form.controls['layer'].valueChanges.pipe(map((layer) => isVectorLayer(layer)));
+        this.isVectorLayer$ = this.form.controls['layer'].valueChanges.pipe(map((layer) => isVectorLayer(layer as Layer)));
     }
 
     ngAfterViewInit(): void {
@@ -201,7 +201,7 @@ export class HistogramOperatorComponent implements AfterViewInit, OnDestroy {
             };
         }
 
-        const outputName: string = this.form.controls['name'].value;
+        const outputName = this.form.controls['name'].value as string;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(

@@ -81,10 +81,10 @@ export class RasterTypeConversionComponent implements AfterViewInit {
     }
 
     add(): void {
-        const inputLayer: RasterLayer = this.form.controls['layer'].value;
-        const outputName: string = this.form.controls['name'].value;
+        const inputLayer = this.form.controls['layer'].value as RasterLayer;
+        const outputName = this.form.controls['name'].value as string;
 
-        const outputDataType: RasterDataType = this.form.controls['dataType'].value;
+        const outputDataType = this.form.controls['dataType'].value as RasterDataType;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(

@@ -124,7 +124,7 @@ export class ScatterplotOperatorComponent implements AfterViewInit, OnDestroy {
 
         const columnY = this.form.controls['columnY'].value as string;
 
-        const outputName: string = this.form.controls['name'].value;
+        const outputName = this.form.controls['name'].value as string;
 
         from(this.projectService.getProcessingGraph(inputLayer.workflowId))
             .pipe(

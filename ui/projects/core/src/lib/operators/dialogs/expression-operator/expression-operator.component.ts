@@ -220,7 +220,8 @@ export class ExpressionOperatorComponent implements AfterViewInit {
     */
 
     validateNoData(control: AbstractControl): ValidationErrors | null {
-        if (!isNaN(parseFloat(control.value)) || control.value.toLowerCase() === 'nan') {
+        const value = control.value as string;
+        if (!isNaN(parseFloat(value)) || value.toLowerCase() === 'nan') {
             return null;
         } else {
             return {

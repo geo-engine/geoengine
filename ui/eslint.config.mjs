@@ -33,8 +33,6 @@ const config = defineConfig([
         },
 
         rules: {
-            'arrow-parens': ['off', 'always'],
-            'brace-style': ['off', '1tbs'], // prettier is currently inconsistent, re-enable if possible
             'guard-for-in': 'error',
             'id-blacklist': 'off',
             'id-match': 'off',
@@ -143,10 +141,10 @@ const config = defineConfig([
             ],
             '@typescript-eslint/no-shadow': 'error',
             '@typescript-eslint/explicit-function-return-type': 'error',
-            '@typescript-eslint/no-unsafe-argument': 'warn', // TODO: use typed forms
-            '@typescript-eslint/no-unsafe-assignment': 'warn', // TODO: use typed forms
-            '@typescript-eslint/no-unsafe-call': 'warn', // TODO: use typed forms
-            '@typescript-eslint/no-unsafe-member-access': 'warn', // TODO: use typed forms
+            '@typescript-eslint/no-unsafe-argument': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
+            '@typescript-eslint/no-unsafe-assignment': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
+            '@typescript-eslint/no-unsafe-call': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
+            '@typescript-eslint/no-unsafe-member-access': 'warn', // TODO: type lineage-graph, map-container and time-slider in core
             '@typescript-eslint/no-unsafe-return': 'error',
             '@typescript-eslint/unbound-method': ['error', {ignoreStatic: true}],
             '@typescript-eslint/no-floating-promises': 'error',

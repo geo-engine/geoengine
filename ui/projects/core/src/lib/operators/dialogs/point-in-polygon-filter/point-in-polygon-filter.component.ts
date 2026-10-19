@@ -72,7 +72,7 @@ export class PointInPolygonFilterOperatorComponent {
         const pointsLayer = this.form.controls['pointLayer'].value as Layer;
         const polygonsLayer = this.form.controls['polygonLayer'].value as Layer;
 
-        const name: string = this.form.controls['name'].value;
+        const name = this.form.controls['name'].value as string;
 
         const sourceOperators = this.projectService.getAutomaticallyProjectedOperatorsFromLayers([pointsLayer, polygonsLayer]);
 
