@@ -15,10 +15,19 @@ pub use gdal_dataset_params::{
     GdalRetryOptions, GdalSourceTimePlaceholder, TimeReference,
 };
 pub use grid_and_properties::GridAndProperties;
+pub use process_common::{MdAxisMapping, validate_md_axis_mapping, validate_md_axis_roles};
 pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
 pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
-pub use reader::{GdalPoolReader, GdalProcessReadResult};
+pub use reader::{GdalPoolReader, GdalProcessMdReadResult, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
+
+/// How many tile reads a GDAL source keeps in flight against the worker pool.
+///
+/// Shared by the two sources that fan out over a tile x band grid. It is deliberately
+/// conservative for multidimensional sources: an `MdGdalSource` read returns one 2D slice per
+/// tile (a single 1440x600 float32 slice is already 3.4 MB), so the same bound represents far
+/// more bytes here than for a plain 2D tile.
+pub const TILE_READ_CONCURRENCY: usize = 16;
 
 /// Computes a reduced-resolution spatial grid for a given overview level.
 ///

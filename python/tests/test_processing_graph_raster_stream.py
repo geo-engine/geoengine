@@ -7,12 +7,14 @@ import unittest.mock
 from datetime import datetime
 from uuid import UUID
 
+import numpy as np
 import pyarrow as pa
 import rioxarray
 import websockets.protocol
 import xarray as xr
 
 import geoengine as ge
+from geoengine.workflow import RasterStreamProcessing
 from geoengine.types import RasterBandDescriptor
 
 from . import UrllibMocker
@@ -175,3 +177,32 @@ class ProcessingGraphRasterStreamTests(unittest.TestCase):
                 assert array.isel({"band": 0, "time": 0}, drop=True).equals(original_array)
 
             asyncio.run(inner2())
+
+    def test_merge_tiles_promotes_scalar_coords_for_concat(self):
+        data = xr.DataArray(
+            [[1.0, 2.0], [3.0, 4.0]],
+            dims=["y", "x"],
+            coords={
+                "x": [0.5, 1.5],
+                "y": [1.5, 0.5],
+                "time": np.datetime64("2020-01-01"),
+                "band": 0,
+            },
+        )
+        data2 = xr.DataArray(
+            [[5.0, 6.0], [7.0, 8.0]],
+            dims=["y", "x"],
+            coords={
+                "x": [0.5, 1.5],
+                "y": [1.5, 0.5],
+                "time": np.datetime64("2020-01-02"),
+                "band": 0,
+            },
+        )
+
+        merged = RasterStreamProcessing.merge_tiles([data, data2])
+
+        assert merged is not None
+        assert merged.dims == ("band", "time", "y", "x")
+        assert merged["time"].shape == (2,)
+        assert merged["band"].shape == (1,)
