@@ -359,6 +359,10 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
             )
             .map(IpcChannelResult::MdArrayInfo)
         }
+        GdalReadKind::RasterInfo => {
+            GdalHandling::load_raster_info_with_dataset_retry(dataset_cache, &dataset_params)
+                .map(IpcChannelResult::RasterInfo)
+        }
     };
 
     // Propagate channel send errors directly up out of the handler

@@ -164,6 +164,9 @@ pub enum GdalReadKind {
         group: Option<String>,
         array_name: String,
     },
+    /// Classic raster header read: the data type of band `rasterband_channel` and the
+    /// dataset's CRS, without any pixel data. The read advise and data type are ignored.
+    RasterInfo,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
@@ -190,6 +193,15 @@ pub enum IpcChannelResult {
     MdSlice(GdalIpcMdBytePayload),
     /// Header result of [`GdalReadKind::MdArrayInfo`].
     MdArrayInfo(MdArrayInfo),
+    /// Header result of [`GdalReadKind::RasterInfo`].
+    RasterInfo(RasterInfo),
+}
+
+/// The data type of one band and the CRS of a classic raster, as read from its header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct RasterInfo {
+    pub data_type: RasterDataType,
+    pub spatial_reference: geoengine_datatypes::spatial_reference::SpatialReference,
 }
 
 /// The shape and declared CRS of a multidim array, as read from its header.

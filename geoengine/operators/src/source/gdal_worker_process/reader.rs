@@ -10,8 +10,8 @@ use crate::source::gdal_worker_process::{
     GridAndProperties,
     process_common::{
         GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadKind,
-        GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-        IpcProcessGdalErrorKind, MdArrayInfo, MdAxisMapping,
+        GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+        IpcProcessError, IpcProcessGdalErrorKind, MdArrayInfo, MdAxisMapping, RasterInfo,
     },
 };
 
@@ -271,11 +271,45 @@ impl GdalPoolReader {
         group: Option<&str>,
         array_name: &str,
     ) -> Result<MdArrayInfo, GdalProcessPoolError> {
+        let read_kind = GdalReadKind::MdArrayInfo {
+            group: group.map(str::to_string),
+            array_name: array_name.to_string(),
+        };
+        match self.read_header(dataset_params, read_kind).await? {
+            IpcChannelResult::MdArrayInfo(info) => Ok(info),
+            _ => Err(unexpected_header()),
+        }
+    }
+
+    /// Reads the data type of the `rasterband_channel` band and the CRS of a classic raster in
+    /// a worker, so the server never opens the file itself. A missing file is an error here,
+    /// whatever `file_not_found_handling` says.
+    ///
+    /// # Errors
+    /// Returns a `GdalProcessPoolError` if the file or band cannot be opened, the data type is
+    /// not supported or the file has no CRS.
+    pub async fn read_raster_info(
+        &self,
+        dataset_params: GdalDatasetParameters,
+    ) -> Result<RasterInfo, GdalProcessPoolError> {
+        match self
+            .read_header(dataset_params, GdalReadKind::RasterInfo)
+            .await?
+        {
+            IpcChannelResult::RasterInfo(info) => Ok(info),
+            _ => Err(unexpected_header()),
+        }
+    }
+
+    async fn read_header(
+        &self,
+        dataset_params: GdalDatasetParameters,
+        read_kind: GdalReadKind,
+    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
         let span = tracing::info_span!(
-            "gdal_pool_read_md_info",
+            "gdal_pool_read_header",
             dataset = %dataset_params.file_path.display(),
-            group = ?group,
-            array = array_name,
+            read_kind = ?read_kind,
         );
         let empty = GridBoundingBox2D::new_unchecked([0, 0], [0, 0]);
         let request = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
@@ -288,14 +322,11 @@ impl GdalPoolReader {
             },
             data_type: RasterDataType::U8,
             read_id: None,
-            read_kind: GdalReadKind::MdArrayInfo {
-                group: group.map(str::to_string),
-                array_name: array_name.to_string(),
-            },
+            read_kind,
         });
 
         self.dispatcher()
-            .read_md_array_info(request)
+            .read_header(request)
             .instrument(span)
             .await
     }
@@ -388,6 +419,14 @@ fn read_result_or_no_data<T>(
                 },
         }) if file_not_found_as_no_data => Ok(None),
         Err(other_err) => Err(other_err),
+    }
+}
+
+fn unexpected_header() -> GdalProcessPoolError {
+    GdalProcessPoolError::IpcProcessError {
+        source: IpcProcessError::IpcOther {
+            msg: "the worker answered a header read with a different result kind".to_string(),
+        },
     }
 }
 
