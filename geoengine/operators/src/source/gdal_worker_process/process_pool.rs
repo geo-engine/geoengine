@@ -14,7 +14,7 @@ use super::{
     GdalProcessPoolAccess,
     process_common::{
         GdalIpcMdPayload, GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
-        IpcProcessRasterResult, MdArrayInfo,
+        IpcProcessRasterResult,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
@@ -913,25 +913,17 @@ impl GdalPoolDispatcher {
             })
     }
 
-    /// Read the header of a GDAL multidimensional array: its shape and declared CRS. Uses the
-    /// same leader/follower deduplication as [`Self::read_data`].
+    /// Read a header (`GdalReadKind::MdArrayInfo` or `GdalReadKind::RasterInfo`) without pixel
+    /// data. Uses the same leader/follower deduplication as [`Self::read_data`].
     ///
     /// # Panics
     /// This function will panic if a required channel is dropped unexpectedly.
-    pub async fn read_md_array_info(
+    pub async fn read_header(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<MdArrayInfo, GdalProcessPoolError> {
+    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
         let shared_res = self.dispatch_dedup(request).await?;
-
-        match shared_res.0.as_ref().map_err(Clone::clone)? {
-            IpcChannelResult::MdArrayInfo(info) => Ok(info.clone()),
-            _ => Err(GdalProcessPoolError::IpcProcessError {
-                source: IpcProcessError::IpcOther {
-                    msg: "expected an MD array info result".to_string(),
-                },
-            }),
-        }
+        shared_res.0.clone()
     }
 
     /// Shared leader/follower dispatch: hashes the request, coalesces identical

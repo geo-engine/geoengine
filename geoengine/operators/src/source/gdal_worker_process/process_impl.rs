@@ -2,7 +2,7 @@ use super::{
     GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadWindow,
-        IpcProcessError, MdArrayInfo, MdAxisMapping, validate_md_axis_mapping,
+        IpcProcessError, MdArrayInfo, MdAxisMapping, RasterInfo, validate_md_axis_mapping,
     },
 };
 use crate::{
@@ -20,7 +20,10 @@ use gdal::{
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::{
     primitives::Coordinate2D,
-    raster::{GridSize, Pixel, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType},
+    raster::{
+        GridSize, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+        RasterPropertiesEntryType,
+    },
     spatial_reference::SpatialReference,
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
@@ -756,6 +759,32 @@ impl GdalHandling {
         })
     }
 
+    /// Reads the data type of the `rasterband_channel` band and the dataset's CRS, without
+    /// pixel data.
+    ///
+    /// # Errors
+    /// Returns an `IpcProcessError` if the file or band cannot be opened, the data type is not
+    /// supported or the dataset has no CRS.
+    pub fn load_raster_info_with_dataset_retry(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+    ) -> Result<RasterInfo, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, false, |ds, params| {
+            let band_type = ds.rasterband(params.rasterband_channel)?.band_type();
+            let data_type = RasterDataType::from_gdal_data_type(band_type).map_err(|_| {
+                IpcProcessError::IpcOther {
+                    msg: format!("unsupported raster data type {band_type:?}"),
+                }
+            })?;
+            let spatial_reference = SpatialReference::try_from(ds.spatial_ref()?)
+                .map_err(|e| IpcProcessError::IpcOther { msg: e.to_string() })?;
+            Ok(RasterInfo {
+                data_type,
+                spatial_reference,
+            })
+        })
+    }
+
     /// Reads the shape and declared CRS of a multidimensional array, without pixel data.
     ///
     /// # Errors
@@ -930,6 +959,21 @@ mod tests {
 
         assert_eq!(start, vec![1, 5, 3, 10]);
         assert_eq!(count, vec![1, 1, 6, 4]);
+    }
+
+    #[test]
+    fn it_reads_raster_info_without_pixels() {
+        let mut holder = GdalDatasetHolder::new();
+
+        let info = GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &get_params())
+            .expect("the NDVI fixture opens");
+        assert_eq!(info.data_type, RasterDataType::U8);
+        assert_eq!(info.spatial_reference, SpatialReference::epsg_4326());
+
+        // a missing file is an error, whatever `file_not_found_handling` says
+        let mut missing = get_params();
+        missing.file_path = test_data!("raster/does_not_exist.tif").into();
+        assert!(GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &missing).is_err());
     }
 
     fn get_params() -> GdalDatasetParameters {

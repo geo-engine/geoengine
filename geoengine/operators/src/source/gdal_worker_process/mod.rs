@@ -16,7 +16,7 @@ pub use gdal_dataset_params::{
 };
 pub use grid_and_properties::GridAndProperties;
 pub use process_common::{
-    MdArrayInfo, MdAxisMapping, validate_md_axis_mapping, validate_md_axis_roles,
+    MdArrayInfo, MdAxisMapping, RasterInfo, validate_md_axis_mapping, validate_md_axis_roles,
 };
 pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
 pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
