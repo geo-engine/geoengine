@@ -78,12 +78,6 @@ pub fn geo_transform_from_fields(
         return None;
     }
 
-    // A `GeoTransform` requires non-zero pixel sizes. Some STAC catalogs encode
-    // angular/QA assets with a zero pixel height, so skip those instead of panicking.
-    if values[0] == 0.0 || values[4] == 0.0 {
-        return None;
-    }
-
     // GDAL geo-transform: [origin_x, pixel_width, rotation, origin_y, rotation, pixel_height]
     let gdal_geotransform: GdalGeoTransform = [
         values[2], // origin_x
@@ -93,7 +87,9 @@ pub fn geo_transform_from_fields(
         values[3], // rotation
         values[4], // pixel_height (negative for north-up)
     ];
-    Some(gdal_geotransform.into())
+    // A `GeoTransform` requires finite, non-zero pixel sizes. Some STAC catalogs encode
+    // angular/QA assets with a zero pixel height, so skip those.
+    gdal_geotransform.try_into().ok()
 }
 
 /// Extract `(height, width)` from `proj:shape` in asset fields.
@@ -719,8 +715,8 @@ mod tests {
         let gt = geo_transform_from_fields(&fields).expect("should parse transform");
         assert!((gt.origin_coordinate.x - 399_960.0).abs() < 1e-9);
         assert!((gt.origin_coordinate.y - 5_700_000.0).abs() < 1e-9);
-        assert!((gt.x_pixel_size() - 10.0).abs() < 1e-9);
-        assert!((gt.y_pixel_size() - (-10.0)).abs() < 1e-9);
+        assert!((gt.x_pixel_size().get() - 10.0).abs() < 1e-9);
+        assert!((gt.y_pixel_size().get() - (-10.0)).abs() < 1e-9);
     }
 
     #[test]

@@ -656,6 +656,7 @@ impl TimeFilledItem for GdalLoadingInfoTemporalSlice {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         hashmap,
         primitives::{BandSelection, DateTime, DateTimeParseFormat, TimeGranularity},
@@ -688,7 +689,7 @@ mod tests {
                     TimeStep::millis(11).unwrap(),
                 ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
@@ -769,7 +770,7 @@ mod tests {
                     TimeStep::millis(11).unwrap(),
                 ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box()
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
@@ -990,7 +991,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 6))),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
@@ -1060,7 +1061,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 6))),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box()
                 ),
                 bands: RasterBandDescriptors::new_single_band()
@@ -1105,7 +1106,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: TimeDescriptor::new_irregular(None), // FIXME: the regular time step settings are crazy
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((0., 0.).into(), 1., -1.),
+                    GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
                     GridShape2D::new_2d(128, 128).bounding_box(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
@@ -1115,8 +1116,8 @@ mod tests {
                 rasterband_channel: 0,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (0., 0.).into(),
-                    x_pixel_size: 1.,
-                    y_pixel_size: 1.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
                 },
                 width: 128,
                 height: 128,
@@ -1174,7 +1175,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time: TimeDescriptor::new_irregular(None), // FIXME: the regular time step settings are crazy
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
@@ -1184,8 +1185,8 @@ mod tests {
                 rasterband_channel: 0,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (0., 0.).into(),
-                    x_pixel_size: 1.,
-                    y_pixel_size: 1.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
                 },
                 width: 128,
                 height: 128,
@@ -1246,7 +1247,7 @@ mod tests {
                     time_step,
                 ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
@@ -1256,8 +1257,8 @@ mod tests {
                 rasterband_channel: 0,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (0., 0.).into(),
-                    x_pixel_size: 1.,
-                    y_pixel_size: 1.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
                 },
                 width: 128,
                 height: 128,
@@ -1346,8 +1347,8 @@ mod tests {
                 rasterband_channel: 0,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (0., 0.).into(),
-                    x_pixel_size: 1.,
-                    y_pixel_size: 1.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
                 },
                 width: 128,
                 height: 128,
@@ -1429,8 +1430,8 @@ mod tests {
                     rasterband_channel: 0,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (0., 0.).into(),
-                        x_pixel_size: 1.,
-                        y_pixel_size: 1.,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
                     },
                     width: 128,
                     height: 128,

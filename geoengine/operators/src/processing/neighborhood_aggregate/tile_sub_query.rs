@@ -366,7 +366,7 @@ mod tests {
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::test_default());
 
         let spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(0., 1., 0., -1.),
+            GeoTransform::new_with_coordinate_x_y_unchecked(0., 1., 0., -1.),
             GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
         );
 

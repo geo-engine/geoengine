@@ -289,7 +289,7 @@ mod tests {
             resolution: SpatialResolution::new_unchecked(1., 1.),
             projection: SpatialReference::epsg_4326(),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new((0., 1.).into(), 1., -1.),
+                GeoTransform::new_unchecked((0., 1.).into(), 1., -1.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
             ),
             bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {

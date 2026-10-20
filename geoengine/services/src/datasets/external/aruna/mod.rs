@@ -530,7 +530,7 @@ impl ArunaDataProvider {
         info: &RasterInfo,
     ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
         let shape = GridShape2D::new_2d(info.width, info.height).bounding_box();
-        let geo_transform = GeoTransform::try_from(info.geo_transform)?;
+        let geo_transform = GeoTransform::from(info.geo_transform);
 
         Ok(RasterResultDescriptor {
             data_type: info.data_type,

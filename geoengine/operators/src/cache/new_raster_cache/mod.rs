@@ -1575,7 +1575,7 @@ mod tests {
     ) {
         let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
-        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
+        let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.);
 
         let raster: MaskedGrid2D<u8> = Grid2D::new_filled(tile_size_in_pixels, fill_value).into();
 

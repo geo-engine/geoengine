@@ -44,8 +44,8 @@ pub trait OptimizableOperator: InitializedRasterOperator {
         );
 
         ensure!(
-            target_resolution.x % original_resolution.x == 0.
-                && target_resolution.y % original_resolution.y == 0.,
+            target_resolution.x() % original_resolution.x() == 0.
+                && target_resolution.y() % original_resolution.y() == 0.,
             TargetResolutionMustBeDivisibleBySourceResolution {
                 source_resolution: original_resolution,
                 target_resolution,

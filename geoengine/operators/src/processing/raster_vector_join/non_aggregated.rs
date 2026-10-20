@@ -988,7 +988,7 @@ mod tests {
                 TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
@@ -1205,7 +1205,7 @@ mod tests {
                 TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),

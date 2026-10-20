@@ -18,7 +18,7 @@ use geoengine_operators::{
         Statistics as OperatorsStatistics,
     },
 };
-use ordered_float::NotNan;
+use typed_floats::tf64::NonNaN;
 
 macro_rules! convert {
     ($type_name:expr, $operator:expr, $($runtime:ty => $variant:ident),+ $(,)?) => {{
@@ -162,10 +162,10 @@ impl TryFrom<&OperatorsHistogram> for Histogram {
                     }
                     geoengine_operators::plot::HistogramBounds::Values { min, max } => {
                         HistogramBounds::Values(HistogramBoundsValues {
-                            min: NotNan::new(*min).map_err(|_| {
+                            min: NonNaN::new(*min).map_err(|_| {
                                 anyhow::anyhow!("histogram min bound for {} must be finite", value.typetag_name())
                             })?,
-                            max: NotNan::new(*max).map_err(|_| {
+                            max: NonNaN::new(*max).map_err(|_| {
                                 anyhow::anyhow!("histogram max bound for {} must be finite", value.typetag_name())
                             })?,
                         })

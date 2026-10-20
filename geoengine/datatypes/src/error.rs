@@ -236,6 +236,14 @@ pub enum Error {
         min: Vec<isize>,
         max: Vec<isize>,
     },
+    #[snafu(display(
+        "Invalid GeoTransform: the origin ({origin_coordinate:?}) must be finite and the pixel sizes (x: {x_pixel_size}, y: {y_pixel_size}) must be finite and non-zero."
+    ))]
+    InvalidGeoTransform {
+        origin_coordinate: Coordinate2D,
+        x_pixel_size: f64,
+        y_pixel_size: f64,
+    },
     #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
     InvalidSpatialReferenceString {
         spatial_reference_string: String,

@@ -253,8 +253,8 @@ fn euclidian_pixel_distance<B: AxisAlignedRectangle>(
     );
 
     // calculate the number of pixels per axis
-    let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
-    let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
+    let x_pixels = (bbox.size_x() / spatial_resolution.x().get()).abs();
+    let y_pixels = (bbox.size_y() / spatial_resolution.y().get()).abs();
 
     let diag_pixels: f64 = x_pixels.hypot(y_pixels);
     Ok(diag_pixels)
@@ -465,7 +465,7 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     let x_pixel_size = pixel_size;
     let y_pixel_size = pixel_size;
 
-    let geo_transform = GeoTransform::new(proj_bbox.upper_left(), x_pixel_size, -y_pixel_size);
+    let geo_transform = GeoTransform::new(proj_bbox.upper_left(), x_pixel_size, -y_pixel_size)?;
     let grid_bounds = GridShape::new_2d(y_pixels, x_pixels).bounding_box();
     let out_spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
@@ -916,13 +916,13 @@ mod tests {
 
         assert!(approx_eq!(
             f64,
-            spatial_resolution.x,
+            spatial_resolution.x().get(),
             0.000_833_333,
             epsilon = 0.000_000_1
         ));
         assert!(approx_eq!(
             f64,
-            spatial_resolution.y,
+            spatial_resolution.y().get(),
             0.000_833_333,
             epsilon = 0.000_000_1
         ));
@@ -936,10 +936,14 @@ mod tests {
         let sugg_pixel_size =
             suggest_pixel_size_like_gdal(bbox, spatial_resolution, &projector).unwrap();
 
-        assert!(approx_eq!(f64, sugg_pixel_size.x, sugg_pixel_size.y));
         assert!(approx_eq!(
             f64,
-            sugg_pixel_size.x,
+            sugg_pixel_size.x().get(),
+            sugg_pixel_size.y().get()
+        ));
+        assert!(approx_eq!(
+            f64,
+            sugg_pixel_size.x().get(),
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
         ));
@@ -960,13 +964,13 @@ mod tests {
 
         assert!(approx_eq!(
             f64,
-            spatial_resolution.x,
+            spatial_resolution.x().get(),
             0.000_833_333,
             epsilon = 0.000_000_1
         ));
         assert!(approx_eq!(
             f64,
-            spatial_resolution.y,
+            spatial_resolution.y().get(),
             0.000_833_333,
             epsilon = 0.000_000_1
         ));
@@ -980,10 +984,14 @@ mod tests {
         let sugg_pixel_size =
             suggest_pixel_size_from_diag_cross(bbox, spatial_resolution, &projector).unwrap();
 
-        assert!(approx_eq!(f64, sugg_pixel_size.x, sugg_pixel_size.y));
         assert!(approx_eq!(
             f64,
-            sugg_pixel_size.x,
+            sugg_pixel_size.x().get(),
+            sugg_pixel_size.y().get()
+        ));
+        assert!(approx_eq!(
+            f64,
+            sugg_pixel_size.x().get(),
             79.088_974_450_690_5, // this is the pixel size GDAL generates when reprojecting the SRTM tile.
             epsilon = 0.000_000_1
         ));
@@ -1035,25 +1043,34 @@ mod tests {
             ("default", &default_suggestion),
         ] {
             assert!(
-                s.x.is_finite() && s.y.is_finite(),
+                s.x().is_finite() && s.y().is_finite(),
                 "{label} suggested pixel size must be finite, got {s:?}"
             );
             assert!(
-                s.x > 0.0 && s.y > 0.0,
+                s.x() > 0.0 && s.y() > 0.0,
                 "{label} suggested pixel size must be positive, got {s:?}"
             );
             assert!(
-                s.x > 1_000.0 && s.x < 100_000.0,
+                s.x() > 1_000.0 && s.x() < 100_000.0,
                 "{label} suggested pixel size out of expected magnitude, got {s:?}"
             );
         }
 
         // The projectors must agree on the suggestion within floating point noise: they
         // were pinned to 11137.041708704 m/px after clipping the pole-spanning bounds.
-        let reference = proj_suggestion.x;
+        let reference = proj_suggestion.x().get();
         assert!(
-            approx_eq!(f64, geodesy_suggestion.x, reference, epsilon = 0.000_000_1)
-                && approx_eq!(f64, default_suggestion.x, reference, epsilon = 0.000_000_1),
+            approx_eq!(
+                f64,
+                geodesy_suggestion.x().get(),
+                reference,
+                epsilon = 0.000_000_1
+            ) && approx_eq!(
+                f64,
+                default_suggestion.x().get(),
+                reference,
+                epsilon = 0.000_000_1
+            ),
             "projectors diverge: proj={proj_suggestion:?}, geodesy={geodesy_suggestion:?}, default={default_suggestion:?}"
         );
     }

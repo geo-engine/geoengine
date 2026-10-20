@@ -93,6 +93,7 @@ mod tests {
     use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType};
     use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_operators::source::GdalDatasetGeoTransform;
 
     #[test]
@@ -161,8 +162,8 @@ mod tests {
                 height: 1800,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: Coordinate2D::new(-180.0, 90.0),
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                 },
             }),
             provenance: Some(vec![Provenance {

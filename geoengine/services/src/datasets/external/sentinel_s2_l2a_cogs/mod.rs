@@ -612,11 +612,10 @@ impl SentinelS2L2aCogsMetaData {
             params: Some(GdalDatasetParameters {
                 file_path: PathBuf::from(asset.href.clone()),
                 rasterband_channel: 1,
-                geo_transform: GdalDatasetGeoTransform::from(
-                    asset
-                        .gdal_geotransform()
-                        .ok_or(error::Error::StacInvalidGeoTransform)?,
-                ),
+                geo_transform: asset
+                    .gdal_geotransform()
+                    .and_then(|gt| GdalDatasetGeoTransform::try_from(gt).ok())
+                    .ok_or(error::Error::StacInvalidGeoTransform)?,
                 width: stac_shape_x as usize,
                 height: stac_shape_y as usize,
                 file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
@@ -785,7 +784,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
-        let geo_transform = GeoTransform::new(
+        // the band resolutions are positive constants
+        let geo_transform = GeoTransform::new_unchecked(
             self.zone.native_extent().upper_left(),
             self.band.resolution_m(),
             self.band.resolution_m().neg(),
@@ -923,6 +923,7 @@ mod tests {
         util::tests::admin_login,
     };
     use futures::StreamExt;
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         dataset::{DatasetId, ExternalDataId},
         primitives::{BandSelection, SpatialPartition2D},
@@ -1000,8 +1001,8 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (600_000.0, 3_400_020.0).into(),
-                    x_pixel_size: 60.,
-                    y_pixel_size: -60.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(60.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-60.),
                 },
                 width: 1830,
                 height: 1830,
@@ -1400,8 +1401,8 @@ mod tests {
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (499_980.0,9_800_020.00).into(),
-                        x_pixel_size: 10.,
-                        y_pixel_size: -10.,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(10.),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-10.),
                     },
                     width: 10980,
                     height: 10980,

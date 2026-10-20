@@ -8,11 +8,10 @@ use geoengine_datatypes::{
         GeoTransform, GridBoundingBox2D, GridShapeAccess, RasterPropertiesEntryType,
         RasterPropertiesKey, SpatialGridDefinition,
     },
-    util::test::TestDefault,
+    util::{NonZeroFiniteF64, test::TestDefault},
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
 use std::{
     collections::HashMap,
     hash::{Hash, Hasher},
@@ -64,17 +63,8 @@ impl GdalDatasetParameters {
     /// Returns the `SpatialGridDefinition` of the Gdal dataset.
     ///
     /// Note: This allows upside down datasets (where `GeoTransform` `y_pixel_size` is positive)!
-    ///
-    /// # Panics
-    /// Panics if the `GdalDatasetParameters` are faulty.
     pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
-        let gdal_geo_transform = GeoTransform::new(
-            self.gdal_geo_transform().origin_coordinate,
-            self.gdal_geo_transform().x_pixel_size,
-            self.gdal_geo_transform().y_pixel_size,
-        );
-
-        SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
+        SpatialGridDefinition::new(self.gdal_geo_transform().into(), self.dataset_bounds())
     }
 
     /// Returns the file path that should be passed to GDAL when opening the dataset.
@@ -177,16 +167,16 @@ pub struct GdalRetryOptions {
 }
 
 /// A user friendly representation of Gdal's geo transform. In contrast to [`GeoTransform`] this
-/// geo transform allows arbitrary pixel sizes and can thus also represent rasters where the origin is not located
-/// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
+/// geo transform allows pixel sizes of any sign and can thus also represent rasters where the origin is not located
+/// in the upper left corner. The pixel sizes are always finite and non-zero. It should only be used for loading rasters with Gdal and not internally.
 /// The GDAL pixel space is usually anchored at the "top-left" corner of the data spatial bounds. Therefore the raster data is stored with spatial coordinate y-values decreasing with the rasters rows. This is represented by a negative pixel size.
 /// However, there are datasets where the data is stored "upside-down". If this is the case, the pixel size is positive.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalDatasetGeoTransform {
     pub origin_coordinate: Coordinate2D,
-    pub x_pixel_size: f64,
-    pub y_pixel_size: f64,
+    pub x_pixel_size: NonZeroFiniteF64,
+    pub y_pixel_size: NonZeroFiniteF64,
 }
 
 /// Default implementation for testing purposes where geo transform doesn't matter
@@ -194,8 +184,8 @@ impl TestDefault for GdalDatasetGeoTransform {
     fn test_default() -> Self {
         Self {
             origin_coordinate: (0.0, 0.0).into(),
-            x_pixel_size: 1.0,
-            y_pixel_size: -1.0,
+            x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+            y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
         }
     }
 }
@@ -215,30 +205,26 @@ impl ApproxEq for GdalDatasetGeoTransform {
 }
 
 /// Direct conversion from `GdalDatasetGeoTransform` to [`GeoTransform`] only works if origin is located in the upper left corner.
-impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
-    type Error = Error;
-
-    fn try_from(dataset_geo_transform: GdalDatasetGeoTransform) -> Result<Self> {
-        ensure!(
-            dataset_geo_transform.x_pixel_size != 0.0 && dataset_geo_transform.y_pixel_size != 0.0,
-            crate::error::GeoTransformOrigin // TODO new name?
-        );
-
-        Ok(GeoTransform::new(
+impl From<GdalDatasetGeoTransform> for GeoTransform {
+    fn from(dataset_geo_transform: GdalDatasetGeoTransform) -> Self {
+        GeoTransform::new_typed(
             dataset_geo_transform.origin_coordinate,
             dataset_geo_transform.x_pixel_size,
             dataset_geo_transform.y_pixel_size,
-        ))
+        )
     }
 }
 
-impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
-    fn from(gdal_geo_transform: gdal::GeoTransform) -> Self {
-        Self {
+/// Fails if a pixel size is zero or not finite.
+impl TryFrom<gdal::GeoTransform> for GdalDatasetGeoTransform {
+    type Error = typed_floats::InvalidNumber;
+
+    fn try_from(gdal_geo_transform: gdal::GeoTransform) -> Result<Self, Self::Error> {
+        Ok(Self {
             origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[3]).into(),
-            x_pixel_size: gdal_geo_transform[1],
-            y_pixel_size: gdal_geo_transform[5],
-        }
+            x_pixel_size: NonZeroFiniteF64::new(gdal_geo_transform[1])?,
+            y_pixel_size: NonZeroFiniteF64::new(gdal_geo_transform[5])?,
+        })
     }
 }
 

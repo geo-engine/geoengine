@@ -250,7 +250,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
     ) -> geoengine_operators::util::Result<GdalLoadingInfo> {
         let utm_extent = self.zone.native_extent();
         let px_size = self.product_band.resolution_meters() as f64;
-        let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
+        // the band resolutions are positive constants
+        let geo_transform = GeoTransform::new_unchecked(utm_extent.upper_left(), px_size, -px_size);
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
@@ -280,7 +281,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
         let utm_extent = self.zone.native_extent();
         let px_size = self.product_band.resolution_meters() as f64;
-        let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
+        // the band resolutions are positive constants
+        let geo_transform = GeoTransform::new_unchecked(utm_extent.upper_left(), px_size, -px_size);
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
@@ -323,6 +325,7 @@ mod tests {
         datasets::external::copernicus_dataspace::ids::L2ABand,
         util::sentinel_2_utm_zones::UtmZoneDirection,
     };
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         primitives::{Coordinate2D, DateTime, SpatialPartition2D},
         test_data,
@@ -565,8 +568,8 @@ mod tests {
                             x: 399_960.0,
                             y: 5_700_000.0,
                         },
-                        x_pixel_size: 10.0,
-                        y_pixel_size: -10.0,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(10.0),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-10.0),
                     },
                     width: 10980,
                     height: 10980,

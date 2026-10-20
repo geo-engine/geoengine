@@ -124,14 +124,14 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
         let output_resolution = match params.output_resolution {
             DownsamplingResolution::Resolution(res) => {
                 ensure!(
-                    res.x.abs() >= in_spatial_grid.spatial_resolution().x.abs(),
+                    res.x().abs() >= in_spatial_grid.spatial_resolution().x().abs(),
                     error::OutputMustBeLowerResolutionThanInput {
                         input: in_spatial_grid.spatial_resolution(),
                         output: res
                     }
                 );
                 ensure!(
-                    res.y.abs() >= in_spatial_grid.spatial_resolution().y.abs(), // TODO: allow neg y size in SpatialResolution
+                    res.y().abs() >= in_spatial_grid.spatial_resolution().y().abs(), // TODO: allow neg y size in SpatialResolution
                     error::OutputMustBeLowerResolutionThanInput {
                         input: in_spatial_grid.spatial_resolution(),
                         output: res
@@ -151,8 +151,8 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
                 );
 
                 SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x * fraction.x,
-                    in_spatial_grid.spatial_resolution().y.abs() * fraction.y, // TODO: allow negative size
+                    in_spatial_grid.spatial_resolution().x().get() * fraction.x,
+                    in_spatial_grid.spatial_resolution().y().get() * fraction.y, // TODO: allow negative size
                 )
             }
         };
@@ -642,8 +642,8 @@ mod tests {
         // The pixel which "owns" the edge is selected because pixels are defiend from the upper left edge.
         // E.g. _6 is selected for the first pixel since it owns the edge between _1, _2, _5_ and _6.
 
-        let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
-        let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 2.0, -2.0);
+        let in_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
+        let out_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 2.0, -2.0);
         let tile_size_in_pixels = GridShape2D {
             shape_array: [4, 4],
         };
@@ -750,10 +750,12 @@ mod tests {
             params: DownsamplingParams {
                 sampling_method: DownsamplingMethod::NearestNeighbor,
                 output_origin_reference: None,
-                output_resolution: DownsamplingResolution::Resolution(SpatialResolution {
-                    x: out_geo_transform.x_pixel_size(),
-                    y: out_geo_transform.y_pixel_size().abs(),
-                }),
+                output_resolution: DownsamplingResolution::Resolution(
+                    SpatialResolution::new_unchecked(
+                        out_geo_transform.x_pixel_size().get(),
+                        out_geo_transform.y_pixel_size().get().abs(),
+                    ),
+                ),
             },
             sources: SingleRasterSource { raster: mrs1 },
         }
@@ -823,8 +825,8 @@ mod tests {
         // In this case, each pixel corresponds to the center of the corresponding tile.
         // E.g. _4 is selected for the first pixel since it is in the center of the tile.
 
-        let in_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
-        let out_geo_transform = GeoTransform::new(Coordinate2D::new(0.0, 0.0), 3.0, -3.0);
+        let in_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
+        let out_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 3.0, -3.0);
         let tile_size_in_pixels = GridShape2D {
             shape_array: [3, 3],
         };
@@ -992,10 +994,12 @@ mod tests {
             params: DownsamplingParams {
                 sampling_method: DownsamplingMethod::NearestNeighbor,
                 output_origin_reference: None,
-                output_resolution: DownsamplingResolution::Resolution(SpatialResolution {
-                    x: out_geo_transform.x_pixel_size(),
-                    y: out_geo_transform.y_pixel_size().abs(),
-                }),
+                output_resolution: DownsamplingResolution::Resolution(
+                    SpatialResolution::new_unchecked(
+                        out_geo_transform.x_pixel_size().get(),
+                        out_geo_transform.y_pixel_size().get().abs(),
+                    ),
+                ),
             },
             sources: SingleRasterSource { raster: mrs1 },
         }

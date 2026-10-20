@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
 
 use futures::StreamExt;
+use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_datatypes::{
     primitives::{BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval},
     raster::{GridBoundingBox2D, RasterTile2D},
@@ -259,8 +260,8 @@ async fn add_ndvi_multi_tile_dataset(app_ctx: &PostgresContext<NoTls>) -> Datase
                 rasterband_channel: 1,
                 geo_transform: GeoTransform {
                     origin_coordinate: Coordinate2D { x: -180., y: 90. },
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                 },
                 width: 3600,
                 height: 1800,

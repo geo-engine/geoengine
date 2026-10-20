@@ -491,6 +491,7 @@ mod tests {
         ge_context,
         layers::storage::LayerProviderDb,
     };
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         collections::VectorDataType,
         primitives::{TimeGranularity, TimeStep},
@@ -743,7 +744,7 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: TimeDescriptor::new_irregular(None),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new((0., 0.).into(), 1., -1.),
+                GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
                 GridBoundingBox::new([0, 0], [0, 0]).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
@@ -774,8 +775,8 @@ mod tests {
             rasterband_channel: 0,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: Default::default(),
-                x_pixel_size: 0.0,
-                y_pixel_size: 0.0,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
             },
             width: 1,
             height: 1,

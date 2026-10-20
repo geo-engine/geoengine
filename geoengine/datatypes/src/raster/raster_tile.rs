@@ -105,7 +105,7 @@ where
             .global_geo_transform
             .grid_idx_to_pixel_upper_left_coordinate_2d(global_upper_left_idx);
 
-        GeoTransform::new(
+        GeoTransform::new_typed(
             tile_upper_left_coord,
             self.global_geo_transform.x_pixel_size(),
             self.global_geo_transform.y_pixel_size(),
@@ -758,7 +758,7 @@ mod tests {
         let ti = TileInformation::new(
             GridIdx([2, 3]),
             GridShape2D::from([10, 10]),
-            GeoTransform::new_with_coordinate_x_y(-180., 0.1, 90., -0.1),
+            GeoTransform::new_with_coordinate_x_y_unchecked(-180., 0.1, 90., -0.1),
         );
         assert_eq!(
             ti.spatial_partition(),

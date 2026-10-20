@@ -1749,6 +1749,7 @@ mod tests {
     };
     use crate::api::model::services::SECRET_REPLACEMENT;
     use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::PositiveFiniteF64;
     use std::fs;
 
     #[test]
@@ -1763,7 +1764,7 @@ mod tests {
         assert_eq!(stac_definition.collection_name, "sentinel-2-l2a");
         assert!(matches!(
             stac_definition.datasets[0].resolution,
-            SpatialResolution { x, y } if x == 10. && y == 10.
+            SpatialResolution { x, y } if x == PositiveFiniteF64::new_unchecked(10.) && y == PositiveFiniteF64::new_unchecked(10.)
         ));
 
         let definition: TypedDataProviderDefinition =
@@ -1776,7 +1777,7 @@ mod tests {
         assert_eq!(definition.collection_name, "sentinel-2-l2a");
         assert!(matches!(
             definition.datasets[0].resolution,
-            SpatialResolution { x, y } if x == 10. && y == 10.
+            SpatialResolution { x, y } if x == PositiveFiniteF64::new_unchecked(10.) && y == PositiveFiniteF64::new_unchecked(10.)
         ));
     }
 

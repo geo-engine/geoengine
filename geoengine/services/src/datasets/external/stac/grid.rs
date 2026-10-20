@@ -75,10 +75,9 @@ impl StacGrid {
         }
         // Separate square roots avoid overflowing width * height for large extents.
         let side = width.sqrt() * height.sqrt() / f64::from(self.target_number_of_cells).sqrt();
-        if !side.is_finite() || side <= 0. {
-            return Err("STAC derived cell side must be finite and positive");
-        }
-        let transform = GeoTransform::new(upper_left, side, -side);
+        // `side` is not negative, so the geo transform only rejects zero and non-finite values
+        let transform = GeoTransform::new(upper_left, side, -side)
+            .map_err(|_| "STAC derived cell side must be finite and positive")?;
         let extent_partition = SpatialPartition2D::new_unchecked(upper_left, lower_right);
         let grid_bounds = transform.spatial_to_grid_bounds(&extent_partition);
         let max_dimension = f64::from(u32::MAX).min(isize::MAX as f64);
@@ -200,7 +199,7 @@ mod tests {
             (
                 grid_bounds.x_max() + 1,
                 grid_bounds.y_max() + 1,
-                grid.raster.geo_transform().x_pixel_size()
+                grid.raster.geo_transform().x_pixel_size().get()
             ),
             (32, 16, 11.25)
         );
@@ -309,7 +308,7 @@ mod tests {
         .for_extent(extent)
         .unwrap();
         let transform = grid.raster.geo_transform();
-        let side = transform.x_pixel_size();
+        let side = transform.x_pixel_size().get();
         let edge = transform
             .grid_idx_to_pixel_upper_left_coordinate_2d(GridIdx2D::new_y_x(0, 1))
             .x;
@@ -410,7 +409,7 @@ mod tests {
         .for_extent(bbox(0., 0., 4., 9.))
         .unwrap();
         assert_eq!(
-            grid.raster.geo_transform().x_pixel_size().to_bits(),
+            grid.raster.geo_transform().x_pixel_size().get().to_bits(),
             6_f64.to_bits()
         );
         assert_eq!(grid.cells_for_bbox(grid.extent).unwrap().count(), 2);
@@ -464,7 +463,7 @@ mod tests {
             let extent = projection.area_of_use_projected::<BoundingBox2D>().unwrap();
             let grid = StacGrid::default().for_extent(extent).unwrap();
             let grid_bounds = grid.raster.grid_bounds();
-            let side = grid.raster.geo_transform().x_pixel_size();
+            let side = grid.raster.geo_transform().x_pixel_size().get();
             assert!(grid_bounds.y_max() > grid_bounds.x_max());
             assert!((80_000. ..150_000.).contains(&side));
             let cells: Vec<_> = grid.cells_for_bbox(extent).unwrap().collect();

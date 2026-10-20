@@ -395,6 +395,7 @@ impl TryFrom<&OperatorsVisualPointClustering> for VisualPointClustering {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
     use geoengine_datatypes::{dataset::NamedData, primitives::Measurement};
     use geoengine_operators::{
         engine::{
@@ -568,9 +569,9 @@ mod tests {
             (
                 Box::new(OperatorsVisualPointClustering {
                     params: VisualPointClusteringParams {
-                        min_radius_px: 8.0,
-                        delta_px: 1.0,
-                        resolution: 0.5,
+                        min_radius_px: PositiveFiniteF64::new_unchecked(8.0),
+                        delta_px: NonNegativeFiniteF64::new_unchecked(1.0),
+                        resolution: PositiveFiniteF64::new_unchecked(0.5),
                         radius_column: "__radius".to_string(),
                         count_column: "__count".to_string(),
                         column_aggregates: std::collections::HashMap::from([(

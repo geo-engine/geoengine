@@ -32,9 +32,9 @@ use geoengine_operators::{
         MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
     },
 };
-use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
+use typed_floats::tf64::NonNaN;
 
 use super::{
     ids::{
@@ -325,8 +325,8 @@ impl CopernicusDataspaceDataProvider {
                     band: 0,
                     band_colorizer: Colorizer::linear_gradient(
                         vec![
-                            (NotNan::<f64>::from(0), RgbaColor::black()).into(),
-                            (NotNan::<f64>::from(u16::MAX), RgbaColor::white()).into(),
+                            (NonNaN::from(0_u16), RgbaColor::black()).into(),
+                            (NonNaN::from(u16::MAX), RgbaColor::white()).into(),
                         ],
                         RgbaColor::transparent(),
                         RgbaColor::black(),

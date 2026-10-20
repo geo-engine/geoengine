@@ -28,10 +28,10 @@ use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::GridOrEmpty;
 use itertools::Itertools;
 use num_traits::AsPrimitive;
-use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
+use typed_floats::tf64::NonNaN;
 
 pub const STATISTICS_OPERATOR_NAME: &str = "Statistics";
 
@@ -53,7 +53,7 @@ pub struct StatisticsParams {
     #[serde(default)]
     pub column_names: Vec<String>,
     #[serde(default)]
-    pub percentiles: Vec<NotNan<f64>>,
+    pub percentiles: Vec<NonNaN>,
 }
 
 #[typetag::serde]
@@ -86,12 +86,7 @@ impl PlotOperator for Statistics {
             }
         );
 
-        let percentiles = self
-            .params
-            .percentiles
-            .iter()
-            .map(|p| p.into_inner())
-            .collect();
+        let percentiles = self.params.percentiles.iter().map(NonNaN::get).collect();
 
         match self.sources.source {
             RasterOrVectorOperator::Raster(raster_source) => {
@@ -209,10 +204,10 @@ impl<Op, Columns> InitializedStatistics<Op, Columns> {
                 .percentiles
                 .iter()
                 .copied()
-                .map(NotNan::<f64>::new)
+                .map(NonNaN::new)
                 .collect::<Result<Vec<_>, _>>()
                 .expect(
-                    "percentiles should be not nan because they are NotNan<f64> during initialization",
+                    "percentiles should be not nan because they are NonNaN during initialization",
                 ),
         }
     }
@@ -721,7 +716,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridShape2D::new_2d(3, 2).bounding_box(),
             ),
             bands: RasterBandDescriptors::new(
@@ -804,7 +799,7 @@ mod tests {
         let plot = Statistics {
             params: StatisticsParams {
                 column_names: vec![],
-                percentiles: vec![NotNan::new(0.25).unwrap(), NotNan::new(1. / 3.).unwrap()],
+                percentiles: vec![NonNaN::new(0.25).unwrap(), NonNaN::new(1. / 3.).unwrap()],
             },
             sources: multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]).into(),
         }
@@ -858,7 +853,7 @@ mod tests {
             multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]),
             StatisticsParams {
                 column_names: vec![],
-                percentiles: vec![NotNan::new(0.5).unwrap(), NotNan::new(0.5).unwrap()],
+                percentiles: vec![NonNaN::new(0.5).unwrap(), NonNaN::new(0.5).unwrap()],
             },
             world_bbox(),
         )
@@ -1367,7 +1362,7 @@ mod tests {
         let statistics = Statistics {
             params: StatisticsParams {
                 column_names: vec![],
-                percentiles: vec![NotNan::new(0.25).unwrap(), NotNan::new(0.75).unwrap()],
+                percentiles: vec![NonNaN::new(0.25).unwrap(), NonNaN::new(0.75).unwrap()],
             },
             sources: raster_source.into(),
         };
@@ -1461,7 +1456,7 @@ mod tests {
         let statistics = Statistics {
             params: StatisticsParams {
                 column_names: vec!["foo".to_string()],
-                percentiles: vec![NotNan::new(0.25).unwrap(), NotNan::new(0.75).unwrap()],
+                percentiles: vec![NonNaN::new(0.25).unwrap(), NonNaN::new(0.75).unwrap()],
             },
             sources: vector_source.into(),
         };

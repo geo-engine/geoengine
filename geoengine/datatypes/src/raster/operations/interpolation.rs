@@ -125,10 +125,10 @@ where
 
             let in_a_coord = in_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(in_a_idx);
             let a_y = in_a_coord.y;
-            let b_y = a_y + in_geo_transform.y_pixel_size();
+            let b_y = a_y + in_geo_transform.y_pixel_size().get();
 
             let a_x = in_a_coord.x;
-            let c_x = a_x + in_geo_transform.x_pixel_size();
+            let c_x = a_x + in_geo_transform.x_pixel_size().get();
 
             let a_v = input.get_at_grid_index(in_a_idx).unwrap_or(None);
 
@@ -183,7 +183,7 @@ mod tests {
             TileInformation {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 3].into(),
-                global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
+                global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
             GridOrEmpty::Grid(MaskedGrid::from(
@@ -198,7 +198,7 @@ mod tests {
         let output_info = TileInformation {
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [3, 3].into(),
-            global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
+            global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 0.5, -0.5),
         };
 
         let output_geo_transform = output_info.global_geo_transform;
@@ -268,7 +268,7 @@ mod tests {
             TileInformation {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 3].into(),
-                global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
+                global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
             GridOrEmpty::Grid(MaskedGrid::from(
@@ -283,7 +283,7 @@ mod tests {
         let output_info = TileInformation {
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [4, 4].into(),
-            global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
+            global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 0.5, -0.5),
         };
 
         let output_geo_transform = output_info.global_geo_transform;

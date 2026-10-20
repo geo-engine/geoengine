@@ -18,6 +18,7 @@ use geoengine_datatypes::{
         TilingSpatialGridDefinition, TilingSpecification,
     },
     spatial_reference::{DefaultCoordinateProjector, SpatialReference},
+    util::PositiveFiniteF64,
 };
 use geoengine_operators::engine::{RasterResultDescriptor, ResultDescriptor};
 use ogcapi_types::tiles::{CornerOfOrigin, TileMatrix, TileMatrixSet, TileMatrixSetId, TilesCrs};
@@ -401,7 +402,9 @@ impl TileMatrixSetProvider for CustomNativeTMS {
         let zoom_level = self.max_matrix_id().saturating_sub(u32::from(matrix_id));
         let multiple_of_resolution = 2u32.pow(zoom_level);
 
-        self.result_descriptor.spatial_grid.spatial_resolution() * f64::from(multiple_of_resolution)
+        // the zoom levels are bounded by the grid size, so the coarsest resolution still covers a finite extent
+        self.result_descriptor.spatial_grid.spatial_resolution()
+            * PositiveFiniteF64::new_unchecked(f64::from(multiple_of_resolution))
     }
 
     fn grid_shape_and_origin(&self, matrix_id: u8) -> (GridShape2D, Coordinate2D) {
@@ -553,7 +556,7 @@ impl WebMercatorQuadTMS {
     fn find_next_best_resolution(native_resolution: SpatialResolution) -> SpatialResolution {
         for &(_, _, cell_size, _, _) in Self::DATA {
             let resolution = cell_size; // cell size equals resolution in meters per pixel for Web Mercator Quad
-            if native_resolution.x <= resolution && native_resolution.y <= resolution {
+            if native_resolution.x() <= resolution && native_resolution.y() <= resolution {
                 return SpatialResolution::new_unchecked(resolution, resolution);
             }
         }
@@ -709,17 +712,24 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
 
         // Find the closest zoom level (matching or slightly finer) to a multiple of result descriptor's resolution
         let base_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
-        let multiples_of_resolution = target_spatial_resolution.div_floor(base_resolution);
+        // fails if the target is finer than the base resolution, i.e., the multiple is 0
+        let Ok(multiples_of_resolution) = target_spatial_resolution.div_floor(base_resolution)
+        else {
+            return base_resolution; // Don't go below the base resolution of the layer
+        };
 
-        if multiples_of_resolution.x <= 1.0 || multiples_of_resolution.y <= 1.0 {
+        if multiples_of_resolution.x() <= 1.0 || multiples_of_resolution.y() <= 1.0 {
             return base_resolution; // Don't go below the base resolution of the layer
         }
 
-        let mut resolution_multiple =
-            f64::min(multiples_of_resolution.x, multiples_of_resolution.y);
+        let mut resolution_multiple = f64::min(
+            multiples_of_resolution.x().get(),
+            multiples_of_resolution.y().get(),
+        );
         resolution_multiple = 2_f64.powf(resolution_multiple.log2().floor()); // Round down to nearest power of 2
 
-        base_resolution * resolution_multiple
+        // a power of 2 that is at least 2, and the product is bounded by the target resolution
+        base_resolution * PositiveFiniteF64::new_unchecked(resolution_multiple)
     }
 
     fn grid_shape_and_origin(&self, matrix_id: u8) -> (GridShape2D, Coordinate2D) {
@@ -753,8 +763,8 @@ pub fn build_tile_matrices(
         result_descriptor.tiling_grid_definition(tiling_specification);
     let tiling_geo_transform = tiling_spatial_grid_definition.tiling_geo_transform();
     let (x_resolution, y_resolution) = (
-        tiling_geo_transform.x_pixel_size(),
-        tiling_geo_transform.y_pixel_size(),
+        tiling_geo_transform.x_pixel_size().get(),
+        tiling_geo_transform.y_pixel_size().get(),
     );
 
     if !approx_eq!(f64, x_resolution.abs(), y_resolution.abs()) {
@@ -882,10 +892,8 @@ pub fn calculate_tiles_for_zoom_level(
     let zoom_factor = 2u32.pow(zoom_level);
 
     // Compute downsampled resolution
-    let downsampled_resolution = SpatialResolution {
-        x: original_resolution.x * f64::from(zoom_factor),
-        y: original_resolution.y * f64::from(zoom_factor),
-    };
+    let downsampled_resolution =
+        original_resolution * PositiveFiniteF64::new_unchecked(f64::from(zoom_factor));
 
     // Create the spatial grid at this zoom level's resolution
     let downsampled_grid = original_spatial_grid.with_changed_resolution(downsampled_resolution);
@@ -928,10 +936,8 @@ fn calculate_tiles_for_zoom_levels(
         let zoom_factor = 2u32.pow(zoom_level);
 
         // Compute downsampled resolution
-        let downsampled_resolution = SpatialResolution {
-            x: original_resolution.x * f64::from(zoom_factor),
-            y: original_resolution.y * f64::from(zoom_factor),
-        };
+        let downsampled_resolution =
+            original_resolution * PositiveFiniteF64::new_unchecked(f64::from(zoom_factor));
 
         // Create the spatial grid at this zoom level's resolution
         let downsampled_grid =
@@ -1004,14 +1010,24 @@ mod tests {
         );
 
         assert!(
-            approx_eq!(f64, resolution.x, 156_543.033_928_041, epsilon = 1e-9),
+            approx_eq!(
+                f64,
+                resolution.x().get(),
+                156_543.033_928_041,
+                epsilon = 1e-9
+            ),
             "x resolution should be the coarsest cell, got {}",
-            resolution.x
+            resolution.x()
         );
         assert!(
-            approx_eq!(f64, resolution.y, 156_543.033_928_041, epsilon = 1e-9),
+            approx_eq!(
+                f64,
+                resolution.y().get(),
+                156_543.033_928_041,
+                epsilon = 1e-9
+            ),
             "y resolution should be the coarsest cell, got {}",
-            resolution.y
+            resolution.y()
         );
     }
 

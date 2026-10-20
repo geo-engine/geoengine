@@ -15,6 +15,7 @@ use crate::api::model::{
         },
     },
 };
+use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::{
     machine_learning::{onnx::Onnx as OperatorsOnnx, onnx::OnnxParams as OperatorsOnnxParameters},
@@ -330,8 +331,10 @@ pub enum InterpolationResolution {
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationResolutionResolution {
     /// Explicit output resolution (`x`, `y`) in target coordinates.
-    pub x: f64,
-    pub y: f64,
+    #[schema(value_type = f64)]
+    pub x: PositiveFiniteF64,
+    #[schema(value_type = f64)]
+    pub y: PositiveFiniteF64,
 }
 
 #[type_tag(value = "fraction")]
@@ -350,7 +353,9 @@ impl From<InterpolationResolution> for OperatorsInterpolationResolution {
                 r#type: _,
                 x,
                 y,
-            }) => Self::Resolution(geoengine_datatypes::primitives::SpatialResolution { x, y }),
+            }) => Self::Resolution(
+                geoengine_datatypes::primitives::SpatialResolution::new_typed(x, y),
+            ),
             InterpolationResolution::Fraction(InterpolationResolutionFraction {
                 r#type: _,
                 x,
@@ -925,8 +930,10 @@ pub enum DownsamplingResolution {
 #[serde(rename_all = "camelCase")]
 pub struct DownsamplingResolutionResolution {
     /// Explicit output resolution (`x`, `y`) in target coordinates.
-    pub x: f64,
-    pub y: f64,
+    #[schema(value_type = f64)]
+    pub x: PositiveFiniteF64,
+    #[schema(value_type = f64)]
+    pub y: PositiveFiniteF64,
 }
 
 #[type_tag(value = "fraction")]
@@ -945,7 +952,9 @@ impl From<DownsamplingResolution> for OperatorsDownsamplingResolution {
                 r#type: _,
                 x,
                 y,
-            }) => Self::Resolution(geoengine_datatypes::primitives::SpatialResolution { x, y }),
+            }) => Self::Resolution(
+                geoengine_datatypes::primitives::SpatialResolution::new_typed(x, y),
+            ),
             DownsamplingResolution::Fraction(DownsamplingResolutionFraction {
                 r#type: _,
                 x,
@@ -2593,14 +2602,14 @@ pub struct VisualPointClustering {
 #[serde(rename_all = "camelCase")]
 pub struct VisualPointClusteringParameters {
     /// Minimum circle radius in pixels.
-    #[schema(examples(8.0, 10.0))]
-    pub min_radius_px: f64,
+    #[schema(value_type = f64, examples(8.0, 10.0))]
+    pub min_radius_px: PositiveFiniteF64,
     /// Minimum circle-to-circle distance in pixels.
-    #[schema(examples(1.0))]
-    pub delta_px: f64,
+    #[schema(value_type = f64, examples(1.0))]
+    pub delta_px: NonNegativeFiniteF64,
     /// Spatial resolution used during clustering.
-    #[schema(examples(0.5, 1.0))]
-    pub resolution: f64,
+    #[schema(value_type = f64, examples(0.5, 1.0))]
+    pub resolution: PositiveFiniteF64,
     /// Column name used to store the cluster radius.
     #[schema(examples("__radius"))]
     pub radius_column: String,
@@ -3362,8 +3371,8 @@ mod tests {
             r#type: Default::default(),
             params: RasterizationParameters {
                 spatial_resolution: crate::api::model::datatypes::SpatialResolution {
-                    x: 1.0,
-                    y: 2.0,
+                    x: PositiveFiniteF64::new_unchecked(1.0),
+                    y: PositiveFiniteF64::new_unchecked(2.0),
                 },
                 origin_coordinate: Coordinate2D { x: 0.0, y: 0.0 },
                 density_params: Some(DensityParams {
@@ -3384,8 +3393,8 @@ mod tests {
 
         let ops = OperatorsRasterization::try_from(api).expect("conversion failed");
 
-        approx_eq!(f64, ops.params.spatial_resolution.x, 1.0);
-        approx_eq!(f64, ops.params.spatial_resolution.y, 2.0);
+        approx_eq!(f64, ops.params.spatial_resolution.x().get(), 1.0);
+        approx_eq!(f64, ops.params.spatial_resolution.y().get(), 2.0);
         approx_eq!(f64, ops.params.origin_coordinate.x, 0.0);
         assert!(ops.params.density_params.is_some());
         approx_eq!(f64, ops.params.density_params.unwrap().cutoff, 0.5);
@@ -3549,9 +3558,9 @@ mod tests {
         let api = VisualPointClustering {
             r#type: Default::default(),
             params: VisualPointClusteringParameters {
-                min_radius_px: 2.0,
-                delta_px: 1.0,
-                resolution: 0.5,
+                min_radius_px: PositiveFiniteF64::new_unchecked(2.0),
+                delta_px: NonNegativeFiniteF64::new_unchecked(1.0),
+                resolution: PositiveFiniteF64::new_unchecked(0.5),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: std::collections::HashMap::from([(
