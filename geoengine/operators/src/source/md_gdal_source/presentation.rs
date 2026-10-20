@@ -35,8 +35,7 @@ impl MdPresentation {
     /// Rejects a raw grid that this presentation cannot show.
     ///
     /// # Errors
-    /// Returns `UnpresentableGrid` if a wrapped grid is not 360° wide, is not on the
-    /// pixel lattice of −180°, or has an odd width.
+    /// Returns `UnpresentableGrid` if a wrapped grid is not 360° wide or has an odd width.
     pub fn validate(self, raw: &GdalDatasetParameters) -> Result<(), MdGdalSourceError> {
         if self == Self::Raw {
             return Ok(());
@@ -57,13 +56,6 @@ impl MdPresentation {
                 "a wrapped grid must span 360°, found {span}°"
             )));
         }
-        let offset = (gt.origin_coordinate.x + 180.0) / px;
-        if (offset - offset.round()).abs() > EPS {
-            return Err(unpresentable(format!(
-                "the origin longitude {} is not on the pixel lattice of −180°",
-                gt.origin_coordinate.x
-            )));
-        }
         Ok(())
     }
 
@@ -76,7 +68,7 @@ impl MdPresentation {
     ) -> GeoTransform {
         let origin_x = match self {
             Self::Raw => raw.origin_coordinate.x,
-            Self::Wrap180 => -180.0,
+            Self::Wrap180 => presented_west_edge(raw),
         };
         GeoTransform::new_typed(
             (origin_x, north_edge(raw, height)).into(),
@@ -150,6 +142,14 @@ impl MdPresentation {
     }
 }
 
+/// The west edge of a wrapped grid: the edge of the raw pixel lattice at or just west of
+/// −180°. A grid whose longitudes are pixel centres from 0° (ERA5) starts half a pixel west.
+fn presented_west_edge(raw: GdalDatasetGeoTransform) -> f64 {
+    let px = f64::from(raw.x_pixel_size).abs();
+    let columns = ((-WORLD_WIDTH / 2.0 - raw.origin_coordinate.x) / px + EPS).floor();
+    raw.origin_coordinate.x + columns * px
+}
+
 /// The y coordinate of the north edge of the raw grid.
 fn north_edge(raw: GdalDatasetGeoTransform, height: usize) -> f64 {
     let dy = f64::from(raw.y_pixel_size);
@@ -160,8 +160,8 @@ fn north_edge(raw: GdalDatasetGeoTransform, height: usize) -> f64 {
     }
 }
 
-/// Read windows for a wrapped grid. Presented columns are the tile lattice columns of
-/// −180..180°; presented column `c` shows stored column `(c − col0) mod width`, where `col0`
+/// Read windows for a wrapped grid. Presented columns are the tile lattice columns from
+/// [`presented_west_edge`] on; presented column `c` shows stored column `(c − col0) mod width`, where `col0`
 /// is the lattice column of the stored origin. A run stops at the stored array edge, so a
 /// tile that crosses world longitude 0° (or 180°) is split into two stored runs.
 fn wrap_read_advises(
@@ -178,7 +178,7 @@ fn wrap_read_advises(
         ((lon - tile_origin.origin_coordinate.x) / f64::from(gt.x_pixel_size)).round() as isize
     };
     let col0 = lattice_x(gt.origin_coordinate.x);
-    let presented_start = lattice_x(-180.0);
+    let presented_start = lattice_x(presented_west_edge(gt));
     let ady = f64::from(gt.y_pixel_size).abs();
     let row0 =
         ((tile_origin.origin_coordinate.y - north_edge(gt, raw.height)) / ady).round() as isize;
@@ -383,6 +383,27 @@ mod tests {
     }
 
     #[test]
+    fn wrap_presents_pixel_centre_grids_half_a_pixel_west_of_minus_180() {
+        // ERA5: lon centres 0, 0.25, .. 359.75, so the stored edges are −0.125 .. 359.875
+        let p = params((-0.125, 90.125), (0.25, -0.25), 1440, 721);
+        let presented = MdPresentation::Wrap180.presented_geo_transform(p.geo_transform, p.height);
+        assert!((presented.origin_coordinate().x + 180.125).abs() < 1e-9);
+
+        // the tile lattice is the presented grid's own: world col c has its west edge at
+        // −0.125 + 0.25·c, so presented col −720 (lon −180.125..−179.875, centre 180°) is
+        // stored col 720 and col −1 (centre −0.25°) is stored col 1439
+        let tile_grid = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked((-0.125, 90.125).into(), 0.25, -0.25),
+            GridBoundingBox2D::new_unchecked([0, -720], [0, -1]),
+        );
+        let advises = wrap_read_advises(&p, &tile_grid);
+        assert_eq!(advises.len(), 1);
+        let w = advises[0].gdal_read_widow;
+        assert_eq!((w.start_x, w.size_x), (720, 720));
+        assert_eq!(advises[0].read_window_bounds.min_index().x(), -720);
+    }
+
+    #[test]
     fn wrap_splits_a_presented_window_at_the_stored_seam() {
         let raw = SpatialGridDefinition::new(
             GeoTransform::new_unchecked((0., 45.).into(), 1., -1.),
@@ -408,10 +429,8 @@ mod tests {
         assert!(validate(&wrap_params()).is_ok());
         assert!(validate(&params((0., 45.), (1., -1.), 361, 10)).is_err());
         assert!(validate(&params((0., 45.), (1., -1.), 180, 10)).is_err());
-        assert!(validate(&params((0.5, 45.), (1., -1.), 360, 10)).is_err());
-        // ERA5's 0.25° grid: origin −0.125 (0° is a pixel centre), half a pixel off the −180
-        // lattice, so its 1440 columns have no whole-pixel wrap
-        assert!(validate(&params((-0.125, 90.125), (0.25, -0.25), 1440, 721)).is_err());
+        // ERA5's 0.25° grid: origin −0.125 (0° is a pixel centre), presented from −180.125
+        assert!(validate(&params((-0.125, 90.125), (0.25, -0.25), 1440, 721)).is_ok());
         assert!(
             MdPresentation::Raw
                 .validate(&params((0., 45.), (1., -1.), 361, 10))
