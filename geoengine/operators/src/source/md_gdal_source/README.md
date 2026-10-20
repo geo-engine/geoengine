@@ -85,25 +85,28 @@ this per-dimension `start`/`count` pair; nothing is inferred from the dimension'
 ## Time steps from a CF calendar
 
 The server does not read the file's `time` coordinate: `time_steps` is stated by hand, one
-`TimeInterval` per slice. Convert the coordinate with the file's own calendar and epoch, not with a
-fixed one — CORDEX EUR-11 uses `360_day`, CMIP6 `standard`/`gregorian`, and both count from
-different epochs. `xarray` + `cftime` does this correctly:
+`TimeInterval` per slice. Decode the coordinate with the file's own calendar and epoch, not with a
+fixed one — CORDEX EUR-11 uses `360_day`, CMIP6 `standard`/`gregorian` or `noleap`, and both count
+from different epochs.
+
+The engine's axis is real (proleptic Gregorian) time, so a model calendar has to be mapped onto
+it. `360_day` has dates like 30 February that do not exist there, so converting each date's
+`isoformat()` fails. `xarray`'s `convert_calendar` with `align_on="year"` spreads the 360 days
+over the real year and keeps every slice (it needs `cftime`):
 
 ```python
-import cftime, numpy as np, xarray as xr
+import numpy as np, xarray as xr
 
-ds = xr.open_dataset(path, decode_times=False)
-time = ds["time"]
-dates = cftime.num2date(
-    time.values,
-    time.attrs["units"],                      # "days since 1949-12-01 00:00:00"
-    time.attrs.get("calendar", "standard"),   # "360_day", "standard", ...
-)
+ds = xr.open_dataset(path)  # decodes `time` with its own units and calendar
+time = ds[["time"]].convert_calendar("proleptic_gregorian", align_on="year", dim="time").time
 
 # one interval per slice; the end is the next step (or +1 day for the last one)
-starts = np.array([d.isoformat() for d in dates], dtype="datetime64[ns]")
-ends = starts[1:] + [starts[-1] + np.timedelta64(1, "D")]
+starts = time.values.astype("datetime64[ns]")
+ends = np.append(starts[1:], starts[-1] + np.timedelta64(1, "D"))
 ```
+
+Most intervals are then one day, and five or six a year are two days, where a real date has no
+model day. A `noleap` year maps one to one and simply has no 29 February.
 
 The engine's time axis is UTC nanoseconds; `datetime64[...]` converts directly. A `fixed` time step
 (a monthly mean, a decade) is stated the same way — nothing is inferred from the coordinate.
