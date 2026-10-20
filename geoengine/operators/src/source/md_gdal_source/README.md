@@ -156,9 +156,10 @@ A row is rejected unless:
   sides only — no longitude shift (`MdTileGeoTransformMismatch`), so the stored footprint is the
   file's own; and a CRS the file declares is not a _different_ one than the dataset's
   (`MdTileCrsMismatch`) — a file that declares no CRS is allowed.
-- a wrapped dataset needs an **even** width, a span of exactly 360°, and an origin on the pixel
-  lattice of −180° (`MdTileUnpresentable`); otherwise the shift has no whole-pixel answer. A 0.25°
-  product whose longitudes are pixel _centres_ (0, 0.25, …) is half a pixel off that lattice.
+- a wrapped dataset needs an **even** width and a span of exactly 360° (`MdTileUnpresentable`).
+  It is presented from the edge of its own pixel lattice at or just west of −180°, so a 0.25°
+  product whose longitudes are pixel _centres_ (0, 0.25, …, like ERA5) is presented from
+  −180.125.
 
 ## Reading
 

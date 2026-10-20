@@ -1207,18 +1207,26 @@ mod tests {
         }
     }
 
+    /// Also for a grid whose stored edge is half a pixel west of 0° (ERA5: longitudes are
+    /// pixel centres from 0°): it is presented from −180.5, and the tile lattice follows it.
     #[tokio::test]
     async fn test_query_wrap_seam() {
+        for origin_x in [0.0, -0.5] {
+            query_wrap_seam(origin_x).await;
+        }
+    }
+
+    async fn query_wrap_seam(origin_x: f64) {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_wrap",
-            // edges lon 0..360 at 1 degree (360 cols), lat 45..35
-            MdDataset::wrapped("md/wrap_0_360.nc", 360, 10, (0.0, 45.0, 1.0, -1.0), 4),
+            // edges lon origin_x..origin_x + 360 at 1 degree (360 cols), lat 45..35
+            MdDataset::wrapped("md/wrap_0_360.nc", 360, 10, (origin_x, 45.0, 1.0, -1.0), 4),
         );
 
-        // presented grid: world lon -180..180 (global cols -180..179), lat 45..35
+        // presented grid: global cols -180..179 from the west edge at or just west of -180°
         let spatial = GridBoundingBox2D::new_unchecked([-45, -180], [-36, 179]);
         let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY);
         let tiles = query_md_source(
@@ -1239,14 +1247,23 @@ mod tests {
             .collect();
         xs.sort_unstable();
         assert_eq!(xs, [-1, 0]);
+        // the tile lattice is the stored grid's own: its origin is a whole pixel off origin_x
+        let lattice_x = tiles[0]
+            .tile_information()
+            .global_geo_transform
+            .origin_coordinate()
+            .x;
+        assert!((lattice_x - origin_x).rem_euclid(1.0) < 1e-9, "{lattice_x}");
         assert!(
             tiles
                 .iter()
                 .all(|t| t.tile_information().global_tile_position().y() == -1)
         );
 
-        // value at world (row, col) = stored row (row + 45) * 10 + stored col (col mod 360)
-        for (row, col) in [(-45_isize, -180_isize), (-45, -1), (-36, 0), (-36, 179)] {
+        // value at world (row, col) = stored row (row + 45) * 10 + stored col; world col c has
+        // its west edge at lattice_x + c, stored col s at origin_x + s (mod 360)
+        let shift = (lattice_x - origin_x).round() as isize;
+        for (row, col) in [(-45_isize, -180_isize), (-45, -1), (-36, 0), (-36, 178)] {
             let tile = tiles
                 .iter()
                 .find(|t| {
@@ -1255,11 +1272,11 @@ mod tests {
                 })
                 .unwrap();
             let local = tile.tile_information().global_pixel_bounds().min_index();
-            let stored_col = col.rem_euclid(360);
+            let stored_col = (col + shift).rem_euclid(360);
             assert_eq!(
                 grid_value(tile, (row - local.y()) as usize, (col - local.x()) as usize),
                 ((row + 45) * 10 + stored_col) as f32,
-                "world col {col}"
+                "world col {col} of origin {origin_x}"
             );
         }
     }
