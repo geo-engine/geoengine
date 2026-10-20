@@ -368,25 +368,27 @@ impl DataProvider for StacDataProvider {
     }
 }
 
-/// Shared STAC HTTP client. Clones share token renewal state, and each request
-/// reads the current token so pagination and retries use refreshed credentials.
+/// STAC HTTP transport and origin-scoped authentication/admission policy.
+/// Clones share the connection pool, token renewal state and configured scope.
 #[derive(Clone, Debug)]
 pub(crate) struct StacClient {
     client: reqwest::Client,
+    scope: Option<Arc<StacClientScope>>,
+}
+
+/// An origin, its coordinator and its optional authentication are configured together.
+#[derive(Debug)]
+struct StacClientScope {
+    origin: url::Url,
+    coordinator: Arc<coordinator::StacRequestCoordinator>,
     authentication: Option<auth::StacAuthentication>,
-    authentication_origin: Option<url::Url>,
-    coordinator_origin: Option<url::Url>,
-    coordinator: Option<Arc<coordinator::StacRequestCoordinator>>,
 }
 
 impl StacClient {
     pub(crate) fn new(client: reqwest::Client) -> Self {
         Self {
             client,
-            authentication: None,
-            authentication_origin: None,
-            coordinator_origin: None,
-            coordinator: None,
+            scope: None,
         }
     }
 
@@ -395,19 +397,19 @@ impl StacClient {
         config: Option<StacProviderAuthentication>,
         stac_api_url: &str,
     ) -> crate::error::Result<Self> {
-        let stac_origin = url::Url::parse(stac_api_url)?;
-        self.authentication_origin = config.as_ref().map(|_| stac_origin.clone());
-        self.coordinator_origin = Some(stac_origin.clone());
-        self.coordinator = Some(coordinator::StacRequestCoordinator::shared(
-            &stac_origin,
-            config.as_ref(),
-        ));
-        self.authentication = match config {
+        let origin = url::Url::parse(stac_api_url)?;
+        let coordinator = coordinator::StacRequestCoordinator::shared(&origin, config.as_ref());
+        let authentication = match config {
             Some(config) => {
                 Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
             }
             None => None,
         };
+        self.scope = Some(Arc::new(StacClientScope {
+            origin,
+            coordinator,
+            authentication,
+        }));
         Ok(self)
     }
 
@@ -422,29 +424,20 @@ impl StacClient {
         policy: &crate::util::retry::RetryPolicy,
     ) -> reqwest::Result<T> {
         let request = request.build()?;
-        let coordinator = self.coordinator_for(request.url());
-        let authentication = self.authentication_for(request.url());
+        let (coordinator, authentication) = match self
+            .scope
+            .as_deref()
+            .filter(|scope| same_origin(&scope.origin, request.url()))
+        {
+            Some(scope) => (scope.coordinator.clone(), scope.authentication.as_ref()),
+            None => (
+                coordinator::StacRequestCoordinator::shared(request.url(), None),
+                None,
+            ),
+        };
         coordinator
             .execute(&self.client, request, authentication, policy)
             .await
-    }
-
-    fn coordinator_for(&self, request_url: &url::Url) -> Arc<coordinator::StacRequestCoordinator> {
-        match (&self.coordinator, &self.coordinator_origin) {
-            (Some(coordinator), Some(origin)) if same_origin(origin, request_url) => {
-                coordinator.clone()
-            }
-            _ => coordinator::StacRequestCoordinator::shared(request_url, None),
-        }
-    }
-
-    fn authentication_for(&self, request_url: &url::Url) -> Option<&auth::StacAuthentication> {
-        match (&self.authentication, &self.authentication_origin) {
-            (Some(authentication), Some(origin)) if same_origin(origin, request_url) => {
-                Some(authentication)
-            }
-            _ => None,
-        }
     }
 }
 
@@ -683,6 +676,73 @@ mod tests {
         )
         .await
         .unwrap()
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_uses_anonymous_destination_policy_for_cross_origin_requests() {
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{any, contains, not, request},
+            responders,
+        };
+        use serde_json::{Value, json};
+        use std::time::Duration;
+        let origin = Server::run();
+        let destination = Server::run();
+        origin.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(1)
+                .respond_with(responders::json_encoded(
+                    json!({ "access_token": "origin-only", "expires_in": 3600 }),
+                )),
+        );
+        origin.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/probe"),
+                request::headers(contains(("authorization", "Bearer origin-only"))),
+            ])
+            .times(1)
+            .respond_with(
+                responders::status_code(200)
+                    .append_header("x-ratelimit-limit", "1;w=60")
+                    .append_header("x-ratelimit-remaining", "0")
+                    .append_header("x-ratelimit-reset", "60")
+                    .body("null"),
+            ),
+        );
+        destination.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/items"),
+                request::headers(not(contains(("authorization", any())))),
+            ])
+            .times(1)
+            .respond_with(responders::status_code(200).body("null")),
+        );
+        let client = StacClient::new(reqwest::Client::new())
+            .with_authentication(
+                Some(StacProviderAuthentication {
+                    endpoint: origin.url_str("/token"),
+                    client_id: "client".into(),
+                    username: "user".into(),
+                    password: "password".into(),
+                }),
+                &origin.url_str("/"),
+            )
+            .await
+            .unwrap();
+        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+        client
+            .send_json::<Value>(client.get(origin.url_str("/probe")), &policy)
+            .await
+            .unwrap();
+        let cloned = client.clone();
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            cloned.send_json::<Value>(cloned.get(destination.url_str("/items")), &policy),
+        )
+        .await
+        .expect("another origin must not wait for the configured origin's exhausted quota")
         .unwrap();
     }
 

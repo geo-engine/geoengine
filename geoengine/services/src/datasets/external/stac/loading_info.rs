@@ -1497,14 +1497,21 @@ mod tests {
         let next_page_query = StacQueryState::NextPage {
             next_url: Url::parse(&server.url_str("/next-items")).unwrap(),
         };
-        query_stac_item_collection(&client, &next_page_query)
+        let cloned_client = client.clone();
+        query_stac_item_collection(&cloned_client, &next_page_query)
             .await
             .expect("authenticated STAC pagination request should succeed");
 
+        let authentication = client
+            .scope
+            .as_ref()
+            .unwrap()
+            .authentication
+            .as_ref()
+            .unwrap();
         tokio::time::timeout(Duration::from_secs(4), async {
             loop {
-                if client.authentication.as_ref().unwrap().access_token().await == "access-token-3"
-                {
+                if authentication.access_token().await == "access-token-3" {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(25)).await;
@@ -1517,7 +1524,7 @@ mod tests {
             query_url: Url::parse(&server.url_str("/refreshed-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&client, &refreshed_query)
+        query_stac_item_collection(&cloned_client, &refreshed_query)
             .await
             .expect("refreshed authenticated STAC request should succeed");
     }
