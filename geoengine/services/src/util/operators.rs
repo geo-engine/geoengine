@@ -4,8 +4,8 @@ use geoengine_operators::{
     engine::{OperatorName, RasterOperator, TypedOperator, VectorOperator},
     mock::{MockDatasetDataSource, MockDatasetDataSourceParams},
     source::{
-        GdalSource, GdalSourceParameters, MultiBandGdalSource, MultiBandGdalSourceParameters,
-        OgrSource, OgrSourceParameters,
+        GdalSource, GdalSourceParameters, MdGdalSource, MdGdalSourceParameters,
+        MultiBandGdalSource, MultiBandGdalSourceParameters, OgrSource, OgrSourceParameters,
     },
 };
 
@@ -39,6 +39,12 @@ pub fn source_operator_from_dataset(
         MultiBandGdalSource::TYPE_NAME => TypedOperator::Raster(
             MultiBandGdalSource {
                 params: MultiBandGdalSourceParameters::new(name.clone()),
+            }
+            .boxed(),
+        ),
+        MdGdalSource::TYPE_NAME => TypedOperator::Raster(
+            MdGdalSource {
+                params: MdGdalSourceParameters::new(name.clone()),
             }
             .boxed(),
         ),
