@@ -1,7 +1,5 @@
 use gdal::raster::GdalType;
-use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel, RasterDataType,
-};
+use geoengine_datatypes::raster::{GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel};
 use num::FromPrimitive;
 use tracing::Instrument;
 
@@ -9,8 +7,8 @@ use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
     GridAndProperties,
     process_common::{
-        GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadKind,
-        GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+        GdalDataGridVariant, GdalHeaderKind, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise,
+        GdalReadKind, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
         IpcProcessError, IpcProcessGdalErrorKind, MdArrayInfo, MdAxisMapping, RasterInfo,
     },
 };
@@ -236,10 +234,12 @@ impl GdalPoolReader {
             .read_data(IpcChannelMessage::new_request_tile_message(
                 IpcChannelMessagePayload {
                     dataset_params,
-                    read_advise,
-                    data_type: T::TYPE,
                     read_id: Some(read_id),
-                    read_kind: GdalReadKind::Raster,
+                    request: GdalRequest::Read {
+                        read_advise,
+                        data_type: T::TYPE,
+                        kind: GdalReadKind::Raster,
+                    },
                 },
             ))
             .instrument(span)
@@ -271,11 +271,11 @@ impl GdalPoolReader {
         group: Option<&str>,
         array_name: &str,
     ) -> Result<MdArrayInfo, GdalProcessPoolError> {
-        let read_kind = GdalReadKind::MdArrayInfo {
+        let kind = GdalHeaderKind::MdArray {
             group: group.map(str::to_string),
             array_name: array_name.to_string(),
         };
-        match self.read_header(dataset_params, read_kind).await? {
+        match self.read_header(dataset_params, kind).await? {
             IpcChannelResult::MdArrayInfo(info) => Ok(info),
             _ => Err(unexpected_header()),
         }
@@ -293,7 +293,7 @@ impl GdalPoolReader {
         dataset_params: GdalDatasetParameters,
     ) -> Result<RasterInfo, GdalProcessPoolError> {
         match self
-            .read_header(dataset_params, GdalReadKind::RasterInfo)
+            .read_header(dataset_params, GdalHeaderKind::Raster)
             .await?
         {
             IpcChannelResult::RasterInfo(info) => Ok(info),
@@ -304,25 +304,17 @@ impl GdalPoolReader {
     async fn read_header(
         &self,
         dataset_params: GdalDatasetParameters,
-        read_kind: GdalReadKind,
+        kind: GdalHeaderKind,
     ) -> Result<IpcChannelResult, GdalProcessPoolError> {
         let span = tracing::info_span!(
             "gdal_pool_read_header",
             dataset = %dataset_params.file_path.display(),
-            read_kind = ?read_kind,
+            kind = ?kind,
         );
-        let empty = GridBoundingBox2D::new_unchecked([0, 0], [0, 0]);
         let request = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params,
-            read_advise: GdalReadAdvise {
-                gdal_read_widow: GdalReadWindow::new([0, 0].into(), [0, 0].into()),
-                read_window_bounds: empty,
-                bounds_of_target: empty,
-                flip_y: false,
-            },
-            data_type: RasterDataType::U8,
             read_id: None,
-            read_kind,
+            request: GdalRequest::Header(kind),
         });
 
         self.dispatcher()
@@ -372,14 +364,16 @@ impl GdalPoolReader {
 
         let request = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params,
-            read_advise,
-            data_type: T::TYPE,
             read_id: Some(read_id),
-            read_kind: GdalReadKind::MdArray {
-                group: group.map(str::to_string),
-                array_name: array_name.to_string(),
-                z_index,
-                axis_mapping: axis_mapping.to_vec(),
+            request: GdalRequest::Read {
+                read_advise,
+                data_type: T::TYPE,
+                kind: GdalReadKind::MdArray {
+                    group: group.map(str::to_string),
+                    array_name: array_name.to_string(),
+                    z_index,
+                    axis_mapping: axis_mapping.to_vec(),
+                },
             },
         });
 

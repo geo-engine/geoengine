@@ -917,8 +917,8 @@ mod tests {
     use super::super::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
-            GdalReadKind, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
-            IpcProcessGdalErrorKind, IpcProcessRasterResult,
+            GdalReadKind, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
+            IpcChannelResult, IpcProcessGdalErrorKind, IpcProcessRasterResult,
         },
     };
     use super::*;
@@ -1199,7 +1199,6 @@ mod tests {
         };
 
         let payload = IpcChannelMessagePayload {
-            data_type: RasterDataType::U8,
             dataset_params: GdalDatasetParameters {
                 file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
@@ -1241,9 +1240,12 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: None,
             },
-            read_advise,
             read_id: None,
-            read_kind: GdalReadKind::Raster,
+            request: GdalRequest::Read {
+                read_advise,
+                data_type: RasterDataType::U8,
+                kind: GdalReadKind::Raster,
+            },
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -1269,7 +1271,6 @@ mod tests {
         };
 
         let payload = IpcChannelMessagePayload {
-            data_type: RasterDataType::U8,
             dataset_params: GdalDatasetParameters {
                 file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
@@ -1311,9 +1312,12 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: None,
             },
-            read_advise,
             read_id: None,
-            read_kind: GdalReadKind::Raster,
+            request: GdalRequest::Read {
+                read_advise,
+                data_type: RasterDataType::U8,
+                kind: GdalReadKind::Raster,
+            },
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
