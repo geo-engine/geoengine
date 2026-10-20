@@ -822,6 +822,15 @@ impl GdalHandling {
         .entered();
         let start = Instant::now();
 
+        let mut properties = RasterProperties::default();
+        let (scale, offset) = md_array_scale_offset(dataset, group, array_name);
+        if let Some(scale) = scale {
+            properties.set_scale(scale);
+        }
+        if let Some(offset) = offset {
+            properties.set_offset(offset);
+        }
+
         with_md_array(dataset, group, array_name, |md_array| {
             let axis_sizes: Vec<usize> = md_array
                 .dimensions()?
@@ -864,7 +873,7 @@ impl GdalHandling {
 
             Ok(GdalIpcMdPayload {
                 axis_sizes: array_count,
-                properties: RasterProperties::default(),
+                properties,
                 data_variant,
             })
         })
@@ -893,6 +902,52 @@ fn with_md_array<R>(
     }
     let md_array = group_h.open_md_array(array_name, CslStringList::new())?;
     read(&md_array)
+}
+
+/// The scale and offset of an MD array, e.g. from netCDF's CF `scale_factor`/`add_offset`,
+/// which the driver turns into these and no longer lists as attributes. The `gdal` crate has
+/// no getter and keeps the array handle private, so the array is opened again by full name.
+fn md_array_scale_offset(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+) -> (Option<f64>, Option<f64>) {
+    let full_name = match group.map(|g| g.trim_matches('/')).filter(|g| !g.is_empty()) {
+        Some(group) => format!("/{group}/{array_name}"),
+        None => format!("/{array_name}"),
+    };
+    let Ok(full_name) = CString::new(full_name) else {
+        return (None, None);
+    };
+
+    // SAFETY: every handle is checked for null before use and released exactly once; the
+    // array keeps its own reference to the group, so the group can be released first.
+    unsafe {
+        let root = gdal_sys::GDALDatasetGetRootGroup(dataset.c_dataset());
+        if root.is_null() {
+            return (None, None);
+        }
+        let array = gdal_sys::GDALGroupOpenMDArrayFromFullname(
+            root,
+            full_name.as_ptr(),
+            std::ptr::null_mut(),
+        );
+        gdal_sys::GDALGroupRelease(root);
+        if array.is_null() {
+            return (None, None);
+        }
+
+        let mut has_scale = 0;
+        let scale = gdal_sys::GDALMDArrayGetScale(array, &raw mut has_scale);
+        let mut has_offset = 0;
+        let offset = gdal_sys::GDALMDArrayGetOffset(array, &raw mut has_offset);
+        gdal_sys::GDALMDArrayRelease(array);
+
+        (
+            (has_scale != 0).then_some(scale),
+            (has_offset != 0).then_some(offset),
+        )
+    }
 }
 
 /// The shape and declared CRS of an open MD array.
