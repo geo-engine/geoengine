@@ -266,7 +266,6 @@ mod tests {
     use crate::datasets::external::stac::{
         StacAssetBand, StacProviderDataset, StacProviderDatasetBand,
     };
-    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         primitives::{SpatialResolution, TimeInterval},
         raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType},

@@ -75,10 +75,9 @@ impl StacGrid {
         }
         // Separate square roots avoid overflowing width * height for large extents.
         let side = width.sqrt() * height.sqrt() / f64::from(self.target_number_of_cells).sqrt();
-        if !side.is_finite() || side <= 0. {
-            return Err("STAC derived cell side must be finite and positive");
-        }
-        let transform = GeoTransform::new(upper_left, side, -side);
+        // `side` is not negative, so the geo transform only rejects zero and non-finite values
+        let transform = GeoTransform::new(upper_left, side, -side)
+            .map_err(|_| "STAC derived cell side must be finite and positive")?;
         let extent_partition = SpatialPartition2D::new_unchecked(upper_left, lower_right);
         let grid_bounds = transform.spatial_to_grid_bounds(&extent_partition);
         let max_dimension = f64::from(u32::MAX).min(isize::MAX as f64);

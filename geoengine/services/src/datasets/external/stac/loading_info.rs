@@ -20,6 +20,7 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::{
     CoordinateProjection, DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
 };
+use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterResultDescriptor, TimeDescriptor,
     VectorResultDescriptor,
@@ -30,12 +31,12 @@ use geoengine_operators::source::{
     GdalRetryOptions, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset, TileFile,
 };
-use ordered_float::OrderedFloat;
 use stac::Item;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::debug;
+use typed_floats::tf64::NonNaN;
 use url::Url;
 
 /// Multi-band raster metadata queried from a STAC provider.
@@ -663,8 +664,14 @@ struct StacTileIdentity<'a> {
     rasterband_channel: usize,
     width: usize,
     height: usize,
-    geo_transform: [OrderedFloat<f64>; 4],
-    spatial_bounds: [OrderedFloat<f64>; 4],
+    origin_coordinate: [Option<NonNaN>; 2],
+    pixel_size: [NonZeroFiniteF64; 2],
+    spatial_bounds: [Option<NonNaN>; 4],
+}
+
+/// A total order key for a coordinate: `NaN` is `None`, and `0.0 == -0.0`.
+fn coordinate_key(value: f64) -> Option<NonNaN> {
+    NonNaN::new(value).ok()
 }
 
 impl<'a> From<&'a TileFile> for StacTileIdentity<'a> {
@@ -682,17 +689,16 @@ impl<'a> From<&'a TileFile> for StacTileIdentity<'a> {
             rasterband_channel: file.params.rasterband_channel,
             width: file.params.width,
             height: file.params.height,
-            geo_transform: [
-                OrderedFloat(geo_transform.origin_coordinate.x),
-                OrderedFloat(geo_transform.origin_coordinate.y),
-                OrderedFloat(geo_transform.x_pixel_size),
-                OrderedFloat(geo_transform.y_pixel_size),
+            origin_coordinate: [
+                coordinate_key(geo_transform.origin_coordinate.x),
+                coordinate_key(geo_transform.origin_coordinate.y),
             ],
+            pixel_size: [geo_transform.x_pixel_size, geo_transform.y_pixel_size],
             spatial_bounds: [
-                OrderedFloat(lower_left.x),
-                OrderedFloat(lower_left.y),
-                OrderedFloat(upper_right.x),
-                OrderedFloat(upper_right.y),
+                coordinate_key(lower_left.x),
+                coordinate_key(lower_left.y),
+                coordinate_key(upper_right.x),
+                coordinate_key(upper_right.y),
             ],
         }
     }
@@ -1080,8 +1086,8 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (0., 1.).into(),
-                    x_pixel_size: 1.,
-                    y_pixel_size: -1.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                 },
                 width: 10,
                 height: 10,
@@ -1116,7 +1122,7 @@ mod tests {
         let mut different_channel = identity_tile();
         different_channel.params.rasterband_channel = 2;
         let mut different_transform = identity_tile();
-        different_transform.params.geo_transform.x_pixel_size = 2.;
+        different_transform.params.geo_transform.x_pixel_size = NonZeroFiniteF64::new_unchecked(2.);
         let mut different_bounds = identity_tile();
         different_bounds.spatial_partition =
             SpatialPartition2D::new((1., 1.).into(), (2., 0.).into()).unwrap();
@@ -1987,7 +1993,7 @@ mod grid_request_tests {
             resolution: SpatialResolution::new_unchecked(0.1, 0.1),
             projection: SpatialReference::epsg_4326(),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new((0., 1.).into(), 0.1, -0.1),
+                GeoTransform::new_unchecked((0., 1.).into(), 0.1, -0.1),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([9, 19])).unwrap(),
             ),
             bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
@@ -2159,7 +2165,7 @@ mod grid_request_tests {
         TileInformation::new(
             GridIdx2D::new([0, 0]),
             GridShape::new([10, 10]),
-            GeoTransform::new((left, 1.).into(), 0.1, -0.1),
+            GeoTransform::new_unchecked((left, 1.).into(), 0.1, -0.1),
         )
     }
 
@@ -2316,7 +2322,7 @@ mod grid_request_tests {
         let tile = TileInformation::new(
             GridIdx2D::new([0, 0]),
             GridShape::new([10, 10]),
-            GeoTransform::new((0.5, 1.5).into(), 0.1, -0.1),
+            GeoTransform::new_unchecked((0.5, 1.5).into(), 0.1, -0.1),
         );
         let files = result.tile_files(interval(3), tile, 0);
         assert_eq!(files.len(), 5);
@@ -2491,7 +2497,7 @@ mod grid_request_tests {
         );
         provider.datasets[0].resolution = SpatialResolution::new_unchecked(1000., 1000.);
         provider.datasets[0].spatial_grid = SpatialGridDescriptor::source_from_parts(
-            GeoTransform::new((500_000., 5_800_000.).into(), 1000., -1000.),
+            GeoTransform::new_unchecked((500_000., 5_800_000.).into(), 1000., -1000.),
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([9, 19])).unwrap(),
         );
         let projection = provider.datasets[0].projection;
@@ -2544,7 +2550,7 @@ mod grid_request_tests {
         let tile = TileInformation::new(
             GridIdx2D::new([0, 0]),
             GridShape::new([10, 10]),
-            GeoTransform::new((500_000., 5_800_000.).into(), 1000., -1000.),
+            GeoTransform::new_unchecked((500_000., 5_800_000.).into(), 1000., -1000.),
         );
         assert_eq!(result.tile_files(interval(3), tile, 0).len(), 1);
         metadata(&provider, 0)

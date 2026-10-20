@@ -104,7 +104,7 @@ fn tile_information(tile: &Tile) -> TileInformation {
     TileInformation::new(
         GridIdx2D::new([0, 0]),
         GridShape::new([1, 1]),
-        GeoTransform::new(
+        GeoTransform::new_unchecked(
             (tile.bbox.0, tile.bbox.3).into(),
             tile.bbox.2 - tile.bbox.0,
             tile.bbox.1 - tile.bbox.3,

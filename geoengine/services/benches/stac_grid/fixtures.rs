@@ -413,7 +413,7 @@ pub(super) fn provider(
         resolution: SpatialResolution::new_unchecked(1., 1.),
         projection: SpatialReference::epsg_4326(),
         spatial_grid: SpatialGridDescriptor::source_from_parts(
-            GeoTransform::new((-180., 90.).into(), 1., -1.),
+            GeoTransform::new_unchecked((-180., 90.).into(), 1., -1.),
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([179, 359]))
                 .expect("world grid bounds"),
         ),
