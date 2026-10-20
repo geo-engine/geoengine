@@ -7107,187 +7107,90 @@ mod tests {
         .await
     }
 
-    #[tokio::test]
-    async fn it_checks_an_md_row_against_the_array_it_names() {
-        let (meta_data, tiles) = md_dataset_meta(
-            &[MdRow::of("md/time_series.nc", "temperature", 0, 8)],
-            vec![api_band("temperature")],
-        );
+    /// Reads the array `row` names, after `edit` changed the row, and checks the row against
+    /// it, the way registration does.
+    async fn check_md_row(
+        row: MdRow,
+        edit: impl FnOnce(&mut AddDatasetMdTile),
+    ) -> Result<(), AddDatasetMdTilesError> {
+        let (meta_data, mut tiles) = md_dataset_meta(&[row], vec![api_band("band")]);
         let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
             panic!("md_dataset_meta returns MD metadata")
         };
-        let local = |tile: &AddDatasetMdTile| {
-            let mut tile = tile.clone();
-            tile.params.file_path = test_data!("md/time_series.nc").to_path_buf();
-            tile
+        let mut tile = tiles.remove(0);
+        edit(&mut tile);
+        let info = md_tile_info(&tile).await?;
+        check_md_tile_against_array(
+            &tile,
+            &md.variables[0].axis_mapping,
+            &info,
+            &md.result_descriptor,
+        )
+    }
+
+    /// Registration is the only place a wrong array name, axis mapping, slice count, grid,
+    /// CRS or transform can be caught: past it, each is read as wrong data without an error.
+    #[tokio::test]
+    async fn it_checks_md_rows_against_their_arrays() {
+        let series = || MdRow::of("md/time_series.nc", "temperature", 0, 8);
+        let flat = |path| MdRow {
+            axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
+            ..MdRow::of(path, "grid_2d", 0, 1)
         };
 
-        let info = md_tile_info(&local(&tiles[0]))
-            .await
-            .expect("the fixture's array opens");
+        assert!(check_md_row(series(), |_| {}).await.is_ok());
+        // a `[Y, X]` variable has no z axis and is one slice
+        assert!(check_md_row(flat("md/grid_2d.nc"), |_| {}).await.is_ok());
 
-        // the declared row matches the fixture
-        assert!(
-            check_md_tile_against_array(
-                &local(&tiles[0]),
-                &md.variables[0].axis_mapping,
-                &info,
-                &md.result_descriptor
-            )
-            .is_ok()
-        );
-
-        // a name that does not exist cannot be opened, and that is an error, not a panic
-        let mut wrong_name = local(&tiles[0]);
-        wrong_name.array_name = "no_such_array".to_owned();
+        // a missing array is an error, not a panic
         assert!(matches!(
-            md_tile_info(&wrong_name).await,
+            check_md_row(series(), |t| t.array_name = "no_such_array".to_owned()).await,
             Err(AddDatasetMdTilesError::CannotOpenMdTileFile { .. })
         ));
-
-        // a wrong slice count is caught here rather than reading the wrong slices
-        let mut wrong_slices = local(&tiles[0]);
-        wrong_slices.time_steps.pop();
+        // every dimension needs exactly one valid role
+        let short_mapping = MdRow {
+            axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y],
+            ..series()
+        };
         assert!(matches!(
-            check_md_tile_against_array(
-                &wrong_slices,
-                &md.variables[0].axis_mapping,
-                &info,
-                &md.result_descriptor
-            ),
+            check_md_row(short_mapping, |_| {}).await,
+            Err(AddDatasetMdTilesError::MdTileAxisMappingInvalid { .. })
+        ));
+        assert!(matches!(
+            check_md_row(series(), |t| {
+                t.time_steps.pop();
+            })
+            .await,
             Err(AddDatasetMdTilesError::MdTileSliceCountMismatch {
                 expected: 7,
                 found: 8,
                 ..
             })
         ));
-
-        // every dimension needs exactly one valid role
-        let wrong_mapping = [
-            geoengine_operators::source::MdAxisMapping::Time,
-            geoengine_operators::source::MdAxisMapping::Y,
-        ];
         assert!(matches!(
-            check_md_tile_against_array(
-                &local(&tiles[0]),
-                &wrong_mapping,
-                &info,
-                &md.result_descriptor
-            ),
-            Err(AddDatasetMdTilesError::MdTileAxisMappingInvalid { .. })
-        ));
-
-        // the fixture has no `crs` attribute, so nothing contradicts EPSG:4326
-        let mut wrong_grid = local(&tiles[0]);
-        wrong_grid.params.width = 7;
-        assert!(matches!(
-            check_md_tile_against_array(
-                &wrong_grid,
-                &md.variables[0].axis_mapping,
-                &info,
-                &md.result_descriptor
-            ),
+            check_md_row(series(), |t| t.params.width = 7).await,
             Err(AddDatasetMdTilesError::MdTileArraySizeMismatch {
                 declared: (7, 8),
                 found: (8, 8),
                 ..
             })
         ));
-    }
-
-    /// A CRS the file actually declares has to match the dataset's: a mismatch is a
-    /// mislabelled dataset, and nothing downstream would ever notice.
-    #[tokio::test]
-    async fn it_rejects_an_md_row_whose_crs_contradicts_the_dataset() {
-        let (meta_data, tiles) = md_dataset_meta(
-            &[MdRow::of("md/projected_crs.nc", "elevation", 0, 4)],
-            vec![api_band("elevation")],
-        );
-        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
-            panic!("md_dataset_meta returns MD metadata")
-        };
-        // the fixture declares EPSG:32633 (metre pixels), the descriptor claims EPSG:4326
-        let info = md_tile_info(&tiles[0])
-            .await
-            .expect("the fixture's array opens");
+        // the file declares EPSG:32633, the dataset EPSG:4326
         assert!(matches!(
-            check_md_tile_against_array(
-                &tiles[0],
-                &md.variables[0].axis_mapping,
-                &info,
-                &md.result_descriptor
-            ),
+            check_md_row(MdRow::of("md/projected_crs.nc", "elevation", 0, 4), |_| {}).await,
             Err(AddDatasetMdTilesError::MdTileCrsMismatch { .. })
         ));
-    }
-
-    /// A `[Y, X]` variable has no z axis and is one slice; the array check must accept it.
-    #[tokio::test]
-    async fn it_accepts_a_2d_md_row_without_a_z_axis() {
-        let (meta_data, tiles) = md_dataset_meta(
-            &[MdRow {
-                axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
-                ..MdRow::of("md/grid_2d.nc", "grid_2d", 0, 1)
-            }],
-            vec![api_band("grid_2d")],
-        );
-        let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
-            panic!("md_dataset_meta returns MD metadata")
-        };
-        let mut tile = tiles[0].clone();
-        tile.params.file_path = test_data!("md/grid_2d.nc").to_path_buf();
-        let info = md_tile_info(&tile)
-            .await
-            .expect("the fixture's array opens");
-
-        assert!(
-            check_md_tile_against_array(
-                &tile,
-                &md.variables[0].axis_mapping,
-                &info,
-                &md.result_descriptor
-            )
-            .is_ok()
-        );
-    }
-
-    /// The stated transform must put the cell centres on the file's coordinates: a row whose
-    /// origin is the first centre instead of the edge, or a grid no affine transform describes
-    /// (a Gaussian latitude axis), would be read misplaced without any error.
-    #[tokio::test]
-    async fn it_rejects_an_md_row_off_the_files_coordinates() {
-        let check = async |path: &'static str, shift_x: f64| {
-            let (meta_data, tiles) = md_dataset_meta(
-                &[MdRow {
-                    axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
-                    ..MdRow::of(path, "grid_2d", 0, 1)
-                }],
-                vec![api_band("grid_2d")],
-            );
-            let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
-                panic!("md_dataset_meta returns MD metadata")
-            };
-            let mut tile = tiles[0].clone();
-            tile.params.file_path = test_data!(path).to_path_buf();
-            tile.params.geo_transform.origin_coordinate.x += shift_x;
-            let info = md_tile_info(&tile)
-                .await
-                .expect("the fixture's array opens");
-            check_md_tile_against_array(
-                &tile,
-                &md.variables[0].axis_mapping,
-                &info,
-                &md.result_descriptor,
-            )
-        };
-
-        // grid_2d's lon centres are 15, 45, ..; an origin at the first centre is half a pixel off
+        // grid_2d's lon centres are 15, 45, ..; an origin at the first centre is half a pixel
+        // off, and a Gaussian-like latitude axis has no affine transform at all
         assert!(matches!(
-            check("md/grid_2d.nc", 15.0).await,
+            check_md_row(flat("md/grid_2d.nc"), |t| {
+                t.params.geo_transform.origin_coordinate.x += 15.0;
+            })
+            .await,
             Err(AddDatasetMdTilesError::MdTileCoordinateMismatch { axis, .. }) if axis == "X"
         ));
         assert!(matches!(
-            check("md/non_uniform_lat.nc", 0.0).await,
+            check_md_row(flat("md/non_uniform_lat.nc"), |_| {}).await,
             Err(AddDatasetMdTilesError::MdTileCoordinateMismatch { axis, .. }) if axis == "Y"
         ));
     }
