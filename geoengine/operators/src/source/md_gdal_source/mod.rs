@@ -1026,16 +1026,12 @@ mod tests {
         }
     }
 
-    /// A query that reaches past a wrapped dataset's presented extent must return no tiles
-    /// for the non-overlapping part, exactly as the non-wrap path already does.
-    ///
-    /// `wrapped_splitted_advises` returning an empty `advises` used to fall through to the
-    /// `EmptyGrid` frames, which emitted a real (fully empty) tile. So a query extending below
-    /// the southernmost stored latitude got a full rectangle of empty tiles back where
-    /// `GdalSource` returns none. This fixture stores lat 1..0 only, so rows below -1 in the
-    /// tiling frame are outside the data.
+    /// A query past a wrapped dataset's presented extent still gets one empty tile per tile
+    /// position, as `GdalSource` does: raster streams are gap-free, so downstream operators
+    /// that zip several inputs stay aligned. This fixture stores lat 1..0 only, so rows below
+    /// -1 in the tiling frame are outside the data.
     #[tokio::test]
-    async fn test_query_wrap_beyond_extent_returns_no_tiles() {
+    async fn test_query_wrap_beyond_extent_returns_empty_tiles() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
         let name = add_md_dataset(
@@ -1053,7 +1049,7 @@ mod tests {
 
         // The stored rows are -4..-1 in the tiling frame, i.e. inside tile row -1 (y -512..-1).
         // Rows -1000..-600 snap to tile row -2 (y -1024..-513) alone, which cannot reach the
-        // data at all -- so every requested tile must be dropped.
+        // data at all -- so all four tile columns of that row come back empty.
         let spatial = GridBoundingBox2D::new_unchecked([-1000, -720], [-600, 719]);
         let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY);
         let tiles = query_md_source(
@@ -1066,10 +1062,10 @@ mod tests {
         )
         .await;
 
+        assert_eq!(tiles.len(), 4, "one tile per tile position");
         assert!(
-            tiles.is_empty(),
-            "a query entirely outside the wrapped extent must return no tiles, got {}",
-            tiles.len()
+            tiles.iter().all(|tile| tile.grid_array.is_empty()),
+            "a query entirely outside the wrapped extent must return only empty tiles"
         );
     }
 
