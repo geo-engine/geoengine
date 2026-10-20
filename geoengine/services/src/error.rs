@@ -506,6 +506,14 @@ pub enum Error {
         found: String,
     },
 
+    #[snafu(display(
+        "Aruna providers are no longer supported. Remove them before migrating. Existing Aruna providers (id, name): {}",
+        providers.join(", ")
+    ))]
+    ArunaProvidersExist {
+        providers: Vec<String>,
+    },
+
     #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once."))]
     RasterBandNamesMustBeUnique {
         duplicate_key: String,

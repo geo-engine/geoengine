@@ -1,12 +1,14 @@
 use super::database_migration::{DatabaseVersion, Migration};
 use crate::{
     contexts::migrations::migration_0035_stac_grid::Migration0035StacGrid,
-    error::Result,
+    error::{ArunaProvidersExist, Result},
 };
 use async_trait::async_trait;
+use snafu::ensure;
 use tokio_postgres::Transaction;
 
-/// Removes persisted Aruna providers and their obsolete database type.
+/// Removes the obsolete Aruna provider database type.
+/// Fails if Aruna providers still exist, so they are not deleted silently.
 pub struct Migration0036RemoveArunaProvider;
 
 #[async_trait]
@@ -20,6 +22,17 @@ impl Migration for Migration0036RemoveArunaProvider {
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
+        let providers: Vec<String> = tx
+            .query(
+                "SELECT id, name FROM layer_providers WHERE ((definition).aruna_data_provider_definition).id IS NOT NULL",
+                &[],
+            )
+            .await?
+            .iter()
+            .map(|row| format!("({}, {})", row.get::<_, uuid::Uuid>(0), row.get::<_, String>(1)))
+            .collect();
+        ensure!(providers.is_empty(), ArunaProvidersExist { providers });
+
         tx.batch_execute(include_str!("migration_0036_remove_aruna_provider.sql"))
             .await?;
         Ok(())
@@ -46,7 +59,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn it_removes_persisted_aruna_providers() {
+    async fn it_refuses_to_migrate_with_existing_aruna_providers() {
         let postgres_config = get_config_element::<crate::config::Postgres>().unwrap();
         let db_config = DatabaseConnectionConfig::from(postgres_config);
         let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
@@ -79,17 +92,26 @@ mod tests {
         assert_eq!(aruna_provider_count, 1);
 
         let tx = conn.transaction().await.unwrap();
+        let err = Migration0036RemoveArunaProvider
+            .migrate(&tx)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("(ad12176c-29bd-43c2-a3db-05271386da61, Aruna test provider)"),
+            "{err}"
+        );
+        tx.rollback().await.unwrap();
+
+        conn.execute(
+            "DELETE FROM layer_providers WHERE id = 'ad12176c-29bd-43c2-a3db-05271386da61'",
+            &[],
+        )
+        .await
+        .unwrap();
+
+        let tx = conn.transaction().await.unwrap();
         Migration0036RemoveArunaProvider.migrate(&tx).await.unwrap();
         tx.commit().await.unwrap();
-
-        let aruna_provider_count: i64 = conn
-            .query_one(
-                "SELECT COUNT(*) FROM layer_providers WHERE type_name = 'Aruna'",
-                &[],
-            )
-            .await
-            .unwrap()
-            .get(0);
-        assert_eq!(aruna_provider_count, 0);
     }
 }
