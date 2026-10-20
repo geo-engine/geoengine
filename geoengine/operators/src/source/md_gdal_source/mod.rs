@@ -1293,6 +1293,45 @@ mod tests {
         assert_eq!(grid_value(tile, 7, 7), 7.0);
     }
 
+    /// Packed netCDF (int16 plus CF `scale_factor`/`add_offset`) must hand the scale and
+    /// offset on with the tile; without them the raw integers cannot be turned into values.
+    #[tokio::test]
+    async fn test_query_packed_array_carries_scale_and_offset() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let name = add_md_dataset(
+            &mut exe_ctx,
+            "md_packed",
+            MdDataset {
+                // `packed.nc` stores latitudes ascending, like `cf_time_units_minutes.nc`
+                files: vec![MdFile {
+                    axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
+                    ..MdFile::of("md/packed.nc", "Band1", 0, 1)
+                }],
+                grid: (0.0, -8.0, 30.0, 1.0),
+                width: 8,
+                height: 8,
+                wrap: false,
+                time: None,
+                bands: vec!["ndvi"],
+            },
+        );
+
+        let tiles = query_md_source(
+            &exe_ctx,
+            &query_ctx,
+            name,
+            ts_grid_bounds(),
+            TimeInterval::new_instant(0).unwrap(),
+            BandSelection::first(),
+        )
+        .await;
+
+        assert_eq!(tiles.len(), 1);
+        assert_eq!(tiles[0].properties.scale_option(), Some(0.5));
+        assert_eq!(tiles[0].properties.offset_option(), Some(10.0));
+    }
+
     #[tokio::test]
     async fn test_query_fixed_axis_variables() {
         let mut exe_ctx = MockExecutionContext::test_default();

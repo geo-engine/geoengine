@@ -20,6 +20,8 @@ Fixtures
                           cloud_area_fraction) sharing (time, lat, lon), with long_name/units
 - projected_crs.nc        (time, y, x) in a projected CRS, declaring it via the CF `crs`
                           attribute (metre x units, so EPSG:4326 would be a mislabel)
+- packed.nc               int16 (lat, lon) `Band1` with CF scale_factor 0.5 / add_offset 10,
+                          ASCENDING lat on the 8x8 / 30 deg grid, cut from the MODIS NDVI fixture
 
 
 netCDF/CF convention: coordinate variables are cell *centers* (offset half a
@@ -64,6 +66,7 @@ FIXTURES = [
     "pressure_level_synthetic.nc",
     "mosaic_west.nc",
     "mosaic_east.nc",
+    "packed.nc",
 ]
 
 
@@ -295,6 +298,17 @@ def grid_2d(path: Path):
     ds = None
 
 
+def packed(path: Path):
+    """Packed int16 data: the netCDF driver turns CF scale_factor/add_offset into the
+    array's scale and offset, so the reader has to pass them on."""
+    ndvi = OUT_DIR.parent / "raster" / "modis_ndvi" / "MOD13A2_M_NDVI_2014-01-01.TIFF"
+    gdal.Translate(
+        str(path),
+        str(ndvi),
+        options="-of netCDF -srcwin 1800 900 8 8 -a_ullr 0 0 240 -8 -ot Int16 -a_scale 0.5 -a_offset 10",
+    )
+
+
 def cf_time_units_minutes(path: Path):
     """Same as time_series but time units `minutes since 1900-01-01 00:00:00Z` and
     ASCENDING latitudes (row 0 = south), so the read path must flip y."""
@@ -463,6 +477,7 @@ def main() -> None:
     variables_multitile(OUT_DIR / "variables_multitile.nc")
     pressure_level_synthetic(OUT_DIR / "pressure_level_synthetic.nc")
     mosaic_halves(OUT_DIR)
+    packed(OUT_DIR / "packed.nc")
     print(f"generated fixtures in {OUT_DIR}")
 
 
