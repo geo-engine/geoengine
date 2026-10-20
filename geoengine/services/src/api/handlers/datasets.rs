@@ -31,6 +31,7 @@ use actix_web::{
     FromRequest, HttpResponse, HttpResponseBuilder, Responder,
     web::{self, Json},
 };
+use futures::{StreamExt, TryStreamExt};
 use gdal::{
     DatasetOptions,
     vector::{Layer, LayerAccess, OGRFieldType},
@@ -51,7 +52,7 @@ use geoengine_operators::{
         GdalProcessPoolAccess, MdPresentation, MultiBandGdalSource as OperatorsMultiBandGdalSource,
         OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
         OgrSourceErrorSpec, OgrSourceTimeFormat,
-        gdal_worker_process::{GdalPoolReader, MdArrayInfo},
+        gdal_worker_process::{GdalPoolReader, MdArrayInfo, TILE_READ_CONCURRENCY},
     },
     util::gdal::{
         gdal_open_dataset, gdal_open_dataset_ex, gdal_parameters_from_dataset,
@@ -61,7 +62,7 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::HashMap,
     convert::{TryFrom, TryInto},
     path::{Path, PathBuf},
 };
@@ -565,7 +566,8 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
             .context(CannotAddMdTilesToDataset)?
             .get_gdal_worker(),
     );
-    let mut array_infos = HashMap::new();
+    let mut keys = Vec::with_capacity(tiles.len());
+    let mut to_read = HashMap::new();
     for tile in &tiles {
         let absolute_path = validate_md_tile(
             tile,
@@ -581,15 +583,31 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
             tile.array_group.clone(),
             tile.array_name.clone(),
         );
-        let info = match array_infos.entry(key) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(read_md_tile_info(&reader, tile, params).await?),
-        };
+        to_read.entry(key.clone()).or_insert((tile, params));
+        keys.push(key);
+    }
+
+    // remote headers cost a round trip each, so they are read concurrently
+    let array_infos: HashMap<_, _> = futures::stream::iter(to_read)
+        .map(|(key, (tile, params))| {
+            let reader = &reader;
+            async move {
+                Ok::<_, AddDatasetMdTilesError>((
+                    key,
+                    read_md_tile_info(reader, tile, params).await?,
+                ))
+            }
+        })
+        .buffer_unordered(TILE_READ_CONCURRENCY)
+        .try_collect()
+        .await?;
+
+    for (tile, key) in tiles.iter().zip(&keys) {
         // the band's variable exists, `validate_md_tile` checked it
         check_md_tile_against_array(
             tile,
             &variables[tile.band as usize].axis_mapping,
-            info,
+            &array_infos[key],
             &dataset_descriptor,
         )?;
     }
