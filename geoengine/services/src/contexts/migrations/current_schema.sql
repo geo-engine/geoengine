@@ -1457,7 +1457,8 @@ CREATE TYPE "TileEntry" AS (
 -- see migration_0036_md_dataset_tiles
 CREATE TABLE dataset_md_tiles (
     id uuid NOT NULL PRIMARY KEY,
-    dataset_id uuid NOT NULL,
+    -- rows go with their dataset
+    dataset_id uuid NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
     time "TimeInterval" NOT NULL, -- noqa: references.keywords
     bbox "SpatialPartition2D" NOT NULL,
     band oid NOT NULL,
