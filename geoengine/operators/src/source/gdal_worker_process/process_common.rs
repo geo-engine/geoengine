@@ -140,8 +140,21 @@ impl GdalReadWindow {
     }
 }
 
-/// The kind of read a [`IpcChannelMessagePayload`] requests: a classic 2D rasterband
-/// read or a batched multidimensional (MD) array read.
+/// What a [`IpcChannelMessagePayload`] asks the worker for: pixels, or only a header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
+pub enum GdalRequest {
+    /// Read pixels of the window `read_advise` as `data_type`.
+    Read {
+        read_advise: GdalReadAdvise,
+        /// We use this to know what type we serialize
+        data_type: RasterDataType,
+        kind: GdalReadKind,
+    },
+    /// Read a header only, without any pixel data.
+    Header(GdalHeaderKind),
+}
+
+/// The kind of pixel read: a classic 2D rasterband read or a multidimensional (MD) array read.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
 pub enum GdalReadKind {
     /// Classic 2D rasterband read (`rasterband_channel` selects the band).
@@ -158,29 +171,38 @@ pub enum GdalReadKind {
         /// Role of each source-array dimension, in source order.
         axis_mapping: Vec<MdAxisMapping>,
     },
-    /// Multidim array header read: the shape and declared CRS of `array_name` (in `group`),
-    /// without any pixel data. The read advise and data type of the message are ignored.
-    MdArrayInfo {
+}
+
+/// The kind of header read.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
+pub enum GdalHeaderKind {
+    /// The data type of band `rasterband_channel` and the dataset's CRS.
+    Raster,
+    /// The shape and declared CRS of the MD array `array_name` (in `group`).
+    MdArray {
         group: Option<String>,
         array_name: String,
     },
-    /// Classic raster header read: the data type of band `rasterband_channel` and the
-    /// dataset's CRS, without any pixel data. The read advise and data type are ignored.
-    RasterInfo,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct IpcChannelMessagePayload {
     pub dataset_params: GdalDatasetParameters,
-    pub read_advise: GdalReadAdvise,
-    /// We use this to know what type we serialize
-    pub data_type: RasterDataType,
     /// Correlation ID for tracing: `{hash}-{nanos}`. Used to link the main process
     /// caller span with the worker process span for the same logical read.
     #[serde(default)]
     pub read_id: Option<String>,
-    /// Whether this is a classic 2D or a multidim array read.
-    pub read_kind: GdalReadKind,
+    pub request: GdalRequest,
+}
+
+impl IpcChannelMessagePayload {
+    /// The pixel window a read targets; `None` for header reads.
+    pub fn read_window_bounds(&self) -> Option<GridBoundingBox2D> {
+        match &self.request {
+            GdalRequest::Read { read_advise, .. } => Some(read_advise.read_window_bounds),
+            GdalRequest::Header(_) => None,
+        }
+    }
 }
 
 /// Result payload of a worker read: a classic 2D raster payload, or a multidim slice payload.
@@ -191,9 +213,9 @@ pub enum IpcChannelResult {
     /// Multidim read result: the single z-slice requested by [`GdalReadKind::MdArray`].
     /// Uses the same byte encoding as `Raster`.
     MdSlice(GdalIpcMdBytePayload),
-    /// Header result of [`GdalReadKind::MdArrayInfo`].
+    /// Header result of [`GdalHeaderKind::MdArray`].
     MdArrayInfo(MdArrayInfo),
-    /// Header result of [`GdalReadKind::RasterInfo`].
+    /// Header result of [`GdalHeaderKind::Raster`].
     RasterInfo(RasterInfo),
 }
 
@@ -723,13 +745,7 @@ impl IpcChannelMessage {
 
     pub fn full_hash<H: Hasher>(&self, state: &mut H) {
         self.0.dataset_params.full_hash(state);
-
-        // Hash read advise
-        self.0.read_advise.hash(state);
-        self.0.data_type.hash(state);
-
-        // Hash multidim request parts
-        self.0.read_kind.hash(state);
+        self.0.request.hash(state);
     }
 }
 

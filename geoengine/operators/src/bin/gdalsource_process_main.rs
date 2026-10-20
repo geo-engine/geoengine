@@ -3,10 +3,11 @@ use std::fmt::Display;
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::gdal_worker_process::{
-    OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
+    GdalDatasetParameters, OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
     process_common::{
-        GdalIpcBytePayload, GdalIpcMdBytePayload, GdalReadKind, IpcChannelMessage,
-        IpcChannelMessagePayload, IpcChannelResult, IpcProcessError, IpcProcessRasterResult,
+        GdalHeaderKind, GdalIpcBytePayload, GdalIpcMdBytePayload, GdalReadAdvise, GdalReadKind,
+        GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+        IpcProcessError, IpcProcessRasterResult,
     },
     process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
 };
@@ -257,18 +258,61 @@ fn main() {
     drop(file_guard);
 }
 
-fn raster_type_dispatch(
-    payload: IpcChannelMessagePayload,
+fn handle_request(
+    IpcChannelMessagePayload {
+        dataset_params,
+        read_id: _,
+        request,
+    }: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
+    match request {
+        GdalRequest::Read {
+            read_advise,
+            data_type,
+            kind,
+        } => raster_type_dispatch(
+            &dataset_params,
+            read_advise,
+            data_type,
+            kind,
+            dataset_cache,
+            sender,
+        ),
+        GdalRequest::Header(GdalHeaderKind::Raster) => send_result(
+            GdalHandling::load_raster_info_with_dataset_retry(dataset_cache, &dataset_params)
+                .map(IpcChannelResult::RasterInfo),
+            sender,
+        ),
+        GdalRequest::Header(GdalHeaderKind::MdArray { group, array_name }) => send_result(
+            GdalHandling::load_md_array_info_with_dataset_retry(
+                dataset_cache,
+                &dataset_params,
+                group.as_deref(),
+                &array_name,
+            )
+            .map(IpcChannelResult::MdArrayInfo),
+            sender,
+        ),
+    }
+}
+
+fn raster_type_dispatch(
+    dataset_params: &GdalDatasetParameters,
+    read_advise: GdalReadAdvise,
+    data_type: geoengine_datatypes::raster::RasterDataType,
+    kind: GdalReadKind,
+    dataset_cache: &mut GdalDatasetHolder,
+    sender: &IpcSender<IpcProcessRasterResult>,
+) -> Result<(), IpcProcessError> {
+    use geoengine_datatypes::raster::RasterDataType as T;
     macro_rules! dispatch {
         ($t:ty) => {
-            read_and_send::<$t>(payload, dataset_cache, sender)?
+            read_and_send::<$t>(dataset_params, read_advise, kind, dataset_cache, sender)
         };
     }
-    use geoengine_datatypes::raster::RasterDataType as T;
-    match payload.data_type {
+    match data_type {
         T::U8 => dispatch!(u8),
         T::U16 => dispatch!(u16),
         T::U32 => dispatch!(u32),
@@ -280,8 +324,6 @@ fn raster_type_dispatch(
         T::F32 => dispatch!(f32),
         T::F64 => dispatch!(f64),
     }
-
-    Ok(())
 }
 
 #[allow(clippy::print_stderr)]
@@ -307,7 +349,7 @@ fn run(token: Token) {
         .entered();
 
         // If helper returns an error, it means the underlying IPC channel is completely broken
-        if let Err(err) = raster_type_dispatch(payload, &mut dataset_cache, &sender) {
+        if let Err(err) = handle_request(payload, &mut dataset_cache, &sender) {
             eprintln!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
             break;
         }
@@ -315,20 +357,16 @@ fn run(token: Token) {
 }
 
 fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
-    IpcChannelMessagePayload {
-        dataset_params,
-        read_advise,
-        data_type: _,
-        read_id: _,
-        read_kind,
-    }: IpcChannelMessagePayload,
+    dataset_params: &GdalDatasetParameters,
+    read_advise: GdalReadAdvise,
+    kind: GdalReadKind,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
-    let byte_payload = match read_kind {
+    let result = match kind {
         GdalReadKind::Raster => GdalHandling::load_tile_data_with_dataset_retry::<T>(
             dataset_cache,
-            &dataset_params,
+            dataset_params,
             read_advise,
         )
         .and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into))
@@ -340,7 +378,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
             axis_mapping,
         } => GdalHandling::load_md_tile_data_with_dataset_retry::<T>(
             dataset_cache,
-            &dataset_params,
+            dataset_params,
             read_advise,
             group.as_deref(),
             &array_name,
@@ -349,24 +387,18 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         )
         .and_then(|payload| GdalIpcMdBytePayload::try_from(payload).map_err(Into::into))
         .map(IpcChannelResult::MdSlice),
-        // a header read: `T` and the read advise play no part
-        GdalReadKind::MdArrayInfo { group, array_name } => {
-            GdalHandling::load_md_array_info_with_dataset_retry(
-                dataset_cache,
-                &dataset_params,
-                group.as_deref(),
-                &array_name,
-            )
-            .map(IpcChannelResult::MdArrayInfo)
-        }
-        GdalReadKind::RasterInfo => {
-            GdalHandling::load_raster_info_with_dataset_retry(dataset_cache, &dataset_params)
-                .map(IpcChannelResult::RasterInfo)
-        }
     };
 
+    send_result(result, sender)
+}
+
+/// Sends a worker result back to the server.
+fn send_result(
+    result: IpcProcessRasterResult,
+    sender: &IpcSender<IpcProcessRasterResult>,
+) -> Result<(), IpcProcessError> {
     // Propagate channel send errors directly up out of the handler
-    match byte_payload {
+    match result {
         Ok(result) => sender.send(Ok(result)),
         Err(err) => {
             // This is the only place the real cause survives. The parent wraps it into

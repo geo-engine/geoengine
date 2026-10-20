@@ -111,7 +111,8 @@ struct WorkerJob {
 struct WorkerAffinity {
     dataset_hash: u64,
     band: usize,
-    spatial_window: GridBoundingBox2D,
+    /// `None` after a header read, which has no pixel window
+    spatial_window: Option<GridBoundingBox2D>,
     timestamp: Instant,
 }
 
@@ -123,7 +124,7 @@ impl WorkerAffinity {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        window: Option<&GridBoundingBox2D>,
         now: Instant,
     ) -> f64 {
         let idle_duration = now.saturating_duration_since(self.timestamp).as_secs_f64();
@@ -141,11 +142,13 @@ impl WorkerAffinity {
             if self.band == band {
                 score += SCORE_BAND_MATCH * decay;
 
-                let dist = calculate_grid_distance(&self.spatial_window, window);
-                if dist == 0.0 {
-                    score += SCORE_EXACT_WINDOW_MATCH * decay;
-                } else {
-                    score += (SCORE_NEARBY_WINDOW_MAX / (1.0 + dist)) * decay;
+                if let (Some(last), Some(window)) = (&self.spatial_window, window) {
+                    let dist = calculate_grid_distance(last, window);
+                    if dist == 0.0 {
+                        score += SCORE_EXACT_WINDOW_MATCH * decay;
+                    } else {
+                        score += (SCORE_NEARBY_WINDOW_MAX / (1.0 + dist)) * decay;
+                    }
                 }
             }
         }
@@ -168,7 +171,7 @@ impl WorkerProcess {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        window: Option<&GridBoundingBox2D>,
         now: Instant,
     ) -> f64 {
         match &self.affinity {
@@ -221,7 +224,7 @@ enum BrokerCommand {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        window: Option<GridBoundingBox2D>,
     },
     WorkerDied {
         worker_id: usize,
@@ -418,7 +421,7 @@ impl GdalProcessPool {
         broker_tx: &mpsc::Sender<BrokerCommand>,
     ) {
         while let Some(job) = job_rx.blocking_recv() {
-            let window = job.request.0.read_advise.read_window_bounds;
+            let window = job.request.0.read_window_bounds();
             let band = job.request.0.dataset_params.rasterband_channel;
             let dataset_hash = job.dataset_hash;
 
@@ -640,7 +643,7 @@ impl BrokerState {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        window: Option<GridBoundingBox2D>,
     ) {
         if let Some(slot) = self.dataset_registry.get_mut(&dataset_hash) {
             slot.active_count = slot.active_count.saturating_sub(1);
@@ -706,7 +709,7 @@ impl BrokerState {
                 };
 
                 datasets_scanned += 1;
-                let window = &req.request.0.read_advise.read_window_bounds;
+                let window = req.request.0.read_window_bounds();
                 let band = req.request.0.dataset_params.rasterband_channel;
 
                 let mut current_best_w_idx = 0;
@@ -717,7 +720,7 @@ impl BrokerState {
                         .workers
                         .get(w_id)
                         .expect("Idle worker ID missing from registry - invariant broken");
-                    let score = w.score_for_job(hash, band, window, now);
+                    let score = w.score_for_job(hash, band, window.as_ref(), now);
 
                     if score > current_best_score {
                         current_best_score = score;
@@ -913,7 +916,7 @@ impl GdalPoolDispatcher {
             })
     }
 
-    /// Read a header (`GdalReadKind::MdArrayInfo` or `GdalReadKind::RasterInfo`) without pixel
+    /// Read a header (`GdalRequest::Header`) without pixel
     /// data. Uses the same leader/follower deduplication as [`Self::read_data`].
     ///
     /// # Panics
@@ -1112,28 +1115,30 @@ mod tests {
                 allow_alphaband_as_mask: false,
                 retry: None,
             },
-            read_advise: GdalReadAdvise {
-                gdal_read_widow: GdalReadWindow {
-                    start_x: 0,
-                    start_y: 0,
-                    size_x: 512,
-                    size_y: 360,
-                },
-                read_window_bounds: window([0, 0], [359, 511]),
-                bounds_of_target: window([0, 0], [599, 1439]),
-                flip_y: true,
-            },
-            data_type: geoengine_datatypes::raster::RasterDataType::F32,
             read_id: None,
-            read_kind: GdalReadKind::MdArray {
-                group: None,
-                array_name: "tasmax".to_string(),
-                z_index,
-                axis_mapping: vec![
-                    super::super::process_common::MdAxisMapping::Time,
-                    super::super::process_common::MdAxisMapping::Y,
-                    super::super::process_common::MdAxisMapping::X,
-                ],
+            request: GdalRequest::Read {
+                read_advise: GdalReadAdvise {
+                    gdal_read_widow: GdalReadWindow {
+                        start_x: 0,
+                        start_y: 0,
+                        size_x: 512,
+                        size_y: 360,
+                    },
+                    read_window_bounds: window([0, 0], [359, 511]),
+                    bounds_of_target: window([0, 0], [599, 1439]),
+                    flip_y: true,
+                },
+                data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                kind: GdalReadKind::MdArray {
+                    group: None,
+                    array_name: "tasmax".to_string(),
+                    z_index,
+                    axis_mapping: vec![
+                        super::super::process_common::MdAxisMapping::Time,
+                        super::super::process_common::MdAxisMapping::Y,
+                        super::super::process_common::MdAxisMapping::X,
+                    ],
+                },
             },
         })
     }
@@ -1184,8 +1189,10 @@ mod tests {
         let a = md_message(0);
         let mut b = md_message(0);
         let IpcChannelMessage(p) = &mut b;
-        let IpcChannelMessagePayload { read_kind, .. } = p;
-        *read_kind = GdalReadKind::MdArray {
+        let GdalRequest::Read { kind, .. } = &mut p.request else {
+            panic!("md_message builds a pixel read");
+        };
+        *kind = GdalReadKind::MdArray {
             group: None,
             array_name: "tasmin".to_string(),
             z_index: 0,
@@ -1224,7 +1231,7 @@ mod tests {
         WorkerAffinity {
             dataset_hash,
             band,
-            spatial_window: window,
+            spatial_window: Some(window),
             timestamp: Instant::now(),
         }
     }
@@ -1233,7 +1240,7 @@ mod tests {
     fn score_exact_match_fresh() {
         let w = window([100, 100], [200, 200]);
         let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
+        let score = aff.calculate_score(42, 1, Some(&w), aff.timestamp);
 
         assert_approx_eq!(
             f64,
@@ -1246,7 +1253,7 @@ mod tests {
     fn score_nearby_window() {
         let w = window([100, 100], [200, 200]);
         let aff = make_affinity(42, 1, window([100, 101], [200, 201]));
-        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
+        let score = aff.calculate_score(42, 1, Some(&w), aff.timestamp);
 
         // Chebyshev(|100-100|, |101-100|) = 1
         let expected =
@@ -1258,7 +1265,7 @@ mod tests {
     fn score_different_band_same_dataset() {
         let w = window([0, 0], [7, 7]);
         let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(42, 2, &w, aff.timestamp);
+        let score = aff.calculate_score(42, 2, Some(&w), aff.timestamp);
 
         assert_approx_eq!(f64, score, SCORE_DATASET_MATCH);
     }
@@ -1267,7 +1274,7 @@ mod tests {
     fn score_different_dataset() {
         let w = window([0, 0], [7, 7]);
         let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(99, 1, &w, aff.timestamp);
+        let score = aff.calculate_score(99, 1, Some(&w), aff.timestamp);
 
         assert_approx_eq!(f64, score, 0.0);
     }
@@ -1279,7 +1286,7 @@ mod tests {
         aff.timestamp = Instant::now()
             .checked_sub(Duration::from_secs_f64(CACHE_TTL_SECS + 1.0))
             .unwrap();
-        let score = aff.calculate_score(42, 1, &w, Instant::now());
+        let score = aff.calculate_score(42, 1, Some(&w), Instant::now());
 
         assert_approx_eq!(f64, score, 0.0);
     }
@@ -1291,7 +1298,7 @@ mod tests {
     };
     use crate::source::gdal_worker_process::process_common::{
         GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
-        GdalReadKind, GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload,
+        GdalReadKind, GdalReadWindow, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
         IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
@@ -1342,18 +1349,20 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         let msg = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params: make_params("test.tif", band),
-            read_advise: GdalReadAdvise {
-                gdal_read_widow: GdalReadWindow::new(
-                    GridIdx2D::new([0, 0]),
-                    GridShape2D::new([256, 256]),
-                ),
-                read_window_bounds: w,
-                bounds_of_target: w,
-                flip_y: false,
-            },
-            data_type: RasterDataType::U8,
             read_id: None,
-            read_kind: GdalReadKind::Raster,
+            request: GdalRequest::Read {
+                read_advise: GdalReadAdvise {
+                    gdal_read_widow: GdalReadWindow::new(
+                        GridIdx2D::new([0, 0]),
+                        GridShape2D::new([256, 256]),
+                    ),
+                    read_window_bounds: w,
+                    bounds_of_target: w,
+                    flip_y: false,
+                },
+                data_type: RasterDataType::U8,
+                kind: GdalReadKind::Raster,
+            },
         });
         let req = Box::new(QueuedRequest {
             dataset_hash,
@@ -1398,7 +1407,7 @@ mod tests {
         assert_eq!(state.idle_workers.len(), 0);
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]));
+        state.release_worker(0, job.dataset_hash, 1, Some(window([0, 0], [255, 255])));
 
         assert_eq!(state.idle_workers.len(), 1);
         assert_eq!(state.idle_workers[0], 0);
@@ -1423,7 +1432,7 @@ mod tests {
         let first = rx0.try_recv().unwrap().dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, first, 1, window([0, 0], [255, 255]));
+        state.release_worker(0, first, 1, Some(window([0, 0], [255, 255])));
         state.try_dispatch();
         let second = rx0.try_recv().unwrap().dataset_hash;
 
