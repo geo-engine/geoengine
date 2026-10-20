@@ -1,6 +1,6 @@
 use geoengine_datatypes::primitives::{
-    CacheHint, CacheTtlSeconds, RegularTimeDimension, TimeDimension, TimeGranularity, TimeInstance,
-    TimeInterval, TimeStep,
+    CacheHint, CacheTtlSeconds, RasterQueryRectangle, RegularTimeDimension, TimeDimension,
+    TimeGranularity, TimeInstance, TimeInterval, TimeStep,
 };
 use serde::{Deserialize, Serialize};
 
@@ -240,6 +240,14 @@ pub struct MdDatasetFile {
     /// index into `GdalMdMetaData::variables` of the variable this file holds
     #[serde(default)]
     pub output_band: u32,
+}
+
+/// The query for an `MdLoadingInfo`. Set `fetch_files` to false to get only the time steps,
+/// as `MultiBandGdalLoadingInfoQueryRectangle` does with `fetch_tiles`.
+#[derive(Clone, Debug)]
+pub struct MdLoadingInfoQueryRectangle {
+    pub query_rectangle: RasterQueryRectangle,
+    pub fetch_files: bool,
 }
 
 /// The loading information of a `MdGdalSource`: a set of MD arrays that are

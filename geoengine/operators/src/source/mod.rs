@@ -21,7 +21,8 @@ pub use self::gdal_worker_process::{
 };
 pub use self::md_gdal_source::{
     GdalMdMetaData, MdDatasetFile, MdFileTimes, MdGdalSource, MdGdalSourceError,
-    MdGdalSourceParameters, MdGdalSourceProcessor, MdLoadingInfo, MdPresentation, MdVariable,
+    MdGdalSourceParameters, MdGdalSourceProcessor, MdLoadingInfo, MdLoadingInfoQueryRectangle,
+    MdPresentation, MdVariable,
 };
 pub use self::multi_band_gdal_source::{
     GdalMultiBand, GdalSourceError as MultiBandGdalSourceError,
