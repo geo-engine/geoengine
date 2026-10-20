@@ -44,7 +44,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     processing::ExpressionEnvironment,
     source::{
-        GdalLoadingInfo, MdLoadingInfo, MultiBandGdalLoadingInfo,
+        GdalLoadingInfo, MdLoadingInfo, MdLoadingInfoQueryRectangle, MultiBandGdalLoadingInfo,
         MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
         gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     },
@@ -324,7 +324,7 @@ where
             MultiBandGdalLoadingInfo,
             RasterResultDescriptor,
             MultiBandGdalLoadingInfoQueryRectangle,
-        > + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+        > + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>
         + LayerProviderDb
         + MlModelDb,
 {
@@ -644,18 +644,18 @@ where
 }
 
 #[async_trait]
-impl<D> MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+impl<D> MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>
     for ExecutionContextImpl<D>
 where
     D: DatasetDb
         + LayerProviderDb
-        + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>,
+        + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>,
 {
     async fn meta_data(
         &self,
         data_id: &DataId,
     ) -> Result<
-        Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
         match data_id {
