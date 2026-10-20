@@ -43,7 +43,8 @@ ADD ATTRIBUTE gdal_md_meta_data "GdalMdMetaData";
 
 CREATE TABLE dataset_md_tiles (
     id uuid NOT NULL PRIMARY KEY,
-    dataset_id uuid NOT NULL,
+    -- rows go with their dataset
+    dataset_id uuid NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
     time "TimeInterval" NOT NULL, -- noqa: references.keywords
     -- the raw footprint in the file's own grid; wrap is applied at read time
     bbox "SpatialPartition2D" NOT NULL,
