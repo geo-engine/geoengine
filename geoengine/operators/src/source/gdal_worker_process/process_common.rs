@@ -231,8 +231,21 @@ pub struct RasterInfo {
 pub struct MdArrayInfo {
     /// the size of each array dimension, in source order
     pub axis_sizes: Vec<usize>,
-    /// the CRS from the array's `crs`, `spatial_ref` or `grid_mapping` attribute, if any
+    /// the array's CRS as GDAL resolves it, else its `crs`, `spatial_ref` or `grid_mapping`
+    /// attribute, if any
     pub crs: Option<geoengine_datatypes::spatial_reference::SpatialReference>,
+    /// one entry per dimension, in source order: its coordinate variable, if it has a 1-D one
+    /// in degrees or metres
+    pub coordinates: Vec<Option<MdAxisCoordinates>>,
+}
+
+/// The cell-centre coordinates along one dimension of an MD array.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub struct MdAxisCoordinates {
+    pub first: f64,
+    pub last: f64,
+    /// whether the spacing is constant, i.e. an affine transform can describe the axis
+    pub uniform: bool,
 }
 
 pub type IpcProcessRasterResult = Result<IpcChannelResult, IpcProcessError>;
