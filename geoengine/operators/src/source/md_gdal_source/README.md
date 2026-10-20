@@ -156,6 +156,10 @@ A row is rejected unless:
   sides only — no longitude shift (`MdTileGeoTransformMismatch`), so the stored footprint is the
   file's own; and a CRS the file declares is not a _different_ one than the dataset's
   (`MdTileCrsMismatch`) — a file that declares no CRS is allowed.
+- where the X or Y dimension has a 1-D coordinate variable in degrees or metres, the row's
+  transform puts the cell centres on its first and last value and the spacing is uniform
+  (`MdTileCoordinateMismatch`). This catches an origin taken from the first centre instead of the
+  edge, and grids no affine transform describes (Gaussian latitudes);
 - a wrapped dataset needs an **even** width and a span of exactly 360° (`MdTileUnpresentable`).
   It is presented from the edge of its own pixel lattice at or just west of −180°, so a 0.25°
   product whose longitudes are pixel _centres_ (0, 0.25, …, like ERA5) is presented from
