@@ -83,7 +83,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(query_url.clone()).query(query_params);
             let item_collection: stac::ItemCollection = client
-                .send_json(request, &request_policy)
+                .execute_json(request, &request_policy)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -114,7 +114,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(next_url.clone());
             let item_collection: stac::ItemCollection = client
-                .send_json(request, &request_policy)
+                .execute_json(request, &request_policy)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -1252,7 +1252,7 @@ mod tests {
                 time_dimension: definition.time_dimension,
                 dataset,
                 page_limit: definition.page_limit,
-                client: StacClient::new(reqwest::Client::new()),
+                client: StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
@@ -1305,7 +1305,7 @@ mod tests {
             time_dimension: definition.time_dimension,
             dataset: definition.datasets[0].clone(),
             page_limit: definition.page_limit,
-            client: StacClient::new(reqwest::Client::new()),
+            client: StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
@@ -1471,18 +1471,16 @@ mod tests {
             .respond_with(responders::json_encoded(stac_items_response())),
         );
 
-        let client = StacClient::new(reqwest::Client::new())
-            .with_authentication(
-                Some(
-                    crate::datasets::external::stac::StacProviderAuthentication {
-                        endpoint: server.url_str("/token"),
-                        client_id: "my-client-id".to_owned(),
-                        username: "test-user".to_owned(),
-                        password: "test-password".to_owned(),
-                    },
-                ),
-                &server.url_str("/"),
-            )
+        let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"))
+            .unwrap()
+            .with_authentication(Some(
+                crate::datasets::external::stac::StacProviderAuthentication {
+                    endpoint: server.url_str("/token"),
+                    client_id: "my-client-id".to_owned(),
+                    username: "test-user".to_owned(),
+                    password: "test-password".to_owned(),
+                },
+            ))
             .await
             .expect("initial password grant should succeed");
 
@@ -1502,13 +1500,7 @@ mod tests {
             .await
             .expect("authenticated STAC pagination request should succeed");
 
-        let authentication = client
-            .scope
-            .as_ref()
-            .unwrap()
-            .authentication
-            .as_ref()
-            .unwrap();
+        let authentication = client.authentication.as_ref().unwrap();
         tokio::time::timeout(Duration::from_secs(4), async {
             loop {
                 if authentication.access_token().await == "access-token-3" {
@@ -2357,7 +2349,7 @@ mod grid_request_tests {
         );
         provider
             .client
-            .send_json::<Value>(
+            .execute_json::<Value>(
                 provider.client.get(server.url_str("/quota-discovery")),
                 &crate::util::retry::RetryPolicy::new(),
             )
@@ -2734,7 +2726,7 @@ mod grid_request_tests {
                 .times(crate::util::retry::DEFAULT_MAX_RETRIES as usize)
                 .respond_with(responders::status_code(429).append_header("x-ratelimit-reset", "0")),
         );
-        let client = super::StacClient::new(reqwest::Client::new());
+        let client = super::StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap();
         let state = super::StacQueryState::NextPage {
             next_url: server.url_str("/always-limited").parse().unwrap(),
         };
@@ -2797,7 +2789,7 @@ mod grid_request_tests {
             let exhausted = Instant::now();
             other_provider
                 .client
-                .send_json::<Value>(
+                .execute_json::<Value>(
                     other_provider
                         .client
                         .get(server.url_str("/collections/other/items")),

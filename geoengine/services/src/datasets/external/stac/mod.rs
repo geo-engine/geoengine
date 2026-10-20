@@ -227,10 +227,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
         validate_authentication(authentication.as_ref())?;
         let mut provider = StacDataProvider::from_definition(definition)?;
 
-        provider.client = provider
-            .client
-            .with_authentication(authentication, &provider.api_url)
-            .await?;
+        provider.client = provider.client.with_authentication(authentication).await?;
 
         Ok(Box::new(provider))
     }
@@ -329,6 +326,7 @@ impl StacDataProvider {
             ))
             .build()
             .unwrap_or_default();
+        let client = StacClient::new(client, &definition.api_url)?;
 
         Ok(Self {
             id: definition.id,
@@ -340,7 +338,7 @@ impl StacDataProvider {
             time_dimension: definition.time_dimension,
             datasets: definition.datasets,
             page_limit: definition.page_limit,
-            client: StacClient::new(client),
+            client,
             cache_ttl_secs: definition.cache_ttl_secs,
             query_cache: Arc::new(StacQueryCache::default()),
             grid,
@@ -368,48 +366,40 @@ impl DataProvider for StacDataProvider {
     }
 }
 
-/// STAC HTTP transport and origin-scoped authentication/admission policy.
-/// Clones share the connection pool, token renewal state and configured scope.
+/// STAC HTTP transport with a fixed provider origin and coordinator.
+/// Clones share the connection pool, token renewal state and coordinator.
 #[derive(Clone, Debug)]
 pub(crate) struct StacClient {
     client: reqwest::Client,
-    scope: Option<Arc<StacClientScope>>,
-}
-
-/// An origin, its coordinator and its optional authentication are configured together.
-#[derive(Debug)]
-struct StacClientScope {
     origin: url::Url,
     coordinator: Arc<coordinator::StacRequestCoordinator>,
     authentication: Option<auth::StacAuthentication>,
 }
 
 impl StacClient {
-    pub(crate) fn new(client: reqwest::Client) -> Self {
-        Self {
+    pub(crate) fn new(client: reqwest::Client, stac_api_url: &str) -> crate::error::Result<Self> {
+        let origin = url::Url::parse(stac_api_url)?;
+        let coordinator = coordinator::StacRequestCoordinator::shared(&origin, None);
+        Ok(Self {
             client,
-            scope: None,
-        }
+            origin,
+            coordinator,
+            authentication: None,
+        })
     }
 
     pub(crate) async fn with_authentication(
         mut self,
         config: Option<StacProviderAuthentication>,
-        stac_api_url: &str,
     ) -> crate::error::Result<Self> {
-        let origin = url::Url::parse(stac_api_url)?;
-        let coordinator = coordinator::StacRequestCoordinator::shared(&origin, config.as_ref());
-        let authentication = match config {
+        self.coordinator =
+            coordinator::StacRequestCoordinator::shared(&self.origin, config.as_ref());
+        self.authentication = match config {
             Some(config) => {
                 Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
             }
             None => None,
         };
-        self.scope = Some(Arc::new(StacClientScope {
-            origin,
-            coordinator,
-            authentication,
-        }));
         Ok(self)
     }
 
@@ -417,25 +407,20 @@ impl StacClient {
         self.client.get(url)
     }
 
-    /// Returns decoded JSON or an error; the coordinator owns all request retries.
-    pub(crate) async fn send_json<T: serde::de::DeserializeOwned>(
+    /// Executes a request through the provider's coordinator and decodes the JSON response.
+    /// The coordinator handles authentication, rate limits and retries.
+    pub(crate) async fn execute_json<T: serde::de::DeserializeOwned>(
         &self,
         request: reqwest::RequestBuilder,
         policy: &crate::util::retry::RetryPolicy,
     ) -> reqwest::Result<T> {
         let request = request.build()?;
-        let (coordinator, authentication) = match self
-            .scope
-            .as_deref()
-            .filter(|scope| same_origin(&scope.origin, request.url()))
-        {
-            Some(scope) => (scope.coordinator.clone(), scope.authentication.as_ref()),
-            None => (
-                coordinator::StacRequestCoordinator::shared(request.url(), None),
-                None,
-            ),
+        let authentication = if same_origin(&self.origin, request.url()) {
+            self.authentication.as_ref()
+        } else {
+            None
         };
-        coordinator
+        self.coordinator
             .execute(&self.client, request, authentication, policy)
             .await
     }
@@ -540,8 +525,9 @@ mod tests {
             });
             let api_url = server.url_str("/");
             async move {
-                StacClient::new(reqwest::Client::new())
-                    .with_authentication(config, &api_url)
+                StacClient::new(reqwest::Client::new(), &api_url)
+                    .unwrap()
+                    .with_authentication(config)
                     .await
                     .unwrap()
             }
@@ -553,10 +539,10 @@ mod tests {
         let policy = crate::util::retry::RetryPolicy::new().stop_on_status(&[400, 404]);
         let exhausted = Instant::now();
         first
-            .send_json::<Value>(first.get(server.url_str("/probe")), &policy)
+            .execute_json::<Value>(first.get(server.url_str("/probe")), &policy)
             .await
             .unwrap();
-        let waiting = same.send_json::<Value>(same.get(server.url_str("/shared")), &policy);
+        let waiting = same.execute_json::<Value>(same.get(server.url_str("/shared")), &policy);
         tokio::pin!(waiting);
         assert!(
             tokio::time::timeout(Duration::from_millis(50), &mut waiting)
@@ -566,7 +552,7 @@ mod tests {
         );
         tokio::time::timeout(
             Duration::from_millis(300),
-            other.send_json::<Value>(other.get(server.url_str("/independent")), &policy),
+            other.execute_json::<Value>(other.get(server.url_str("/independent")), &policy),
         )
         .await
         .expect("different authentication has an independent quota")
@@ -574,7 +560,8 @@ mod tests {
         if authenticated {
             tokio::time::timeout(
                 Duration::from_millis(300),
-                anonymous.send_json::<Value>(anonymous.get(server.url_str("/anonymous")), &policy),
+                anonymous
+                    .execute_json::<Value>(anonymous.get(server.url_str("/anonymous")), &policy),
             )
             .await
             .expect("anonymous quota is independent of authenticated quota")
@@ -596,6 +583,43 @@ mod tests {
     #[tokio::test]
     async fn it_shares_anonymous_rate_limits_across_clients() {
         authentication_bucket_contract(false).await;
+    }
+
+    #[tokio::test]
+    async fn it_reuses_the_initialized_coordinator_across_clones() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+        use std::time::{Duration, Instant};
+
+        let server = Server::run();
+        for path in ["/items", "/next"] {
+            server.expect(
+                Expectation::matching(request::method_path("GET", path))
+                    .times(1)
+                    .respond_with(
+                        responders::status_code(200)
+                            .append_header("x-ratelimit-remaining", "0")
+                            .append_header("x-ratelimit-reset", "1")
+                            .body("null"),
+                    ),
+            );
+        }
+        let client = StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap();
+        let cloned = client.clone();
+        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+        let started = Instant::now();
+        client
+            .execute_json::<Value>(client.get(server.url_str("/items")), &policy)
+            .await
+            .unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(3),
+            cloned.execute_json::<Value>(cloned.get(server.url_str("/next")), &policy),
+        )
+        .await
+        .expect("the cloned client should proceed after the shared quota resets")
+        .unwrap();
+        assert!(started.elapsed() >= Duration::from_secs(1));
     }
 
     #[tokio::test]
@@ -650,16 +674,14 @@ mod tests {
             .times(1)
             .respond_with(responders::status_code(200).body("null")),
         );
-        let client = StacClient::new(reqwest::Client::new())
-            .with_authentication(
-                Some(StacProviderAuthentication {
-                    endpoint: server.url_str("/token"),
-                    client_id: "client".into(),
-                    username: "user".into(),
-                    password: "password".into(),
-                }),
-                &server.url_str("/"),
-            )
+        let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"))
+            .unwrap()
+            .with_authentication(Some(StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                client_id: "client".into(),
+                username: "user".into(),
+                password: "password".into(),
+            }))
             .await
             .unwrap();
         let queued = client
@@ -667,12 +689,12 @@ mod tests {
             .timeout(Duration::from_millis(100));
         let policy = crate::util::retry::RetryPolicy::new().stop_on_status(&[400, 404]);
         client
-            .send_json::<serde_json::Value>(client.get(server.url_str("/probe")), &policy)
+            .execute_json::<serde_json::Value>(client.get(server.url_str("/probe")), &policy)
             .await
             .unwrap();
         tokio::time::timeout(
             Duration::from_secs(3),
-            client.send_json::<serde_json::Value>(queued, &policy),
+            client.execute_json::<serde_json::Value>(queued, &policy),
         )
         .await
         .unwrap()
@@ -680,14 +702,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_uses_anonymous_destination_policy_for_cross_origin_requests() {
+    async fn it_reuses_the_provider_coordinator_without_sending_credentials_to_other_origins() {
         use httptest::{
             Expectation, Server, all_of,
             matchers::{any, contains, not, request},
             responders,
         };
         use serde_json::{Value, json};
-        use std::time::Duration;
+        use std::time::{Duration, Instant};
         let origin = Server::run();
         let destination = Server::run();
         origin.expect(
@@ -705,9 +727,8 @@ mod tests {
             .times(1)
             .respond_with(
                 responders::status_code(200)
-                    .append_header("x-ratelimit-limit", "1;w=60")
                     .append_header("x-ratelimit-remaining", "0")
-                    .append_header("x-ratelimit-reset", "60")
+                    .append_header("x-ratelimit-reset", "1")
                     .body("null"),
             ),
         );
@@ -719,31 +740,31 @@ mod tests {
             .times(1)
             .respond_with(responders::status_code(200).body("null")),
         );
-        let client = StacClient::new(reqwest::Client::new())
-            .with_authentication(
-                Some(StacProviderAuthentication {
-                    endpoint: origin.url_str("/token"),
-                    client_id: "client".into(),
-                    username: "user".into(),
-                    password: "password".into(),
-                }),
-                &origin.url_str("/"),
-            )
+        let client = StacClient::new(reqwest::Client::new(), &origin.url_str("/"))
+            .unwrap()
+            .with_authentication(Some(StacProviderAuthentication {
+                endpoint: origin.url_str("/token"),
+                client_id: "client".into(),
+                username: "user".into(),
+                password: "password".into(),
+            }))
             .await
             .unwrap();
         let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+        let started = Instant::now();
         client
-            .send_json::<Value>(client.get(origin.url_str("/probe")), &policy)
+            .execute_json::<Value>(client.get(origin.url_str("/probe")), &policy)
             .await
             .unwrap();
         let cloned = client.clone();
         tokio::time::timeout(
-            Duration::from_millis(500),
-            cloned.send_json::<Value>(cloned.get(destination.url_str("/items")), &policy),
+            Duration::from_secs(3),
+            cloned.execute_json::<Value>(cloned.get(destination.url_str("/items")), &policy),
         )
         .await
-        .expect("another origin must not wait for the configured origin's exhausted quota")
+        .expect("cross-origin requests should proceed without provider credentials")
         .unwrap();
+        assert!(started.elapsed() >= Duration::from_secs(1));
     }
 
     #[test]
