@@ -1,4 +1,4 @@
-use crate::api::handlers::datasets::AddDatasetTile;
+use crate::api::handlers::datasets::{AddDatasetMdTile, AddDatasetTile};
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::contexts::PostgresDb;
@@ -29,17 +29,19 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::primitives::{TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::raster::{GridBoundingBoxExt, SpatialGridDefinition};
 use geoengine_datatypes::util::Identifier;
+use geoengine_operators::engine::TimeDescriptor;
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    GdalDatasetParameters, GdalLoadingInfo, GdalMdMetaData, MdDatasetFile, MdFileTimes,
+    MdLoadingInfo, MdPresentation, MdVariable, MultiBandGdalLoadingInfo,
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
-use tokio_postgres::Transaction;
+use tokio_postgres::{GenericClient, Transaction};
 
 pub async fn resolve_dataset_name_to_id<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -231,7 +233,8 @@ where
                 d.tags,
                 d.source_operator,
                 d.result_descriptor,
-                d.symbology
+                d.symbology,
+                ((d.meta_data).gdal_md_meta_data).wrap
             FROM 
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
@@ -301,7 +304,10 @@ where
             .iter()
             .map(|row| {
                 // get the real TypedResultDescriptor and convert it to the API one
-                let result_desc: TypedResultDescriptor = row.get(6);
+                let result_desc: TypedResultDescriptor = presented_descriptor(
+                    row.get(6),
+                    row.get::<_, Option<bool>>(8).unwrap_or_default(),
+                );
                 let result_desc = result_desc.into();
 
                 Result::<DatasetListing>::Ok(DatasetListing {
@@ -334,7 +340,8 @@ where
                 d.symbology,
                 d.provenance,
                 d.tags,
-                d.data_path
+                d.data_path,
+                ((d.meta_data).gdal_md_meta_data).wrap
             FROM 
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
@@ -356,7 +363,10 @@ where
             name: row.get(1),
             display_name: row.get(2),
             description: row.get(3),
-            result_descriptor: row.get(4),
+            result_descriptor: presented_descriptor(
+                row.get(4),
+                row.get::<_, Option<bool>>(10).unwrap_or_default(),
+            ),
             source_operator: row.get(5),
             symbology: row.get(6),
             provenance: row.get(7),
@@ -668,6 +678,114 @@ where
 }
 
 #[async_trait]
+impl<Tls> MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn meta_data(
+        &self,
+        data_id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    > {
+        let id = data_id
+            .internal()
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
+
+        let mut conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+        let tx = conn.build_transaction().start().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        if !self
+            .has_permission_in_tx(id, Permission::Read, &tx)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        }
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                d.meta_data, d.data_path
+            FROM
+                user_permitted_datasets p JOIN datasets d
+                    ON (p.dataset_id = d.id)
+            WHERE
+                d.id = $1 AND p.user_id = $2
+            LIMIT
+                1",
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let row = tx
+            .query_one(&stmt, &[&id, &self.session.user.id])
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let meta_data: MetaDataDefinition = try_get_dataset_by_index_operators(&row, 0, &id)?;
+
+        let MetaDataDefinition::GdalMdMetaData(m) = meta_data else {
+            return Err(geoengine_operators::error::Error::DataIdTypeMissMatch);
+        };
+        let GdalMdMetaData {
+            result_descriptor,
+            variables,
+            wrap,
+            cache_ttl,
+        } = m;
+
+        let data_path: DataPath = try_get_dataset_by_index_operators(&row, 1, &id)?;
+
+        Ok(Box::new(MdGdalLoadingInfoProvider {
+            dataset_id: id,
+            result_descriptor,
+            variables,
+            wrap,
+            dataset_cache_ttl: cache_ttl,
+            data_path,
+            db: self.clone(),
+        }))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MdGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    dataset_id: DatasetId,
+    result_descriptor: RasterResultDescriptor,
+    variables: Vec<MdVariable>,
+    wrap: bool,
+    dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
+    data_path: DataPath,
+    db: PostgresDb<Tls>,
+}
+
+#[async_trait]
 impl<Tls>
     MetaDataProvider<
         MultiBandGdalLoadingInfo,
@@ -788,7 +906,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     // determine the regularity of the dataset
-    let time_dim = resolve_time_dim(dataset_id, conn).await?;
+    let time_dim = resolve_time_dim(dataset_id, &**conn).await?;
 
     // fill the gaps before, between and after the data tiles to fully cover the query time range
     match time_dim {
@@ -914,16 +1032,12 @@ where
     })
 }
 
-async fn resolve_time_dim<Tls>(
+/// Reads the time dimension of a dataset's result descriptor. Takes any client so that both
+/// the pooled query path and an open transaction can share it.
+async fn resolve_time_dim(
     dataset_id: DatasetId,
-    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-) -> Result<TimeDimension>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
+    conn: &impl GenericClient,
+) -> Result<TimeDimension> {
     let time_dim: TimeDimension = conn
         .query_one(
             r#"
@@ -1091,6 +1205,302 @@ where
     }
 }
 
+#[async_trait]
+impl<Tls> MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for MdGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn loading_info(
+        &self,
+        query: RasterQueryRectangle,
+    ) -> Result<MdLoadingInfo, geoengine_operators::error::Error> {
+        // Unlike `MultiBandGdalLoadingInfoProvider`, one MD row spans a whole file, and
+        // every file of a dataset shares the probe's footprint. The bbox filter is therefore
+        // a no-op in practice; the time and band filters are what actually narrow this.
+
+        let conn = self.db.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        // Resolve the base path once before the row loop to avoid repeated volume lookups
+        let base_path = self.data_path.resolve_base_path().map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        // `dataset_md_tiles.bbox` is stored raw, while a `RasterQueryRectangle` carries grid
+        // coordinates of the presented grid. The query box goes through the presented transform,
+        // then is split into the raw windows that hold it (one, or two across the seam).
+        let presentation = MdPresentation::from_wrap(self.wrap);
+        let raw_grid = SpatialGridDefinition::new(
+            self.result_descriptor
+                .spatial_grid_descriptor()
+                .geo_transform(),
+            query.spatial_bounds(),
+        );
+        let query_partition = presentation.presented_grid(&raw_grid).spatial_partition();
+        let windows = presentation.raw_partitions(&raw_grid, query_partition);
+        let first = windows.first().copied().unwrap_or(query_partition);
+        let second = windows.last().copied().unwrap_or(query_partition);
+
+        // The rows are needed for the time axis even when the files themselves are not, so
+        // they are always queried.
+        //
+        // Ordered by `(time).start` within each band so the concatenated axis follows real
+        // time without trusting a client-supplied `z_index`; `z_index` is only the tiebreak.
+        let rows = conn
+            .query(
+                "
+            SELECT
+                z_index, band, array_name, array_group, time_descriptor, time_steps, gdal_params
+            FROM
+                dataset_md_tiles
+            WHERE
+                dataset_id = $1 AND
+                (spatial_partition2d_intersects(bbox, $2) OR spatial_partition2d_intersects(bbox, $5)) AND
+                time_interval_intersects(time, $3) AND
+                band = ANY($4)
+            ORDER BY
+                band, (time).start, z_index",
+                &[
+                    &self.dataset_id,
+                    &first,
+                    &query.time_interval(),
+                    &query.attributes().as_slice(),
+                    &second,
+                ],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let (time_steps, files) =
+            md_loading_info_from_rows(rows, base_path.as_deref(), query.time_interval()).map_err(
+                |e| geoengine_operators::error::Error::MetaData {
+                    source: Box::new(e),
+                },
+            )?;
+
+        MdLoadingInfo::new(
+            time_steps,
+            files,
+            self.variables.clone(),
+            self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
+            self.wrap,
+        )
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })
+    }
+
+    async fn time_axis(
+        &self,
+        query: TimeInterval,
+    ) -> Result<Option<Vec<TimeInterval>>, geoengine_operators::error::Error> {
+        let conn = self.db.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        // Deliberately not filtered by bbox or band: every band shares one timeline, so the
+        // axis is a property of the dataset and not of the query rectangle. Reading only the
+        // two time columns keeps this cheap enough to answer a plain time query.
+        let rows = conn
+            .query(
+                "
+            SELECT
+                time_descriptor, time_steps
+            FROM
+                dataset_md_tiles
+            WHERE
+                dataset_id = $1 AND
+                -- one row per (file, variable), so every band repeats the same intervals;
+                -- reading one band's rows keeps the axis at one copy of the timeline
+                band = (SELECT min(band) FROM dataset_md_tiles WHERE dataset_id = $1)
+            ORDER BY
+                band, (time).start, z_index",
+                &[&self.dataset_id],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let times = rows
+            .iter()
+            .map(|row| MdFileTimes::from_columns(row.get(0), row.get(1)))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        // `try_time_irregular_range_fill` *extends* coverage to `query` but never clips the
+        // source intervals to it, so an unfiltered axis carries every slice the dataset has
+        // (23k for a 65-year daily series) even for a one-day window. The gap fills all
+        // intersect `query` by construction, so filtering keeps them.
+        md_time_axis(&times, query)
+            .map(|steps| {
+                Some(
+                    steps
+                        .into_iter()
+                        .filter(|step| step.intersects(&query))
+                        .collect(),
+                )
+            })
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })
+    }
+
+    async fn result_descriptor(
+        &self,
+    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
+        // the stored descriptor holds the raw grid, so a wrapped dataset is presented here
+        Ok(presented_raster_descriptor(
+            self.result_descriptor.clone(),
+            self.wrap,
+        ))
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
+        Box::new(self.clone())
+    }
+}
+
+/// Turns `dataset_md_tiles` rows into the `(time axis, files)` pair of a loading info.
+///
+/// The rows arrive ordered by `(band, (time).start, z_index)`. The time axis is the union of
+/// every file's per-slice intervals (`md_time_axis`), gap-filled to cover `query_time`: a file
+/// that is absent leaves one
+/// gap-filling interval, which `MdLoadingInfo::z_batches` reports as a missing z index and
+/// the operator turns into an empty tile. This mirrors what the probe produces, and is
+/// *not* `create_gap_free_time_steps`, which assumes one row per time step (true for
+/// multi-band tiles, false here where one row spans a whole file).
+///
+/// `MdDatasetFile::z_start` is then the file's position in *that* axis, derived from its
+/// first slice's start rather than from a running slice count: a gap shifts every later
+/// file, and a running count would silently return the wrong slice for every date after it.
+fn md_loading_info_from_rows(
+    rows: Vec<tokio_postgres::Row>,
+    base_path: Option<&std::path::Path>,
+    query_time: TimeInterval,
+) -> Result<(Vec<TimeInterval>, Vec<MdDatasetFile>)> {
+    let mut slices_per_band = 0usize;
+    let mut band: Option<u32> = None;
+    let mut files: Vec<MdDatasetFile> = Vec::with_capacity(rows.len());
+    let mut all_times: Vec<MdFileTimes> = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        let row_band: u32 = row.get(1);
+        let mut params: GdalDatasetParameters = row.get(6);
+
+        if let Some(base_path) = base_path {
+            params.file_path = base_path.join(&params.file_path);
+        }
+
+        // same trust boundary as `time_axis`: both columns come from outside, and a row
+        // whose descriptor disagrees with its steps would be read with `steps` while
+        // advertised with `descriptor`
+        let times = MdFileTimes::from_columns(row.get(4), row.get(5)).map_err(|e| {
+            crate::error::Error::Operator {
+                source: geoengine_operators::error::Error::MetaData {
+                    source: Box::new(e),
+                },
+            }
+        })?;
+        let slices = times.intervals().len();
+
+        if band != Some(row_band) {
+            band = Some(row_band);
+            slices_per_band = 0;
+            // every band shares one time axis (that is what a time z axis means), so the
+            // axis is built from one band's rows only; collecting all bands would concatenate
+            // N copies of the same intervals and produce a non-monotonic axis. The clear on
+            // band change leaves the *last* band's rows - equal to the first's because the
+            // axis is shared, but nothing at insert time enforces that.
+            all_times.clear();
+        }
+
+        all_times.push(times.clone());
+        files.push(MdDatasetFile {
+            params,
+            array_name: row.get(2),
+            group: row.get(3),
+            // placeholders, realigned against the finished time axis below
+            z_start: slices_per_band,
+            z_end: slices_per_band + slices,
+            local_offset: 0,
+            times,
+            output_band: row_band,
+        });
+        slices_per_band += slices;
+    }
+
+    let time_steps = md_time_axis(&all_times, query_time)?;
+    // clip to the query window so MdLoadingInfo only holds the slices a request needs
+    let time_steps: Vec<TimeInterval> = time_steps
+        .into_iter()
+        .filter(|s| s.intersects(&query_time))
+        .collect();
+
+    for file in &mut files {
+        let intervals = file.times.intervals();
+        // first file-local index whose interval lands inside the clipped axis
+        let first_in_window = intervals.iter().position(|iv| iv.intersects(&query_time));
+        let Some(first) = first_in_window else {
+            file.z_start = 0;
+            file.z_end = 0;
+            continue;
+        };
+        file.local_offset = first;
+        let in_window_count = intervals[first..]
+            .iter()
+            .take_while(|iv| iv.intersects(&query_time))
+            .count();
+        file.z_start = time_steps.partition_point(|step| step.start() < intervals[first].start());
+        file.z_end = file.z_start + in_window_count;
+    }
+
+    Ok((time_steps, files))
+}
+
+/// The dataset's time axis: the union of every file's per-slice intervals, gap-filled to cover
+/// `query_time`.
+///
+/// Rows are read in `(band, (time).start, z_index)` order, i.e. by each file's *first* slice, so
+/// the concatenation is only monotonic while no two rows of a band overlap. Sorting gives the
+/// union regardless - and `md_loading_info_from_rows` needs a sorted axis for its
+/// `partition_point`. Equal neighbours are the same step stored once per spatial piece (or per
+/// overlapping file), so collapsing them keeps one step instead of N, which would otherwise
+/// leave every file but the first realigned onto one index and the rest of the axis as gap
+/// tiles.
+fn md_time_axis(times: &[MdFileTimes], query_time: TimeInterval) -> Result<Vec<TimeInterval>> {
+    let mut intervals: Vec<TimeInterval> = times
+        .iter()
+        .flat_map(MdFileTimes::intervals)
+        .copied()
+        .collect();
+    intervals.sort_by_key(TimeInterval::start);
+    intervals.dedup();
+
+    intervals
+        .into_iter()
+        .map(Result::Ok)
+        .try_time_irregular_range_fill(query_time)
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
 struct TileKey {
     time: crate::api::model::datatypes::TimeInterval,
@@ -1109,6 +1519,32 @@ struct TileEntry {
     bbox: SpatialPartition2D,
     band: u32,
     z_index: i64,
+    gdal_params: GdalDatasetParameters,
+}
+
+#[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
+struct MdTileKey {
+    time: crate::api::model::datatypes::TimeInterval,
+    bbox: SpatialPartition2D,
+    band: u32,
+    z_index: i64,
+    array_name: String,
+}
+
+identifier!(DatasetMdTileId);
+
+#[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
+struct MdTileEntry {
+    id: DatasetMdTileId,
+    dataset_id: DatasetId,
+    time: crate::api::model::datatypes::TimeInterval,
+    bbox: SpatialPartition2D,
+    band: u32,
+    z_index: i64,
+    array_name: String,
+    array_group: Option<String>,
+    time_descriptor: TimeDescriptor,
+    time_steps: Vec<TimeInterval>,
     gdal_params: GdalDatasetParameters,
 }
 
@@ -1366,6 +1802,212 @@ where
 
         Ok(())
     }
+
+    async fn add_md_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        tiles: Vec<AddDatasetMdTile>,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        validate_md_tiles(&tx, dataset, &tiles).await?;
+
+        batch_insert_md_tiles(&tx, dataset, &tiles).await?;
+
+        update_md_dataset_extents(&tx, dataset, &tiles).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+}
+
+/// Rejects MD tiles that would duplicate an existing row.
+///
+/// Unlike `validate_time`/`validate_z_index` for multi-band tiles, this does not require
+/// disjoint time intervals: one MD row spans all of a file's slices, so two files of the
+/// same variable legitimately have overlapping bounds.
+///
+/// A hole *between* files is not an error: `md_loading_info_from_rows` gap-fills missing files
+/// and the operator turns the gap into an empty tile. Only an exact-key collision is rejected,
+/// because that row already exists and would be silently overwritten. A hole *inside* one
+/// file's own steps is rejected earlier, by `validate_md_tile`.
+async fn validate_md_tiles(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[AddDatasetMdTile],
+) -> Result<()> {
+    let tile_keys = tiles
+        .iter()
+        .map(|tile| MdTileKey {
+            time: tile.file_time_bounds(),
+            bbox: tile.spatial_partition,
+            band: tile.band,
+            z_index: tile.z_index,
+            array_name: tile.array_name.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    let conflicting = tx
+        .query(
+            r#"
+                SELECT DISTINCT
+                    (gdal_params).file_path
+                FROM
+                    dataset_md_tiles dt, unnest($2::"MdTileKey"[]) as tk
+                WHERE
+                    dataset_id = $1 AND
+                    dt.time = tk.time AND
+                    SPATIAL_PARTITION2D_INTERSECTS(dt.bbox, tk.bbox) AND
+                    dt.band = tk.band AND
+                    dt.z_index = tk.z_index AND
+                    dt.array_name = tk.array_name
+                ;
+                "#,
+            &[&dataset, &tile_keys],
+        )
+        .await?;
+
+    if !conflicting.is_empty() {
+        return Err(Error::DatasetTileZIndexConflict {
+            files: conflicting.iter().map(|row| row.get(0)).collect(),
+        });
+    }
+
+    Ok(())
+}
+
+async fn batch_insert_md_tiles(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[AddDatasetMdTile],
+) -> Result<()> {
+    let tile_entries = tiles
+        .iter()
+        .map(|tile| MdTileEntry {
+            id: DatasetMdTileId::new(),
+            dataset_id: dataset,
+            time: tile.file_time_bounds(),
+            bbox: tile.spatial_partition,
+            band: tile.band,
+            z_index: tile.z_index,
+            array_name: tile.array_name.clone(),
+            array_group: tile.array_group.clone(),
+            time_descriptor: tile.time_descriptor.clone().into(),
+            time_steps: tile
+                .time_steps
+                .iter()
+                .map(|t| geoengine_datatypes::primitives::TimeInterval::from(*t))
+                .collect(),
+            gdal_params: tile.params.clone().into(),
+        })
+        .collect::<Vec<_>>();
+
+    tx.execute(
+        r#"
+            INSERT INTO dataset_md_tiles (
+                id, dataset_id, time, bbox, band, z_index,
+                array_name, array_group, time_descriptor, time_steps, gdal_params
+            )
+                SELECT * FROM unnest($1::"MdTileEntry"[]);
+            "#,
+        &[&tile_entries],
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// The grid an MD dataset is shown with: its stored grid is raw, so it is presented here.
+fn presented_raster_descriptor(raw: RasterResultDescriptor, wrap: bool) -> RasterResultDescriptor {
+    let presentation = MdPresentation::from_wrap(wrap);
+    RasterResultDescriptor {
+        spatial_grid: raw.spatial_grid.map(|g| presentation.presented_grid(g)),
+        ..raw
+    }
+}
+
+/// [`presented_raster_descriptor`] for the typed descriptor a dataset row carries.
+fn presented_descriptor(raw: TypedResultDescriptor, wrap: bool) -> TypedResultDescriptor {
+    match raw {
+        TypedResultDescriptor::Raster(raster) => {
+            TypedResultDescriptor::Raster(presented_raster_descriptor(raster, wrap))
+        }
+        other => other,
+    }
+}
+
+/// Grows the dataset's spatial and temporal extents to cover the newly added files.
+///
+/// The spatial bounds come from each tile's raw footprint, not from the file's geo transform.
+/// `meta_path` is the meta data composite
+/// attribute whose result descriptor is mirrored, e.g. `gdal_multi_band` or
+/// `gdal_md_meta_data`.
+async fn update_dataset_extents_of(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    extents: impl Iterator<Item = (SpatialPartition2D, TimeInterval)>,
+    meta_path: &str,
+) -> Result<()> {
+    let row = tx
+        .query_one(
+            r#"
+            SELECT
+                (result_descriptor).raster.spatial_grid.spatial_grid,
+                (result_descriptor).raster."time".bounds
+            FROM
+                datasets
+            WHERE
+                id = $1;
+            "#,
+            &[&dataset],
+        )
+        .await?;
+
+    let (mut dataset_grid, mut time_bounds): (SpatialGridDefinition, Option<TimeInterval>) =
+        (row.get(0), row.get(1));
+
+    for (spatial_partition, file_time) in extents {
+        dataset_grid = extend_spatial_bounds(dataset_grid, spatial_partition);
+        time_bounds = Some(extend_time_bounds(time_bounds, file_time));
+    }
+
+    let sql = format!(
+        r#"
+            UPDATE datasets
+            SET
+                result_descriptor.raster.spatial_grid.spatial_grid = $2,
+                result_descriptor.raster."time".bounds = $3,
+                meta_data.{meta_path}.result_descriptor.spatial_grid.spatial_grid = $2,
+                meta_data.{meta_path}.result_descriptor."time".bounds = $3
+            WHERE id = $1;
+            "#
+    );
+    tx.execute(&sql, &[&dataset, &dataset_grid, &time_bounds])
+        .await?;
+
+    Ok(())
+}
+
+async fn update_md_dataset_extents(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[AddDatasetMdTile],
+) -> Result<()> {
+    update_dataset_extents_of(
+        tx,
+        dataset,
+        tiles
+            .iter()
+            .map(|t| (t.spatial_partition, t.file_time_bounds().into())),
+        "gdal_md_meta_data",
+    )
+    .await
 }
 
 async fn validate_time(
@@ -1374,17 +2016,7 @@ async fn validate_time(
     tiles: &[AddDatasetTile],
 ) -> Result<()> {
     // validate the time of the tiles
-    let time_dim: TimeDimension = tx
-        .query_one(
-            r#"
-                    SELECT (result_descriptor).raster."time".dimension
-                    FROM datasets
-                    WHERE id = $1;
-                "#,
-            &[&dataset],
-        )
-        .await?
-        .get(0);
+    let time_dim = resolve_time_dim(dataset, tx).await?;
 
     match time_dim {
         TimeDimension::Regular(regular_time_dimension) => {
@@ -1537,46 +2169,13 @@ async fn update_dataset_extents(
     dataset: DatasetId,
     tiles: &[AddDatasetTile],
 ) -> Result<()> {
-    // update the dataset extents
-    let row = tx
-        .query_one(
-            r#"
-            SELECT
-                (result_descriptor).raster.spatial_grid.spatial_grid,
-                (result_descriptor).raster."time".bounds
-            FROM
-                datasets
-            WHERE
-                id = $1;
-            "#,
-            &[&dataset],
-        )
-        .await?;
-
-    let (mut dataset_grid, mut time_bounds): (SpatialGridDefinition, Option<TimeInterval>) =
-        (row.get(0), row.get(1));
-
-    for tile in tiles {
-        dataset_grid = extend_spatial_bounds(dataset_grid, tile.spatial_partition);
-
-        time_bounds = Some(extend_time_bounds(time_bounds, tile.time.into()));
-    }
-
-    tx.execute(
-        r#"
-            UPDATE datasets
-            SET 
-                result_descriptor.raster.spatial_grid.spatial_grid = $2,
-                result_descriptor.raster."time".bounds = $3,
-                meta_data.gdal_multi_band.result_descriptor.spatial_grid.spatial_grid = $2,
-                meta_data.gdal_multi_band.result_descriptor."time".bounds = $3
-            WHERE id = $1;
-            "#,
-        &[&dataset, &dataset_grid, &time_bounds],
+    update_dataset_extents_of(
+        tx,
+        dataset,
+        tiles.iter().map(|t| (t.spatial_partition, t.time.into())),
+        "gdal_multi_band",
     )
-    .await?;
-
-    Ok(())
+    .await
 }
 
 #[async_trait]
@@ -1671,6 +2270,63 @@ mod tests {
         },
     };
     use tokio_postgres::NoTls;
+
+    fn interval(start: i64, end: i64) -> TimeInterval {
+        TimeInterval::new_unchecked(
+            TimeInstance::from_millis_unchecked(start),
+            TimeInstance::from_millis_unchecked(end),
+        )
+    }
+
+    /// Two rows that share a time step (spatial pieces of one image, or two files with
+    /// overlapping ranges) must contribute one step, not N. Left as N, every file but the first
+    /// realigns onto one index and the rest of the axis becomes empty tiles.
+    #[test]
+    fn it_collapses_shared_time_steps_in_the_md_time_axis() {
+        let mosaic = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1)]),
+            MdFileTimes::from_intervals(vec![interval(0, 1)]),
+        ];
+        assert_eq!(
+            md_time_axis(&mosaic, interval(0, 1)).unwrap().len(),
+            1,
+            "two pieces of one time step give one step"
+        );
+
+        // overlapping ranges: A covers 0..3, B covers 2..5, so 2..3 is stored twice
+        let overlap = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+            MdFileTimes::from_intervals(vec![interval(2, 3), interval(3, 4), interval(4, 5)]),
+        ];
+        let axis = md_time_axis(&overlap, interval(0, 5)).unwrap();
+        assert_eq!(axis.len(), 5);
+        assert_eq!(axis[2], interval(2, 3));
+
+        // the case `dedup` alone cannot fix: two spatial pieces that share *all* their steps.
+        // Concatenated this is 0,1,2,0,1,2, and no two neighbours are equal, so the axis used
+        // to hold six steps and both files realigned onto z 0..2
+        let mosaic = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+        ];
+        let axis = md_time_axis(&mosaic, interval(0, 3)).unwrap();
+        assert_eq!(axis.len(), 3, "shared multi-slice ranges give one copy");
+        assert!(
+            axis.windows(2).all(|w| w[0].start() < w[1].start()),
+            "the axis must be monotonic for `partition_point` to realign the files"
+        );
+
+        // overlapping and shifted: A covers 0..3, B covers 1..4
+        let shifted = vec![
+            MdFileTimes::from_intervals(vec![interval(0, 1), interval(1, 2), interval(2, 3)]),
+            MdFileTimes::from_intervals(vec![interval(1, 2), interval(2, 3), interval(3, 4)]),
+        ];
+        let axis = md_time_axis(&shifted, interval(0, 4)).unwrap();
+        assert_eq!(
+            axis.iter().map(|iv| iv.start().inner()).collect::<Vec<_>>(),
+            vec![0, 1, 2, 3]
+        );
+    }
 
     #[test]
     fn it_initializes_missing_dataset_time_bounds_from_the_first_tile() {
