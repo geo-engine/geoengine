@@ -12,9 +12,6 @@ pub enum MdGdalSourceError {
     #[snafu(context(false))]
     GdalProcessPoolError { source: GdalProcessPoolError },
 
-    #[snafu(display("MD GdalSource probe error: {message}"))]
-    ProbeError { message: String },
-
     #[snafu(display(
         "Stored MD time axis is inconsistent: the time descriptor does not describe the stored time steps"
     ))]

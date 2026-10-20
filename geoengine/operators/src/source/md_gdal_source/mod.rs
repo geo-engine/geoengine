@@ -472,9 +472,9 @@ mod tests {
 
     /// One MD array file, declared the way an importer declares it.
     ///
-    /// Nothing here is read from the file: the probe lives on a stacked branch, so a
-    /// read-path test builds its metadata by hand - the same construction that production
-    /// and `python/examples/md_gdal_source_dataset.ipynb` perform. Every constant is
+    /// Nothing here is read from the file: MD metadata is always stated, so a read-path test
+    /// builds it by hand - the same construction that
+    /// `python/examples/md_gdal_source_dataset.ipynb` performs. Every constant is
     /// transcribed from the fixture manifest in `test_data/md/generate_md_fixtures.py`,
     /// which stays the single source of truth.
     #[derive(Clone)]
