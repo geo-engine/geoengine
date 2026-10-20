@@ -1205,6 +1205,71 @@ where
     }
 }
 
+impl<Tls> MdGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    /// The dataset's time axis over `query`: the union of every file's slices across all
+    /// bands, gap-filled. Reads every row (only the two time columns), so the steps are the
+    /// same for every query; filtering rows by time would let a gap's step boundaries depend
+    /// on the query window.
+    async fn dataset_time_axis(
+        &self,
+        query: TimeInterval,
+    ) -> Result<Vec<TimeInterval>, geoengine_operators::error::Error> {
+        let conn = self.db.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        // Not filtered by bbox or band: the axis is a property of the dataset. Every band's
+        // rows are read, so a file one variable lacks still contributes its steps; the
+        // per-band copies of a shared step collapse in `md_time_axis`.
+        let rows = conn
+            .query(
+                "
+            SELECT
+                time_descriptor, time_steps
+            FROM
+                dataset_md_tiles
+            WHERE
+                dataset_id = $1",
+                &[&self.dataset_id],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let times = rows
+            .iter()
+            .map(|row| MdFileTimes::from_columns(row.get(0), row.get(1)))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        // `try_time_irregular_range_fill` *extends* coverage to `query` but never clips the
+        // source intervals to it, so an unfiltered axis carries every slice the dataset has
+        // (23k for a 65-year daily series) even for a one-day window. The gap fills all
+        // intersect `query` by construction, so filtering keeps them.
+        md_time_axis(&times, query)
+            .map(|steps| {
+                steps
+                    .into_iter()
+                    .filter(|step| step.intersects(&query))
+                    .collect()
+            })
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })
+    }
+}
+
 #[async_trait]
 impl<Tls> MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     for MdGdalLoadingInfoProvider<Tls>
@@ -1218,9 +1283,8 @@ where
         &self,
         query: RasterQueryRectangle,
     ) -> Result<MdLoadingInfo, geoengine_operators::error::Error> {
-        // Unlike `MultiBandGdalLoadingInfoProvider`, one MD row spans a whole file, and
-        // every file of a dataset shares the probe's footprint. The bbox filter is therefore
-        // a no-op in practice; the time and band filters are what actually narrow this.
+        // Unlike `MultiBandGdalLoadingInfoProvider`, one MD row spans a whole file, so the
+        // time and band filters narrow this far more than the bbox filter does.
 
         let conn = self.db.conn_pool.get().await.map_err(|e| {
             geoengine_operators::error::Error::MetaData {
@@ -1250,11 +1314,9 @@ where
         let first = windows.first().copied().unwrap_or(query_partition);
         let second = windows.last().copied().unwrap_or(query_partition);
 
-        // The rows are needed for the time axis even when the files themselves are not, so
-        // they are always queried.
-        //
-        // Ordered by `(time).start` within each band so the concatenated axis follows real
-        // time without trusting a client-supplied `z_index`; `z_index` is only the tiebreak.
+        // the axis spans all bands, so it is the same whichever bands the query selects
+        let time_steps = self.dataset_time_axis(query.time_interval()).await?;
+
         let rows = conn
             .query(
                 "
@@ -1282,12 +1344,15 @@ where
                 source: Box::new(e),
             })?;
 
-        let (time_steps, files) =
-            md_loading_info_from_rows(rows, base_path.as_deref(), query.time_interval()).map_err(
-                |e| geoengine_operators::error::Error::MetaData {
-                    source: Box::new(e),
-                },
-            )?;
+        let files = md_files_from_rows(
+            rows,
+            base_path.as_deref(),
+            query.time_interval(),
+            &time_steps,
+        )
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
 
         MdLoadingInfo::new(
             time_steps,
@@ -1305,60 +1370,7 @@ where
         &self,
         query: TimeInterval,
     ) -> Result<Option<Vec<TimeInterval>>, geoengine_operators::error::Error> {
-        let conn = self.db.conn_pool.get().await.map_err(|e| {
-            geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            }
-        })?;
-
-        // Deliberately not filtered by bbox or band: every band shares one timeline, so the
-        // axis is a property of the dataset and not of the query rectangle. Reading only the
-        // two time columns keeps this cheap enough to answer a plain time query.
-        let rows = conn
-            .query(
-                "
-            SELECT
-                time_descriptor, time_steps
-            FROM
-                dataset_md_tiles
-            WHERE
-                dataset_id = $1 AND
-                -- one row per (file, variable), so every band repeats the same intervals;
-                -- reading one band's rows keeps the axis at one copy of the timeline
-                band = (SELECT min(band) FROM dataset_md_tiles WHERE dataset_id = $1)
-            ORDER BY
-                band, (time).start, z_index",
-                &[&self.dataset_id],
-            )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
-
-        let times = rows
-            .iter()
-            .map(|row| MdFileTimes::from_columns(row.get(0), row.get(1)))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
-
-        // `try_time_irregular_range_fill` *extends* coverage to `query` but never clips the
-        // source intervals to it, so an unfiltered axis carries every slice the dataset has
-        // (23k for a 65-year daily series) even for a one-day window. The gap fills all
-        // intersect `query` by construction, so filtering keeps them.
-        md_time_axis(&times, query)
-            .map(|steps| {
-                Some(
-                    steps
-                        .into_iter()
-                        .filter(|step| step.intersects(&query))
-                        .collect(),
-                )
-            })
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })
+        self.dataset_time_axis(query).await.map(Some)
     }
 
     async fn result_descriptor(
@@ -1378,31 +1390,21 @@ where
     }
 }
 
-/// Turns `dataset_md_tiles` rows into the `(time axis, files)` pair of a loading info.
+/// Turns `dataset_md_tiles` rows into the files of a loading info, placed on `time_steps`.
 ///
-/// The rows arrive ordered by `(band, (time).start, z_index)`. The time axis is the union of
-/// every file's per-slice intervals (`md_time_axis`), gap-filled to cover `query_time`: a file
-/// that is absent leaves one
-/// gap-filling interval, which `MdLoadingInfo::z_batches` reports as a missing z index and
-/// the operator turns into an empty tile. This mirrors what the probe produces, and is
-/// *not* `create_gap_free_time_steps`, which assumes one row per time step (true for
-/// multi-band tiles, false here where one row spans a whole file).
-///
-/// `MdDatasetFile::z_start` is then the file's position in *that* axis, derived from its
-/// first slice's start rather than from a running slice count: a gap shifts every later
-/// file, and a running count would silently return the wrong slice for every date after it.
-fn md_loading_info_from_rows(
+/// `time_steps` is the dataset's axis (all bands) clipped to `query_time`. A file's `z_start`
+/// is its position in that axis, derived from its first in-window slice's start rather than
+/// from a running slice count: a gap shifts every later file, and a running count would
+/// silently return the wrong slice for every date after it.
+fn md_files_from_rows(
     rows: Vec<tokio_postgres::Row>,
     base_path: Option<&std::path::Path>,
     query_time: TimeInterval,
-) -> Result<(Vec<TimeInterval>, Vec<MdDatasetFile>)> {
-    let mut slices_per_band = 0usize;
-    let mut band: Option<u32> = None;
+    time_steps: &[TimeInterval],
+) -> Result<Vec<MdDatasetFile>> {
     let mut files: Vec<MdDatasetFile> = Vec::with_capacity(rows.len());
-    let mut all_times: Vec<MdFileTimes> = Vec::with_capacity(rows.len());
 
     for row in rows {
-        let row_band: u32 = row.get(1);
         let mut params: GdalDatasetParameters = row.get(6);
 
         if let Some(base_path) = base_path {
@@ -1419,60 +1421,36 @@ fn md_loading_info_from_rows(
                 },
             }
         })?;
-        let slices = times.intervals().len();
 
-        if band != Some(row_band) {
-            band = Some(row_band);
-            slices_per_band = 0;
-            // every band shares one time axis (that is what a time z axis means), so the
-            // axis is built from one band's rows only; collecting all bands would concatenate
-            // N copies of the same intervals and produce a non-monotonic axis. The clear on
-            // band change leaves the *last* band's rows - equal to the first's because the
-            // axis is shared, but nothing at insert time enforces that.
-            all_times.clear();
-        }
+        let intervals = times.intervals();
+        // a file with no slice in the window keeps `z_start == z_end`, which `z_slices` skips
+        let (z_start, z_end, local_offset) =
+            match intervals.iter().position(|iv| iv.intersects(&query_time)) {
+                Some(first) => {
+                    let in_window_count = intervals[first..]
+                        .iter()
+                        .take_while(|iv| iv.intersects(&query_time))
+                        .count();
+                    let z_start =
+                        time_steps.partition_point(|step| step.start() < intervals[first].start());
+                    (z_start, z_start + in_window_count, first)
+                }
+                None => (0, 0, 0),
+            };
 
-        all_times.push(times.clone());
         files.push(MdDatasetFile {
             params,
             array_name: row.get(2),
             group: row.get(3),
-            // placeholders, realigned against the finished time axis below
-            z_start: slices_per_band,
-            z_end: slices_per_band + slices,
-            local_offset: 0,
+            z_start,
+            z_end,
+            local_offset,
             times,
-            output_band: row_band,
+            output_band: row.get(1),
         });
-        slices_per_band += slices;
     }
 
-    let time_steps = md_time_axis(&all_times, query_time)?;
-    // clip to the query window so MdLoadingInfo only holds the slices a request needs
-    let time_steps: Vec<TimeInterval> = time_steps
-        .into_iter()
-        .filter(|s| s.intersects(&query_time))
-        .collect();
-
-    for file in &mut files {
-        let intervals = file.times.intervals();
-        // first file-local index whose interval lands inside the clipped axis
-        let first_in_window = intervals.iter().position(|iv| iv.intersects(&query_time));
-        let Some(first) = first_in_window else {
-            file.z_start = 0;
-            file.z_end = 0;
-            continue;
-        };
-        file.local_offset = first;
-        let in_window_count = intervals[first..]
-            .iter()
-            .take_while(|iv| iv.intersects(&query_time))
-            .count();
-        file.z_start = time_steps.partition_point(|step| step.start() < intervals[first].start());
-        file.z_end = file.z_start + in_window_count;
-    }
-
-    Ok((time_steps, files))
+    Ok(files)
 }
 
 /// The dataset's time axis: the union of every file's per-slice intervals, gap-filled to cover
@@ -1480,7 +1458,7 @@ fn md_loading_info_from_rows(
 ///
 /// Rows are read in `(band, (time).start, z_index)` order, i.e. by each file's *first* slice, so
 /// the concatenation is only monotonic while no two rows of a band overlap. Sorting gives the
-/// union regardless - and `md_loading_info_from_rows` needs a sorted axis for its
+/// union regardless - and `md_files_from_rows` needs a sorted axis for its
 /// `partition_point`. Equal neighbours are the same step stored once per spatial piece (or per
 /// overlapping file), so collapsing them keeps one step instead of N, which would otherwise
 /// leave every file but the first realigned onto one index and the rest of the axis as gap
@@ -1833,7 +1811,7 @@ where
 /// disjoint time intervals: one MD row spans all of a file's slices, so two files of the
 /// same variable legitimately have overlapping bounds.
 ///
-/// A hole *between* files is not an error: `md_loading_info_from_rows` gap-fills missing files
+/// A hole *between* files is not an error: `md_time_axis` gap-fills missing files
 /// and the operator turns the gap into an empty tile. Only an exact-key collision is rejected,
 /// because that row already exists and would be silently overwritten. A hole *inside* one
 /// file's own steps is rejected earlier, by `validate_md_tile`.

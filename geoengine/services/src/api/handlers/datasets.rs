@@ -6817,10 +6817,9 @@ mod tests {
         Ok(())
     }
 
-    /// A time-axis dataset stores one row per `(file, variable)`, so the row reader
-    /// sees every band's copy of the same intervals. The axis must be built from one band's
-    /// rows only: concatenating all of them yields N copies of the timeline, which
-    /// `try_time_irregular_range_fill` passes through and turns into a non-monotonic axis.
+    /// A time-axis dataset stores one row per `(file, variable)`, so the axis sees every
+    /// band's copy of the same intervals. They must collapse to one timeline: N copies would
+    /// pass through `try_time_irregular_range_fill` as a non-monotonic axis.
     #[ge_context::test]
     async fn it_builds_one_md_time_axis_per_variable_not_one_per_band(
         app_ctx: PostgresContext<NoTls>,
@@ -6876,6 +6875,72 @@ mod tests {
             .expect("a Variable-role dataset has an axis");
 
         assert_eq!(window.len(), 1, "a one-day window returns one slice");
+
+        Ok(())
+    }
+
+    /// Variables need not have the same files: here `precipitation` lacks the middle file.
+    /// The axis must still be the union over all bands, whichever bands a query selects. An
+    /// axis built from one band would hold a single gap step for days 5..9, and
+    /// `temperature`'s middle file - placed by its first slice - would spill its four slices
+    /// onto days 9..13 and return the wrong days' data.
+    #[ge_context::test]
+    async fn it_builds_the_md_time_axis_from_all_bands(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let row = |band, z_index, path, z_start| MdRow {
+            band,
+            z_index,
+            ..MdRow::of(path, "temperature", z_start, 4)
+        };
+        let (meta_data, tiles) = md_dataset_meta(
+            &[
+                row(0, 0, "md/time_series_split_a.nc", 0),
+                row(0, 1, "md/time_series_split_b.nc", 4),
+                row(0, 2, "md/time_series_gap_b.nc", 8),
+                row(1, 0, "md/time_series_split_a.nc", 0),
+                row(1, 1, "md/time_series_gap_b.nc", 8),
+            ],
+            vec![api_band("temperature"), api_band("precipitation")],
+        );
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+
+        let id_and_name = add_md_dataset(&db, "md uneven bands", meta_data, tiles).await?;
+        let provider = md_provider(&db, id_and_name.id).await?;
+
+        let time = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2000-01-13T00:00:00Z").unwrap(),
+        );
+        let query = |bands: Vec<u32>| {
+            RasterQueryRectangle::new(
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                time,
+                BandSelection::new(bands).unwrap(),
+            )
+        };
+
+        let both = provider.loading_info(query(vec![0, 1])).await?;
+        assert_eq!(both.time_steps().len(), 12, "one step per day, no gap step");
+
+        let middle = both
+            .files()
+            .iter()
+            .find(|f| f.output_band == 0 && f.params.file_path.ends_with("time_series_split_b.nc"))
+            .expect("temperature's middle file is loaded");
+        assert_eq!((middle.z_start, middle.z_end), (4, 8));
+
+        // the same axis whichever bands are selected, and for a plain time query
+        let precipitation_only = provider.loading_info(query(vec![1])).await?;
+        assert_eq!(precipitation_only.time_steps(), both.time_steps());
+        let axis = provider
+            .time_axis(time)
+            .await?
+            .expect("an MD dataset has an axis");
+        assert_eq!(axis.as_slice(), both.time_steps());
 
         Ok(())
     }
