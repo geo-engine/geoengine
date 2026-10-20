@@ -566,6 +566,30 @@ CREATE TYPE "GdalMultiBand" AS (
     cache_ttl int
 );
 
+CREATE TYPE "MdAxisMappingDiscriminator" AS ENUM (
+    'X',
+    'Y',
+    'Time',
+    'Fixed'
+);
+
+CREATE TYPE "MdAxisMapping" AS (
+    discriminant "MdAxisMappingDiscriminator",
+    fixed_index bigint
+);
+
+CREATE TYPE "MdVariable" AS (
+    name text,
+    axis_mapping "MdAxisMapping" []
+);
+
+CREATE TYPE "GdalMdMetaData" AS (
+    result_descriptor "RasterResultDescriptor",
+    variables "MdVariable" [],
+    wrap boolean,
+    cache_ttl int
+);
+
 CREATE TYPE "MetaDataDefinition" AS (
     -- oneOf
     mock_meta_data "MockMetaData",
@@ -574,7 +598,8 @@ CREATE TYPE "MetaDataDefinition" AS (
     gdal_static "GdalMetaDataStatic",
     gdal_metadata_net_cdf_cf "GdalMetadataNetCdfCf",
     gdal_meta_data_list "GdalMetaDataList",
-    gdal_multi_band "GdalMultiBand"
+    gdal_multi_band "GdalMultiBand",
+    gdal_md_meta_data "GdalMdMetaData"
 );
 
 -- seperate table for projects used in foreign key constraints
@@ -1425,6 +1450,56 @@ CREATE TYPE "TileEntry" AS (
     bbox "SpatialPartition2D",
     band oid,
     z_index bigint,
+    gdal_params "GdalDatasetParameters"
+);
+
+-- one row per MD array file of an MdGdalSource dataset;
+-- see migration_0036_md_dataset_tiles
+CREATE TABLE dataset_md_tiles (
+    id uuid NOT NULL PRIMARY KEY,
+    -- rows go with their dataset
+    dataset_id uuid NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
+    time "TimeInterval" NOT NULL, -- noqa: references.keywords
+    bbox "SpatialPartition2D" NOT NULL,
+    band oid NOT NULL,
+    z_index bigint NOT NULL,
+    array_name text NOT NULL,
+    array_group text,
+    time_descriptor "TimeDescriptor" NOT NULL,
+    time_steps "TimeInterval" [] NOT NULL, -- noqa: rules.shorthands
+    gdal_params "GdalDatasetParameters" NOT NULL
+);
+
+CREATE UNIQUE INDEX dataset_md_tiles_unique_idx ON dataset_md_tiles (
+    dataset_id,
+    time,
+    bbox,
+    band,
+    z_index,
+    array_name
+);
+
+-- helper type for batch checking MD tile validity
+CREATE TYPE "MdTileKey" AS (
+    time "TimeInterval",
+    bbox "SpatialPartition2D",
+    band oid,
+    z_index bigint,
+    array_name text
+);
+
+-- helper type for batch inserting MD tiles
+CREATE TYPE "MdTileEntry" AS (
+    id uuid,
+    dataset_id uuid,
+    time "TimeInterval",
+    bbox "SpatialPartition2D",
+    band oid,
+    z_index bigint,
+    array_name text,
+    array_group text,
+    time_descriptor "TimeDescriptor",
+    time_steps "TimeInterval" [], -- noqa: rules.shorthands
     gdal_params "GdalDatasetParameters"
 );
 

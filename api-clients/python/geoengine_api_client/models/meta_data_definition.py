@@ -17,6 +17,7 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
+from geoengine_api_client.models.gdal_md_meta_data import GdalMdMetaData
 from geoengine_api_client.models.gdal_meta_data_list import GdalMetaDataList
 from geoengine_api_client.models.gdal_meta_data_regular import GdalMetaDataRegular
 from geoengine_api_client.models.gdal_meta_data_static import GdalMetaDataStatic
@@ -28,7 +29,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-METADATADEFINITION_ONE_OF_SCHEMAS = ["GdalMetaDataList", "GdalMetaDataRegular", "GdalMetaDataStatic", "GdalMetadataNetCdfCf", "GdalMultiBand", "MockMetaData", "OgrMetaData"]
+METADATADEFINITION_ONE_OF_SCHEMAS = ["GdalMdMetaData", "GdalMetaDataList", "GdalMetaDataRegular", "GdalMetaDataStatic", "GdalMetadataNetCdfCf", "GdalMultiBand", "MockMetaData", "OgrMetaData"]
 
 class MetaDataDefinition(BaseModel):
     """
@@ -48,8 +49,10 @@ class MetaDataDefinition(BaseModel):
     oneof_schema_6_validator: Optional[GdalMetaDataList] = None
     # data type: GdalMultiBand
     oneof_schema_7_validator: Optional[GdalMultiBand] = None
-    actual_instance: Optional[Union[GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData]] = None
-    one_of_schemas: Set[str] = { "GdalMetaDataList", "GdalMetaDataRegular", "GdalMetaDataStatic", "GdalMetadataNetCdfCf", "GdalMultiBand", "MockMetaData", "OgrMetaData" }
+    # data type: GdalMdMetaData
+    oneof_schema_8_validator: Optional[GdalMdMetaData] = None
+    actual_instance: Optional[Union[GdalMdMetaData, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData]] = None
+    one_of_schemas: Set[str] = { "GdalMdMetaData", "GdalMetaDataList", "GdalMetaDataRegular", "GdalMetaDataStatic", "GdalMetadataNetCdfCf", "GdalMultiBand", "MockMetaData", "OgrMetaData" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -110,12 +113,17 @@ class MetaDataDefinition(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `GdalMultiBand`")
         else:
             match += 1
+        # validate data type: GdalMdMetaData
+        if not isinstance(v, GdalMdMetaData):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `GdalMdMetaData`")
+        else:
+            match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in MetaDataDefinition with oneOf schemas: GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in MetaDataDefinition with oneOf schemas: GdalMdMetaData, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in MetaDataDefinition with oneOf schemas: GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in MetaDataDefinition with oneOf schemas: GdalMdMetaData, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -134,6 +142,11 @@ class MetaDataDefinition(BaseModel):
         _data_type = json.loads(json_str).get("type")
         if not _data_type:
             raise ValueError("Failed to lookup data type from the field `type` in the input.")
+
+        # check if data type is `GdalMdMetaData`
+        if _data_type == "GdalMdMetaData":
+            instance.actual_instance = GdalMdMetaData.from_json(json_str)
+            return instance
 
         # check if data type is `GdalMetaDataList`
         if _data_type == "GdalMetaDataList":
@@ -212,13 +225,19 @@ class MetaDataDefinition(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
+        # deserialize data into GdalMdMetaData
+        try:
+            instance.actual_instance = GdalMdMetaData.from_json(json_str)
+            match += 1
+        except (ValidationError, ValueError) as e:
+            error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into MetaDataDefinition with oneOf schemas: GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into MetaDataDefinition with oneOf schemas: GdalMdMetaData, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into MetaDataDefinition with oneOf schemas: GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into MetaDataDefinition with oneOf schemas: GdalMdMetaData, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -232,7 +251,7 @@ class MetaDataDefinition(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], GdalMdMetaData, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand, MockMetaData, OgrMetaData]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

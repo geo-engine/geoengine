@@ -46,6 +46,81 @@ pub struct GdalReadWindow {
     pub(crate) size_y: usize,
 }
 
+/// The role of one source-array dimension in a multidimensional raster read.
+///
+/// A dimension that is neither spatial nor time is pinned with [`Self::Fixed`], so a source
+/// whose band or level dimension is not the time axis is read as one variable per fixed index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub enum MdAxisMapping {
+    X,
+    Y,
+    /// The z axis as time steps: every slice is one time step of the array.
+    Time,
+    Fixed {
+        index: i64,
+    },
+}
+
+impl MdAxisMapping {
+    /// Whether this dimension is the z axis a read slices, i.e. `Time`.
+    #[must_use]
+    pub fn is_z(self) -> bool {
+        matches!(self, Self::Time)
+    }
+}
+
+/// Validates the roles of an axis mapping: exactly one X, exactly one Y, at most one Time.
+///
+/// Needs no axis sizes, so it also runs where the array is not opened (e.g. external MD rows).
+pub fn validate_md_axis_roles(mapping: &[MdAxisMapping]) -> Result<(), String> {
+    let (mut x_count, mut y_count, mut z_count) = (0, 0, 0);
+    for role in mapping {
+        match role {
+            MdAxisMapping::X => x_count += 1,
+            MdAxisMapping::Y => y_count += 1,
+            MdAxisMapping::Time => z_count += 1,
+            MdAxisMapping::Fixed { .. } => {}
+        }
+    }
+
+    if (x_count, y_count) != (1, 1) || z_count > 1 {
+        return Err(format!(
+            "axis mapping must contain exactly one X and one Y, and at most one Time axis; found {x_count} X, {y_count} Y and {z_count} Time"
+        ));
+    }
+
+    Ok(())
+}
+
+/// Validates one mapping entry per source dimension and checks fixed indices against sizes.
+pub fn validate_md_axis_mapping(
+    mapping: &[MdAxisMapping],
+    axis_sizes: &[usize],
+) -> Result<(), String> {
+    if mapping.len() != axis_sizes.len() {
+        return Err(format!(
+            "axis mapping has {} entries for an array with {} dimensions",
+            mapping.len(),
+            axis_sizes.len()
+        ));
+    }
+
+    for (axis, (&role, &size)) in mapping.iter().zip(axis_sizes).enumerate() {
+        if let MdAxisMapping::Fixed { index } = role {
+            let index = usize::try_from(index).map_err(|_| {
+                format!("fixed index {index} for dimension {axis} must be non-negative")
+            })?;
+            if index >= size {
+                return Err(format!(
+                    "fixed index {index} for dimension {axis} is outside its size {size}"
+                ));
+            }
+        }
+    }
+
+    validate_md_axis_roles(mapping)
+}
+
 impl GdalReadWindow {
     pub fn new(start: GridIdx2D, size: GridShape2D) -> Self {
         Self {
@@ -65,25 +140,166 @@ impl GdalReadWindow {
     }
 }
 
+/// What a [`IpcChannelMessagePayload`] asks the worker for: pixels, or only a header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
+pub enum GdalRequest {
+    /// Read pixels of the window `read_advise` as `data_type`.
+    Read {
+        read_advise: GdalReadAdvise,
+        /// We use this to know what type we serialize
+        data_type: RasterDataType,
+        kind: GdalReadKind,
+    },
+    /// Read a header only, without any pixel data.
+    Header(GdalHeaderKind),
+}
+
+/// The kind of pixel read: a classic 2D rasterband read or a multidimensional (MD) array read.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
+pub enum GdalReadKind {
+    /// Classic 2D rasterband read (`rasterband_channel` selects the band).
+    Raster,
+    /// Multidim array read: read the array `array_name` (in the MD group `group`,
+    /// `None` = root group) at the z-slice `z_index` (file-local).
+    MdArray {
+        /// The MD group to read the array from, or `None` for the root group.
+        group: Option<String>,
+        // The name of the array to read.
+        array_name: String,
+        // The z-slice index to read, in file-local coordinates.
+        z_index: usize,
+        /// Role of each source-array dimension, in source order.
+        axis_mapping: Vec<MdAxisMapping>,
+    },
+}
+
+/// The kind of header read.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
+pub enum GdalHeaderKind {
+    /// The data type of band `rasterband_channel` and the dataset's CRS.
+    Raster,
+    /// The shape and declared CRS of the MD array `array_name` (in `group`).
+    MdArray {
+        group: Option<String>,
+        array_name: String,
+    },
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct IpcChannelMessagePayload {
     pub dataset_params: GdalDatasetParameters,
-    pub read_advise: GdalReadAdvise,
-    /// We use this to know what type we serialize
-    pub data_type: RasterDataType,
     /// Correlation ID for tracing: `{hash}-{nanos}`. Used to link the main process
     /// caller span with the worker process span for the same logical read.
     #[serde(default)]
     pub read_id: Option<String>,
+    pub request: GdalRequest,
 }
 
-pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
+impl IpcChannelMessagePayload {
+    /// The pixel window a read targets; `None` for header reads.
+    pub fn read_window_bounds(&self) -> Option<GridBoundingBox2D> {
+        match &self.request {
+            GdalRequest::Read { read_advise, .. } => Some(read_advise.read_window_bounds),
+            GdalRequest::Header(_) => None,
+        }
+    }
+}
+
+/// Result payload of a worker read: a classic 2D raster payload, or a multidim slice payload.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum IpcChannelResult {
+    /// Classic 2D rasterband read result.
+    Raster(GdalIpcBytePayload),
+    /// Multidim read result: the single z-slice requested by [`GdalReadKind::MdArray`].
+    /// Uses the same byte encoding as `Raster`.
+    MdSlice(GdalIpcMdBytePayload),
+    /// Header result of [`GdalHeaderKind::MdArray`].
+    MdArrayInfo(MdArrayInfo),
+    /// Header result of [`GdalHeaderKind::Raster`].
+    RasterInfo(RasterInfo),
+}
+
+/// The data type of one band and the CRS of a classic raster, as read from its header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct RasterInfo {
+    pub data_type: RasterDataType,
+    pub spatial_reference: geoengine_datatypes::spatial_reference::SpatialReference,
+}
+
+/// The shape and declared CRS of a multidim array, as read from its header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct MdArrayInfo {
+    /// the size of each array dimension, in source order
+    pub axis_sizes: Vec<usize>,
+    /// the array's CRS as GDAL resolves it, else its `crs`, `spatial_ref` or `grid_mapping`
+    /// attribute, if any
+    pub crs: Option<geoengine_datatypes::spatial_reference::SpatialReference>,
+    /// one entry per dimension, in source order: its coordinate variable, if it has a 1-D one
+    /// in degrees or metres
+    pub coordinates: Vec<Option<MdAxisCoordinates>>,
+}
+
+/// The cell-centre coordinates along one dimension of an MD array.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub struct MdAxisCoordinates {
+    pub first: f64,
+    pub last: f64,
+    /// whether the spacing is constant, i.e. an affine transform can describe the axis
+    pub uniform: bool,
+}
+
+pub type IpcProcessRasterResult = Result<IpcChannelResult, IpcProcessError>;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GdalIpcBytePayload {
     pub dimensions: GridBoundingBox2D,
     pub properties: GdalIpcRasterProperties,
     pub data_variant: GdalDataGridByteVariant,
+}
+
+/// Raw row-major multidimensional slice returned by the GDAL worker.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct GdalIpcMdBytePayload {
+    pub axis_sizes: Vec<usize>,
+    pub properties: GdalIpcRasterProperties,
+    pub data_variant: GdalDataGridByteVariant,
+}
+
+#[derive(Debug, Clone)]
+pub struct GdalIpcMdPayload<T> {
+    pub axis_sizes: Vec<usize>,
+    pub properties: RasterProperties,
+    pub data_variant: GdalDataGridVariant<T>,
+}
+
+impl<T> TryFrom<GdalIpcMdPayload<T>> for GdalIpcMdBytePayload
+where
+    T: NoUninit,
+{
+    type Error = bytemuck::PodCastError;
+
+    fn try_from(value: GdalIpcMdPayload<T>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            axis_sizes: value.axis_sizes,
+            properties: value.properties.into(),
+            data_variant: value.data_variant.try_into()?,
+        })
+    }
+}
+
+impl<T> TryFrom<&GdalIpcMdBytePayload> for GdalIpcMdPayload<T>
+where
+    T: AnyBitPattern,
+{
+    type Error = bytemuck::PodCastError;
+
+    fn try_from(value: &GdalIpcMdBytePayload) -> Result<Self, Self::Error> {
+        Ok(Self {
+            axis_sizes: value.axis_sizes.clone(),
+            properties: value.properties.clone().into(),
+            data_variant: (&value.data_variant).try_into()?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -542,9 +758,54 @@ impl IpcChannelMessage {
 
     pub fn full_hash<H: Hasher>(&self, state: &mut H) {
         self.0.dataset_params.full_hash(state);
+        self.0.request.hash(state);
+    }
+}
 
-        // Hash read advise
-        self.0.read_advise.hash(state);
-        self.0.data_type.hash(state);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn md_axis_mapping_survives_ipc_encoding() {
+        let mapping = vec![
+            MdAxisMapping::Time,
+            MdAxisMapping::Fixed { index: 3 },
+            MdAxisMapping::Y,
+            MdAxisMapping::X,
+        ];
+        let (sender, receiver) = ipc_channel::ipc::channel::<Vec<MdAxisMapping>>().unwrap();
+        sender.send(mapping.clone()).unwrap();
+
+        assert_eq!(receiver.recv().unwrap(), mapping);
+    }
+
+    #[test]
+    fn validate_md_axis_mapping_cases() {
+        use MdAxisMapping::{Fixed, Time, X, Y};
+
+        assert!(validate_md_axis_mapping(&[Y, X], &[10, 20]).is_ok());
+        assert!(validate_md_axis_mapping(&[Time, Y, X], &[3, 10, 20]).is_ok());
+        assert!(
+            validate_md_axis_mapping(&[Fixed { index: 1 }, Time, Y, X], &[2, 3, 10, 20]).is_ok()
+        );
+
+        assert!(validate_md_axis_mapping(&[Time, Time, Y, X], &[3, 2, 10, 20]).is_err());
+        assert!(validate_md_axis_mapping(&[Time, Y], &[3, 10]).is_err());
+        assert!(validate_md_axis_mapping(&[Y, X, X], &[10, 20, 20]).is_err());
+        assert!(validate_md_axis_mapping(&[Fixed { index: 2 }, Y, X], &[2, 10, 20]).is_err());
+        assert!(validate_md_axis_mapping(&[Y, X], &[10]).is_err());
+    }
+
+    #[test]
+    fn validate_md_axis_roles_needs_no_sizes() {
+        use MdAxisMapping::{Fixed, Time, X, Y};
+
+        assert!(validate_md_axis_roles(&[Y, X]).is_ok());
+        assert!(validate_md_axis_roles(&[Fixed { index: 7 }, Time, Y, X]).is_ok());
+
+        assert!(validate_md_axis_roles(&[Time, Time, Y, X]).is_err());
+        assert!(validate_md_axis_roles(&[Y]).is_err());
+        assert!(validate_md_axis_roles(&[Y, X, X]).is_err());
     }
 }

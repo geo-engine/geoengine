@@ -17,6 +17,7 @@ import { DownsamplingFromJSONTyped, DownsamplingToJSON, } from './Downsampling';
 import { instanceOfExpression, ExpressionFromJSONTyped, ExpressionToJSON, } from './Expression';
 import { instanceOfGdalSource, GdalSourceFromJSONTyped, GdalSourceToJSON, } from './GdalSource';
 import { InterpolationFromJSONTyped, InterpolationToJSON, } from './Interpolation';
+import { MdGdalSourceFromJSONTyped, MdGdalSourceToJSON, } from './MdGdalSource';
 import { MultiBandGdalSourceFromJSONTyped, MultiBandGdalSourceToJSON, } from './MultiBandGdalSource';
 import { NeighborhoodAggregateFromJSONTyped, NeighborhoodAggregateToJSON, } from './NeighborhoodAggregate';
 import { OnnxFromJSONTyped, OnnxToJSON, } from './Onnx';
@@ -52,6 +53,8 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, GdalSourceFromJSONTyped(json, true), { type: 'GdalSource' });
         case 'Interpolation':
             return Object.assign({}, InterpolationFromJSONTyped(json, true), { type: 'Interpolation' });
+        case 'MdGdalSource':
+            return Object.assign({}, MdGdalSourceFromJSONTyped(json, true), { type: 'MdGdalSource' });
         case 'MultiBandGdalSource':
             return Object.assign({}, MultiBandGdalSourceFromJSONTyped(json, true), { type: 'MultiBandGdalSource' });
         case 'NeighborhoodAggregate':
@@ -104,6 +107,8 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, GdalSourceToJSON(value), { type: 'GdalSource' });
         case 'Interpolation':
             return Object.assign({}, InterpolationToJSON(value), { type: 'Interpolation' });
+        case 'MdGdalSource':
+            return Object.assign({}, MdGdalSourceToJSON(value), { type: 'MdGdalSource' });
         case 'MultiBandGdalSource':
             return Object.assign({}, MultiBandGdalSourceToJSON(value), { type: 'MultiBandGdalSource' });
         case 'NeighborhoodAggregate':

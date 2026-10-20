@@ -1,7 +1,9 @@
 use super::{
     GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
-        GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
+        GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadWindow,
+        IpcProcessError, MdArrayInfo, MdAxisCoordinates, MdAxisMapping, RasterInfo,
+        validate_md_axis_mapping,
     },
 };
 use crate::{
@@ -11,13 +13,19 @@ use crate::{
 use float_cmp::approx_eq;
 use gdal::{
     Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata,
+    cpl::CslStringList,
     errors::GdalError,
     raster::{GdalType, RasterBand as GdalRasterBand},
+    spatial_ref::SpatialRef,
 };
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::{
     primitives::Coordinate2D,
-    raster::{GridSize, Pixel, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType},
+    raster::{
+        GridSize, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+        RasterPropertiesEntryType,
+    },
+    spatial_reference::SpatialReference,
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use num::FromPrimitive;
@@ -220,6 +228,7 @@ where
 #[derive(Default)]
 pub struct GdalDatasetHolder {
     params: Option<GdalDatasetParameters>,
+    multidim: bool,
     dataset: Option<GdalDataset>,
     thread_local: Option<GdalConfigOptions>,
 }
@@ -232,6 +241,7 @@ impl GdalDatasetHolder {
     pub fn new() -> Self {
         Self {
             params: None,
+            multidim: false,
             dataset: None,
             thread_local: None,
         }
@@ -239,6 +249,7 @@ impl GdalDatasetHolder {
 
     fn open_ex(
         dataset_params: &GdalDatasetParameters,
+        multidim: bool,
     ) -> Result<(GdalDataset, Option<GdalConfigOptions>), GdalError> {
         let options = dataset_params
             .gdal_open_options
@@ -253,10 +264,17 @@ impl GdalDatasetHolder {
             .transpose()
             .expect("GdalConfigOptions must not fail");
 
+        // With the multidim flag GDAL returns NULL for classic `NETCDF:<file>:/group/array` subdatasets
+        let open_flags = if multidim {
+            GdalOpenFlags::GDAL_OF_RASTER | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER
+        } else {
+            GdalOpenFlags::GDAL_OF_RASTER
+        };
+
         let ds = gdal_open_ex_gdal_error(
             &dataset_params.file_path_for_open(),
             DatasetOptions {
-                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                open_flags,
                 open_options: options.as_deref(),
                 ..DatasetOptions::default()
             },
@@ -265,15 +283,19 @@ impl GdalDatasetHolder {
         Ok((ds, thread_local_configs))
     }
 
-    pub fn get(&mut self, params: &GdalDatasetParameters) -> Option<&mut GdalDataset> {
-        if Self::is_hit(self.params.as_ref(), params) {
+    pub fn get(
+        &mut self,
+        params: &GdalDatasetParameters,
+        multidim: bool,
+    ) -> Option<&mut GdalDataset> {
+        if self.is_hit(params, multidim) {
             self.dataset.as_mut()
         } else {
             None
         }
     }
 
-    /// Retrieves the open dataset if the parameters match, otherwise opens a new dataset with the given parameters, updates the stored dataset, and returns it.
+    /// Retrieves the open dataset if the parameters and the open mode match, otherwise opens a new dataset with the given parameters, updates the stored dataset, and returns it.
     /// The current open dataset is kept alive until the new one is successfully opened to maintain GDAL's internal caching benefits.
     /// This method ensures that only one dataset is open at a time, and that the state is updated atomically to prevent stale data.
     /// The caller is responsible for ensuring that the returned dataset is not used concurrently across threads, as GDAL datasets are generally not thread-safe.
@@ -287,8 +309,9 @@ impl GdalDatasetHolder {
     pub fn get_or_open(
         &mut self,
         params: &GdalDatasetParameters,
+        multidim: bool,
     ) -> Result<&mut GdalDataset, GdalError> {
-        let hit = Self::is_hit(self.params.as_ref(), params);
+        let hit = self.is_hit(params, multidim);
 
         if hit {
             let _span = tracing::debug_span!("gdal_dataset_cache_hit").entered();
@@ -303,9 +326,10 @@ impl GdalDatasetHolder {
             )
             .entered();
 
-            let (ds, tlo) = Self::open_ex(params)?;
+            let (ds, tlo) = Self::open_ex(params, multidim)?;
 
             self.params = Some(params.clone());
+            self.multidim = multidim;
             self.dataset = Some(ds);
             self.thread_local = tlo;
 
@@ -313,12 +337,13 @@ impl GdalDatasetHolder {
         }
     }
 
-    fn is_hit(params: Option<&GdalDatasetParameters>, other: &GdalDatasetParameters) -> bool {
+    fn is_hit(&self, other: &GdalDatasetParameters, multidim: bool) -> bool {
         // TODO: we could optimize this by hashing the parameters and comparing the hash for a quick check before doing the full equality check, if it turns out to be a bottleneck.
-        if let Some(current_ds_params) = params {
+        if let Some(current_ds_params) = self.params.as_ref() {
             current_ds_params.file_path == other.file_path
                 && current_ds_params.gdal_open_options == other.gdal_open_options
                 && current_ds_params.gdal_config_options == other.gdal_config_options
+                && self.multidim == multidim
         } else {
             false
         }
@@ -333,9 +358,56 @@ impl GdalDatasetHolder {
         prev
     }
 
-    pub fn contains(&self, params: &GdalDatasetParameters) -> bool {
-        Self::is_hit(self.params.as_ref(), params)
+    pub fn contains(&self, params: &GdalDatasetParameters, multidim: bool) -> bool {
+        self.is_hit(params, multidim)
     }
+}
+
+/// Builds GDAL's per-dimension `[start, count]` vectors from the explicit axis mapping.
+fn md_read_window(
+    axis_mapping: &[MdAxisMapping],
+    z_index: usize,
+    read_window: GdalReadWindow,
+) -> Result<(Vec<u64>, Vec<usize>), IpcProcessError> {
+    let (start_x, start_y) = (
+        usize::try_from(read_window.start_x).map_err(|_| IpcProcessError::IpcOther {
+            msg: format!(
+                "negative read window start x {} is invalid for MD reads",
+                read_window.start_x
+            ),
+        })?,
+        usize::try_from(read_window.start_y).map_err(|_| IpcProcessError::IpcOther {
+            msg: format!(
+                "negative read window start y {} is invalid for MD reads",
+                read_window.start_y
+            ),
+        })?,
+    );
+
+    let mut start = vec![0u64; axis_mapping.len()];
+    let mut count = vec![1usize; axis_mapping.len()];
+    for (axis, role) in axis_mapping.iter().enumerate() {
+        match role {
+            MdAxisMapping::X => {
+                start[axis] = start_x as u64;
+                count[axis] = read_window.size_x;
+            }
+            MdAxisMapping::Y => {
+                start[axis] = start_y as u64;
+                count[axis] = read_window.size_y;
+            }
+            MdAxisMapping::Time => {
+                start[axis] = z_index as u64;
+            }
+            MdAxisMapping::Fixed { index } => {
+                start[axis] = u64::try_from(*index).map_err(|_| IpcProcessError::IpcOther {
+                    msg: format!("negative fixed index {index} for MD dimension {axis}"),
+                })?;
+            }
+        }
+    }
+
+    Ok((start, count))
 }
 
 pub struct GdalHandling;
@@ -360,19 +432,18 @@ impl GdalHandling {
         }
     }
 
-    ///
-    /// A method to load single tiles from a GDAL dataset.
-    ///
-    pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
+    /// Opens the dataset (or reuses the cached one) and runs `read` on it, retrying both the
+    /// open and the read with backoff. Remote paths clear their VSI cache on failure, and a
+    /// file that explicitly does not exist is never retried.
+    fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
-        read_advise: GdalReadAdvise,
-    ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
+        multidim: bool,
+        read: impl Fn(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
+    ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
         let max_retries = dataset_params.max_retries().unwrap_or(0);
         let dp = &dataset_params;
-
-        // Wrap both OPEN and READ actions inside the retry loop
 
         retry_sync(
             max_retries,
@@ -380,7 +451,7 @@ impl GdalHandling {
             GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
             Some(GDAL_RETRY_MAX_BACKOFF_MS),
             || {
-                let ds = match cache.get_or_open(dp) {
+                let ds = match cache.get_or_open(dp, multidim) {
                     Ok(dataset) => dataset,
                     Err(gdal_error) => {
                         if is_remote {
@@ -390,7 +461,7 @@ impl GdalHandling {
                     }
                 };
 
-                Self::load_tile_data(ds, dataset_params, read_advise).inspect_err(|_e| {
+                read(ds, dataset_params).inspect_err(|_e| {
                     if is_remote {
                         Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
                     }
@@ -399,6 +470,19 @@ impl GdalHandling {
             // If the file explicitly does not exist, do not waste time retrying
             |e| matches!(e, IpcProcessError::GdalError { kind, details: _ } if *kind == IpcProcessGdalErrorKind::FileNotFound),
         )
+    }
+
+    ///
+    /// A method to load single tiles from a GDAL dataset.
+    ///
+    pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+        read_advise: GdalReadAdvise,
+    ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, false, |ds, params| {
+            Self::load_tile_data(ds, params, read_advise)
+        })
     }
 
     /// This method reads the data for a single grid with a specified size from the GDAL dataset.
@@ -645,6 +729,323 @@ impl GdalHandling {
             data_variant: result_gdal_raster,
         })
     }
+
+    ///
+    /// A method to load a z-slice from a GDAL multidimensional array.
+    ///
+    /// Reuses the same retry/backoff + VSI-cache-clearing wrapper as
+    /// [`Self::load_tile_data_with_dataset_retry`].
+    ///
+    /// # Panics
+    /// Panics never; errors are returned as `IpcProcessError`.
+    pub fn load_md_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+        read_advise: GdalReadAdvise,
+        group: Option<&str>,
+        array_name: &str,
+        z_index: usize,
+        axis_mapping: &[MdAxisMapping],
+    ) -> Result<GdalIpcMdPayload<T>, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, true, |ds, params| {
+            Self::load_md_tile_data(
+                ds,
+                params,
+                read_advise,
+                group,
+                array_name,
+                z_index,
+                axis_mapping,
+            )
+        })
+    }
+
+    /// Reads the data type of the `rasterband_channel` band and the dataset's CRS, without
+    /// pixel data.
+    ///
+    /// # Errors
+    /// Returns an `IpcProcessError` if the file or band cannot be opened, the data type is not
+    /// supported or the dataset has no CRS.
+    pub fn load_raster_info_with_dataset_retry(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+    ) -> Result<RasterInfo, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, false, |ds, params| {
+            let band_type = ds.rasterband(params.rasterband_channel)?.band_type();
+            let data_type = RasterDataType::from_gdal_data_type(band_type).map_err(|_| {
+                IpcProcessError::IpcOther {
+                    msg: format!("unsupported raster data type {band_type:?}"),
+                }
+            })?;
+            let spatial_reference = SpatialReference::try_from(ds.spatial_ref()?)
+                .map_err(|e| IpcProcessError::IpcOther { msg: e.to_string() })?;
+            Ok(RasterInfo {
+                data_type,
+                spatial_reference,
+            })
+        })
+    }
+
+    /// Reads the shape and declared CRS of a multidimensional array, without pixel data.
+    ///
+    /// # Errors
+    /// Returns an `IpcProcessError` if the file, group or array cannot be opened.
+    pub fn load_md_array_info_with_dataset_retry(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+        group: Option<&str>,
+        array_name: &str,
+    ) -> Result<MdArrayInfo, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, true, |ds, _| {
+            let mut info = with_md_array(ds, group, array_name, md_array_info)?;
+            info.crs = md_array_crs(ds, group, array_name).or(info.crs);
+            Ok(info)
+        })
+    }
+
+    /// Reads a z-slice from a multidimensional array and returns the raw source-order buffer.
+    #[allow(clippy::too_many_lines)]
+    fn load_md_tile_data<T: Pixel + GdalType + FromPrimitive>(
+        dataset: &mut GdalDataset,
+        dataset_params: &GdalDatasetParameters,
+        read_advise: GdalReadAdvise,
+        group: Option<&str>,
+        array_name: &str,
+        z_index: usize,
+        axis_mapping: &[MdAxisMapping],
+    ) -> Result<GdalIpcMdPayload<T>, IpcProcessError> {
+        let _span = tracing::debug_span!(
+            "gdal_load_md_tile_data",
+            data_type = ?T::TYPE,
+            group = ?group,
+            array = array_name,
+            z_index,
+            window = ?read_advise.bounds_of_target,
+        )
+        .entered();
+        let start = Instant::now();
+
+        let mut properties = RasterProperties::default();
+        let (scale, offset) = md_array_scale_offset(dataset, group, array_name);
+        if let Some(scale) = scale {
+            properties.set_scale(scale);
+        }
+        if let Some(offset) = offset {
+            properties.set_offset(offset);
+        }
+
+        with_md_array(dataset, group, array_name, |_, md_array| {
+            let axis_sizes: Vec<usize> = md_array
+                .dimensions()?
+                .iter()
+                .map(gdal::raster::Dimension::size)
+                .collect();
+            validate_md_axis_mapping(axis_mapping, &axis_sizes).map_err(|msg| {
+                IpcProcessError::IpcOther {
+                    msg: format!("MD array '{array_name}': {msg}"),
+                }
+            })?;
+
+            let (array_start_index, array_count) =
+                md_read_window(axis_mapping, z_index, read_advise.gdal_read_widow)?;
+
+            let read_start = Instant::now();
+            let data = md_array.read_as::<T>(array_start_index, array_count.clone())?;
+            tracing::debug!(
+                "GDAL md array read took {:?} for window size ({}, {})",
+                read_start.elapsed(),
+                read_advise.gdal_read_widow.size_x,
+                read_advise.gdal_read_widow.size_y,
+            );
+
+            // no-data classification: MD arrays have no mask band, only a scalar no-data value
+            let no_data_value = dataset_params
+                .no_data_value
+                .or_else(|| md_array.no_data_value_as_double());
+
+            let data_variant = match no_data_value {
+                Some(no_data_value) => GdalDataGridVariant::WithNoData {
+                    data,
+                    no_data_value,
+                },
+                None => GdalDataGridVariant::AllValid { data },
+            };
+
+            let elapsed = start.elapsed();
+            debug!("md data loaded -> returning z-slice, took {elapsed:?}");
+
+            Ok(GdalIpcMdPayload {
+                axis_sizes: array_count,
+                properties,
+                data_variant,
+            })
+        })
+    }
+}
+
+/// Opens `array_name` below the (possibly nested, "/"-separated) MD `group` and passes the
+/// group and the array to `read`; `None` is the root group. A callback, because the array
+/// borrows its group.
+fn with_md_array<R>(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+    read: impl FnOnce(
+        &gdal::raster::Group<'_>,
+        &gdal::raster::MDArray<'_>,
+    ) -> Result<R, IpcProcessError>,
+) -> Result<R, IpcProcessError> {
+    let mut group_h = dataset.root_group()?;
+    for segment in group
+        .filter(|g| !g.is_empty())
+        .into_iter()
+        .flat_map(|g| g.split('/'))
+    {
+        group_h = group_h
+            .open_group(segment, CslStringList::new())
+            .map_err(|e| IpcProcessError::IpcOther {
+                msg: format!("cannot open MD group '{segment}' of array '{array_name}': {e}"),
+            })?;
+    }
+    let md_array = group_h.open_md_array(array_name, CslStringList::new())?;
+    read(&group_h, &md_array)
+}
+
+/// Runs `read` on the raw handle of an MD array, for what the `gdal` crate has no getter for
+/// or panics on. The crate keeps its handle private, so the array is opened again by full name.
+fn with_c_md_array<R>(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+    read: impl FnOnce(gdal_sys::GDALMDArrayH) -> Option<R>,
+) -> Option<R> {
+    let full_name = match group.map(|g| g.trim_matches('/')).filter(|g| !g.is_empty()) {
+        Some(group) => format!("/{group}/{array_name}"),
+        None => format!("/{array_name}"),
+    };
+    let full_name = CString::new(full_name).ok()?;
+
+    // SAFETY: every handle is checked for null before use and released exactly once; the
+    // array keeps its own reference to the group, so the group can be released first.
+    unsafe {
+        let root = gdal_sys::GDALDatasetGetRootGroup(dataset.c_dataset());
+        if root.is_null() {
+            return None;
+        }
+        let array = gdal_sys::GDALGroupOpenMDArrayFromFullname(
+            root,
+            full_name.as_ptr(),
+            std::ptr::null_mut(),
+        );
+        gdal_sys::GDALGroupRelease(root);
+        if array.is_null() {
+            return None;
+        }
+        let result = read(array);
+        gdal_sys::GDALMDArrayRelease(array);
+        result
+    }
+}
+
+/// The scale and offset of an MD array, e.g. from netCDF's CF `scale_factor`/`add_offset`,
+/// which the driver turns into these and no longer lists as attributes.
+fn md_array_scale_offset(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+) -> (Option<f64>, Option<f64>) {
+    with_c_md_array(dataset, group, array_name, |array| {
+        // SAFETY: `array` is a valid handle for the duration of the callback
+        unsafe {
+            let mut has_scale = 0;
+            let scale = gdal_sys::GDALMDArrayGetScale(array, &raw mut has_scale);
+            let mut has_offset = 0;
+            let offset = gdal_sys::GDALMDArrayGetOffset(array, &raw mut has_offset);
+            Some((
+                (has_scale != 0).then_some(scale),
+                (has_offset != 0).then_some(offset),
+            ))
+        }
+    })
+    .unwrap_or_default()
+}
+
+/// The CRS of an MD array as GDAL resolves it, e.g. from CF's `grid_mapping`, which names a
+/// variable rather than holding a CRS. `None` if it has none or it has no authority code.
+fn md_array_crs(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+) -> Option<SpatialReference> {
+    with_c_md_array(dataset, group, array_name, |array| {
+        // SAFETY: `array` is valid for the callback; a non-null SRS is ours to destroy, and
+        // `from_c_obj` clones it first
+        unsafe {
+            let srs = gdal_sys::GDALMDArrayGetSpatialRef(array);
+            if srs.is_null() {
+                return None;
+            }
+            let cloned = SpatialRef::from_c_obj(srs);
+            gdal_sys::OSRDestroySpatialReference(srs);
+            SpatialReference::try_from(cloned.ok()?).ok()
+        }
+    })
+}
+
+/// The shape, CRS attribute and coordinates of an open MD array.
+fn md_array_info(
+    group: &gdal::raster::Group<'_>,
+    md_array: &gdal::raster::MDArray<'_>,
+) -> Result<MdArrayInfo, IpcProcessError> {
+    let dimensions = md_array.dimensions()?;
+    let axis_sizes = dimensions
+        .iter()
+        .map(gdal::raster::Dimension::size)
+        .collect();
+    let crs = ["crs", "spatial_ref", "grid_mapping"]
+        .into_iter()
+        .find_map(|name| md_array.attribute(name).ok().map(|a| a.read_as_string()))
+        .and_then(|definition| SpatialRef::from_definition(definition.trim()).ok())
+        .and_then(|srs| SpatialReference::try_from(srs).ok());
+    let coordinates = dimensions
+        .iter()
+        .map(|dimension| md_axis_coordinates(group, dimension))
+        .collect();
+    Ok(MdArrayInfo {
+        axis_sizes,
+        crs,
+        coordinates,
+    })
+}
+
+/// The coordinate variable of `dimension`, by the CF/Zarr convention of an array with the
+/// dimension's name. Only degrees and metres are read, the units a geo transform is stated in;
+/// e.g. the scan angles of a geostationary product are skipped.
+fn md_axis_coordinates(
+    group: &gdal::raster::Group<'_>,
+    dimension: &gdal::raster::Dimension<'_>,
+) -> Option<MdAxisCoordinates> {
+    let coordinates = group
+        .open_md_array(&dimension.name(), CslStringList::new())
+        .ok()?;
+    let unit = coordinates.unit();
+    if coordinates.num_dimensions() != 1 || !(unit.starts_with("degree") || unit == "m") {
+        return None;
+    }
+    let values = coordinates
+        .read_as::<f64>(vec![0], vec![dimension.size()])
+        .ok()?;
+    let (first, last) = (*values.first()?, *values.last()?);
+    let step = (last - first) / (values.len().max(2) - 1) as f64;
+    // far above float32 rounding, far below the half pixel of a centre-vs-edge mix-up
+    let uniform = values
+        .windows(2)
+        .all(|pair| (pair[1] - pair[0] - step).abs() <= 1e-3 * step.abs());
+    Some(MdAxisCoordinates {
+        first,
+        last,
+        uniform,
+    })
 }
 
 #[cfg(test)]
@@ -654,8 +1055,8 @@ mod tests {
     use super::super::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
-            IpcChannelMessage, IpcChannelMessagePayload, IpcProcessGdalErrorKind,
-            IpcProcessRasterResult,
+            GdalReadKind, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
+            IpcChannelResult, IpcProcessGdalErrorKind, IpcProcessRasterResult,
         },
     };
     use super::*;
@@ -670,6 +1071,48 @@ mod tests {
         util::{gdal::hide_gdal_errors, test::TestDefault},
     };
     use httptest::{Expectation, Server, matchers::request, responders};
+
+    #[test]
+    fn md_read_window_uses_axis_roles_not_position_assumptions() {
+        let mapping = [MdAxisMapping::Y, MdAxisMapping::Time, MdAxisMapping::X];
+        let window = GdalReadWindow {
+            start_x: 10,
+            start_y: 3,
+            size_x: 4,
+            size_y: 6,
+        };
+
+        let (start, count) = md_read_window(&mapping, 5, window).unwrap();
+
+        assert_eq!(start, vec![3, 5, 10]);
+        assert_eq!(count, vec![6, 1, 4]);
+
+        let mapping = [
+            MdAxisMapping::Fixed { index: 1 },
+            MdAxisMapping::Time,
+            MdAxisMapping::Y,
+            MdAxisMapping::X,
+        ];
+        let (start, count) = md_read_window(&mapping, 5, window).unwrap();
+
+        assert_eq!(start, vec![1, 5, 3, 10]);
+        assert_eq!(count, vec![1, 1, 6, 4]);
+    }
+
+    #[test]
+    fn it_reads_raster_info_without_pixels() {
+        let mut holder = GdalDatasetHolder::new();
+
+        let info = GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &get_params())
+            .expect("the NDVI fixture opens");
+        assert_eq!(info.data_type, RasterDataType::U8);
+        assert_eq!(info.spatial_reference, SpatialReference::epsg_4326());
+
+        // a missing file is an error, whatever `file_not_found_handling` says
+        let mut missing = get_params();
+        missing.file_path = test_data!("raster/does_not_exist.tif").into();
+        assert!(GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &missing).is_err());
+    }
 
     fn get_params() -> GdalDatasetParameters {
         GdalDatasetParameters {
@@ -730,6 +1173,72 @@ mod tests {
             global_tile_position: [0, 0].into(),
             global_geo_transform: real_geotransform,
         }
+    }
+
+    /// The dataset cache is keyed on the *file* and the open mode, not on the shape of the request.
+    ///
+    /// This is what makes two things safe: issuing one request per z slice
+    /// must not cost extra GDAL opens, and two arrays of one file must share the open handle.
+    /// Both fall out of `is_hit` looking only at the path, the open/config options and the open mode.
+    #[test]
+    #[serial_test::serial]
+    fn dataset_cache_is_keyed_on_the_file_not_the_request() {
+        let params = get_params();
+        let mut holder = GdalDatasetHolder::new();
+        assert!(
+            holder.get_or_open(&params, false).is_ok(),
+            "the fixture must open"
+        );
+        assert!(holder.contains(&params, false));
+
+        // another band of the same file is the same open dataset
+        let mut other = params.clone();
+        other.rasterband_channel = 7;
+        assert!(
+            holder.contains(&other, false),
+            "band must not be part of the cache key"
+        );
+
+        // nothing request-shaped short of the open/config options may evict the handle: the
+        // z slice arrives in `GdalReadKind`, which is not in these parameters at all
+        let mut other = params.clone();
+        other.no_data_value = Some(42.0);
+        other.width = 1;
+        assert!(
+            holder.contains(&other, false),
+            "the read window must not be part of the cache key"
+        );
+
+        // ...but the open mode is: a multidim read needs a handle opened with the multidim flag
+        assert!(
+            !holder.contains(&params, true),
+            "a multidim read must not reuse a classic handle"
+        );
+
+        // ...and a different file is
+        let mut other = params.clone();
+        other.file_path = test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-02.TIFF").into();
+        assert!(
+            !holder.contains(&other, false),
+            "a different file must not reuse the handle"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn classic_open_reads_netcdf_subdataset_path() {
+        let mut params = get_params();
+        params.file_path = format!(
+            "NETCDF:{}:/metric_1/ebv_cube",
+            test_data!("netcdf4d/dataset_irr_ts.nc").display()
+        )
+        .into();
+
+        let mut holder = GdalDatasetHolder::new();
+        assert!(
+            holder.get_or_open(&params, false).is_ok(),
+            "a classic open of a netCDF subdataset must not use the multidim flag"
+        );
     }
 
     #[test]
@@ -828,7 +1337,6 @@ mod tests {
         };
 
         let payload = IpcChannelMessagePayload {
-            data_type: RasterDataType::U8,
             dataset_params: GdalDatasetParameters {
                 file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
@@ -870,8 +1378,12 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: None,
             },
-            read_advise,
             read_id: None,
+            request: GdalRequest::Read {
+                read_advise,
+                data_type: RasterDataType::U8,
+                kind: GdalReadKind::Raster,
+            },
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -897,7 +1409,6 @@ mod tests {
         };
 
         let payload = IpcChannelMessagePayload {
-            data_type: RasterDataType::U8,
             dataset_params: GdalDatasetParameters {
                 file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
@@ -939,8 +1450,12 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: None,
             },
-            read_advise,
             read_id: None,
+            request: GdalRequest::Read {
+                read_advise,
+                data_type: RasterDataType::U8,
+                kind: GdalReadKind::Raster,
+            },
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -962,7 +1477,11 @@ mod tests {
             Err(e) => panic!("Error receiving from IPC process: {e:?}"),
         };
 
-        let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
+        let IpcChannelResult::Raster(byte_payload) = payload else {
+            panic!("expected a classic raster result for a 2D read");
+        };
+
+        let result_2: GdalIpcPayload<u8> = (&byte_payload).try_into().unwrap();
 
         let grid_and_props: GridAndProperties<u8, GridBoundingBox2D> = result_2.into();
 
@@ -1013,7 +1532,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&dataset_params).unwrap();
+        let dataset = gdc.get_or_open(&dataset_params, false).unwrap();
 
         let reader_payload =
             GdalHandling::load_tile_data::<u8>(dataset, &dataset_params, gdal_read_advice)?;
@@ -1496,7 +2015,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
+        let dataset = gdc.get_or_open(&up_side_down_params, false).unwrap();
 
         let reader_payload =
             GdalHandling::load_tile_data::<u8>(dataset, &up_side_down_params, gdal_read_advice)
@@ -1557,7 +2076,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
+        let dataset = gdc.get_or_open(&up_side_down_params, false).unwrap();
 
         let GridAndProperties { grid, properties } =
             GdalHandling::load_tile_data::<u8>(dataset, &up_side_down_params, gdal_read_advice)
@@ -1644,7 +2163,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&params).unwrap();
+        let dataset = gdc.get_or_open(&params, false).unwrap();
 
         let reader_payload =
             GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice).unwrap();

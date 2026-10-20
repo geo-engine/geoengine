@@ -163,6 +163,34 @@ def from_operator_dict(cls, operator_dict: dict[str,
 
 Returns an operator from a dictionary.
 
+## MdGdalSource Objects
+
+```python
+class MdGdalSource(RasterOperator)
+```
+
+A multidimensional GDAL source operator for n-dimensional netCDF/Zarr arrays.
+
+The dataset&#x27;s own time dimension selects which z slices a query returns, so the
+query&#x27;s time interval picks the time steps; there is no separate temporal operator.
+
+#### \_\_init\_\_
+
+```python
+def __init__(dataset: str | DatasetName)
+```
+
+Creates a new multidimensional GDAL source operator.
+
+#### from\_operator\_dict
+
+```python
+@classmethod
+def from_operator_dict(cls, operator_dict: dict[str, Any]) -> MdGdalSource
+```
+
+Returns an operator from a dictionary.
+
 ## OgrSource Objects
 
 ```python
