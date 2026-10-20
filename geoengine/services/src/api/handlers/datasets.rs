@@ -6790,6 +6790,38 @@ mod tests {
         Ok(())
     }
 
+    /// Deleting a dataset removes its MD rows; nothing else ever would.
+    #[ge_context::test]
+    async fn it_deletes_md_tiles_with_their_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let (meta_data, tiles) = md_dataset_meta(
+            &[MdRow::of("md/time_series.nc", "temperature", 0, 8)],
+            vec![api_band("temperature")],
+        );
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session);
+        let db = ctx.db();
+
+        let id_and_name = add_md_dataset(&db, "md delete", meta_data, tiles).await?;
+
+        let count = || async {
+            let conn = db.conn_pool.get().await?;
+            let row = conn
+                .query_one(
+                    "SELECT count(*) FROM dataset_md_tiles WHERE dataset_id = $1",
+                    &[&id_and_name.id],
+                )
+                .await?;
+            Result::<i64>::Ok(row.get(0))
+        };
+
+        assert_eq!(count().await?, 1);
+        db.delete_dataset(id_and_name.id).await?;
+        assert_eq!(count().await?, 0);
+
+        Ok(())
+    }
+
     /// The explicit dimension mapping survives persistence and loading-info reconstruction.
     #[ge_context::test]
     async fn it_persists_the_axis_mapping_of_md_variables(
