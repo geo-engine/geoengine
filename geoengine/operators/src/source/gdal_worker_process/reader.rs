@@ -1,5 +1,7 @@
 use gdal::raster::GdalType;
-use geoengine_datatypes::raster::{GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel};
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel, RasterDataType,
+};
 use num::FromPrimitive;
 use tracing::Instrument;
 
@@ -8,8 +10,8 @@ use crate::source::gdal_worker_process::{
     GridAndProperties,
     process_common::{
         GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadKind,
-        IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError, IpcProcessGdalErrorKind,
-        MdAxisMapping,
+        GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+        IpcProcessGdalErrorKind, MdArrayInfo, MdAxisMapping,
     },
 };
 
@@ -255,6 +257,47 @@ impl GdalPoolReader {
             grid,
             properties,
         })))
+    }
+
+    /// Reads the shape and declared CRS of the MD array `array_name` (in `group`) in a worker,
+    /// so the server never opens the file itself. A missing file is an error here, whatever
+    /// `file_not_found_handling` says: there is no header to report.
+    ///
+    /// # Errors
+    /// Returns a `GdalProcessPoolError` if the file, group or array cannot be opened.
+    pub async fn read_md_array_info(
+        &self,
+        dataset_params: GdalDatasetParameters,
+        group: Option<&str>,
+        array_name: &str,
+    ) -> Result<MdArrayInfo, GdalProcessPoolError> {
+        let span = tracing::info_span!(
+            "gdal_pool_read_md_info",
+            dataset = %dataset_params.file_path.display(),
+            group = ?group,
+            array = array_name,
+        );
+        let empty = GridBoundingBox2D::new_unchecked([0, 0], [0, 0]);
+        let request = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
+            dataset_params,
+            read_advise: GdalReadAdvise {
+                gdal_read_widow: GdalReadWindow::new([0, 0].into(), [0, 0].into()),
+                read_window_bounds: empty,
+                bounds_of_target: empty,
+                flip_y: false,
+            },
+            data_type: RasterDataType::U8,
+            read_id: None,
+            read_kind: GdalReadKind::MdArrayInfo {
+                group: group.map(str::to_string),
+                array_name: array_name.to_string(),
+            },
+        });
+
+        self.dispatcher()
+            .read_md_array_info(request)
+            .instrument(span)
+            .await
     }
 
     /// Reads one z-slice from a multidim array via the worker process in a single request, applying the same post-processing (Y-axis flip per z-slice)
