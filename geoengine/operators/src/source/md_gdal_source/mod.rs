@@ -36,7 +36,10 @@ mod presentation;
 mod reader;
 
 pub use error::MdGdalSourceError;
-pub use loading_info::{GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, MdVariable};
+pub use loading_info::{
+    GdalMdMetaData, MdDatasetFile, MdFileTimes, MdLoadingInfo, MdLoadingInfoQueryRectangle,
+    MdVariable,
+};
 pub use presentation::MdPresentation;
 
 /// Parameters for the MD GDAL Source Operator.
@@ -59,7 +62,8 @@ impl OperatorData for MdGdalSourceParameters {
     }
 }
 
-type MdMetaData = Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
+type MdMetaData =
+    Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>>;
 
 /// A `RasterOperator` that reads n-dimensional GDAL arrays (netCDF/Zarr) and emits one 2D
 /// raster tile per z-slice.
@@ -129,7 +133,13 @@ where
                     .as_bbox(),
                 ),
         );
-        let loading_info = self.meta_data.loading_info(query_in_source_grid).await?;
+        let loading_info = self
+            .meta_data
+            .loading_info(MdLoadingInfoQueryRectangle {
+                query_rectangle: query_in_source_grid,
+                fetch_files: true,
+            })
+            .await?;
         let gdal_worker = ctx.get_gdal_worker();
         let default_cache_ttl = self.default_cache_ttl;
 
@@ -304,27 +314,20 @@ where
         query: TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
-        // The time axis is stored per file, so it can be answered from the meta data alone.
-        // Sources whose axis is not separately answerable (`time_axis` returns `None`) fall
-        // back to reading it off a loading info, which is what `GdalSource` does.
-        let time_steps = match self.meta_data.time_axis(query).await? {
-            Some(time_steps) => time_steps,
-            None => {
-                let q_bounds = self
-                    .result_descriptor()
-                    .tiling_grid_definition(ctx.tiling_specification())
-                    .tiling_grid_bounds();
-                self.meta_data
-                    .loading_info(RasterQueryRectangle::new(
-                        q_bounds,
-                        query,
-                        BandSelection::first(),
-                    ))
-                    .await?
-                    .time_steps()
-                    .to_vec()
-            }
-        };
+        // only the time steps are needed, so no file is loaded
+        let q_bounds = self
+            .result_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_grid_bounds();
+        let time_steps = self
+            .meta_data
+            .loading_info(MdLoadingInfoQueryRectangle {
+                query_rectangle: RasterQueryRectangle::new(q_bounds, query, BandSelection::first()),
+                fetch_files: false,
+            })
+            .await?
+            .time_steps()
+            .to_vec();
 
         Ok(stream::iter(time_steps).map(Result::Ok).boxed())
     }
@@ -827,7 +830,7 @@ mod tests {
                 loading_info: MdLoadingInfo::new(time_steps, md_files, variables, None, wrap)
                     .unwrap(),
                 result_descriptor,
-                phantom: PhantomData::<RasterQueryRectangle>,
+                phantom: PhantomData::<MdLoadingInfoQueryRectangle>,
             }),
         );
         named

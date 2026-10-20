@@ -6454,7 +6454,7 @@ mod tests {
         dyn MetaData<
                 MdLoadingInfo,
                 geoengine_operators::engine::RasterResultDescriptor,
-                RasterQueryRectangle,
+                geoengine_operators::source::MdLoadingInfoQueryRectangle,
             >,
     >;
 
@@ -6474,6 +6474,35 @@ mod tests {
             )
             .await?;
         Ok(provider)
+    }
+
+    /// A loading-info query that also loads the files.
+    fn md_query(
+        query_rectangle: RasterQueryRectangle,
+    ) -> geoengine_operators::source::MdLoadingInfoQueryRectangle {
+        geoengine_operators::source::MdLoadingInfoQueryRectangle {
+            query_rectangle,
+            fetch_files: true,
+        }
+    }
+
+    /// The time steps over `time`, asked the way a time query asks: without files.
+    async fn md_time_steps(provider: &MdProvider, time: TimeInterval) -> Result<Vec<TimeInterval>> {
+        let loading_info = provider
+            .loading_info(geoengine_operators::source::MdLoadingInfoQueryRectangle {
+                query_rectangle: RasterQueryRectangle::new(
+                    geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                    time,
+                    BandSelection::first(),
+                ),
+                fetch_files: false,
+            })
+            .await?;
+        assert!(
+            loading_info.files().is_empty(),
+            "a time-only query loads no files"
+        );
+        Ok(loading_info.time_steps().to_vec())
     }
 
     /// Stores `meta_data` as an MD dataset plus its rows and returns the id. `tiles` come from
@@ -6695,9 +6724,9 @@ mod tests {
         ]
     }
 
-    /// `MetaData::time_axis` must answer the same gap-filled axis that `loading_info` does,
-    /// without the file rows: a plain time query never asks for a bbox, and an axis derived
-    /// from stored *row* times would collapse to one step per file.
+    /// A time-only loading info (`fetch_files: false`) must answer the same gap-filled axis
+    /// as one with files, without loading the file rows: an axis derived from stored *row*
+    /// times would collapse to one step per file.
     #[ge_context::test]
     async fn it_answers_the_md_time_axis_without_a_bbox(
         app_ctx: PostgresContext<NoTls>,
@@ -6711,19 +6740,33 @@ mod tests {
         let provider = md_provider(&db, id_and_name.id).await?;
 
         // 2000-01-01 .. 2000-01-13 spans t 0..12: 4 covered + 1 gap + 4 covered = 9 steps
-        let axis = provider
-            .time_axis(TimeInterval::new_unchecked(
+        let axis = md_time_steps(
+            &provider,
+            TimeInterval::new_unchecked(
                 TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2000-01-13T00:00:00Z").unwrap(),
-            ))
-            .await?
-            .expect("a Time-role dataset has an axis");
+            ),
+        )
+        .await?;
 
         assert_eq!(axis.len(), 9);
         assert_eq!(axis[0].start().inner(), 946_684_800_000);
         // the gap step starts where file a stopped, and file b resumes after it
         assert_eq!(axis[4].start().inner(), 946_684_800_000 + 4 * 86_400_000);
         assert_eq!(axis[5].start().inner(), 946_684_800_000 + 8 * 86_400_000);
+
+        let with_files = provider
+            .loading_info(md_query(RasterQueryRectangle::new(
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
+                    TimeInstance::from_str("2000-01-13T00:00:00Z").unwrap(),
+                ),
+                BandSelection::first(),
+            )))
+            .await?;
+        assert!(!with_files.files().is_empty());
+        assert_eq!(with_files.time_steps(), axis.as_slice());
 
         Ok(())
     }
@@ -6756,14 +6799,14 @@ mod tests {
             let provider = md_provider(&db, id_and_name.id).await?;
 
             let loading_info = provider
-                .loading_info(RasterQueryRectangle::new(
+                .loading_info(md_query(RasterQueryRectangle::new(
                     geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
                     TimeInterval::new_unchecked(
                         TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                         TimeInstance::from_str("2000-01-05T00:00:00Z").unwrap(),
                     ),
                     BandSelection::first(),
-                ))
+                )))
                 .await?;
             assert!(
                 !loading_info.files().is_empty(),
@@ -6842,14 +6885,14 @@ mod tests {
         let id_and_name = add_md_dataset(&db, "md axis mapping", meta_data, tiles).await?;
         let provider = md_provider(&db, id_and_name.id).await?;
         let loading_info = provider
-            .loading_info(RasterQueryRectangle::new(
+            .loading_info(md_query(RasterQueryRectangle::new(
                 geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
                 TimeInterval::new_unchecked(
                     TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                     TimeInstance::from_str("2000-01-07T00:00:00Z").unwrap(),
                 ),
                 BandSelection::first(),
-            ))
+            )))
             .await?;
 
         assert_eq!(loading_info.files().len(), 1);
@@ -6900,13 +6943,14 @@ mod tests {
 
         // `variables.nc` is a single 8-step daily series with 2 data variables, so the
         // dataset has 8 time steps. Concatenating every row's intervals would give 16.
-        let axis = provider
-            .time_axis(TimeInterval::new_unchecked(
+        let axis = md_time_steps(
+            &provider,
+            TimeInterval::new_unchecked(
                 TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2000-01-09T00:00:00Z").unwrap(),
-            ))
-            .await?
-            .expect("a Variable-role dataset has an axis");
+            ),
+        )
+        .await?;
 
         assert_eq!(
             axis.len(),
@@ -6916,13 +6960,14 @@ mod tests {
 
         // a narrow window clips: `try_time_irregular_range_fill` extends coverage to the
         // query but never trims it, so without a filter this returns all 8 slices
-        let window = provider
-            .time_axis(TimeInterval::new_unchecked(
+        let window = md_time_steps(
+            &provider,
+            TimeInterval::new_unchecked(
                 TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2000-01-02T00:00:00Z").unwrap(),
-            ))
-            .await?
-            .expect("a Variable-role dataset has an axis");
+            ),
+        )
+        .await?;
 
         assert_eq!(window.len(), 1, "a one-day window returns one slice");
 
@@ -6973,7 +7018,7 @@ mod tests {
             )
         };
 
-        let both = provider.loading_info(query(vec![0, 1])).await?;
+        let both = provider.loading_info(md_query(query(vec![0, 1]))).await?;
         assert_eq!(both.time_steps().len(), 12, "one step per day, no gap step");
 
         let middle = both
@@ -6984,12 +7029,9 @@ mod tests {
         assert_eq!((middle.z_start, middle.z_end), (4, 8));
 
         // the same axis whichever bands are selected, and for a plain time query
-        let precipitation_only = provider.loading_info(query(vec![1])).await?;
+        let precipitation_only = provider.loading_info(md_query(query(vec![1]))).await?;
         assert_eq!(precipitation_only.time_steps(), both.time_steps());
-        let axis = provider
-            .time_axis(time)
-            .await?
-            .expect("an MD dataset has an axis");
+        let axis = md_time_steps(&provider, time).await?;
         assert_eq!(axis.as_slice(), both.time_steps());
 
         Ok(())
@@ -7031,14 +7073,14 @@ mod tests {
         let provider = md_provider(&db, id_and_name.id).await?;
 
         let loading_info = provider
-            .loading_info(RasterQueryRectangle::new(
+            .loading_info(md_query(RasterQueryRectangle::new(
                 geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
                 TimeInterval::new_unchecked(
                     TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                     TimeInstance::from_str("2000-01-02T00:00:00Z").unwrap(),
                 ),
                 BandSelection::new_single(2),
-            ))
+            )))
             .await?;
 
         assert_eq!(loading_info.time_steps().len(), 1);
@@ -7582,12 +7624,12 @@ mod tests {
 
         // a presented query across the seam maps onto the raw stored rows
         let loading_info = provider
-            .loading_info(RasterQueryRectangle::new(
+            .loading_info(md_query(RasterQueryRectangle::new(
                 // presented grid indices: −180 is index 0, so lon −10..10 is indices 170..190
                 geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 170], [9, 190]),
                 TimeInterval::new_unchecked(MD_EPOCH_2000, MD_EPOCH_2000 + MD_DAY),
                 BandSelection::first(),
-            ))
+            )))
             .await?;
         assert_eq!(
             loading_info.files().len(),
@@ -7620,13 +7662,14 @@ mod tests {
         let id_and_name = add_md_dataset(&db, "md mosaic", meta_data, tiles).await?;
         let provider = md_provider(&db, id_and_name.id).await?;
 
-        let axis = provider
-            .time_axis(TimeInterval::new_unchecked(
+        let axis = md_time_steps(
+            &provider,
+            TimeInterval::new_unchecked(
                 TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2000-01-03T00:00:00Z").unwrap(),
-            ))
-            .await?
-            .expect("a Time-role dataset has an axis");
+            ),
+        )
+        .await?;
 
         assert_eq!(axis.len(), 2);
         assert!(axis.windows(2).all(|w| w[0].start() < w[1].start()));
