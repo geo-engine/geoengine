@@ -1228,7 +1228,8 @@ where
 
         // Not filtered by bbox or band: the axis is a property of the dataset. Every band's
         // rows are read, so a file one variable lacks still contributes its steps; the
-        // per-band copies of a shared step collapse in `md_time_axis`.
+        // per-band copies of a shared step collapse in `md_time_axis`. Filtered by time like
+        // the multi-band time query, so a gap at the query's edge is filled from that edge.
         let rows = conn
             .query(
                 "
@@ -1237,8 +1238,8 @@ where
             FROM
                 dataset_md_tiles
             WHERE
-                dataset_id = $1",
-                &[&self.dataset_id],
+                dataset_id = $1 AND time_interval_intersects(time, $2)",
+                &[&self.dataset_id, &query],
             )
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -1254,9 +1255,9 @@ where
             })?;
 
         // `try_time_irregular_range_fill` *extends* coverage to `query` but never clips the
-        // source intervals to it, so an unfiltered axis carries every slice the dataset has
-        // (23k for a 65-year daily series) even for a one-day window. The gap fills all
-        // intersect `query` by construction, so filtering keeps them.
+        // source intervals to it, so a row's whole axis (8760 hourly slices for a year) would
+        // come back for a one-hour window. The gap fills all intersect `query` by construction,
+        // so filtering keeps them.
         md_time_axis(&times, query)
             .map(|steps| {
                 steps

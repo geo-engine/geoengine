@@ -6768,6 +6768,19 @@ mod tests {
         assert!(!with_files.files().is_empty());
         assert_eq!(with_files.time_steps(), axis.as_slice());
 
+        // a window inside a file reads only that file's steps it touches
+        let day = |d: u32| TimeInstance::from_str(&format!("2000-01-{d:02}T00:00:00Z")).unwrap();
+        assert_eq!(
+            md_time_steps(&provider, TimeInterval::new_unchecked(day(2), day(3))).await?,
+            vec![axis[1]]
+        );
+        // a window inside the gap reads no row at all, so its gap step is the window itself,
+        // as in the multi-band time query
+        assert_eq!(
+            md_time_steps(&provider, TimeInterval::new_unchecked(day(6), day(7))).await?,
+            vec![TimeInterval::new_unchecked(day(6), day(7))]
+        );
+
         Ok(())
     }
 
