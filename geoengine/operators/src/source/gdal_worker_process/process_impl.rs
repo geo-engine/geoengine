@@ -1,5 +1,5 @@
 use super::{
-    GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
+    GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
     },
@@ -582,39 +582,42 @@ impl GdalHandling {
             &read_advise.bounds_of_target,
         );
 
-        let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
+        // [origin_x, x_pixel_size, rotation, origin_y, rotation, y_pixel_size]
+        let gdal_geo_transform = dataset.geo_transform()?;
+        let gdal_origin_coordinate =
+            Coordinate2D::new(gdal_geo_transform[0], gdal_geo_transform[3]);
         // check that the dataset geo transform is the same as the one we get from GDAL
         debug_assert!(
             approx_eq!(
                 Coordinate2D,
-                gdal_dataset_geotransform.origin_coordinate,
+                gdal_origin_coordinate,
                 dataset_params.geo_transform.origin_coordinate
             ),
             "expected dataset geo transform origin coordinate {:?} to be approximately equal to GDAL dataset geo transform origin coordinate {:?}",
             dataset_params.geo_transform.origin_coordinate,
-            gdal_dataset_geotransform.origin_coordinate
+            gdal_origin_coordinate
         );
 
         debug_assert!(
             approx_eq!(
                 f64,
-                gdal_dataset_geotransform.x_pixel_size,
-                dataset_params.geo_transform.x_pixel_size
+                gdal_geo_transform[1],
+                dataset_params.geo_transform.x_pixel_size.get()
             ),
             "expected dataset geo transform x pixel size {:?} to be approximately equal to GDAL dataset geo transform x pixel size {:?}",
             dataset_params.geo_transform.x_pixel_size,
-            gdal_dataset_geotransform.x_pixel_size
+            gdal_geo_transform[1]
         );
 
         debug_assert!(
             approx_eq!(
                 f64,
-                gdal_dataset_geotransform.y_pixel_size,
-                dataset_params.geo_transform.y_pixel_size
+                gdal_geo_transform[5],
+                dataset_params.geo_transform.y_pixel_size.get()
             ),
             "expected dataset geo transform y pixel size {:?} to be approximately equal to GDAL dataset geo transform y pixel size {:?}",
             dataset_params.geo_transform.y_pixel_size,
-            gdal_dataset_geotransform.y_pixel_size
+            gdal_geo_transform[5]
         );
 
         let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
@@ -646,9 +649,10 @@ impl GdalHandling {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::util::NonZeroFiniteF64;
 
     use super::super::{
-        FileNotFoundHandling, GridAndProperties,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
             IpcChannelMessage, IpcChannelMessagePayload, IpcProcessGdalErrorKind,
             IpcProcessRasterResult,
@@ -673,8 +677,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 3600,
             height: 1800,
@@ -715,7 +719,7 @@ mod tests {
         partition: SpatialPartition2D,
         shape: GridShape2D,
     ) -> TileInformation {
-        let real_geotransform = GeoTransform::new(
+        let real_geotransform = GeoTransform::new_unchecked(
             partition.upper_left(),
             partition.size_x() / shape.axis_size_x() as f64,
             -partition.size_y() / shape.axis_size_y() as f64,
@@ -830,8 +834,8 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (-180., 90.).into(),
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                 },
                 width: 3600,
                 height: 1800,
@@ -899,8 +903,8 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (-180., 90.).into(),
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                 },
                 width: 3600,
                 height: 1800,
@@ -984,8 +988,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (8.0, 57.4).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 30,
             height: 30,
@@ -1124,8 +1128,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 3600,
             height: 1800,
@@ -1164,8 +1168,8 @@ mod tests {
             rasterband_channel: 100, // invalid channel
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 3600,
             height: 1800,
@@ -1398,8 +1402,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., -90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: 0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
             },
             width: 3600,
             height: 1800,
@@ -1436,7 +1440,7 @@ mod tests {
         };
 
         let ge_global_dataset_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(-180., 90.), 0.1, -0.1),
+            GeoTransform::new_unchecked(Coordinate2D::new(-180., 90.), 0.1, -0.1),
             GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap(),
         );
 
@@ -1515,8 +1519,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (8.0, 57.4).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 30,
             height: 30,
@@ -1602,8 +1606,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (0., 4.).into(),
-                x_pixel_size: 1.0,
-                y_pixel_size: -1.0,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
             },
             width: 4,
             height: 4,

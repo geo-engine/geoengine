@@ -1690,7 +1690,7 @@ mod tests {
         };
 
         let dataset_grid = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(0., 10., 0., -10.),
+            GeoTransform::new_with_coordinate_x_y_unchecked(0., 10., 0., -10.),
             GridBoundingBox2D::new_unchecked([0, 0], [9, 9]),
         );
         let original_partition = dataset_grid.spatial_partition();

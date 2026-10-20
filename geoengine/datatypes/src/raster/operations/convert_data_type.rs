@@ -238,7 +238,7 @@ mod tests {
             TimeInterval::default(),
             [0, 0].into(),
             0,
-            GeoTransform::new((0., 0.).into(), 1., -1.),
+            GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
             g_u8,
             CacheHint::no_cache(),
         );
@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(tile_f64.tile_position, [0, 0].into());
         assert_eq!(
             tile_f64.global_geo_transform,
-            GeoTransform::new((0., 0.).into(), 1., -1.)
+            GeoTransform::new_unchecked((0., 0.).into(), 1., -1.)
         );
 
         if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {
@@ -266,7 +266,7 @@ mod tests {
             TimeInterval::default(),
             [0, 0].into(),
             0,
-            GeoTransform::new((0., 0.).into(), 1., -1.),
+            GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
             g_u8,
             CacheHint::no_cache(),
         );
@@ -276,7 +276,7 @@ mod tests {
         assert_eq!(tile_f64.tile_position, [0, 0].into());
         assert_eq!(
             tile_f64.global_geo_transform,
-            GeoTransform::new((0., 0.).into(), 1., -1.)
+            GeoTransform::new_unchecked((0., 0.).into(), 1., -1.)
         );
 
         if let GridOrEmpty2D::Grid(g) = tile_f64.grid_array {

@@ -7,6 +7,7 @@ use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridIndexAccess, GridIntersection, GridOrEmpty, GridSize, Pixel,
     RasterTile2D, grid_idx_iter_2d,
 };
+use geoengine_datatypes::util::PositiveFiniteF64;
 use itertools::Either;
 
 /// A band of a raster input, identified by its index and name.
@@ -61,20 +62,13 @@ pub(super) fn optimize_raster_plot_source(
 ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
     let native_resolution = source.result_descriptor().spatial_grid.spatial_resolution();
 
-    // degenerate resolutions would never stop the doubling below.
-    // `SpatialResolution::new` rejects them, but derived resolutions (e.g., a request resolution
-    // reprojected to the workflow's CRS) can still overflow to infinity.
-    if !(native_resolution.x > 0.
-        && native_resolution.y > 0.
-        && target_resolution.x.is_finite()
-        && target_resolution.y.is_finite())
-    {
-        return source.optimize(native_resolution);
-    }
-
+    // stops if the resolution would overflow
     let mut resolution = native_resolution;
-    while resolution.x * 2. <= target_resolution.x && resolution.y * 2. <= target_resolution.y {
-        resolution = resolution * 2.;
+    while let Some(next_resolution) = resolution.checked_mul(PositiveFiniteF64::TWO)
+        && next_resolution.x() <= target_resolution.x()
+        && next_resolution.y() <= target_resolution.y()
+    {
+        resolution = next_resolution;
     }
 
     source.optimize(resolution)

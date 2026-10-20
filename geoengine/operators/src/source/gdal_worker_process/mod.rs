@@ -30,7 +30,8 @@ pub(crate) fn overview_level_spatial_grid(
 ) -> Option<SpatialGridDefinition> {
     if overview_level > 0 {
         tracing::trace!("Using overview level {overview_level}");
-        let geo_transform = GeoTransform::new(
+        // overview levels are small integers, so scaling a finite pixel size cannot overflow in practice
+        let geo_transform = GeoTransform::new_unchecked(
             source_spatial_grid.geo_transform.origin_coordinate,
             source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
             source_spatial_grid.geo_transform.y_pixel_size() * f64::from(overview_level),
@@ -77,14 +78,14 @@ mod tests {
     #[test]
     fn it_computes_spatial_grids_for_overviews() {
         let spatial_grid_definition = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.1, -0.1),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.1, -0.1),
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
         );
 
         let spatial_grid_definition_2x =
             overview_level_spatial_grid(spatial_grid_definition, 2).unwrap();
         let expected = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.2, -0.2),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.2, -0.2),
             GridBoundingBox2D::new([-450, -900], [449, 899]).unwrap(),
         );
         assert_eq!(spatial_grid_definition_2x, expected);
@@ -92,7 +93,7 @@ mod tests {
         let spatial_grid_definition_4x =
             overview_level_spatial_grid(spatial_grid_definition, 4).unwrap();
         let expected = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.4, -0.4),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.4, -0.4),
             GridBoundingBox2D::new([-225, -450], [224, 449]).unwrap(),
         );
         assert_eq!(spatial_grid_definition_4x, expected);
@@ -100,7 +101,7 @@ mod tests {
         let spatial_grid_definition_8x =
             overview_level_spatial_grid(spatial_grid_definition, 8).unwrap();
         let expected = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.8, -0.8),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.8, -0.8),
             GridBoundingBox2D::new([-113, -225], [112, 224]).unwrap(),
         );
         assert_eq!(spatial_grid_definition_8x, expected);

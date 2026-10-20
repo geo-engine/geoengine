@@ -80,6 +80,7 @@ impl<C: CircleRadiusModel> Grid<C> {
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::primitives::{Circle, TimeInterval};
+    use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 
     use crate::processing::circle_merging_quadtree::circle_radius_model::LogScaledRadius;
 
@@ -89,7 +90,10 @@ mod tests {
     fn test_grid() {
         let mut grid = Grid::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            LogScaledRadius::new(2., 1.).unwrap(),
+            LogScaledRadius::new(
+                PositiveFiniteF64::new_unchecked(2.),
+                NonNegativeFiniteF64::new_unchecked(1.),
+            ),
         );
 
         grid.insert(CircleOfPoints::new_with_one_point(

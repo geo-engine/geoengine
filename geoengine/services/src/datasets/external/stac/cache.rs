@@ -387,6 +387,7 @@ mod tests {
     use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_operators::engine::SpatialGridDescriptor;
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalRetryOptions,
@@ -401,7 +402,7 @@ mod tests {
             resolution: SpatialResolution::new_unchecked(10.0, 10.0),
             projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                     .expect("grid bounds"),
             ),
@@ -429,8 +430,8 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (0.0, 0.0).into(),
-                    x_pixel_size: 1.0,
-                    y_pixel_size: -1.0,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
                 },
                 width: 10,
                 height: 10,

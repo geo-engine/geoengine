@@ -256,8 +256,8 @@ pub fn processing_graph_with_resampling(
                         output_resolution:
                             geoengine_operators::processing::InterpolationResolution::Fraction(
                                 geoengine_operators::processing::Fraction {
-                                    x: target_resolution.x,
-                                    y: target_resolution.y,
+                                    x: target_resolution.x(),
+                                    y: target_resolution.y(),
                                 },
                             ),
                         output_origin_reference: Some(target_origin),

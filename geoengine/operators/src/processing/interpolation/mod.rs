@@ -25,6 +25,7 @@ use geoengine_datatypes::raster::{
     InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
     TilingSpecification,
 };
+use geoengine_datatypes::util::PositiveFiniteF64;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
@@ -120,14 +121,14 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         let output_resolution = match params.output_resolution {
             InterpolationResolution::Resolution(res) => {
                 ensure!(
-                    res.x.abs() <= in_spatial_grid.spatial_resolution().x.abs(),
+                    res.x().abs() <= in_spatial_grid.spatial_resolution().x().abs(),
                     error::OutputMustBeHigherResolutionThanInput {
                         input: in_spatial_grid.spatial_resolution(),
                         output: res
                     }
                 );
                 ensure!(
-                    res.y.abs() <= in_spatial_grid.spatial_resolution().y.abs(),
+                    res.y().abs() <= in_spatial_grid.spatial_resolution().y().abs(),
                     error::OutputMustBeHigherResolutionThanInput {
                         input: in_spatial_grid.spatial_resolution(),
                         output: res
@@ -147,8 +148,8 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
                 );
 
                 SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x / fraction.x,
-                    in_spatial_grid.spatial_resolution().y.abs() / fraction.y,
+                    in_spatial_grid.spatial_resolution().x() / fraction.x,
+                    in_spatial_grid.spatial_resolution().y().abs() / fraction.y,
                 )
             }
         };
@@ -275,8 +276,12 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
         // snap the input resolution to an overview level
         let mut snapped_input_resolution = input_resolution;
 
-        while snapped_input_resolution * 2.0 < target_resolution {
-            snapped_input_resolution = snapped_input_resolution * 2.0;
+        // stops if the resolution would overflow
+        while let Some(next_resolution) =
+            snapped_input_resolution.checked_mul(PositiveFiniteF64::TWO)
+            && next_resolution < target_resolution
+        {
+            snapped_input_resolution = next_resolution;
         }
 
         let optimzed_source = self.raster_source.optimize(snapped_input_resolution)?;
@@ -1091,7 +1096,7 @@ mod tests {
                 TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1.0, -1.0),
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),

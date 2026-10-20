@@ -108,7 +108,7 @@ pub fn raster_tile_from_file<T: Pixel + GdalType>(
 ) -> Result<RasterTile2D<T>> {
     let ds = gdal_open_dataset(file_path)?;
 
-    let gf: GeoTransform = ds.geo_transform()?.into();
+    let gf: GeoTransform = ds.geo_transform()?.try_into()?;
 
     let tiling_strategy = tiling_spatial_grid.generate_data_tiling_strategy();
 

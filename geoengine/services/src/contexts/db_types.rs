@@ -1501,9 +1501,13 @@ delegate_from_to_sql!(DataPath, DataPathDbType);
 mod tests {
     use geoengine_datatypes::{
         dataset::DataProviderId,
-        primitives::{CacheTtlSeconds, Coordinate2D, SpatialPartition2D, TimeInterval},
-        util::Identifier,
+        primitives::{
+            CacheTtlSeconds, Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
+        raster::GeoTransform,
+        util::{Identifier, NonZeroFiniteF64},
     };
+    use geoengine_operators::source::GdalDatasetGeoTransform;
     use tokio_postgres::NoTls;
 
     use super::*;
@@ -1626,8 +1630,75 @@ mod tests {
                 ],
             )
             .await;
+
+            assert_sql_type(
+                &pool,
+                "GeoTransform",
+                [
+                    GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
+                    // upside-down
+                    GeoTransform::new_unchecked((0., 0.).into(), 1., 1.),
+                ],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "SpatialResolution",
+                [SpatialResolution::new_unchecked(0.5, 2.)],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalDatasetGeoTransform",
+                [GdalDatasetGeoTransform {
+                    origin_coordinate: (1., 2.).into(),
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.25),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.25),
+                }],
+            )
+            .await;
         })
         .await;
+    }
+
+    #[ge_context::test]
+    async fn it_rejects_invalid_pixel_sizes_when_loading(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> crate::error::Result<()> {
+        let conn = app_ctx.pool.get().await?;
+
+        let row = conn
+            .query_one(
+                r#"SELECT ROW(ROW(0, 0)::"Coordinate2D", 0, -1)::"GeoTransform""#,
+                &[],
+            )
+            .await?;
+        assert!(row.try_get::<_, GeoTransform>(0).is_err());
+
+        let row = conn
+            .query_one(
+                r#"SELECT ROW(ROW(0, 0)::"Coordinate2D", 1, 'NaN')::"GdalDatasetGeoTransform""#,
+                &[],
+            )
+            .await?;
+        assert!(row.try_get::<_, GdalDatasetGeoTransform>(0).is_err());
+
+        let row = conn
+            .query_one(r#"SELECT ROW(-1, 1)::"SpatialResolution""#, &[])
+            .await?;
+        assert!(row.try_get::<_, SpatialResolution>(0).is_err());
+
+        let row = conn
+            .query_one(r#"SELECT ROW(1, 1)::"SpatialResolution""#, &[])
+            .await?;
+        assert_eq!(
+            row.try_get::<_, SpatialResolution>(0)?,
+            SpatialResolution::new_unchecked(1., 1.)
+        );
+
+        Ok(())
     }
 
     #[ge_context::test]

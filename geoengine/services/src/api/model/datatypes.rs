@@ -6,8 +6,8 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
 use geoengine_datatypes::raster::GridBounds;
+use geoengine_datatypes::util::{NonNanF64, NonZeroFiniteF64, PositiveFiniteF64};
 use geoengine_macros::type_tag;
-use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 use serde::de::Error as SerdeError;
 use serde::ser::SerializeMap;
@@ -19,6 +19,7 @@ use std::{
     fmt::{Debug, Formatter},
     str::FromStr,
 };
+use typed_floats::tf64::NonNaN;
 use utoipa::{PartialSchema, ToSchema, openapi};
 
 identifier!(DataProviderId);
@@ -803,23 +804,27 @@ impl From<SpatialGridDefinition> for geoengine_datatypes::raster::SpatialGridDef
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
-    pub x_pixel_size: f64,
-    pub y_pixel_size: f64,
+    // finite and non-zero
+    #[schema(value_type = f64)]
+    pub x_pixel_size: NonZeroFiniteF64,
+    // finite and non-zero
+    #[schema(value_type = f64)]
+    pub y_pixel_size: NonZeroFiniteF64,
 }
 
 impl From<geoengine_datatypes::raster::GeoTransform> for GeoTransform {
     fn from(value: geoengine_datatypes::raster::GeoTransform) -> Self {
         GeoTransform {
             origin_coordinate: value.origin_coordinate().into(),
-            x_pixel_size: value.x_pixel_size(),
-            y_pixel_size: value.y_pixel_size(),
+            x_pixel_size: value.x_pixel_size_typed(),
+            y_pixel_size: value.y_pixel_size_typed(),
         }
     }
 }
 
 impl From<GeoTransform> for geoengine_datatypes::raster::GeoTransform {
     fn from(value: GeoTransform) -> Self {
-        geoengine_datatypes::raster::GeoTransform::new(
+        geoengine_datatypes::raster::GeoTransform::new_typed(
             value.origin_coordinate.into(),
             value.x_pixel_size,
             value.y_pixel_size,
@@ -1226,25 +1231,26 @@ impl TryFrom<BandSelection> for geoengine_datatypes::primitives::BandSelection {
 /// The spatial resolution in SRS units
 #[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
 pub struct SpatialResolution {
-    pub x: f64,
-    pub y: f64,
+    // finite and positive
+    #[schema(value_type = f64)]
+    pub x: PositiveFiniteF64,
+    // finite and positive
+    #[schema(value_type = f64)]
+    pub y: PositiveFiniteF64,
 }
 
 impl From<geoengine_datatypes::primitives::SpatialResolution> for SpatialResolution {
     fn from(value: geoengine_datatypes::primitives::SpatialResolution) -> Self {
         Self {
-            x: value.x,
-            y: value.y,
+            x: value.x_typed(),
+            y: value.y_typed(),
         }
     }
 }
 
 impl From<SpatialResolution> for geoengine_datatypes::primitives::SpatialResolution {
     fn from(value: SpatialResolution) -> Self {
-        Self {
-            x: value.x,
-            y: value.y,
-        }
+        Self::new_typed(value.x, value.y)
     }
 }
 
@@ -1572,54 +1578,8 @@ impl From<RgbaColor> for geoengine_datatypes::operations::image::RgbaColor {
 /// A container type for breakpoints that specify a value to color mapping
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Breakpoint {
-    pub value: NotNanF64,
+    pub value: NonNanF64,
     pub color: RgbaColor,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct NotNanF64(NotNan<f64>);
-
-impl From<NotNan<f64>> for NotNanF64 {
-    fn from(value: NotNan<f64>) -> Self {
-        Self(value)
-    }
-}
-
-impl From<NotNanF64> for NotNan<f64> {
-    fn from(value: NotNanF64) -> Self {
-        value.0
-    }
-}
-
-impl ToSql for NotNanF64 {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        w: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        <f64 as ToSql>::to_sql(&self.0.into_inner(), ty, w)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        <f64 as ToSql>::accepts(ty)
-    }
-
-    postgres_types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for NotNanF64 {
-    fn from_sql(
-        ty: &postgres_types::Type,
-        raw: &'a [u8],
-    ) -> Result<NotNanF64, Box<dyn std::error::Error + Sync + Send>> {
-        let value = <f64 as FromSql>::from_sql(ty, raw)?;
-
-        Ok(NotNanF64(value.try_into()?))
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        <f64 as FromSql>::accepts(ty)
-    }
 }
 
 impl PartialSchema for Breakpoint {
@@ -1634,7 +1594,7 @@ impl PartialSchema for Breakpoint {
     }
 }
 
-// manual implementation because of NotNan
+// manual implementation because of NonNanF64
 impl ToSchema for Breakpoint {}
 
 impl From<geoengine_datatypes::operations::image::Breakpoint> for Breakpoint {
@@ -1960,7 +1920,7 @@ impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterCol
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
 #[schema(value_type = HashMap<f64, RgbaColor>)]
-pub struct Palette(pub HashMap<NotNan<f64>, RgbaColor>);
+pub struct Palette(pub HashMap<NonNaN, RgbaColor>);
 
 impl From<geoengine_datatypes::operations::image::Palette> for Palette {
     fn from(palette: geoengine_datatypes::operations::image::Palette) -> Self {
@@ -2004,10 +1964,10 @@ impl From<Palette> for SerializablePalette {
 }
 
 impl TryFrom<SerializablePalette> for Palette {
-    type Error = <NotNan<f64> as FromStr>::Err;
+    type Error = <NonNaN as FromStr>::Err;
 
     fn try_from(palette: SerializablePalette) -> Result<Self, Self::Error> {
-        let mut inner = HashMap::<NotNan<f64>, RgbaColor>::with_capacity(palette.0.len());
+        let mut inner = HashMap::<NonNaN, RgbaColor>::with_capacity(palette.0.len());
         for (k, v) in palette.0 {
             inner.insert(k.parse()?, v);
         }

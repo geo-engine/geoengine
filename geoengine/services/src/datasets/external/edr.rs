@@ -745,7 +745,7 @@ impl EdrCollectionMetaData {
                     .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
                         source: Box::new(e),
                     })?
-                    .into(),
+                    .try_into()?,
                 width: rasterband.x_size(),
                 height: rasterband.y_size(),
                 file_not_found_handling: FileNotFoundHandling::NoData,
@@ -1214,11 +1214,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             .expect("there must be at least one element");
         // TODO: we need the GeoTransform and GridShape to produce the result descriptor. Since we already have the dataset open, we could also get it from there.
         let gdal_geotransform = first_params.geo_transform;
-        let geo_transform: GeoTransform = gdal_geotransform.try_into().map_err(|e| {
-            geoengine_operators::error::Error::LoadingInfo {
-                source: Box::new(e),
-            }
-        })?;
+        let geo_transform: GeoTransform = gdal_geotransform.into();
         let grid_shape: geoengine_datatypes::raster::GridShape<[usize; 2]> =
             GridShape2D::new_2d(first_params.height, first_params.width);
 
@@ -1284,6 +1280,7 @@ mod tests {
         ge_context,
     };
     use futures::FutureExt;
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
         hashmap,
@@ -1840,8 +1837,8 @@ mod tests {
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (0., -90.).into(),
-                            x_pixel_size: 0.499_305_555_555_555_6,
-                            y_pixel_size: 0.498_614_958_448_753_5,
+                            x_pixel_size: NonZeroFiniteF64::new_unchecked(0.499_305_555_555_555_6),
+                            y_pixel_size: NonZeroFiniteF64::new_unchecked(0.498_614_958_448_753_5),
                         },
                         width: 720,
                         height: 361,
@@ -1870,8 +1867,8 @@ mod tests {
                         rasterband_channel: 1,
                         geo_transform: GdalDatasetGeoTransform {
                             origin_coordinate: (0., -90.).into(),
-                            x_pixel_size: 0.499_305_555_555_555_6,
-                            y_pixel_size: 0.498_614_958_448_753_5,
+                            x_pixel_size: NonZeroFiniteF64::new_unchecked(0.499_305_555_555_555_6),
+                            y_pixel_size: NonZeroFiniteF64::new_unchecked(0.498_614_958_448_753_5),
                         },
                         width: 720,
                         height: 361,
@@ -1904,7 +1901,7 @@ mod tests {
                         TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000)
                     )),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new(
+                        GeoTransform::new_unchecked(
                             (0., 90.).into(),
                             0.499_305_555_555_555_6,
                             -0.498_614_958_448_753_5

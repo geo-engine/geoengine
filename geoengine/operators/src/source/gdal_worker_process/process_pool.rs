@@ -992,6 +992,7 @@ mod tests {
     use super::*;
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
+    use geoengine_datatypes::util::NonZeroFiniteF64;
 
     /// Creates a window from min/max `[row, col]` indices.
     fn window(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
@@ -1127,8 +1128,8 @@ mod tests {
             rasterband_channel: band,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: Coordinate2D::new(0.0, 0.0),
-                x_pixel_size: 1.0,
-                y_pixel_size: -1.0,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
             },
             width: 256,
             height: 256,

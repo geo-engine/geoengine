@@ -52,15 +52,13 @@ futures = { workspace = true }
 futures-util = { workspace = true }
 gdal = { workspace = true }
 geo = { workspace = true }
+geoengine-api-client = { path = "../../api-clients/rust" }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-expression = { path = "../expression" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
-geoengine-api-client = { path = "../../api-clients/rust" }
 geojson = { workspace = true }
 itertools = { workspace = true }
-tracing = { workspace = true }
-tracing-appender = { workspace = true }
 mime = { workspace = true }
 num-traits = { workspace = true }
 oauth2 = { workspace = true }
@@ -69,7 +67,6 @@ openidconnect = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
-ordered-float = { workspace = true }
 paste = { workspace = true }
 pbkdf2 = { workspace = true }
 postgres-protocol = { workspace = true }
@@ -96,9 +93,12 @@ time = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
 tonic = { workspace = true }
+tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
+tracing-appender = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
+typed_floats = { workspace = true }
 url = { workspace = true }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }

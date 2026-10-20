@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used)] // okay in tests
 
+use geoengine_datatypes::util::NonZeroFiniteF64;
+
 use crate::{
     api::{
         handlers::{self},
@@ -290,8 +292,8 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: Coordinate2D { x: -180., y: 90.},
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                 },
                 width: 3600,
                 height: 1800,
@@ -308,7 +310,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
                 time: TimeDescriptor::new_irregular(Some(geoengine_datatypes::primitives::TimeInterval::default())),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                 GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
+                 GeoTransform::new_unchecked(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
                  GridBoundingBox2D::new_min_max(0,1799, 0, 1599).unwrap(),
                 ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 

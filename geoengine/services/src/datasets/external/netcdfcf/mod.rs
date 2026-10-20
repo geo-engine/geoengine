@@ -539,8 +539,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
         };
 
         let pixel_shape = GridShape2D::new_2d(params.height as usize, params.width as usize);
-        let geo_transform =
-            GeoTransform::try_from(params.geo_transform).expect("GeoTransform must be valid"); // TODO: check how the axis in netcfd are stored;
+        let geo_transform = GeoTransform::from(params.geo_transform); // TODO: check how the axis in netcfd are stored;
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::from_gdal_data_type(
@@ -874,7 +873,9 @@ fn parse_geo_transform(input: &str) -> Result<GdalDatasetGeoTransform> {
         numbers[0], numbers[1], numbers[2], numbers[3], numbers[4], numbers[5],
     ];
 
-    Ok(gdal_geo_transform.into())
+    gdal_geo_transform
+        .try_into()
+        .context(error::InvalidGeoTransformPixelSize)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1633,6 +1634,7 @@ mod tests {
     use geoengine_datatypes::raster::RenameBands;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         primitives::TimeInterval, spatial_reference::SpatialReferenceAuthority, test_data,
         util::gdal::hide_gdal_errors,
@@ -2005,7 +2007,7 @@ mod tests {
                     .into(),
                 time: TimeDescriptor::new_irregular(None),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0), // FIXME: move to tiling bounds
+                    GeoTransform::new_unchecked((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0), // FIXME: move to tiling bounds
                     GridBoundingBox2D::new(
                         [0, 0], // 0
                         [9, 9]  // 10
@@ -2051,8 +2053,8 @@ mod tests {
                     rasterband_channel: 4,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (3_580_000.0, 2_370_000.0).into(),
-                        x_pixel_size: 1000.0,
-                        y_pixel_size: -1000.0,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(1000.0),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-1000.0),
                     },
                     width: 10,
                     height: 10,
@@ -2140,7 +2142,7 @@ mod tests {
                     .into(),
                 time: TimeDescriptor::new_irregular(None),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0),
+                    GeoTransform::new_unchecked((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0),
                     GridBoundingBox2D::new(
                         [0, 0], // 0
                         [9, 9]  // 10
@@ -2181,8 +2183,8 @@ mod tests {
                     rasterband_channel: 1,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: (3_580_000.0, 2_370_000.0).into(),
-                        x_pixel_size: 1000.0,
-                        y_pixel_size: -1000.0,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(1000.0),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-1000.0),
                     },
                     width: 10,
                     height: 10,

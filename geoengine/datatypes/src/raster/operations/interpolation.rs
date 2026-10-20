@@ -183,7 +183,7 @@ mod tests {
             TileInformation {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 3].into(),
-                global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
+                global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
             GridOrEmpty::Grid(MaskedGrid::from(
@@ -198,7 +198,7 @@ mod tests {
         let output_info = TileInformation {
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [3, 3].into(),
-            global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
+            global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 0.5, -0.5),
         };
 
         let output_geo_transform = output_info.global_geo_transform;
@@ -268,7 +268,7 @@ mod tests {
             TileInformation {
                 global_tile_position: [0, 0].into(),
                 tile_size_in_pixels: [3, 3].into(),
-                global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 1.0, -1.0),
+                global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
             GridOrEmpty::Grid(MaskedGrid::from(
@@ -283,7 +283,7 @@ mod tests {
         let output_info = TileInformation {
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [4, 4].into(),
-            global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
+            global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 0.5, -0.5),
         };
 
         let output_geo_transform = output_info.global_geo_transform;

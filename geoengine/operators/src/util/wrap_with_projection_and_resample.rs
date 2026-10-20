@@ -129,8 +129,8 @@ impl WrapWithProjectionAndResample {
         }
 
         // Query resolution is smaller than workflow => compute on full resolution and append interpolation to decrease resolution
-        if target_spatial_grid.spatial_resolution().x <= rd_resolution.x
-            && target_spatial_grid.spatial_resolution().y <= rd_resolution.y
+        if target_spatial_grid.spatial_resolution().x() <= rd_resolution.x()
+            && target_spatial_grid.spatial_resolution().y() <= rd_resolution.y()
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
         {
             self.interpolation(

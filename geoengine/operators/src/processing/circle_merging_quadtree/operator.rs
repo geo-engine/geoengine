@@ -11,6 +11,7 @@ use geoengine_datatypes::primitives::{
     MultiPointAccess, SpatialBounded, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
+use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -36,9 +37,9 @@ use super::quadtree::CircleMergingQuadtree;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct VisualPointClusteringParams {
-    pub min_radius_px: f64,
-    pub delta_px: f64,
-    pub resolution: f64,
+    pub min_radius_px: PositiveFiniteF64,
+    pub delta_px: NonNegativeFiniteF64,
+    pub resolution: PositiveFiniteF64,
     pub radius_column: String,
     pub count_column: String,
     pub column_aggregates: HashMap<String, AttributeAggregateDef>,
@@ -68,27 +69,6 @@ impl VectorOperator for VisualPointClustering {
         path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
-        ensure!(
-            self.params.min_radius_px > 0.0,
-            error::InputMustBeGreaterThanZero {
-                scope: "VisualPointClustering",
-                name: "minRadius"
-            }
-        );
-        ensure!(
-            self.params.delta_px >= 0.0,
-            error::InputMustBeZeroOrPositive {
-                scope: "VisualPointClustering",
-                name: "deltaPx"
-            }
-        );
-        ensure!(
-            self.params.resolution >= 0.0,
-            error::InputMustBeZeroOrPositive {
-                scope: "VisualPointClustering",
-                name: "resolution"
-            }
-        );
         ensure!(!self.params.radius_column.is_empty(), error::EmptyInput);
         ensure!(
             self.params.count_column != self.params.radius_column,
@@ -97,7 +77,7 @@ impl VectorOperator for VisualPointClustering {
 
         let name = CanonicOperatorName::from(&self);
 
-        let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px)?;
+        let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px);
 
         let initialized_sources = self
             .sources
@@ -216,7 +196,7 @@ pub struct InitializedVisualPointClustering {
     radius_column: String,
     count_column: String,
     attribute_mapping: HashMap<String, AttributeAggregateDef>,
-    resolution: f64,
+    resolution: PositiveFiniteF64,
 }
 
 impl InitializedVectorOperator for InitializedVisualPointClustering {
@@ -288,7 +268,7 @@ pub struct VisualPointClusteringProcessor {
     count_column: String,
     result_descriptor: VectorResultDescriptor,
     attribute_mapping: HashMap<String, AttributeAggregateDef>,
-    resolution: f64,
+    resolution: PositiveFiniteF64,
 }
 
 impl VisualPointClusteringProcessor {
@@ -299,7 +279,7 @@ impl VisualPointClusteringProcessor {
         count_column: String,
         result_descriptor: VectorResultDescriptor,
         attribute_mapping: HashMap<String, AttributeAggregateDef>,
-        resolution: f64,
+        resolution: PositiveFiniteF64,
     ) -> Self {
         Self {
             source,
@@ -519,7 +499,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 &self.count_column,
                 &column_schema,
                 cache_hint,
-                self.resolution,
+                self.resolution.get(),
             )
         });
 
@@ -559,9 +539,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                resolution: 0.1,
+                min_radius_px: PositiveFiniteF64::new_unchecked(8.),
+                delta_px: NonNegativeFiniteF64::new_unchecked(1.),
+                resolution: PositiveFiniteF64::new_unchecked(0.1),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: Default::default(),
@@ -633,9 +613,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                resolution: 0.1,
+                min_radius_px: PositiveFiniteF64::new_unchecked(8.),
+                delta_px: NonNegativeFiniteF64::new_unchecked(1.),
+                resolution: PositiveFiniteF64::new_unchecked(0.1),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -718,9 +698,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                resolution: 0.1,
+                min_radius_px: PositiveFiniteF64::new_unchecked(8.),
+                delta_px: NonNegativeFiniteF64::new_unchecked(1.),
+                resolution: PositiveFiniteF64::new_unchecked(0.1),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -811,9 +791,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                resolution: 0.1,
+                min_radius_px: PositiveFiniteF64::new_unchecked(8.),
+                delta_px: NonNegativeFiniteF64::new_unchecked(1.),
+                resolution: PositiveFiniteF64::new_unchecked(0.1),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -919,9 +899,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                resolution: 0.1,
+                min_radius_px: PositiveFiniteF64::new_unchecked(8.),
+                delta_px: NonNegativeFiniteF64::new_unchecked(1.),
+                resolution: PositiveFiniteF64::new_unchecked(0.1),
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(

@@ -4,13 +4,13 @@ use crate::primitives::BandSelection;
 use crate::raster::Pixel;
 use crate::util::Result;
 use crate::util::test::TestDefault;
-use ordered_float::{FloatIsNan, NotNan};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
+use typed_floats::{InvalidNumber, tf64::NonNaN};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -211,7 +211,7 @@ impl Colorizer {
     /// A palette maps values as classes to a certain color.
     /// Unmapped values results in the NO DATA color
     pub fn palette(
-        colors: HashMap<NotNan<f64>, RgbaColor>,
+        colors: HashMap<NonNaN, RgbaColor>,
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     ) -> Result<Self> {
@@ -252,7 +252,7 @@ impl Colorizer {
     pub fn min_value(&self) -> f64 {
         match self {
             Self::LinearGradient { breakpoints, .. }
-            | Self::LogarithmicGradient { breakpoints, .. } => *breakpoints[0].value,
+            | Self::LogarithmicGradient { breakpoints, .. } => breakpoints[0].value.get(),
             Self::Palette { .. } => f64::from(u8::MIN),
         }
     }
@@ -281,7 +281,7 @@ impl Colorizer {
         match self {
             Self::LinearGradient { breakpoints, .. }
             | Self::LogarithmicGradient { breakpoints, .. } => {
-                *breakpoints[breakpoints.len() - 1].value
+                breakpoints[breakpoints.len() - 1].value.get()
             }
             Self::Palette { .. } => f64::from(u8::MAX),
         }
@@ -422,8 +422,8 @@ impl Colorizer {
             return Vec::new();
         };
 
-        let smallest_breakpoint_value = *breakpoints[0].value;
-        let largest_breakpoint_value = *breakpoints[breakpoints.len() - 1].value;
+        let smallest_breakpoint_value = breakpoints[0].value.get();
+        let largest_breakpoint_value = breakpoints[breakpoints.len() - 1].value.get();
 
         let step = (max - min) / ((number_of_colors - 1) as f64);
 
@@ -439,15 +439,15 @@ impl Colorizer {
                 } else if value > largest_breakpoint_value {
                     self.over_color()
                 } else {
-                    while value > *breakpoint_next.value {
+                    while value > breakpoint_next.value.get() {
                         breakpoint_prev = breakpoint_next;
                         breakpoint_next = breakpoint_iter
                             .next()
                             .expect("if-condition must ensure this");
                     }
 
-                    let prev_value = *breakpoint_prev.value;
-                    let next_value = *breakpoint_next.value;
+                    let prev_value = breakpoint_prev.value.get();
+                    let next_value = breakpoint_next.value.get();
 
                     let prev_color = breakpoint_prev.color;
                     let next_color = breakpoint_next.color;
@@ -622,7 +622,7 @@ impl ColorMapper<'_> {
                 no_data_color,
                 default_color,
             } => {
-                if let Ok(value) = NotNan::<f64>::new(value.as_()) {
+                if let Ok(value) = NonNaN::new(value.as_()) {
                     *color_map.0.get(&value).unwrap_or(default_color)
                 } else {
                     *no_data_color
@@ -636,12 +636,12 @@ impl ColorMapper<'_> {
 /// A container type for breakpoints that specify a value to color mapping
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Breakpoint {
-    pub value: NotNan<f64>,
+    pub value: NonNaN,
     pub color: RgbaColor,
 }
 
-impl From<(NotNan<f64>, RgbaColor)> for Breakpoint {
-    fn from(tuple: (NotNan<f64>, RgbaColor)) -> Self {
+impl From<(NonNaN, RgbaColor)> for Breakpoint {
+    fn from(tuple: (NonNaN, RgbaColor)) -> Self {
         Self {
             value: tuple.0,
             color: tuple.1,
@@ -650,11 +650,11 @@ impl From<(NotNan<f64>, RgbaColor)> for Breakpoint {
 }
 
 impl TryFrom<(f64, RgbaColor)> for Breakpoint {
-    type Error = FloatIsNan;
+    type Error = InvalidNumber;
 
     fn try_from(tuple: (f64, RgbaColor)) -> Result<Self, Self::Error> {
         Ok(Self {
-            value: NotNan::new(tuple.0)?,
+            value: NonNaN::new(tuple.0)?,
             color: tuple.1,
         })
     }
@@ -671,18 +671,18 @@ pub type Breakpoints = Vec<Breakpoint>;
 /// It is assumed that is has at least one and at most 256 entries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
-pub struct Palette(HashMap<NotNan<f64>, RgbaColor>);
+pub struct Palette(HashMap<NonNaN, RgbaColor>);
 
 impl Palette {
-    pub fn new(map: HashMap<NotNan<f64>, RgbaColor>) -> Self {
+    pub fn new(map: HashMap<NonNaN, RgbaColor>) -> Self {
         Self(map)
     }
 
-    pub fn into_inner(self) -> HashMap<NotNan<f64>, RgbaColor> {
+    pub fn into_inner(self) -> HashMap<NonNaN, RgbaColor> {
         self.0
     }
 
-    pub fn inner(&self) -> &HashMap<NotNan<f64>, RgbaColor> {
+    pub fn inner(&self) -> &HashMap<NonNaN, RgbaColor> {
         &self.0
     }
 }
@@ -705,10 +705,10 @@ impl From<Palette> for SerializablePalette {
 }
 
 impl TryFrom<SerializablePalette> for Palette {
-    type Error = <NotNan<f64> as FromStr>::Err;
+    type Error = <NonNaN as FromStr>::Err;
 
     fn try_from(palette: SerializablePalette) -> Result<Self, Self::Error> {
-        let mut inner = HashMap::<NotNan<f64>, RgbaColor>::with_capacity(palette.0.len());
+        let mut inner = HashMap::<NonNaN, RgbaColor>::with_capacity(palette.0.len());
         for (k, v) in palette.0 {
             inner.insert(k.parse()?, v);
         }

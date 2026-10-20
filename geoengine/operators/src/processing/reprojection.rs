@@ -641,11 +641,11 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
 
         // TODO: use `find_next_best_resolution_overview_level` instead?
         let output_overview_level_factor =
-            (target_resolution.x / current_resolution.x).round() as u32;
+            (target_resolution.x() / current_resolution.x()).round() as u32;
         // must be the same in x and y
         debug_assert_eq!(
             output_overview_level_factor,
-            (target_resolution.y / current_resolution.y).round() as u32
+            (target_resolution.y() / current_resolution.y()).round() as u32
         );
         // must be a power of 2
         debug_assert!(output_overview_level_factor.is_power_of_two());
@@ -653,7 +653,14 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
         let input_descriptor = self.source.result_descriptor();
 
         let input_resolution = input_descriptor.spatial_grid.spatial_resolution();
-        let scaled_input_resolution = input_resolution * f64::from(output_overview_level_factor);
+        // a factor of 0 means the target is finer than the current resolution
+        let scaled_input_resolution = (input_resolution * f64::from(output_overview_level_factor))
+            .map_err(|_| {
+                OptimizationError::TargetResolutionMustNotBeSmallerThanSourceResolution {
+                    source_resolution: current_resolution,
+                    target_resolution,
+                }
+            })?;
 
         let source_optimized = self.source.optimize(scaled_input_resolution)?;
 
@@ -859,6 +866,7 @@ mod tests {
         GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, SpatialGridDefinition,
         TilesEqualIgnoringCacheHint,
     };
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,
@@ -1205,7 +1213,7 @@ mod tests {
             },
         ];
 
-        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
+        let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.);
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1318,7 +1326,7 @@ mod tests {
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
-                .x,
+                .x(),
             epsilon = 0.000_001
         );
 
@@ -1328,7 +1336,7 @@ mod tests {
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
-                .y,
+                .y(),
             epsilon = 0.000_001
         );
 
@@ -1424,7 +1432,7 @@ mod tests {
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
         let tile_size_in_pixels = [200, 200].into();
-        let data_geo_transform = GeoTransform::new(
+        let data_geo_transform = GeoTransform::new_unchecked(
             Coordinate2D::new(-20_037_508.342_789_244, 19_971_868.880_408_562),
             14_052.950_258_048_738,
             -14_057.881_117_788_405,
@@ -1467,8 +1475,12 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: data_geo_transform.origin_coordinate,
-                    x_pixel_size: data_geo_transform.x_pixel_size(),
-                    y_pixel_size: data_geo_transform.y_pixel_size(),
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(
+                        data_geo_transform.x_pixel_size(),
+                    ),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(
+                        data_geo_transform.y_pixel_size(),
+                    ),
                 },
                 width: data_bounds.axis_size_x(),
                 height: data_bounds.axis_size_y(),
@@ -1555,7 +1567,7 @@ mod tests {
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636).into(),
             time: crate::engine::TimeDescriptor::new_irregular(None),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(
+                GeoTransform::new_unchecked(
                     Coordinate2D::new(166_021.44, 9_329_005.188),
                     534_994.66 - 166_021.444,
                     -9_329_005.18,
@@ -1572,8 +1584,10 @@ mod tests {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: (166_021.44, 9_329_005.188).into(),
-                    x_pixel_size: (534_994.66 - 166_021.444) / 100.,
-                    y_pixel_size: -9_329_005.18 / 100.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(
+                        (534_994.66 - 166_021.444) / 100.,
+                    ),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-9_329_005.18 / 100.),
                 },
                 width: 100,
                 height: 100,
@@ -1890,7 +1904,7 @@ mod tests {
         let in_proj = SpatialReference::epsg_4326();
         let out_proj = SpatialReference::from_str("EPSG:3857").unwrap();
 
-        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 0.1, -0.1);
+        let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.1, -0.1);
         let grid_bounds = GridBoundingBox2D::new_min_max(-850, 849, -1800, 1799).unwrap();
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 

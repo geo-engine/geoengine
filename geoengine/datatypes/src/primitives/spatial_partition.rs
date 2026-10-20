@@ -79,12 +79,12 @@ impl SpatialPartition2D {
 
         let upper_left = bbox.upper_left();
 
-        let x_pixels = ((bbox.size_x() + EPSILON * resolution.x) / resolution.x).ceil();
-        let y_pixels = ((bbox.size_y() + EPSILON * resolution.y) / resolution.y).ceil();
+        let x_pixels = ((bbox.size_x() + EPSILON * resolution.x()) / resolution.x()).ceil();
+        let y_pixels = ((bbox.size_y() + EPSILON * resolution.y()) / resolution.y()).ceil();
 
         let snapped_lower_right = Coordinate2D::new(
-            upper_left.x + x_pixels * resolution.x,
-            upper_left.y - y_pixels * resolution.y,
+            upper_left.x + x_pixels * resolution.x(),
+            upper_left.y - y_pixels * resolution.y(),
         );
 
         SpatialPartition2D::new_unchecked(upper_left, snapped_lower_right)
@@ -229,13 +229,13 @@ impl SpatialPartition2D {
     pub fn snap_to_grid(&self, origin: Coordinate2D, resolution: SpatialResolution) -> Self {
         Self {
             upper_left_coordinate: (
-                snap_prev(origin.x, resolution.x, self.upper_left().x),
-                snap_next(origin.y, resolution.y, self.upper_left().y),
+                snap_prev(origin.x, resolution.x(), self.upper_left().x),
+                snap_next(origin.y, resolution.y(), self.upper_left().y),
             )
                 .into(),
             lower_right_coordinate: (
-                snap_next(origin.x, resolution.x, self.lower_right().x),
-                snap_prev(origin.y, resolution.y, self.lower_right().y),
+                snap_next(origin.x, resolution.x(), self.lower_right().x),
+                snap_prev(origin.y, resolution.y(), self.lower_right().y),
             )
                 .into(),
         }
@@ -247,8 +247,8 @@ impl SpatialPartition2D {
         let snapped = self.snap_to_grid(origin, resolution);
 
         [
-            (snapped.size_y() / resolution.y).round() as usize,
-            (snapped.size_x() / resolution.x).round() as usize,
+            (snapped.size_y() / resolution.y()).round() as usize,
+            (snapped.size_x() / resolution.x()).round() as usize,
         ]
         .into()
     }
@@ -499,7 +499,7 @@ mod tests {
     #[test]
     fn it_snaps_to_grid() {
         let origin = Coordinate2D::new(1., 1.);
-        let resolution = SpatialResolution { x: 3., y: 5. };
+        let resolution = SpatialResolution::new_unchecked(3., 5.);
         let p = SpatialPartition2D::new_unchecked((2., 10.).into(), (6., 2.).into());
 
         assert_eq!(

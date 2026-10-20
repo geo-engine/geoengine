@@ -318,7 +318,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(time_interval)),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
             ),
             bands: RasterBandDescriptors::new(vec![
@@ -444,7 +444,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_irregular(Some(time_interval)),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
             ),
             bands: RasterBandDescriptors::new(vec![

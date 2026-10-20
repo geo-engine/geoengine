@@ -824,6 +824,7 @@ mod tests {
         RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileInformation,
         TilesEqualIgnoringCacheHint, TilingStrategy,
     };
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
 
     async fn query_gdal_source(
@@ -883,7 +884,7 @@ mod tests {
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
-        let dataset_geo_transform = GeoTransform::new(
+        let dataset_geo_transform = GeoTransform::new_unchecked(
             dataset_upper_right_coord,
             dataset_x_pixel_size,
             dataset_y_pixel_size,
@@ -920,7 +921,7 @@ mod tests {
         let tile_size_in_pixels = [600, 600];
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
-        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
+        let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
             0.0,
             dataset_x_pixel_size,
             0.0,
@@ -958,7 +959,7 @@ mod tests {
         let tile_size_in_pixels = [600, 600];
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
-        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
+        let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
             0.0,
             dataset_x_pixel_size,
             0.0,
@@ -988,7 +989,7 @@ mod tests {
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
 
-        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
+        let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
             0.0,
             dataset_x_pixel_size,
             0.0,
@@ -1217,7 +1218,7 @@ mod tests {
         partition: SpatialPartition2D,
         shape: GridShape2D,
     ) -> TileInformation {
-        let real_geotransform = GeoTransform::new(
+        let real_geotransform = GeoTransform::new_unchecked(
             partition.upper_left(),
             partition.size_x() / shape.axis_size_x() as f64,
             -partition.size_y() / shape.axis_size_y() as f64,
@@ -1280,8 +1281,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 3600,
             height: 1800,

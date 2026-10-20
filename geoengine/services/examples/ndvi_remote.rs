@@ -393,7 +393,7 @@ fn create_raster_tile(
         MaskedGrid2D::new(Grid2D::new(grid_shape, ndvi.data.clone())?, validity_grid)?;
     let grid_or_empty: GridOrEmpty2D<f32> = masked_grid.into();
 
-    let geo_transform = GeoTransform::new(origin, pixel_size_x, pixel_size_y);
+    let geo_transform = GeoTransform::new(origin, pixel_size_x, pixel_size_y)?;
 
     let datetime: geoengine_datatypes::primitives::DateTime =
         chrono::NaiveDate::from_ymd_opt(2020, 8, 7)

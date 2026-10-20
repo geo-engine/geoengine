@@ -514,8 +514,8 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
-            || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs() > 1e-9
+        if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x()).abs() > 1e-9
+            || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y()).abs() > 1e-9
         {
             return Ok(());
         }
@@ -570,8 +570,8 @@ impl StacMultiBandMetaData {
                     rasterband_channel,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: geo_transform.origin_coordinate(),
-                        x_pixel_size: geo_transform.x_pixel_size(),
-                        y_pixel_size: geo_transform.y_pixel_size(),
+                        x_pixel_size: geo_transform.x_pixel_size_typed(),
+                        y_pixel_size: geo_transform.y_pixel_size_typed(),
                     },
                     width,
                     height,
@@ -766,7 +766,7 @@ mod tests {
                 resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                 projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                    GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                         .unwrap(),
                 ),
@@ -927,7 +927,7 @@ mod tests {
             let tile = TileInformation::new(
                 GridIdx2D::new([0, 0]),
                 GridShape::new([2, 2]),
-                GeoTransform::new(bounds.upper_left(), 10., -10.),
+                GeoTransform::new_unchecked(bounds.upper_left(), 10., -10.),
             );
             // The second lookup must reuse the cached file parameters without another request.
             for _ in 0..2 {
@@ -981,7 +981,7 @@ mod tests {
         let tile = TileInformation::new(
             GridIdx2D::new([0, 0]),
             GridShape::new([1000, 1000]),
-            GeoTransform::new(bounds.upper_left(), 10., -10.),
+            GeoTransform::new_unchecked(bounds.upper_left(), 10., -10.),
         );
 
         // Exercise the initial query, its cached result, and an instant query.
@@ -1267,7 +1267,8 @@ mod tests {
             "loading_info should contain time step for 2026-01-03, got {time_steps:?}"
         );
 
-        let tile_geo_transform = GeoTransform::new((499_980.0, 5_800_020.0).into(), 10.0, -10.0);
+        let tile_geo_transform =
+            GeoTransform::new_unchecked((499_980.0, 5_800_020.0).into(), 10.0, -10.0);
         let tile = TileInformation::new(
             GridIdx2D::new([0, 0]),
             GridShape::new([10980, 10980]),
@@ -1349,7 +1350,7 @@ mod tests {
                     resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                     projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                        GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                         GridBoundingBox2D::new(
                             GridIdx2D::new([0, 0]),
                             GridIdx2D::new([10979, 10979]),
@@ -1401,7 +1402,7 @@ mod tests {
                     resolution: SpatialResolution::new_unchecked(20.0, 20.0),
                     projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((399_960.0, 5_700_000.0).into(), 20.0, -20.0),
+                        GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 20.0, -20.0),
                         GridBoundingBox2D::new(
                             GridIdx2D::new([0, 0]),
                             GridIdx2D::new([5489, 5489]),
@@ -1507,7 +1508,7 @@ mod tests {
         for dataset in &provider_def.datasets {
             let epsg_code = dataset.projection.code();
             let data_type_str = format!("{:?}", dataset.data_type).to_lowercase();
-            let resolution = dataset.resolution.x as u32;
+            let resolution = dataset.resolution.x() as u32;
             let stable_id = format!("epsg{epsg_code}_{data_type_str}_{resolution}");
 
             let layer_id = geoengine_datatypes::dataset::LayerId(format!("dataset/{stable_id}"));

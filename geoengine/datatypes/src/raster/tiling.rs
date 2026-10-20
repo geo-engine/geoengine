@@ -234,10 +234,10 @@ impl TileInformation {
             .global_geo_transform
             .grid_idx_to_pixel_upper_left_coordinate_2d(self.global_upper_left_pixel_idx());
 
-        GeoTransform::new(
+        GeoTransform::new_typed(
             tile_upper_left_coord,
-            self.global_geo_transform.x_pixel_size(),
-            self.global_geo_transform.y_pixel_size(),
+            self.global_geo_transform.x_pixel_size_typed(),
+            self.global_geo_transform.y_pixel_size_typed(),
         )
     }
 
@@ -319,7 +319,7 @@ mod tests {
     fn it_generates_only_intersected_tiles() {
         let origin_coordinate = (0., 0.).into();
 
-        let geo_transform = GeoTransform::new(
+        let geo_transform = GeoTransform::new_unchecked(
             origin_coordinate,
             2.095_475_792_884_826_7E-8,
             -2.095_475_792_884_826_7E-8,
@@ -355,7 +355,7 @@ mod tests {
     fn it_generates_all_interesected_tiles() {
         let strat = TilingStrategy {
             tile_size_in_pixels: [512, 512].into(),
-            geo_transform: GeoTransform::new((0., -0.).into(), 10., -10.),
+            geo_transform: GeoTransform::new_unchecked((0., -0.).into(), 10., -10.),
         };
 
         let bounds =
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn tiling_tile_tile() {
-        let geo_transform = GeoTransform::new(
+        let geo_transform = GeoTransform::new_unchecked(
             (-1_234_567_890., 1_234_567_890.).into(),
             0.000_033_337_4,
             -0.000_033_337_4,
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn pixel_idx_to_tile_idx() {
-        let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
+        let geo_transform = GeoTransform::new_unchecked((123., 321.).into(), 1.0, -1.0);
         let tile_pixel_size = GridShape2D::new_2d(100, 100);
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn tile_idx_to_pixel_idx() {
-        let geo_transform = GeoTransform::new((123., 321.).into(), 1.0, -1.0);
+        let geo_transform = GeoTransform::new_unchecked((123., 321.).into(), 1.0, -1.0);
         let tile_pixel_size = GridShape2D::new_2d(100, 100);
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);

@@ -3,8 +3,8 @@ use crate::api::model::processing_graphs::source_parameters::{
     SingleRasterOrVectorSource, SingleRasterSource, SingleVectorSource,
 };
 use geoengine_macros::{api_operator, type_tag};
-use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
+use typed_floats::tf64::NonNaN;
 use utoipa::ToSchema;
 
 /// The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source.
@@ -88,9 +88,9 @@ pub enum HistogramBounds {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 pub struct HistogramBoundsValues {
     #[schema(value_type = f64)]
-    pub min: NotNan<f64>,
+    pub min: NonNaN,
     #[schema(value_type = f64)]
-    pub max: NotNan<f64>,
+    pub max: NonNaN,
 }
 
 fn default_max_number_of_buckets() -> u8 {
@@ -131,8 +131,8 @@ impl TryFrom<Histogram> for geoengine_operators::plot::Histogram {
                 }
                 HistogramBounds::Values(HistogramBoundsValues { min, max }) => {
                     geoengine_operators::plot::HistogramBounds::Values {
-                        min: *min,
-                        max: *max,
+                        min: min.get(),
+                        max: max.get(),
                     }
                 }
             },
@@ -252,7 +252,7 @@ pub struct StatisticsParameters {
     /// The percentiles to compute for each attribute.
     #[serde(default)]
     #[schema(value_type = Vec<f64>, examples(json!([0.25, 0.5, 0.75])))]
-    pub percentiles: Vec<NotNan<f64>>,
+    pub percentiles: Vec<NonNaN>,
 }
 
 impl TryFrom<Statistics> for geoengine_operators::plot::Statistics {
@@ -748,7 +748,7 @@ mod tests {
         },
     };
     use geoengine_operators::engine::PlotOperator as OperatorsPlotOperatorTrait;
-    use ordered_float::NotNan;
+    use typed_floats::tf64::NonNaN;
 
     // ---------------------------------------------------------------------------
     // Histogram
@@ -865,8 +865,8 @@ mod tests {
             params: HistogramParameters {
                 column_name: "foobar".to_string(),
                 bounds: HistogramBounds::Values(HistogramBoundsValues {
-                    min: NotNan::new(5.0).unwrap(),
-                    max: NotNan::new(10.0).unwrap(),
+                    min: NonNaN::new(5.0).unwrap(),
+                    max: NonNaN::new(10.0).unwrap(),
                 }),
                 buckets: HistogramBuckets::Number(HistogramBucketsNumber {
                     r#type: Default::default(),
@@ -910,8 +910,8 @@ mod tests {
             params: HistogramParameters {
                 column_name: "foobar".to_string(),
                 bounds: HistogramBounds::Values(HistogramBoundsValues {
-                    min: NotNan::new(5.0).unwrap(),
-                    max: NotNan::new(10.0).unwrap(),
+                    min: NonNaN::new(5.0).unwrap(),
+                    max: NonNaN::new(10.0).unwrap(),
                 }),
                 buckets: HistogramBuckets::Number(HistogramBucketsNumber {
                     r#type: Default::default(),
@@ -1020,9 +1020,9 @@ mod tests {
             params: StatisticsParameters {
                 attributes: vec!["A".to_string()].try_into().unwrap(),
                 percentiles: vec![
-                    NotNan::new(0.25).unwrap(),
-                    NotNan::new(0.5).unwrap(),
-                    NotNan::new(0.75).unwrap(),
+                    NonNaN::new(0.25).unwrap(),
+                    NonNaN::new(0.5).unwrap(),
+                    NonNaN::new(0.75).unwrap(),
                 ],
             },
             sources: SingleRasterOrVectorSource {
@@ -1050,7 +1050,7 @@ mod tests {
             r#type: Default::default(),
             params: StatisticsParameters {
                 attributes: vec!["A".to_string()].try_into().unwrap(),
-                percentiles: vec![NotNan::new(0.5).unwrap()],
+                percentiles: vec![NonNaN::new(0.5).unwrap()],
             },
             sources: SingleRasterOrVectorSource {
                 source: SingleRasterOrVectorOperator::Vector(VectorOperator::MockPointSource(
@@ -1072,7 +1072,7 @@ mod tests {
         assert_eq!(operators.params.percentiles.len(), 1);
         assert_eq!(
             operators.params.percentiles[0].clone(),
-            NotNan::new(0.5).unwrap()
+            NonNaN::new(0.5).unwrap()
         );
     }
 

@@ -137,14 +137,14 @@ where
         .number_of_elements();
     let num_timesteps = tiles.len() / num_tiles_per_timestep;
 
-    let x_pixel_size = tiling_strategy.geo_transform.x_pixel_size();
-    let y_pixel_size = tiling_strategy.geo_transform.y_pixel_size();
-
     let coordinate_of_ul_query_pixel = strat
         .geo_transform
         .grid_idx_to_pixel_upper_left_coordinate_2d(query_rect.spatial_bounds().min_index());
-    let output_geo_transform =
-        GeoTransform::new(coordinate_of_ul_query_pixel, x_pixel_size, y_pixel_size);
+    let output_geo_transform = GeoTransform::new_typed(
+        coordinate_of_ul_query_pixel,
+        tiling_strategy.geo_transform.x_pixel_size_typed(),
+        tiling_strategy.geo_transform.y_pixel_size_typed(),
+    );
     let out_pixel_bounds = query_rect.spatial_bounds();
 
     let uncompressed_byte_size =
@@ -662,16 +662,16 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             .geo_transform
             .grid_idx_to_pixel_upper_left_coordinate_2d(query_rect.spatial_bounds().min_index());
 
-        let output_geo_transform = GeoTransform::new(
+        let output_geo_transform = GeoTransform::new_typed(
             out_geo_transform_origin,
-            tiling_strategy.geo_transform.x_pixel_size(),
-            tiling_strategy.geo_transform.y_pixel_size(),
+            tiling_strategy.geo_transform.x_pixel_size_typed(),
+            tiling_strategy.geo_transform.y_pixel_size_typed(),
         );
 
         let output_gdal_geo_transform = GdalDatasetGeoTransform {
             origin_coordinate: out_geo_transform_origin,
-            x_pixel_size: tiling_strategy.geo_transform.x_pixel_size(),
-            y_pixel_size: tiling_strategy.geo_transform.y_pixel_size(),
+            x_pixel_size: tiling_strategy.geo_transform.x_pixel_size_typed(),
+            y_pixel_size: tiling_strategy.geo_transform.y_pixel_size_typed(),
         };
 
         let intermediate_dataset_parameters = GdalDatasetParameters {

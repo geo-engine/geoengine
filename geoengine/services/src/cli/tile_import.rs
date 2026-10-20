@@ -653,7 +653,8 @@ fn extract_product_from_file(
     let geo_transform: GdalGeoTransform = gdal_dataset
         .geo_transform()
         .context("Failed to get geo-transform")?;
-    let geo_transform: GdalDatasetGeoTransform = geo_transform.into();
+    let geo_transform: GdalDatasetGeoTransform =
+        geo_transform.try_into().context("Invalid geo-transform")?;
 
     let (width, height) = gdal_dataset.raster_size();
 
@@ -661,8 +662,8 @@ fn extract_product_from_file(
         geo_transform.origin_coordinate,
         geo_transform.origin_coordinate
             + Coordinate2D::new(
-                width as f64 * geo_transform.x_pixel_size,
-                height as f64 * geo_transform.y_pixel_size,
+                width as f64 * geo_transform.x_pixel_size.get(),
+                height as f64 * geo_transform.y_pixel_size.get(),
             ),
     )
     .context("Failed to create spatial partition")?;

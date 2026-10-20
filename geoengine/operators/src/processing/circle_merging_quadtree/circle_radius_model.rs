@@ -1,13 +1,13 @@
 use std::num::NonZeroUsize;
 
-use snafu::ensure;
-
-use crate::error;
-use crate::util::Result;
+use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
+use typed_floats::InvalidNumber;
 
 /// A radius model that is based on the number of points in the circle.
 pub trait CircleRadiusModel {
-    fn with_scaled_radii(&self, resolution: f64) -> Result<Self>
+    /// Scales the radii by the `resolution`.
+    /// Fails if the scaled radii overflow to infinity or underflow to zero.
+    fn with_scaled_radii(&self, resolution: PositiveFiniteF64) -> Result<Self, InvalidNumber>
     where
         Self: Sized;
 
@@ -19,66 +19,43 @@ pub trait CircleRadiusModel {
 /// A radius model that scales circles based on the logarithm of the number of points.
 #[derive(Clone, Debug, Copy)]
 pub struct LogScaledRadius {
-    min_radius: f64,
-    delta: f64,
-    resolution: f64,
+    min_radius: PositiveFiniteF64,
+    delta: NonNegativeFiniteF64,
+    resolution: PositiveFiniteF64,
 }
 
 impl LogScaledRadius {
-    pub fn new(min_radius_px: f64, delta_px: f64) -> Result<Self> {
-        ensure!(
-            min_radius_px > 0.,
-            error::InputMustBeGreaterThanZero {
-                scope: "CircleRadiusModel",
-                name: "min_radius"
-            }
-        );
-        ensure!(
-            delta_px >= 0.,
-            error::InputMustBeZeroOrPositive {
-                scope: "CircleRadiusModel",
-                name: "delta_px"
-            }
-        );
-
-        Ok(LogScaledRadius {
+    pub fn new(min_radius_px: PositiveFiniteF64, delta_px: NonNegativeFiniteF64) -> Self {
+        LogScaledRadius {
             min_radius: min_radius_px,
             delta: delta_px,
-            resolution: 1.,
-        })
+            resolution: PositiveFiniteF64::ONE,
+        }
     }
 }
 
 impl CircleRadiusModel for LogScaledRadius {
-    fn with_scaled_radii(&self, resolution: f64) -> Result<Self>
+    fn with_scaled_radii(&self, resolution: PositiveFiniteF64) -> Result<Self, InvalidNumber>
     where
         Self: Sized,
     {
-        ensure!(
-            resolution > 0.,
-            error::InputMustBeGreaterThanZero {
-                scope: "CircleRadiusModel",
-                name: "resolution"
-            }
-        );
-
         Ok(Self {
-            min_radius: self.min_radius * resolution,
-            delta: self.delta * resolution,
+            min_radius: PositiveFiniteF64::new(self.min_radius.get() * resolution.get())?,
+            delta: NonNegativeFiniteF64::new(self.delta.get() * resolution.get())?,
             resolution,
         })
     }
 
     fn min_radius(&self) -> f64 {
-        self.min_radius
+        self.min_radius.get()
     }
 
     fn calculate_radius(&self, number_of_points: NonZeroUsize) -> f64 {
-        self.min_radius + (number_of_points.get() as f64).ln() * self.resolution
+        self.min_radius.get() + (number_of_points.get() as f64).ln() * self.resolution.get()
     }
 
     fn delta(&self) -> f64 {
-        self.delta
+        self.delta.get()
     }
 }
 
@@ -89,7 +66,10 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_radius_calculation() {
-        let radius_model = LogScaledRadius::new(8., 1.0).unwrap();
+        let radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(8.),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
 
         assert_eq!(
             radius_model.calculate_radius(NonZeroUsize::new(1).unwrap()),
@@ -104,10 +84,12 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_scaled_radius_calculation() {
-        let radius_model = LogScaledRadius::new(8., 1.0)
-            .unwrap()
-            .with_scaled_radii(0.5)
-            .unwrap();
+        let radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(8.),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        )
+        .with_scaled_radii(PositiveFiniteF64::new_unchecked(0.5))
+        .unwrap();
 
         assert_eq!(
             radius_model.calculate_radius(NonZeroUsize::new(1).unwrap()),

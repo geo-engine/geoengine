@@ -8,12 +8,12 @@ use geoengine_datatypes::{
     primitives::{DateTime, TimeInstance, TimeInterval},
     raster::{GdalGeoTransform, GeoTransform},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
+    util::NonZeroFiniteF64,
 };
 use geoengine_operators::{
     engine::{RasterOperator, TypedOperator},
     source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
 };
-use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use stac::Asset;
 use std::{
@@ -23,6 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tracing::{debug, error, info, warn};
+use typed_floats::tf64::NonNaN;
 
 use crate::{
     api::{
@@ -602,7 +603,7 @@ impl StacImporter {
         let dataset_key = DatasetKey {
             epsg,
             data_type,
-            resolution: geo_transform.x_pixel_size().into(),
+            resolution: geo_transform.x_pixel_size_typed(),
         };
 
         let partial_key = PartialDatasetKey {
@@ -707,7 +708,7 @@ impl StacImporter {
         let dataset_key = DatasetKey {
             epsg,
             data_type,
-            resolution: geo_transform.x_pixel_size().into(),
+            resolution: geo_transform.x_pixel_size_typed(),
         };
 
         let partial_key = PartialDatasetKey {
@@ -1550,7 +1551,7 @@ impl Attribute {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum AttributeValue {
     DataType(RasterDataType),
-    Resolution(OrderedFloat<f64>),
+    Resolution(NonZeroFiniteF64),
     Epsg(u32),
 }
 
@@ -1878,14 +1879,14 @@ enum QueryState {
 struct DatasetKey {
     epsg: u32,
     data_type: RasterDataType,
-    resolution: OrderedFloat<f64>,
+    resolution: NonZeroFiniteF64,
 }
 
 // partial dataset key used for grouping bands by data type and resolution, because epsgs are only retrieved when querying the actual items and not on collection level
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct PartialDatasetKey {
     data_type: RasterDataType,
-    resolution: OrderedFloat<f64>,
+    resolution: NonZeroFiniteF64,
 }
 
 impl DatasetKey {
@@ -1922,20 +1923,22 @@ impl DatasetKey {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct ProjTransform {
-    origin_x: OrderedFloat<f64>,
-    origin_y: OrderedFloat<f64>,
-    pixel_size_x: OrderedFloat<f64>,
-    pixel_size_y: OrderedFloat<f64>,
+    origin_x: NonNaN,
+    origin_y: NonNaN,
+    pixel_size_x: NonZeroFiniteF64,
+    pixel_size_y: NonZeroFiniteF64,
 }
 
-impl From<GeoTransform> for ProjTransform {
-    fn from(gt: GeoTransform) -> Self {
-        ProjTransform {
-            origin_x: OrderedFloat(gt.origin_coordinate.x),
-            origin_y: OrderedFloat(gt.origin_coordinate.y),
-            pixel_size_x: OrderedFloat(gt.x_pixel_size()),
-            pixel_size_y: OrderedFloat(gt.y_pixel_size()),
-        }
+impl TryFrom<GeoTransform> for ProjTransform {
+    type Error = typed_floats::InvalidNumber;
+
+    fn try_from(gt: GeoTransform) -> Result<Self, Self::Error> {
+        Ok(ProjTransform {
+            origin_x: NonNaN::new(gt.origin_coordinate.x)?,
+            origin_y: NonNaN::new(gt.origin_coordinate.y)?,
+            pixel_size_x: gt.x_pixel_size_typed(),
+            pixel_size_y: gt.y_pixel_size_typed(),
+        })
     }
 }
 
@@ -1943,11 +1946,11 @@ impl From<ProjTransform> for crate::api::model::datatypes::GeoTransform {
     fn from(pt: ProjTransform) -> Self {
         crate::api::model::datatypes::GeoTransform {
             origin_coordinate: crate::api::model::datatypes::Coordinate2D {
-                x: pt.origin_x.into_inner(),
-                y: pt.origin_y.into_inner(),
+                x: pt.origin_x.get(),
+                y: pt.origin_y.get(),
             },
-            x_pixel_size: pt.pixel_size_x.into_inner(),
-            y_pixel_size: pt.pixel_size_y.into_inner(),
+            x_pixel_size: pt.pixel_size_x,
+            y_pixel_size: pt.pixel_size_y,
         }
     }
 }
@@ -2198,7 +2201,7 @@ fn scan_item_asset_v1_0_0(
 
         let geo_transform = geo_transform_from_fields(&asset.additional_fields)
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
-        let resolution = geo_transform.x_pixel_size().into();
+        let resolution = geo_transform.x_pixel_size_typed();
 
         let band_name = if let Some(ref eo_bands_vec) = eo_bands {
             // Use eo:bands metadata if available
@@ -2255,12 +2258,14 @@ fn scan_item_asset_v1_1_0(
         .ok_or(anyhow::anyhow!("missing attribute `gsd`"))?
         .as_f64()
         .ok_or(anyhow::anyhow!("attribute `gsd` is not a number"))?;
+    let resolution = NonZeroFiniteF64::try_from(resolution)
+        .map_err(|e| anyhow::anyhow!("attribute `gsd` is invalid: {e}"))?;
 
     for band_name in band_names {
         dataset_bands
             .entry(PartialDatasetKey {
                 data_type,
-                resolution: resolution.into(),
+                resolution,
             })
             .or_default()
             .push(RasterBandDescriptor {
@@ -2356,8 +2361,7 @@ fn geo_transform_from_fields(
         proj_transform_values[3], // g[4] = a3 (rotation)
         proj_transform_values[4], // g[5] = a4 (pixel height, negative)
     ];
-    let geo_transform: GeoTransform = gdal_geotransform.into();
-    Some(geo_transform)
+    gdal_geotransform.try_into().ok()
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -2755,7 +2759,7 @@ mod tests {
 
         let partial_key = PartialDatasetKey {
             data_type: RasterDataType::U16,
-            resolution: OrderedFloat(10.),
+            resolution: NonZeroFiniteF64::new_unchecked(10.),
         };
 
         let expected_band_idx = importer
@@ -2773,7 +2777,7 @@ mod tests {
 
         assert_eq!(dataset_key.epsg, 32632);
         assert_eq!(dataset_key.data_type, RasterDataType::U16);
-        assert_eq!(dataset_key.resolution, OrderedFloat(10.));
+        assert_eq!(dataset_key.resolution, NonZeroFiniteF64::new_unchecked(10.));
         assert_eq!(tiles.len(), 1);
 
         let tile = &tiles[0];
@@ -2905,7 +2909,7 @@ mod tests {
 
         let partial_key = PartialDatasetKey {
             data_type: RasterDataType::U16,
-            resolution: OrderedFloat(10.),
+            resolution: NonZeroFiniteF64::new_unchecked(10.),
         };
 
         let expected_band_idx = importer
@@ -2923,7 +2927,7 @@ mod tests {
 
         assert_eq!(dataset_key.epsg, 32632);
         assert_eq!(dataset_key.data_type, RasterDataType::U16);
-        assert_eq!(dataset_key.resolution, OrderedFloat(10.));
+        assert_eq!(dataset_key.resolution, NonZeroFiniteF64::new_unchecked(10.));
         assert_eq!(tiles.len(), 1);
 
         let tile = &tiles[0];

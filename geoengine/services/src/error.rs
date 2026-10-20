@@ -11,7 +11,6 @@ use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::RegularTimeDimension;
 use geoengine_datatypes::util::helpers::ge_report;
-use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::fmt;
 use std::path::PathBuf;
@@ -496,9 +495,9 @@ pub enum Error {
         message: String,
     },
 
-    #[snafu(display("NotNan error: {}", source))]
-    InvalidNotNanFloatKey {
-        source: ordered_float::FloatIsNan,
+    #[snafu(display("Invalid number: {}", source))]
+    InvalidNumber {
+        source: typed_floats::InvalidNumber,
     },
 
     UnexpectedInvalidDbTypeConversion,
@@ -700,9 +699,9 @@ impl From<tokio::task::JoinError> for Error {
     }
 }
 
-impl From<ordered_float::FloatIsNan> for Error {
-    fn from(source: FloatIsNan) -> Self {
-        Error::InvalidNotNanFloatKey { source }
+impl From<typed_floats::InvalidNumber> for Error {
+    fn from(source: typed_floats::InvalidNumber) -> Self {
+        Error::InvalidNumber { source }
     }
 }
 

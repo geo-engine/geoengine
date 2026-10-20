@@ -21,6 +21,7 @@ use crate::{
         ndvi_255_symbology,
     },
 };
+use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_datatypes::{
     raster::{GridBoundingBox2D, GridIdx2D, GridShape2D, GridSize, TilingSpatialGridDefinition},
     test_data,
@@ -159,7 +160,11 @@ pub async fn session_and_ndvi_multi_band_layer_id(
         )),
         spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::new_source(
             geoengine_datatypes::raster::SpatialGridDefinition::new(
-                geoengine_datatypes::raster::GeoTransform::new((-180.0, 90.0).into(), 0.1, -0.1),
+                geoengine_datatypes::raster::GeoTransform::new_unchecked(
+                    (-180.0, 90.0).into(),
+                    0.1,
+                    -0.1,
+                ),
                 geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [1799, 3599]).unwrap(),
             ),
         ),
@@ -228,8 +233,8 @@ pub async fn session_and_ndvi_multi_band_layer_id(
             rasterband_channel: 1,
             geo_transform: crate::api::model::datatypes::GeoTransform {
                 origin_coordinate: crate::api::model::datatypes::Coordinate2D { x: -180., y: 90. },
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 3600,
             height: 1800,

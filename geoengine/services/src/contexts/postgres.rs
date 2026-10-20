@@ -627,6 +627,7 @@ mod tests {
     };
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         collections::VectorDataType,
         dataset::{DataProviderId, LayerId},
@@ -1700,7 +1701,7 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: TimeDescriptor::new_irregular(None),
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
@@ -1731,8 +1732,8 @@ mod tests {
             rasterband_channel: 0,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: Default::default(),
-                x_pixel_size: 0.0,
-                y_pixel_size: 0.0,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
             },
             width: 0,
             height: 0,

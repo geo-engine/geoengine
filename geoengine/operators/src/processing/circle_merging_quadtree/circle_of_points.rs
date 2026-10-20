@@ -131,6 +131,7 @@ mod tests {
     use crate::processing::circle_merging_quadtree::{
         aggregates::MeanAggregator, circle_radius_model::LogScaledRadius,
     };
+    use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 
     use super::*;
 
@@ -152,7 +153,10 @@ mod tests {
         )
         .unwrap();
 
-        let radius_model = LogScaledRadius::new(1.0, 0.).unwrap();
+        let radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(1.0),
+            NonNegativeFiniteF64::new_unchecked(0.),
+        );
 
         c1.merge(&c2, &radius_model);
 
@@ -192,7 +196,10 @@ mod tests {
         )
         .unwrap();
 
-        let radius_model = LogScaledRadius::new(1.0, 0.).unwrap();
+        let radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(1.0),
+            NonNegativeFiniteF64::new_unchecked(0.),
+        );
 
         c1.merge(&c2, &radius_model);
 
@@ -229,7 +236,10 @@ mod tests {
         )
         .unwrap();
 
-        let radius_model = LogScaledRadius::new(1.0, 0.).unwrap();
+        let radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(1.0),
+            NonNegativeFiniteF64::new_unchecked(0.),
+        );
 
         c1.merge(&c2, &radius_model);
 

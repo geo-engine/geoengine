@@ -503,21 +503,21 @@ mod tests {
     fn reader_state_dataset_geo_transform() {
         let reader_state = ReaderState {
             dataset_spatial_grid: SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridShape2D::new([1024, 1024]).bounding_box(),
             ),
         };
 
         assert_eq!(
             reader_state.dataset_spatial_grid.geo_transform(),
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.)
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.)
         );
     }
 
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_no_change() {
         let spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
             GridShape2D::new([1024, 1024]).bounding_box(),
         );
 
@@ -528,7 +528,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
             ),
         );
@@ -563,7 +563,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_shifted() {
         let spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(-180., 90.), 1., -1.),
             GridShape2D::new([180, 360]).bounding_box(),
         );
 
@@ -574,7 +574,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
             ),
         );
@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_shifted_and_clipped() {
         let spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(-180., 90.), 1., -1.),
             GridShape2D::new([180, 360]).bounding_box(),
         );
 
@@ -620,7 +620,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new(GridIdx2D::new([10, 10]), GridIdx2D::new([99, 189]))
                     .unwrap(),
             ),
@@ -656,12 +656,12 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_shifted_flipy() {
         let spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(-180., 90.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(-180., 90.), 1., -1.),
             GridShape2D::new([180, 360]).bounding_box(),
         );
 
         let spatial_grid_flipy = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(-180., -90.), 1., 1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(-180., -90.), 1., 1.),
             GridShape2D::new([180, 360]).bounding_box(),
         );
 
@@ -672,7 +672,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &spatial_grid_flipy,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([89, 179])).unwrap(),
             ),
         );
@@ -707,7 +707,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_2() {
         let original_spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
             GridShape2D::new([1024, 1024]).bounding_box(),
         );
 
@@ -719,7 +719,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &original_spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 2., -2.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 2., -2.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
             ),
         );
@@ -754,7 +754,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_4() {
         let original_spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
             GridShape2D::new([2048, 2048]).bounding_box(),
         );
 
@@ -766,7 +766,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &original_spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 4., -4.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 4., -4.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
             ),
         );
@@ -801,7 +801,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_4_tile_22() {
         let original_spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
             GridShape2D::new([4096, 4096]).bounding_box(),
         );
 
@@ -813,7 +813,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &original_spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 4., -4.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 4., -4.),
                 GridBoundingBox2D::new(GridIdx2D::new([512, 512]), GridIdx2D::new([1023, 1023]))
                     .unwrap(),
             ),
@@ -851,7 +851,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_4_tile_22_lrcrop() {
         let original_spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
             GridShape2D::new([4096 - 16, 4096 - 16]).bounding_box(),
         );
 
@@ -863,7 +863,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &original_spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 4., -4.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 4., -4.),
                 GridBoundingBox2D::new(GridIdx2D::new([512, 512]), GridIdx2D::new([1023, 1023]))
                     .unwrap(),
             ),
@@ -904,7 +904,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_4_tile_22_ulcrop() {
         let original_spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(16., -16.), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(16., -16.), 1., -1.),
             GridShape2D::new([4096 - 16, 4096 - 16]).bounding_box(),
         );
 
@@ -916,7 +916,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &original_spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 4., -4.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 4., -4.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
             ),
         );
@@ -951,7 +951,7 @@ mod tests {
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_4_tile_22_ulcrop_numbers() {
         let original_spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(17.123_456, -17.123_456), 1., -1.),
+            GeoTransform::new_unchecked(Coordinate2D::new(17.123_456, -17.123_456), 1., -1.),
             GridShape2D::new([4096 - 16, 4096 - 16]).bounding_box(),
         );
 
@@ -963,7 +963,7 @@ mod tests {
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
             &original_spatial_grid,
             &SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(1.123_456, -1.123_456), 4., -4.),
+                GeoTransform::new_unchecked(Coordinate2D::new(1.123_456, -1.123_456), 4., -4.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap(),
             ),
         );
@@ -999,14 +999,18 @@ mod tests {
     fn it_snaps_overview_read_window_to_tile_edge() {
         let reader_state = OverviewReaderState {
             original_dataset_grid: SpatialGridDefinition {
-                geo_transform: GeoTransform::new(Coordinate2D { x: -180.0, y: 90.0 }, 0.2, -0.2),
+                geo_transform: GeoTransform::new_unchecked(
+                    Coordinate2D { x: -180.0, y: 90.0 },
+                    0.2,
+                    -0.2,
+                ),
                 grid_bounds: GridBoundingBox2D::new_unchecked([0, 0], [899, 1799]),
             },
             overview_level: 2,
         };
 
         let actual_gdal_dataset_spatial_grid_definition = SpatialGridDefinition {
-            geo_transform: GeoTransform::new(
+            geo_transform: GeoTransform::new_unchecked(
                 Coordinate2D {
                     x: -45.0,
                     y: 22.399_999_999_999_99,
@@ -1018,7 +1022,7 @@ mod tests {
         };
 
         let tile = SpatialGridDefinition {
-            geo_transform: GeoTransform::new(Coordinate2D { x: 0.0, y: 0.0 }, 0.4, -0.4),
+            geo_transform: GeoTransform::new_unchecked(Coordinate2D { x: 0.0, y: 0.0 }, 0.4, -0.4),
             grid_bounds: GridBoundingBox2D::new_unchecked([-512, -512], [-1, -1]),
         };
 

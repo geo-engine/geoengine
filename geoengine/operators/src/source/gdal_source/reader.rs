@@ -67,6 +67,7 @@ impl GdalPoolReader {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         primitives::{AxisAlignedRectangle, CacheHint, SpatialPartition2D, TimeInterval},
         raster::{
@@ -94,8 +95,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 3600,
             height: 1800,
@@ -150,7 +151,7 @@ mod tests {
         partition: SpatialPartition2D,
         shape: GridShape2D,
     ) -> TileInformation {
-        let real_geotransform = GeoTransform::new(
+        let real_geotransform = GeoTransform::new_unchecked(
             partition.upper_left(),
             partition.size_x() / shape.axis_size_x() as f64,
             -partition.size_y() / shape.axis_size_y() as f64,
