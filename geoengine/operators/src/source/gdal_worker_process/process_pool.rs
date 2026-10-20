@@ -1153,76 +1153,46 @@ mod tests {
         h.finish()
     }
 
-    /// Requests for the same file but different z slices must land in the same worker queue,
-    /// so the worker can reuse the GDAL dataset it already has open. The routing key is
-    /// `dataset_params.partial_hash`, which must not contain the z index.
+    /// The routing key (`dataset_params.partial_hash`) picks the worker queue and must group
+    /// every read of one file, so the worker reuses the GDAL dataset it already has open:
+    /// re-opening costs a 4.8s round trip per slice. The dedup key (`full_hash`) decides
+    /// which requests share a result and must tell apart every read that returns different
+    /// data.
     #[test]
-    fn routing_is_blind_to_the_z_index() {
-        let a = md_message(0);
-        let b = md_message(48);
-        assert_eq!(
-            hash_of(&a, false),
-            hash_of(&b, false),
-            "different z slices of one file must be routed together, or each slice re-opens \
-             the dataset and the 4.8s round trip is paid again"
-        );
-    }
-
-    /// ...while the *dedup* key must not collapse them: two different z slices must not
-    /// share a result.
-    #[test]
-    fn sharing_is_not_blind_to_the_z_index() {
-        let a = md_message(0);
-        let b = md_message(48);
-        assert_ne!(
-            hash_of(&a, true),
-            hash_of(&b, true),
-            "collapsing different z slices would return the wrong slices"
-        );
-    }
-
-    /// A different array of the *same file* must also route together - the open handle is
-    /// per file, and GDAL can resolve several arrays from it. Only the dedup key has to
-    /// tell them apart, since they return different data.
-    #[test]
-    fn routing_is_blind_to_the_array_but_sharing_is_not() {
-        let a = md_message(0);
-        let mut b = md_message(0);
-        let IpcChannelMessage(p) = &mut b;
-        let GdalRequest::Read { kind, .. } = &mut p.request else {
-            panic!("md_message builds a pixel read");
+    fn routing_groups_by_file_and_sharing_by_read() {
+        let mut other_array = md_message(0);
+        let GdalRequest::Read {
+            kind: GdalReadKind::MdArray { array_name, .. },
+            ..
+        } = &mut other_array.0.request
+        else {
+            panic!("md_message builds an MD pixel read");
         };
-        *kind = GdalReadKind::MdArray {
-            group: None,
-            array_name: "tasmin".to_string(),
-            z_index: 0,
-            axis_mapping: vec![
-                super::super::process_common::MdAxisMapping::Time,
-                super::super::process_common::MdAxisMapping::Y,
-                super::super::process_common::MdAxisMapping::X,
-            ],
-        };
-        assert_eq!(
-            hash_of(&a, false),
-            hash_of(&b, false),
-            "two arrays of one file share the open GDAL dataset"
-        );
-        assert_ne!(
-            hash_of(&a, true),
-            hash_of(&b, true),
-            "but they must not share a read result"
-        );
-    }
+        *array_name = "tasmin".to_string();
+        let mut other_file = md_message(0);
+        other_file.0.dataset_params.file_path =
+            PathBuf::from("/vsicurl/https://example.invalid/tasmin.nc");
 
-    /// The same array at the same z slice in a *different* file is a different read.
-    #[test]
-    fn routing_separates_different_files() {
+        // (case, second request, same queue, same result)
+        let cases = [
+            ("another z slice", md_message(48), true, false),
+            ("another array of the file", other_array, true, false),
+            ("another file", other_file, false, false),
+        ];
+
         let a = md_message(0);
-        let mut b = md_message(0);
-        let IpcChannelMessage(p) = &mut b;
-        p.dataset_params.file_path = PathBuf::from("/vsicurl/https://example.invalid/tasmin.nc");
-        assert_ne!(hash_of(&a, false), hash_of(&b, false));
-        assert_ne!(hash_of(&a, true), hash_of(&b, true));
+        for (case, b, same_queue, same_result) in cases {
+            assert_eq!(
+                hash_of(&a, false) == hash_of(&b, false),
+                same_queue,
+                "routing of {case}"
+            );
+            assert_eq!(
+                hash_of(&a, true) == hash_of(&b, true),
+                same_result,
+                "sharing of {case}"
+            );
+        }
     }
 
     // --- WorkerAffinity::calculate_score ---

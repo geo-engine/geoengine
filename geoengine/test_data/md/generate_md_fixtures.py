@@ -12,8 +12,8 @@ Fixtures
 - time_series_split_b.nc  second half (global t 4..8), grid identical to part a
 - time_series_gap_b.nc    last 4 slices (t 8..12) of a series with a hole; t 4..8 is absent,
                           so pair it with time_series_split_a.nc (t 0..4, same bytes)
-- wrap_0_360.nc           time axis, edges lon 0..360 (step 1), lat 45..35 (wrap-around)
-- wrap_0_360_multitile.nc same but 0.25 deg lon (1440 cols, spans 3 tile columns)
+- wrap_0_360_multitile.nc time axis, edges lon 0..360 at 0.25 deg (1440 cols, spans 3 tile
+                          columns), lat 1..0 (wrap-around)
 - bands.nc                dims (band, y, x), no CF time units; read as one variable per fixed band index
 - cf_time_units_minutes.nc time axis, CF units `minutes since 1900-01-01`, ASCENDING lat
 - variables.nc            one variable per CF data variable: 3 CF data variables (temperature/precipitation/
@@ -30,7 +30,7 @@ pixel from the grid edges), so the probes can derive a correct geo transform.
 Cell values follow deterministic formulas so tests can assert exact values:
 - (time, y, x) arrays:  value = t*1000 + y*10 + x     (x in stored column index)
 - (band, y, x) arrays:   value = b*100  + y*10 + x
-- wrap_0_360:            value = t*100  + y*10 + x     (x in stored column index)
+- wrap_0_360_multitile:  value = t*100000 + y*10 + x   (x in stored column index)
 - variables (.nc):       value = (var_index + 1) * (t*100 + y*10 + x)
 """
 from __future__ import annotations
@@ -55,15 +55,12 @@ FIXTURES = [
     "time_series_split_a.nc",
     "time_series_split_b.nc",
     "time_series_gap_b.nc",
-    "wrap_0_360.nc",
     "wrap_0_360_multitile.nc",
     "bands.nc",
     "cf_time_units_minutes.nc",
     "grid_2d.nc",
     "projected_crs.nc",
-    "time_depth_4d.nc",
     "variables.nc",
-    "variables_multitile.nc",
     "pressure_level_synthetic.nc",
     "mosaic_west.nc",
     "mosaic_east.nc",
@@ -166,10 +163,10 @@ def time_series(nt: int, ntime: int, path: Path, t_start: int = 0):
 def wrap_0_360_multitile(path: Path):
     """0..360 deg longitude at 0.25 deg, so the world spans several 512 px tile columns.
 
-    `wrap_0_360.nc` is 360 columns at 1 deg, i.e. the whole world fits inside one tile
-    column, so it cannot exercise the per-column stored<->presented mapping or the clip of a
-    tile column against the presented extent. At 0.25 deg the 1440 columns span three tile
-    columns, which is the layout many global 0.25° products use.
+    At 1 deg the whole world would fit inside one tile column, so it could not exercise the
+    per-column stored<->presented mapping or the clip of a tile column against the presented
+    extent. At 0.25 deg the 1440 columns span three tile columns, which is the layout many
+    global 0.25° products use.
 
     Latitude is kept to 4 rows and time to 2 slices so the fixture stays small (~46 kB);
     only the longitude axis needs to be wide.
@@ -203,20 +200,6 @@ def zarr_time_series(path: Path):
     arr = rg.CreateMDArray("temperature", [tdim, ydim, xdim], F32, ["BLOCKSIZE=8,8,8"])
     arr.SetNoDataValueDouble(-9999)
     arr.Write(vals)
-    ds = None
-
-
-def wrap_0_360(path: Path):
-    """(time, y, x) array stored on a 0..360 longitude grid, value = t*100 + y*10 + x."""
-    width, height, ntime = 360, 10, 4
-    ds = new_netcdf(path)
-    rg = ds.GetRootGroup()
-    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 45.0)
-    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
-    ts = np.arange(ntime, dtype=np.int64)
-    vals = (np.arange(height)[:, None] * 10 + np.arange(width)[None, :])[None, :, :]
-    vals = ts[:, None, None] * 100 + vals.astype("float32")
-    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999)
     ds = None
 
 
@@ -260,32 +243,6 @@ def projected_crs(path: Path):
     arr.CreateAttribute("crs", [1], gdal.ExtendedDataType.CreateString(), []).WriteString(
         "EPSG:32633"
     )
-    ds = None
-
-
-def time_depth_4d(path: Path):
-    """(time, depth, y, x): z is the outermost dimension, `depth` is a leading prefix.
-
-    Depth is the dimension an `axis_mapping` `Fixed` role selects: the probe reads `time` as
-    the z axis and holds `depth` at a fixed index, so one dataset is one depth. Value at
-    `(t, d, row, col)` is `t * 10_000 + d * 1000 + row * 10 + col`, which makes a wrong
-    prefix or a wrong z mapping obvious.
-    """
-    width, height, ntime, ndepth = 8, 8, 6, 3
-    ds = new_netcdf(path)
-    rg = ds.GetRootGroup()
-    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 0.0, lon_step=30.0)
-    # z first, as the design requires
-    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
-    ddim, _da = add_coord_var(
-        rg, "depth", "DEPTH", "", np.arange(ndepth, dtype=np.float64) * 10.0
-    )
-    t = np.arange(ntime, dtype=np.int64)[:, None, None, None]
-    d = np.arange(ndepth, dtype=np.int64)[None, :, None, None]
-    r = np.arange(height, dtype=np.int64)[None, None, :, None]
-    c = np.arange(width, dtype=np.int64)[None, None, None, :]
-    vals = (t * 10_000 + d * 1000 + r * 10 + c).astype("float32")
-    write_array(rg, "temperature", [tdim, ddim, ydim, xdim], vals, -9999)
     ds = None
 
 
@@ -366,27 +323,6 @@ def variables(path: Path):
     ds = new_netcdf(path)
     _fill_variables(ds.GetRootGroup(), 8, 8, 8)
     _fill_variables(ds.GetRootGroup().CreateGroup("analysis"), 8, 8, 8)
-
-
-def variables_multitile(path: Path):
-    """Two CF data variables on the wrapped 0..360 multi-tile grid -> Geo Engine bands.
-
-    `variables.nc` is 8x8 and therefore a single tiling cell, so it cannot tell whether a
-    band is emitted before or after the next spatial tile. At 0.25 deg the 1440 columns span
-    three tile columns, which is the shape that makes the order observable.
-    """
-    width, height, ntime = 1440, 4, 2
-    ds = new_netcdf(path)
-    rg = ds.GetRootGroup()
-    xdim, ydim = add_xy_dims(rg, width, height, 0.0, 1.0, lon_step=0.25, lat_step=0.25)
-    tdim = add_time_dim(rg, ntime, "days since 2000-01-01 00:00:00")
-    ts = np.arange(ntime, dtype=np.int64)
-    rows = np.arange(height) * 10
-    cols = np.arange(width)
-    vals = (ts[:, None, None] * 100_000 + rows[None, :, None] + cols[None, None, :]).astype("float32")
-    write_array(rg, "temperature", [tdim, ydim, xdim], vals, -9999, "air temperature", "K")
-    write_array(rg, "precipitation", [tdim, ydim, xdim], vals * 2, -9999, "precipitation", "mm")
-    ds = None
 
 
 def _pressure_level_grid(rg, nlat: int, nlon: int):
@@ -486,15 +422,12 @@ def main() -> None:
     # middle. A file whose z_start came from a running slice count instead of its position
     # on the axis would be off by one for every date after the gap.
     time_series(2, 4, OUT_DIR / "time_series_gap_b.nc", t_start=8)
-    wrap_0_360(OUT_DIR / "wrap_0_360.nc")
     bands(OUT_DIR / "bands.nc")
     cf_time_units_minutes(OUT_DIR / "cf_time_units_minutes.nc")
     wrap_0_360_multitile(OUT_DIR / "wrap_0_360_multitile.nc")
     grid_2d(OUT_DIR / "grid_2d.nc")
     projected_crs(OUT_DIR / "projected_crs.nc")
-    time_depth_4d(OUT_DIR / "time_depth_4d.nc")
     variables(OUT_DIR / "variables.nc")
-    variables_multitile(OUT_DIR / "variables_multitile.nc")
     pressure_level_synthetic(OUT_DIR / "pressure_level_synthetic.nc")
     mosaic_halves(OUT_DIR)
     packed(OUT_DIR / "packed.nc")

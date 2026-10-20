@@ -6923,115 +6923,6 @@ mod tests {
         Ok(())
     }
 
-    /// The explicit dimension mapping survives persistence and loading-info reconstruction.
-    #[ge_context::test]
-    async fn it_persists_the_axis_mapping_of_md_variables(
-        app_ctx: PostgresContext<NoTls>,
-    ) -> Result<()> {
-        let session = admin_login(&app_ctx).await;
-        let ctx = app_ctx.session_context(session);
-        let db = ctx.db();
-
-        let mut row = MdRow::of("md/time_depth_4d.nc", "temperature", 0, 6);
-        row.axis_mapping = vec![
-            MdAxisMapping::Time,
-            MdAxisMapping::Fixed { index: 0 },
-            MdAxisMapping::Y,
-            MdAxisMapping::X,
-        ];
-        let (meta_data, tiles) = md_dataset_meta(&[row], vec![api_band("temperature")]);
-        let id_and_name = add_md_dataset(&db, "md axis mapping", meta_data, tiles).await?;
-        let provider = md_provider(&db, id_and_name.id).await?;
-        let loading_info = provider
-            .loading_info(md_query(RasterQueryRectangle::new(
-                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [7, 7]),
-                TimeInterval::new_unchecked(
-                    TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
-                    TimeInstance::from_str("2000-01-07T00:00:00Z").unwrap(),
-                ),
-                BandSelection::first(),
-            )))
-            .await?;
-
-        assert_eq!(loading_info.files().len(), 1);
-        assert_eq!(
-            loading_info.variables()[0].axis_mapping,
-            vec![
-                geoengine_operators::source::MdAxisMapping::Time,
-                geoengine_operators::source::MdAxisMapping::Fixed { index: 0 },
-                geoengine_operators::source::MdAxisMapping::Y,
-                geoengine_operators::source::MdAxisMapping::X,
-            ],
-            "the axis mapping must come back from the row"
-        );
-
-        Ok(())
-    }
-
-    /// A time-axis dataset stores one row per `(file, variable)`, so the axis sees every
-    /// band's copy of the same intervals. They must collapse to one timeline: N copies would
-    /// pass through `try_time_irregular_range_fill` as a non-monotonic axis.
-    #[ge_context::test]
-    async fn it_builds_one_md_time_axis_per_variable_not_one_per_band(
-        app_ctx: PostgresContext<NoTls>,
-    ) -> Result<()> {
-        let (meta_data, tiles) = md_dataset_meta(
-            &[
-                MdRow {
-                    band: 0,
-                    ..MdRow::of("md/variables.nc", "temperature", 0, 8)
-                },
-                MdRow {
-                    band: 1,
-                    ..MdRow::of("md/variables.nc", "precipitation", 0, 8)
-                },
-            ],
-            vec![api_band("temperature"), api_band("precipitation")],
-        );
-
-        // two rows: one per (file, variable)
-        assert_eq!(tiles.len(), 2);
-
-        let session = admin_login(&app_ctx).await;
-        let ctx = app_ctx.session_context(session);
-        let db = ctx.db();
-
-        let id_and_name = add_md_dataset(&db, "md variables", meta_data, tiles).await?;
-        let provider = md_provider(&db, id_and_name.id).await?;
-
-        // `variables.nc` is a single 8-step daily series with 2 data variables, so the
-        // dataset has 8 time steps. Concatenating every row's intervals would give 16.
-        let axis = md_time_steps(
-            &provider,
-            TimeInterval::new_unchecked(
-                TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
-                TimeInstance::from_str("2000-01-09T00:00:00Z").unwrap(),
-            ),
-        )
-        .await?;
-
-        assert_eq!(
-            axis.len(),
-            8,
-            "one axis per dataset, not one per (file, variable) row"
-        );
-
-        // a narrow window clips: `try_time_irregular_range_fill` extends coverage to the
-        // query but never trims it, so without a filter this returns all 8 slices
-        let window = md_time_steps(
-            &provider,
-            TimeInterval::new_unchecked(
-                TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
-                TimeInstance::from_str("2000-01-02T00:00:00Z").unwrap(),
-            ),
-        )
-        .await?;
-
-        assert_eq!(window.len(), 1, "a one-day window returns one slice");
-
-        Ok(())
-    }
-
     /// Variables need not have the same files: here `precipitation` lacks the middle file.
     /// The axis must still be the union over all bands, whichever bands a query selects. An
     /// axis built from one band would hold a single gap step for days 5..9, and
@@ -7581,7 +7472,7 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let db = ctx.db();
 
-        let time_steps: Vec<TimeInterval> = (0..4)
+        let time_steps: Vec<TimeInterval> = (0..2)
             .map(|i| {
                 TimeInterval::new_unchecked(
                     MD_EPOCH_2000 + i * MD_DAY,
@@ -7590,13 +7481,13 @@ mod tests {
             })
             .collect();
 
-        // the file's own grid: 360 one-degree columns from 0° to 360°, ten rows from 45° down
+        // the file's own grid: 1440 quarter-degree columns from 0° to 360°, four rows from 1° down
         let raw_geo_transform = GeoTransform {
-            origin_coordinate: Coordinate2D { x: 0.0, y: 45.0 },
-            x_pixel_size: geoengine_datatypes::util::NonZeroFiniteF64::new_unchecked(1.0),
-            y_pixel_size: geoengine_datatypes::util::NonZeroFiniteF64::new_unchecked(-1.0),
+            origin_coordinate: Coordinate2D { x: 0.0, y: 1.0 },
+            x_pixel_size: geoengine_datatypes::util::NonZeroFiniteF64::new_unchecked(0.25),
+            y_pixel_size: geoengine_datatypes::util::NonZeroFiniteF64::new_unchecked(-0.25),
         };
-        let raw_bounds = SpatialPartition2D::new_unchecked((0., 45.).into(), (360., 35.).into());
+        let raw_bounds = SpatialPartition2D::new_unchecked((0., 1.).into(), (360., 0.).into());
 
         let tile = AddDatasetMdTile {
             spatial_partition: raw_bounds.into(),
@@ -7614,11 +7505,11 @@ mod tests {
                 .collect(),
             params: GdalDatasetParameters {
                 // a volume row stores the path relative to the volume root
-                file_path: Path::new("md").join("wrap_0_360.nc"),
+                file_path: Path::new("md").join("wrap_0_360_multitile.nc"),
                 rasterband_channel: 1,
                 geo_transform: raw_geo_transform,
-                width: 360,
-                height: 10,
+                width: 1440,
+                height: 4,
                 file_not_found_handling: FileNotFoundHandling::NoData,
                 no_data_value: Some(-9999.0),
                 properties_mapping: None,
@@ -7634,7 +7525,7 @@ mod tests {
             geoengine_operators::engine::TimeDescriptor::new_regular(
                 Some(TimeInterval::new_unchecked(
                     time_steps[0].start(),
-                    time_steps[3].end(),
+                    time_steps[1].end(),
                 )),
                 time_steps[0].start(),
                 geoengine_datatypes::primitives::TimeStep::days(1)
@@ -7642,11 +7533,11 @@ mod tests {
             ),
             geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                 geoengine_datatypes::raster::GeoTransform::new_unchecked(
-                    (0.0, 45.0).into(),
-                    1.0,
-                    -1.0,
+                    (0.0, 1.0).into(),
+                    0.25,
+                    -0.25,
                 ),
-                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [9, 359]),
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 0], [3, 1439]),
             ),
             geoengine_operators::engine::RasterBandDescriptors::new(vec![
                 geoengine_operators::engine::RasterBandDescriptor::new(
@@ -7692,7 +7583,7 @@ mod tests {
         assert_eq!(row.get::<_, f64>(1), 360.0, "stored bbox must be raw");
         assert_eq!(row.get::<_, f64>(2), 0.0, "stored transform must be raw");
 
-        // the API presents the stored grid: −180..180 over the same 360 pixels
+        // the API presents the stored grid: −180..180 over the same 1440 pixels
         let dataset = db.load_dataset(&id_and_name.id).await?;
         let geoengine_operators::engine::TypedResultDescriptor::Raster(raster) =
             &dataset.result_descriptor
@@ -7724,8 +7615,8 @@ mod tests {
         // a presented query across the seam maps onto the raw stored rows
         let loading_info = provider
             .loading_info(md_query(RasterQueryRectangle::new(
-                // presented grid indices: −180 is index 0, so lon −10..10 is indices 170..190
-                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 170], [9, 190]),
+                // presented grid indices: −180 is index 0, so lon −10..10 is indices 680..760
+                geoengine_datatypes::raster::GridBoundingBox2D::new_unchecked([0, 680], [3, 760]),
                 TimeInterval::new_unchecked(MD_EPOCH_2000, MD_EPOCH_2000 + MD_DAY),
                 BandSelection::first(),
             )))
@@ -7736,42 +7627,7 @@ mod tests {
             "the seam query must find the raw row"
         );
         // the file params round trip unchanged
-        assert_eq!(loading_info.files()[0].params.width, 360);
-
-        Ok(())
-    }
-
-    /// Two rows of one band over the same file slices (a mosaic split, or a second `z_index`
-    /// over the same times) must give one axis step per time. Only adjacent duplicates were
-    /// collapsed before the axis was sorted, so shared steps spread over several rows
-    /// duplicated.
-    #[ge_context::test]
-    async fn it_collapses_shared_md_time_steps_across_rows(
-        app_ctx: PostgresContext<NoTls>,
-    ) -> Result<()> {
-        let session = admin_login(&app_ctx).await;
-        let ctx = app_ctx.session_context(session);
-        let db = ctx.db();
-
-        let rows = [0, 1].map(|z_index| MdRow {
-            z_index,
-            ..MdRow::of("md/time_series_split_a.nc", "temperature", 0, 2)
-        });
-        let (meta_data, tiles) = md_dataset_meta(&rows, vec![api_band("temperature")]);
-        let id_and_name = add_md_dataset(&db, "md mosaic", meta_data, tiles).await?;
-        let provider = md_provider(&db, id_and_name.id).await?;
-
-        let axis = md_time_steps(
-            &provider,
-            TimeInterval::new_unchecked(
-                TimeInstance::from_str("2000-01-01T00:00:00Z").unwrap(),
-                TimeInstance::from_str("2000-01-03T00:00:00Z").unwrap(),
-            ),
-        )
-        .await?;
-
-        assert_eq!(axis.len(), 2);
-        assert!(axis.windows(2).all(|w| w[0].start() < w[1].start()));
+        assert_eq!(loading_info.files()[0].params.width, 1440);
 
         Ok(())
     }

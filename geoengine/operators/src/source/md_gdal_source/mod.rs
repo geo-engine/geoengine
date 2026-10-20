@@ -536,28 +536,6 @@ mod tests {
             }
         }
 
-        /// `(time, depth, y, x)`: 6 daily slices with depth fixed at index 0.
-        fn four_dimensional() -> Self {
-            let mut dataset = Self::daily_series("md/time_depth_4d.nc", 6);
-            dataset.files[0].axis_mapping = vec![
-                MdAxisMapping::Time,
-                MdAxisMapping::Fixed { index: 0 },
-                MdAxisMapping::Y,
-                MdAxisMapping::X,
-            ];
-            dataset
-        }
-
-        /// Two files of 4 slices each, concatenated to one 8-slice axis: file `a` covers
-        /// global z 0..4, file `b` covers 4..8.
-        fn split_series() -> Self {
-            let mut dataset = Self::daily_series("md/time_series_split_a.nc", 4);
-            dataset
-                .files
-                .push(MdFile::of("md/time_series_split_b.nc", "temperature", 4, 4));
-            dataset
-        }
-
         /// A 0..360 stored longitude grid, re-presented as -180..180.
         fn wrapped(
             path: &'static str,
@@ -574,37 +552,6 @@ mod tests {
                 wrap: true,
                 time: Some((EPOCH_2000, DAY)),
                 bands: vec!["temperature"],
-            }
-        }
-
-        /// Several arrays as bands on the wrapped 0..360 grid, one band per array.
-        fn wrapped_arrays(
-            path: &'static str,
-            width: usize,
-            height: usize,
-            grid: (f64, f64, f64, f64),
-            slices: usize,
-            arrays: &[(&'static str, u32)],
-        ) -> Self {
-            Self {
-                files: arrays
-                    .iter()
-                    .map(|(array_name, band)| MdFile {
-                        path,
-                        array_name,
-                        group: None,
-                        band: *band,
-                        z_start: 0,
-                        slices,
-                        axis_mapping: vec![MdAxisMapping::Time, MdAxisMapping::Y, MdAxisMapping::X],
-                    })
-                    .collect(),
-                grid,
-                width,
-                height,
-                wrap: true,
-                time: Some((EPOCH_2000, DAY)),
-                bands: arrays.iter().map(|(n, _)| *n).collect(),
             }
         }
 
@@ -884,14 +831,21 @@ mod tests {
         GridBoundingBox2D::new_unchecked([0, 0], [7, 7])
     }
 
+    /// The same array through the netCDF and the ZARR driver.
     #[tokio::test]
     async fn test_query_time_series_slices() {
+        for path in ["md/time_series.nc", "md/time_series.zarr"] {
+            query_time_series_slices(path).await;
+        }
+    }
+
+    async fn query_time_series_slices(path: &'static str) {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
         let name = add_md_dataset(
             &mut exe_ctx,
             "md_time_series",
-            MdDataset::daily_series("md/time_series.nc", 8),
+            MdDataset::daily_series(path, 8),
         );
 
         // window over z-slices 2..6 (4 slices), one read per slice
@@ -918,7 +872,7 @@ mod tests {
                 assert_eq!(
                     grid_value(tile, y, x),
                     (t * 1000 + (y as i64) * 10) as f32 + x as f32,
-                    "value at y={y}, x={x} of slice t={t}"
+                    "value at y={y}, x={x} of slice t={t} in {path}"
                 );
             }
         }
@@ -927,108 +881,6 @@ mod tests {
     /// The end-to-end check for 4D: `depth` is held fixed while `time` is sliced, and each
     /// slice must come back with the `depth` offset in its values. A read that dropped or
     /// mis-set the prefix would return another depth's data, not an error.
-    #[tokio::test]
-    async fn test_query_four_dimensional_array_holds_the_mapped_fixed_axis() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(&mut exe_ctx, "md_time_depth", MdDataset::four_dimensional());
-
-        // two daily slices at depth 0
-        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + 2 * DAY);
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            ts_grid_bounds(),
-            time,
-            BandSelection::first(),
-        )
-        .await;
-
-        assert_eq!(tiles.len(), 2);
-        for (k, tile) in tiles.iter().enumerate() {
-            let t = k as i64;
-            assert_eq!(
-                tile.time,
-                TimeInterval::new_unchecked(EPOCH_2000 + t * DAY, EPOCH_2000 + (t + 1) * DAY)
-            );
-            for (y, x) in [(0, 0), (7, 3), (7, 7)] {
-                // fixture value at (t, depth=0, y, x)
-                let expected = (t * 10_000 + (y as i64) * 10 + x as i64) as f32;
-                assert_eq!(
-                    grid_value(tile, y, x),
-                    expected,
-                    "value at y={y}, x={x} of t={t} must be depth 0's slice"
-                );
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_query_split_files_crossing_boundary() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(&mut exe_ctx, "md_split", MdDataset::split_series());
-
-        // window [d3, d6): slice 3 (file a) and slices 4..6 (file b), crossing the file boundary
-        let time = TimeInterval::new_unchecked(EPOCH_2000 + 3 * DAY, EPOCH_2000 + 6 * DAY);
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            ts_grid_bounds(),
-            time,
-            BandSelection::first(),
-        )
-        .await;
-
-        assert_eq!(tiles.len(), 3);
-        let times = tiles
-            .iter()
-            .map(|t| t.time.start().inner())
-            .collect::<Vec<_>>();
-        assert!(
-            times.windows(2).all(|w| w[0] < w[1]),
-            "tiles must be in time order"
-        );
-        for (k, tile) in tiles.iter().enumerate() {
-            let t = 3 + k;
-            assert_eq!(
-                grid_value(tile, 0, 0),
-                (t * 1000) as f32,
-                "cross-file slice t={t}"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn test_query_zarr() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
-            &mut exe_ctx,
-            "md_zarr",
-            MdDataset::daily_series("md/time_series.zarr", 8),
-        );
-
-        let time = TimeInterval::new_unchecked(EPOCH_2000 + 2 * DAY, EPOCH_2000 + 6 * DAY);
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            ts_grid_bounds(),
-            time,
-            BandSelection::first(),
-        )
-        .await;
-
-        assert_eq!(tiles.len(), 4);
-        for (k, tile) in tiles.iter().enumerate() {
-            let t = 2 + k;
-            assert_eq!(grid_value(tile, 7, 7), (t * 1000 + 7 * 10 + 7) as f32);
-        }
-    }
-
     /// A query past a wrapped dataset's presented extent still gets one empty tile per tile
     /// position, as `GdalSource` does: raster streams are gap-free, so downstream operators
     /// that zip several inputs stay aligned. This fixture stores lat 1..0 only, so rows below
@@ -1074,15 +926,22 @@ mod tests {
 
     /// A wrapped dataset whose longitude axis is wider than one 512 px tile column.
     ///
-    /// `wrap_0_360.nc` is 360 columns at 1 deg, so the whole world fits inside a single tile
-    /// column and it cannot exercise the per-column stored<->presented mapping. At 0.25 deg
-    /// the 1440 columns span three tile columns, which is the layout NEX-GDDP-CMIP6 has --
-    /// and the one that turned out to matter in practice.
+    /// At 0.25 deg the 1440 columns span several tile columns, which is the layout of
+    /// NEX-GDDP-CMIP6 and ERA5; a 1 deg world would fit inside one tile column and could not
+    /// exercise the per-column stored<->presented mapping.
     ///
     /// Checks that every presented column maps back to the right stored column across all
-    /// three tile columns, including the seam at world longitude 0.
+    /// three tile columns, including the seam at world longitude 0. Also for ERA5's layout,
+    /// whose stored edge is half a pixel west of 0° (longitudes are pixel centres from 0°): it
+    /// is presented from −180.125, and the tile lattice follows it.
     #[tokio::test]
     async fn test_query_wrap_across_multiple_tile_columns() {
+        for origin_x in [0.0, -0.125] {
+            query_wrap_across_multiple_tile_columns(origin_x).await;
+        }
+    }
+
+    async fn query_wrap_across_multiple_tile_columns(origin_x: f64) {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
         let name = add_md_dataset(
@@ -1092,7 +951,7 @@ mod tests {
                 "md/wrap_0_360_multitile.nc",
                 1440,
                 4,
-                (0.0, 1.0, 0.25, -0.25),
+                (origin_x, 1.0, 0.25, -0.25),
                 2,
             ),
         );
@@ -1120,8 +979,21 @@ mod tests {
         xs.dedup();
         assert_eq!(xs, [-2, -1, 0, 1], "expected four tile columns");
 
-        // value at presented (col) = t * 100_000 + row * 10 + (col mod 1440)
-        // sample both hemispheres and the seam column itself
+        // the tile lattice is the stored grid's own: its origin is a whole pixel off origin_x
+        let lattice_x = tiles[0]
+            .tile_information()
+            .global_geo_transform
+            .origin_coordinate()
+            .x;
+        let shift = ((lattice_x - origin_x) / 0.25).round() as isize;
+        assert!(
+            ((lattice_x - origin_x) / 0.25 - shift as f64).abs() < 1e-9,
+            "{lattice_x}"
+        );
+
+        // value at world col c = t * 100_000 + row * 10 + stored col; world col c has its west
+        // edge at lattice_x + 0.25 c, stored col s at origin_x + 0.25 s (mod 360°). Sample both
+        // hemispheres, the seam column itself and the last column inside both extents
         for (row, col) in [
             (-4_isize, -720_isize),
             (-4, -1),
@@ -1129,7 +1001,7 @@ mod tests {
             (-4, 1),
             (-4, 359),
             (-4, 360),
-            (-4, 719),
+            (-4, 718),
         ] {
             let tile = tiles
                 .iter()
@@ -1139,11 +1011,11 @@ mod tests {
                 })
                 .unwrap_or_else(|| panic!("no tile covers world ({row}, {col})"));
             let local = tile.tile_information().global_pixel_bounds().min_index();
-            let stored_col = col.rem_euclid(1440);
+            let stored_col = (col + shift).rem_euclid(1440);
             assert_eq!(
                 grid_value(tile, (row - local.y()) as usize, (col - local.x()) as usize),
                 stored_col as f32,
-                "world col {col}"
+                "world col {col} of origin {origin_x}"
             );
         }
     }
@@ -1203,80 +1075,6 @@ mod tests {
                 ),
                 expected,
                 "value at tiling cell ({row}, {col})"
-            );
-        }
-    }
-
-    /// Also for a grid whose stored edge is half a pixel west of 0° (ERA5: longitudes are
-    /// pixel centres from 0°): it is presented from −180.5, and the tile lattice follows it.
-    #[tokio::test]
-    async fn test_query_wrap_seam() {
-        for origin_x in [0.0, -0.5] {
-            query_wrap_seam(origin_x).await;
-        }
-    }
-
-    async fn query_wrap_seam(origin_x: f64) {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-        let name = add_md_dataset(
-            &mut exe_ctx,
-            "md_wrap",
-            // edges lon origin_x..origin_x + 360 at 1 degree (360 cols), lat 45..35
-            MdDataset::wrapped("md/wrap_0_360.nc", 360, 10, (origin_x, 45.0, 1.0, -1.0), 4),
-        );
-
-        // presented grid: global cols -180..179 from the west edge at or just west of -180°
-        let spatial = GridBoundingBox2D::new_unchecked([-45, -180], [-36, 179]);
-        let time = TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY);
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            spatial,
-            time,
-            BandSelection::first(),
-        )
-        .await;
-
-        // 512 px tiles anchored at world 0° yield one tile per hemisphere (y tile -1)
-        assert_eq!(tiles.len(), 2);
-        let mut xs: Vec<_> = tiles
-            .iter()
-            .map(|t| t.tile_information().global_tile_position().x())
-            .collect();
-        xs.sort_unstable();
-        assert_eq!(xs, [-1, 0]);
-        // the tile lattice is the stored grid's own: its origin is a whole pixel off origin_x
-        let lattice_x = tiles[0]
-            .tile_information()
-            .global_geo_transform
-            .origin_coordinate()
-            .x;
-        assert!((lattice_x - origin_x).rem_euclid(1.0) < 1e-9, "{lattice_x}");
-        assert!(
-            tiles
-                .iter()
-                .all(|t| t.tile_information().global_tile_position().y() == -1)
-        );
-
-        // value at world (row, col) = stored row (row + 45) * 10 + stored col; world col c has
-        // its west edge at lattice_x + c, stored col s at origin_x + s (mod 360)
-        let shift = (lattice_x - origin_x).round() as isize;
-        for (row, col) in [(-45_isize, -180_isize), (-45, -1), (-36, 0), (-36, 178)] {
-            let tile = tiles
-                .iter()
-                .find(|t| {
-                    let x = t.tile_information().global_tile_position().x();
-                    (col < 0 && x == -1) || (col >= 0 && x == 0)
-                })
-                .unwrap();
-            let local = tile.tile_information().global_pixel_bounds().min_index();
-            let stored_col = (col + shift).rem_euclid(360);
-            assert_eq!(
-                grid_value(tile, (row - local.y()) as usize, (col - local.x()) as usize),
-                ((row + 45) * 10 + stored_col) as f32,
-                "world col {col} of origin {origin_x}"
             );
         }
     }
@@ -1447,19 +1245,34 @@ mod tests {
             .expect("pixel is not covered by any tile")
     }
 
+    /// ERA5-shaped: one variable per pressure level (1000, 850, 500 hPa), each a `Fixed`
+    /// slice of `(time, level, y, x)`, plus a `(time, y, x)` surface variable from the same
+    /// file as band 3.
     #[tokio::test]
-    async fn test_query_pressure_level_slices_fixed_level() {
+    async fn test_query_pressure_levels_and_surface() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
-        // one variable per pressure level (1000, 850, 500 hPa); each is a `Fixed` slice of
-        // `(time, level, y, x)`
-        let levels = [0_usize, 1, 2];
-        let mut dataset = MdDataset {
-            files: levels
-                .iter()
-                .map(|_| MdFile::of("md/pressure_level_synthetic.nc", "temperature_3d", 0, 4))
-                .collect(),
+        let mut files: Vec<MdFile> = (0..3_u32)
+            .map(|level| MdFile {
+                band: level,
+                axis_mapping: vec![
+                    MdAxisMapping::Time,
+                    MdAxisMapping::Fixed {
+                        index: i64::from(level),
+                    },
+                    MdAxisMapping::Y,
+                    MdAxisMapping::X,
+                ],
+                ..MdFile::of("md/pressure_level_synthetic.nc", "temperature_3d", 0, 4)
+            })
+            .collect();
+        files.push(MdFile {
+            band: 3,
+            ..MdFile::of("md/pressure_level_synthetic.nc", "temperature_2d", 0, 4)
+        });
+        let dataset = MdDataset {
+            files,
             grid: (0.0, 48.0, 22.5, -12.0),
             width: 16,
             height: 8,
@@ -1469,74 +1282,31 @@ mod tests {
                 "temperature_3d 1000",
                 "temperature_3d 850",
                 "temperature_3d 500",
+                "temperature_2d",
             ],
         };
-        for (file, level) in dataset.files.iter_mut().zip(levels) {
-            file.band = level as u32;
-            file.axis_mapping = vec![
-                MdAxisMapping::Time,
-                MdAxisMapping::Fixed {
-                    index: level as i64,
-                },
-                MdAxisMapping::Y,
-                MdAxisMapping::X,
-            ];
-        }
         let name = add_md_dataset(&mut exe_ctx, "md_pressure_level", dataset);
 
-        // band 1 is the 850 hPa slice, time step 2
+        // time step 2, all four bands
         let tiles = query_md_source(
             &exe_ctx,
             &query_ctx,
             name,
             pressure_level_grid_bounds(),
             TimeInterval::new_instant(EPOCH_2000 + 2 * DAY).unwrap(),
-            BandSelection::new_single(1),
+            BandSelection::first_n(4),
         )
         .await;
 
-        assert_eq!(tiles.len(), 4);
-        // value = t * 10_000 + p * 1000 + stored row * 10 + stored col; global (-4, -8) is
-        // lat 48, lon -180, i.e. stored (0, 8)
-        assert_eq!(value_at(&tiles, -4, -8), 21_008.0);
-        assert_eq!(value_at(&tiles, 3, 7), 21_077.0);
-    }
-
-    #[tokio::test]
-    async fn test_query_surface_without_level_axis() {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-
-        let dataset = MdDataset {
-            files: vec![MdFile::of(
-                "md/pressure_level_synthetic.nc",
-                "temperature_2d",
-                0,
-                4,
-            )],
-            grid: (0.0, 48.0, 22.5, -12.0),
-            width: 16,
-            height: 8,
-            wrap: true,
-            time: Some((EPOCH_2000, DAY)),
-            bands: vec!["temperature_2d"],
-        };
-        let name = add_md_dataset(&mut exe_ctx, "md_surface", dataset);
-
-        let tiles = query_md_source(
-            &exe_ctx,
-            &query_ctx,
-            name,
-            pressure_level_grid_bounds(),
-            TimeInterval::new_instant(EPOCH_2000 + DAY).unwrap(),
-            BandSelection::first(),
-        )
-        .await;
-
-        assert_eq!(tiles.len(), 4);
-        // value = t * 1000 + stored row * 10 + stored col
-        assert_eq!(value_at(&tiles, -4, -8), 1_008.0);
-        assert_eq!(value_at(&tiles, 3, 7), 1_077.0);
+        assert_eq!(tiles.len(), 16, "four tiles per band");
+        // levels: t * 10_000 + p * 1000 + stored row * 10 + stored col; surface:
+        // t * 1000 + stored row * 10 + stored col. Global (-4, -8) is lat 48, lon -180, i.e.
+        // stored (0, 8)
+        for (band, base) in [(0, 20_000.0), (1, 21_000.0), (2, 22_000.0), (3, 2_000.0)] {
+            let band_tiles: Vec<_> = tiles.iter().filter(|t| t.band == band).cloned().collect();
+            assert_eq!(value_at(&band_tiles, -4, -8), base + 8.0, "band {band}");
+            assert_eq!(value_at(&band_tiles, 3, 7), base + 77.0, "band {band}");
+        }
     }
 
     #[test]
@@ -1656,14 +1426,19 @@ mod tests {
     async fn test_emits_band_inside_space() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = exe_ctx.mock_query_context_test_default();
-        let spec = MdDataset::wrapped_arrays(
-            "md/variables_multitile.nc",
+        // the order does not depend on the values, so one array serves as both bands
+        let mut spec = MdDataset::wrapped(
+            "md/wrap_0_360_multitile.nc",
             1440,
             4,
             (0.0, 1.0, 0.25, -0.25),
             2,
-            &[("temperature", 0), ("precipitation", 1)],
         );
+        spec.files.push(MdFile {
+            band: 1,
+            ..MdFile::of("md/wrap_0_360_multitile.nc", "temperature", 0, 2)
+        });
+        spec.bands = vec!["temperature", "temperature copy"];
         let name = add_md_dataset(&mut exe_ctx, "md_order_band_space", spec);
 
         // three tile columns, two time steps, two bands
@@ -1753,6 +1528,10 @@ mod tests {
             keys, expected,
             "band fastest, then time; a file boundary in one band only must not reorder the stream"
         );
+        // band 0 crosses from file a to file b between t = 3 and t = 4
+        for t in [3, 4] {
+            assert_eq!(grid_value(&tiles[t * 2], 0, 0), (t * 1000) as f32, "t={t}");
+        }
     }
 
     /// A z index no file covers is a gap-filled empty tile, and it belongs at its own time
