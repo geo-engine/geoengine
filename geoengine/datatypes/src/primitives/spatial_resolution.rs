@@ -16,12 +16,16 @@ pub struct SpatialResolution {
 
 impl SpatialResolution {
     /// Create a new `SpatialResolution` object from known-valid values, e.g. constants.
+    /// In a const context, invalid values fail at compile time.
     ///
     /// # Panics
     ///
     /// If `x` or `y` is not positive and finite.
-    pub fn new_unchecked(x: f64, y: f64) -> Self {
-        Self::new(x, y).expect("the spatial resolution must be positive and finite")
+    pub const fn new_unchecked(x: f64, y: f64) -> Self {
+        Self::new_typed(
+            PositiveFiniteF64::new_unchecked(x),
+            PositiveFiniteF64::new_unchecked(y),
+        )
     }
 
     /// Create a new `SpatialResolution` object, if `x` and `y` are positive and finite
@@ -55,15 +59,15 @@ impl SpatialResolution {
         self.y
     }
 
-    pub fn zero_point_one() -> Self {
+    pub const fn zero_point_one() -> Self {
         Self::new_unchecked(0.1, 0.1)
     }
 
-    pub fn zero_point_five() -> Self {
+    pub const fn zero_point_five() -> Self {
         Self::new_unchecked(0.5, 0.5)
     }
 
-    pub fn one() -> Self {
+    pub const fn one() -> Self {
         Self::new_unchecked(1., 1.)
     }
 
