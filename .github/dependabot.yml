@@ -8,6 +8,9 @@ multi-ecosystem-groups:
     # This filter ensures only patches are bundled across all linked ecosystems
     update-types:
       - "patch"
+    # Spans several projects, so no scope (allowed scopes: .github/workflows/lint-pr-title.yml)
+    commit-message:
+      prefix: "build"
 
 updates:
   - package-ecosystem: "cargo"
@@ -17,6 +20,9 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(backend)"
     groups:
       minor-and-major:
         patterns:
@@ -24,6 +30,11 @@ updates:
         update-types:
           - "minor"
           - "major"
+      # Security updates ignore the groups above, so they need their own group
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     patterns:
       - "*"
     multi-ecosystem-group: "patch-updates"
@@ -34,6 +45,10 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(python)"
+      prefix-development: "build(python)"
     groups:
       minor-and-major:
         patterns:
@@ -41,6 +56,10 @@ updates:
         update-types:
           - "minor"
           - "major"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     patterns:
       - "*"
     multi-ecosystem-group: "patch-updates"
@@ -53,6 +72,9 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "ci"
     groups:
       minor-and-major:
         patterns:
@@ -60,6 +82,10 @@ updates:
         update-types:
           - "minor"
           - "major"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     patterns:
       - "*"
     multi-ecosystem-group: "patch-updates"
@@ -71,6 +97,10 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(ui)"
+      prefix-development: "build(ui)"
     groups:
       minor-and-major:
         patterns:
@@ -78,6 +108,50 @@ updates:
         update-types:
           - "minor"
           - "major"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
     patterns:
       - "*"
+    # Wait a week before proposing new versions (does not delay security updates)
+    cooldown:
+      default-days: 7
     multi-ecosystem-group: "patch-updates"
+
+  - package-ecosystem: "npm"
+    directory: "/www"
+    schedule:
+      interval: "weekly"
+      day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(www)"
+      prefix-development: "build(www)"
+    groups:
+      minor-and-major:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "major"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    patterns:
+      - "*"
+    # Wait a week before proposing new versions (does not delay security updates)
+    cooldown:
+      default-days: 7
+    multi-ecosystem-group: "patch-updates"
+
+  # Test data only: suppress all updates, including security updates
+  - package-ecosystem: "npm"
+    directory: "/geoengine/test_data/ogc/tiles/openlayers"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
