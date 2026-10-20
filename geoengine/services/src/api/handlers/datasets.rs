@@ -7230,7 +7230,7 @@ mod tests {
         ));
     }
 
-    /// A `[Y, X]` variable has no z axis and is one slice; the probe must accept it.
+    /// A `[Y, X]` variable has no z axis and is one slice; the array check must accept it.
     #[tokio::test]
     async fn it_accepts_a_2d_md_row_without_a_z_axis() {
         let (meta_data, tiles) = md_dataset_meta(
@@ -7272,12 +7272,12 @@ mod tests {
             vec![api_band("temperature")],
         );
         let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
-            panic!("a probe produces MD metadata");
+            panic!("md_dataset_meta returns MD metadata");
         };
 
         let external = |tile: &AddDatasetMdTile| {
             let mut tile = tile.clone();
-            // a bare URL is external data; the probe's local path is not
+            // a bare URL is external data; the fixture's local path is not
             tile.params.file_path = "/vsicurl/https://example.invalid/variables.nc".into();
             tile
         };

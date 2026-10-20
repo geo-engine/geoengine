@@ -148,9 +148,7 @@ impl TryFrom<&OperatorsMdGdalSource> for MdGdalSource {
         Ok(Self {
             r#type: Default::default(),
             params: MdGdalSourceParameters {
-                data: serde_json::from_str::<crate::api::model::datatypes::NamedData>(
-                    &serde_json::to_string(&value.params.data)?,
-                )?,
+                data: value.params.data.clone().into(),
             },
         })
     }
