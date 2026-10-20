@@ -99,7 +99,8 @@ struct WorkerJob {
 struct WorkerAffinity {
     dataset_hash: u64,
     band: usize,
-    spatial_window: GridBoundingBox2D,
+    /// `None` after a header read, which has no pixel window
+    spatial_window: Option<GridBoundingBox2D>,
     timestamp: Instant,
 }
 
@@ -140,7 +141,7 @@ impl WorkerAffinity {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        window: Option<&GridBoundingBox2D>,
         now: Instant,
         holders: &FastHashMap<u64, usize>,
     ) -> WorkerRank {
@@ -153,7 +154,11 @@ impl WorkerAffinity {
 
         WorkerRank::Hit {
             same_band: self.band == band,
-            distance: std::cmp::Reverse(calculate_grid_distance(&self.spatial_window, window)),
+            // a header read has no window: rank it as the farthest hit
+            distance: std::cmp::Reverse(match (&self.spatial_window, window) {
+                (Some(last), Some(window)) => calculate_grid_distance(last, window),
+                _ => u64::MAX,
+            }),
         }
     }
 }
@@ -173,7 +178,7 @@ impl WorkerProcess {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        window: Option<&GridBoundingBox2D>,
         now: Instant,
         holders: &FastHashMap<u64, usize>,
     ) -> WorkerRank {
@@ -267,7 +272,7 @@ enum BrokerCommand {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        window: Option<GridBoundingBox2D>,
         read_failed: bool,
     },
     WorkerCachesCleared {
@@ -494,7 +499,7 @@ impl GdalProcessPool {
                     continue;
                 }
             };
-            let window = job.request.0.read_advise.read_window_bounds;
+            let window = job.request.0.read_window_bounds();
             let band = job.request.0.dataset_params.rasterband_channel;
             let dataset_hash = job.dataset_hash;
 
@@ -819,7 +824,7 @@ impl BrokerState {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        window: Option<GridBoundingBox2D>,
         read_failed: bool,
     ) {
         self.release_read_capacity(dataset_hash);
@@ -986,7 +991,7 @@ impl BrokerState {
         req: &QueuedRequest,
         now: Instant,
     ) -> Option<(usize, WorkerRank)> {
-        let window = &req.request.0.read_advise.read_window_bounds;
+        let window = req.request.0.read_window_bounds();
         let band = req.request.0.dataset_params.rasterband_channel;
 
         let mut best: Option<(usize, WorkerRank)> = None;
@@ -995,7 +1000,13 @@ impl BrokerState {
                 .workers
                 .get(worker_id)
                 .expect("Idle worker ID missing from registry - invariant broken")
-                .rank_for_job(dataset_hash, band, window, now, &self.dataset_holders);
+                .rank_for_job(
+                    dataset_hash,
+                    band,
+                    window.as_ref(),
+                    now,
+                    &self.dataset_holders,
+                );
             if best.is_none_or(|(_, best_rank)| rank > best_rank) {
                 best = Some((idle_idx, rank));
             }
@@ -1036,7 +1047,7 @@ impl BrokerState {
         let busy_affinity = WorkerAffinity {
             dataset_hash: req.dataset_hash,
             band: req.request.0.dataset_params.rasterband_channel,
-            spatial_window: req.request.0.read_advise.read_window_bounds,
+            spatial_window: req.request.0.read_window_bounds(),
             timestamp: now,
         };
 
@@ -1231,7 +1242,7 @@ impl GdalPoolDispatcher {
             })
     }
 
-    /// Read a header (`GdalReadKind::MdArrayInfo` or `GdalReadKind::RasterInfo`) without pixel
+    /// Read a header (`GdalRequest::Header`) without pixel
     /// data. Uses the same leader/follower deduplication as [`Self::read_data`].
     ///
     /// # Panics
@@ -1425,28 +1436,30 @@ mod tests {
                 allow_alphaband_as_mask: false,
                 retry: None,
             },
-            read_advise: GdalReadAdvise {
-                gdal_read_widow: GdalReadWindow {
-                    start_x: 0,
-                    start_y: 0,
-                    size_x: 512,
-                    size_y: 360,
-                },
-                read_window_bounds: window([0, 0], [359, 511]),
-                bounds_of_target: window([0, 0], [599, 1439]),
-                flip_y: true,
-            },
-            data_type: geoengine_datatypes::raster::RasterDataType::F32,
             read_id: None,
-            read_kind: GdalReadKind::MdArray {
-                group: None,
-                array_name: "tasmax".to_string(),
-                z_index,
-                axis_mapping: vec![
-                    super::super::process_common::MdAxisMapping::Time,
-                    super::super::process_common::MdAxisMapping::Y,
-                    super::super::process_common::MdAxisMapping::X,
-                ],
+            request: GdalRequest::Read {
+                read_advise: GdalReadAdvise {
+                    gdal_read_widow: GdalReadWindow {
+                        start_x: 0,
+                        start_y: 0,
+                        size_x: 512,
+                        size_y: 360,
+                    },
+                    read_window_bounds: window([0, 0], [359, 511]),
+                    bounds_of_target: window([0, 0], [599, 1439]),
+                    flip_y: true,
+                },
+                data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                kind: GdalReadKind::MdArray {
+                    group: None,
+                    array_name: "tasmax".to_string(),
+                    z_index,
+                    axis_mapping: vec![
+                        super::super::process_common::MdAxisMapping::Time,
+                        super::super::process_common::MdAxisMapping::Y,
+                        super::super::process_common::MdAxisMapping::X,
+                    ],
+                },
             },
         })
     }
@@ -1497,8 +1510,10 @@ mod tests {
         let a = md_message(0);
         let mut b = md_message(0);
         let IpcChannelMessage(p) = &mut b;
-        let IpcChannelMessagePayload { read_kind, .. } = p;
-        *read_kind = GdalReadKind::MdArray {
+        let GdalRequest::Read { kind, .. } = &mut p.request else {
+            panic!("md_message builds a pixel read");
+        };
+        *kind = GdalReadKind::MdArray {
             group: None,
             array_name: "tasmin".to_string(),
             z_index: 0,
@@ -1537,7 +1552,7 @@ mod tests {
         WorkerAffinity {
             dataset_hash,
             band,
-            spatial_window: window,
+            spatial_window: Some(window),
             timestamp: Instant::now(),
         }
     }
@@ -1553,7 +1568,7 @@ mod tests {
     ) -> WorkerRank {
         let w = window([0, 0], [7, 7]);
         let now = aff.timestamp + Duration::from_secs(idle_secs);
-        aff.rank(dataset_hash, band, &w, now, &FastHashMap::default())
+        aff.rank(dataset_hash, band, Some(&w), now, &FastHashMap::default())
     }
 
     #[test]
@@ -1563,7 +1578,7 @@ mod tests {
         for idle in IDLE_SECS {
             let now = aff.timestamp + Duration::from_secs(idle);
             assert_eq!(
-                aff.rank(42, 1, &w, now, &FastHashMap::default()),
+                aff.rank(42, 1, Some(&w), now, &FastHashMap::default()),
                 WorkerRank::BEST
             );
         }
@@ -1583,7 +1598,7 @@ mod tests {
             assert!(worst_hit > WorkerRank::Fresh);
             for evict_idle in IDLE_SECS {
                 let now = evict.timestamp + Duration::from_secs(evict_idle);
-                let best_evict = evict.rank(42, 1, &window([0, 0], [7, 7]), now, &duplicates);
+                let best_evict = evict.rank(42, 1, Some(&window([0, 0], [7, 7])), now, &duplicates);
                 assert!(WorkerRank::Fresh > best_evict);
             }
         }
@@ -1617,14 +1632,19 @@ mod tests {
         let unique_long_idle = aff.rank(
             42,
             1,
-            &w,
+            Some(&w),
             aff.timestamp + Duration::from_secs(3600),
             &holders,
         );
-        let unique_short_idle =
-            aff.rank(42, 1, &w, aff.timestamp + Duration::from_secs(1), &holders);
+        let unique_short_idle = aff.rank(
+            42,
+            1,
+            Some(&w),
+            aff.timestamp + Duration::from_secs(1),
+            &holders,
+        );
         holders.insert(99, 2);
-        let duplicate = aff.rank(42, 1, &w, aff.timestamp, &holders);
+        let duplicate = aff.rank(42, 1, Some(&w), aff.timestamp, &holders);
 
         assert!(duplicate > unique_long_idle);
         assert!(unique_long_idle > unique_short_idle);
@@ -1637,7 +1657,7 @@ mod tests {
     };
     use crate::source::gdal_worker_process::process_common::{
         GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
-        GdalReadKind, GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload,
+        GdalReadKind, GdalReadWindow, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
         IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
@@ -1723,7 +1743,7 @@ mod tests {
                 panic!("Expected second clear");
             };
             if active_read {
-                state.release_worker(0, 100, 1, bounds, false);
+                state.release_worker(0, 100, 1, Some(bounds), false);
             }
             let (next, _next_response) = make_request(200, 1, bounds);
             state.enqueue_request(next);
@@ -1767,7 +1787,7 @@ mod tests {
         let second = read_job(jobs1.try_recv().unwrap());
 
         let _cleared = state.clear_caches();
-        state.release_worker(0, first.dataset_hash, 1, bounds, false);
+        state.release_worker(0, first.dataset_hash, 1, Some(bounds), false);
         state.remove_worker(0);
         assert_eq!(state.global_active_count, 1);
         assert_eq!(state.dataset_registry[&second.dataset_hash].active_count, 1);
@@ -2135,8 +2155,10 @@ mod tests {
                 ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
                 ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".into(), ".tif".into()),
             ]);
-            request.request.0.read_advise.gdal_read_widow =
-                GdalReadWindow::new([0, 0].into(), [1, 1].into());
+            let GdalRequest::Read { read_advise, .. } = &mut request.request.0.request else {
+                panic!("expected a pixel read request");
+            };
+            read_advise.gdal_read_widow = GdalReadWindow::new([0, 0].into(), [1, 1].into());
             pool.broker_tx
                 .send(BrokerCommand::Read(request))
                 .await
@@ -2159,18 +2181,20 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         let msg = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params: make_params("test.tif", band),
-            read_advise: GdalReadAdvise {
-                gdal_read_widow: GdalReadWindow::new(
-                    GridIdx2D::new([0, 0]),
-                    GridShape2D::new([256, 256]),
-                ),
-                read_window_bounds: w,
-                bounds_of_target: w,
-                flip_y: false,
-            },
-            data_type: RasterDataType::U8,
             read_id: None,
-            read_kind: GdalReadKind::Raster,
+            request: GdalRequest::Read {
+                read_advise: GdalReadAdvise {
+                    gdal_read_widow: GdalReadWindow::new(
+                        GridIdx2D::new([0, 0]),
+                        GridShape2D::new([256, 256]),
+                    ),
+                    read_window_bounds: w,
+                    bounds_of_target: w,
+                    flip_y: false,
+                },
+                data_type: RasterDataType::U8,
+                kind: GdalReadKind::Raster,
+            },
         });
         let req = Box::new(QueuedRequest {
             dataset_hash,
@@ -2217,7 +2241,13 @@ mod tests {
         // a busy worker already counts as a holder of the dataset it reads
         assert_eq!(state.dataset_holders.get(&100), Some(&1));
 
-        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]), false);
+        state.release_worker(
+            0,
+            job.dataset_hash,
+            1,
+            Some(window([0, 0], [255, 255])),
+            false,
+        );
 
         assert_eq!(state.idle_workers.len(), 1);
         assert_eq!(state.idle_workers[0], 0);
@@ -2246,7 +2276,7 @@ mod tests {
         let first = read_job(rx0.try_recv().unwrap()).dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, first, 1, window([0, 0], [255, 255]), false);
+        state.release_worker(0, first, 1, Some(window([0, 0], [255, 255])), false);
         state.try_dispatch();
         let second = read_job(rx0.try_recv().unwrap()).dataset_hash;
 
@@ -2366,7 +2396,7 @@ mod tests {
         state.enqueue_request(req);
         state.try_dispatch();
         let job = read_job(rx0.try_recv().unwrap());
-        state.release_worker(0, job.dataset_hash, 1, w, true);
+        state.release_worker(0, job.dataset_hash, 1, Some(w), true);
 
         assert!(state.workers[0].affinity.is_none());
         assert!(state.dataset_holders.is_empty());
