@@ -406,7 +406,7 @@ fn process_sample_assets(
             }
 
             let resolution = geo_transform
-                .map(|gt| gt.x_pixel_size().abs())
+                .map(|gt| gt.x_pixel_size().get().abs())
                 .or_else(|| {
                     asset
                         .additional_fields
@@ -583,7 +583,7 @@ fn build_dataset_spatial_grid(
         GeoOpSpatialGridDescriptor::source_from_parts(
             GeoTransform::new_typed(
                 (0.0, 0.0).into(),
-                dataset_key.resolution.into(),
+                NonZeroFiniteF64::from(dataset_key.resolution),
                 -NonZeroFiniteF64::from(dataset_key.resolution),
             ),
             zero_size_grid(),
@@ -650,8 +650,8 @@ fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox
 
     let ox = gt.origin_coordinate.x;
     let oy = gt.origin_coordinate.y;
-    let ps_x = gt.x_pixel_size();
-    let ps_y = gt.y_pixel_size();
+    let ps_x = gt.x_pixel_size().get();
+    let ps_y = gt.y_pixel_size().get();
 
     // `grid_to_spatial_bounds` interprets the box's min index as the upper-left
     // (top) pixel and the max index as the last pixel, so the box spans
@@ -772,7 +772,7 @@ fn scan_collection_item_asset_v1_0_0(
 
         let geo_transform = common::geo_transform_from_fields(&asset.additional_fields)
             .ok_or_else(|| "Missing proj:transform".to_string())?;
-        let resolution: PositiveFiniteF64 = geo_transform.x_pixel_size_typed().abs().into();
+        let resolution: PositiveFiniteF64 = geo_transform.x_pixel_size().abs().into();
 
         let band_name = if let Some(ref eo_bands_vec) = eo_bands {
             common::v1_0_0_band_name(
@@ -825,7 +825,7 @@ fn scan_collection_item_asset_v1_1_0(
         .and_then(serde_json::Value::as_f64)
         .or_else(|| {
             common::geo_transform_from_fields(&asset.additional_fields)
-                .map(|gt| gt.x_pixel_size().abs())
+                .map(|gt| gt.x_pixel_size().get().abs())
         })
         .or_else(|| {
             collection_summaries

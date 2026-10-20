@@ -1311,8 +1311,8 @@ fn try_create_tile_for_band(
 
     let geo_transform = common::geo_transform_from_fields(&asset.additional_fields)?;
 
-    if (geo_transform.x_pixel_size().abs() - dataset.resolution.x()).abs() > 1e-9
-        || (geo_transform.y_pixel_size().abs() - dataset.resolution.y()).abs() > 1e-9
+    if (geo_transform.x_pixel_size().get().abs() - dataset.resolution.x().get()).abs() > 1e-9
+        || (geo_transform.y_pixel_size().get().abs() - dataset.resolution.y().get()).abs() > 1e-9
     {
         return None;
     }

@@ -9,11 +9,12 @@ use crate::{
         SpatialResolution,
     },
     spatial_reference::CoordinateProjection,
-    util::{NonZeroFiniteF64, Result},
+    util::Result,
 };
 use float_cmp::{ApproxEq, approx_eq};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use typed_floats::tf64;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, ToSql, FromSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -96,8 +97,8 @@ impl SpatialGridDefinition {
         Self {
             geo_transform: GeoTransform::new_typed(
                 new_origin,
-                self.geo_transform.x_pixel_size_typed(),
-                self.geo_transform.y_pixel_size_typed(),
+                self.geo_transform.x_pixel_size(),
+                self.geo_transform.y_pixel_size(),
             ),
             grid_bounds: self.grid_bounds,
         }
@@ -135,8 +136,8 @@ impl SpatialGridDefinition {
             self.geo_transform.origin_coordinate,
         );
 
-        if dist.x.abs() > self.geo_transform().x_pixel_size().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
-            || dist.y.abs() > self.geo_transform().y_pixel_size().abs() * 0.00001
+        if dist.x.abs() > self.geo_transform().x_pixel_size().get().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
+            || dist.y.abs() > self.geo_transform().y_pixel_size().get().abs() * 0.00001
         {
             return None;
         }
@@ -155,8 +156,8 @@ impl SpatialGridDefinition {
     pub fn with_changed_resolution(&self, new_res: SpatialResolution) -> Self {
         let geo_transform = GeoTransform::new_typed(
             self.geo_transform.origin_coordinate,
-            new_res.x_typed().into(),
-            -NonZeroFiniteF64::from(new_res.y_typed()),
+            tf64::NonZeroNonNaNFinite::from(new_res.x()),
+            -tf64::NonZeroNonNaNFinite::from(new_res.y()),
         );
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&self.spatial_partition());
         SpatialGridDefinition::new(geo_transform, grid_bounds)
@@ -195,8 +196,8 @@ impl SpatialGridDefinition {
     pub fn flip_axis_y(&self) -> Self {
         let geo_transform = GeoTransform::new_typed(
             self.geo_transform.origin_coordinate,
-            self.geo_transform.x_pixel_size_typed(),
-            -self.geo_transform.y_pixel_size_typed(),
+            self.geo_transform.x_pixel_size(),
+            -self.geo_transform.y_pixel_size(),
         );
 
         let y_min = -(self.grid_bounds.y_max() + 1); // since grid bounds are inclusive
@@ -531,8 +532,14 @@ mod tests {
             )
             .unwrap();
 
-        assert!(1. - (result_res.geo_transform().x_pixel_size() / res_4326.x()).abs() < 0.02);
-        assert!(1. - (result_res.geo_transform().y_pixel_size() / res_4326.y()).abs() < 0.02);
+        assert!(
+            1. - (result_res.geo_transform().x_pixel_size().get() / res_4326.x().get()).abs()
+                < 0.02
+        );
+        assert!(
+            1. - (result_res.geo_transform().y_pixel_size().get() / res_4326.y().get()).abs()
+                < 0.02
+        );
     }
 
     #[test]

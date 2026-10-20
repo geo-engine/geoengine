@@ -286,8 +286,8 @@ impl TryFrom<&OperatorsInterpolation> for Interpolation {
                     OperatorsInterpolationResolution::Resolution(resolution) => {
                         InterpolationResolution::Resolution(InterpolationResolutionResolution {
                             r#type: Default::default(),
-                            x: resolution.x_typed(),
-                            y: resolution.y_typed(),
+                            x: resolution.x().into(),
+                            y: resolution.y().into(),
                         })
                     }
                     OperatorsInterpolationResolution::Fraction(fraction) => {
@@ -324,8 +324,8 @@ impl TryFrom<&OperatorsDownsampling> for Downsampling {
                     OperatorsDownsamplingResolution::Resolution(resolution) => {
                         DownsamplingResolution::Resolution(DownsamplingResolutionResolution {
                             r#type: Default::default(),
-                            x: resolution.x_typed(),
-                            y: resolution.y_typed(),
+                            x: resolution.x().into(),
+                            y: resolution.y().into(),
                         })
                     }
                     OperatorsDownsamplingResolution::Fraction(fraction) => {

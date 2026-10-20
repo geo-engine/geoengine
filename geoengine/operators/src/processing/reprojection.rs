@@ -640,12 +640,15 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
         let current_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
 
         // TODO: use `find_next_best_resolution_overview_level` instead?
-        let output_overview_level_factor =
-            (target_resolution.x() / current_resolution.x()).round() as u32;
+        let output_overview_level_factor = (target_resolution.x() / current_resolution.x())
+            .get()
+            .round() as u32;
         // must be the same in x and y
         debug_assert_eq!(
             output_overview_level_factor,
-            (target_resolution.y() / current_resolution.y()).round() as u32
+            (target_resolution.y() / current_resolution.y())
+                .get()
+                .round() as u32
         );
         // must be a power of 2
         debug_assert!(output_overview_level_factor.is_power_of_two());
@@ -1326,7 +1329,8 @@ mod tests {
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
-                .x(),
+                .x()
+                .get(),
             epsilon = 0.000_001
         );
 
@@ -1336,7 +1340,8 @@ mod tests {
             result_descritptor
                 .spatial_grid_descriptor()
                 .spatial_resolution()
-                .y(),
+                .y()
+                .get(),
             epsilon = 0.000_001
         );
 
@@ -1476,10 +1481,10 @@ mod tests {
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: data_geo_transform.origin_coordinate,
                     x_pixel_size: NonZeroFiniteF64::new_unchecked(
-                        data_geo_transform.x_pixel_size(),
+                        data_geo_transform.x_pixel_size().get(),
                     ),
                     y_pixel_size: NonZeroFiniteF64::new_unchecked(
-                        data_geo_transform.y_pixel_size(),
+                        data_geo_transform.y_pixel_size().get(),
                     ),
                 },
                 width: data_bounds.axis_size_x(),

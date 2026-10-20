@@ -3393,8 +3393,8 @@ mod tests {
 
         let ops = OperatorsRasterization::try_from(api).expect("conversion failed");
 
-        approx_eq!(f64, ops.params.spatial_resolution.x(), 1.0);
-        approx_eq!(f64, ops.params.spatial_resolution.y(), 2.0);
+        approx_eq!(f64, ops.params.spatial_resolution.x().get(), 1.0);
+        approx_eq!(f64, ops.params.spatial_resolution.y().get(), 2.0);
         approx_eq!(f64, ops.params.origin_coordinate.x, 0.0);
         assert!(ops.params.density_params.is_some());
         approx_eq!(f64, ops.params.density_params.unwrap().cutoff, 0.5);

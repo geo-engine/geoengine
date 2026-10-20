@@ -148,8 +148,8 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
                 );
 
                 SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x() / fraction.x,
-                    in_spatial_grid.spatial_resolution().y().abs() / fraction.y,
+                    in_spatial_grid.spatial_resolution().x().get() / fraction.x,
+                    in_spatial_grid.spatial_resolution().y().get() / fraction.y,
                 )
             }
         };

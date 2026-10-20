@@ -187,11 +187,11 @@ where
         // However, there are spatial reference systems where the y-axis points downwards.
         // The standard "pixel-space" starts at the top-left corner of a `GeoTransform` and points down-right.
         // Therefore, the pixel size on the x-axis is always increasing
-        let pixel_size_x = grid_produced_by_source.geo_transform().x_pixel_size();
+        let pixel_size_x = grid_produced_by_source.geo_transform().x_pixel_size().get();
         debug_assert!(pixel_size_x.is_sign_positive());
         // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
         // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = grid_produced_by_source.geo_transform().y_pixel_size();
+        let pixel_size_y = grid_produced_by_source.geo_transform().y_pixel_size().get();
         debug_assert!(pixel_size_y.is_sign_negative());
 
         // The data origin is not neccessarily the origin of the tileing we want to use.

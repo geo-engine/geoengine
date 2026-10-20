@@ -5,6 +5,7 @@ use crate::util::{PositiveFiniteF64, Result};
 use float_cmp::{ApproxEq, F64Margin, approx_eq};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use typed_floats::tf64;
 
 /// The spatial resolution in SRS units.
 /// Both values are always finite and strictly positive, which is enforced by their type.
@@ -22,10 +23,10 @@ impl SpatialResolution {
     ///
     /// If `x` or `y` is not positive and finite.
     pub const fn new_unchecked(x: f64, y: f64) -> Self {
-        Self::new_typed(
-            PositiveFiniteF64::new_unchecked(x),
-            PositiveFiniteF64::new_unchecked(y),
-        )
+        Self {
+            x: PositiveFiniteF64::new_unchecked(x),
+            y: PositiveFiniteF64::new_unchecked(y),
+        }
     }
 
     /// Create a new `SpatialResolution` object, if `x` and `y` are positive and finite
@@ -39,24 +40,19 @@ impl SpatialResolution {
     }
 
     /// Create a new `SpatialResolution` object from already validated values
-    pub const fn new_typed(x: PositiveFiniteF64, y: PositiveFiniteF64) -> Self {
-        Self { x, y }
+    pub fn new_typed(x: impl Into<PositiveFiniteF64>, y: impl Into<PositiveFiniteF64>) -> Self {
+        Self {
+            x: x.into(),
+            y: y.into(),
+        }
     }
 
-    pub fn x(&self) -> f64 {
-        self.x.get()
+    pub fn x(&self) -> tf64::StrictlyPositiveFinite {
+        self.x.into()
     }
 
-    pub fn y(&self) -> f64 {
-        self.y.get()
-    }
-
-    pub fn x_typed(&self) -> PositiveFiniteF64 {
-        self.x
-    }
-
-    pub fn y_typed(&self) -> PositiveFiniteF64 {
-        self.y
+    pub fn y(&self) -> tf64::StrictlyPositiveFinite {
+        self.y.into()
     }
 
     pub const fn zero_point_one() -> Self {
@@ -87,11 +83,17 @@ impl SpatialResolution {
     }
 
     pub fn div_floor(self, rhs: Self) -> Result<Self> {
-        Self::new((self.x() / rhs.x()).floor(), (self.y() / rhs.y()).floor())
+        Self::new(
+            (self.x() / rhs.x()).floor().get(),
+            (self.y() / rhs.y()).floor().get(),
+        )
     }
 
     pub fn div_ceil(self, rhs: Self) -> Result<Self> {
-        Self::new((self.x() / rhs.x()).ceil(), (self.y() / rhs.y()).ceil())
+        Self::new(
+            (self.x() / rhs.x()).ceil().get(),
+            (self.y() / rhs.y()).ceil().get(),
+        )
     }
 }
 
@@ -108,7 +110,7 @@ impl Add for SpatialResolution {
     type Output = Result<Self>;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Self::new(self.x() + rhs.x(), self.y() + rhs.y())
+        Self::new((self.x() + rhs.x()).get(), (self.y() + rhs.y()).get())
     }
 }
 
@@ -117,7 +119,7 @@ impl Sub for SpatialResolution {
     type Output = Result<Self>;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self::new(self.x() - rhs.x(), self.y() - rhs.y())
+        Self::new((self.x() - rhs.x()).get(), (self.y() - rhs.y()).get())
     }
 }
 
@@ -126,7 +128,7 @@ impl Mul<f64> for SpatialResolution {
     type Output = Result<Self>;
 
     fn mul(self, rhs: f64) -> Self::Output {
-        Self::new(self.x() * rhs, self.y() * rhs)
+        Self::new(self.x().get() * rhs, self.y().get() * rhs)
     }
 }
 
@@ -150,7 +152,7 @@ impl Div<f64> for SpatialResolution {
     type Output = Result<Self>;
 
     fn div(self, rhs: f64) -> Self::Output {
-        Self::new(self.x() / rhs, self.y() / rhs)
+        Self::new(self.x().get() / rhs, self.y().get() / rhs)
     }
 }
 
@@ -159,7 +161,8 @@ impl ApproxEq for SpatialResolution {
 
     fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
         let m = margin.into();
-        approx_eq!(f64, self.x(), other.x(), m) && approx_eq!(f64, self.y(), other.y(), m)
+        approx_eq!(f64, self.x().get(), other.x().get(), m)
+            && approx_eq!(f64, self.y().get(), other.y().get(), m)
     }
 }
 

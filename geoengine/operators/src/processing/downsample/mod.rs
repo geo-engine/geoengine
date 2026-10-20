@@ -151,8 +151,8 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
                 );
 
                 SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x() * fraction.x,
-                    in_spatial_grid.spatial_resolution().y().abs() * fraction.y, // TODO: allow negative size
+                    in_spatial_grid.spatial_resolution().x().get() * fraction.x,
+                    in_spatial_grid.spatial_resolution().y().get() * fraction.y, // TODO: allow negative size
                 )
             }
         };
@@ -752,8 +752,8 @@ mod tests {
                 output_origin_reference: None,
                 output_resolution: DownsamplingResolution::Resolution(
                     SpatialResolution::new_unchecked(
-                        out_geo_transform.x_pixel_size(),
-                        out_geo_transform.y_pixel_size().abs(),
+                        out_geo_transform.x_pixel_size().get(),
+                        out_geo_transform.y_pixel_size().get().abs(),
                     ),
                 ),
             },
@@ -996,8 +996,8 @@ mod tests {
                 output_origin_reference: None,
                 output_resolution: DownsamplingResolution::Resolution(
                     SpatialResolution::new_unchecked(
-                        out_geo_transform.x_pixel_size(),
-                        out_geo_transform.y_pixel_size().abs(),
+                        out_geo_transform.x_pixel_size().get(),
+                        out_geo_transform.y_pixel_size().get().abs(),
                     ),
                 ),
             },

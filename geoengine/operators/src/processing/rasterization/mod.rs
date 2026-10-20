@@ -78,7 +78,7 @@ impl RasterOperator for Rasterization {
         let resolution = self.params.spatial_resolution;
         let origin = self.params.origin_coordinate;
 
-        let geo_transform = GeoTransform::new(origin, resolution.x(), -resolution.y())?;
+        let geo_transform = GeoTransform::new(origin, resolution.x().get(), -resolution.y().get())?;
 
         let spatial_bounds = in_desc
             .bbox
@@ -486,8 +486,8 @@ impl QueryProcessor for DensityRasterizationQueryProcessor {
         if let MultiPoint(points_processor) = &self.input {
             // Use rounding factor calculated from query resolution to extend in full pixel units
             let rounding_factor = f64::max(
-                1. / tiling_geo_transform.x_pixel_size(),
-                1. / tiling_geo_transform.y_pixel_size(),
+                1. / tiling_geo_transform.x_pixel_size().get(),
+                1. / tiling_geo_transform.y_pixel_size().get(),
             );
             let radius = (self.radius * rounding_factor).ceil() / rounding_factor;
 

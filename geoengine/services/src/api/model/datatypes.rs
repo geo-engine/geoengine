@@ -816,8 +816,8 @@ impl From<geoengine_datatypes::raster::GeoTransform> for GeoTransform {
     fn from(value: geoengine_datatypes::raster::GeoTransform) -> Self {
         GeoTransform {
             origin_coordinate: value.origin_coordinate().into(),
-            x_pixel_size: value.x_pixel_size_typed(),
-            y_pixel_size: value.y_pixel_size_typed(),
+            x_pixel_size: value.x_pixel_size().into(),
+            y_pixel_size: value.y_pixel_size().into(),
         }
     }
 }
@@ -1242,8 +1242,8 @@ pub struct SpatialResolution {
 impl From<geoengine_datatypes::primitives::SpatialResolution> for SpatialResolution {
     fn from(value: geoengine_datatypes::primitives::SpatialResolution) -> Self {
         Self {
-            x: value.x_typed(),
-            y: value.y_typed(),
+            x: value.x().into(),
+            y: value.y().into(),
         }
     }
 }

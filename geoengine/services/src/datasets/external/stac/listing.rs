@@ -77,8 +77,8 @@ impl StacDataProvider {
             .to_ascii_lowercase()
             .replace(':', "");
         let data_type = format!("{:?}", dataset.data_type).to_ascii_lowercase();
-        let res_x = Self::format_resolution_component(dataset.resolution.x());
-        let res_y = Self::format_resolution_component(dataset.resolution.y());
+        let res_x = Self::format_resolution_component(dataset.resolution.x().get());
+        let res_y = Self::format_resolution_component(dataset.resolution.y().get());
 
         if (dataset.resolution.x() - dataset.resolution.y()).abs() < 1e-9 {
             format!("{projection}_{data_type}_{res_x}")
@@ -93,9 +93,10 @@ impl StacDataProvider {
     ) -> String {
         match dimension {
             GroupingDimension::DataType => format!("{:?}", dataset.data_type),
-            GroupingDimension::Resolution => {
-                Self::format_resolution_value(dataset.resolution.x(), dataset.resolution.y())
-            }
+            GroupingDimension::Resolution => Self::format_resolution_value(
+                dataset.resolution.x().get(),
+                dataset.resolution.y().get(),
+            ),
             GroupingDimension::Projection => dataset.projection.to_string(),
         }
     }
@@ -106,9 +107,10 @@ impl StacDataProvider {
     ) -> String {
         match dimension {
             GroupingDimension::DataType => format!("{:?}", dataset.data_type).to_ascii_lowercase(),
-            GroupingDimension::Resolution => {
-                Self::format_resolution_value(dataset.resolution.x(), dataset.resolution.y())
-            }
+            GroupingDimension::Resolution => Self::format_resolution_value(
+                dataset.resolution.x().get(),
+                dataset.resolution.y().get(),
+            ),
             GroupingDimension::Projection => dataset
                 .projection
                 .to_string()

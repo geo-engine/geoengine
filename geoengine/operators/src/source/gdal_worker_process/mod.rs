@@ -33,8 +33,8 @@ pub(crate) fn overview_level_spatial_grid(
         // overview levels are small integers, so scaling a finite pixel size cannot overflow in practice
         let geo_transform = GeoTransform::new_unchecked(
             source_spatial_grid.geo_transform.origin_coordinate,
-            source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
-            source_spatial_grid.geo_transform.y_pixel_size() * f64::from(overview_level),
+            source_spatial_grid.geo_transform.x_pixel_size().get() * f64::from(overview_level),
+            source_spatial_grid.geo_transform.y_pixel_size().get() * f64::from(overview_level),
         );
         let grid_bounds = GridBoundingBox2D::new_min_max(
             div_floor(

@@ -722,8 +722,10 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
             return base_resolution; // Don't go below the base resolution of the layer
         }
 
-        let mut resolution_multiple =
-            f64::min(multiples_of_resolution.x(), multiples_of_resolution.y());
+        let mut resolution_multiple = f64::min(
+            multiples_of_resolution.x().get(),
+            multiples_of_resolution.y().get(),
+        );
         resolution_multiple = 2_f64.powf(resolution_multiple.log2().floor()); // Round down to nearest power of 2
 
         // a power of 2 that is at least 2, and the product is bounded by the target resolution
@@ -761,8 +763,8 @@ pub fn build_tile_matrices(
         result_descriptor.tiling_grid_definition(tiling_specification);
     let tiling_geo_transform = tiling_spatial_grid_definition.tiling_geo_transform();
     let (x_resolution, y_resolution) = (
-        tiling_geo_transform.x_pixel_size(),
-        tiling_geo_transform.y_pixel_size(),
+        tiling_geo_transform.x_pixel_size().get(),
+        tiling_geo_transform.y_pixel_size().get(),
     );
 
     if !approx_eq!(f64, x_resolution.abs(), y_resolution.abs()) {
@@ -1008,12 +1010,22 @@ mod tests {
         );
 
         assert!(
-            approx_eq!(f64, resolution.x(), 156_543.033_928_041, epsilon = 1e-9),
+            approx_eq!(
+                f64,
+                resolution.x().get(),
+                156_543.033_928_041,
+                epsilon = 1e-9
+            ),
             "x resolution should be the coarsest cell, got {}",
             resolution.x()
         );
         assert!(
-            approx_eq!(f64, resolution.y(), 156_543.033_928_041, epsilon = 1e-9),
+            approx_eq!(
+                f64,
+                resolution.y().get(),
+                156_543.033_928_041,
+                epsilon = 1e-9
+            ),
             "y resolution should be the coarsest cell, got {}",
             resolution.y()
         );

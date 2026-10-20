@@ -142,8 +142,8 @@ where
         .grid_idx_to_pixel_upper_left_coordinate_2d(query_rect.spatial_bounds().min_index());
     let output_geo_transform = GeoTransform::new_typed(
         coordinate_of_ul_query_pixel,
-        tiling_strategy.geo_transform.x_pixel_size_typed(),
-        tiling_strategy.geo_transform.y_pixel_size_typed(),
+        tiling_strategy.geo_transform.x_pixel_size(),
+        tiling_strategy.geo_transform.y_pixel_size(),
     );
     let out_pixel_bounds = query_rect.spatial_bounds();
 
@@ -664,14 +664,14 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
 
         let output_geo_transform = GeoTransform::new_typed(
             out_geo_transform_origin,
-            tiling_strategy.geo_transform.x_pixel_size_typed(),
-            tiling_strategy.geo_transform.y_pixel_size_typed(),
+            tiling_strategy.geo_transform.x_pixel_size(),
+            tiling_strategy.geo_transform.y_pixel_size(),
         );
 
         let output_gdal_geo_transform = GdalDatasetGeoTransform {
             origin_coordinate: out_geo_transform_origin,
-            x_pixel_size: tiling_strategy.geo_transform.x_pixel_size_typed(),
-            y_pixel_size: tiling_strategy.geo_transform.y_pixel_size_typed(),
+            x_pixel_size: tiling_strategy.geo_transform.x_pixel_size().into(),
+            y_pixel_size: tiling_strategy.geo_transform.y_pixel_size().into(),
         };
 
         let intermediate_dataset_parameters = GdalDatasetParameters {

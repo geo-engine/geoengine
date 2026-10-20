@@ -396,7 +396,7 @@ fn read_window_bounds_for_partially_tile(
             // if it is still contained in the actual dataset bounds
             let mut extend = [0, 0];
             if tile.geo_transform().origin_coordinate().y - tile_edge_coord.y
-                > tile.geo_transform().y_pixel_size()
+                > tile.geo_transform().y_pixel_size().get()
             {
                 let max_index = readable_area_in_overview_res_and_tile_space
                     .grid_bounds()
@@ -410,6 +410,7 @@ fn read_window_bounds_for_partially_tile(
                     + (readable_area_in_overview_res_and_tile_space
                         .geo_transform()
                         .y_pixel_size()
+                        .get()
                         * (max_index + 1) as f64);
 
                 if new_border_y
@@ -423,7 +424,7 @@ fn read_window_bounds_for_partially_tile(
             }
 
             if tile.geo_transform().origin_coordinate().x - tile_edge_coord.x
-                > tile.geo_transform().x_pixel_size()
+                > tile.geo_transform().x_pixel_size().get()
             {
                 let max_index = readable_area_in_overview_res_and_tile_space
                     .grid_bounds()
@@ -437,6 +438,7 @@ fn read_window_bounds_for_partially_tile(
                     + (readable_area_in_overview_res_and_tile_space
                         .geo_transform()
                         .x_pixel_size()
+                        .get()
                         * (max_index + 1) as f64);
 
                 if new_border_x

@@ -10,6 +10,7 @@ use float_cmp::{ApproxEq, F64Margin, approx_eq};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use typed_floats::tf64;
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
@@ -89,13 +90,13 @@ impl GeoTransform {
     #[inline]
     pub fn new_typed(
         origin_coordinate: Coordinate2D,
-        x_pixel_size: NonZeroFiniteF64,
-        y_pixel_size: NonZeroFiniteF64,
+        x_pixel_size: impl Into<NonZeroFiniteF64>,
+        y_pixel_size: impl Into<NonZeroFiniteF64>,
     ) -> Self {
         Self {
             origin_coordinate,
-            x_pixel_size,
-            y_pixel_size,
+            x_pixel_size: x_pixel_size.into(),
+            y_pixel_size: y_pixel_size.into(),
         }
     }
 
@@ -141,24 +142,16 @@ impl GeoTransform {
         )
     }
 
-    pub fn x_pixel_size(&self) -> f64 {
-        self.x_pixel_size.get()
+    pub fn x_pixel_size(&self) -> tf64::NonZeroNonNaNFinite {
+        self.x_pixel_size.into()
     }
 
-    pub fn y_pixel_size(&self) -> f64 {
-        self.y_pixel_size.get()
-    }
-
-    pub fn x_pixel_size_typed(&self) -> NonZeroFiniteF64 {
-        self.x_pixel_size
-    }
-
-    pub fn y_pixel_size_typed(&self) -> NonZeroFiniteF64 {
-        self.y_pixel_size
+    pub fn y_pixel_size(&self) -> tf64::NonZeroNonNaNFinite {
+        self.y_pixel_size.into()
     }
 
     pub fn y_axis_is_neg(&self) -> bool {
-        self.y_pixel_size() < 0.0
+        self.y_pixel_size().is_sign_negative()
     }
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
@@ -181,8 +174,8 @@ impl GeoTransform {
         grid_index: GridIdx2D,
     ) -> Coordinate2D {
         let GridIdx([.., grid_index_y, grid_index_x]) = grid_index;
-        let coord_x = self.origin_coordinate.x + (grid_index_x as f64) * self.x_pixel_size();
-        let coord_y = self.origin_coordinate.y + (grid_index_y as f64) * self.y_pixel_size();
+        let coord_x = self.origin_coordinate.x + (grid_index_x as f64) * self.x_pixel_size().get();
+        let coord_y = self.origin_coordinate.y + (grid_index_y as f64) * self.y_pixel_size().get();
         Coordinate2D::new(coord_x, coord_y)
     }
 
@@ -191,8 +184,10 @@ impl GeoTransform {
     #[inline]
     pub fn grid_idx_to_pixel_center_coordinate_2d(&self, grid_index: GridIdx2D) -> Coordinate2D {
         let GridIdx([.., grid_index_y, grid_index_x]) = grid_index;
-        let coord_x = self.origin_coordinate.x + (grid_index_x as f64 + 0.5) * self.x_pixel_size();
-        let coord_y = self.origin_coordinate.y + (grid_index_y as f64 + 0.5) * self.y_pixel_size();
+        let coord_x =
+            self.origin_coordinate.x + (grid_index_x as f64 + 0.5) * self.x_pixel_size().get();
+        let coord_y =
+            self.origin_coordinate.y + (grid_index_y as f64 + 0.5) * self.y_pixel_size().get();
         Coordinate2D::new(coord_x, coord_y)
     }
 
@@ -212,9 +207,9 @@ impl GeoTransform {
     #[inline]
     pub fn coordinate_to_grid_idx_2d(&self, coord: Coordinate2D) -> GridIdx2D {
         let grid_x_index =
-            ((coord.x - self.origin_coordinate.x) / self.x_pixel_size()).floor() as isize;
+            ((coord.x - self.origin_coordinate.x) / self.x_pixel_size().get()).floor() as isize;
         let grid_y_index =
-            ((coord.y - self.origin_coordinate.y) / self.y_pixel_size()).floor() as isize;
+            ((coord.y - self.origin_coordinate.y) / self.y_pixel_size().get()).floor() as isize;
         [grid_y_index, grid_x_index].into()
     }
 
@@ -222,21 +217,18 @@ impl GeoTransform {
     pub fn worldfile_string(&self) -> String {
         format!(
             "{}\n{}\n{}\n{}\n{}\n{}",
-            self.x_pixel_size(),
+            self.x_pixel_size().get(),
             0.,
             0.,
-            self.y_pixel_size(),
-            self.origin_coordinate.x + (self.x_pixel_size() / 2.),
-            self.origin_coordinate.y - (self.y_pixel_size() / 2.)
+            self.y_pixel_size().get(),
+            self.origin_coordinate.x + (self.x_pixel_size().get() / 2.),
+            self.origin_coordinate.y - (self.y_pixel_size().get() / 2.)
         )
     }
 
     pub fn spatial_resolution(&self) -> SpatialResolution {
         // TODO: should honor negative y size
-        SpatialResolution::new_typed(
-            self.x_pixel_size.abs().into(),
-            self.y_pixel_size.abs().into(),
-        )
+        SpatialResolution::new_typed(self.x_pixel_size.abs(), self.y_pixel_size.abs())
     }
 
     /// compute the index of the upper left pixel that is contained in the `partition`
@@ -253,8 +245,11 @@ impl GeoTransform {
 
         // choose the epsilon relative to the pixel size
         const EPSILON: f64 = 0.000_001;
-        let epsilon: Coordinate2D =
-            (self.x_pixel_size() * EPSILON, self.y_pixel_size() * EPSILON).into();
+        let epsilon: Coordinate2D = (
+            self.x_pixel_size().get() * EPSILON,
+            self.y_pixel_size().get() * EPSILON,
+        )
+            .into();
 
         // shift lower right by epsilon
         let lower_right = partition.lower_right() - epsilon;
@@ -324,7 +319,11 @@ impl GeoTransform {
 
     pub fn nearest_pixel_edge(&self, coordinate: Coordinate2D) -> GridIdx2D {
         self.coordinate_to_grid_idx_2d(
-            coordinate + Coordinate2D::new(self.x_pixel_size() * 0.5, self.y_pixel_size() * 0.5), // by adding a half pixel, we can find flips between edges
+            coordinate
+                + Coordinate2D::new(
+                    self.x_pixel_size().get() * 0.5,
+                    self.y_pixel_size().get() * 0.5,
+                ), // by adding a half pixel, we can find flips between edges
         )
     }
 
@@ -335,8 +334,8 @@ impl GeoTransform {
     pub fn distance_to_nearest_pixel_edge(&self, coordinate: Coordinate2D) -> Coordinate2D {
         let pixel_edge = self.nearest_pixel_edge_coordinate(coordinate);
         let dist = coordinate - pixel_edge;
-        debug_assert!(dist.x.abs() <= self.x_pixel_size().abs() * 0.5);
-        debug_assert!(dist.y.abs() <= self.y_pixel_size().abs() * 0.5);
+        debug_assert!(dist.x.abs() <= self.x_pixel_size().get().abs() * 0.5);
+        debug_assert!(dist.y.abs() <= self.y_pixel_size().get().abs() * 0.5);
         dist
     }
 
@@ -351,8 +350,8 @@ impl GeoTransform {
 
     pub fn is_compatible_grid(&self, other: GeoTransform) -> bool {
         self.is_valid_pixel_edge(other.origin_coordinate)
-            && approx_eq!(f64, self.x_pixel_size(), other.x_pixel_size())
-            && approx_eq!(f64, self.y_pixel_size(), other.y_pixel_size())
+            && approx_eq!(f64, self.x_pixel_size().get(), other.x_pixel_size().get())
+            && approx_eq!(f64, self.y_pixel_size().get(), other.y_pixel_size().get())
     }
 
     pub fn is_compatible_grid_generic<G: GeoTransformAccess>(&self, g: &G) -> bool {
@@ -385,11 +384,11 @@ impl From<GeoTransform> for GdalGeoTransform {
     fn from(geo_transform: GeoTransform) -> GdalGeoTransform {
         [
             geo_transform.origin_coordinate.x,
-            geo_transform.x_pixel_size(),
+            geo_transform.x_pixel_size().get(),
             0.0, // self.x_rotation,
             geo_transform.origin_coordinate.y,
             0.0, // self.y_rotation,
-            geo_transform.y_pixel_size(),
+            geo_transform.y_pixel_size().get(),
         ]
     }
 }
@@ -420,8 +419,8 @@ mod tests {
         let geo_transform = GeoTransform::new_unchecked((0.0, 1.0).into(), 2.0, -3.0);
         assert_eq!(geo_transform.origin_coordinate.x, 0.0);
         assert_eq!(geo_transform.origin_coordinate.y, 1.0);
-        assert_eq!(geo_transform.x_pixel_size(), 2.0);
-        assert_eq!(geo_transform.y_pixel_size(), -3.0);
+        assert_eq!(geo_transform.x_pixel_size().get(), 2.0);
+        assert_eq!(geo_transform.y_pixel_size().get(), -3.0);
     }
 
     #[test]
@@ -429,9 +428,9 @@ mod tests {
     fn geo_transform_new_with_coordinate_x_y() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(0.0, 1.0, 2.0, -3.0);
         assert_eq!(geo_transform.origin_coordinate.x, 0.0);
-        assert_eq!(geo_transform.x_pixel_size(), 1.0);
+        assert_eq!(geo_transform.x_pixel_size().get(), 1.0);
         assert_eq!(geo_transform.origin_coordinate.y, 2.0);
-        assert_eq!(geo_transform.y_pixel_size(), -3.0);
+        assert_eq!(geo_transform.y_pixel_size().get(), -3.0);
     }
 
     #[test]

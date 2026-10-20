@@ -715,8 +715,8 @@ mod tests {
         let gt = geo_transform_from_fields(&fields).expect("should parse transform");
         assert!((gt.origin_coordinate.x - 399_960.0).abs() < 1e-9);
         assert!((gt.origin_coordinate.y - 5_700_000.0).abs() < 1e-9);
-        assert!((gt.x_pixel_size() - 10.0).abs() < 1e-9);
-        assert!((gt.y_pixel_size() - (-10.0)).abs() < 1e-9);
+        assert!((gt.x_pixel_size().get() - 10.0).abs() < 1e-9);
+        assert!((gt.y_pixel_size().get() - (-10.0)).abs() < 1e-9);
     }
 
     #[test]

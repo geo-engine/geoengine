@@ -576,8 +576,10 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x()).abs() > 1e-9
-            || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y()).abs() > 1e-9
+        if (geo_transform.x_pixel_size().get().abs() - self.dataset.resolution.x().get()).abs()
+            > 1e-9
+            || (geo_transform.y_pixel_size().get().abs() - self.dataset.resolution.y().get()).abs()
+                > 1e-9
         {
             return Ok(());
         }
@@ -632,8 +634,8 @@ impl StacMultiBandMetaData {
                     rasterband_channel,
                     geo_transform: GdalDatasetGeoTransform {
                         origin_coordinate: geo_transform.origin_coordinate(),
-                        x_pixel_size: geo_transform.x_pixel_size_typed(),
-                        y_pixel_size: geo_transform.y_pixel_size_typed(),
+                        x_pixel_size: geo_transform.x_pixel_size().into(),
+                        y_pixel_size: geo_transform.y_pixel_size().into(),
                     },
                     width,
                     height,
@@ -1873,7 +1875,7 @@ mod tests {
         for dataset in &provider_def.datasets {
             let epsg_code = dataset.projection.code();
             let data_type_str = format!("{:?}", dataset.data_type).to_lowercase();
-            let resolution = dataset.resolution.x() as u32;
+            let resolution = dataset.resolution.x().get() as u32;
             let stable_id = format!("epsg{epsg_code}_{data_type_str}_{resolution}");
 
             let layer_id = geoengine_datatypes::dataset::LayerId(format!("dataset/{stable_id}"));

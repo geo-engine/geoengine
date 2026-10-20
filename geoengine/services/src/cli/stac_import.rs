@@ -603,7 +603,7 @@ impl StacImporter {
         let dataset_key = DatasetKey {
             epsg,
             data_type,
-            resolution: geo_transform.x_pixel_size_typed(),
+            resolution: geo_transform.x_pixel_size().into(),
         };
 
         let partial_key = PartialDatasetKey {
@@ -708,7 +708,7 @@ impl StacImporter {
         let dataset_key = DatasetKey {
             epsg,
             data_type,
-            resolution: geo_transform.x_pixel_size_typed(),
+            resolution: geo_transform.x_pixel_size().into(),
         };
 
         let partial_key = PartialDatasetKey {
@@ -1936,8 +1936,8 @@ impl TryFrom<GeoTransform> for ProjTransform {
         Ok(ProjTransform {
             origin_x: NonNaN::new(gt.origin_coordinate.x)?,
             origin_y: NonNaN::new(gt.origin_coordinate.y)?,
-            pixel_size_x: gt.x_pixel_size_typed(),
-            pixel_size_y: gt.y_pixel_size_typed(),
+            pixel_size_x: gt.x_pixel_size().into(),
+            pixel_size_y: gt.y_pixel_size().into(),
         })
     }
 }
@@ -2201,7 +2201,7 @@ fn scan_item_asset_v1_0_0(
 
         let geo_transform = geo_transform_from_fields(&asset.additional_fields)
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
-        let resolution = geo_transform.x_pixel_size_typed();
+        let resolution = geo_transform.x_pixel_size().into();
 
         let band_name = if let Some(ref eo_bands_vec) = eo_bands {
             // Use eo:bands metadata if available

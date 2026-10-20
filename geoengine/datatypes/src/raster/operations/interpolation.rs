@@ -125,10 +125,10 @@ where
 
             let in_a_coord = in_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(in_a_idx);
             let a_y = in_a_coord.y;
-            let b_y = a_y + in_geo_transform.y_pixel_size();
+            let b_y = a_y + in_geo_transform.y_pixel_size().get();
 
             let a_x = in_a_coord.x;
-            let c_x = a_x + in_geo_transform.x_pixel_size();
+            let c_x = a_x + in_geo_transform.x_pixel_size().get();
 
             let a_v = input.get_at_grid_index(in_a_idx).unwrap_or(None);
 

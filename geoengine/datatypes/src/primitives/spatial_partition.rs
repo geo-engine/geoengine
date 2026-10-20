@@ -79,12 +79,14 @@ impl SpatialPartition2D {
 
         let upper_left = bbox.upper_left();
 
-        let x_pixels = ((bbox.size_x() + EPSILON * resolution.x()) / resolution.x()).ceil();
-        let y_pixels = ((bbox.size_y() + EPSILON * resolution.y()) / resolution.y()).ceil();
+        let x_pixels =
+            ((bbox.size_x() + EPSILON * resolution.x().get()) / resolution.x().get()).ceil();
+        let y_pixels =
+            ((bbox.size_y() + EPSILON * resolution.y().get()) / resolution.y().get()).ceil();
 
         let snapped_lower_right = Coordinate2D::new(
-            upper_left.x + x_pixels * resolution.x(),
-            upper_left.y - y_pixels * resolution.y(),
+            upper_left.x + x_pixels * resolution.x().get(),
+            upper_left.y - y_pixels * resolution.y().get(),
         );
 
         SpatialPartition2D::new_unchecked(upper_left, snapped_lower_right)
@@ -229,13 +231,13 @@ impl SpatialPartition2D {
     pub fn snap_to_grid(&self, origin: Coordinate2D, resolution: SpatialResolution) -> Self {
         Self {
             upper_left_coordinate: (
-                snap_prev(origin.x, resolution.x(), self.upper_left().x),
-                snap_next(origin.y, resolution.y(), self.upper_left().y),
+                snap_prev(origin.x, resolution.x().get(), self.upper_left().x),
+                snap_next(origin.y, resolution.y().get(), self.upper_left().y),
             )
                 .into(),
             lower_right_coordinate: (
-                snap_next(origin.x, resolution.x(), self.lower_right().x),
-                snap_prev(origin.y, resolution.y(), self.lower_right().y),
+                snap_next(origin.x, resolution.x().get(), self.lower_right().x),
+                snap_prev(origin.y, resolution.y().get(), self.lower_right().y),
             )
                 .into(),
         }
@@ -247,8 +249,8 @@ impl SpatialPartition2D {
         let snapped = self.snap_to_grid(origin, resolution);
 
         [
-            (snapped.size_y() / resolution.y()).round() as usize,
-            (snapped.size_x() / resolution.x()).round() as usize,
+            (snapped.size_y() / resolution.y().get()).round() as usize,
+            (snapped.size_x() / resolution.x().get()).round() as usize,
         ]
         .into()
     }

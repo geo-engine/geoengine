@@ -1450,8 +1450,16 @@ mod tests {
             gdal_dataset_grid.geo_transform().origin_coordinate,
             Coordinate2D::new(-180., 90.)
         );
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.y_pixel_size(), 0.1);
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.x_pixel_size(), 0.1);
+        assert_approx_eq!(
+            f64,
+            gdal_dataset_grid.geo_transform.y_pixel_size().get(),
+            0.1
+        );
+        assert_approx_eq!(
+            f64,
+            gdal_dataset_grid.geo_transform.x_pixel_size().get(),
+            0.1
+        );
         assert_eq!(
             gdal_dataset_grid.grid_bounds,
             GridBoundingBox2D::new_min_max(-1800, -1, 0, 3599).unwrap()
@@ -1465,8 +1473,16 @@ mod tests {
             gdal_dataset_grid.geo_transform().origin_coordinate,
             Coordinate2D::new(-180., -90.)
         );
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.y_pixel_size(), 0.1);
-        assert_approx_eq!(f64, gdal_dataset_grid.geo_transform.x_pixel_size(), 0.1);
+        assert_approx_eq!(
+            f64,
+            gdal_dataset_grid.geo_transform.y_pixel_size().get(),
+            0.1
+        );
+        assert_approx_eq!(
+            f64,
+            gdal_dataset_grid.geo_transform.x_pixel_size().get(),
+            0.1
+        );
         assert_eq!(
             gdal_dataset_grid.grid_bounds,
             GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap()
