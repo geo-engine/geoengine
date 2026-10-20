@@ -349,6 +349,16 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         )
         .and_then(|payload| GdalIpcMdBytePayload::try_from(payload).map_err(Into::into))
         .map(IpcChannelResult::MdSlice),
+        // a header read: `T` and the read advise play no part
+        GdalReadKind::MdArrayInfo { group, array_name } => {
+            GdalHandling::load_md_array_info_with_dataset_retry(
+                dataset_cache,
+                &dataset_params,
+                group.as_deref(),
+                &array_name,
+            )
+            .map(IpcChannelResult::MdArrayInfo)
+        }
     };
 
     // Propagate channel send errors directly up out of the handler

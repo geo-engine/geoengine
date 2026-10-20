@@ -158,6 +158,12 @@ pub enum GdalReadKind {
         /// Role of each source-array dimension, in source order.
         axis_mapping: Vec<MdAxisMapping>,
     },
+    /// Multidim array header read: the shape and declared CRS of `array_name` (in `group`),
+    /// without any pixel data. The read advise and data type of the message are ignored.
+    MdArrayInfo {
+        group: Option<String>,
+        array_name: String,
+    },
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
@@ -182,6 +188,17 @@ pub enum IpcChannelResult {
     /// Multidim read result: the single z-slice requested by [`GdalReadKind::MdArray`].
     /// Uses the same byte encoding as `Raster`.
     MdSlice(GdalIpcMdBytePayload),
+    /// Header result of [`GdalReadKind::MdArrayInfo`].
+    MdArrayInfo(MdArrayInfo),
+}
+
+/// The shape and declared CRS of a multidim array, as read from its header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct MdArrayInfo {
+    /// the size of each array dimension, in source order
+    pub axis_sizes: Vec<usize>,
+    /// the CRS from the array's `crs`, `spatial_ref` or `grid_mapping` attribute, if any
+    pub crs: Option<geoengine_datatypes::spatial_reference::SpatialReference>,
 }
 
 pub type IpcProcessRasterResult = Result<IpcChannelResult, IpcProcessError>;
