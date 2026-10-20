@@ -33,12 +33,11 @@ use geoengine_datatypes::{
     raster::GridShape2D,
     util::Identifier,
 };
+#[cfg(debug_assertions)]
+use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{
-        ExecutionContext, InitializedRasterOperator, RasterResultDescriptor,
-        TypedRasterQueryProcessor,
-    },
+    engine::{ExecutionContext, InitializedRasterOperator, TypedRasterQueryProcessor},
     util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use ogcapi_types::{

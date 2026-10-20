@@ -19,6 +19,7 @@ pub use crate::contexts::migrations::{
     migration_0032_stac_provider_cache_ttl::Migration0032StacProviderCacheTtl,
     migration_0033_gdal_multiband_cache_ttl::Migration0033GdalMultibandCacheTtl,
     migration_0034_plots_single_raster_source::Migration0034PlotsSingleRasterSource,
+    migration_0035_stac_grid::Migration0035StacGrid,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -45,6 +46,7 @@ mod migration_0031_stac_provider_authentication;
 mod migration_0032_stac_provider_cache_ttl;
 mod migration_0033_gdal_multiband_cache_ttl;
 mod migration_0034_plots_single_raster_source;
+mod migration_0035_stac_grid;
 
 #[cfg(test)]
 mod schema_info;
@@ -85,6 +87,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0032StacProviderCacheTtl),
         Box::new(Migration0033GdalMultibandCacheTtl),
         Box::new(Migration0034PlotsSingleRasterSource),
+        Box::new(Migration0035StacGrid),
     ]
 }
 

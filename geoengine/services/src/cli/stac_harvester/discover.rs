@@ -207,6 +207,7 @@ pub(super) async fn discover_mapping(params: StacDiscoverMapping) -> Result<(), 
         page_limit: params.page_limit as i64,
         query_timeout_secs: 60,
         cache_ttl_secs: None,
+        stac_grid: None,
     };
 
     write_discovered_mapping(provider_def, params.output.as_ref())?;

@@ -12,6 +12,7 @@
  */
 import { StacProviderS3ConfigFromJSON, StacProviderS3ConfigToJSON, } from './StacProviderS3Config';
 import { StacProviderDatasetFromJSON, StacProviderDatasetToJSON, } from './StacProviderDataset';
+import { StacGridFromJSON, StacGridToJSON, } from './StacGrid';
 import { StacProviderAuthenticationFromJSON, StacProviderAuthenticationToJSON, } from './StacProviderAuthentication';
 import { TimeDimensionFromJSON, TimeDimensionToJSON, } from './TimeDimension';
 /**
@@ -64,6 +65,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
         'cacheTtlSecs': json['cacheTtlSecs'] == null ? undefined : json['cacheTtlSecs'],
+        'stacGrid': json['stacGrid'] == null ? undefined : StacGridFromJSON(json['stacGrid']),
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -88,5 +90,6 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         'queryTimeoutSecs': value['queryTimeoutSecs'],
         'pageLimit': value['pageLimit'],
         'cacheTtlSecs': value['cacheTtlSecs'],
+        'stacGrid': StacGridToJSON(value['stacGrid']),
     };
 }

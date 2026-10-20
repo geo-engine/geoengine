@@ -85,7 +85,9 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                     ],
                 query_timeout_secs = 56,
                 page_limit = 56,
-                cache_ttl_secs = 0
+                cache_ttl_secs = 0,
+                stac_grid = geoengine_api_client.models.stac_grid.StacGrid(
+                    target_number_of_cells = 1, )
             )
         else:
             return StacDataProviderDefinition(

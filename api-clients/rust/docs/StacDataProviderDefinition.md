@@ -18,6 +18,7 @@ Name | Type | Description | Notes
 **query_timeout_secs** | Option<**i64**> | Timeout in seconds for outgoing STAC API HTTP requests. | [optional]
 **page_limit** | Option<**i64**> |  | [optional]
 **cache_ttl_secs** | Option<**i32**> | Optional output cache lifetime; omitted values use the global cache default. | [optional]
+**stac_grid** | Option<[**models::StacGrid**](StacGrid.md)> | Target number of square search cells per dataset CRS projected area of use; omitted values use 512. | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 
