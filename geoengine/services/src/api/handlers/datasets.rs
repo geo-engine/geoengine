@@ -727,6 +727,51 @@ fn check_md_tile_against_array(
         });
     }
 
+    // the stated transform must put the cell centres where the file's coordinates are; the
+    // usual mistake is taking the first centre for the edge, half a pixel off
+    let gt = tile.params.geo_transform;
+    for (role, origin, pixel, size) in [
+        (
+            geoengine_operators::source::MdAxisMapping::X,
+            gt.origin_coordinate.x,
+            f64::from(gt.x_pixel_size),
+            x_size,
+        ),
+        (
+            geoengine_operators::source::MdAxisMapping::Y,
+            gt.origin_coordinate.y,
+            f64::from(gt.y_pixel_size),
+            y_size,
+        ),
+    ] {
+        let Some(found) = axis_mapping
+            .iter()
+            .position(|axis| *axis == role)
+            .and_then(|index| shape.coordinates.get(index).copied().flatten())
+        else {
+            continue;
+        };
+        let centre = |i: usize| origin + (i as f64 + 0.5) * pixel;
+        let (first, last) = (centre(0), centre(size - 1));
+        let tolerance = 1e-3 * pixel.abs();
+        if !found.uniform
+            || (found.first - first).abs() > tolerance
+            || (found.last - last).abs() > tolerance
+        {
+            return Err(AddDatasetMdTilesError::MdTileCoordinateMismatch {
+                axis: format!("{role:?}"),
+                expected: format!("uniform cell centres {first} .. {last}"),
+                found: format!(
+                    "{}cell centres {} .. {}",
+                    if found.uniform { "" } else { "non-uniform " },
+                    found.first,
+                    found.last
+                ),
+                file_path,
+            });
+        }
+    }
+
     Ok(())
 }
 
@@ -7313,6 +7358,47 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    /// The stated transform must put the cell centres on the file's coordinates: a row whose
+    /// origin is the first centre instead of the edge, or a grid no affine transform describes
+    /// (a Gaussian latitude axis), would be read misplaced without any error.
+    #[tokio::test]
+    async fn it_rejects_an_md_row_off_the_files_coordinates() {
+        let check = async |path: &'static str, shift_x: f64| {
+            let (meta_data, tiles) = md_dataset_meta(
+                &[MdRow {
+                    axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
+                    ..MdRow::of(path, "grid_2d", 0, 1)
+                }],
+                vec![api_band("grid_2d")],
+            );
+            let crate::datasets::storage::MetaDataDefinition::GdalMdMetaData(md) = meta_data else {
+                panic!("md_dataset_meta returns MD metadata")
+            };
+            let mut tile = tiles[0].clone();
+            tile.params.file_path = test_data!(path).to_path_buf();
+            tile.params.geo_transform.origin_coordinate.x += shift_x;
+            let info = md_tile_info(&tile)
+                .await
+                .expect("the fixture's array opens");
+            check_md_tile_against_array(
+                &tile,
+                &md.variables[0].axis_mapping,
+                &info,
+                &md.result_descriptor,
+            )
+        };
+
+        // grid_2d's lon centres are 15, 45, ..; an origin at the first centre is half a pixel off
+        assert!(matches!(
+            check("md/grid_2d.nc", 15.0).await,
+            Err(AddDatasetMdTilesError::MdTileCoordinateMismatch { axis, .. }) if axis == "X"
+        ));
+        assert!(matches!(
+            check("md/non_uniform_lat.nc", 0.0).await,
+            Err(AddDatasetMdTilesError::MdTileCoordinateMismatch { axis, .. }) if axis == "Y"
+        ));
     }
 
     /// External data is never opened while a row is validated, so the declared axis is the

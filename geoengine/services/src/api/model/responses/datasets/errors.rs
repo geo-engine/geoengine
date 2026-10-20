@@ -220,6 +220,13 @@ pub enum AddDatasetMdTilesError {
         found: (usize, usize),
         file_path: String,
     },
+    /// the row's geo transform does not put the cell centres on the file's coordinates
+    MdTileCoordinateMismatch {
+        axis: String,
+        expected: String,
+        found: String,
+        file_path: String,
+    },
     /// the array declares a CRS that contradicts the dataset's
     MdTileCrsMismatch {
         declared: String,
