@@ -222,6 +222,7 @@ where
 #[derive(Default)]
 pub struct GdalDatasetHolder {
     params: Option<GdalDatasetParameters>,
+    multidim: bool,
     dataset: Option<GdalDataset>,
     thread_local: Option<GdalConfigOptions>,
 }
@@ -234,6 +235,7 @@ impl GdalDatasetHolder {
     pub fn new() -> Self {
         Self {
             params: None,
+            multidim: false,
             dataset: None,
             thread_local: None,
         }
@@ -241,6 +243,7 @@ impl GdalDatasetHolder {
 
     fn open_ex(
         dataset_params: &GdalDatasetParameters,
+        multidim: bool,
     ) -> Result<(GdalDataset, Option<GdalConfigOptions>), GdalError> {
         let options = dataset_params
             .gdal_open_options
@@ -255,12 +258,17 @@ impl GdalDatasetHolder {
             .transpose()
             .expect("GdalConfigOptions must not fail");
 
+        // With the multidim flag GDAL returns NULL for classic `NETCDF:<file>:/group/array` subdatasets
+        let open_flags = if multidim {
+            GdalOpenFlags::GDAL_OF_RASTER | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER
+        } else {
+            GdalOpenFlags::GDAL_OF_RASTER
+        };
+
         let ds = gdal_open_ex_gdal_error(
             &dataset_params.file_path_for_open(),
             DatasetOptions {
-                // open in both modes so that classic rasterband reads and
-                // multidim (`root_group`) reads work on the same cached handle
-                open_flags: GdalOpenFlags::GDAL_OF_RASTER | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
+                open_flags,
                 open_options: options.as_deref(),
                 ..DatasetOptions::default()
             },
@@ -269,15 +277,19 @@ impl GdalDatasetHolder {
         Ok((ds, thread_local_configs))
     }
 
-    pub fn get(&mut self, params: &GdalDatasetParameters) -> Option<&mut GdalDataset> {
-        if Self::is_hit(self.params.as_ref(), params) {
+    pub fn get(
+        &mut self,
+        params: &GdalDatasetParameters,
+        multidim: bool,
+    ) -> Option<&mut GdalDataset> {
+        if self.is_hit(params, multidim) {
             self.dataset.as_mut()
         } else {
             None
         }
     }
 
-    /// Retrieves the open dataset if the parameters match, otherwise opens a new dataset with the given parameters, updates the stored dataset, and returns it.
+    /// Retrieves the open dataset if the parameters and the open mode match, otherwise opens a new dataset with the given parameters, updates the stored dataset, and returns it.
     /// The current open dataset is kept alive until the new one is successfully opened to maintain GDAL's internal caching benefits.
     /// This method ensures that only one dataset is open at a time, and that the state is updated atomically to prevent stale data.
     /// The caller is responsible for ensuring that the returned dataset is not used concurrently across threads, as GDAL datasets are generally not thread-safe.
@@ -291,8 +303,9 @@ impl GdalDatasetHolder {
     pub fn get_or_open(
         &mut self,
         params: &GdalDatasetParameters,
+        multidim: bool,
     ) -> Result<&mut GdalDataset, GdalError> {
-        let hit = Self::is_hit(self.params.as_ref(), params);
+        let hit = self.is_hit(params, multidim);
 
         if hit {
             let _span = tracing::debug_span!("gdal_dataset_cache_hit").entered();
@@ -307,9 +320,10 @@ impl GdalDatasetHolder {
             )
             .entered();
 
-            let (ds, tlo) = Self::open_ex(params)?;
+            let (ds, tlo) = Self::open_ex(params, multidim)?;
 
             self.params = Some(params.clone());
+            self.multidim = multidim;
             self.dataset = Some(ds);
             self.thread_local = tlo;
 
@@ -317,12 +331,13 @@ impl GdalDatasetHolder {
         }
     }
 
-    fn is_hit(params: Option<&GdalDatasetParameters>, other: &GdalDatasetParameters) -> bool {
+    fn is_hit(&self, other: &GdalDatasetParameters, multidim: bool) -> bool {
         // TODO: we could optimize this by hashing the parameters and comparing the hash for a quick check before doing the full equality check, if it turns out to be a bottleneck.
-        if let Some(current_ds_params) = params {
+        if let Some(current_ds_params) = self.params.as_ref() {
             current_ds_params.file_path == other.file_path
                 && current_ds_params.gdal_open_options == other.gdal_open_options
                 && current_ds_params.gdal_config_options == other.gdal_config_options
+                && self.multidim == multidim
         } else {
             false
         }
@@ -337,8 +352,8 @@ impl GdalDatasetHolder {
         prev
     }
 
-    pub fn contains(&self, params: &GdalDatasetParameters) -> bool {
-        Self::is_hit(self.params.as_ref(), params)
+    pub fn contains(&self, params: &GdalDatasetParameters, multidim: bool) -> bool {
+        self.is_hit(params, multidim)
     }
 }
 
@@ -417,6 +432,7 @@ impl GdalHandling {
     fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
+        multidim: bool,
         read: impl Fn(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
     ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
@@ -429,7 +445,7 @@ impl GdalHandling {
             GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
             Some(GDAL_RETRY_MAX_BACKOFF_MS),
             || {
-                let ds = match cache.get_or_open(dp) {
+                let ds = match cache.get_or_open(dp, multidim) {
                     Ok(dataset) => dataset,
                     Err(gdal_error) => {
                         if is_remote {
@@ -458,7 +474,7 @@ impl GdalHandling {
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
-        Self::open_with_retry(cache, dataset_params, |ds, params| {
+        Self::open_with_retry(cache, dataset_params, false, |ds, params| {
             Self::load_tile_data(ds, params, read_advise)
         })
     }
@@ -722,7 +738,7 @@ impl GdalHandling {
         z_index: usize,
         axis_mapping: &[MdAxisMapping],
     ) -> Result<GdalIpcMdPayload<T>, IpcProcessError> {
-        Self::open_with_retry(cache, dataset_params, |ds, params| {
+        Self::open_with_retry(cache, dataset_params, true, |ds, params| {
             Self::load_md_tile_data(
                 ds,
                 params,
@@ -932,25 +948,27 @@ mod tests {
         }
     }
 
-    /// The dataset cache is keyed on the *file*, not on the shape of the request.
+    /// The dataset cache is keyed on the *file* and the open mode, not on the shape of the request.
     ///
     /// This is what makes two things safe: issuing one request per z slice
     /// must not cost extra GDAL opens, and two arrays of one file must share the open handle.
-    /// Both fall out of `is_hit` looking only at the path and the open/config options, and
-    /// neither survives someone adding a request field to that comparison.
+    /// Both fall out of `is_hit` looking only at the path, the open/config options and the open mode.
     #[test]
     #[serial_test::serial]
     fn dataset_cache_is_keyed_on_the_file_not_the_request() {
         let params = get_params();
         let mut holder = GdalDatasetHolder::new();
-        assert!(holder.get_or_open(&params).is_ok(), "the fixture must open");
-        assert!(holder.contains(&params));
+        assert!(
+            holder.get_or_open(&params, false).is_ok(),
+            "the fixture must open"
+        );
+        assert!(holder.contains(&params, false));
 
         // another band of the same file is the same open dataset
         let mut other = params.clone();
         other.rasterband_channel = 7;
         assert!(
-            holder.contains(&other),
+            holder.contains(&other, false),
             "band must not be part of the cache key"
         );
 
@@ -960,16 +978,39 @@ mod tests {
         other.no_data_value = Some(42.0);
         other.width = 1;
         assert!(
-            holder.contains(&other),
+            holder.contains(&other, false),
             "the read window must not be part of the cache key"
         );
 
-        // ...but a different file is
+        // ...but the open mode is: a multidim read needs a handle opened with the multidim flag
+        assert!(
+            !holder.contains(&params, true),
+            "a multidim read must not reuse a classic handle"
+        );
+
+        // ...and a different file is
         let mut other = params.clone();
         other.file_path = test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-02.TIFF").into();
         assert!(
-            !holder.contains(&other),
+            !holder.contains(&other, false),
             "a different file must not reuse the handle"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn classic_open_reads_netcdf_subdataset_path() {
+        let mut params = get_params();
+        params.file_path = format!(
+            "NETCDF:{}:/metric_1/ebv_cube",
+            test_data!("netcdf4d/dataset_irr_ts.nc").display()
+        )
+        .into();
+
+        let mut holder = GdalDatasetHolder::new();
+        assert!(
+            holder.get_or_open(&params, false).is_ok(),
+            "a classic open of a netCDF subdataset must not use the multidim flag"
         );
     }
 
@@ -1260,7 +1301,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&dataset_params).unwrap();
+        let dataset = gdc.get_or_open(&dataset_params, false).unwrap();
 
         let reader_payload =
             GdalHandling::load_tile_data::<u8>(dataset, &dataset_params, gdal_read_advice)?;
@@ -1727,7 +1768,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
+        let dataset = gdc.get_or_open(&up_side_down_params, false).unwrap();
 
         let reader_payload =
             GdalHandling::load_tile_data::<u8>(dataset, &up_side_down_params, gdal_read_advice)
@@ -1788,7 +1829,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
+        let dataset = gdc.get_or_open(&up_side_down_params, false).unwrap();
 
         let GridAndProperties { grid, properties } =
             GdalHandling::load_tile_data::<u8>(dataset, &up_side_down_params, gdal_read_advice)
@@ -1875,7 +1916,7 @@ mod tests {
         };
 
         let mut gdc = GdalDatasetHolder::new();
-        let dataset = gdc.get_or_open(&params).unwrap();
+        let dataset = gdc.get_or_open(&params, false).unwrap();
 
         let reader_payload =
             GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice).unwrap();
