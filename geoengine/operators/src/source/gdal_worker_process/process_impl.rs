@@ -2,7 +2,7 @@ use super::{
     GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadWindow,
-        IpcProcessError, MdAxisMapping, validate_md_axis_mapping,
+        IpcProcessError, MdArrayInfo, MdAxisMapping, validate_md_axis_mapping,
     },
 };
 use crate::{
@@ -15,11 +15,13 @@ use gdal::{
     cpl::CslStringList,
     errors::GdalError,
     raster::{GdalType, RasterBand as GdalRasterBand},
+    spatial_ref::SpatialRef,
 };
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::{
     primitives::Coordinate2D,
     raster::{GridSize, Pixel, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType},
+    spatial_reference::SpatialReference,
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use num::FromPrimitive;
@@ -754,6 +756,21 @@ impl GdalHandling {
         })
     }
 
+    /// Reads the shape and declared CRS of a multidimensional array, without pixel data.
+    ///
+    /// # Errors
+    /// Returns an `IpcProcessError` if the file, group or array cannot be opened.
+    pub fn load_md_array_info_with_dataset_retry(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+        group: Option<&str>,
+        array_name: &str,
+    ) -> Result<MdArrayInfo, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, true, |ds, _| {
+            with_md_array(ds, group, array_name, md_array_info)
+        })
+    }
+
     /// Reads a z-slice from a multidimensional array and returns the raw source-order buffer.
     #[allow(clippy::too_many_lines)]
     fn load_md_tile_data<T: Pixel + GdalType + FromPrimitive>(
@@ -776,68 +793,92 @@ impl GdalHandling {
         .entered();
         let start = Instant::now();
 
-        let root_group = dataset.root_group()?;
-        // descend into the (possibly nested) MD group the array lives in, like the
-        // probe does; `None` keeps the root group
-        let mut group_h = root_group;
-        for segment in group
-            .filter(|g| !g.is_empty())
-            .into_iter()
-            .flat_map(|g| g.split('/'))
-        {
-            group_h = group_h
-                .open_group(segment, CslStringList::new())
-                .map_err(|e| IpcProcessError::IpcOther {
-                    msg: format!("cannot open MD group '{segment}' of array '{array_name}': {e}"),
-                })?;
-        }
-        let md_array = group_h.open_md_array(array_name, CslStringList::new())?;
+        with_md_array(dataset, group, array_name, |md_array| {
+            let axis_sizes: Vec<usize> = md_array
+                .dimensions()?
+                .iter()
+                .map(gdal::raster::Dimension::size)
+                .collect();
+            validate_md_axis_mapping(axis_mapping, &axis_sizes).map_err(|msg| {
+                IpcProcessError::IpcOther {
+                    msg: format!("MD array '{array_name}': {msg}"),
+                }
+            })?;
 
-        let axis_sizes: Vec<usize> = md_array
-            .dimensions()?
-            .iter()
-            .map(gdal::raster::Dimension::size)
-            .collect();
-        validate_md_axis_mapping(axis_mapping, &axis_sizes).map_err(|msg| {
-            IpcProcessError::IpcOther {
-                msg: format!("MD array '{array_name}': {msg}"),
-            }
-        })?;
+            let (array_start_index, array_count) =
+                md_read_window(axis_mapping, z_index, read_advise.gdal_read_widow)?;
 
-        let (array_start_index, array_count) =
-            md_read_window(axis_mapping, z_index, read_advise.gdal_read_widow)?;
+            let read_start = Instant::now();
+            let data = md_array.read_as::<T>(array_start_index, array_count.clone())?;
+            tracing::debug!(
+                "GDAL md array read took {:?} for window size ({}, {})",
+                read_start.elapsed(),
+                read_advise.gdal_read_widow.size_x,
+                read_advise.gdal_read_widow.size_y,
+            );
 
-        let read_start = Instant::now();
-        let data = md_array.read_as::<T>(array_start_index, array_count.clone())?;
-        tracing::debug!(
-            "GDAL md array read took {:?} for window size ({}, {})",
-            read_start.elapsed(),
-            read_advise.gdal_read_widow.size_x,
-            read_advise.gdal_read_widow.size_y,
-        );
+            // no-data classification: MD arrays have no mask band, only a scalar no-data value
+            let no_data_value = dataset_params
+                .no_data_value
+                .or_else(|| md_array.no_data_value_as_double());
 
-        // no-data classification: MD arrays have no mask band, only a scalar no-data value
-        let no_data_value = dataset_params
-            .no_data_value
-            .or_else(|| md_array.no_data_value_as_double());
+            let data_variant = match no_data_value {
+                Some(no_data_value) => GdalDataGridVariant::WithNoData {
+                    data,
+                    no_data_value,
+                },
+                None => GdalDataGridVariant::AllValid { data },
+            };
 
-        let data_variant = match no_data_value {
-            Some(no_data_value) => GdalDataGridVariant::WithNoData {
-                data,
-                no_data_value,
-            },
-            None => GdalDataGridVariant::AllValid { data },
-        };
+            let elapsed = start.elapsed();
+            debug!("md data loaded -> returning z-slice, took {elapsed:?}");
 
-        let elapsed = start.elapsed();
-        debug!("md data loaded -> returning z-slice, took {elapsed:?}");
-
-        Ok(GdalIpcMdPayload {
-            axis_sizes: array_count,
-            properties: RasterProperties::default(),
-            data_variant,
+            Ok(GdalIpcMdPayload {
+                axis_sizes: array_count,
+                properties: RasterProperties::default(),
+                data_variant,
+            })
         })
     }
+}
+
+/// Opens `array_name` below the (possibly nested, "/"-separated) MD `group` and passes it to
+/// `read`; `None` is the root group. A callback, because the array borrows its group.
+fn with_md_array<R>(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+    read: impl FnOnce(&gdal::raster::MDArray<'_>) -> Result<R, IpcProcessError>,
+) -> Result<R, IpcProcessError> {
+    let mut group_h = dataset.root_group()?;
+    for segment in group
+        .filter(|g| !g.is_empty())
+        .into_iter()
+        .flat_map(|g| g.split('/'))
+    {
+        group_h = group_h
+            .open_group(segment, CslStringList::new())
+            .map_err(|e| IpcProcessError::IpcOther {
+                msg: format!("cannot open MD group '{segment}' of array '{array_name}': {e}"),
+            })?;
+    }
+    let md_array = group_h.open_md_array(array_name, CslStringList::new())?;
+    read(&md_array)
+}
+
+/// The shape and declared CRS of an open MD array.
+fn md_array_info(md_array: &gdal::raster::MDArray<'_>) -> Result<MdArrayInfo, IpcProcessError> {
+    let axis_sizes = md_array
+        .dimensions()?
+        .iter()
+        .map(gdal::raster::Dimension::size)
+        .collect();
+    let crs = ["crs", "spatial_ref", "grid_mapping"]
+        .into_iter()
+        .find_map(|name| md_array.attribute(name).ok().map(|a| a.read_as_string()))
+        .and_then(|definition| SpatialRef::from_definition(definition.trim()).ok())
+        .and_then(|srs| SpatialReference::try_from(srs).ok());
+    Ok(MdArrayInfo { axis_sizes, crs })
 }
 
 #[cfg(test)]

@@ -31,10 +31,8 @@ use actix_web::{
     FromRequest, HttpResponse, HttpResponseBuilder, Responder,
     web::{self, Json},
 };
-use gdal::GdalOpenFlags;
 use gdal::{
     DatasetOptions,
-    spatial_ref::SpatialRef,
     vector::{Layer, LayerAccess, OGRFieldType},
 };
 use geoengine_datatypes::{
@@ -44,16 +42,16 @@ use geoengine_datatypes::{
     raster::GridSize,
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
-use geoengine_operators::util::GdalConfigOptions;
 use geoengine_operators::{
     engine::{
         OperatorName, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
         VectorColumnInfo, VectorResultDescriptor,
     },
     source::{
-        MdPresentation, MultiBandGdalSource as OperatorsMultiBandGdalSource, OgrSourceColumnSpec,
-        OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
-        OgrSourceTimeFormat,
+        GdalProcessPoolAccess, MdPresentation, MultiBandGdalSource as OperatorsMultiBandGdalSource,
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+        OgrSourceErrorSpec, OgrSourceTimeFormat,
+        gdal_worker_process::{GdalPoolReader, MdArrayInfo},
     },
     util::gdal::{
         gdal_open_dataset, gdal_open_dataset_ex, gdal_parameters_from_dataset,
@@ -63,7 +61,7 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, hash_map::Entry},
     convert::{TryFrom, TryInto},
     path::{Path, PathBuf},
 };
@@ -546,18 +544,41 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
     let data_path_file_path = file_path_from_data_path(&data_path, &session_context)
         .context(CannotAddMdTilesToDataset)?;
 
-    // Opening a tile's array is a header read. External rows pay a /vsicurl request per
-    // distinct file, but that is the only way to validate axis-mapping sizes (in particular
-    // `Fixed` indices) at the registration trust boundary.
+    // Each distinct array is read once, in a GDAL worker: the header is the only way to
+    // validate axis-mapping sizes (in particular `Fixed` indices) at the registration trust
+    // boundary, and GDAL must not run in the server process.
+    let reader = GdalPoolReader::from(
+        session_context
+            .execution_context()
+            .context(CannotAddMdTilesToDataset)?
+            .get_gdal_worker(),
+    );
+    let mut array_infos = HashMap::new();
     for tile in &tiles {
-        validate_md_tile(
+        let absolute_path = validate_md_tile(
             tile,
             wrap,
             &variables,
             &data_path,
             &data_path_file_path,
             &dataset_descriptor,
-            true,
+        )?;
+        let params = md_tile_read_params(tile, &data_path, &absolute_path);
+        let key = (
+            params.file_path.clone(),
+            tile.array_group.clone(),
+            tile.array_name.clone(),
+        );
+        let info = match array_infos.entry(key) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(read_md_tile_info(&reader, tile, params).await?),
+        };
+        // the band's variable exists, `validate_md_tile` checked it
+        check_md_tile_against_array(
+            tile,
+            &variables[tile.band as usize].axis_mapping,
+            info,
+            &dataset_descriptor,
         )?;
     }
 
@@ -568,104 +589,37 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok().finish())
 }
 
-/// The shape and declared CRS of the tile's MD array.
-///
-/// MD arrays are not exposed as classic raster bands, so the array is reached through GDAL's
-/// multidim API instead of `raster_descriptor_from_dataset`. Returns `None` if the file, group
-/// or array cannot be opened.
-///
-/// shortcut: GDAL runs on the caller's thread, not in the worker pool (see `ProbedGdalMdMetaData`), upgrade once probing is pooled
-struct MdArrayShape {
-    axis_sizes: Vec<usize>,
-    crs: Option<SpatialReference>,
-}
-
-fn md_array_shape(path: &Path, tile: &AddDatasetMdTile) -> Option<MdArrayShape> {
-    // The tile's config options are what lets GDAL read `.nc` over `/vsicurl` at all, so a
-    // check that opens the file has to run in the same GDAL environment as the read does.
-    // Without this guard every remote row was rejected as unopenable while reading it worked.
-    let params: geoengine_operators::source::GdalDatasetParameters = tile.params.clone().into();
-    let _configs = params
-        .gdal_config_options_for_request()
-        .map(|configs| GdalConfigOptions::new(&configs).expect("GDAL config options are valid"));
-
-    let dataset = gdal_open_dataset_ex(
-        path,
-        DatasetOptions {
-            open_flags: GdalOpenFlags::GDAL_OF_RASTER | GdalOpenFlags::GDAL_OF_MULTIDIM_RASTER,
-            ..Default::default()
-        },
-    )
-    .ok()?;
-
-    let mut group = dataset.root_group().ok()?;
-    for segment in tile
-        .array_group
-        .as_deref()
-        .unwrap_or_default()
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-    {
-        group = group.open_group(segment, Default::default()).ok()?;
-    }
-
-    let md_array = group
-        .open_md_array(&tile.array_name, Default::default())
-        .ok()?;
-    let dimensions = md_array.dimensions().ok()?;
-
-    let crs = ["crs", "spatial_ref", "grid_mapping"]
-        .into_iter()
-        .find_map(|name| md_array.attribute(name).ok().map(|a| a.read_as_string()))
-        .and_then(|definition| SpatialRef::from_definition(definition.trim()).ok())
-        .and_then(|srs| SpatialReference::try_from(srs).ok());
-
-    Some(MdArrayShape {
-        axis_sizes: dimensions
-            .iter()
-            .map(gdal::raster::Dimension::size)
-            .collect(),
-        crs,
-    })
-}
-
-/// The path an MD row's array is opened with.
+/// The parameters an MD row's array is read with in the GDAL worker.
 ///
 /// [`validate_tile_file_path`] resolves volume/upload rows against the data path root and
-/// returns an **empty** path for external data, whose rows carry their own absolute
-/// `/vsicurl` URL in `params.file_path` - which is what the read path opens. Using the
-/// resolved path unconditionally opened `""` and rejected every remote row as unopenable
-/// while reading it worked.
-fn md_tile_open_path(
+/// returns an **empty** path for external data, whose rows carry their own absolute URL in
+/// `params.file_path` - which the worker wraps for `/vsicurl` itself, as the read path does.
+/// Using the resolved path unconditionally opened `""` and rejected every remote row.
+fn md_tile_read_params(
     tile: &AddDatasetMdTile,
     data_path: &DataPath,
     absolute_path: &Path,
-) -> PathBuf {
-    if matches!(data_path, DataPath::External) {
-        let params: geoengine_operators::source::GdalDatasetParameters = tile.params.clone().into();
-        params.file_path_for_open()
-    } else {
-        absolute_path.to_path_buf()
+) -> geoengine_operators::source::GdalDatasetParameters {
+    let mut params: geoengine_operators::source::GdalDatasetParameters = tile.params.clone().into();
+    if !matches!(data_path, DataPath::External) {
+        params.file_path = absolute_path.to_path_buf();
     }
+    params
 }
 
-/// Checks a tile's declared metadata against the array it names.
-///
-/// This is the only place a wrong `arrayName`, `axisMapping`, grid, slice count or CRS can
-/// be caught, so it runs even for external data - where the file is not opened elsewhere.
-fn check_md_tile_against_array(
+/// Reads the shape and declared CRS of the tile's MD array in a GDAL worker.
+async fn read_md_tile_info(
+    reader: &GdalPoolReader,
     tile: &AddDatasetMdTile,
-    axis_mapping: &[geoengine_operators::source::MdAxisMapping],
-    open_path: &Path,
-    dataset_descriptor: &RasterResultDescriptor,
-) -> Result<(), AddDatasetMdTilesError> {
-    let file_path = tile.params.file_path.to_string_lossy().to_string();
-
-    let shape =
-        md_array_shape(open_path, tile).ok_or(AddDatasetMdTilesError::CannotOpenMdTileFile {
+    params: geoengine_operators::source::GdalDatasetParameters,
+) -> Result<MdArrayInfo, AddDatasetMdTilesError> {
+    reader
+        .read_md_array_info(params, tile.array_group.as_deref(), &tile.array_name)
+        .await
+        .map_err(|e| AddDatasetMdTilesError::CannotOpenMdTileFile {
             source: geoengine_operators::error::Error::InvalidOperatorSpec {
                 reason: format!(
-                    "MD array '{}{}' could not be opened",
+                    "MD array '{}{}' could not be opened: {e}",
                     tile.array_name,
                     tile.array_group
                         .as_deref()
@@ -673,8 +627,21 @@ fn check_md_tile_against_array(
                         .unwrap_or_default()
                 ),
             },
-            file_path: file_path.clone(),
-        })?;
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        })
+}
+
+/// Checks a tile's declared metadata against the array it names.
+///
+/// This is the only place a wrong `axisMapping`, grid, slice count or CRS can be caught, so
+/// it runs on every data path, external included. `shape` comes from [`read_md_tile_info`].
+fn check_md_tile_against_array(
+    tile: &AddDatasetMdTile,
+    axis_mapping: &[geoengine_operators::source::MdAxisMapping],
+    shape: &MdArrayInfo,
+    dataset_descriptor: &RasterResultDescriptor,
+) -> Result<(), AddDatasetMdTilesError> {
+    let file_path = tile.params.file_path.to_string_lossy().to_string();
 
     geoengine_operators::source::validate_md_axis_mapping(axis_mapping, &shape.axis_sizes)
         .map_err(|details| AddDatasetMdTilesError::MdTileAxisMappingInvalid {
@@ -733,9 +700,11 @@ fn check_md_tile_against_array(
     Ok(())
 }
 
-/// Validates one MD tile at the trust boundary: the file must exist, the named array must
-/// open with a z dimension matching the declared time steps, the band must exist, and the
-/// file's raw grid must match the dataset's raw grid, and the grid must be presentable with `wrap`.
+/// Validates the declared parts of one MD tile at the trust boundary, without opening it: the
+/// path must be valid, the band and its variable must exist, the time axis must be consistent,
+/// ordered and hole-free, and the raw grid must match the dataset's and be presentable with
+/// `wrap`. Returns the resolved path. The array itself is checked by
+/// [`check_md_tile_against_array`].
 fn validate_md_tile(
     tile: &AddDatasetMdTile,
     wrap: bool,
@@ -743,8 +712,7 @@ fn validate_md_tile(
     data_path: &DataPath,
     data_path_file_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
-    check_against_array: bool,
-) -> Result<(), AddDatasetMdTilesError> {
+) -> Result<PathBuf, AddDatasetMdTilesError> {
     let file_path = tile.params.file_path.to_string_lossy().to_string();
 
     let absolute_path =
@@ -851,16 +819,7 @@ fn validate_md_tile(
         },
     )?;
 
-    if check_against_array {
-        check_md_tile_against_array(
-            tile,
-            &variable.axis_mapping,
-            &md_tile_open_path(tile, data_path, &absolute_path),
-            dataset_descriptor,
-        )?;
-    }
-
-    Ok(())
+    Ok(absolute_path)
 }
 
 /// Retrieves details about a dataset using the internal name.
@@ -6991,7 +6950,7 @@ mod tests {
         assert!(resolved.as_os_str().is_empty(), "{resolved:?}");
 
         assert_eq!(
-            md_tile_open_path(&tile, &DataPath::External, &resolved),
+            md_tile_read_params(&tile, &DataPath::External, &resolved).file_path_for_open(),
             Path::new("/vsicurl/https://example.invalid/temperature.nc"),
             "an external row is opened at its own URL, not at the empty resolved path"
         );
@@ -6999,14 +6958,14 @@ mod tests {
         // a bare `https://` row is wrapped the way the read path wraps it
         tile.params.file_path = "https://example.invalid/temperature.nc".into();
         assert_eq!(
-            md_tile_open_path(&tile, &DataPath::External, &resolved),
+            md_tile_read_params(&tile, &DataPath::External, &resolved).file_path_for_open(),
             Path::new("/vsicurl/https://example.invalid/temperature.nc"),
         );
 
         // a volume row is opened at the path resolved against the volume root
         let volume = DataPath::Volume(VolumeName("test_data".to_string()));
         assert_eq!(
-            md_tile_open_path(&tile, &volume, Path::new("/data/temperature.nc")),
+            md_tile_read_params(&tile, &volume, Path::new("/data/temperature.nc")).file_path,
             Path::new("/data/temperature.nc"),
         );
     }
@@ -7014,8 +6973,24 @@ mod tests {
     /// The array check is the only thing standing between a wrong `arrayName` and a dataset
     /// that reads nothing, so it has to run on every data path - including external, where a
     /// wrong CRS would otherwise be a permanent mislabel with nothing to catch it.
-    #[test]
-    fn it_checks_an_md_row_against_the_array_it_names() {
+    /// Reads a tile's MD array header the way the handler does: in a GDAL worker.
+    async fn md_tile_info(tile: &AddDatasetMdTile) -> Result<MdArrayInfo, AddDatasetMdTilesError> {
+        let pool = geoengine_operators::source::GdalProcessPool::new(
+            1,
+            1,
+            1,
+            geoengine_operators::source::gdal_worker_process::WorkerConfig::default(),
+        );
+        read_md_tile_info(
+            &GdalPoolReader::from(pool.get_gdal_worker()),
+            tile,
+            tile.params.clone().into(),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn it_checks_an_md_row_against_the_array_it_names() {
         let (meta_data, tiles) = md_dataset_meta(
             &[MdRow::of("md/time_series.nc", "temperature", 0, 8)],
             vec![api_band("temperature")],
@@ -7029,27 +7004,26 @@ mod tests {
             tile
         };
 
+        let info = md_tile_info(&local(&tiles[0]))
+            .await
+            .expect("the fixture's array opens");
+
         // the declared row matches the fixture
         assert!(
             check_md_tile_against_array(
                 &local(&tiles[0]),
                 &md.variables[0].axis_mapping,
-                test_data!("md/time_series.nc"),
+                &info,
                 &md.result_descriptor
             )
             .is_ok()
         );
 
-        // a name that does not exist cannot be opened
+        // a name that does not exist cannot be opened, and that is an error, not a panic
         let mut wrong_name = local(&tiles[0]);
         wrong_name.array_name = "no_such_array".to_owned();
         assert!(matches!(
-            check_md_tile_against_array(
-                &wrong_name,
-                &md.variables[0].axis_mapping,
-                test_data!("md/time_series.nc"),
-                &md.result_descriptor
-            ),
+            md_tile_info(&wrong_name).await,
             Err(AddDatasetMdTilesError::CannotOpenMdTileFile { .. })
         ));
 
@@ -7060,7 +7034,7 @@ mod tests {
             check_md_tile_against_array(
                 &wrong_slices,
                 &md.variables[0].axis_mapping,
-                test_data!("md/time_series.nc"),
+                &info,
                 &md.result_descriptor
             ),
             Err(AddDatasetMdTilesError::MdTileSliceCountMismatch {
@@ -7079,7 +7053,7 @@ mod tests {
             check_md_tile_against_array(
                 &local(&tiles[0]),
                 &wrong_mapping,
-                test_data!("md/time_series.nc"),
+                &info,
                 &md.result_descriptor
             ),
             Err(AddDatasetMdTilesError::MdTileAxisMappingInvalid { .. })
@@ -7092,7 +7066,7 @@ mod tests {
             check_md_tile_against_array(
                 &wrong_grid,
                 &md.variables[0].axis_mapping,
-                test_data!("md/time_series.nc"),
+                &info,
                 &md.result_descriptor
             ),
             Err(AddDatasetMdTilesError::MdTileArraySizeMismatch {
@@ -7105,8 +7079,8 @@ mod tests {
 
     /// A CRS the file actually declares has to match the dataset's: a mismatch is a
     /// mislabelled dataset, and nothing downstream would ever notice.
-    #[test]
-    fn it_rejects_an_md_row_whose_crs_contradicts_the_dataset() {
+    #[tokio::test]
+    async fn it_rejects_an_md_row_whose_crs_contradicts_the_dataset() {
         let (meta_data, tiles) = md_dataset_meta(
             &[MdRow::of("md/projected_crs.nc", "elevation", 0, 4)],
             vec![api_band("elevation")],
@@ -7115,11 +7089,14 @@ mod tests {
             panic!("md_dataset_meta returns MD metadata")
         };
         // the fixture declares EPSG:32633 (metre pixels), the descriptor claims EPSG:4326
+        let info = md_tile_info(&tiles[0])
+            .await
+            .expect("the fixture's array opens");
         assert!(matches!(
             check_md_tile_against_array(
                 &tiles[0],
                 &md.variables[0].axis_mapping,
-                test_data!("md/projected_crs.nc"),
+                &info,
                 &md.result_descriptor
             ),
             Err(AddDatasetMdTilesError::MdTileCrsMismatch { .. })
@@ -7127,8 +7104,8 @@ mod tests {
     }
 
     /// A `[Y, X]` variable has no z axis and is one slice; the probe must accept it.
-    #[test]
-    fn it_accepts_a_2d_md_row_without_a_z_axis() {
+    #[tokio::test]
+    async fn it_accepts_a_2d_md_row_without_a_z_axis() {
         let (meta_data, tiles) = md_dataset_meta(
             &[MdRow {
                 axis_mapping: vec![MdAxisMapping::Y, MdAxisMapping::X],
@@ -7141,12 +7118,15 @@ mod tests {
         };
         let mut tile = tiles[0].clone();
         tile.params.file_path = test_data!("md/grid_2d.nc").to_path_buf();
+        let info = md_tile_info(&tile)
+            .await
+            .expect("the fixture's array opens");
 
         assert!(
             check_md_tile_against_array(
                 &tile,
                 &md.variables[0].axis_mapping,
-                test_data!("md/grid_2d.nc"),
+                &info,
                 &md.result_descriptor
             )
             .is_ok()
@@ -7189,9 +7169,6 @@ mod tests {
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,
-                // external rows are the ones whose file is not opened, which is exactly why
-                // the axis checks have to be independent of it
-                false,
             ),
             Err(AddDatasetMdTilesError::MdTileTimeAxisInconsistent { .. }),
         ));
@@ -7215,9 +7192,6 @@ mod tests {
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,
-                // external rows are the ones whose file is not opened, which is exactly why
-                // the axis checks have to be independent of it
-                false,
             ),
             Err(AddDatasetMdTilesError::MdTileTimeAxisUnordered { .. }),
         ));
@@ -7241,7 +7215,6 @@ mod tests {
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,
-                false,
             ),
             Err(AddDatasetMdTilesError::MdTileTimeAxisHoles { .. }),
         ));
@@ -7271,7 +7244,6 @@ mod tests {
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,
-                false,
             ),
             Err(AddDatasetMdTilesError::MdTileUnpresentable { .. })
         ));
@@ -7283,7 +7255,6 @@ mod tests {
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,
-                false,
             )
             .is_ok()
         );
@@ -7325,7 +7296,6 @@ mod tests {
                 &DataPath::External,
                 Path::new(""),
                 &md.result_descriptor,
-                false,
             )
             .is_ok()
         );
