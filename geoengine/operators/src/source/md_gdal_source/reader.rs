@@ -26,7 +26,8 @@ pub struct MdTileRequest {
 
 /// Reads one z slice for one query tile: every file in `requests` that holds that slice is
 /// blitted into the same tile, the way the spatial pieces of one time step are mosaicked.
-/// Returns `None` if no file intersects the tile.
+/// A tile no file intersects comes back empty, never dropped: the stream must stay gap-free.
+/// Returns `None` only for empty `requests`, which `MdLoadingInfo::z_slices` never produces.
 ///
 /// # Errors
 /// Returns a `MdGdalSourceError` if a read window cannot be computed or a pool read fails.
@@ -45,9 +46,8 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
     let mut properties = RasterProperties::default();
 
-    let mut intersects = false;
     for request in requests {
-        intersects |= blit_md_file(
+        blit_md_file(
             loading_info,
             request,
             reader_mode,
@@ -57,9 +57,6 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
             &mut properties,
         )
         .await?;
-    }
-    if !intersects {
-        return Ok(None);
     }
 
     let file = &loading_info.files()[first.file_idx];
@@ -79,8 +76,8 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
     )))
 }
 
-/// Blits one file's read windows for one z slice into `frame`. Returns `false` if the file
-/// does not intersect the tile.
+/// Blits one file's read windows for one z slice into `frame`. Leaves `frame` untouched if
+/// the file does not intersect the tile.
 #[allow(clippy::too_many_arguments)]
 async fn blit_md_file<T: Pixel + GdalType + FromPrimitive>(
     loading_info: &MdLoadingInfo,
@@ -90,7 +87,7 @@ async fn blit_md_file<T: Pixel + GdalType + FromPrimitive>(
     gdal_worker: &GdalPoolDispatcher,
     frame: &mut GridOrEmpty<GridBoundingBox2D, T>,
     properties: &mut RasterProperties,
-) -> Result<bool, MdGdalSourceError> {
+) -> Result<(), MdGdalSourceError> {
     let file: &MdDatasetFile = &loading_info.files()[request.file_idx];
     let z_index = request.local_z;
     let dataset_params = file.params.clone();
@@ -110,7 +107,7 @@ async fn blit_md_file<T: Pixel + GdalType + FromPrimitive>(
     );
     if advises.is_empty() {
         trace!("no read advise for tile, skipping.");
-        return Ok(false);
+        return Ok(());
     }
 
     let reader =
@@ -138,7 +135,7 @@ async fn blit_md_file<T: Pixel + GdalType + FromPrimitive>(
         }
     }
 
-    Ok(true)
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
