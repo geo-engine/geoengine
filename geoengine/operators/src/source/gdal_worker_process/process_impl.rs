@@ -2,7 +2,8 @@ use super::{
     GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcMdPayload, GdalIpcPayload, GdalReadAdvise, GdalReadWindow,
-        IpcProcessError, MdArrayInfo, MdAxisMapping, RasterInfo, validate_md_axis_mapping,
+        IpcProcessError, MdArrayInfo, MdAxisCoordinates, MdAxisMapping, RasterInfo,
+        validate_md_axis_mapping,
     },
 };
 use crate::{
@@ -796,7 +797,9 @@ impl GdalHandling {
         array_name: &str,
     ) -> Result<MdArrayInfo, IpcProcessError> {
         Self::open_with_retry(cache, dataset_params, true, |ds, _| {
-            with_md_array(ds, group, array_name, md_array_info)
+            let mut info = with_md_array(ds, group, array_name, md_array_info)?;
+            info.crs = md_array_crs(ds, group, array_name).or(info.crs);
+            Ok(info)
         })
     }
 
@@ -831,7 +834,7 @@ impl GdalHandling {
             properties.set_offset(offset);
         }
 
-        with_md_array(dataset, group, array_name, |md_array| {
+        with_md_array(dataset, group, array_name, |_, md_array| {
             let axis_sizes: Vec<usize> = md_array
                 .dimensions()?
                 .iter()
@@ -880,13 +883,17 @@ impl GdalHandling {
     }
 }
 
-/// Opens `array_name` below the (possibly nested, "/"-separated) MD `group` and passes it to
-/// `read`; `None` is the root group. A callback, because the array borrows its group.
+/// Opens `array_name` below the (possibly nested, "/"-separated) MD `group` and passes the
+/// group and the array to `read`; `None` is the root group. A callback, because the array
+/// borrows its group.
 fn with_md_array<R>(
     dataset: &GdalDataset,
     group: Option<&str>,
     array_name: &str,
-    read: impl FnOnce(&gdal::raster::MDArray<'_>) -> Result<R, IpcProcessError>,
+    read: impl FnOnce(
+        &gdal::raster::Group<'_>,
+        &gdal::raster::MDArray<'_>,
+    ) -> Result<R, IpcProcessError>,
 ) -> Result<R, IpcProcessError> {
     let mut group_h = dataset.root_group()?;
     for segment in group
@@ -901,31 +908,29 @@ fn with_md_array<R>(
             })?;
     }
     let md_array = group_h.open_md_array(array_name, CslStringList::new())?;
-    read(&md_array)
+    read(&group_h, &md_array)
 }
 
-/// The scale and offset of an MD array, e.g. from netCDF's CF `scale_factor`/`add_offset`,
-/// which the driver turns into these and no longer lists as attributes. The `gdal` crate has
-/// no getter and keeps the array handle private, so the array is opened again by full name.
-fn md_array_scale_offset(
+/// Runs `read` on the raw handle of an MD array, for what the `gdal` crate has no getter for
+/// or panics on. The crate keeps its handle private, so the array is opened again by full name.
+fn with_c_md_array<R>(
     dataset: &GdalDataset,
     group: Option<&str>,
     array_name: &str,
-) -> (Option<f64>, Option<f64>) {
+    read: impl FnOnce(gdal_sys::GDALMDArrayH) -> Option<R>,
+) -> Option<R> {
     let full_name = match group.map(|g| g.trim_matches('/')).filter(|g| !g.is_empty()) {
         Some(group) => format!("/{group}/{array_name}"),
         None => format!("/{array_name}"),
     };
-    let Ok(full_name) = CString::new(full_name) else {
-        return (None, None);
-    };
+    let full_name = CString::new(full_name).ok()?;
 
     // SAFETY: every handle is checked for null before use and released exactly once; the
     // array keeps its own reference to the group, so the group can be released first.
     unsafe {
         let root = gdal_sys::GDALDatasetGetRootGroup(dataset.c_dataset());
         if root.is_null() {
-            return (None, None);
+            return None;
         }
         let array = gdal_sys::GDALGroupOpenMDArrayFromFullname(
             root,
@@ -934,26 +939,66 @@ fn md_array_scale_offset(
         );
         gdal_sys::GDALGroupRelease(root);
         if array.is_null() {
-            return (None, None);
+            return None;
         }
-
-        let mut has_scale = 0;
-        let scale = gdal_sys::GDALMDArrayGetScale(array, &raw mut has_scale);
-        let mut has_offset = 0;
-        let offset = gdal_sys::GDALMDArrayGetOffset(array, &raw mut has_offset);
+        let result = read(array);
         gdal_sys::GDALMDArrayRelease(array);
-
-        (
-            (has_scale != 0).then_some(scale),
-            (has_offset != 0).then_some(offset),
-        )
+        result
     }
 }
 
-/// The shape and declared CRS of an open MD array.
-fn md_array_info(md_array: &gdal::raster::MDArray<'_>) -> Result<MdArrayInfo, IpcProcessError> {
-    let axis_sizes = md_array
-        .dimensions()?
+/// The scale and offset of an MD array, e.g. from netCDF's CF `scale_factor`/`add_offset`,
+/// which the driver turns into these and no longer lists as attributes.
+fn md_array_scale_offset(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+) -> (Option<f64>, Option<f64>) {
+    with_c_md_array(dataset, group, array_name, |array| {
+        // SAFETY: `array` is a valid handle for the duration of the callback
+        unsafe {
+            let mut has_scale = 0;
+            let scale = gdal_sys::GDALMDArrayGetScale(array, &raw mut has_scale);
+            let mut has_offset = 0;
+            let offset = gdal_sys::GDALMDArrayGetOffset(array, &raw mut has_offset);
+            Some((
+                (has_scale != 0).then_some(scale),
+                (has_offset != 0).then_some(offset),
+            ))
+        }
+    })
+    .unwrap_or_default()
+}
+
+/// The CRS of an MD array as GDAL resolves it, e.g. from CF's `grid_mapping`, which names a
+/// variable rather than holding a CRS. `None` if it has none or it has no authority code.
+fn md_array_crs(
+    dataset: &GdalDataset,
+    group: Option<&str>,
+    array_name: &str,
+) -> Option<SpatialReference> {
+    with_c_md_array(dataset, group, array_name, |array| {
+        // SAFETY: `array` is valid for the callback; a non-null SRS is ours to destroy, and
+        // `from_c_obj` clones it first
+        unsafe {
+            let srs = gdal_sys::GDALMDArrayGetSpatialRef(array);
+            if srs.is_null() {
+                return None;
+            }
+            let cloned = SpatialRef::from_c_obj(srs);
+            gdal_sys::OSRDestroySpatialReference(srs);
+            SpatialReference::try_from(cloned.ok()?).ok()
+        }
+    })
+}
+
+/// The shape, CRS attribute and coordinates of an open MD array.
+fn md_array_info(
+    group: &gdal::raster::Group<'_>,
+    md_array: &gdal::raster::MDArray<'_>,
+) -> Result<MdArrayInfo, IpcProcessError> {
+    let dimensions = md_array.dimensions()?;
+    let axis_sizes = dimensions
         .iter()
         .map(gdal::raster::Dimension::size)
         .collect();
@@ -962,7 +1007,45 @@ fn md_array_info(md_array: &gdal::raster::MDArray<'_>) -> Result<MdArrayInfo, Ip
         .find_map(|name| md_array.attribute(name).ok().map(|a| a.read_as_string()))
         .and_then(|definition| SpatialRef::from_definition(definition.trim()).ok())
         .and_then(|srs| SpatialReference::try_from(srs).ok());
-    Ok(MdArrayInfo { axis_sizes, crs })
+    let coordinates = dimensions
+        .iter()
+        .map(|dimension| md_axis_coordinates(group, dimension))
+        .collect();
+    Ok(MdArrayInfo {
+        axis_sizes,
+        crs,
+        coordinates,
+    })
+}
+
+/// The coordinate variable of `dimension`, by the CF/Zarr convention of an array with the
+/// dimension's name. Only degrees and metres are read, the units a geo transform is stated in;
+/// e.g. the scan angles of a geostationary product are skipped.
+fn md_axis_coordinates(
+    group: &gdal::raster::Group<'_>,
+    dimension: &gdal::raster::Dimension<'_>,
+) -> Option<MdAxisCoordinates> {
+    let coordinates = group
+        .open_md_array(&dimension.name(), CslStringList::new())
+        .ok()?;
+    let unit = coordinates.unit();
+    if coordinates.num_dimensions() != 1 || !(unit.starts_with("degree") || unit == "m") {
+        return None;
+    }
+    let values = coordinates
+        .read_as::<f64>(vec![0], vec![dimension.size()])
+        .ok()?;
+    let (first, last) = (*values.first()?, *values.last()?);
+    let step = (last - first) / (values.len().max(2) - 1) as f64;
+    // far above float32 rounding, far below the half pixel of a centre-vs-edge mix-up
+    let uniform = values
+        .windows(2)
+        .all(|pair| (pair[1] - pair[0] - step).abs() <= 1e-3 * step.abs());
+    Some(MdAxisCoordinates {
+        first,
+        last,
+        uniform,
+    })
 }
 
 #[cfg(test)]

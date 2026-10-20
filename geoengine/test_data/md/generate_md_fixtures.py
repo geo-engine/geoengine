@@ -22,6 +22,7 @@ Fixtures
                           attribute (metre x units, so EPSG:4326 would be a mislabel)
 - packed.nc               int16 (lat, lon) `Band1` with CF scale_factor 0.5 / add_offset 10,
                           ASCENDING lat on the 8x8 / 30 deg grid, cut from the MODIS NDVI fixture
+- non_uniform_lat.nc      `grid_2d` with one latitude 0.1 deg off its step, like a Gaussian grid
 
 
 netCDF/CF convention: coordinate variables are cell *centers* (offset half a
@@ -67,6 +68,7 @@ FIXTURES = [
     "mosaic_west.nc",
     "mosaic_east.nc",
     "packed.nc",
+    "non_uniform_lat.nc",
 ]
 
 
@@ -309,6 +311,24 @@ def packed(path: Path):
     )
 
 
+def non_uniform_lat(path: Path):
+    """`grid_2d` with one latitude off its step, like a Gaussian grid: no affine transform
+    describes it, so registration must reject it."""
+    width, height = 8, 8
+    ds = new_netcdf(path)
+    rg = ds.GetRootGroup()
+    x, y = mk_grid(width, height, 0.0, 0.0, lon_step=30.0)
+    y[3] -= 0.1
+    string = gdal.ExtendedDataType.CreateString()
+    xdim, xa = add_coord_var(rg, "lon", "HORIZONTAL_X", "", x)
+    xa.CreateAttribute("units", [1], string, []).WriteString("degrees_east")
+    ydim, ya = add_coord_var(rg, "lat", "HORIZONTAL_Y", "", y)
+    ya.CreateAttribute("units", [1], string, []).WriteString("degrees_north")
+    vals = np.arange(height, dtype="float32")[:, None] * 10 + np.arange(width)[None, :]
+    write_array(rg, "grid_2d", [ydim, xdim], vals, -9999)
+    ds = None
+
+
 def cf_time_units_minutes(path: Path):
     """Same as time_series but time units `minutes since 1900-01-01 00:00:00Z` and
     ASCENDING latitudes (row 0 = south), so the read path must flip y."""
@@ -478,6 +498,7 @@ def main() -> None:
     pressure_level_synthetic(OUT_DIR / "pressure_level_synthetic.nc")
     mosaic_halves(OUT_DIR)
     packed(OUT_DIR / "packed.nc")
+    non_uniform_lat(OUT_DIR / "non_uniform_lat.nc")
     print(f"generated fixtures in {OUT_DIR}")
 
 
