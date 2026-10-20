@@ -37,8 +37,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     GdalDatasetParameters, GdalLoadingInfo, GdalMdMetaData, MdDatasetFile, MdFileTimes,
-    MdLoadingInfo, MdPresentation, MdVariable, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
+    MdLoadingInfo, MdLoadingInfoQueryRectangle, MdPresentation, MdVariable,
+    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
 use tokio_postgres::{GenericClient, Transaction};
@@ -678,7 +678,7 @@ where
 }
 
 #[async_trait]
-impl<Tls> MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+impl<Tls> MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>
     for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -690,7 +690,7 @@ where
         &self,
         data_id: &DataId,
     ) -> geoengine_operators::util::Result<
-        Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>>,
     > {
         let id = data_id
             .internal()
@@ -1268,21 +1268,13 @@ where
                 source: Box::new(e),
             })
     }
-}
 
-#[async_trait]
-impl<Tls> MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for MdGdalLoadingInfoProvider<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn loading_info(
+    /// The dataset's files that `query` touches, placed on `time_steps`.
+    async fn md_files(
         &self,
-        query: RasterQueryRectangle,
-    ) -> Result<MdLoadingInfo, geoengine_operators::error::Error> {
+        query: &RasterQueryRectangle,
+        time_steps: &[TimeInterval],
+    ) -> Result<Vec<MdDatasetFile>, geoengine_operators::error::Error> {
         // Unlike `MultiBandGdalLoadingInfoProvider`, one MD row spans a whole file, so the
         // time and band filters narrow this far more than the bbox filter does.
 
@@ -1314,9 +1306,6 @@ where
         let first = windows.first().copied().unwrap_or(query_partition);
         let second = windows.last().copied().unwrap_or(query_partition);
 
-        // the axis spans all bands, so it is the same whichever bands the query selects
-        let time_steps = self.dataset_time_axis(query.time_interval()).await?;
-
         let rows = conn
             .query(
                 "
@@ -1344,15 +1333,41 @@ where
                 source: Box::new(e),
             })?;
 
-        let files = md_files_from_rows(
+        md_files_from_rows(
             rows,
             base_path.as_deref(),
             query.time_interval(),
-            &time_steps,
+            time_steps,
         )
         .map_err(|e| geoengine_operators::error::Error::MetaData {
             source: Box::new(e),
-        })?;
+        })
+    }
+}
+
+#[async_trait]
+impl<Tls> MetaData<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>
+    for MdGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn loading_info(
+        &self,
+        query: MdLoadingInfoQueryRectangle,
+    ) -> Result<MdLoadingInfo, geoengine_operators::error::Error> {
+        // the axis spans all bands, so it is the same whichever bands the query selects
+        let time_steps = self
+            .dataset_time_axis(query.query_rectangle.time_interval())
+            .await?;
+        // a time query needs only the steps, not the file rows
+        let files = if query.fetch_files {
+            self.md_files(&query.query_rectangle, &time_steps).await?
+        } else {
+            vec![]
+        };
 
         MdLoadingInfo::new(
             time_steps,
@@ -1364,13 +1379,6 @@ where
         .map_err(|e| geoengine_operators::error::Error::MetaData {
             source: Box::new(e),
         })
-    }
-
-    async fn time_axis(
-        &self,
-        query: TimeInterval,
-    ) -> Result<Option<Vec<TimeInterval>>, geoengine_operators::error::Error> {
-        self.dataset_time_axis(query).await.map(Some)
     }
 
     async fn result_descriptor(
@@ -1385,7 +1393,7 @@ where
 
     fn box_clone(
         &self,
-    ) -> Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
+    ) -> Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>> {
         Box::new(self.clone())
     }
 }
@@ -1411,7 +1419,7 @@ fn md_files_from_rows(
             params.file_path = base_path.join(&params.file_path);
         }
 
-        // same trust boundary as `time_axis`: both columns come from outside, and a row
+        // same trust boundary as `dataset_time_axis`: both columns come from outside, and a row
         // whose descriptor disagrees with its steps would be read with `steps` while
         // advertised with `descriptor`
         let times = MdFileTimes::from_columns(row.get(4), row.get(5)).map_err(|e| {
