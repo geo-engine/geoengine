@@ -6,7 +6,7 @@ use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::{GridBoundingBox2D, RasterProperties};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, TimeInterval},
-    raster::{Grid, RasterTile2D},
+    raster::{Grid, RasterTile2D, TileIdx},
     util::test::TestDefault,
 };
 use geoengine_operators::{
@@ -41,7 +41,7 @@ struct WriteMeasurement {
 async fn write_cache(tile_cache: &SharedCache, op_name: CanonicOperatorName) -> WriteMeasurement {
     let tile = RasterTile2D::<u8> {
         time: TimeInterval::new_unchecked(1, 1),
-        tile_position: [-1, 0].into(),
+        tile_position: TileIdx::new_y_x(-1, 0),
         band: 0,
         global_geo_transform: TestDefault::test_default(),
         grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])

@@ -241,7 +241,11 @@ impl PolygonRasterization {
             data_type,
             spatial_reference: in_desc.spatial_reference,
             time,
-            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, pixel_bounds),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                geo_transform,
+                pixel_bounds,
+                context.tiling_specification().tile_size,
+            ),
             bands: RasterBandDescriptors::new(vec![band])?,
         };
 
@@ -458,12 +462,9 @@ impl<T: Pixel> QueryProcessor for PolygonRasterizationQueryProcessor<T> {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let tiling_grid = self
-            .shared
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification());
+        let tiling_grid = self.shared.result_descriptor.tiling_grid_definition();
         let tile_infos = tiling_grid
-            .generate_data_tiling_strategy()
+            .tiling_strategy()
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds());
 
         let time_slices = self.time_query(query.time_interval(), ctx).await?;

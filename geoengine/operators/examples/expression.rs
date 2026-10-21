@@ -35,6 +35,7 @@ fn expression_on_sources(a: TypedRasterOperator, b: TypedRasterOperator) -> Type
         sources: SingleRasterSource {
             raster: RasterStacker {
                 params: RasterStackerParams {
+                    output_origin: None,
                     rename_bands: RenameBands::Default,
                 },
                 sources: MultipleRasterSources {

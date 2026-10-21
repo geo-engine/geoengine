@@ -5,7 +5,9 @@ use crate::{
     mock::{MockRasterSource, MockRasterSourceParams},
 };
 use geoengine_datatypes::{
-    raster::Pixel, spatial_reference::SpatialReference, util::test::AsciiRasterTiles,
+    raster::{Pixel, TileSize},
+    spatial_reference::SpatialReference,
+    util::test::AsciiRasterTiles,
 };
 use std::str::FromStr;
 
@@ -52,6 +54,7 @@ impl AsciiRasterTilesExt for AsciiRasterTiles<'_> {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 info.geo_transform,
                 info.pixel_bounds,
+                TileSize::try_from(info.tile_size).expect("parsed tiles are non-empty"),
             ),
             bands,
         }

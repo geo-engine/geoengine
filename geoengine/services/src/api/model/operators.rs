@@ -10,6 +10,7 @@ use crate::api::model::datatypes::{
 use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
 };
+use geoengine_datatypes::raster::TileSize;
 use geoengine_datatypes::util::ByteSize;
 use geoengine_macros::type_tag;
 use geoengine_operators::util::input::float_option_with_nan;
@@ -56,6 +57,7 @@ impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDes
     fn from(value: SpatialGridDescriptor) -> Self {
         let sp = geoengine_operators::engine::SpatialGridDescriptor::new_source(
             value.spatial_grid.into(),
+            TileSize::default_512(),
         )
         .with_max_overview_level(value.max_overview_level);
         match value.descriptor {
@@ -1234,6 +1236,10 @@ pub struct GdalDatasetParameters {
     pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
+    /// Optional per-dataset tile size override.
+    #[serde(default)]
+    #[schema(value_type = Object)]
+    pub tile_size: Option<TileSize>,
 }
 
 impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetParameters {
@@ -1254,6 +1260,7 @@ impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetPar
                 .gdal_config_options
                 .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
+            tile_size: value.tile_size,
         }
     }
 }
@@ -1277,6 +1284,7 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
                 .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
             retry: None,
+            tile_size: value.tile_size,
         }
     }
 }

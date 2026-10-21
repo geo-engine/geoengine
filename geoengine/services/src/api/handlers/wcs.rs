@@ -21,6 +21,7 @@ use crate::{
     util::server::{CacheControlHeader, connection_closed},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
+use geoengine_datatypes::raster::{GridShape2D, TilingGrid};
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, BandSelection},
     raster::GridShape2D,
@@ -427,7 +428,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     fn tiling_spec() -> TilingSpecification {
-        TilingSpecification::new(TileSize::new_unchecked(600, 600))
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(600, 600))
     }
 
     #[ge_context::test]
