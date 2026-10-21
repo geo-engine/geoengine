@@ -268,7 +268,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         primitives::{SpatialResolution, TimeInterval},
-        raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType},
+        raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType, TileSize},
         spatial_reference::SpatialReference,
     };
     use geoengine_operators::{engine::SpatialGridDescriptor, error::Error};
@@ -291,6 +291,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked((0., 1.).into(), 1., -1.),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
+                TileSize::default_512(),
             ),
             bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
                 asset_title: "a".into(),

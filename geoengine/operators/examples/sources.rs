@@ -9,7 +9,8 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, TimeInterval},
     raster::{
-        GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+        GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingGrid,
+        TilingSpecification,
     },
     util::test::TestDefault,
 };
@@ -30,7 +31,10 @@ fn setup_gdal_source(
 ) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
         produced_result_descriptor: meta_data.result_descriptor.clone(),
-        tiling_specification,
+        tiling_grid: TilingGrid::from_spatial_grid(
+            meta_data.result_descriptor.spatial_grid.spatial_grid,
+            tiling_specification.tile_size,
+        ),
         overview_level: 0,
         meta_data: Box::new(meta_data),
         original_resolution_spatial_grid: None,
@@ -243,7 +247,9 @@ fn bench_no_data_tiles() {
         ),
     ];
 
-    let tiling_specs = vec![TilingSpecification::new(TileSize::new_unchecked(600, 600))];
+    let tiling_specs = vec![TilingSpecification::with_zero_origin(
+        TileSize::new_unchecked(600, 600),
+    )];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
 
@@ -276,17 +282,17 @@ fn bench_tile_size() {
     let run_time = tokio::runtime::Runtime::new().unwrap();
 
     let tiling_specs = vec![
-        TilingSpecification::new(TileSize::new_unchecked(32, 32)),
-        TilingSpecification::new(TileSize::new_unchecked(64, 64)),
-        TilingSpecification::new(TileSize::new_unchecked(128, 128)),
-        TilingSpecification::new(TileSize::new_unchecked(256, 256)),
-        TilingSpecification::new(TileSize::new_unchecked(512, 512)),
-        TilingSpecification::new(TileSize::new_unchecked(600, 600)),
-        TilingSpecification::new(TileSize::new_unchecked(900, 900)),
-        TilingSpecification::new(TileSize::new_unchecked(1024, 1024)),
-        TilingSpecification::new(TileSize::new_unchecked(2048, 2048)),
-        TilingSpecification::new(TileSize::new_unchecked(4096, 4096)),
-        TilingSpecification::new(TileSize::new_unchecked(9000, 9000)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(32, 32)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(64, 64)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(128, 128)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(256, 256)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(512, 512)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(600, 600)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(900, 900)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(1024, 1024)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(2048, 2048)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(4096, 4096)),
+        TilingSpecification::with_zero_origin(TileSize::new_unchecked(9000, 9000)),
     ];
 
     bench_raster_processor(

@@ -189,8 +189,7 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::new(self.bands.iter().map(|band| band.index).collect())?,
-            rd.tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            rd.tiling_grid_definition().geo_transform,
         );
 
         let query_bounds = raster_query_rect.spatial_bounds();
@@ -351,7 +350,8 @@ impl MeanCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::raster::{TileIdx, TileSize};
+    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::TileSize;
 
     use crate::{
         engine::{
@@ -428,7 +428,7 @@ mod tests {
     #[tokio::test]
     async fn single_raster() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -514,9 +514,10 @@ mod tests {
     #[tokio::test]
     async fn it_uses_only_pixels_in_query_rectangle() {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let tiling_specification = TilingSpecification {
-            tile_size: TileSize::new_unchecked(tile_size_in_pixels.y(), tile_size_in_pixels.x()),
-        };
+        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+            tile_size_in_pixels.y(),
+            tile_size_in_pixels.x(),
+        ));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -609,6 +610,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridShape2D::new_2d(3, 2).bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -625,7 +627,7 @@ mod tests {
     #[tokio::test]
     async fn raster_series() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -742,6 +744,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
+                        TileSize::new_unchecked(3, 2),
                     ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new("a".to_string(), measurement_a),
@@ -758,9 +761,9 @@ mod tests {
         band_names: Vec<String>,
         measurements: [Measurement; 2],
     ) -> Result<PlotData> {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(TilingSpecification {
-            tile_size: TileSize::new_unchecked(3, 2),
-        });
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+        );
 
         let time_interval = TimeInterval::new(
             TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),

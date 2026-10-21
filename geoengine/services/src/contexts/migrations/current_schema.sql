@@ -494,6 +494,11 @@ CREATE TYPE "GdalRetryOptions" AS (
     max_retries bigint
 );
 
+CREATE TYPE "TileSize" AS (
+    y bigint,
+    x bigint
+);
+
 CREATE TYPE "GdalDatasetParameters" AS (
     file_path text,
     rasterband_channel bigint,
@@ -506,7 +511,8 @@ CREATE TYPE "GdalDatasetParameters" AS (
     gdal_open_options text [],
     gdal_config_options "StringPair" [],
     allow_alphaband_as_mask boolean,
-    retry "GdalRetryOptions"
+    retry "GdalRetryOptions",
+    tile_size "TileSize"
 );
 
 CREATE TYPE "TimeReference" AS ENUM (
