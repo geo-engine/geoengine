@@ -44,10 +44,12 @@ Missing or malformed headers must not panic or stall forever. Avoid uncontrolled
 bursts when quota information is missing.
 
 A 429 updates a shared cooldown, honoring Retry-After (seconds and HTTP date)
-and reset, with a one-second fixed fallback when neither is usable. Missing quota headers
-use a conservative fallback of ten requests per second from the first request. Retry the rejected
-attempt through FIFO admission; bounded retries retain the existing failure
-contract. Do not feed exhausted 429 retries into generic exponential retry.
+and reset, with a one-second fixed fallback when neither is usable. If no quota
+window has been learned and no usable server retry timing is supplied, the retry
+loop also applies its existing exponential backoff to 429s. Missing quota headers
+use a conservative fallback of ten requests per second from the first request.
+Retry the rejected attempt through FIFO admission; bounded retries retain the
+existing failure contract. Do not feed exhausted 429 retries into an outer retry loop.
 Keep existing retry behavior for other transient HTTP, transport and JSON errors.
 Build authorization at dispatch time so time spent queued cannot stale the token.
 

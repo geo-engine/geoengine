@@ -2724,7 +2724,7 @@ mod grid_request_tests {
         server.expect(
             Expectation::matching(request::method_path("GET", "/always-limited"))
                 .times(crate::util::retry::DEFAULT_MAX_RETRIES as usize)
-                .respond_with(responders::status_code(429).append_header("x-ratelimit-reset", "0")),
+                .respond_with(responders::status_code(429).append_header("x-ratelimit-reset", "1")),
         );
         let client = super::StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap();
         let state = super::StacQueryState::NextPage {

@@ -15,8 +15,9 @@
 //! request start charged against the rolling windows.
 //!
 //! Retries for transient failures wait for exponential backoff outside the queue,
-//! then join its tail again. A 429 sets a shared cooldown; retries immediately
-//! rejoin the queue and admission waits for that cooldown and all quota constraints.
+//! then join its tail again. A 429 sets a shared cooldown; retries also back off
+//! unless the server supplies quota windows or usable retry timing. Admission
+//! waits for the cooldown and all quota constraints.
 use super::auth::StacAuthentication;
 use crate::util::retry::{RetryPolicy, is_terminal};
 use chrono::{DateTime, Utc};
@@ -423,7 +424,8 @@ impl StacRequestCoordinator {
     /// The policy's attempt limit includes rate-limit, HTTP, transport and decode failures.
     ///
     /// Transient retries back off before joining the queue again. A 429 retry
-    /// immediately rejoins and waits through the shared admission cooldown.
+    /// also backs off unless a learned quota window or usable server retry timing
+    /// lets admission control the retry delay.
     /// No request guard or scheduler mutex is held during exponential backoff or
     /// JSON decoding.
     pub(super) async fn execute<T: DeserializeOwned>(
@@ -434,17 +436,17 @@ impl StacRequestCoordinator {
         policy: &RetryPolicy,
     ) -> reqwest::Result<T> {
         let max_attempts = policy.max_retries.max(1);
-        let mut transient_failures = 0;
+        let mut backoff_failures = 0;
         let operation_name = format!("Fetch STAC items from {}", request.url());
         for attempt in 1..=max_attempts {
-            let result = async {
-                self.execute_attempt(client, &request, authentication)
-                    .await?
-                    .error_for_status()?
-                    .json::<T>()
-                    .await
-            }
-            .await;
+            let response = self.execute_attempt(client, &request, authentication).await;
+            // The attempt has already applied any advertised windows to state.
+            let server_controls_retry = response.as_ref().is_ok_and(|response| {
+                response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+                    && (rate_limit_delay(response.headers()).is_some()
+                        || !self.lock_state().windows.is_empty())
+            });
+            let result = async { response?.error_for_status()?.json::<T>().await }.await;
             let error = match result {
                 Ok(value) => return Ok(value),
                 Err(error) => error,
@@ -458,12 +460,12 @@ impl StacRequestCoordinator {
                 tracing::error!("{operation_name} failed after {max_attempts} attempts: {error}");
                 return Err(error);
             }
-            // Every failure consumes the same attempt budget. Only transient
-            // failures add exponential backoff; 429s wait through admission.
-            if error.status() != Some(reqwest::StatusCode::TOO_MANY_REQUESTS) {
+            // Every failure consumes the same attempt budget. Without server
+            // quota information, 429s use the same backoff as other failures.
+            if !server_controls_retry {
                 let delay =
-                    Duration::from_millis(policy.initial_delay_ms * 2_u64.pow(transient_failures));
-                transient_failures += 1;
+                    Duration::from_millis(policy.initial_delay_ms * 2_u64.pow(backoff_failures));
+                backoff_failures += 1;
                 tracing::warn!(
                     "{operation_name} failed (attempt {attempt}/{max_attempts}): {error}. Retrying in {delay:?}..."
                 );
@@ -696,12 +698,7 @@ impl ResponseFeedback {
             RemoteQuota::merge(destination, quota, 0);
         }
         if status == 429 {
-            let delay = retry_after(headers)
-                .into_iter()
-                .chain(header_values(headers, "x-ratelimit-reset").filter_map(parse_seconds))
-                .max()
-                .filter(|delay| !delay.is_zero())
-                .unwrap_or(FALLBACK_DELAY);
+            let delay = rate_limit_delay(headers).unwrap_or(FALLBACK_DELAY);
             feedback.cooldown_until = Some(now.checked_add(delay).unwrap_or(now + FALLBACK_DELAY));
         }
         feedback
@@ -739,6 +736,15 @@ fn header_values<'a>(headers: &'a HeaderMap, name: &str) -> impl Iterator<Item =
 fn parse_seconds(value: &str) -> Option<Duration> {
     let duration = Duration::from_secs(value.trim().parse().ok()?);
     Instant::now().checked_add(duration).map(|_| duration)
+}
+
+/// Longest usable server retry delay, before applying any local fallback.
+fn rate_limit_delay(headers: &HeaderMap) -> Option<Duration> {
+    retry_after(headers)
+        .into_iter()
+        .chain(header_values(headers, "x-ratelimit-reset").filter_map(parse_seconds))
+        .max()
+        .filter(|delay| !delay.is_zero())
 }
 
 /// Interpret Retry-After as relative seconds or an HTTP date. Wall-clock dates
@@ -846,6 +852,20 @@ mod tests {
             "Mon, 21 Oct 2030 07:28:00 GMT".parse().unwrap(),
         );
         assert!(retry_after(&headers).is_some());
+    }
+
+    #[test]
+    fn it_requires_usable_server_retry_timing() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(rate_limit_delay(&headers), None);
+        for value in ["invalid", "0", "-1", "18446744073709551615"] {
+            headers.insert(RETRY_AFTER, value.parse().unwrap());
+            headers.insert("x-ratelimit-reset", value.parse().unwrap());
+            assert_eq!(rate_limit_delay(&headers), None);
+        }
+        headers.insert(RETRY_AFTER, "2".parse().unwrap());
+        headers.insert("x-ratelimit-reset", "3".parse().unwrap());
+        assert_eq!(rate_limit_delay(&headers), Some(Duration::from_secs(3)));
     }
 
     #[test]
@@ -1382,6 +1402,85 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.status(), Some(reqwest::StatusCode::TOO_MANY_REQUESTS));
+    }
+
+    #[tokio::test]
+    async fn it_backs_off_exponentially_for_headerless_rate_limits() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+
+        let server = Server::run();
+        let starts = Arc::new(Mutex::new(Vec::new()));
+        let response_starts = starts.clone();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/limited"))
+                .times(4)
+                .respond_with(move || {
+                    let mut starts = response_starts.lock().unwrap();
+                    starts.push(Instant::now());
+                    responders::status_code(if starts.len() < 4 { 429 } else { 200 }).body("null")
+                }),
+        );
+        let client = reqwest::Client::new();
+        let coordinator =
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        let policy = RetryPolicy::new().max_retries(4).initial_delay_ms(600);
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            coordinator.execute::<serde_json::Value>(
+                &client,
+                client.get(server.url_str("/limited")).build().unwrap(),
+                None,
+                &policy,
+            ),
+        )
+        .await
+        .expect("headerless rate limits must recover within the attempt budget")
+        .unwrap();
+        let starts = starts.lock().unwrap();
+        for (attempt, pair) in starts.windows(2).enumerate() {
+            assert!(
+                pair[1].duration_since(pair[0])
+                    >= Duration::from_millis(600 * 2_u64.pow(attempt as u32)),
+                "each headerless 429 must increase the retry delay"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn it_uses_server_rate_limits_without_adding_exponential_backoff() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+
+        for (header, value) in [
+            ("retry-after", "1"),
+            ("x-ratelimit-reset", "1"),
+            ("x-ratelimit-limit", "100;w=1"),
+        ] {
+            let server = Server::run();
+            server.expect(
+                Expectation::matching(request::method_path("GET", "/limited"))
+                    .times(2)
+                    .respond_with(responders::cycle![
+                        responders::status_code(429).append_header(header, value),
+                        responders::status_code(200).body("null"),
+                    ]),
+            );
+            let client = reqwest::Client::new();
+            let coordinator =
+                StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+            let policy = RetryPolicy::new().max_retries(2).initial_delay_ms(10_000);
+            tokio::time::timeout(
+                Duration::from_secs(3),
+                coordinator.execute::<serde_json::Value>(
+                    &client,
+                    client.get(server.url_str("/limited")).build().unwrap(),
+                    None,
+                    &policy,
+                ),
+            )
+            .await
+            .expect("server-controlled retries must not add the ten-second policy backoff")
+            .unwrap();
+        }
     }
 
     #[tokio::test]
