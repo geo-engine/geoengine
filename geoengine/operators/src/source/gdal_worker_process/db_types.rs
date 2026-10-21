@@ -1,4 +1,4 @@
-use geoengine_datatypes::{delegate_from_to_sql, util::StringPair};
+use geoengine_datatypes::{delegate_from_to_sql, raster::TileSize, util::StringPair};
 use postgres_types::{FromSql, ToSql};
 
 use super::{
@@ -22,6 +22,14 @@ pub struct GdalDatasetParametersDbType {
     pub gdal_config_options: Option<Vec<StringPair>>,
     pub allow_alphaband_as_mask: bool,
     pub retry: Option<GdalRetryOptions>,
+    pub tile_size: Option<TileSizeDbType>,
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "TileSize")]
+pub struct TileSizeDbType {
+    pub y: i64,
+    pub x: i64,
 }
 
 impl From<&GdalDatasetParameters> for GdalDatasetParametersDbType {
@@ -42,6 +50,10 @@ impl From<&GdalDatasetParameters> for GdalDatasetParametersDbType {
                 .map(|v| v.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: other.allow_alphaband_as_mask,
             retry: other.retry,
+            tile_size: other.tile_size.map(|tile_size| TileSizeDbType {
+                y: tile_size.axis_size_y() as i64,
+                x: tile_size.axis_size_x() as i64,
+            }),
         }
     }
 }
@@ -65,6 +77,10 @@ impl TryFrom<GdalDatasetParametersDbType> for GdalDatasetParameters {
                 .map(|v| v.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: other.allow_alphaband_as_mask,
             retry: other.retry,
+            tile_size: other
+                .tile_size
+                .map(|TileSizeDbType { y, x }| TileSize::new(y as usize, x as usize))
+                .transpose()?,
         })
     }
 }

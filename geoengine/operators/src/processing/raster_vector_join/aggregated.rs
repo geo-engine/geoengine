@@ -99,8 +99,8 @@ where
             let spatial_bounds = query.spatial_bounds();
 
             let pixel_bounds = rd
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform()
+                .tiling_grid_definition()
+                .geo_transform
                 .bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
 
             let raster_query = RasterQueryRectangle::new(

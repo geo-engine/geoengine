@@ -8,7 +8,7 @@ use geoengine_datatypes::{
     primitives::{
         RegularTimeDimension, SpatialResolution, TimeDimension, TimeGranularity, TimeStep,
     },
-    raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType},
+    raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType, TileSize},
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -416,6 +416,7 @@ pub(super) fn provider(
             GeoTransform::new_unchecked((-180., 90.).into(), 1., -1.),
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([179, 359]))
                 .expect("world grid bounds"),
+            TileSize::default_512(),
         ),
         bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
             asset_title: "data".to_owned(),

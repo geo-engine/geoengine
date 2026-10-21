@@ -24,12 +24,12 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
+use geoengine_datatypes::primitives::TimeStep;
 use geoengine_datatypes::primitives::{
     BandSelection, RasterQueryRectangle, RegularTimeDimension, SpatialResolution, TimeFilledItem,
     TimeInstance,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
-use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
@@ -132,7 +132,6 @@ impl RasterOperator for TemporalRasterAggregation {
                 .unwrap_or(TimeInstance::EPOCH_START),
             result_descriptor: out_result_descriptor,
             source,
-            tiling_specification: context.tiling_specification(),
             output_type: self.params.output_type,
         };
 
@@ -150,7 +149,6 @@ pub struct InitializedTemporalRasterAggregation {
     window_reference: TimeInstance,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
-    tiling_specification: TilingSpecification,
     output_type: Option<RasterDataType>,
 }
 
@@ -183,7 +181,6 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
                 self.result_descriptor.clone(),
                 self.aggregation_type,
                 p,
-                self.tiling_specification,
             ).boxed()
             .into()
         );
@@ -230,7 +227,6 @@ where
     result_descriptor: RasterResultDescriptor,
     aggregation_type: Aggregation,
     source: Q,
-    tiling_specification: TilingSpecification,
 }
 
 impl<Q, P> TemporalRasterAggregationProcessor<Q, P>
@@ -248,13 +244,11 @@ where
         result_descriptor: RasterResultDescriptor,
         aggregation_type: Aggregation,
         source: Q,
-        tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             result_descriptor,
             aggregation_type,
             source,
-            tiling_specification,
         }
     }
 
@@ -300,9 +294,7 @@ where
         );
 
         let grid_desc = self.result_descriptor.spatial_grid_descriptor();
-        let tiling_strategy = grid_desc
-            .tiling_grid_definition(self.tiling_specification)
-            .generate_data_tiling_strategy();
+        let tiling_strategy = grid_desc.tiling_grid_definition().tiling_strategy();
 
         let time_stream: std::pin::Pin<
             Box<
@@ -1781,6 +1773,7 @@ mod tests {
             sources: SingleRasterSource {
                 raster: RasterStacker {
                     params: RasterStackerParams {
+                        output_origin: None,
                         rename_bands: RenameBands::Default,
                     },
                     sources: MultipleRasterSources {

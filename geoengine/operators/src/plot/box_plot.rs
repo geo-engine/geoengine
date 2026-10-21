@@ -316,9 +316,7 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::new(self.bands.iter().map(|band| band.index).collect())?,
-            result_descriptor
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            result_descriptor.tiling_grid_definition().geo_transform,
         );
         let query_bounds = raster_query_rect.spatial_bounds();
 
@@ -961,13 +959,15 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = geoengine_datatypes::raster::TilingSpecification::new(
-            TileSize::new_unchecked(tile_size.y(), tile_size.x()),
-        );
+        let tiling_specification =
+            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(
+                TileSize::new_unchecked(tile_size.y(), tile_size.x()),
+            );
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -1035,12 +1035,15 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+            tile_size.y(),
+            tile_size.x(),
+        ));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1112,12 +1115,15 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+            tile_size.y(),
+            tile_size.x(),
+        ));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1184,12 +1190,15 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+            tile_size.y(),
+            tile_size.x(),
+        ));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = BoxPlot {
             params: BoxPlotParams {
@@ -1258,12 +1267,15 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+            tile_size.y(),
+            tile_size.x(),
+        ));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1342,12 +1354,15 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
+        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+            tile_size.y(),
+            tile_size.x(),
+        ));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1419,6 +1434,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         };
@@ -1465,7 +1481,7 @@ mod tests {
         bbox: BoundingBox2D,
     ) -> Result<PlotData> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(4, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(4, 2)),
         );
 
         let query_processor = BoxPlot {

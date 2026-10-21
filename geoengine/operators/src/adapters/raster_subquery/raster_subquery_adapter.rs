@@ -164,9 +164,8 @@ where
         let source_data_bounds = source_processor
             .raster_result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(TilingSpecification::new(tiling_strategy.tile_size))
-            .tiling_spatial_grid_definition()
-            .grid_bounds();
+            .tiling_grid_definition()
+            .pixel_bounds;
 
         Self {
             current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!

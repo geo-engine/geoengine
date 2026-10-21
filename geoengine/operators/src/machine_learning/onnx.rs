@@ -540,16 +540,14 @@ mod tests {
     use approx::assert_abs_diff_eq;
     use futures::StreamExt;
     use geoengine_datatypes::primitives::TimeStep;
-    use geoengine_datatypes::raster::GridBoundingBox2D;
-    use geoengine_datatypes::raster::RasterTile2D;
-    use geoengine_datatypes::raster::SpatialGridDefinition;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileSize;
-    use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
+    use geoengine_datatypes::raster::{
+        GridBoundingBox2D, RasterTile2D, SpatialGridDefinition, TileIdx,
+        TilesEqualIgnoringCacheHint,
+    };
     use geoengine_datatypes::{
         machine_learning::{MlModelName, MlTensorShape3D},
         primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
-        raster::{Grid, GridOrEmpty, RasterDataType, RenameBands},
+        raster::{Grid, GridOrEmpty, RasterDataType, RenameBands, TileSize},
         spatial_reference::SpatialReference,
         test_data,
         util::test::TestDefault,
@@ -726,6 +724,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -746,6 +745,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -755,6 +755,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -933,6 +934,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -953,6 +955,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -973,6 +976,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -982,6 +986,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {
@@ -1114,10 +1119,13 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::F32,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                TestDefault::test_default(),
-                GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
-            )),
+            spatial_grid: SpatialGridDescriptor::new_source(
+                SpatialGridDefinition::new(
+                    TestDefault::test_default(),
+                    GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
+                ),
+                TileSize::new_unchecked(256, 256),
+            ),
             time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1140,6 +1148,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {

@@ -459,6 +459,7 @@ where
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         primitives::{CacheHint, Measurement, TimeInterval, TimeStep},
         raster::{
@@ -478,7 +479,6 @@ mod tests {
     };
 
     use super::*;
-    use geoengine_datatypes::raster::TileSize;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -490,6 +490,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [0, 4]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -644,9 +645,7 @@ mod tests {
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 TimeInterval::new_unchecked(0, 10),
             ),
-            result_descriptor
-                .tiling_grid_definition(exe_ctx.tiling_specification)
-                .generate_data_tiling_strategy(),
+            result_descriptor.tiling_grid_definition().tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -674,6 +673,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 4]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -756,9 +756,7 @@ mod tests {
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 TimeInterval::new_unchecked(0, 10),
             ),
-            result_descriptor
-                .tiling_grid_definition(exe_ctx.tiling_specification)
-                .generate_data_tiling_strategy(),
+            result_descriptor.tiling_grid_definition().tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -777,6 +775,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
@@ -793,6 +792,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
@@ -1035,8 +1035,8 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
             ),
             result_descriptor_1
-                .tiling_grid_definition(exe_ctx.tiling_specification)
-                .generate_data_tiling_strategy(),
+                .tiling_grid_definition()
+                .tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -1071,6 +1071,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
 
             bands: vec![
@@ -1088,6 +1089,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs2 band1".to_string(), Measurement::Unitless),
@@ -1330,8 +1332,8 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
             ),
             result_descriptor_1
-                .tiling_grid_definition(exe_ctx.tiling_specification)
-                .generate_data_tiling_strategy(),
+                .tiling_grid_definition()
+                .tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -1597,6 +1599,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
@@ -1614,6 +1617,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: vec![RasterBandDescriptor::new(
                 "mrs2 band2".to_string(),
@@ -1630,6 +1634,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TileSize::new_unchecked(2, 2),
             ),
             bands: vec![
                 RasterBandDescriptor::new("mrs3 band1".to_string(), Measurement::Unitless),
@@ -1991,8 +1996,8 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
             ),
             result_descriptor_1
-                .tiling_grid_definition(exe_ctx.tiling_specification)
-                .generate_data_tiling_strategy(),
+                .tiling_grid_definition()
+                .tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
