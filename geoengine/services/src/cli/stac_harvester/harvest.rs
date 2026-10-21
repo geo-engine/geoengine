@@ -1378,7 +1378,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn harvest_pages_use_shared_stac_authentication() {
+    async fn it_harvests_pages_across_origins_with_shared_authentication() {
         use crate::datasets::external::stac::StacProviderAuthentication;
         use httptest::{
             Expectation, Server, all_of,
@@ -1388,6 +1388,7 @@ mod tests {
 
         for authenticated in [false, true] {
             let server = Server::run();
+            let next_server = Server::run();
             let authentication = authenticated.then(|| StacProviderAuthentication {
                 endpoint: server.url_str("/token"),
                 client_id: "client".into(),
@@ -1408,11 +1409,14 @@ mod tests {
             ))
             .unwrap();
             first_page["links"] = serde_json::json!([{
-                "rel": "next", "href": server.url_str("/next")
+                "rel": "next", "href": next_server.url_str("/next")
             }]);
             let last_page =
                 serde_json::json!({"type": "FeatureCollection", "features": [], "links": []});
-            for (path, page) in [("/items", first_page), ("/next", last_page)] {
+            for (page_server, path, page) in [
+                (&server, "/items", first_page),
+                (&next_server, "/next", last_page),
+            ] {
                 let expectation = if authenticated {
                     Expectation::matching(all_of![
                         request::method_path("GET", path),
@@ -1421,7 +1425,7 @@ mod tests {
                 } else {
                     Expectation::matching(request::method_path("GET", path))
                 };
-                server.expect(expectation.respond_with(responders::json_encoded(page)));
+                page_server.expect(expectation.respond_with(responders::json_encoded(page)));
             }
             let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"))
                 .unwrap()

@@ -146,7 +146,7 @@ where
 }
 
 /// Decide whether `err` should abort the retry loop under `policy`.
-fn is_terminal<E: std::fmt::Display>(
+pub(crate) fn is_terminal<E: std::fmt::Display>(
     err: &E,
     policy: &RetryPolicy,
     extract_status: &impl Fn(&E) -> Option<u16>,

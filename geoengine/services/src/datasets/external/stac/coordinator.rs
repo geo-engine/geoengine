@@ -1,7 +1,24 @@
-//! FIFO admission shared by STAC origin and credentials. Requests reserve capacity
-//! in every known window before dispatch, then perform HTTP without holding locks.
+//! FIFO admission shared by configured STAC origin and credentials. Each HTTP
+//! attempt reserves capacity in every known window before dispatch. Queue and
+//! quota updates briefly lock scheduler state; those locks are released before
+//! HTTP calls or retry backoff.
+//!
+//! [`Identity`] selects a process-wide [`StacRequestCoordinator`], shared across
+//! providers and collections with the same configuration. Its [`State`] holds
+//! the FIFO queue, request history, learned rate-limit windows and server feedback.
+//! Admission follows queue order, while admitted HTTP attempts may overlap.
+//!
+//! One [`StacRequestCoordinator::execute`] call may make several HTTP attempts.
+//! Each attempt gets a [`RequestGuard`] that tracks its queue membership and
+//! completion. Response headers become [`ResponseFeedback`], which is applied
+//! when the guard finishes. Failures and cancellation keep the recorded
+//! request start charged against the rolling windows.
+//!
+//! Retries for transient failures wait for exponential backoff outside the queue,
+//! then join its tail again. A 429 sets a shared cooldown; retries immediately
+//! rejoin the queue and admission waits for that cooldown and all quota constraints.
 use super::auth::StacAuthentication;
-use crate::util::retry::{RetryPolicy, retry_http};
+use crate::util::retry::{RetryPolicy, is_terminal};
 use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde::de::DeserializeOwned;
@@ -14,9 +31,18 @@ use std::{
 use tokio::sync::Notify;
 use url::Url;
 
+/// Default cooldown/reset delay and duration of the initial ten-request window.
 const FALLBACK_DELAY: Duration = Duration::from_secs(1);
+/// Keep recent starts and idle coordinators long enough to learn further policies
+/// and preserve quota accounting when providers are reconstructed.
 const MIN_RETENTION: Duration = Duration::from_mins(5);
 
+/// Registry key identifying providers that share one quota bucket.
+///
+/// The origin is the configured STAC scheme, host and effective port. Configured
+/// OAuth credentials distinguish authenticated buckets; absent credentials select
+/// the anonymous bucket. Provider ids, collection paths and renewed access tokens
+/// do not affect sharing. The custom `Debug` implementation omits credential fields.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Identity {
     scheme: String,
@@ -39,15 +65,24 @@ impl fmt::Debug for Identity {
     }
 }
 
-/// Remote feedback only reduces capacity until reset, including when responses
-/// arrive out of order. Request counts here are actual quotas, not lifecycle states.
+/// Remaining server capacity and the monotonic deadline at which it expires.
+///
+/// This supplements local request history with server knowledge, including quota
+/// consumed by other clients. It can belong to a known [`Window`] or apply to the
+/// whole coordinator when the headers do not identify a window unambiguously.
+/// Merging observations only reduces remaining capacity until reset, so responses
+/// arriving out of order cannot replenish the budget.
 #[derive(Debug)]
 struct RemoteQuota {
+    /// Server-reported capacity, conservatively reduced for local reservations.
     remaining: usize,
+    /// Absolute deadline derived from the server's relative reset duration.
     reset: Instant,
 }
 
 impl RemoteQuota {
+    /// Deduct other unfinished attempts that the server may not have counted yet,
+    /// then retain the smaller budget and later reset from both observations.
     fn merge(current: &mut Option<Self>, mut observed: Self, outstanding: usize) {
         observed.remaining = observed.remaining.saturating_sub(outstanding);
         if let Some(current) = current {
@@ -63,12 +98,19 @@ impl RemoteQuota {
     }
 }
 
-/// One advertised policy, used both when parsing headers and tracking capacity.
-/// All policies share `State::starts` instead of keeping duplicate request histories.
+/// One rate-limit policy: at most `limit` starts within a rolling `duration`.
+///
+/// Admission must satisfy both this local limit and any associated server quota.
+/// Policies are identified by duration and all use [`State::starts`] as their
+/// history. The same type represents policies parsed from headers and those
+/// retained by the scheduler.
 #[derive(Debug)]
 struct Window {
+    /// Maximum number of admissions within the rolling interval.
     limit: usize,
+    /// Length of the rolling interval used to count recent request starts.
     duration: Duration,
+    /// Additional remaining/reset constraint reported for this policy, if known.
     remote: Option<RemoteQuota>,
 }
 
@@ -81,6 +123,8 @@ impl Window {
         }
     }
 
+    /// Return the later deadline imposed by local starts and an exhausted server
+    /// quota. `None` means this window permits another request.
     fn blocked_until(&self, starts: &VecDeque<Instant>, now: Instant) -> Option<Instant> {
         // The limit-th most recent start determines when capacity returns. This
         // is O(1), even with a long shared history or a newly lowered limit.
@@ -96,31 +140,59 @@ impl Window {
     }
 }
 
+/// Result of one admission check under the scheduler mutex.
+///
+/// This tells the async caller what to await after releasing the mutex. Waits
+/// always lead to another check because notifications and deadlines can race
+/// with cancellations or new server feedback.
 #[derive(Debug)]
 enum Admission {
+    /// The attempt left the queue and reserved capacity in the current state.
     Admitted,
+    /// Another attempt is ahead in the FIFO queue; wait for notification.
     WaitForChange,
+    /// The attempt is at the front but a quota or cooldown blocks it. Wait for
+    /// this deadline or a notification that the scheduling state changed.
     WaitUntil(Instant),
 }
 
+/// Mutable scheduling data for one [`Identity`], protected by a mutex held briefly
+/// for each update.
+///
+/// Queue changes, admission reservations and response feedback are applied
+/// atomically here. Async waiting, HTTP dispatch and JSON decoding happen outside
+/// this state. The history of request starts enforces rates independently of how many
+/// attempts are currently waiting for response headers.
 #[derive(Debug)]
 struct State {
+    /// One notification handle per queued attempt, also used as its unique identity.
     queue: VecDeque<Arc<Notify>>,
+    /// Admitted attempts still waiting for response headers or a transport error.
+    /// Used to adjust server feedback; this is not a concurrency limit.
     in_flight: usize,
+    /// Learned policies, deduplicated by duration. Empty selects ten starts/second.
     windows: Vec<Window>,
+    /// Chronological admission timestamps shared by every window. Completion,
+    /// failure and cancellation do not refund these reservations.
     starts: VecDeque<Instant>,
+    /// Server remaining/reset feedback without an unambiguous window association.
     unscoped_quota: Option<RemoteQuota>,
+    /// Shared admission barrier learned from 429 responses.
     cooldown_until: Option<Instant>,
+    /// Last admission or release of an admitted attempt, used for idle retention.
     last_activity: Instant,
 }
 
 impl State {
+    /// Wake only the queue head, which is the only waiter eligible for admission.
     fn wake_front(&self) {
         if let Some(waiter) = self.queue.front() {
             waiter.notify_one();
         }
     }
 
+    /// Preserve starts for the longest learned policy, with a minimum history
+    /// for policies that may first appear in later responses.
     fn history_duration(&self) -> Duration {
         self.windows
             .iter()
@@ -130,6 +202,8 @@ impl State {
             .max(MIN_RETENTION)
     }
 
+    /// Deadline after which an unused coordinator's history, quotas and cooldown
+    /// no longer require its registry entry to be retained.
     fn retain_until(&self) -> Instant {
         self.last_activity
             .checked_add(self.history_duration())
@@ -145,6 +219,8 @@ impl State {
             .unwrap_or(self.last_activity)
     }
 
+    /// Admit the queue head only when every known window and server constraint
+    /// permits it. Record the start and decrement remaining quotas before dispatch.
     fn admit(&mut self, waiter: &Arc<Notify>, now: Instant) -> Admission {
         if !self
             .queue
@@ -192,6 +268,7 @@ impl State {
         Admission::Admitted
     }
 
+    /// Expire old starts, server quotas and cooldowns while keeping learned policies.
     fn prune(&mut self, now: Instant) {
         let history_duration = self.history_duration();
         while self
@@ -216,6 +293,9 @@ impl State {
         }
     }
 
+    /// Merge response feedback while preserving policies absent from this response.
+    /// The responding attempt must already be released so `in_flight` counts only
+    /// the other attempts to reserve against the reported remaining capacity.
     fn observe(&mut self, feedback: ResponseFeedback, now: Instant) {
         self.prune(now);
         for mut observed in feedback.windows {
@@ -248,6 +328,8 @@ impl State {
         }
     }
 
+    /// Remove a queued attempt or decrement the count of unfinished HTTP attempts.
+    /// An admitted attempt's timestamp remains charged against local rate limits.
     fn release(&mut self, phase: &RequestPhase) {
         match phase {
             RequestPhase::Queued(waiter) => {
@@ -269,15 +351,25 @@ impl State {
     }
 }
 
+/// Shared admission and retry scheduler for one configured origin and auth identity.
+///
+/// The registry supplies shared ownership across providers, collections and client
+/// clones. Each HTTP attempt briefly locks `state` to reserve capacity, then runs
+/// independently until its headers or transport error can update the scheduler.
 #[derive(Debug)]
 pub(super) struct StacRequestCoordinator {
     state: Mutex<State>,
 }
 
+/// Process-wide coordinator ownership. Lookups reclaim unused entries only after
+/// their request history and server deadlines expire, preserving quotas across
+/// provider reconstruction. When both locks are needed, lock registry before state.
 static REGISTRY: OnceLock<Mutex<HashMap<Identity, Arc<StacRequestCoordinator>>>> = OnceLock::new();
 
 impl StacRequestCoordinator {
+    /// Find or create the coordinator for this configured origin and authentication.
     /// Provider ids, collection ids and refreshed access tokens do not split quotas.
+    /// This lookup also reclaims expired registry entries that have no other owners.
     pub(super) fn shared(
         origin: &Url,
         authentication: Option<&super::StacProviderAuthentication>,
@@ -328,6 +420,12 @@ impl StacRequestCoordinator {
 
     /// Executes and decodes a STAC request, owning admission, header feedback and
     /// retries. Tokens are read after admission, and each retry enters the queue.
+    /// The policy's attempt limit includes rate-limit, HTTP, transport and decode failures.
+    ///
+    /// Transient retries back off before joining the queue again. A 429 retry
+    /// immediately rejoins and waits through the shared admission cooldown.
+    /// No request guard or scheduler mutex is held during exponential backoff or
+    /// JSON decoding.
     pub(super) async fn execute<T: DeserializeOwned>(
         self: &Arc<Self>,
         client: &reqwest::Client,
@@ -335,58 +433,77 @@ impl StacRequestCoordinator {
         authentication: Option<&StacAuthentication>,
         policy: &RetryPolicy,
     ) -> reqwest::Result<T> {
-        // The rate-limit loop has already exhausted its attempts when it returns
-        // a 429. Never start an exponential retry cycle for that final response.
-        let policy = policy.clone().stop_on_status(&[429]);
-        retry_http(
-            || async {
-                self.execute_rate_limited(client, &request, authentication, policy.max_retries)
+        let max_attempts = policy.max_retries.max(1);
+        let mut transient_failures = 0;
+        let operation_name = format!("Fetch STAC items from {}", request.url());
+        for attempt in 1..=max_attempts {
+            let result = async {
+                self.execute_attempt(client, &request, authentication)
                     .await?
                     .error_for_status()?
                     .json::<T>()
                     .await
-            },
-            &format!("Fetch STAC items from {}", request.url()),
-            &policy,
-            |error| error.status().map(|status| status.as_u16()),
-        )
-        .await
+            }
+            .await;
+            let error = match result {
+                Ok(value) => return Ok(value),
+                Err(error) => error,
+            };
+            if is_terminal(&error, policy, &|error| {
+                error.status().map(|status| status.as_u16())
+            }) {
+                return Err(error);
+            }
+            if attempt == max_attempts {
+                tracing::error!("{operation_name} failed after {max_attempts} attempts: {error}");
+                return Err(error);
+            }
+            // Every failure consumes the same attempt budget. Only transient
+            // failures add exponential backoff; 429s wait through admission.
+            if error.status() != Some(reqwest::StatusCode::TOO_MANY_REQUESTS) {
+                let delay =
+                    Duration::from_millis(policy.initial_delay_ms * 2_u64.pow(transient_failures));
+                transient_failures += 1;
+                tracing::warn!(
+                    "{operation_name} failed (attempt {attempt}/{max_attempts}): {error}. Retrying in {delay:?}..."
+                );
+                tokio::time::sleep(delay).await;
+            }
+        }
+        unreachable!("bounded STAC retry loop always returns")
     }
 
-    async fn execute_rate_limited(
+    /// Queue and dispatch one attempt using the current access token. Finish its
+    /// guard as soon as headers or a transport error arrive; body decoding belongs
+    /// to `execute` and does not keep the attempt in `State::in_flight`.
+    async fn execute_attempt(
         self: &Arc<Self>,
         client: &reqwest::Client,
         request: &reqwest::Request,
         authentication: Option<&StacAuthentication>,
-        attempts: u32,
     ) -> reqwest::Result<reqwest::Response> {
-        for attempt in 1..=attempts.max(1) {
-            let request_guard = self.acquire().await;
-            let request_copy = request
-                .try_clone()
-                .expect("STAC API searches are replayable GET requests");
-            let mut request_builder =
-                reqwest::RequestBuilder::from_parts(client.clone(), request_copy);
-            if let Some(authentication) = authentication {
-                let token = authentication.access_token().await;
-                request_builder = request_builder.bearer_auth(token);
-            }
-            let response = request_builder.send().await;
-            request_guard.finish(
-                response
-                    .as_ref()
-                    .ok()
-                    .map(|response| (response.headers(), response.status().as_u16())),
-            );
-            let response = response?;
-            let status = response.status().as_u16();
-            if status != 429 || attempt == attempts.max(1) {
-                return Ok(response);
-            }
+        let request_guard = self.acquire().await;
+        let request_copy = request
+            .try_clone()
+            .expect("STAC API searches are replayable GET requests");
+        let mut request_builder = reqwest::RequestBuilder::from_parts(client.clone(), request_copy);
+        if let Some(authentication) = authentication {
+            let token = authentication.access_token().await;
+            request_builder = request_builder.bearer_auth(token);
         }
-        unreachable!("bounded STAC 429 retry loop always returns")
+        let response = request_builder.send().await;
+        request_guard.finish(
+            response
+                .as_ref()
+                .ok()
+                .map(|response| (response.headers(), response.status().as_u16())),
+        );
+        response
     }
 
+    /// Join the FIFO tail and wait until this attempt can reserve capacity.
+    /// Only the head waits on a quota timer; other waiters await notifications.
+    /// Dropping this future removes its queued attempt through the request guard.
     async fn acquire(self: &Arc<Self>) -> RequestGuard {
         let waiter = Arc::new(Notify::new());
         let mut request = RequestGuard {
@@ -421,20 +538,36 @@ impl StacRequestCoordinator {
     }
 }
 
+/// Cleanup obligation of a single attempt throughout its lifetime.
+///
+/// [`Admission`] describes one scheduling decision; this enum records which
+/// resources [`RequestGuard`] must release when the attempt finishes or is dropped.
 enum RequestPhase {
+    /// Registered in the FIFO queue; the handle identifies the entry to remove.
     Queued(Arc<Notify>),
+    /// Capacity is reserved and the attempt contributes to `State::in_flight`.
     InFlight,
+    /// Bookkeeping has been released; dropping the guard requires no cleanup.
     Finished,
 }
 
-/// A single guard follows an attempt from queueing through response headers.
-/// Normal completion is explicit; Drop only handles cancellation/unwinding.
+/// Owns cleanup for one attempt from queue insertion until response headers or a
+/// transport error arrive.
+///
+/// This guard holds a coordinator reference and lifecycle state, not a mutex lock.
+/// Normal completion calls [`Self::finish`] to release bookkeeping and apply
+/// response feedback atomically. `Drop` handles cancellation or unwinding by
+/// removing the waiter or decrementing [`State::in_flight`]. Neither path
+/// refunds the admitted start recorded in the rolling history.
 struct RequestGuard {
     coordinator: Arc<StacRequestCoordinator>,
     phase: RequestPhase,
 }
 
 impl RequestGuard {
+    /// Finish an attempt and publish its headers in the same state update as its
+    /// release. `None` represents a transport failure with no response headers.
+    /// Header parsing happens before the scheduler mutex is acquired.
     fn finish(mut self, response: Option<(&HeaderMap, u16)>) {
         let feedback = response
             .map(|(headers, status)| ResponseFeedback::parse(headers, status, Instant::now()));
@@ -463,19 +596,31 @@ impl Drop for RequestGuard {
     }
 }
 
+/// Canonicalize valid OAuth endpoint URLs for registry matching, preserving the
+/// original text when parsing fails.
 fn normalize_endpoint(endpoint: &str) -> String {
     Url::parse(endpoint).map_or_else(|_| endpoint.to_owned(), |url| url.to_string())
 }
 
-/// Parsed once outside the scheduler lock. Window carries its own quota, so
-/// there is no second window identifier or duplicate header parsing pass.
+/// Scheduling constraints extracted from one HTTP response before locking state.
+///
+/// Known policies carry their associated remaining/reset quota inside [`Window`].
+/// Ambiguous quota feedback is kept separately, and a 429 contributes a shared
+/// cooldown. [`State::observe`] merges these observations with existing constraints
+/// and accounts for other unfinished attempts.
 struct ResponseFeedback {
+    /// Advertised policies, deduplicated by duration, with any identifiable quotas.
     windows: Vec<Window>,
+    /// Remaining/reset feedback that could not be assigned to one advertised policy.
     unscoped_quota: Option<RemoteQuota>,
+    /// Monotonic deadline from a 429's Retry-After/reset headers or fallback delay.
     cooldown_until: Option<Instant>,
 }
 
 impl ResponseFeedback {
+    /// Parse rate-limit policies and relative reset seconds. Repeated header fields
+    /// retain their positions so ambiguous remaining counts stay unscoped. For a
+    /// 429, use the longest usable Retry-After/reset delay or the fixed fallback.
     fn parse(headers: &HeaderMap, status: u16, now: Instant) -> Self {
         let limits: Vec<_> = headers.get_all("x-ratelimit-limit").iter().collect();
         let remaining: Vec<_> = headers.get_all("x-ratelimit-remaining").iter().collect();
@@ -563,6 +708,8 @@ impl ResponseFeedback {
     }
 }
 
+/// Extract positive `limit;w=seconds` policies from a comma-separated limit field.
+/// The bare leading count identifies a binding policy but has no window duration.
 fn parse_limit_field(value: &str) -> Vec<Window> {
     value
         .split(',')
@@ -588,11 +735,14 @@ fn header_values<'a>(headers: &'a HeaderMap, name: &str) -> impl Iterator<Item =
         .filter_map(|value| value.to_str().ok())
 }
 
+/// Accept integer seconds only when they can form a representable monotonic deadline.
 fn parse_seconds(value: &str) -> Option<Duration> {
     let duration = Duration::from_secs(value.trim().parse().ok()?);
     Instant::now().checked_add(duration).map(|_| duration)
 }
 
+/// Interpret Retry-After as relative seconds or an HTTP date. Wall-clock dates
+/// become a duration here; the scheduler subsequently stores a monotonic deadline.
 fn retry_after(headers: &HeaderMap) -> Option<Duration> {
     let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
     if let Some(duration) = parse_seconds(value) {
@@ -622,8 +772,9 @@ mod tests {
         let server = Server::run();
         server.expect(
             Expectation::matching(request::method_path("GET", "/items"))
-                .times(3)
+                .times(4)
                 .respond_with(responders::cycle![
+                    responders::status_code(429),
                     responders::status_code(500),
                     responders::status_code(200).body("invalid json"),
                     responders::json_encoded(json!({"complete": true})),
@@ -633,7 +784,7 @@ mod tests {
             StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
         let client = reqwest::Client::new();
         let request = client.get(server.url_str("/items")).build().unwrap();
-        let policy = RetryPolicy::new().max_retries(3).initial_delay_ms(1);
+        let policy = RetryPolicy::new().max_retries(4).initial_delay_ms(1);
         let result: Value = coordinator
             .execute(&client, request, None, &policy)
             .await
@@ -1231,6 +1382,41 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.status(), Some(reqwest::StatusCode::TOO_MANY_REQUESTS));
+    }
+
+    #[tokio::test]
+    async fn it_shares_the_attempt_budget_between_rate_limits_and_other_failures() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+
+        for statuses in [[429, 500], [500, 429], [429, 200]] {
+            let server = Server::run();
+            server.expect(
+                Expectation::matching(request::method_path("GET", "/items"))
+                    .times(2)
+                    .respond_with(responders::cycle![
+                        responders::status_code(statuses[0]),
+                        // A 200 with an empty body exercises JSON decode errors.
+                        responders::status_code(statuses[1]),
+                    ]),
+            );
+            let client = reqwest::Client::new();
+            let coordinator =
+                StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+            let error = coordinator
+                .execute::<serde_json::Value>(
+                    &client,
+                    client.get(server.url_str("/items")).build().unwrap(),
+                    None,
+                    &RetryPolicy::new().max_retries(2).initial_delay_ms(1),
+                )
+                .await
+                .unwrap_err();
+            if statuses[1] == 200 {
+                assert!(error.is_decode());
+            } else {
+                assert_eq!(error.status().unwrap().as_u16(), statuses[1]);
+            }
+        }
     }
 
     #[tokio::test]

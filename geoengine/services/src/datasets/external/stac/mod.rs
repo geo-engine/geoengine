@@ -366,7 +366,7 @@ impl DataProvider for StacDataProvider {
     }
 }
 
-/// STAC HTTP transport with a fixed provider origin and coordinator.
+/// STAC HTTP transport with a shared provider coordinator.
 /// Clones share the connection pool, token renewal state and coordinator.
 #[derive(Clone, Debug)]
 pub(crate) struct StacClient {
@@ -407,29 +407,18 @@ impl StacClient {
         self.client.get(url)
     }
 
-    /// Executes a request through the provider's coordinator and decodes the JSON response.
-    /// The coordinator handles authentication, rate limits and retries.
+    /// Executes a request through the provider's shared coordinator and authentication.
+    /// Pagination URLs are followed as supplied by the STAC server.
     pub(crate) async fn execute_json<T: serde::de::DeserializeOwned>(
         &self,
         request: reqwest::RequestBuilder,
         policy: &crate::util::retry::RetryPolicy,
     ) -> reqwest::Result<T> {
         let request = request.build()?;
-        let authentication = if same_origin(&self.origin, request.url()) {
-            self.authentication.as_ref()
-        } else {
-            None
-        };
         self.coordinator
-            .execute(&self.client, request, authentication, policy)
+            .execute(&self.client, request, self.authentication.as_ref(), policy)
             .await
     }
-}
-
-fn same_origin(expected: &url::Url, actual: &url::Url) -> bool {
-    expected.scheme() == actual.scheme()
-        && expected.host() == actual.host()
-        && expected.port_or_known_default() == actual.port_or_known_default()
 }
 
 #[cfg(test)]
@@ -701,83 +690,6 @@ mod tests {
         .unwrap();
     }
 
-    #[tokio::test]
-    async fn it_reuses_the_provider_coordinator_without_sending_credentials_to_other_origins() {
-        use httptest::{
-            Expectation, Server, all_of,
-            matchers::{any, contains, not, request},
-            responders,
-        };
-        use serde_json::{Value, json};
-        use std::time::{Duration, Instant};
-        let origin = Server::run();
-        let destination = Server::run();
-        origin.expect(
-            Expectation::matching(request::method_path("POST", "/token"))
-                .times(1)
-                .respond_with(responders::json_encoded(
-                    json!({ "access_token": "origin-only", "expires_in": 3600 }),
-                )),
-        );
-        origin.expect(
-            Expectation::matching(all_of![
-                request::method_path("GET", "/probe"),
-                request::headers(contains(("authorization", "Bearer origin-only"))),
-            ])
-            .times(1)
-            .respond_with(
-                responders::status_code(200)
-                    .append_header("x-ratelimit-remaining", "0")
-                    .append_header("x-ratelimit-reset", "1")
-                    .body("null"),
-            ),
-        );
-        destination.expect(
-            Expectation::matching(all_of![
-                request::method_path("GET", "/items"),
-                request::headers(not(contains(("authorization", any())))),
-            ])
-            .times(1)
-            .respond_with(responders::status_code(200).body("null")),
-        );
-        let client = StacClient::new(reqwest::Client::new(), &origin.url_str("/"))
-            .unwrap()
-            .with_authentication(Some(StacProviderAuthentication {
-                endpoint: origin.url_str("/token"),
-                client_id: "client".into(),
-                username: "user".into(),
-                password: "password".into(),
-            }))
-            .await
-            .unwrap();
-        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
-        let started = Instant::now();
-        client
-            .execute_json::<Value>(client.get(origin.url_str("/probe")), &policy)
-            .await
-            .unwrap();
-        let cloned = client.clone();
-        tokio::time::timeout(
-            Duration::from_secs(3),
-            cloned.execute_json::<Value>(cloned.get(destination.url_str("/items")), &policy),
-        )
-        .await
-        .expect("cross-origin requests should proceed without provider credentials")
-        .unwrap();
-        assert!(started.elapsed() >= Duration::from_secs(1));
-    }
-
-    #[test]
-    fn same_origin_ignores_path_but_checks_scheme_host_and_port() {
-        assert!(same_origin(
-            &url::Url::parse("https://example.test/api").unwrap(),
-            &url::Url::parse("https://example.test/other").unwrap(),
-        ));
-        assert!(!same_origin(
-            &url::Url::parse("https://example.test/api").unwrap(),
-            &url::Url::parse("https://other.test/api").unwrap(),
-        ));
-    }
     #[test]
     fn secret_replacement_is_rejected_without_existing_authentication() {
         let authentication = StacProviderAuthentication {

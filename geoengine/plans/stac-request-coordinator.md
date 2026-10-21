@@ -3,13 +3,15 @@
 ## Purpose and scope
 
 All STAC HTTP attempts within one backend process use a FIFO coordinator shared
-by server origin (scheme, host, effective port) and full configured authentication
-identity (token endpoint, client id, username, password), or anonymous identity.
+by configured server origin (scheme, host, effective port) and full configured
+authentication identity (token endpoint, client id, username, password), or
+anonymous identity.
 Collection, provider id, page size, and refreshed access tokens are not identity.
 For each server, all anonymous requests share one quota bucket; matching
 configured authentication shares another bucket, across all providers and
-collections. Different authentications have independent quotas. Cross-origin pagination uses the
-anonymous coordinator for that destination and never receives STAC credentials.
+collections. Different authentications have independent quotas. Pagination follows
+the server's next-page URLs using the provider's initialized coordinator and
+authentication.
 OAuth token endpoints and GDAL asset reads remain outside STAC coordination.
 
 ## Scheduling
