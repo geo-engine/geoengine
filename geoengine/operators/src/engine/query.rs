@@ -19,35 +19,68 @@ use geoengine_datatypes::{
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
 
-/// Query-wide fanout factor for sub-query adapters.
+/// Budget for running sub-queries concurrently.
+///
+/// All sub-query adapters of one query share the per-query permits, so nested adapters
+/// add up instead of multiplying their fanout. Each extra sub-query also needs a permit
+/// from a pool shared by all queries of the server: an idle server gives a single query
+/// its full parallelism, a busy one runs every query sequentially, because parallelism
+/// within a query adds no throughput once the GDAL pool and thread pool are saturated.
+///
+/// Every adapter may always run one sub-query without a permit, which guarantees
+/// progress and avoids deadlocks.
 pub struct TileScheduler {
-    parallelism: usize,
+    query: Arc<Semaphore>,
+    global: Arc<Semaphore>,
+}
+
+/// Held by an extra sub-query until its tile is yielded.
+pub struct TilePermit {
+    _query: OwnedSemaphorePermit,
+    _global: OwnedSemaphorePermit,
 }
 
 impl TileScheduler {
-    // fixed per-query fanout for the POC; replace with shared scheduling later.
-    pub const POC_PARALLELISM: usize = 4;
+    pub const DEFAULT_PARALLELISM: usize = 4;
 
-    pub fn fixed(parallelism: usize) -> Self {
+    /// At most `parallelism` leaf sub-queries of this query run at once, however deep
+    /// adapters nest. Extra sub-queries also draw from `global`.
+    pub fn new(parallelism: usize, global: Arc<Semaphore>) -> Self {
         Self {
-            parallelism: parallelism.max(1),
+            query: Arc::new(Semaphore::new(parallelism.saturating_sub(1))),
+            global,
         }
     }
 
-    pub fn parallelism(&self) -> usize {
-        self.parallelism
+    /// Like [`Self::new`], with a global pool no other query uses.
+    pub fn fixed(parallelism: usize) -> Self {
+        Self::new(
+            parallelism,
+            Arc::new(Semaphore::new(parallelism.saturating_sub(1))),
+        )
+    }
+
+    /// Never waits: waiting on a permit deadlocks when outer sub-queries hold all of them.
+    pub fn try_acquire(&self) -> Option<TilePermit> {
+        let query = self.query.clone().try_acquire_owned().ok()?;
+        let global = self.global.clone().try_acquire_owned().ok()?;
+        Some(TilePermit {
+            _query: query,
+            _global: global,
+        })
     }
 }
 
 impl Default for TileScheduler {
     fn default() -> Self {
-        Self::fixed(Self::POC_PARALLELISM)
+        Self::fixed(Self::DEFAULT_PARALLELISM)
     }
 }
 
@@ -428,9 +461,37 @@ mod tests {
         assert!(stream.next().await.is_none());
     }
 
-    #[tokio::test]
-    async fn tile_scheduler_never_has_zero_parallelism() {
-        assert_eq!(TileScheduler::fixed(0).parallelism(), 1);
-        assert_eq!(TileScheduler::fixed(4).parallelism(), 4);
+    #[test]
+    fn it_hands_out_parallelism_minus_one_permits() {
+        let scheduler = TileScheduler::fixed(3);
+        let permits = [scheduler.try_acquire(), scheduler.try_acquire()];
+        assert!(permits.iter().all(Option::is_some));
+        assert!(scheduler.try_acquire().is_none());
+        drop(permits);
+        assert!(scheduler.try_acquire().is_some());
+
+        assert!(TileScheduler::fixed(0).try_acquire().is_none());
+        assert!(TileScheduler::fixed(1).try_acquire().is_none());
+    }
+
+    #[test]
+    fn it_shares_the_global_pool_between_queries() {
+        let global = Arc::new(Semaphore::new(2));
+        let busy = TileScheduler::new(4, global.clone());
+        let other = TileScheduler::new(4, global.clone());
+
+        let held = [busy.try_acquire(), busy.try_acquire()];
+        assert!(held.iter().all(Option::is_some));
+        assert!(other.try_acquire().is_none(), "global pool is exhausted");
+
+        drop(held);
+        assert!(other.try_acquire().is_some());
+    }
+
+    #[test]
+    fn it_returns_the_query_permit_when_the_global_pool_is_empty() {
+        let scheduler = TileScheduler::new(2, Arc::new(Semaphore::new(0)));
+        assert!(scheduler.try_acquire().is_none());
+        assert_eq!(scheduler.query.available_permits(), 1);
     }
 }

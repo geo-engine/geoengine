@@ -34,7 +34,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
-    engine::ChunkByteSize,
+    engine::{ChunkByteSize, TileScheduler},
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
@@ -42,6 +42,7 @@ use geoengine_operators::{
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::{path::PathBuf, sync::Arc};
+use tokio::sync::Semaphore;
 use tokio_postgres::error::SqlState;
 use tracing::{info, instrument};
 
@@ -67,6 +68,8 @@ where
     tile_cache: Arc<SharedCache>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
+    tile_parallelism: usize,
+    global_tile_permits: Arc<Semaphore>,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
@@ -125,6 +128,8 @@ where
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache: None,
             default_cache_ttl: CacheTtlSeconds::new(0),
+            tile_parallelism: TileScheduler::DEFAULT_PARALLELISM,
+            global_tile_permits: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             gdal_process_pool,
         })
@@ -192,6 +197,8 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
+            tile_parallelism: TileScheduler::DEFAULT_PARALLELISM,
+            global_tile_permits: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             gdal_process_pool,
         })
@@ -215,6 +222,7 @@ where
         gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
         cache_config.validate()?;
+        let query_context_config = get_config_element::<crate::config::QueryContext>()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -267,6 +275,10 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
+            tile_parallelism: query_context_config.tile_parallelism,
+            global_tile_permits: Arc::new(Semaphore::new(
+                query_context_config.global_extra_tile_permits,
+            )),
             provider_registry,
             gdal_process_pool,
         };
@@ -454,8 +466,6 @@ where
         computation: ComputationId,
     ) -> Result<Self::QueryContext> {
         // TODO: load config only once
-        let tile_parallelism =
-            crate::config::get_config_element::<crate::config::QueryContext>()?.tile_parallelism;
 
         Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,
@@ -463,7 +473,10 @@ where
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
             self.context.default_cache_ttl,
-            tile_parallelism,
+            TileScheduler::new(
+                self.context.tile_parallelism,
+                self.context.global_tile_permits.clone(),
+            ),
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
             Some(

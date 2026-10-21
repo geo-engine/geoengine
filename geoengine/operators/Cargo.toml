@@ -8,10 +8,6 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
-[features]
-default = ["new-subquery-adapter"]
-new-subquery-adapter = []
-
 [lib]
 bench = false
 

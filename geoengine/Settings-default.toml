@@ -40,7 +40,11 @@ tile_shape_pixels_y = 512
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
+# max. concurrent sub-queries of one query (1 = sequential)
 tile_parallelism = 4
+# extra concurrent sub-queries shared by all queries of the server; once used up,
+# queries run sequentially (roughly `gdal_process_pool.max_active_processes`)
+global_extra_tile_permits = 16
 
 [upload]
 path = "upload"

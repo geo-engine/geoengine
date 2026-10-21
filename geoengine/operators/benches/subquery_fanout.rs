@@ -199,15 +199,6 @@ fn subquery_fanout_benchmark(c: &mut Criterion) {
     let _guard = runtime.enter();
     let (processor, mut query_context, query, tiling_strategy) = setup(&runtime);
 
-    #[cfg(not(feature = "new-subquery-adapter"))]
-    {
-        c.bench_function("subquery_old", |b| {
-            b.to_async(&runtime)
-                .iter(|| run(&processor, &query_context, query.clone(), tiling_strategy));
-        });
-    }
-
-    #[cfg(feature = "new-subquery-adapter")]
     for factor in 1..=8 {
         query_context.tile_scheduler = geoengine_operators::engine::TileScheduler::fixed(factor);
         c.bench_function(&format!("subquery_fanout_{factor}"), |b| {

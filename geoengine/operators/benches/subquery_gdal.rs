@@ -8,7 +8,6 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::SingleRasterOrVectorSource;
-#[cfg(feature = "new-subquery-adapter")]
 use geoengine_operators::engine::TileScheduler;
 use geoengine_operators::{
     engine::{
@@ -21,8 +20,22 @@ use geoengine_operators::{
 };
 use std::hint::black_box;
 
+fn reproject(source: Box<dyn RasterOperator>, target: SpatialReference) -> Box<dyn RasterOperator> {
+    RasterOperator::boxed(Reprojection {
+        params: ReprojectionParams {
+            target_spatial_reference: target,
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+        },
+        sources: SingleRasterOrVectorSource {
+            source: source.into(),
+        },
+    })
+}
+
+/// `chained` nests two reprojections to measure that fan-out does not multiply per level.
 fn setup(
     runtime: &tokio::runtime::Runtime,
+    chained: bool,
 ) -> (
     BoxRasterQueryProcessor<u8>,
     geoengine_operators::engine::MockQueryContext,
@@ -41,19 +54,14 @@ fn setup(
         );
 
     let dataset = add_ndvi_dataset(&mut execution_context);
-    let operator = RasterOperator::boxed(Reprojection {
-        params: ReprojectionParams {
-            target_spatial_reference: SpatialReference::web_mercator(),
-            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
-        },
-        sources: SingleRasterOrVectorSource {
-            source: GdalSource {
-                params: GdalSourceParameters::new(dataset),
-            }
-            .boxed()
-            .into(),
-        },
-    });
+    let source = GdalSource {
+        params: GdalSourceParameters::new(dataset),
+    }
+    .boxed();
+    let mut operator = reproject(source, SpatialReference::web_mercator());
+    if chained {
+        operator = reproject(operator, SpatialReference::epsg_4326());
+    }
     let initialized = runtime
         .block_on(operator.initialize(WorkflowOperatorPath::initialize_root(), &execution_context))
         .unwrap();
@@ -93,23 +101,15 @@ fn subquery_gdal_benchmark(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let _guard = runtime.enter();
 
-    #[cfg(not(feature = "new-subquery-adapter"))]
-    {
-        let (processor, query_context, query) = setup(&runtime);
-        c.bench_function("subquery_gdal_old", |b| {
-            b.to_async(&runtime)
-                .iter(|| run(&processor, &query_context, query.clone()));
-        });
-    }
-
-    #[cfg(feature = "new-subquery-adapter")]
-    for factor in 1..=8 {
-        let (processor, mut query_context, query) = setup(&runtime);
-        query_context.tile_scheduler = TileScheduler::fixed(factor);
-        c.bench_function(&format!("subquery_gdal_fanout_{factor}"), |b| {
-            b.to_async(&runtime)
-                .iter(|| run(&processor, &query_context, query.clone()));
-        });
+    for (chained, name) in [(false, "subquery_gdal"), (true, "subquery_gdal_chained")] {
+        for factor in [1, 2, 4, 8] {
+            let (processor, mut query_context, query) = setup(&runtime, chained);
+            query_context.tile_scheduler = TileScheduler::fixed(factor);
+            c.bench_function(&format!("{name}_fanout_{factor}"), |b| {
+                b.to_async(&runtime)
+                    .iter(|| run(&processor, &query_context, query.clone()));
+            });
+        }
     }
 }
 
