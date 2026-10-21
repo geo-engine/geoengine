@@ -1,23 +1,199 @@
 use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
-use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor};
+use crate::engine::{
+    CanonicOperatorName, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, SpatialGridDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+};
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{FutureExt, TryFutureExt};
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, RasterQueryRectangle, TimeInterval,
+    BandSelection, CacheHint, Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
-    GridOrEmpty, Pixel, RasterTile2D, TileInformation, TilingSpecification, TilingStrategy,
-    UpdateIndexedElementsParallel,
+    GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TileSize, TilingGrid,
+    TilingSpecification, TilingStrategy, UpdateIndexedElementsParallel,
 };
 use rayon::ThreadPool;
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+/// Re-tiles raster data from one grid layout to another.
+///
+/// Re-aligns raster tiles between pixel-aligned grids without resampling.
+///
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReTileParams {
+    /// Override the output tile size. If `None`, the global tiling specification's tile size is used.
+    pub tile_size: Option<TileSize>,
+    /// Override the output tiling origin. If `None`, the dataset's own geo-transform origin is used
+    /// (i.e. tiles are aligned to the data's native grid).
+    pub origin: Option<Coordinate2D>,
+}
+
+pub type ReTile = Operator<ReTileParams, SingleRasterSource>;
+
+impl OperatorName for ReTile {
+    const TYPE_NAME: &'static str = "ReTile";
+}
+
+#[typetag::serde]
+#[async_trait]
+impl RasterOperator for ReTile {
+    /// Initializes the `ReTile` operator.
+    ///
+    /// Derives the output tiling specification from the input dataset's spatial grid:
+    /// - **origin**: from `ReTileParams::origin`, or the input dataset's geo-transform origin
+    /// - **tile size**: from `ReTileParams::tile_size`, or the global tiling spec
+    ///
+    /// Computes the output spatial grid (same spatial extent and resolution as input, but
+    /// aligned to the new tiling origin) and stores it in the result descriptor.
+    async fn _initialize(
+        self: Box<Self>,
+        path: WorkflowOperatorPath,
+        context: &dyn crate::engine::ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
+
+        let in_descriptor = initialized_source.raster.result_descriptor();
+        let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
+
+        let output_origin = self
+            .params
+            .origin
+            .unwrap_or_else(|| in_spatial_grid.geo_transform().origin_coordinate);
+
+        let output_tile_size = self
+            .params
+            .tile_size
+            .unwrap_or_else(|| context.tiling_specification().tile_size);
+
+        if output_tile_size.axis_size_y() == 0 || output_tile_size.axis_size_x() == 0 {
+            return Err(crate::error::Error::InvalidTileSize {
+                tile_size: output_tile_size,
+            });
+        }
+
+        let tiling_spec = TilingSpecification::new(output_tile_size, output_origin);
+
+        let output_tiling_grid = TilingGrid::from_spatial_grid_with_origin(
+            in_spatial_grid.spatial_grid,
+            output_origin,
+            output_tile_size,
+        )
+        .ok_or_else(|| crate::error::Error::ReTileGridMismatch {
+            input: in_spatial_grid.spatial_grid,
+            output: SpatialGridDefinition::new(
+                GeoTransform::new_typed(
+                    output_origin,
+                    in_spatial_grid.geo_transform().x_pixel_size(),
+                    in_spatial_grid.geo_transform().y_pixel_size(),
+                ),
+                GridBoundingBox2D::new_unchecked([0, 0], [0, 0]),
+            ),
+        })?;
+        let output_spatial_grid = SpatialGridDescriptor::new_source(
+            output_tiling_grid.to_spatial_grid(),
+            output_tile_size,
+        );
+
+        let out_descriptor = RasterResultDescriptor {
+            spatial_reference: in_descriptor.spatial_reference,
+            data_type: in_descriptor.data_type,
+            time: in_descriptor.time,
+            spatial_grid: output_spatial_grid,
+            bands: in_descriptor.bands.clone(),
+        };
+
+        Ok(InitializedReTile {
+            name,
+            path,
+            output_result_descriptor: out_descriptor,
+            raster_source: initialized_source.raster,
+            tiling_specification: tiling_spec,
+        }
+        .boxed())
+    }
+
+    span_fn!(ReTile);
+}
+
+/// The initialized (ready-to-execute) form of the `ReTile` operator.
+///
+/// Stores the output result descriptor (with the re-aligned spatial grid),
+/// the source operator, and the output tiling specification for use in query
+/// processing and optimization.
+pub struct InitializedReTile<O: InitializedRasterOperator> {
+    name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
+    output_result_descriptor: RasterResultDescriptor,
+    raster_source: O,
+    tiling_specification: TilingSpecification,
+}
+
+impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTile<O> {
+    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
+        let source_processor = self.raster_source.query_processor()?;
+
+        let res = call_on_generic_raster_processor!(
+            source_processor,
+            p => ReTileProcessor::new(
+                p,
+                self.output_result_descriptor.clone(),
+                self.tiling_specification,
+            )
+            .boxed()
+            .into()
+        );
+
+        Ok(res)
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.output_result_descriptor
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        ReTile::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(ReTile {
+            params: ReTileParams {
+                tile_size: Some(self.tiling_specification.tile_size),
+                origin: Some(self.tiling_specification.tiling_origin_reference()),
+            },
+            sources: SingleRasterSource {
+                raster: self.raster_source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
+}
 
 /// The query-time processor for `ReTile`. Holds the source query processor and the
 /// output tiling specification. Delegates to `RasterSubQueryAdapter` for the actual
@@ -322,11 +498,105 @@ pub fn re_tile_fold<T: Pixel>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use geoengine_datatypes::raster::{TileIdx, TileSize};
-
+    use crate::engine::{
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
+        TimeDescriptor,
+    };
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use futures::StreamExt;
+    use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType, TileIdx, TileSize};
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
+    #[tokio::test]
+    async fn retile_same_origin_passthrough() {
+        let in_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(4, 4)),
+            8,
+        );
+
+        let data: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
+            time: TimeInterval::new_unchecked(0, 5),
+            tile_position: TileIdx::new_y_x(0, 0),
+            band: 0,
+            global_geo_transform: in_geo_transform,
+            grid_array: Grid::new(
+                GridShape2D {
+                    shape_array: [4, 4],
+                },
+                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            )
+            .unwrap()
+            .into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::no_cache(),
+        }];
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 5))),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                in_geo_transform,
+                GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
+                TileSize::new_unchecked(4, 4),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data,
+                result_descriptor,
+            },
+        }
+        .boxed();
+
+        let retile = ReTile {
+            params: ReTileParams {
+                tile_size: None,
+                origin: None,
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
+
+        let query_ctx = exe_ctx.mock_query_context(ChunkByteSize::test_default());
+
+        let op = retile
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_u8().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(result.len(), 1);
+        let tile = result[0].as_ref().unwrap();
+        let grid = tile.grid_array.clone().into_materialized_masked_grid();
+        assert_eq!(
+            grid.inner_grid.data,
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        );
+    }
+
+    /// An output tile whose sub-query matched no input tile (e.g. outside the
+    /// source extent, or in a `RasterStacker` union grid) must still produce a
+    /// tile rather than fail the query.
     #[tokio::test]
     async fn it_folds_to_an_empty_tile_when_no_input_tiles_arrive() {
         use geoengine_datatypes::raster::GridSize;
@@ -351,5 +621,177 @@ mod tests {
         assert_eq!(tile.time, TimeInterval::default());
         assert_eq!(tile.grid_array.shape_ref().axis_size_y(), 4);
         assert_eq!(tile.grid_array.shape_ref().axis_size_x(), 4);
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn retile_different_origin() {
+        // Input: origin (0,0), 2x2 tiles of 4x4 pixels each → 8x8 pixel grid
+        // Output: origin (2, -2), same tile size
+        let in_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
+        let tile_size = TileSize::new_unchecked(4, 4);
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
+            TilingSpecification::with_zero_origin(tile_size),
+            8,
+        );
+
+        // 2x2 input tiles covering [0,7] x [0,7]
+        let data: Vec<RasterTile2D<u8>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: TileIdx::new_y_x(0, 0),
+                band: 0,
+                global_geo_transform: in_geo_transform,
+                grid_array: Grid::new(
+                    tile_size.grid_shape(),
+                    vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                )
+                .unwrap()
+                .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::no_cache(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: TileIdx::new_y_x(0, 1),
+                band: 0,
+                global_geo_transform: in_geo_transform,
+                grid_array: Grid::new(
+                    tile_size.grid_shape(),
+                    vec![
+                        21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                    ],
+                )
+                .unwrap()
+                .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::no_cache(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: TileIdx::new_y_x(1, 0),
+                band: 0,
+                global_geo_transform: in_geo_transform,
+                grid_array: Grid::new(
+                    tile_size.grid_shape(),
+                    vec![
+                        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
+                    ],
+                )
+                .unwrap()
+                .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::no_cache(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: TileIdx::new_y_x(1, 1),
+                band: 0,
+                global_geo_transform: in_geo_transform,
+                grid_array: Grid::new(
+                    tile_size.grid_shape(),
+                    vec![
+                        61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
+                    ],
+                )
+                .unwrap()
+                .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::no_cache(),
+            },
+        ];
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 5))),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                in_geo_transform,
+                GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
+                TileSize::new_unchecked(4, 4),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data,
+                result_descriptor,
+            },
+        }
+        .boxed();
+
+        let new_origin = Coordinate2D::new(2.0, -2.0);
+        let retile = ReTile {
+            params: ReTileParams {
+                tile_size: None,
+                origin: Some(new_origin),
+            },
+            sources: SingleRasterSource { raster: mrs },
+        }
+        .boxed();
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
+
+        let query_ctx = exe_ctx.mock_query_context(ChunkByteSize::test_default());
+
+        let op = retile
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_u8().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        // Output tile (0,0) with origin (2, -2) covers input pixels [2,5] x [2,5]:
+        //   (0,0)→(2,2)=11  (0,1)→(2,3)=12  (0,2)→(2,4)=29  (0,3)→(2,5)=30
+        //   (1,0)→(3,2)=15  (1,1)→(3,3)=16  (1,2)→(3,4)=33  (1,3)→(3,5)=34
+        //   (2,0)→(4,2)=43  (2,1)→(4,3)=44  (2,2)→(4,4)=61  (2,3)→(4,5)=62
+        //   (3,0)→(5,2)=47  (3,1)→(5,3)=48  (3,2)→(5,4)=65  (3,3)→(5,5)=66
+        //
+        // Input tile (1,1) data layout (4x4):
+        //   row 0: 61, 62, 63, 64   (global pixels row 4, cols 4-7)
+        //   row 1: 65, 66, 67, 68   (global pixels row 5, cols 4-7)
+        //   row 2: 69, 70, 71, 72   (global pixels row 6, cols 4-7)
+        //   row 3: 73, 74, 75, 76   (global pixels row 7, cols 4-7)
+        let expected_tile_data = vec![
+            11, 12, 29, 30, 15, 16, 33, 34, 43, 44, 61, 62, 47, 48, 65, 66,
+        ];
+
+        assert!(!result.is_empty(), "should have at least one tile");
+
+        let matching = result.iter().find(|t| {
+            let tile = t.as_ref().unwrap();
+            let grid = tile.grid_array.clone().into_materialized_masked_grid();
+            grid.inner_grid.data == expected_tile_data
+        });
+
+        assert!(
+            matching.is_some(),
+            "Expected tile with data {:?} not found. Got tiles: {:?}",
+            expected_tile_data,
+            result
+                .iter()
+                .map(|t| t
+                    .as_ref()
+                    .unwrap()
+                    .grid_array
+                    .clone()
+                    .into_materialized_masked_grid()
+                    .inner_grid
+                    .data)
+                .collect::<Vec<_>>()
+        );
     }
 }
