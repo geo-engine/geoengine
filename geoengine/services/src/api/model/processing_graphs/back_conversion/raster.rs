@@ -607,7 +607,7 @@ impl TryFrom<&OperatorsReTile> for ReTile {
         Ok(Self {
             r#type: Default::default(),
             params: ReTileParameters {
-                tile_size: value.params.tile_size.map(TileSize::into_inner),
+                tile_size: value.params.tile_size.map(Into::into),
                 origin: value.params.origin.map(Into::into),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
@@ -697,6 +697,7 @@ impl TryFrom<&OperatorsTimeShift> for TimeShift {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         dataset::NamedData,
         machine_learning::MlModelName,
