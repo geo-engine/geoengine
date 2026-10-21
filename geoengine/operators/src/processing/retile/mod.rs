@@ -242,7 +242,7 @@ where
         let in_spatial_grid = self.source.result_descriptor().spatial_grid_descriptor();
         let out_spatial_grid = self.result_descriptor().spatial_grid_descriptor();
 
-        if in_spatial_grid == out_spatial_grid {
+        if in_spatial_grid.has_same_tiling(out_spatial_grid) {
             return self.source.query(query, ctx).await;
         }
 

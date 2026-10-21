@@ -291,7 +291,11 @@ fn re_tile_source<T: Pixel>(
     source: &dyn InitializedRasterOperator,
     target_spatial_grid: SpatialGridDescriptor,
 ) -> BoxRasterQueryProcessor<T> {
-    if source.result_descriptor().spatial_grid_descriptor() == &target_spatial_grid {
+    if source
+        .result_descriptor()
+        .spatial_grid_descriptor()
+        .has_same_tiling(&target_spatial_grid)
+    {
         return processor;
     }
 
