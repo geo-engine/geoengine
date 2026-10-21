@@ -70,7 +70,8 @@ class TestGdalMetaDataStatic(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
+                    allow_alphaband_as_mask = True, 
+                    tile_size = null, ),
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
                     data_type = 'U8', 
                     spatial_reference = '', 
@@ -135,7 +136,8 @@ class TestGdalMetaDataStatic(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
+                    allow_alphaband_as_mask = True, 
+                    tile_size = null, ),
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
                     data_type = 'U8', 
                     spatial_reference = '', 

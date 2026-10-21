@@ -10,28 +10,28 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { instanceOfBandFilter, BandFilterFromJSONTyped, BandFilterToJSON, } from './BandFilter';
-import { instanceOfBandNeighborhoodAggregate, BandNeighborhoodAggregateFromJSONTyped, BandNeighborhoodAggregateToJSON, } from './BandNeighborhoodAggregate';
-import { instanceOfBandwiseExpression, BandwiseExpressionFromJSONTyped, BandwiseExpressionToJSON, } from './BandwiseExpression';
-import { instanceOfDownsampling, DownsamplingFromJSONTyped, DownsamplingToJSON, } from './Downsampling';
+import { BandFilterFromJSONTyped, BandFilterToJSON, } from './BandFilter';
+import { BandNeighborhoodAggregateFromJSONTyped, BandNeighborhoodAggregateToJSON, } from './BandNeighborhoodAggregate';
+import { BandwiseExpressionFromJSONTyped, BandwiseExpressionToJSON, } from './BandwiseExpression';
+import { DownsamplingFromJSONTyped, DownsamplingToJSON, } from './Downsampling';
 import { instanceOfExpression, ExpressionFromJSONTyped, ExpressionToJSON, } from './Expression';
 import { instanceOfGdalSource, GdalSourceFromJSONTyped, GdalSourceToJSON, } from './GdalSource';
-import { instanceOfInterpolation, InterpolationFromJSONTyped, InterpolationToJSON, } from './Interpolation';
-import { instanceOfMultiBandGdalSource, MultiBandGdalSourceFromJSONTyped, MultiBandGdalSourceToJSON, } from './MultiBandGdalSource';
-import { instanceOfNeighborhoodAggregate, NeighborhoodAggregateFromJSONTyped, NeighborhoodAggregateToJSON, } from './NeighborhoodAggregate';
-import { instanceOfOnnx, OnnxFromJSONTyped, OnnxToJSON, } from './Onnx';
-import { instanceOfPolygonRasterization, PolygonRasterizationFromJSONTyped, PolygonRasterizationToJSON, } from './PolygonRasterization';
-import { instanceOfRadiance, RadianceFromJSONTyped, RadianceToJSON, } from './Radiance';
-import { instanceOfRasterScaling, RasterScalingFromJSONTyped, RasterScalingToJSON, } from './RasterScaling';
-import { instanceOfRasterStacker, RasterStackerFromJSONTyped, RasterStackerToJSON, } from './RasterStacker';
-import { instanceOfRasterTypeConversion, RasterTypeConversionFromJSONTyped, RasterTypeConversionToJSON, } from './RasterTypeConversion';
-import { instanceOfRasterization, RasterizationFromJSONTyped, RasterizationToJSON, } from './Rasterization';
-import { instanceOfReflectance, ReflectanceFromJSONTyped, ReflectanceToJSON, } from './Reflectance';
-import { instanceOfReprojection, ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
-import { instanceOfTemperature, TemperatureFromJSONTyped, TemperatureToJSON, } from './Temperature';
-import { instanceOfTemporalRasterAggregation, TemporalRasterAggregationFromJSONTyped, TemporalRasterAggregationToJSON, } from './TemporalRasterAggregation';
-import { instanceOfTimeShift, TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
-import { instanceOfWarp, WarpFromJSONTyped, WarpToJSON, } from './Warp';
+import { InterpolationFromJSONTyped, InterpolationToJSON, } from './Interpolation';
+import { MultiBandGdalSourceFromJSONTyped, MultiBandGdalSourceToJSON, } from './MultiBandGdalSource';
+import { NeighborhoodAggregateFromJSONTyped, NeighborhoodAggregateToJSON, } from './NeighborhoodAggregate';
+import { OnnxFromJSONTyped, OnnxToJSON, } from './Onnx';
+import { PolygonRasterizationFromJSONTyped, PolygonRasterizationToJSON, } from './PolygonRasterization';
+import { RadianceFromJSONTyped, RadianceToJSON, } from './Radiance';
+import { RasterScalingFromJSONTyped, RasterScalingToJSON, } from './RasterScaling';
+import { RasterStackerFromJSONTyped, RasterStackerToJSON, } from './RasterStacker';
+import { RasterTypeConversionFromJSONTyped, RasterTypeConversionToJSON, } from './RasterTypeConversion';
+import { RasterizationFromJSONTyped, RasterizationToJSON, } from './Rasterization';
+import { ReTileFromJSONTyped, ReTileToJSON, } from './ReTile';
+import { ReflectanceFromJSONTyped, ReflectanceToJSON, } from './Reflectance';
+import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
+import { TemperatureFromJSONTyped, TemperatureToJSON, } from './Temperature';
+import { TemporalRasterAggregationFromJSONTyped, TemporalRasterAggregationToJSON, } from './TemporalRasterAggregation';
+import { TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
 export function RasterOperatorFromJSON(json) {
     return RasterOperatorFromJSONTyped(json, false);
 }
@@ -72,6 +72,8 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, RasterTypeConversionFromJSONTyped(json, true), { type: 'RasterTypeConversion' });
         case 'Rasterization':
             return Object.assign({}, RasterizationFromJSONTyped(json, true), { type: 'Rasterization' });
+        case 'ReTile':
+            return Object.assign({}, ReTileFromJSONTyped(json, true), { type: 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, ReflectanceFromJSONTyped(json, true), { type: 'Reflectance' });
         case 'Reprojection':
@@ -82,8 +84,6 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, TemporalRasterAggregationFromJSONTyped(json, true), { type: 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, TimeShiftFromJSONTyped(json, true), { type: 'TimeShift' });
-        case 'Warp':
-            return Object.assign({}, WarpFromJSONTyped(json, true), { type: 'Warp' });
         default:
             return json;
     }
@@ -128,6 +128,8 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, RasterTypeConversionToJSON(value), { 'type': 'RasterTypeConversion' });
         case 'Rasterization':
             return Object.assign({}, RasterizationToJSON(value), { 'type': 'Rasterization' });
+        case 'ReTile':
+            return Object.assign({}, ReTileToJSON(value), { 'type': 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, ReflectanceToJSON(value), { 'type': 'Reflectance' });
         case 'Reprojection':
@@ -138,8 +140,6 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, TemporalRasterAggregationToJSON(value), { 'type': 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, TimeShiftToJSON(value), { 'type': 'TimeShift' });
-        case 'Warp':
-            return Object.assign({}, WarpToJSON(value), { 'type': 'Warp' });
         default:
             return value;
     }
@@ -148,26 +148,6 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
 * Check if a given object implements the RasterOperator interface.
 */
 export function instanceOfRasterOperator(value) {
-    return instanceOfBandFilter(value)
-        || instanceOfBandNeighborhoodAggregate(value)
-        || instanceOfBandwiseExpression(value)
-        || instanceOfDownsampling(value)
-        || instanceOfExpression(value)
-        || instanceOfGdalSource(value)
-        || instanceOfInterpolation(value)
-        || instanceOfMultiBandGdalSource(value)
-        || instanceOfNeighborhoodAggregate(value)
-        || instanceOfOnnx(value)
-        || instanceOfPolygonRasterization(value)
-        || instanceOfRadiance(value)
-        || instanceOfRasterScaling(value)
-        || instanceOfRasterStacker(value)
-        || instanceOfRasterTypeConversion(value)
-        || instanceOfRasterization(value)
-        || instanceOfReflectance(value)
-        || instanceOfReprojection(value)
-        || instanceOfTemperature(value)
-        || instanceOfTemporalRasterAggregation(value)
-        || instanceOfTimeShift(value)
-        || instanceOfWarp(value);
+    return instanceOfExpression(value)
+        || instanceOfGdalSource(value);
 }

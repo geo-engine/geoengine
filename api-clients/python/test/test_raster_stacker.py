@@ -37,7 +37,8 @@ class TestRasterStacker(unittest.TestCase):
             return RasterStacker(
                 type = 'RasterStacker',
                 params = geoengine_api_client.models.raster_stacker_parameters.RasterStackerParameters(
-                    rename_bands = null, ),
+                    rename_bands = null, 
+                    output_origin = null, ),
                 sources = geoengine_api_client.models.multiple_raster_sources.MultipleRasterSources(
                     rasters = [
                         null
@@ -47,7 +48,8 @@ class TestRasterStacker(unittest.TestCase):
             return RasterStacker(
                 type = 'RasterStacker',
                 params = geoengine_api_client.models.raster_stacker_parameters.RasterStackerParameters(
-                    rename_bands = null, ),
+                    rename_bands = null, 
+                    output_origin = null, ),
                 sources = geoengine_api_client.models.multiple_raster_sources.MultipleRasterSources(
                     rasters = [
                         null

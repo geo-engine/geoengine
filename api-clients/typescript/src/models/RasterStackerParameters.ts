@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { Coordinate2D } from './Coordinate2D';
+import {
+    Coordinate2DFromJSON,
+    Coordinate2DFromJSONTyped,
+    Coordinate2DToJSON,
+    Coordinate2DToJSONTyped,
+} from './Coordinate2D';
 import type { RenameBands } from './RenameBands';
 import {
     RenameBandsFromJSON,
@@ -34,6 +41,11 @@ export interface RasterStackerParameters {
      * - `rename`: explicitly provides names for all resulting bands.
      */
     renameBands: RenameBands;
+    /**
+     * Override the origin of the stacked output grid.
+     * If `None`, the first input's origin is used.
+     */
+    outputOrigin?: Coordinate2D | null;
 }
 
 /**
@@ -55,6 +67,7 @@ export function RasterStackerParametersFromJSONTyped(json: any, ignoreDiscrimina
     return {
         
         'renameBands': RenameBandsFromJSON(json['renameBands']),
+        'outputOrigin': json['outputOrigin'] === undefined ? undefined : json['outputOrigin'] === null ? null : Coordinate2DFromJSON(json['outputOrigin']),
     };
 }
 
@@ -70,6 +83,7 @@ export function RasterStackerParametersToJSONTyped(value?: RasterStackerParamete
     return {
         
         'renameBands': RenameBandsToJSON(value['renameBands']),
+        'outputOrigin': Coordinate2DToJSON(value['outputOrigin']),
     };
 }
 

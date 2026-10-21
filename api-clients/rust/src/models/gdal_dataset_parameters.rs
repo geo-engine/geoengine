@@ -35,6 +35,9 @@ pub struct GdalDatasetParameters {
     pub gdal_config_options: Option<Option<Vec<Vec<String>>>>,
     #[serde(rename = "allowAlphabandAsMask", skip_serializing_if = "Option::is_none")]
     pub allow_alphaband_as_mask: Option<bool>,
+    /// Optional tile size override. If absent, the configured default tile size is used.
+    #[serde(rename = "tileSize", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub tile_size: Option<Option<Vec<i32>>>,
 }
 
 impl GdalDatasetParameters {
@@ -52,6 +55,7 @@ impl GdalDatasetParameters {
             gdal_open_options: None,
             gdal_config_options: None,
             allow_alphaband_as_mask: None,
+            tile_size: None,
         }
     }
 }
