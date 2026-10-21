@@ -1300,6 +1300,20 @@ mod tests {
                     )
                     .append_header("Server", "AmazonS3")
                     .append_header("Content-Length", "2"),
+                // then succeed
+                responders::status_code(206)
+                    .append_header("Content-Type", "application/json")
+                    .body(
+                        include_bytes!("../../../../../test_data/stac_responses/cog-tile.bin")
+                            .to_vec()
+                    )
+                    .append_header("Accept-Ranges", "bytes")
+                    .append_header("Content-Range", "bytes 46170112-46186495/173560205")
+                    .append_header(
+                        "Content-Type",
+                        "image/tiff; application=geotiff; profile=cloud-optimized",
+                    )
+                    .append_header("Content-Length", "16384"),
             ]),
         );
 
@@ -1448,9 +1462,10 @@ mod tests {
 
         let query_context = execution_context.mock_query_context_test_default();
 
+        // a pixel whose tile lies within the COG's first block, the one served by the mock
         let data_bounds = SpatialPartition2D::new_unchecked(
-            (499_990., 9_790_000.).into(),
-            (500_000., 9_790_010.).into(),
+            (499_990., 9_799_960.).into(),
+            (500_000., 9_799_970.).into(),
         );
 
         let sp: geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> =
@@ -1471,7 +1486,7 @@ mod tests {
         let result = stream.collect::<Vec<_>>().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].is_ok());
+        assert!(result[0].is_ok(), "{:?}", result[0]);
     }
 
     #[test]
