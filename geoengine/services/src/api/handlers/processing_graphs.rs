@@ -1397,7 +1397,7 @@ mod tests {
 
     fn test_download_all_metadata_zip_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            tile_size: TileSize::new_y_x(600, 600),
+            tile_size: TileSize::new_unchecked(600, 600),
         }
     }
 
@@ -1530,7 +1530,7 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn dataset_from_workflow_task_success_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            tile_size: TileSize::new_y_x(512, 512),
+            tile_size: TileSize::new_unchecked(512, 512),
         }
     }
 

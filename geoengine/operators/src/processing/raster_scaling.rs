@@ -355,7 +355,7 @@ mod tests {
         };
 
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let raster = MaskedGrid2D::from(Grid2D::new(tile_size, vec![7_u8, 7, 7, 6]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
@@ -370,7 +370,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
             },
             0,
             raster.into(),
@@ -466,7 +466,7 @@ mod tests {
         };
 
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let raster = MaskedGrid2D::from(Grid2D::new(tile_size, vec![15_u8, 15, 15, 13]).unwrap());
 
@@ -482,7 +482,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
             },
             0,
             raster.into(),

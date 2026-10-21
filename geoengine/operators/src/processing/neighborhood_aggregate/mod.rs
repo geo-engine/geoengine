@@ -475,8 +475,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let raster = make_raster();
 
@@ -535,8 +536,9 @@ mod tests {
 
     #[tokio::test]
     async fn check_make_raster() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let raster = make_raster();
 
@@ -566,7 +568,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -579,7 +581,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -592,7 +594,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -605,7 +607,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -636,7 +638,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -649,7 +651,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -662,7 +664,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -675,7 +677,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 3),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -861,8 +863,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution_multi_bands() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let operator = NeighborhoodAggregate {
             params: NeighborhoodAggregateParams {

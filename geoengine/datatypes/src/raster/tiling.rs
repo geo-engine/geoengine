@@ -3,47 +3,75 @@ use super::{
     SpatialGridDefinition,
 };
 use crate::{
+    error,
     primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned},
     raster::{GridBounds, GridIdx2DIter},
-    util::test::TestDefault,
+    util::{Result, test::TestDefault},
 };
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 
 /// A tile size in pixels — distinguishes tile dimensions from pixel coordinates.
+/// Both axes are always non-zero, which is enforced by their type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TileSize(GridShape2D);
+#[serde(try_from = "GridShape2D", into = "GridShape2D")]
+pub struct TileSize {
+    y: NonZeroUsize,
+    x: NonZeroUsize,
+}
 
 impl TileSize {
-    /// Create a tile size with explicit axis order (y, x).
-    pub fn new_y_x(y_size: usize, x_size: usize) -> Self {
-        Self(GridShape2D::new_2d(y_size, x_size))
+    /// Create a tile size (y, x), if both axes are non-zero.
+    pub fn new(y_size: usize, x_size: usize) -> Result<Self> {
+        match (NonZeroUsize::new(y_size), NonZeroUsize::new(x_size)) {
+            (Some(y), Some(x)) => Ok(Self::new_typed(y, x)),
+            _ => Err(error::Error::InvalidTileSize { y_size, x_size }),
+        }
+    }
+
+    /// Create a tile size (y, x) from known-valid values, e.g. constants.
+    /// In a const context, invalid values fail at compile time.
+    ///
+    /// # Panics
+    ///
+    /// If `y_size` or `x_size` is zero.
+    pub const fn new_unchecked(y_size: usize, x_size: usize) -> Self {
+        match (NonZeroUsize::new(y_size), NonZeroUsize::new(x_size)) {
+            (Some(y), Some(x)) => Self { y, x },
+            _ => panic!("tile size axes must be non-zero"),
+        }
+    }
+
+    /// Create a tile size (y, x) from already validated values.
+    pub const fn new_typed(y: NonZeroUsize, x: NonZeroUsize) -> Self {
+        Self { y, x }
     }
 
     /// Default tile size (512×512) used when tile size is unknown
     /// (e.g. deserializing from database).
-    pub fn default_512() -> Self {
-        Self::new_y_x(512, 512)
+    pub const fn default_512() -> Self {
+        Self::new_unchecked(512, 512)
     }
 
-    pub fn axis_size_y(&self) -> usize {
-        self.0.axis_size_y()
+    pub const fn axis_size_y(&self) -> usize {
+        self.y.get()
     }
 
-    pub fn axis_size_x(&self) -> usize {
-        self.0.axis_size_x()
+    pub const fn axis_size_x(&self) -> usize {
+        self.x.get()
     }
 
-    pub fn number_of_elements(&self) -> usize {
-        self.0.number_of_elements()
+    pub const fn number_of_elements(&self) -> usize {
+        self.y.get() * self.x.get()
     }
 
-    pub fn into_inner(self) -> [usize; 2] {
-        self.0.into_inner()
+    pub const fn into_inner(self) -> [usize; 2] {
+        [self.y.get(), self.x.get()]
     }
 
     /// Access the underlying pixel-space grid shape.
     pub fn grid_shape(&self) -> GridShape2D {
-        self.0
+        GridShape2D::new(self.into_inner())
     }
 }
 
@@ -52,26 +80,27 @@ impl GridSize for TileSize {
     const NDIM: usize = 2;
 
     fn axis_size(&self) -> Self::ShapeArray {
-        self.0.axis_size()
+        self.into_inner()
     }
 }
 
 impl std::fmt::Display for TileSize {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let [y, x] = self.0.into_inner();
-        write!(f, "{y}x{x}")
+        write!(f, "{}x{}", self.y, self.x)
     }
 }
 
-impl From<[usize; 2]> for TileSize {
-    fn from(val: [usize; 2]) -> Self {
-        Self(GridShape2D::from(val))
+impl TryFrom<GridShape2D> for TileSize {
+    type Error = error::Error;
+
+    fn try_from(shape: GridShape2D) -> Result<Self> {
+        Self::new(shape.axis_size_y(), shape.axis_size_x())
     }
 }
 
 impl From<TileSize> for GridShape2D {
     fn from(val: TileSize) -> Self {
-        val.0
+        val.grid_shape()
     }
 }
 
@@ -96,24 +125,11 @@ impl From<[isize; 2]> for TileIdx {
     }
 }
 
-impl From<TileIdx> for GridIdx2D {
-    fn from(val: TileIdx) -> Self {
-        val.0
-    }
-}
-
 /// Tile-space bounding box — distinguishes from pixel-space `GridBoundingBox2D`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TileBounds(GridBoundingBox2D);
 
 impl TileBounds {
-    pub fn new_y_x(min_y: isize, min_x: isize, max_y: isize, max_x: isize) -> Self {
-        Self(GridBoundingBox2D::new_unchecked(
-            GridIdx2D::new_y_x(min_y, min_x),
-            GridIdx2D::new_y_x(max_y, max_x),
-        ))
-    }
-
     /// Access the underlying pixel-space grid bounding box.
     pub fn grid_bounds(&self) -> GridBoundingBox2D {
         self.0
@@ -130,15 +146,7 @@ impl TileBounds {
     }
 
     pub fn num_tiles(&self) -> usize {
-        let TileIdx(GridIdx([uy, ux])) = self.min_index();
-        let TileIdx(GridIdx([ly, lx])) = self.max_index();
-        ((ly - uy + 1) * (lx - ux + 1)) as usize
-    }
-}
-
-impl From<TileBounds> for GridBoundingBox2D {
-    fn from(val: TileBounds) -> Self {
-        val.0
+        self.0.number_of_elements()
     }
 }
 
@@ -189,17 +197,17 @@ impl GridShapeAccess for TilingSpecification {
     type ShapeArray = [usize; 2];
 
     fn grid_shape_array(&self) -> Self::ShapeArray {
-        self.tile_size.0.shape_array
+        self.tile_size.into_inner()
     }
 
     fn grid_shape(&self) -> GridShape2D {
-        self.tile_size.0
+        self.tile_size.grid_shape()
     }
 }
 
 impl From<TilingSpecification> for GridShape2D {
     fn from(val: TilingSpecification) -> Self {
-        val.tile_size.0
+        val.tile_size.grid_shape()
     }
 }
 
@@ -476,6 +484,27 @@ mod tests {
     use crate::raster::GridIntersection;
 
     #[test]
+    fn tile_size_rejects_zero_axes() {
+        assert!(TileSize::new(0, 512).is_err());
+        assert!(TileSize::new(512, 0).is_err());
+        assert_eq!(TileSize::new(256, 512).unwrap().into_inner(), [256, 512]);
+    }
+
+    #[test]
+    fn tile_size_keeps_grid_shape_wire_format() {
+        let json = serde_json::to_value(TileSize::new_unchecked(256, 512)).unwrap();
+        assert_eq!(json, serde_json::json!({"shapeArray": [256, 512]}));
+
+        let parsed: TileSize = serde_json::from_value(json).unwrap();
+        assert_eq!(parsed, TileSize::new_unchecked(256, 512));
+
+        assert!(
+            serde_json::from_value::<TileSize>(serde_json::json!({"shapeArray": [0, 512]}))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn it_generates_only_intersected_tiles() {
         let origin_coordinate = (0., 0.).into();
 
@@ -486,7 +515,7 @@ mod tests {
         );
 
         let strat = TilingStrategy {
-            tile_size: TileSize::new_y_x(600, 600),
+            tile_size: TileSize::new_unchecked(600, 600),
             geo_transform,
         };
 
@@ -541,7 +570,7 @@ mod tests {
             -0.000_033_337_4,
         );
 
-        let tile_pixel_size = TileSize(GridShape2D::new_2d(512, 512));
+        let tile_pixel_size = TileSize::new_unchecked(512, 512);
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
 
         let tiling_origin_reference = Coordinate2D::new(0., 0.); // This is the _currently_ fixed tiling origin reference.
@@ -567,7 +596,7 @@ mod tests {
     #[test]
     fn pixel_idx_to_tile_idx() {
         let geo_transform = GeoTransform::new_unchecked((123., 321.).into(), 1.0, -1.0);
-        let tile_pixel_size = TileSize(GridShape2D::new_2d(100, 100));
+        let tile_pixel_size = TileSize::new_unchecked(100, 100);
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
         let pixels = tiling_strat.pixel_idx_to_tile_idx(GridIdx2D::new_y_x(0, 0));
@@ -591,7 +620,7 @@ mod tests {
     #[test]
     fn tile_idx_to_pixel_idx() {
         let geo_transform = GeoTransform::new_unchecked((123., 321.).into(), 1.0, -1.0);
-        let tile_pixel_size = TileSize(GridShape2D::new_2d(100, 100));
+        let tile_pixel_size = TileSize::new_unchecked(100, 100);
 
         let tiling_strat = TilingStrategy::new(tile_pixel_size, geo_transform);
         let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(0, 0));

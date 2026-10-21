@@ -2,6 +2,7 @@
 
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
+use geoengine_datatypes::raster::TileSize;
 use geoengine_datatypes::raster::{
     BoundedGrid, GridBoundingBox2D, GridShapeAccess, RasterDataType,
 };
@@ -242,7 +243,7 @@ fn bench_no_data_tiles() {
         ),
     ];
 
-    let tiling_specs = vec![TilingSpecification::new([600, 600].into())];
+    let tiling_specs = vec![TilingSpecification::new(TileSize::new_unchecked(600, 600))];
 
     let run_time = tokio::runtime::Runtime::new().unwrap();
 
@@ -275,17 +276,17 @@ fn bench_tile_size() {
     let run_time = tokio::runtime::Runtime::new().unwrap();
 
     let tiling_specs = vec![
-        TilingSpecification::new([32, 32].into()),
-        TilingSpecification::new([64, 64].into()),
-        TilingSpecification::new([128, 128].into()),
-        TilingSpecification::new([256, 256].into()),
-        TilingSpecification::new([512, 512].into()),
-        TilingSpecification::new([600, 600].into()),
-        TilingSpecification::new([900, 900].into()),
-        TilingSpecification::new([1024, 1024].into()),
-        TilingSpecification::new([2048, 2048].into()),
-        TilingSpecification::new([4096, 4096].into()),
-        TilingSpecification::new([9000, 9000].into()),
+        TilingSpecification::new(TileSize::new_unchecked(32, 32)),
+        TilingSpecification::new(TileSize::new_unchecked(64, 64)),
+        TilingSpecification::new(TileSize::new_unchecked(128, 128)),
+        TilingSpecification::new(TileSize::new_unchecked(256, 256)),
+        TilingSpecification::new(TileSize::new_unchecked(512, 512)),
+        TilingSpecification::new(TileSize::new_unchecked(600, 600)),
+        TilingSpecification::new(TileSize::new_unchecked(900, 900)),
+        TilingSpecification::new(TileSize::new_unchecked(1024, 1024)),
+        TilingSpecification::new(TileSize::new_unchecked(2048, 2048)),
+        TilingSpecification::new(TileSize::new_unchecked(4096, 4096)),
+        TilingSpecification::new(TileSize::new_unchecked(9000, 9000)),
     ];
 
     bench_raster_processor(

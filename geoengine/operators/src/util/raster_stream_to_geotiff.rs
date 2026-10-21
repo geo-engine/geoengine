@@ -1096,6 +1096,7 @@ fn geotiff_to_cog(
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileSize;
     use std::ops::Add;
 
     use crate::engine::{MockExecutionContext, RasterResultDescriptor, TimeDescriptor};
@@ -1114,8 +1115,9 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_with_no_data_from_stream() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1164,8 +1166,9 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_with_mask_from_stream() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1209,8 +1212,9 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_big_tiff_from_stream() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1259,8 +1263,9 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_big_tiff_from_stream() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1311,8 +1316,9 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_from_stream() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1363,8 +1369,9 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1435,8 +1442,9 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream_wrong_request() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1475,8 +1483,9 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream_limit() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1526,8 +1535,9 @@ mod tests {
             }
         }
 
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1575,8 +1585,9 @@ mod tests {
 
     #[tokio::test]
     async fn intermediate_dataset_is_removed_when_dropped() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
         let metadata = create_ndvi_meta_data();
 
@@ -1633,8 +1644,9 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream_in_range_of_window() {
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
@@ -1731,8 +1743,9 @@ mod tests {
         let time_bounds =
             TimeInterval::new(data[0].time.start(), data.last().unwrap().time.end()).unwrap();
 
-        let ecx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(600, 600),
+        ));
         let ctx = ecx.mock_query_context_test_default();
 
         let result_descriptor = RasterResultDescriptor::with_datatype_and_num_bands(
@@ -1861,7 +1874,7 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new([512, 512].into());
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(512, 512));
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),

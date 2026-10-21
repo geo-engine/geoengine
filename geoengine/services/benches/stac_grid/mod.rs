@@ -103,7 +103,7 @@ fn viewport(z: u8, center: (f64, f64), reverse: bool) -> Vec<Tile> {
 fn tile_information(tile: &Tile) -> TileInformation {
     TileInformation::new(
         TileIdx::new_y_x(0, 0),
-        TileSize::new_y_x(1, 1),
+        TileSize::new_unchecked(1, 1),
         GeoTransform::new_unchecked(
             (tile.bbox.0, tile.bbox.3).into(),
             tile.bbox.2 - tile.bbox.0,

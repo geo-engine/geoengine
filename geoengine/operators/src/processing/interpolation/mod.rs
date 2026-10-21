@@ -705,8 +705,9 @@ mod tests {
 
     #[tokio::test]
     async fn nearest_neighbor_operator() -> Result<()> {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
 
         // test raster:
         // [0, 10)
@@ -821,7 +822,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -832,7 +833,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -843,7 +844,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -854,7 +855,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -865,7 +866,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -876,7 +877,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -887,7 +888,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -898,7 +899,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -909,7 +910,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -920,7 +921,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -931,7 +932,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -942,7 +943,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -953,7 +954,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -964,7 +965,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -975,7 +976,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -986,7 +987,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-2, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -997,7 +998,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1008,7 +1009,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1019,7 +1020,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1030,7 +1031,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1041,7 +1042,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, -1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1052,7 +1053,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, 0),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1063,7 +1064,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, 1),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1074,7 +1075,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(0, 2),
-                    tile_size: TileSize::new_y_x(2, 2),
+                    tile_size: TileSize::new_unchecked(2, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1114,8 +1115,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_attaches_cache_hint() -> Result<()> {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
 
         let cache_hint = CacheHint::seconds(1234);
         let raster = make_raster(cache_hint);
@@ -1159,8 +1161,9 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_interpolates_multiple_bands() -> Result<()> {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
         let operator = Interpolation {
             params: InterpolationParams {
                 interpolation: InterpolationMethod::NearestNeighbor,

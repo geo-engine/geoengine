@@ -1573,7 +1573,7 @@ mod tests {
         GridBoundingBox2D,
         TilingSpecification,
     ) {
-        let tile_size = TileSize::new_y_x(2, 2);
+        let tile_size = TileSize::new_unchecked(2, 2);
         let tiling_specification = TilingSpecification::new(tile_size);
         let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.);
 

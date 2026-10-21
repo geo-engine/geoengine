@@ -237,7 +237,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let raster: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![7_u8, 7, 7, 6]).unwrap().into();
 
@@ -249,7 +249,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
             },
             0,
             raster.into(),

@@ -744,7 +744,7 @@ mod tests {
                             TileInformation {
                                 global_geo_transform: TestDefault::test_default(),
                                 tile_position: [0, 0].into(),
-                                tile_size: TileSize::new_y_x(
+                                tile_size: TileSize::new_unchecked(
                                     tile_size_in_pixels.y(),
                                     tile_size_in_pixels.x(),
                                 ),
@@ -766,7 +766,7 @@ mod tests {
         bbox: BoundingBox2D,
     ) -> Result<serde_json::Value> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_y_x(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let statistics = Statistics {
@@ -797,7 +797,7 @@ mod tests {
     #[tokio::test]
     async fn it_creates_a_column_per_percentile() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_y_x(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
         let plot = Statistics {
             params: StatisticsParams {
@@ -1035,7 +1035,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_no_column() {
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
@@ -1133,7 +1133,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_single_column() {
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
@@ -1222,7 +1222,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_two_columns() {
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
@@ -1320,7 +1320,7 @@ mod tests {
 
     #[tokio::test]
     async fn raster_percentile() {
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
 
         let result_descriptor = RasterResultDescriptor {
@@ -1408,7 +1408,7 @@ mod tests {
 
     #[tokio::test]
     async fn vector_percentiles() {
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![

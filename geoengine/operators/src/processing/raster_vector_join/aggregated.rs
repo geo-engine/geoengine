@@ -350,7 +350,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -378,8 +378,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let raster_source = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -435,7 +436,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -448,7 +449,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -479,8 +480,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let raster_source = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -537,7 +539,7 @@ mod tests {
                 TileInformation {
                     global_geo_transform: TestDefault::test_default(),
                     tile_position: [0, 0].into(),
-                    tile_size: [3, 2].into(),
+                    tile_size: TileSize::new_unchecked(3, 2),
                 },
                 band,
                 Grid2D::new([3, 2].into(), data).unwrap().into(),
@@ -579,8 +581,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let raster_source = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -642,7 +645,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -655,7 +658,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
@@ -668,7 +671,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -681,7 +684,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
@@ -717,8 +720,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let raster_source = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -774,7 +778,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -787,7 +791,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
@@ -800,7 +804,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
@@ -813,7 +817,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -826,7 +830,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
@@ -839,7 +843,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![110, 120, 130, 140, 150, 160])
@@ -877,8 +881,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let raster_source = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -938,7 +943,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![6, 5, 4, 3, 2, 1])
@@ -951,7 +956,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![255, 254, 253, 251, 250, 249])
@@ -965,7 +970,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![60, 50, 40, 30, 20, 10])
@@ -978,7 +983,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![160, 150, 140, 130, 120, 110])
@@ -992,7 +997,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![600, 500, 400, 300, 200, 100])
@@ -1005,7 +1010,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![610, 510, 410, 310, 210, 110])
@@ -1019,7 +1024,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -1032,7 +1037,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![11, 22, 33, 44, 55, 66])
@@ -1045,7 +1050,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![10, 20, 30, 40, 50, 60])
@@ -1058,7 +1063,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 1),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![100, 220, 300, 400, 500, 600])
@@ -1072,7 +1077,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             Grid2D::new([3, 2].into(), vec![100, 200, 300, 400, 500, 600])
@@ -1085,7 +1090,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 2),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             1,
             Grid2D::new([3, 2].into(), vec![101, 201, 301, 401, 501, 601])
@@ -1131,8 +1136,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let raster = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)

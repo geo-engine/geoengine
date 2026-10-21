@@ -480,7 +480,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             raster.into(),
@@ -583,7 +583,7 @@ mod tests {
 
         let deserialized: Box<dyn RasterOperator> = serde_json::from_value(serialized).unwrap();
 
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
@@ -668,8 +668,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let query_processor = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -796,8 +797,9 @@ mod tests {
         }
         .boxed();
 
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let query_processor = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)

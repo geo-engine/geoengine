@@ -1247,7 +1247,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -1397,7 +1397,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
