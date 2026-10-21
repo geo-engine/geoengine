@@ -65,7 +65,10 @@ class TestGdalDatasetParameters(unittest.TestCase):
                         ''
                         ]
                     ],
-                allow_alphaband_as_mask = True
+                allow_alphaband_as_mask = True,
+                tile_size = [
+                    0
+                    ]
             )
         else:
             return GdalDatasetParameters(

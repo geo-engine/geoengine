@@ -637,7 +637,7 @@ mod tests {
             FeatureDataType, Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance,
             TimeInterval, TimeStep, VectorQueryRectangle,
         },
-        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType, TileSize},
         spatial_reference::{SpatialReference, SpatialReferenceOption},
         test_data,
         util::Identifier,
@@ -1703,6 +1703,7 @@ mod tests {
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+                TileSize::default_512(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1744,6 +1745,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: false,
             retry: None,
+            tile_size: None,
         };
 
         let meta = StaticMetaData {
@@ -1801,9 +1803,15 @@ mod tests {
 
         assert!(meta.is_ok());
 
+        let tile_size = Some(geoengine_datatypes::raster::TileSize::new_unchecked(
+            256, 128,
+        ));
         let meta = GdalMetaDataStatic {
             time: None,
-            params: gdal_params.clone(),
+            params: GdalDatasetParameters {
+                tile_size,
+                ..gdal_params.clone()
+            },
             result_descriptor: raster_descriptor.clone(),
             cache_ttl: None,
         };
@@ -1814,11 +1822,10 @@ mod tests {
             .unwrap()
             .id;
 
-        let meta: geoengine_operators::util::Result<
-            Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        > = db.meta_data(&id.into()).await;
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
+            db.meta_data(&id.into()).await.unwrap();
 
-        assert!(meta.is_ok());
+        assert_eq!(meta.tile_size().unwrap(), tile_size);
 
         let meta = GdalMetaDataList {
             result_descriptor: raster_descriptor.clone(),

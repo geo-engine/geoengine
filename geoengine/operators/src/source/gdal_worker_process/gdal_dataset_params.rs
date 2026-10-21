@@ -6,7 +6,7 @@ use geoengine_datatypes::{
     primitives::{Coordinate2D, DateTimeParseFormat, TimeInterval},
     raster::{
         GeoTransform, GridBoundingBox2D, GridShapeAccess, RasterPropertiesEntryType,
-        RasterPropertiesKey, SpatialGridDefinition,
+        RasterPropertiesKey, SpatialGridDefinition, TileSize,
     },
     util::{NonZeroFiniteF64, test::TestDefault},
 };
@@ -46,6 +46,10 @@ pub struct GdalDatasetParameters {
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
     pub retry: Option<GdalRetryOptions>,
+    /// Optional per-dataset tile size override.
+    /// Falls back to the source tiling specification if not set.
+    #[serde(default)]
+    pub tile_size: Option<TileSize>,
 }
 
 impl GdalDatasetParameters {

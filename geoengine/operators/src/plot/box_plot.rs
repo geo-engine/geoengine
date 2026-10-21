@@ -317,9 +317,7 @@ impl PlotQueryProcessor for BoxPlotRasterQueryProcessor {
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::new(self.bands.iter().map(|band| band.index).collect())?,
-            result_descriptor
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            result_descriptor.tiling_grid_definition().geo_transform,
         );
         let query_bounds = raster_query_rect.spatial_bounds();
 
@@ -940,6 +938,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1011,6 +1010,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1085,6 +1085,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1154,6 +1155,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1225,6 +1227,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1306,6 +1309,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1380,6 +1384,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         };

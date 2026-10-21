@@ -11,7 +11,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
-    SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
+    SpatialGridDefinition, TileSize, TilingGrid, TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::CoordinateProjection;
 use geoengine_datatypes::util::ByteSize;
@@ -85,16 +85,6 @@ pub enum SpatialGridDescriptorState {
 }
 
 impl SpatialGridDescriptorState {
-    #[must_use]
-    pub fn merge(self, other: Self) -> Self {
-        match (self, other) {
-            (SpatialGridDescriptorState::Source, SpatialGridDescriptorState::Source) => {
-                SpatialGridDescriptorState::Source
-            }
-            _ => SpatialGridDescriptorState::Merged,
-        }
-    }
-
     pub fn is_source(self) -> bool {
         self == SpatialGridDescriptorState::Source
     }
@@ -108,20 +98,30 @@ impl SpatialGridDescriptorState {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialGridDescriptor {
-    spatial_grid: SpatialGridDefinition,
+    pub spatial_grid: SpatialGridDefinition,
     state: SpatialGridDescriptorState,
+    #[serde(default = "TileSize::default_512")]
+    pub tile_size: TileSize,
 }
 
 impl SpatialGridDescriptor {
-    pub fn new_source(spatial_grid_def: SpatialGridDefinition) -> Self {
+    pub fn new_source(spatial_grid_def: SpatialGridDefinition, tile_size: TileSize) -> Self {
         Self {
             spatial_grid: spatial_grid_def,
             state: SpatialGridDescriptorState::Source,
+            tile_size,
         }
     }
 
-    pub fn source_from_parts(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
-        Self::new_source(SpatialGridDefinition::new(geo_transform, grid_bounds))
+    pub fn source_from_parts(
+        geo_transform: GeoTransform,
+        grid_bounds: GridBoundingBox2D,
+        tile_size: TileSize,
+    ) -> Self {
+        Self::new_source(
+            SpatialGridDefinition::new(geo_transform, grid_bounds),
+            tile_size,
+        )
     }
 
     #[must_use]
@@ -130,23 +130,6 @@ impl SpatialGridDescriptor {
             state: SpatialGridDescriptorState::Merged,
             ..self
         }
-    }
-
-    pub fn merge(&self, other: &SpatialGridDescriptor) -> Option<Self> {
-        // TODO: merge directly to tiling origin?
-        let merged_grid = self.spatial_grid.merge(&other.spatial_grid)?;
-        let state = if self.spatial_grid.grid_bounds == merged_grid.grid_bounds
-            && other.spatial_grid.grid_bounds == merged_grid.grid_bounds
-        {
-            self.state.merge(other.state)
-        } else {
-            SpatialGridDescriptorState::Merged
-        };
-
-        Some(Self {
-            spatial_grid: merged_grid,
-            state,
-        })
     }
 
     #[must_use]
@@ -175,12 +158,20 @@ impl SpatialGridDescriptor {
         self.is_compatible_grid_generic(&other.spatial_grid)
     }
 
-    pub fn tiling_grid_definition(
-        &self,
-        tiling_specification: TilingSpecification,
-    ) -> TilingSpatialGridDefinition {
-        // TODO: we could also store the tiling_origin_reference and then use that directly?
-        TilingSpatialGridDefinition::new(self.spatial_grid, tiling_specification)
+    /// Do both grids produce the same tiles (same origin, pixel size and tile size)?
+    /// Grid bounds may differ.
+    pub fn has_same_tiling(&self, other: &Self) -> bool {
+        self.geo_transform() == other.geo_transform() && self.tile_size == other.tile_size
+    }
+
+    /// Tiles are anchored at the grid's origin, so operations that move the origin
+    /// (e.g. [`Self::replace_origin`]) move the tile anchor as well.
+    pub fn tiling_grid_definition(&self) -> TilingGrid {
+        TilingGrid::from_spatial_grid(self.spatial_grid, self.tile_size)
+    }
+
+    pub fn tiling_strategy(&self) -> TilingStrategy {
+        self.tiling_grid_definition().tiling_strategy()
     }
 
     pub fn is_source(&self) -> bool {
@@ -244,6 +235,7 @@ impl SpatialGridDescriptor {
             Some(p) => Ok(Some(Self {
                 spatial_grid: p,
                 state: SpatialGridDescriptorState::Merged,
+                tile_size: self.tile_size,
             })),
             None => Ok(None),
         }
@@ -261,11 +253,8 @@ impl SpatialGridDescriptor {
         self.map(|x| x.spatial_bounds_to_compatible_spatial_grid(spatial_partition))
     }
 
-    pub fn intersection_with_tiling_grid(
-        &self,
-        tiling_grid: &TilingSpatialGridDefinition,
-    ) -> Option<Self> {
-        let tiling_spatial_grid = tiling_grid.tiling_spatial_grid_definition();
+    pub fn intersection_with_tiling_grid(&self, tiling_grid: &TilingGrid) -> Option<Self> {
+        let tiling_spatial_grid = tiling_grid.to_spatial_grid();
         let intersection = self.spatial_grid.intersection(&tiling_spatial_grid)?;
 
         let descriptor = if self.spatial_grid.grid_bounds == intersection.grid_bounds {
@@ -277,15 +266,17 @@ impl SpatialGridDescriptor {
         Some(Self {
             spatial_grid: intersection,
             state: descriptor,
+            tile_size: self.tile_size,
         })
     }
 
-    pub fn as_parts(&self) -> (SpatialGridDescriptorState, SpatialGridDefinition) {
+    pub fn as_parts(&self) -> (SpatialGridDescriptorState, SpatialGridDefinition, TileSize) {
         let SpatialGridDescriptor {
             spatial_grid,
             state,
+            tile_size,
         } = *self;
-        (state, spatial_grid)
+        (state, spatial_grid, tile_size)
     }
 }
 
@@ -472,12 +463,12 @@ impl RasterResultDescriptor {
     }
 
     /// Returns tiling grid definition of the data.
-    pub fn tiling_grid_definition(
-        &self,
-        tiling_specification: TilingSpecification,
-    ) -> TilingSpatialGridDefinition {
-        self.spatial_grid
-            .tiling_grid_definition(tiling_specification)
+    pub fn tiling_grid_definition(&self) -> TilingGrid {
+        self.spatial_grid.tiling_grid_definition()
+    }
+
+    pub fn tiling_strategy(&self) -> TilingStrategy {
+        self.spatial_grid.tiling_strategy()
     }
 
     pub fn spatial_bounds(&self) -> SpatialPartition2D {
@@ -495,10 +486,11 @@ impl RasterResultDescriptor {
             data_type,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time,
-            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                geo_transform,
-                pixel_bounds,
-            )),
+            spatial_grid: SpatialGridDescriptor {
+                spatial_grid: SpatialGridDefinition::new(geo_transform, pixel_bounds),
+                state: SpatialGridDescriptorState::Source,
+                tile_size: TileSize::default_512(),
+            },
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
     }
@@ -1057,6 +1049,7 @@ mod db_types {
             Self {
                 spatial_grid: value.spatial_grid,
                 state: SpatialGridDescriptorState::from(value.state),
+                tile_size: TileSize::default_512(), // runtime-only; sources overwrite this
             }
         }
     }
@@ -1069,6 +1062,7 @@ mod db_types {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::TileIdx;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;
 
@@ -1109,6 +1103,43 @@ mod tests {
                 bbox: None,
             }
         );
+    }
+
+    #[test]
+    fn moving_the_origin_moves_the_tile_anchor() {
+        let descriptor = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
+            GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(),
+            TileSize::new_unchecked(4, 4),
+        );
+        let moved = descriptor.replace_origin((2., -2.).into());
+
+        let tiling = moved.tiling_strategy();
+        assert_eq!(tiling.geo_transform.origin_coordinate, (2., -2.).into());
+        assert_eq!(
+            tiling.tile_idx_to_spatial(TileIdx::new_y_x(0, 0)),
+            (2., -2.).into()
+        );
+    }
+
+    #[test]
+    fn same_tiling_ignores_grid_bounds() {
+        let grid = |origin: (f64, f64), max: isize, tile_size| {
+            SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new_unchecked(origin.into(), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [max, max]).unwrap(),
+                tile_size,
+            )
+        };
+        let tile_size = TileSize::new_unchecked(4, 4);
+
+        assert!(grid((0., 0.), 9, tile_size).has_same_tiling(&grid((0., 0.), 3, tile_size)));
+        assert!(!grid((0., 0.), 9, tile_size).has_same_tiling(&grid((1., 0.), 9, tile_size)));
+        assert!(!grid((0., 0.), 9, tile_size).has_same_tiling(&grid(
+            (0., 0.),
+            9,
+            TileSize::new_unchecked(2, 2)
+        )));
     }
 
     #[test]

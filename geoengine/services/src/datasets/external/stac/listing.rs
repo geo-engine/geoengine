@@ -500,7 +500,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         RegularTimeDimension, SpatialResolution, TimeDimension, TimeGranularity, TimeStep,
     };
-    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D};
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, TileSize};
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::SpatialGridDescriptor;
@@ -530,6 +530,7 @@ mod tests {
                     GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                         .unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: vec![],
             }],
@@ -571,6 +572,7 @@ mod tests {
                             GridIdx2D::new([10979, 10979]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![],
                 },
@@ -587,6 +589,7 @@ mod tests {
                             GridIdx2D::new([10979, 10979]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![],
                 },
@@ -603,6 +606,7 @@ mod tests {
                             GridIdx2D::new([10979, 10979]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![],
                 },

@@ -592,7 +592,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let grid_bounds = stac_asset_grid_bounds(height, width)?;
+        let grid_bounds = stac_grid_bounds(height, width)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
         let file_path = if asset.href.starts_with("http://")
@@ -646,6 +646,7 @@ impl StacMultiBandMetaData {
                     gdal_config_options: gdal_config_options.clone(),
                     allow_alphaband_as_mask: false,
                     retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
+                    tile_size: None,
                 },
             });
         }
@@ -704,21 +705,6 @@ impl<'a> From<&'a TileFile> for StacTileIdentity<'a> {
             ],
         }
     }
-}
-
-fn stac_asset_grid_bounds(
-    height: usize,
-    width: usize,
-) -> geoengine_operators::util::Result<GridBoundingBox2D> {
-    GridBoundingBox2D::new(
-        GridIdx2D::new([0, 0]),
-        GridIdx2D::new([(height as isize) - 1, (width as isize) - 1]),
-    )
-    .map_err(
-        |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
-            reason: format!("could not create grid bounds from STAC asset projection shape: {e}"),
-        },
-    )
 }
 
 fn stac_query_bbox(
@@ -864,6 +850,19 @@ fn stac_query_time_interval(
     }
 }
 
+fn stac_grid_bounds(height: usize, width: usize) -> Result<GridBoundingBox2D> {
+    let grid_bounds = GridBoundingBox2D::new(
+        GridIdx2D::new([0, 0]),
+        GridIdx2D::new([(height as isize) - 1, (width as isize) - 1]),
+    )
+    .map_err(
+        |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+            reason: format!("could not create grid bounds from STAC proj:shape: {e}"),
+        },
+    )?;
+    Ok(grid_bounds)
+}
+
 #[async_trait]
 impl
     MetaDataProvider<
@@ -951,6 +950,7 @@ mod tests {
                     GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                         .unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: vec![
                     crate::datasets::external::stac::StacProviderDatasetBand {
@@ -1100,6 +1100,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: false,
                 retry: None,
+                tile_size: None,
             },
         }
     }
@@ -1544,6 +1545,15 @@ mod tests {
             .expect("refreshed authenticated STAC request should succeed");
     }
 
+    #[test]
+    fn stac_grid_bounds_puts_height_on_y_and_width_on_x() {
+        let bounds = stac_grid_bounds(4, 8).unwrap();
+        assert_eq!(bounds.y_min(), 0);
+        assert_eq!(bounds.y_max(), 3);
+        assert_eq!(bounds.x_min(), 0);
+        assert_eq!(bounds.x_max(), 7);
+    }
+
     /// Replicates the steps from `test_ndvi.http` without making real web requests:
     #[crate::ge_context::test]
     #[allow(clippy::too_many_lines)]
@@ -1722,6 +1732,7 @@ mod tests {
                             GridIdx2D::new([10979, 10979]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {
@@ -1774,6 +1785,7 @@ mod tests {
                             GridIdx2D::new([5489, 5489]),
                         )
                         .unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: vec![
                         crate::datasets::external::stac::StacProviderDatasetBand {
@@ -1998,6 +2010,7 @@ mod grid_request_tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked((0., 1.).into(), 0.1, -0.1),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([9, 19])).unwrap(),
+                TileSize::default_512(),
             ),
             bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
                 asset_title: "data".to_owned(),
@@ -2502,6 +2515,7 @@ mod grid_request_tests {
         provider.datasets[0].spatial_grid = SpatialGridDescriptor::source_from_parts(
             GeoTransform::new_unchecked((500_000., 5_800_000.).into(), 1000., -1000.),
             GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([9, 19])).unwrap(),
+            TileSize::default_512(),
         );
         let projection = provider.datasets[0].projection;
         let projected_extent = projection

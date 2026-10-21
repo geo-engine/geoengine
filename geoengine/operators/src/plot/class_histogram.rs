@@ -337,8 +337,7 @@ impl ClassHistogramRasterQueryProcessor {
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::new_single(self.band_index),
-            rd.tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            rd.tiling_grid_definition().geo_transform,
         );
 
         let query_bounds = raster_query_rect.spatial_bounds();
@@ -527,9 +526,9 @@ mod tests {
             sources: mock_raster_source().into(),
         };
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(TilingSpecification {
-            tile_size: TileSize::new_unchecked(3, 2),
-        });
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let result = histogram
             .boxed()
@@ -574,6 +573,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
+                        TileSize::new_unchecked(3, 2),
                     ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new("values".into(), Measurement::Unitless),
@@ -596,9 +596,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_computes_the_histogram_of_the_selected_raster_band() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(TilingSpecification {
-            tile_size: TileSize::new_unchecked(3, 2),
-        });
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+        );
 
         let query_processor = ClassHistogram {
             params: ClassHistogramParams {
@@ -653,9 +653,9 @@ mod tests {
         .boxed()
         .initialize(
             WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::new_with_tiling_spec(TilingSpecification {
-                tile_size: TileSize::new_unchecked(3, 2),
-            }),
+            &MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+                TileSize::new_unchecked(3, 2),
+            )),
         )
         .await;
 
@@ -688,6 +688,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "bands".into(),
@@ -715,7 +716,7 @@ mod tests {
     #[tokio::test]
     async fn simple_raster() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::new(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = ClassHistogram {
@@ -769,9 +770,10 @@ mod tests {
     #[tokio::test]
     async fn it_uses_only_pixels_in_query_rectangle() {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let tiling_specification = TilingSpecification {
-            tile_size: TileSize::new_unchecked(tile_size_in_pixels.y(), tile_size_in_pixels.x()),
-        };
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(
+            tile_size_in_pixels.y(),
+            tile_size_in_pixels.x(),
+        ));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = ClassHistogram {
@@ -1126,6 +1128,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands,
         };
@@ -1338,6 +1341,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size.bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands,
         };

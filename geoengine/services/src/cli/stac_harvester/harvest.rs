@@ -1361,6 +1361,7 @@ fn try_create_tile_for_band(
                 .no_data_value
                 .or_else(|| common::no_data_value_for_rasterband(asset, rasterband_channel)),
             properties_mapping: None,
+            tile_size: None,
             gdal_open_options: None,
             gdal_config_options: gdal_config_options.map(|opts| {
                 opts.into_iter()
@@ -1394,7 +1395,7 @@ mod tests {
     use crate::datasets::external::stac::StacAssetBand;
     use float_cmp::approx_eq;
     use geoengine_datatypes::primitives::SpatialResolution;
-    use geoengine_datatypes::raster::RasterDataType;
+    use geoengine_datatypes::raster::{RasterDataType, TileSize};
 
     fn code_de_test_item() -> stac::Item {
         let items: stac::ItemCollection = serde_json::from_str(include_str!(
@@ -1528,6 +1529,7 @@ mod tests {
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked((0.0, 0.0).into(), 10.0, -10.0),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
+                TileSize::default_512(),
             ),
             bands: vec![],
         };
@@ -1721,6 +1723,7 @@ mod tests {
     /// parsing in `try_create_tile_for_band`. The item fixture is a recorded response
     /// from the element84 STAC API and contains no external dependencies.
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn test_process_harvest_item_recovers_v1_0_0_item() {
         use geoengine_datatypes::dataset::DataProviderId;
         use geoengine_datatypes::util::Identifier;
@@ -1751,6 +1754,7 @@ mod tests {
                 spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((0.0, 0.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
                     asset_title: "Blue - 10m".to_string(),
@@ -1895,6 +1899,7 @@ mod tests {
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked((0.0, 0.0).into(), 10.0, -10.0),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
+                TileSize::default_512(),
             ),
             bands: vec![],
         };

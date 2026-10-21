@@ -116,6 +116,13 @@ import {
     RasterizationFromJSONTyped,
     RasterizationToJSON,
 } from './Rasterization';
+import type { ReTile } from './ReTile';
+import {
+    instanceOfReTile,
+    ReTileFromJSON,
+    ReTileFromJSONTyped,
+    ReTileToJSON,
+} from './ReTile';
 import type { Reflectance } from './Reflectance';
 import {
     instanceOfReflectance,
@@ -157,7 +164,7 @@ import {
  * An operator that produces raster data.
  * @export
  */
-export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
+export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'ReTile' } & ReTile | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
 
 export function RasterOperatorFromJSON(json: any): RasterOperator {
     return RasterOperatorFromJSONTyped(json, false);
@@ -198,6 +205,8 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, RasterTypeConversionFromJSONTyped(json, true), { type: 'RasterTypeConversion' } as const);
         case 'Rasterization':
             return Object.assign({}, RasterizationFromJSONTyped(json, true), { type: 'Rasterization' } as const);
+        case 'ReTile':
+            return Object.assign({}, ReTileFromJSONTyped(json, true), { type: 'ReTile' } as const);
         case 'Reflectance':
             return Object.assign({}, ReflectanceFromJSONTyped(json, true), { type: 'Reflectance' } as const);
         case 'Reprojection':
@@ -252,6 +261,8 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
             return Object.assign({}, RasterTypeConversionToJSON(value), { type: 'RasterTypeConversion' } as const);
         case 'Rasterization':
             return Object.assign({}, RasterizationToJSON(value), { type: 'Rasterization' } as const);
+        case 'ReTile':
+            return Object.assign({}, ReTileToJSON(value), { type: 'ReTile' } as const);
         case 'Reflectance':
             return Object.assign({}, ReflectanceToJSON(value), { type: 'Reflectance' } as const);
         case 'Reprojection':

@@ -20,6 +20,7 @@ use crate::datasets::external::stac::{
     StacProviderS3Config, common,
 };
 use crate::util::retry::{RetryPolicy, retry_http};
+use geoengine_datatypes::raster::TileSize;
 use geoengine_operators::engine::SpatialGridDescriptor as GeoOpSpatialGridDescriptor;
 
 // ---------------------------------------------------------------------------
@@ -587,6 +588,7 @@ fn build_dataset_spatial_grid(
                 -NonZeroFiniteF64::from(dataset_key.resolution),
             ),
             zero_size_grid(),
+            TileSize::default_512(),
         )
     };
 
@@ -594,7 +596,7 @@ fn build_dataset_spatial_grid(
         if let Some(gt) = info.geo_transform {
             let grid_bounds = projection_grid_bounds(gt, dataset_key.epsg)
                 .unwrap_or_else(|| fallback_grid_bounds(info));
-            GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
+            GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds, TileSize::default_512())
         } else {
             fallback_grid()
         }
@@ -603,7 +605,7 @@ fn build_dataset_spatial_grid(
             .proj_shape
             .and_then(|(height, width)| asset_shape_bounds(height, width).ok())
             .unwrap_or_else(zero_size_grid);
-        GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds)
+        GeoOpSpatialGridDescriptor::source_from_parts(gt, grid_bounds, TileSize::default_512())
     } else {
         fallback_grid()
     }
