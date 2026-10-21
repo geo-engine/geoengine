@@ -931,7 +931,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size));
         let raster_tiles = vec![
@@ -942,7 +942,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -956,7 +956,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -970,7 +970,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -984,7 +984,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -998,7 +998,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1012,7 +1012,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1117,7 +1117,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size));
         let raster_tiles = vec![
@@ -1128,7 +1128,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1142,7 +1142,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1156,7 +1156,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1170,7 +1170,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1184,7 +1184,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1198,7 +1198,7 @@ mod tests {
                 ),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,

@@ -362,6 +362,7 @@ pub enum PngCreationError {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileSize;
 
     use crate::engine::{
         MockExecutionContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor,
@@ -399,7 +400,7 @@ mod tests {
     async fn png_from_stream() {
         let exe_ctx = MockExecutionContext::test_default();
         let ctx = exe_ctx.mock_query_context_test_default();
-        let tiling_specification = TilingSpecification::new([600, 600].into());
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(600, 600));
 
         let meta_data = create_ndvi_meta_data();
 
@@ -498,7 +499,7 @@ mod tests {
         let exe_ctx = MockExecutionContext::test_default();
         let mut ctx = exe_ctx.mock_query_context_test_default();
         ctx.processing_runtime = processing.handle().clone();
-        let tiling_specification = TilingSpecification::new([600, 600].into());
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(600, 600));
 
         let meta_data = create_ndvi_meta_data();
 

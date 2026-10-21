@@ -817,9 +817,9 @@ mod tests {
     use geoengine_datatypes::primitives::DateTimeParseFormat;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
-        BoundedGrid, EmptyGrid2D, GeoTransform, GridIdx2D, GridShape2D, GridSize,
-        RasterPropertiesEntryType, RasterPropertiesKey, SpatialGridDefinition, TileIdx,
-        TileInformation, TileSize, TilesEqualIgnoringCacheHint, TilingStrategy,
+        BoundedGrid, EmptyGrid2D, GeoTransform, GridShape2D, GridSize, RasterPropertiesEntryType,
+        RasterPropertiesKey, SpatialGridDefinition, TileIdx, TileInformation, TileSize,
+        TilesEqualIgnoringCacheHint, TilingStrategy,
     };
     use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
@@ -877,7 +877,7 @@ mod tests {
 
     #[test]
     fn tiling_strategy_origin() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new_unchecked(600, 600);
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
@@ -915,7 +915,7 @@ mod tests {
 
     #[test]
     fn tiling_strategy_zero() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new_unchecked(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
@@ -953,7 +953,7 @@ mod tests {
 
     #[test]
     fn tile_idx_iterator() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new_unchecked(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
         let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
@@ -970,9 +970,8 @@ mod tests {
             geo_transform: central_geo_transform,
         };
 
-        let vres: Vec<GridIdx2D> = origin_split_tileing_strategy
+        let vres: Vec<TileIdx> = origin_split_tileing_strategy
             .tile_idx_iterator_from_grid_bounds(grid_bounds)
-            .map(GridIdx2D::from)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(vres[0], [-2, -3].into());
@@ -983,7 +982,7 @@ mod tests {
 
     #[test]
     fn tile_information_iterator() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new_unchecked(600, 600);
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
 
@@ -1195,7 +1194,7 @@ mod tests {
         );
 
         TileInformation {
-            tile_size: TileSize::new_y_x(shape.y(), shape.x()),
+            tile_size: TileSize::new_unchecked(shape.y(), shape.x()),
             tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
         }

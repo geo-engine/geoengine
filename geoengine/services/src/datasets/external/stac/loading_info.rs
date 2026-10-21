@@ -1297,7 +1297,7 @@ mod tests {
             .unwrap();
             let tile = TileInformation::new(
                 TileIdx::new_y_x(0, 0),
-                TileSize::new_y_x(2, 2),
+                TileSize::new_unchecked(2, 2),
                 GeoTransform::new_unchecked(bounds.upper_left(), 10., -10.),
             );
             // The second lookup must reuse the cached file parameters without another request.
@@ -1357,7 +1357,7 @@ mod tests {
         ];
         let tile = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(1000, 1000),
+            TileSize::new_unchecked(1000, 1000),
             GeoTransform::new_unchecked(bounds.upper_left(), 10., -10.),
         );
 
@@ -1651,7 +1651,7 @@ mod tests {
             GeoTransform::new_unchecked((499_980.0, 5_800_020.0).into(), 10.0, -10.0);
         let tile = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(10980, 10980),
+            TileSize::new_unchecked(10980, 10980),
             tile_geo_transform,
         );
 
@@ -1732,8 +1732,8 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                         GridBoundingBox2D::new(
-                            TileIdx::new_y_x(0, 0),
-                            TileIdx::new_y_x(10979, 10979),
+                            GridIdx2D::new([0, 0]),
+                            GridIdx2D::new([10979, 10979]),
                         )
                         .unwrap(),
                     ),
@@ -1784,8 +1784,8 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 20.0, -20.0),
                         GridBoundingBox2D::new(
-                            TileIdx::new_y_x(0, 0),
-                            TileIdx::new_y_x(5489, 5489),
+                            GridIdx2D::new([0, 0]),
+                            GridIdx2D::new([5489, 5489]),
                         )
                         .unwrap(),
                     ),
@@ -2202,7 +2202,7 @@ mod grid_request_tests {
     fn tile(left: f64) -> TileInformation {
         TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(10, 10),
+            TileSize::new_unchecked(10, 10),
             GeoTransform::new_unchecked((left, 1.).into(), 0.1, -0.1),
         )
     }
@@ -2359,7 +2359,7 @@ mod grid_request_tests {
         assert_eq!(result.time_steps(), &[interval(3)]);
         let tile = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(10, 10),
+            TileSize::new_unchecked(10, 10),
             GeoTransform::new_unchecked((0.5, 1.5).into(), 0.1, -0.1),
         );
         let files = result.tile_files(interval(3), tile, 0);
@@ -2413,8 +2413,8 @@ mod grid_request_tests {
         .unwrap();
         assert_eq!(starts.lock().unwrap().len(), 4);
         let tile = TileInformation::new(
-            GridIdx2D::new([0, 0]),
-            GridShape::new([10, 10]),
+            TileIdx::new_y_x(0, 0),
+            TileSize::new_unchecked(10, 10),
             GeoTransform::new_unchecked((0.5, 1.5).into(), 0.1, -0.1),
         );
         assert_eq!(result.tile_files(interval(3), tile, 0).len(), 4);
@@ -2645,7 +2645,7 @@ mod grid_request_tests {
         .unwrap();
         let tile = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(10, 10),
+            TileSize::new_unchecked(10, 10),
             GeoTransform::new_unchecked((500_000., 5_800_000.).into(), 1000., -1000.),
         );
         assert_eq!(result.tile_files(interval(3), tile, 0).len(), 1);

@@ -966,7 +966,7 @@ mod tests {
         };
 
         let tiling_specification = geoengine_datatypes::raster::TilingSpecification::new(
-            TileSize::new_y_x(tile_size.y(), tile_size.x()),
+            TileSize::new_unchecked(tile_size.y(), tile_size.x()),
         );
 
         let box_plot = BoxPlot {
@@ -980,7 +980,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size).into(),
@@ -1040,7 +1040,7 @@ mod tests {
         };
 
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1052,7 +1052,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         Grid2D::new(tile_size, vec![0, 0, 0, 0, 0, 0])
@@ -1117,7 +1117,7 @@ mod tests {
         };
 
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1129,7 +1129,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size).into(),
@@ -1189,7 +1189,7 @@ mod tests {
         };
 
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = BoxPlot {
             params: BoxPlotParams {
@@ -1202,7 +1202,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         Grid2D::new(tile_size, vec![4; 6]).unwrap().into(),
@@ -1263,7 +1263,7 @@ mod tests {
         };
 
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1277,7 +1277,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         MaskedGrid2D::new(
@@ -1347,7 +1347,7 @@ mod tests {
         };
 
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1361,7 +1361,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         Grid2D::new(tile_size, vec![1, 2, 0, 4, 0, 6, 7, 0])
@@ -1432,7 +1432,7 @@ mod tests {
                             TileInformation {
                                 global_geo_transform: TestDefault::test_default(),
                                 tile_position: [0, 0].into(),
-                                tile_size: TileSize::new_y_x(
+                                tile_size: TileSize::new_unchecked(
                                     tile_size_in_pixels.y(),
                                     tile_size_in_pixels.x(),
                                 ),
@@ -1465,7 +1465,7 @@ mod tests {
         bbox: BoundingBox2D,
     ) -> Result<PlotData> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_y_x(4, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(4, 2)),
         );
 
         let query_processor = BoxPlot {

@@ -244,6 +244,11 @@ pub enum Error {
         x_pixel_size: f64,
         y_pixel_size: f64,
     },
+    #[snafu(display("Invalid tile size {y_size}x{x_size}: both axes must be non-zero."))]
+    InvalidTileSize {
+        y_size: usize,
+        x_size: usize,
+    },
     #[snafu(display("InvalidSpatialReferenceString: {}", spatial_reference_string))]
     InvalidSpatialReferenceString {
         spatial_reference_string: String,

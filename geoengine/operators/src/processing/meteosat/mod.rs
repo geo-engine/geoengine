@@ -179,7 +179,7 @@ mod test_util {
             TimeInterval::default(),
             TileInformation {
                 tile_position: TileIdx::new_y_x(-1, 0),
-                tile_size: TileSize::new_y_x(3, 2),
+                tile_size: TileSize::new_unchecked(3, 2),
                 global_geo_transform: TestDefault::test_default(),
             },
             0,

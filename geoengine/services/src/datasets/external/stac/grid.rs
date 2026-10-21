@@ -166,7 +166,8 @@ impl ProjectedStacGrid {
     }
 
     fn cells_for_bounds(self, bounds: Option<GridBoundingBox2D>) -> StacGridCells {
-        let tiling = TilingStrategy::new(TileSize::new_y_x(1, 1), self.raster.geo_transform());
+        let tiling =
+            TilingStrategy::new(TileSize::new_unchecked(1, 1), self.raster.geo_transform());
         let tiles = bounds.map(|bounds| tiling.tile_information_iterator_from_pixel_bounds(bounds));
         tiles
             .into_iter()

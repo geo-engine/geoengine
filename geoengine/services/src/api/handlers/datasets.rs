@@ -2024,7 +2024,7 @@ mod tests {
 
     fn ctx_tiling_spec_600x600() -> TilingSpecification {
         TilingSpecification {
-            tile_size: TileSize::new_y_x(600, 600),
+            tile_size: TileSize::new_unchecked(600, 600),
         }
     }
 
@@ -3373,7 +3373,7 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn create_dataset_tiling_specification() -> TilingSpecification {
         TilingSpecification {
-            tile_size: TileSize::new_y_x(600, 600),
+            tile_size: TileSize::new_unchecked(600, 600),
         }
     }
 

@@ -597,7 +597,7 @@ mod tests {
         .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let qp1 = mrs1
             .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
@@ -726,7 +726,7 @@ mod tests {
         .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let qp1 = mrs1
             .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
@@ -987,7 +987,7 @@ mod tests {
         .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let qp1 = mrs1
             .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
@@ -1282,7 +1282,7 @@ mod tests {
         .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let qp1 = mrs1
             .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
@@ -1926,7 +1926,7 @@ mod tests {
         .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let qp1 = mrs1
             .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)

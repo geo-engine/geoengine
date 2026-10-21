@@ -593,7 +593,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -650,7 +650,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -664,7 +664,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -678,7 +678,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -692,7 +692,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -722,7 +722,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -779,7 +779,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -793,7 +793,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -807,7 +807,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -821,7 +821,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -851,7 +851,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -908,7 +908,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -922,7 +922,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -936,7 +936,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -950,7 +950,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -980,7 +980,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1037,7 +1037,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1051,7 +1051,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1065,7 +1065,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1079,7 +1079,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1107,7 +1107,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1115,7 +1115,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1174,7 +1174,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1203,7 +1203,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1260,7 +1260,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1275,7 +1275,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1312,7 +1312,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1368,7 +1368,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1383,7 +1383,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1420,7 +1420,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1478,7 +1478,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1500,7 +1500,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1529,7 +1529,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1586,7 +1586,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1601,7 +1601,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1638,7 +1638,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1695,7 +1695,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1710,7 +1710,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1747,7 +1747,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1804,7 +1804,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -1819,7 +1819,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1857,7 +1857,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1914,7 +1914,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1927,7 +1927,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1940,7 +1940,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1953,7 +1953,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -1985,7 +1985,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2042,7 +2042,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2057,7 +2057,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2094,7 +2094,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2151,7 +2151,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2166,7 +2166,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2204,7 +2204,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2272,7 +2272,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2288,7 +2288,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2304,7 +2304,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2320,7 +2320,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2356,7 +2356,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2413,7 +2413,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2426,7 +2426,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2439,7 +2439,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2452,7 +2452,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2484,7 +2484,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2541,7 +2541,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2556,7 +2556,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2593,7 +2593,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2650,7 +2650,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2665,7 +2665,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 30),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -2702,7 +2702,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2758,7 +2758,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2772,7 +2772,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2788,7 +2788,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2799,7 +2799,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2810,7 +2810,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2821,7 +2821,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2832,7 +2832,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2843,7 +2843,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2854,7 +2854,7 @@ mod tests {
                 TimeInterval::new_unchecked(30, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2865,7 +2865,7 @@ mod tests {
                 TimeInterval::new_unchecked(30, 40),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2882,7 +2882,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2893,7 +2893,7 @@ mod tests {
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2911,7 +2911,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2929,7 +2929,7 @@ mod tests {
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2940,7 +2940,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 0),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -2958,7 +2958,7 @@ mod tests {
                 TimeInterval::new_unchecked(20, 30),
                 TileInformation {
                     tile_position: TileIdx::new_y_x(-1, 1),
-                    tile_size: TileSize::new_y_x(3, 2),
+                    tile_size: TileSize::new_unchecked(3, 2),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -3028,8 +3028,9 @@ mod tests {
         }
         .typed();
 
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 2),
+        ));
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
@@ -3060,7 +3061,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3073,7 +3074,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3086,7 +3087,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3099,7 +3100,7 @@ mod tests {
                     TimeInterval::new_unchecked(0, 20),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3112,7 +3113,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3125,7 +3126,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3138,7 +3139,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     0,
@@ -3151,7 +3152,7 @@ mod tests {
                     TimeInterval::new_unchecked(20, 40),
                     TileInformation {
                         tile_position: TileIdx::new_y_x(-1, 1),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                         global_geo_transform: TestDefault::test_default(),
                     },
                     1,
@@ -3207,8 +3208,9 @@ mod tests {
         }
         .typed();
 
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 2),
+        ));
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
@@ -3283,8 +3285,9 @@ mod tests {
         }
         .typed();
 
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 2),
+        ));
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
