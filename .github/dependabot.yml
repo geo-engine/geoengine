@@ -1,17 +1,5 @@
 version: 2
 
-multi-ecosystem-groups:
-  patch-updates:
-    schedule:
-      interval: "weekly"
-      day: "sunday" # to be checked before Monday
-    # This filter ensures only patches are bundled across all linked ecosystems
-    update-types:
-      - "patch"
-    # Spans several projects, so no scope (allowed scopes: .github/workflows/lint-pr-title.yml)
-    commit-message:
-      prefix: "build"
-
 updates:
   - package-ecosystem: "cargo"
     # Look for `Cargo.toml` and `lock` files in the `root` directory
@@ -24,20 +12,15 @@ updates:
     commit-message:
       prefix: "build(backend)"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
       # Security updates ignore the groups above, so they need their own group
       security:
         applies-to: security-updates
         patterns:
           - "*"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "patch-updates"
 
   - package-ecosystem: "pip"
     directory: "/python"
@@ -50,19 +33,14 @@ updates:
       prefix: "build(python)"
       prefix-development: "build(python)"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
       security:
         applies-to: security-updates
         patterns:
           - "*"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "patch-updates"
 
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
@@ -76,19 +54,14 @@ updates:
     commit-message:
       prefix: "ci"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
       security:
         applies-to: security-updates
         patterns:
           - "*"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "patch-updates"
 
   - package-ecosystem: "npm"
     # Look for `package.json` and `lock` files in the `root` directory
@@ -102,22 +75,17 @@ updates:
       prefix: "build(ui)"
       prefix-development: "build(ui)"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
       security:
         applies-to: security-updates
         patterns:
           - "*"
-    patterns:
-      - "*"
     # Wait a week before proposing new versions (does not delay security updates)
     cooldown:
       default-days: 7
-    multi-ecosystem-group: "patch-updates"
 
   - package-ecosystem: "npm"
     directory: "/www"
@@ -129,22 +97,17 @@ updates:
       prefix: "build(www)"
       prefix-development: "build(www)"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
       security:
         applies-to: security-updates
         patterns:
           - "*"
-    patterns:
-      - "*"
     # Wait a week before proposing new versions (does not delay security updates)
     cooldown:
       default-days: 7
-    multi-ecosystem-group: "patch-updates"
 
   # Test data only: suppress all updates, including security updates
   - package-ecosystem: "npm"
