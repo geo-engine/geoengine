@@ -136,24 +136,23 @@ impl RasterOperator for NeighborhoodAggregate {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let tiling_specification = context.tiling_specification();
-
-        // dimensions must not be larger as the neighboring tiles
-        let dimensions = self.params.neighborhood.dimensions();
-        ensure!(
-            dimensions.axis_size_x() <= tiling_specification.tile_size.axis_size_x()
-                && dimensions.axis_size_y() <= tiling_specification.tile_size.axis_size_y(),
-            error::NeighborhoodTooLarge {
-                limit: tiling_specification.tile_size.grid_shape(),
-                actual: dimensions
-            }
-        );
-
         let initialized_source = self
             .sources
             .initialize_sources(path.clone(), context)
             .await?;
         let raster_source = initialized_source.raster;
+
+        // dimensions must not be larger as the neighboring tiles
+        let tile_size = raster_source.result_descriptor().spatial_grid.tile_size;
+        let dimensions = self.params.neighborhood.dimensions();
+        ensure!(
+            dimensions.axis_size_x() <= tile_size.axis_size_x()
+                && dimensions.axis_size_y() <= tile_size.axis_size_y(),
+            error::NeighborhoodTooLarge {
+                limit: tile_size.grid_shape(),
+                actual: dimensions
+            }
+        );
 
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
