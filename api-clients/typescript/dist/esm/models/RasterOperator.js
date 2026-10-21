@@ -26,6 +26,7 @@ import { RasterScalingFromJSONTyped, RasterScalingToJSON, } from './RasterScalin
 import { RasterStackerFromJSONTyped, RasterStackerToJSON, } from './RasterStacker';
 import { RasterTypeConversionFromJSONTyped, RasterTypeConversionToJSON, } from './RasterTypeConversion';
 import { RasterizationFromJSONTyped, RasterizationToJSON, } from './Rasterization';
+import { ReTileFromJSONTyped, ReTileToJSON, } from './ReTile';
 import { ReflectanceFromJSONTyped, ReflectanceToJSON, } from './Reflectance';
 import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
 import { TemperatureFromJSONTyped, TemperatureToJSON, } from './Temperature';
@@ -71,6 +72,8 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, RasterTypeConversionFromJSONTyped(json, true), { type: 'RasterTypeConversion' });
         case 'Rasterization':
             return Object.assign({}, RasterizationFromJSONTyped(json, true), { type: 'Rasterization' });
+        case 'ReTile':
+            return Object.assign({}, ReTileFromJSONTyped(json, true), { type: 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, ReflectanceFromJSONTyped(json, true), { type: 'Reflectance' });
         case 'Reprojection':
@@ -125,6 +128,8 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, RasterTypeConversionToJSON(value), { 'type': 'RasterTypeConversion' });
         case 'Rasterization':
             return Object.assign({}, RasterizationToJSON(value), { 'type': 'Rasterization' });
+        case 'ReTile':
+            return Object.assign({}, ReTileToJSON(value), { 'type': 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, ReflectanceToJSON(value), { 'type': 'Reflectance' });
         case 'Reprojection':
