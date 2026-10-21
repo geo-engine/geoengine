@@ -2,13 +2,13 @@ use crate::engine::{QueryContext, RasterQueryProcessor};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::Stream;
 use futures::future::BoxFuture;
 use futures::{Future, stream::FusedStream};
 use futures::{
     FutureExt, TryFuture, TryStreamExt, ready,
     stream::{BoxStream, TryFold},
 };
+use futures::{Stream, StreamExt};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
@@ -23,6 +23,7 @@ use pin_project::pin_project;
 
 use std::sync::Arc;
 use std::task::Poll;
+use tracing::Instrument;
 
 #[async_trait]
 pub trait FoldTileAccu {
@@ -127,6 +128,8 @@ where
 
     band_tile_iter: TileInformationBandCrossProductIter,
 
+    output_span: tracing::Span,
+
     /// This current state of the adapter
     #[pin]
     state: StateInnerType<
@@ -160,6 +163,7 @@ where
         let band_tile_iter = TileInformationBandCrossProductIter::new(tile_iter, band_iter);
 
         Self {
+            output_span: tracing::Span::none(),
             current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!
             query_rect_to_answer,
             band_tile_iter,
@@ -257,10 +261,12 @@ where
             match time_future {
                 None => {
                     this.state.set(StateInner::Ended);
+                    *this.output_span = tracing::Span::none();
                     return Poll::Ready(None);
                 }
                 Some(Err(e)) => {
                     this.state.set(StateInner::Ended);
+                    *this.output_span = tracing::Span::none();
                     return Poll::Ready(Some(Err(e)));
                 }
                 Some(Ok(time)) => {
@@ -288,6 +294,18 @@ where
                     unreachable!()
                 };
 
+            *this.output_span = tracing::debug_span!(
+                "raster_subquery_tile",
+                aggregator = std::any::type_name::<SubQuery>(),
+                ?tile,
+                band,
+                ?time,
+                input_query = tracing::field::Empty,
+                input_tiles = 0_u64,
+            );
+            let output_span = this.output_span.clone();
+            let _entered = output_span.enter();
+
             match this.sub_query.tile_query_rectangle(
                 tile,
                 this.query_rect_to_answer.clone(),
@@ -295,6 +313,8 @@ where
                 band,
             ) {
                 Ok(Some(raster_query_rect)) => {
+                    this.output_span
+                        .record("input_query", tracing::field::debug(&raster_query_rect));
                     let tile_query_stream_fut = this
                         .source_processor
                         .raster_query(raster_query_rect.clone(), *this.query_ctx);
@@ -307,6 +327,7 @@ where
 
                     let joined_future =
                         async { futures::try_join!(tile_query_stream_fut, tile_folding_accu_fut) }
+                            .instrument(this.output_span.clone())
                             .boxed();
 
                     this.state.set(StateInner::RunningQuery {
@@ -324,10 +345,16 @@ where
                 }),
                 Err(e) => {
                     this.state.set(StateInner::Ended);
+                    *this.output_span = tracing::Span::none();
                     return Poll::Ready(Some(Err(e)));
                 }
             }
         }
+
+        // Enter only for this poll. The span survives Pending without leaving a
+        // thread-local guard entered while another request runs on this thread.
+        let output_span = this.output_span.clone();
+        let _entered = output_span.enter();
 
         // A query was issued, so we check whether it is finished
         // To work in this scope we first check if the state is the one we expect. We want to set the state in this scope so we can not borrow it here!
@@ -348,6 +375,14 @@ where
 
             match ready!(query_with_accu.poll(cx)) {
                 Ok((query, tile_folding_accu)) => {
+                    let span = this.output_span.clone();
+                    let mut input_tiles = 0_u64;
+                    let query = query
+                        .inspect_ok(move |_| {
+                            input_tiles += 1;
+                            span.record("input_tiles", input_tiles);
+                        })
+                        .boxed();
                     let tile_folding_stream =
                         query.try_fold(tile_folding_accu, this.sub_query.fold_method());
 
@@ -360,6 +395,7 @@ where
                 }
                 Err(e) => {
                     this.state.set(StateInner::Ended);
+                    *this.output_span = tracing::Span::none();
                     return Poll::Ready(Some(Err(e)));
                 }
             }
@@ -392,6 +428,7 @@ where
                 }
                 Err(e) => {
                     this.state.set(StateInner::Ended);
+                    *this.output_span = tracing::Span::none();
                     return Poll::Ready(Some(Err(e)));
                 }
             }
@@ -425,6 +462,7 @@ where
                 }
                 Err(e) => {
                     this.state.set(StateInner::Ended);
+                    *this.output_span = tracing::Span::none();
                     return Poll::Ready(Some(Err(e)));
                 }
             }
@@ -449,6 +487,7 @@ where
         };
         // In the next poll we need to produce a new tile (if nothing else happens)
         this.state.set(StateInner::ProgressTileBand { time });
+        *this.output_span = tracing::Span::none();
 
         let result_tile = result.unwrap_or_else(|| {
             RasterTile2D::new_with_tile_info(

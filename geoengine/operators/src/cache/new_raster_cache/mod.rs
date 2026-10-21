@@ -75,18 +75,29 @@ impl NewRasterCacheEnum {
         })
     }
 
+    #[tracing::instrument(name = "raster_cache_get", level = "debug", skip_all,
+        fields(?key, outcome = tracing::field::Empty))]
     async fn get(
         &self,
         key: &CacheKey,
     ) -> Result<Option<Arc<SizeTrackedEntry<TypedCompressedRasterTile2D>>>> {
-        match self {
+        let result = match self {
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
                 cache.store.get(key).await
             }
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => {
                 cache.store.get(key).await
             }
-        }
+        };
+        tracing::Span::current().record(
+            "outcome",
+            match &result {
+                Ok(Some(_)) => "hit",
+                Ok(None) => "miss",
+                Err(_) => "error",
+            },
+        );
+        result
     }
 
     async fn insert(&self, key: CacheKey, tile: TypedRasterTile2D) -> Result<()> {
@@ -660,8 +671,10 @@ pub enum TypedCompressedRasterTile2D {
 }
 
 impl StorageFormat for TypedCompressedRasterTile2D {
+    #[hotpath::measure]
+    #[tracing::instrument(name = "raster_cache_compress", level = "debug", skip_all)]
     async fn store(tile: TypedRasterTile2D) -> Result<Self> {
-        tokio::task::spawn_blocking(move || match tile {
+        crate::util::spawn_blocking(move || match tile {
             TypedRasterTile2D::I8(tile) => Ok(TypedCompressedRasterTile2D::I8(
                 CompressedRasterTile2D::compress_tile(tile),
             )),
@@ -697,9 +710,11 @@ impl StorageFormat for TypedCompressedRasterTile2D {
         .map_err(|source| CacheError::CouldNotRunCompressionTask { source })?
     }
 
+    #[hotpath::measure]
+    #[tracing::instrument(name = "raster_cache_decompress", level = "debug", skip_all)]
     async fn load(&self) -> Result<TypedRasterTile2D> {
         let compressed = self.clone();
-        tokio::task::spawn_blocking(move || match compressed {
+        crate::util::spawn_blocking(move || match compressed {
             TypedCompressedRasterTile2D::I8(compressed) => Ok(TypedRasterTile2D::I8(
                 CompressedRasterTile2D::decompress_tile(&compressed)?,
             )),

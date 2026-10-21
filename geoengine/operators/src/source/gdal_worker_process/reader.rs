@@ -48,6 +48,7 @@ impl GdalPoolReader {
     ///
     /// # Panics
     /// Panics if the Y-axis flipped grid cannot be wrapped in a `MaskedGrid`.
+    #[hotpath::measure]
     pub async fn read_tile_data<T: Pixel + GdalType + FromPrimitive>(
         &self,
         dataset_params: GdalDatasetParameters,

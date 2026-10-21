@@ -16,6 +16,7 @@ name = "gdalsource-process"
 path = "src/bin/gdalsource_process_main.rs"
 
 [dependencies]
+hotpath = { workspace = true }
 arrow = { workspace = true }
 async-trait = { workspace = true }
 bb8-postgres = { workspace = true }
@@ -74,6 +75,9 @@ criterion = { workspace = true }
 httptest = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
+
+[features]
+hotpath = ["hotpath/hotpath"]
 
 [[bench]]
 name = "ci_operators"

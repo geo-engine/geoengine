@@ -174,6 +174,8 @@ fn build_accu<T: Pixel>(
     .and_then(|x| async { x }) // flatten Ok(Ok())
 }
 
+#[hotpath::measure]
+#[tracing::instrument(name = "reprojection_coordinate_grid", level = "debug", skip_all, fields(%out_srs, %in_srs))]
 fn projected_coordinate_grid_parallel(
     // TODO: use a map/create_* _parallel method from Grid / Tile
     pool: &ThreadPool,
@@ -285,6 +287,8 @@ where
 
 #[allow(clippy::type_complexity)]
 #[allow(clippy::needless_pass_by_value)]
+#[hotpath::measure]
+#[tracing::instrument(name = "reprojection_fold", level = "debug", skip_all)]
 pub fn fold_by_coordinate_lookup_impl<T>(
     accu: TileWithProjectionCoordinates<T>,
     tile: RasterTile2D<T>,

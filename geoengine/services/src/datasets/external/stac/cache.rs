@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tracing::trace;
+use tracing::{Instrument, debug};
 
 pub(crate) type StacQueryCacheResult = Result<Arc<Vec<TileFile>>, Arc<Error>>;
 
@@ -122,6 +122,8 @@ impl StacQueryCache {
     /// request does not cancel work shared with other callers. Errors are shared
     /// with current waiters and remain retryable; successful results rejected
     /// by size or TTL admission are still returned to current waiters.
+    #[hotpath::measure]
+    #[tracing::instrument(name = "stac_cache_get", level = "debug", skip_all, fields(?cell, ?time, outcome = tracing::field::Empty))]
     pub(crate) async fn get_or_fetch<F, Fut>(
         self: &Arc<Self>,
         dataset: StacProviderDataset,
@@ -142,7 +144,7 @@ impl StacQueryCache {
 
         // Keep warm hits off the task-spawn and try_get_with paths.
         if let Some(result) = self.cache.get(&key).await {
-            trace!(
+            debug!(
                 event = "cache_hit",
                 dataset_id = key.dataset_id,
                 cell_y = key.cell.0[0],
@@ -151,13 +153,19 @@ impl StacQueryCache {
                 time_end = key.time_end,
                 "STAC cell lookup reused a completed search"
             );
+            tracing::Span::current().record("outcome", "hit");
             return Ok(result);
         }
 
         // Detaching the task is essential: dropping the request that first
         // missed must not cancel Moka's initializer and restart the HTTP call.
+        tracing::Span::current().record("outcome", "shared_lookup");
         let cache = self.clone();
-        match tokio::spawn(async move { cache.get_or_initialize(key, fetch).await }).await {
+        match tokio::spawn(
+            async move { cache.get_or_initialize(key, fetch).await }.in_current_span(),
+        )
+        .await
+        {
             Ok(output) => output,
             Err(error) => Err(Arc::new(Error::QueryingProcessorFailed {
                 source: Box::new(error),
@@ -169,7 +177,7 @@ impl StacQueryCache {
     /// into values that current waiters can share without retaining them in the cache.
     #[tracing::instrument(
         name = "stac_cell_lookup",
-        level = "trace",
+        level = "debug",
         skip_all,
         fields(dataset_id = key.dataset_id, cell_y = key.cell.0[0], cell_x = key.cell.0[1],
             time_start = key.time_start, time_end = key.time_end)
@@ -183,13 +191,13 @@ impl StacQueryCache {
         let max_bytes = self.max_bytes;
         let ttl = self.ttl;
 
-        trace!(
+        debug!(
             event = "lookup_started",
             "STAC cell lookup awaiting a shared search"
         );
         let output = match cache
             .try_get_with(key, async move {
-                trace!(event = "fetch_started", "STAC cell search started");
+                debug!(event = "fetch_started", "STAC cell search started");
                 // Invocation is inside the caught async body, so both a
                 // synchronous panic and a panic while polling the future are
                 // published as one shared terminal error.
@@ -206,7 +214,7 @@ impl StacQueryCache {
                     }
                 };
 
-                trace!(
+                debug!(
                     event = "fetch_finished",
                     result_id = Arc::as_ptr(&result) as usize,
                     files = result.len(),
@@ -234,7 +242,7 @@ impl StacQueryCache {
             },
         };
         if let Ok(result) = &output {
-            trace!(
+            debug!(
                 event = "lookup_finished",
                 result_id = Arc::as_ptr(result) as usize,
                 "STAC cell lookup received a shared search result"

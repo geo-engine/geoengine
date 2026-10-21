@@ -35,7 +35,7 @@ use stac::Item;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{Instrument, debug};
 use url::Url;
 
 /// Multi-band raster metadata queried from a STAC provider.
@@ -66,6 +66,9 @@ enum StacQueryState {
     Finished,
 }
 
+#[hotpath::measure]
+#[tracing::instrument(name = "stac_page", level = "debug", skip_all,
+    fields(items = tracing::field::Empty))]
 async fn query_stac_item_collection(
     client: &StacClient,
     query_state: &StacQueryState,
@@ -84,8 +87,15 @@ async fn query_stac_item_collection(
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
                     let request = client.get(query_url.clone()).await?.query(query_params);
-                    let response = request.send().await?;
-                    response.error_for_status()?.json().await
+                    let response = request
+                        .send()
+                        .instrument(tracing::debug_span!("stac_http_headers"))
+                        .await?;
+                    response
+                        .error_for_status()?
+                        .json()
+                        .instrument(tracing::debug_span!("stac_body_and_json"))
+                        .await
                 },
                 &format!("Fetch STAC items from {query_url}"),
                 &request_policy,
@@ -112,6 +122,7 @@ async fn query_stac_item_collection(
                     StacQueryState::NextPage { next_url }
                 });
 
+            tracing::Span::current().record("items", item_collection.items.len());
             Ok((item_collection, next_state))
         }
         StacQueryState::NextPage { next_url } => {
@@ -122,8 +133,15 @@ async fn query_stac_item_collection(
             let item_collection: stac::ItemCollection = retry_http(
                 || async {
                     let request = client.get(next_url.clone()).await?;
-                    let response = request.send().await?;
-                    response.error_for_status()?.json().await
+                    let response = request
+                        .send()
+                        .instrument(tracing::debug_span!("stac_http_headers"))
+                        .await?;
+                    response
+                        .error_for_status()?
+                        .json()
+                        .instrument(tracing::debug_span!("stac_body_and_json"))
+                        .await
                 },
                 &format!("Fetch next STAC page from {next_url}"),
                 &request_policy,
@@ -150,6 +168,7 @@ async fn query_stac_item_collection(
                     StacQueryState::NextPage { next_url }
                 });
 
+            tracing::Span::current().record("items", item_collection.items.len());
             Ok((item_collection, next_state))
         }
         StacQueryState::Finished => {
@@ -168,6 +187,9 @@ impl
         MultiBandGdalLoadingInfoQueryRectangle,
     > for StacMultiBandMetaData
 {
+    #[hotpath::measure]
+    #[tracing::instrument(name = "stac_loading_info", level = "debug", skip_all,
+        fields(collection = %self.collection_name, query = ?query.query_rectangle))]
     async fn loading_info(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
@@ -406,6 +428,9 @@ impl StacMultiBandMetaData {
     ///
     /// Pagination must finish before this result enters the cache, so failed
     /// pages never publish partial tile files.
+    #[hotpath::measure]
+    #[tracing::instrument(name = "stac_search", level = "debug", skip_all,
+        fields(collection = %self.collection_name, ?bbox, ?time_interval))]
     pub async fn search_bbox(
         &self,
         items_url: Url,

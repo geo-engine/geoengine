@@ -60,13 +60,12 @@ pub async fn start_server() -> Result<()> {
 
     // create a telemetry layer for output to opentelemetry and add it to the registry
     let open_telemetry_config: geoengine_services::config::OpenTelemetry = get_config_element()?;
-    let opentelemetry_layer = if open_telemetry_config.enabled {
-        Some(open_telemetry_layer(
-            &open_telemetry_config,
-            &logging_config.log_spec,
-        )?)
+    let (opentelemetry_layer, telemetry_provider) = if open_telemetry_config.enabled {
+        let (layer, provider) =
+            open_telemetry_layer(&open_telemetry_config, &logging_config.log_spec)?;
+        (Some(layer), Some(provider))
     } else {
-        None
+        (None, None)
     };
     let registry = registry.with(opentelemetry_layer);
 
@@ -77,6 +76,9 @@ pub async fn start_server() -> Result<()> {
         Ok(()) => tracing::info!("Server stopped successfully"),
         Err(err) => tracing::error!("Server stopped with error: {err}"),
     }
+    if let Some(provider) = telemetry_provider {
+        let _ = provider.shutdown();
+    }
     drop(writer_drop_guard);
     drop(console_guard);
 
@@ -86,7 +88,10 @@ pub async fn start_server() -> Result<()> {
 fn open_telemetry_layer<S>(
     open_telemetry_config: &geoengine_services::config::OpenTelemetry,
     log_spec: &str,
-) -> Result<impl Layer<S>>
+) -> Result<(
+    impl Layer<S> + use<S>,
+    opentelemetry_sdk::trace::SdkTracerProvider,
+)>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
@@ -116,7 +121,7 @@ where
     let opentelemetry = tracing_opentelemetry::layer()
         .with_tracer(tracer)
         .with_filter(opentelemetry_filter);
-    Ok(opentelemetry)
+    Ok((opentelemetry, provider))
 }
 
 fn console_layer_with_filter<S, F: Filter<S> + 'static>(
@@ -215,6 +220,9 @@ fn configure_error_report_formatting(logging_config: &config::Logging) {
 
 #[tokio::main]
 async fn main() {
+    #[cfg(feature = "hotpath")]
+    let _profiler = hotpath::HotpathGuardBuilder::new("geoengine-server").build();
+
     initialize_expression_dependencies()
         .await
         .expect("successful compilation process is necessary for expression operators to work");

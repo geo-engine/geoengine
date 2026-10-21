@@ -1,0 +1,8 @@
+# Layer the in-pod sampler runtime onto an already built profiling backend.
+ARG BACKEND_IMAGE
+FROM ${BACKEND_IMAGE}
+USER root
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+USER 1001

@@ -180,6 +180,22 @@ pub fn spawn_ipc_server_process<S, R>(
 
     let mut cmd = Command::new(exe_path);
 
+    // Each process owns a profiler. Keep its live endpoint and report independent.
+    #[cfg(feature = "hotpath")]
+    {
+        cmd.env(
+            "HOTPATH_METRICS_PORT",
+            (6800 + worker_config.logging.worker_id).to_string(),
+        )
+        .env(
+            "HOTPATH_OUTPUT_PATH",
+            format!(
+                "/tmp/geoengine-hotpath-worker-{}.json",
+                worker_config.logging.worker_id
+            ),
+        );
+    }
+
     cmd.arg(token)
         .arg(&config_json)
         .stderr(std::process::Stdio::inherit());
@@ -237,6 +253,7 @@ impl GdalDatasetHolder {
         }
     }
 
+    #[hotpath::measure]
     fn open_ex(
         dataset_params: &GdalDatasetParameters,
     ) -> Result<(GdalDataset, Option<GdalConfigOptions>), GdalError> {
@@ -363,6 +380,7 @@ impl GdalHandling {
     ///
     /// A method to load single tiles from a GDAL dataset.
     ///
+    #[hotpath::measure]
     pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
@@ -404,6 +422,7 @@ impl GdalHandling {
     /// This method reads the data for a single grid with a specified size from the GDAL dataset.
     /// It fails if the tile is not within the dataset.
     #[allow(clippy::float_cmp)]
+    #[hotpath::measure]
     pub fn read_grid_from_raster<T, D>(
         rasterband: &GdalRasterBand,
         read_window: &GdalReadWindow,
@@ -416,7 +435,12 @@ impl GdalHandling {
     {
         let _span = tracing::debug_span!(
             "gdal_rasterband_read",
-            window = %format!("({},{})", read_window.size_x, read_window.size_y),
+            source_x = read_window.start_x,
+            source_y = read_window.start_y,
+            source_width = read_window.size_x,
+            source_height = read_window.size_y,
+            output_width = out_shape.axis_size_x(),
+            output_height = out_shape.axis_size_y(),
         )
         .entered();
         let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());

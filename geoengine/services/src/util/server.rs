@@ -22,8 +22,13 @@ use utoipa::{ToSchema, openapi::OpenApi};
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
 
+struct RequestStart(std::time::Instant);
+
 impl RootSpanBuilder for CustomRootSpanBuilder {
     fn on_request_start(request: &ServiceRequest) -> Span {
+        request
+            .extensions_mut()
+            .insert(RequestStart(std::time::Instant::now()));
         // TODO: rethink this error handling
         let request_id = request
             .extensions()
@@ -31,7 +36,15 @@ impl RootSpanBuilder for CustomRootSpanBuilder {
             .copied()
             .expect("it should not run without the `RequestId` extension");
 
-        let span = tracing::info_span!("Request", request_id = %request_id);
+        let span = tracing::info_span!(
+            "Request", request_id = %request_id,
+            profile_run = request.headers().get("x-geoengine-profile-run")
+                .and_then(|value| value.to_str().ok()).unwrap_or(""),
+            profile_request = request.headers().get("x-geoengine-profile-request")
+                .and_then(|value| value.to_str().ok()).unwrap_or(""),
+            http_status = tracing::field::Empty,
+            http_handler_ms = tracing::field::Empty,
+        );
 
         // Emit HTTP request at the beginng of the span.
         {
@@ -60,7 +73,18 @@ impl RootSpanBuilder for CustomRootSpanBuilder {
         span
     }
 
-    fn on_request_end<B>(_span: Span, _outcome: &Result<ServiceResponse<B>, actix_web::Error>) {}
+    fn on_request_end<B>(span: Span, outcome: &Result<ServiceResponse<B>, actix_web::Error>) {
+        if let Ok(response) = outcome
+            && let Some(start) = response.request().extensions().get::<RequestStart>()
+        {
+            span.record("http_handler_ms", start.0.elapsed().as_secs_f64() * 1000.0);
+        }
+        let status = match outcome {
+            Ok(response) => response.status(),
+            Err(error) => error.as_response_error().status_code(),
+        };
+        span.record("http_status", status.as_u16());
+    }
 }
 
 /// Calculate maximum number of blocking threads **per worker**.

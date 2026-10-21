@@ -218,6 +218,9 @@ where
 }
 
 fn main() {
+    #[cfg(feature = "hotpath")]
+    let _profiler = hotpath::HotpathGuardBuilder::new("gdalsource-process").build();
+
     let (token, worker_config) = setup();
 
     // The OTLP exporter needs a tokio runtime. We keep the worker's main loop synchronous and
@@ -235,14 +238,11 @@ fn main() {
         &token,
     );
 
-    let _worker_span =
-        tracing::info_span!("gdal_worker", worker_id = worker_config.logging.worker_id,).entered();
-
     if let Some(ref opts) = worker_config.gdal_config_options {
         set_gdal_process_global_options(opts);
     }
     reroute_gdal_logging();
-    run(token);
+    run(token, worker_config.logging.worker_id);
 
     drop(runtime_guard);
     if let Some(provider) = provider
@@ -296,7 +296,7 @@ fn raster_type_dispatch(
 }
 
 #[allow(clippy::print_stderr)]
-fn run(token: Token) {
+fn run(token: Token, worker_id: usize) {
     let (sender, receiver) = match setup_client::<IpcChannelMessage, IpcProcessRasterResult>(token)
     {
         Ok(pair) => pair,
@@ -310,7 +310,9 @@ fn run(token: Token) {
         let payload = message.0;
 
         let _span = tracing::debug_span!(
+            parent: None,
             "gdal_worker_read_tile",
+            worker_id,
             read_id = payload.read_id.as_deref().unwrap_or(""),
             dataset = %payload.dataset_params.file_path.display(),
             band = payload.dataset_params.rasterband_channel,

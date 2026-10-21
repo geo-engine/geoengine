@@ -14,11 +14,12 @@ use geoengine_datatypes::{
 use num_traits::AsPrimitive;
 use snafu::Snafu;
 use std::convert::TryInto;
-use tracing::{Level, span};
 
 /// # Panics
 /// Panics if not three bands were queried.
 #[allow(clippy::too_many_arguments)]
+#[hotpath::measure]
+#[tracing::instrument(level = "debug", skip_all, fields(width, height))]
 pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
@@ -38,9 +39,6 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
                 .all(|w| w[0] < w[1]), // TODO: replace with `is_sorted` once it is stable
         "bands must be sorted and at most three bands can be queried"
     );
-
-    let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
-    let _enter = span.enter();
 
     let raster_colorizer = match raster_colorizer {
         Some(colorizer) => colorizer,
@@ -154,6 +152,7 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
 
     let (result, ch) =
         abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+    let _encoding = tracing::debug_span!("png_encode").entered();
     Ok((result.unbounded().to_png(width, height, &colorizer)?, ch))
 }
 
@@ -214,6 +213,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
     let (result, ch) =
         abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+    let _encoding = tracing::debug_span!("png_encode").entered();
     Ok((
         result
             .unbounded()
@@ -266,6 +266,8 @@ pub fn default_colorizer_gradient<T: Pixel>() -> Colorizer {
     .expect("we know the min and max value are valid")
 }
 
+#[hotpath::measure]
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn compute_rgb_tile<P: Pixel>(
     [red, green, blue]: [&RasterTile2D<P>; 3],
     params: &RgbParams,

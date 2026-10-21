@@ -1,0 +1,48 @@
+# Prepare ConfigMap odyssey-profile-tools and Secret odyssey-profile-session first (README).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: odyssey-profile
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: workload
+          image: python:3.13-slim
+          command: ["sh", "-c"]
+          # Keep results accessible via kubectl cp, including after a failed workload.
+          args:
+            - >-
+              python /tools/tiles.py
+              --api-url http://geoengine-edv-staging-backend:8080/api
+              --layer-id "$LAYER_ID" --time "$SCENE_TIME"
+              --center 8.77 50.81 --resolution 38.218514
+              --size 3 --concurrency 6 --repeats 3 --save-png --out /results/run;
+              result=$?;
+              echo "workload_exit=$result";
+              touch /results/done;
+              sleep 3600;
+              exit "$result"
+          env:
+            - name: LAYER_ID
+              value: REPLACE_WITH_IMPORTED_SENTINEL2_EPSG32632_TCI_LAYER_ID
+            - name: SCENE_TIME
+              value: "2026-04-01T00:00:00Z"
+            - name: GEOENGINE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: odyssey-profile-session
+                  key: token
+          resources:
+            requests: { cpu: "100m", memory: "64Mi" }
+            limits: { cpu: "1", memory: "256Mi" }
+          volumeMounts:
+            - { name: tools, mountPath: /tools, readOnly: true }
+            - { name: results, mountPath: /results }
+      volumes:
+        - name: tools
+          configMap: { name: odyssey-profile-tools }
+        - name: results
+          emptyDir: {}

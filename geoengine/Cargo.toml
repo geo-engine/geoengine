@@ -32,6 +32,11 @@ repository = "https://github.com/geo-engine/geoengine"
 [profile.release]
 lto = true
 
+[profile.profiling]
+inherits = "release"
+debug = 1
+strip = false
+
 [profile.ci]
 inherits = "test"
 strip = "debuginfo"
@@ -77,6 +82,7 @@ unwrap_used = { level = "warn", priority = 1 }
 multiple_crate_versions = { level = "allow", priority = 1 }
 
 [workspace.dependencies]
+hotpath = "=0.28.6"
 actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
 actix-http = { version = "3.13", features = ["ws"] }

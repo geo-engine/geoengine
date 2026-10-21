@@ -386,6 +386,10 @@ impl TileQuery {
 		("session_token" = [])
 	)
 )]
+#[hotpath::measure]
+#[tracing::instrument(name = "ogc_tile", level = "debug", skip_all,
+    fields(layer = tracing::field::Empty, tms = tracing::field::Empty,
+        zoom = tracing::field::Empty, row = tracing::field::Empty, col = tracing::field::Empty))]
 pub async fn tile<C: ApplicationContext>(
     req: HttpRequest,
     session: C::Session,
@@ -402,6 +406,12 @@ pub async fn tile<C: ApplicationContext>(
     query: web::Query<TileQueryParams>,
 ) -> OgcApiResult<HttpResponse> {
     let query = TileQuery::from_params(path, query.into_inner())?;
+    let span = tracing::Span::current();
+    span.record("layer", tracing::field::display(&query.layer_id));
+    span.record("tms", tracing::field::display(&query.tile_matrix_set_id));
+    span.record("zoom", query.tile_matrix);
+    span.record("row", query.tile_row);
+    span.record("col", query.tile_col);
 
     let ctx = app_ctx.session_context(session);
     let execution_context = ctx.execution_context()?;

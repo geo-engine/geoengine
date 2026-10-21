@@ -132,6 +132,7 @@ pub fn to_ogc_bbox(spatial_bounds: SpatialPartition2D) -> OgcBbox {
     OgcBbox::Bbox2D([lower_left.x, lower_left.y, upper_right.x, upper_right.y])
 }
 
+#[tracing::instrument(name = "ogc_load_layer", level = "debug", skip_all)]
 pub async fn load_layer<C: ApplicationContext>(
     ctx: &C::SessionContext,
     data_connector_id: DataProviderId,
@@ -175,6 +176,7 @@ pub async fn ensure_layer_exists<C: ApplicationContext>(
     Ok(())
 }
 
+#[tracing::instrument(name = "ogc_initialize", level = "debug", skip_all)]
 pub async fn get_initialized_raster_operator<C: SessionContext>(
     layer: &Layer,
     execution_context: &C::ExecutionContext,
@@ -302,6 +304,7 @@ pub struct OriginAndResolution {
 /// to the required spatial reference.
 ///
 /// Then, reinitialize the raster operator to reflect the updated processing graph.
+#[tracing::instrument(name = "ogc_reproject_initialize", level = "debug", skip_all)]
 pub async fn reproject_if_necessary<C: SessionContext>(
     layer: &mut Layer,
     initialized_operator: &mut Box<dyn InitializedRasterOperator>,

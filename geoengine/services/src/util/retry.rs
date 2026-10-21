@@ -8,7 +8,7 @@
 
 use std::time::Duration;
 
-use tracing::{error, warn};
+use tracing::{Instrument, error, warn};
 
 /// Default number of attempts before giving up.
 pub const DEFAULT_MAX_RETRIES: u32 = 10;
@@ -118,7 +118,19 @@ where
 {
     let mut attempt = 0;
     loop {
-        match operation().await {
+        let attempt_span = tracing::debug_span!(
+            "http_attempt",
+            attempt = attempt + 1,
+            http_status = tracing::field::Empty
+        );
+        let result = operation().instrument(attempt_span.clone()).await;
+        if let Err(error) = &result
+            && let Some(status) = extract_status(error)
+        {
+            attempt_span.record("http_status", status);
+        }
+        drop(attempt_span);
+        match result {
             Ok(result) => return Ok(result),
             Err(err) => {
                 if is_terminal(&err, policy, &extract_status) {
@@ -139,7 +151,12 @@ where
                     "{operation_name} failed (attempt {attempt}/{}): {err}. Retrying in {delay:?}...",
                     policy.max_retries
                 );
-                tokio::time::sleep(delay).await;
+                tokio::time::sleep(delay)
+                    .instrument(tracing::debug_span!(
+                        "http_retry_backoff",
+                        delay_ms = delay.as_millis() as u64
+                    ))
+                    .await;
             }
         }
     }

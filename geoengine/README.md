@@ -39,6 +39,9 @@ root: [openapi.json](../openapi.json).
 
 ## Development Notes
 
+- For Odyssey / EDV Sentinel-2 tile performance analysis, see the
+  [profiling plan and Kubernetes runbook](profiling/odyssey/README.md).
+
 - Use `RUST_LOG` to control runtime logging verbosity (e.g. `RUST_LOG=debug`).
 - Many common development tasks are exposed via the top-level `justfile`.
 

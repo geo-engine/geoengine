@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
+use tracing::Instrument;
 
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
@@ -106,6 +107,7 @@ struct WorkerJob {
     request: IpcChannelMessage,
     respond_to: oneshot::Sender<ReadResult>,
     dataset_hash: u64,
+    parent_span: tracing::Span,
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +208,8 @@ struct QueuedRequest {
     dataset_hash: u64,
     request: IpcChannelMessage,
     respond_to: oneshot::Sender<ReadResult>,
+    queued_at: Instant,
+    parent_span: tracing::Span,
 }
 
 /// Result of a read operation, carrying the IPC payload and the companion
@@ -424,6 +428,7 @@ impl GdalProcessPool {
             let dataset_hash = job.dataset_hash;
 
             let _span = tracing::info_span!(
+                parent: &job.parent_span,
                 "gdal_worker_companion",
                 worker_id = worker_id,
                 read_id = job.request.0.read_id.as_deref().unwrap_or(""),
@@ -776,10 +781,16 @@ impl BrokerState {
 
             {
                 let _span = tracing::debug_span!(
+                    parent: &req.parent_span,
                     "gdal_broker_dispatch",
                     worker_id = worker_id,
                     dataset = %req.request.0.dataset_params.file_path.display(),
                     read_id = req.request.0.read_id.as_deref().unwrap_or(""),
+                    queue_ms = req.queued_at.elapsed().as_secs_f64() * 1000.0,
+                    active_global = self.global_active_count,
+                    active_dataset = slot.active_count,
+                    pending_dataset = slot.queue.len(),
+                    affinity_score = best_score,
                 )
                 .entered();
 
@@ -787,6 +798,7 @@ impl BrokerState {
                     request: req.request,
                     respond_to: req.respond_to,
                     dataset_hash: req.dataset_hash,
+                    parent_span: req.parent_span,
                 });
             }
 
@@ -856,6 +868,9 @@ impl GdalPoolDispatcher {
         self.read_data_dedup(request).await
     }
 
+    #[tracing::instrument(name = "gdal_read_dispatch", level = "debug", skip_all,
+        fields(tile_key = tracing::field::Empty, shared = tracing::field::Empty))]
+    #[allow(clippy::too_many_lines)]
     async fn read_data_dedup<P: Pixel>(
         &self,
         request: IpcChannelMessage,
@@ -863,6 +878,7 @@ impl GdalPoolDispatcher {
         let mut s = rustc_hash::FxHasher::default();
         request.full_hash(&mut s);
         let tile_key = s.finish();
+        tracing::Span::current().record("tile_key", tile_key);
 
         let mut rx = {
             let mut lock = self
@@ -873,9 +889,11 @@ impl GdalPoolDispatcher {
 
             // test if data is already read
             if let Some(rx) = lock.get(&tile_key) {
+                tracing::Span::current().record("shared", true);
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
                 rx.clone()
             } else {
+                tracing::Span::current().record("shared", false);
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
                 let (tx, rx) = tokio::sync::watch::channel(None);
                 lock.insert(tile_key, rx.clone());
@@ -885,53 +903,59 @@ impl GdalPoolDispatcher {
                 let parent_span = tracing::Span::current();
 
                 // DETACHED LEADER: Guaranteed to run to completion even if the parent stream is suspended or dropped!
-                tokio::spawn(async move {
-                    let _cleanup_guard = LeaderCleanupGuard {
-                        pool: pool_clone.clone(),
-                        tile_key,
-                    };
+                tokio::spawn(
+                    async move {
+                        let _cleanup_guard = LeaderCleanupGuard {
+                            pool: pool_clone.clone(),
+                            tile_key,
+                        };
 
-                    let mut s_routing = rustc_hash::FxHasher::default();
-                    request_clone.0.dataset_params.partial_hash(&mut s_routing);
-                    let routing_hash = s_routing.finish();
+                        let mut s_routing = rustc_hash::FxHasher::default();
+                        request_clone.0.dataset_params.partial_hash(&mut s_routing);
+                        let routing_hash = s_routing.finish();
 
-                    let (oneshot_tx, oneshot_rx) = tokio::sync::oneshot::channel();
+                        let (oneshot_tx, oneshot_rx) = tokio::sync::oneshot::channel();
 
-                    let dispatched = pool_clone
-                        .broker_tx
-                        .send(BrokerCommand::Read(Box::new(QueuedRequest {
-                            dataset_hash: routing_hash,
-                            request: request_clone,
-                            respond_to: oneshot_tx,
-                        })))
-                        .await;
+                        let dispatched = pool_clone
+                            .broker_tx
+                            .send(BrokerCommand::Read(Box::new(QueuedRequest {
+                                dataset_hash: routing_hash,
+                                request: request_clone,
+                                respond_to: oneshot_tx,
+                                queued_at: Instant::now(),
+                                parent_span: tracing::Span::current(),
+                            })))
+                            .instrument(tracing::debug_span!("gdal_broker_send"))
+                            .await;
 
-                    let (leader_res, companion_span) = if dispatched.is_ok() {
-                        match oneshot_rx.await {
-                            Ok(read_result) => {
-                                let result = read_result
-                                    .result
-                                    .map_err(|_| GdalProcessPoolError::WorkerPanic)
-                                    .and_then(|ipc_res| {
-                                        ipc_res.map_err(GdalProcessPoolError::from)
-                                    });
-                                (result, read_result.companion_span)
+                        let (leader_res, companion_span) = if dispatched.is_ok() {
+                            match oneshot_rx.await {
+                                Ok(read_result) => {
+                                    let result = read_result
+                                        .result
+                                        .map_err(|_| GdalProcessPoolError::WorkerPanic)
+                                        .and_then(|ipc_res| {
+                                            ipc_res.map_err(GdalProcessPoolError::from)
+                                        });
+                                    (result, read_result.companion_span)
+                                }
+                                Err(_) => (Err(GdalProcessPoolError::WorkerPanic), None),
                             }
-                            Err(_) => (Err(GdalProcessPoolError::WorkerPanic), None),
+                        } else {
+                            (Err(GdalProcessPoolError::WorkerPanic), None)
+                        };
+
+                        // link companion's span to the caller's trace.
+                        // The Span handle keeps the companion span alive in the subscriber.
+                        if let Some(ref span) = companion_span {
+                            span.follows_from(parent_span.id());
                         }
-                    } else {
-                        (Err(GdalProcessPoolError::WorkerPanic), None)
-                    };
 
-                    // link companion's span to the caller's trace.
-                    // The Span handle keeps the companion span alive in the subscriber.
-                    if let Some(ref span) = companion_span {
-                        span.follows_from(parent_span.id());
+                        // Broadcast to all waiting tasks. (Arc preserves perfect memory alignment)
+                        let _ = tx.send(Some(std::sync::Arc::new((leader_res, companion_span))));
                     }
-
-                    // Broadcast to all waiting tasks. (Arc preserves perfect memory alignment)
-                    let _ = tx.send(Some(std::sync::Arc::new((leader_res, companion_span))));
-                });
+                    .in_current_span(),
+                );
 
                 rx
             }
@@ -1166,6 +1190,8 @@ mod tests {
             dataset_hash,
             request: msg,
             respond_to: tx,
+            queued_at: Instant::now(),
+            parent_span: tracing::Span::none(),
         });
         (req, rx)
     }

@@ -216,6 +216,8 @@ where
     type Selection = U;
     type ResultDescription = R;
 
+    #[tracing::instrument(name = "operator_cache_query", level = "debug", skip_all,
+        fields(operator = %self.cache_key, outcome = tracing::field::Empty))]
     async fn _query<'a>(
         &'a self,
         query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
@@ -228,6 +230,7 @@ where
         let cache_result = shared_cache.query_cache(&self.cache_key, &query).await;
 
         if let Ok(Some(cache_result)) = cache_result {
+            tracing::Span::current().record("outcome", "hit");
             // cache hit
             tracing::debug!("cache hit for operator {}", self.cache_key);
 
@@ -238,6 +241,14 @@ where
         }
 
         // cache miss
+        tracing::Span::current().record(
+            "outcome",
+            if cache_result.is_err() {
+                "error"
+            } else {
+                "miss"
+            },
+        );
         tracing::debug!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query.clone(), ctx).await?;
 

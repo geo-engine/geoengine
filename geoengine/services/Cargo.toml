@@ -28,6 +28,7 @@ path = "src/bin/geoengine-cli.rs"
 bench = false
 
 [dependencies]
+hotpath = { workspace = true }
 actix = { workspace = true }
 actix-files = { workspace = true }
 actix-http = { workspace = true }
@@ -132,3 +133,6 @@ vergen-gitcl = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true
+
+[features]
+hotpath = ["hotpath/hotpath", "geoengine-operators/hotpath"]

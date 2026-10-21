@@ -2,7 +2,7 @@ use futures::{Future, FutureExt, future::BoxFuture};
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tracing::debug;
+use tracing::{Instrument, debug};
 use tracing::{Level, span};
 
 use crate::{engine::QueryAbortTrigger, error, util::Result};
@@ -15,10 +15,11 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    let current_span = span!(Level::TRACE, "spawn_blocking");
+    let current_span = span!(Level::DEBUG, "spawn_blocking").or_current();
 
     tokio::task::spawn_blocking(move || {
         let _entered_span = current_span.enter();
+        let _work = tracing::debug_span!("blocking_work").entered();
 
         f()
     })
@@ -33,11 +34,14 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    let current_span = span!(Level::TRACE, "spawn_blocking_with_thread_pool");
+    let current_span = span!(Level::DEBUG, "spawn_blocking_with_thread_pool").or_current();
 
     tokio::task::spawn_blocking(move || {
+        let _entered_span = current_span.enter();
+        let work_parent = current_span.clone();
         thread_pool.install(move || {
-            let _entered_span = current_span.enter();
+            let _entered_span = work_parent.enter();
+            let _work = tracing::debug_span!("blocking_work").entered();
 
             f()
         })
@@ -52,14 +56,7 @@ where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
 {
-    let current_span = span!(Level::TRACE, "spawn");
-
-    tokio::task::spawn(async move {
-        // TODO: check if we need to move a span into here
-        let _entered_span = current_span.enter();
-
-        future.await
-    })
+    tokio::spawn(future.instrument(tracing::Span::current()))
 }
 
 /// execute a future that consumes a query and abort it using the trigger if the abort future completes
