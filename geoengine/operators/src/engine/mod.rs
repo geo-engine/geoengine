@@ -23,8 +23,8 @@ pub use operator_impl::{
     SingleVectorSource, SourceOperator,
 };
 pub use query::{
-    ChunkByteSize, MockQueryContext, QueryAbortRegistration, QueryAbortTrigger, QueryContext,
-    TilePermit, TileScheduler,
+    ChunkByteSize, MockQueryContext, OptionalSubQueryPermit, QueryAbortRegistration,
+    QueryAbortTrigger, QueryContext, SubQueryLimiter,
 };
 pub use query_processor::{
     BoxRasterQueryProcessor, PlotQueryProcessor, QueryProcessor, QueryProcessorExt,

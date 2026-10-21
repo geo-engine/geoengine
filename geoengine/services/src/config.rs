@@ -190,8 +190,8 @@ impl ConfigElement for TilingSpecification {
 #[derive(Debug, Deserialize)]
 pub struct QueryContext {
     pub chunk_byte_size: usize,
-    pub tile_parallelism: usize,
-    pub global_extra_tile_permits: usize,
+    pub max_parallel_subqueries_per_query: usize,
+    pub max_optional_subqueries: usize,
 }
 
 impl ConfigElement for QueryContext {

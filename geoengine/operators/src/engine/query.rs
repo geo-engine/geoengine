@@ -26,61 +26,67 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
 
-/// Budget for running sub-queries concurrently.
+/// Limits how many sub-queries run concurrently.
 ///
-/// All sub-query adapters of one query share the per-query permits, so nested adapters
-/// add up instead of multiplying their fanout. Each extra sub-query also needs a permit
-/// from a pool shared by all queries of the server: an idle server gives a single query
-/// its full parallelism, a busy one runs every query sequentially, because parallelism
-/// within a query adds no throughput once the GDAL pool and thread pool are saturated.
+/// Running sub-queries of a query = 1 per active adapter + optional ones. An optional one
+/// needs a free per-query permit AND a free server permit, and never waits for either.
 ///
-/// Every adapter may always run one sub-query without a permit, which guarantees
-/// progress and avoids deadlocks.
-pub struct TileScheduler {
-    query: Arc<Semaphore>,
-    global: Arc<Semaphore>,
+/// - The per-query permits are shared by all adapters of one query, so nested adapters add
+///   up instead of multiplying their fanout.
+/// - The server permits are shared by all queries, so an idle server gives a single query
+///   its full parallelism and a busy one runs queries sequentially: parallelism within a
+///   query adds no throughput once the GDAL pool and the thread pool are saturated.
+/// - The guaranteed sub-query per adapter needs no permit, which guarantees progress and
+///   avoids deadlocks.
+pub struct SubQueryLimiter {
+    per_query: Arc<Semaphore>,
+    server: Arc<Semaphore>,
 }
 
-/// Held by an extra sub-query until its tile is yielded.
-pub struct TilePermit {
-    _query: OwnedSemaphorePermit,
-    _global: OwnedSemaphorePermit,
+/// Held by an optional sub-query until its tile is yielded.
+pub struct OptionalSubQueryPermit {
+    _per_query: OwnedSemaphorePermit,
+    _server: OwnedSemaphorePermit,
 }
 
-impl TileScheduler {
-    pub const DEFAULT_PARALLELISM: usize = 4;
+impl SubQueryLimiter {
+    pub const DEFAULT_MAX_PARALLEL_SUBQUERIES_PER_QUERY: usize = 4;
 
-    /// At most `parallelism` leaf sub-queries of this query run at once, however deep
-    /// adapters nest. Extra sub-queries also draw from `global`.
-    pub fn new(parallelism: usize, global: Arc<Semaphore>) -> Self {
+    /// At most `max_parallel_subqueries_per_query` leaf sub-queries of this query run at
+    /// once, however deep adapters nest, and fewer when `server` has no permits left.
+    pub fn new(max_parallel_subqueries_per_query: usize, server: Arc<Semaphore>) -> Self {
         Self {
-            query: Arc::new(Semaphore::new(parallelism.saturating_sub(1))),
-            global,
+            per_query: Arc::new(Semaphore::new(
+                max_parallel_subqueries_per_query.saturating_sub(1),
+            )),
+            server,
         }
     }
 
-    /// Like [`Self::new`], with a global pool no other query uses.
-    pub fn fixed(parallelism: usize) -> Self {
+    /// Like [`Self::new`], with server permits no other query uses.
+    pub fn fixed(max_parallel_subqueries_per_query: usize) -> Self {
         Self::new(
-            parallelism,
-            Arc::new(Semaphore::new(parallelism.saturating_sub(1))),
+            max_parallel_subqueries_per_query,
+            Arc::new(Semaphore::new(
+                max_parallel_subqueries_per_query.saturating_sub(1),
+            )),
         )
     }
 
     /// Never waits: waiting on a permit deadlocks when outer sub-queries hold all of them.
-    pub fn try_acquire(&self) -> Option<TilePermit> {
-        let query = self.query.clone().try_acquire_owned().ok()?;
-        let global = self.global.clone().try_acquire_owned().ok()?;
-        Some(TilePermit {
-            _query: query,
-            _global: global,
+    pub fn try_acquire(&self) -> Option<OptionalSubQueryPermit> {
+        let per_query = self.per_query.clone().try_acquire_owned().ok()?;
+        let server = self.server.clone().try_acquire_owned().ok()?;
+        Some(OptionalSubQueryPermit {
+            _per_query: per_query,
+            _server: server,
         })
     }
 }
 
-impl Default for TileScheduler {
+impl Default for SubQueryLimiter {
     fn default() -> Self {
-        Self::fixed(Self::DEFAULT_PARALLELISM)
+        Self::fixed(Self::DEFAULT_MAX_PARALLEL_SUBQUERIES_PER_QUERY)
     }
 }
 
@@ -120,7 +126,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
-    fn tile_scheduler(&self) -> &TileScheduler;
+    fn subquery_limiter(&self) -> &SubQueryLimiter;
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 
@@ -249,7 +255,7 @@ pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
-    pub tile_scheduler: TileScheduler,
+    pub subquery_limiter: SubQueryLimiter,
 
     pub cache: Option<Arc<SharedCache>>,
     pub quota_tracking: Option<QuotaTracking>,
@@ -275,7 +281,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
-            tile_scheduler: TileScheduler::default(),
+            subquery_limiter: SubQueryLimiter::default(),
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -303,7 +309,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
-            tile_scheduler: TileScheduler::default(),
+            subquery_limiter: SubQueryLimiter::default(),
             cache,
             quota_checker,
             quota_tracking,
@@ -329,7 +335,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
-            tile_scheduler: TileScheduler::default(),
+            subquery_limiter: SubQueryLimiter::default(),
             gdal_process_pool,
             cache: None,
             quota_checker: None,
@@ -356,8 +362,8 @@ impl QueryContext for MockQueryContext {
         self.default_cache_ttl
     }
 
-    fn tile_scheduler(&self) -> &TileScheduler {
-        &self.tile_scheduler
+    fn subquery_limiter(&self) -> &SubQueryLimiter {
+        &self.subquery_limiter
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
@@ -463,35 +469,35 @@ mod tests {
 
     #[test]
     fn it_hands_out_parallelism_minus_one_permits() {
-        let scheduler = TileScheduler::fixed(3);
-        let permits = [scheduler.try_acquire(), scheduler.try_acquire()];
+        let limiter = SubQueryLimiter::fixed(3);
+        let permits = [limiter.try_acquire(), limiter.try_acquire()];
         assert!(permits.iter().all(Option::is_some));
-        assert!(scheduler.try_acquire().is_none());
+        assert!(limiter.try_acquire().is_none());
         drop(permits);
-        assert!(scheduler.try_acquire().is_some());
+        assert!(limiter.try_acquire().is_some());
 
-        assert!(TileScheduler::fixed(0).try_acquire().is_none());
-        assert!(TileScheduler::fixed(1).try_acquire().is_none());
+        assert!(SubQueryLimiter::fixed(0).try_acquire().is_none());
+        assert!(SubQueryLimiter::fixed(1).try_acquire().is_none());
     }
 
     #[test]
-    fn it_shares_the_global_pool_between_queries() {
-        let global = Arc::new(Semaphore::new(2));
-        let busy = TileScheduler::new(4, global.clone());
-        let other = TileScheduler::new(4, global.clone());
+    fn it_shares_the_server_permits_between_queries() {
+        let server = Arc::new(Semaphore::new(2));
+        let busy = SubQueryLimiter::new(4, server.clone());
+        let other = SubQueryLimiter::new(4, server.clone());
 
         let held = [busy.try_acquire(), busy.try_acquire()];
         assert!(held.iter().all(Option::is_some));
-        assert!(other.try_acquire().is_none(), "global pool is exhausted");
+        assert!(other.try_acquire().is_none(), "server permits are used up");
 
         drop(held);
         assert!(other.try_acquire().is_some());
     }
 
     #[test]
-    fn it_returns_the_query_permit_when_the_global_pool_is_empty() {
-        let scheduler = TileScheduler::new(2, Arc::new(Semaphore::new(0)));
-        assert!(scheduler.try_acquire().is_none());
-        assert_eq!(scheduler.query.available_permits(), 1);
+    fn it_returns_the_per_query_permit_when_the_server_has_none() {
+        let limiter = SubQueryLimiter::new(2, Arc::new(Semaphore::new(0)));
+        assert!(limiter.try_acquire().is_none());
+        assert_eq!(limiter.per_query.available_permits(), 1);
     }
 }

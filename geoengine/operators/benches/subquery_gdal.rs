@@ -8,7 +8,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::SingleRasterOrVectorSource;
-use geoengine_operators::engine::TileScheduler;
+use geoengine_operators::engine::SubQueryLimiter;
 use geoengine_operators::{
     engine::{
         BoxRasterQueryProcessor, MockExecutionContext, QueryContext, RasterOperator,
@@ -104,7 +104,7 @@ fn subquery_gdal_benchmark(c: &mut Criterion) {
     for (chained, name) in [(false, "subquery_gdal"), (true, "subquery_gdal_chained")] {
         for factor in [1, 2, 4, 8] {
             let (processor, mut query_context, query) = setup(&runtime, chained);
-            query_context.tile_scheduler = TileScheduler::fixed(factor);
+            query_context.subquery_limiter = SubQueryLimiter::fixed(factor);
             c.bench_function(&format!("{name}_fanout_{factor}"), |b| {
                 b.to_async(&runtime)
                     .iter(|| run(&processor, &query_context, query.clone()));

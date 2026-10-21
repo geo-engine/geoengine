@@ -34,7 +34,7 @@ use geoengine_operators::{
     engine::{
         ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-        QueryAbortTrigger, QueryContext, RasterResultDescriptor, TileScheduler,
+        QueryAbortTrigger, QueryContext, RasterResultDescriptor, SubQueryLimiter,
         VectorResultDescriptor,
     },
     machine_learning::MlModelLoadingInfo,
@@ -140,7 +140,7 @@ pub struct QueryContextImpl {
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     default_cache_ttl: CacheTtlSeconds,
-    tile_scheduler: TileScheduler,
+    subquery_limiter: SubQueryLimiter,
     cache: Option<Arc<SharedCache>>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     quota_tracking: Option<QuotaTracking>,
@@ -164,7 +164,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
-            tile_scheduler: TileScheduler::default(),
+            subquery_limiter: SubQueryLimiter::default(),
             cache: None,
             new_raster_cache: None,
             quota_tracking: None,
@@ -182,7 +182,7 @@ impl QueryContextImpl {
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
         default_cache_ttl: CacheTtlSeconds,
-        tile_scheduler: TileScheduler,
+        subquery_limiter: SubQueryLimiter,
         cache: Option<Arc<SharedCache>>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
@@ -194,7 +194,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
-            tile_scheduler,
+            subquery_limiter,
             cache,
             new_raster_cache,
             quota_checker,
@@ -220,8 +220,8 @@ impl QueryContext for QueryContextImpl {
         self.default_cache_ttl
     }
 
-    fn tile_scheduler(&self) -> &TileScheduler {
-        &self.tile_scheduler
+    fn subquery_limiter(&self) -> &SubQueryLimiter {
+        &self.subquery_limiter
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {

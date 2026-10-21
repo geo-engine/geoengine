@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, RasterQueryProcessor, TilePermit, TileScheduler};
+use crate::engine::{OptionalSubQueryPermit, QueryContext, RasterQueryProcessor, SubQueryLimiter};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -34,7 +34,7 @@ pub trait FoldTileAccuMut: FoldTileAccu {
 type AdapterMarker<R, S, T> = fn() -> (R, S, T);
 
 /// Generates tiles by running ordered sub-queries, concurrently while the query's
-/// [`TileScheduler`] has permits left.
+/// [`SubQueryLimiter`] has permits left.
 pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
 where
     PixelType: Pixel,
@@ -122,10 +122,10 @@ where
         .boxed();
 
         Self {
-            stream: BudgetedSubQueries {
+            stream: LimitedSubQueries {
                 descriptors,
                 in_flight: FuturesOrdered::new(),
-                scheduler: query_ctx.tile_scheduler(),
+                limiter: query_ctx.subquery_limiter(),
                 done: false,
             }
             .boxed(),
@@ -156,22 +156,23 @@ where
     }
 }
 
-type TileWithPermit<P> = (RasterTile2D<P>, Option<TilePermit>);
+type TileWithPermit<P> = (RasterTile2D<P>, Option<OptionalSubQueryPermit>);
 
 /// Runs sub-queries in order. One always runs without a permit, so every adapter makes
-/// progress; more only run while permits are free, so nested adapters share one budget
-/// and the outermost adapter (which asks first) gets most of the parallelism.
+/// progress; optional ones only run while the [`SubQueryLimiter`] hands out permits, so
+/// nested adapters share one limit and the outermost adapter (which asks first) gets most
+/// of the parallelism.
 ///
 /// A permit is released when its tile is yielded, not when the sub-query finishes, so
-/// finished tiles waiting behind a slow one still count against the budget.
-struct BudgetedSubQueries<'a, P: Pixel> {
+/// finished tiles waiting behind a slow one still count against the limit.
+struct LimitedSubQueries<'a, P: Pixel> {
     descriptors: BoxStream<'a, Result<BoxFuture<'a, Result<RasterTile2D<P>>>>>,
     in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithPermit<P>>>>,
-    scheduler: &'a TileScheduler,
+    limiter: &'a SubQueryLimiter,
     done: bool,
 }
 
-impl<P: Pixel> Stream for BudgetedSubQueries<'_, P> {
+impl<P: Pixel> Stream for LimitedSubQueries<'_, P> {
     type Item = Result<RasterTile2D<P>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -180,7 +181,7 @@ impl<P: Pixel> Stream for BudgetedSubQueries<'_, P> {
         while !this.done {
             let permit = if this.in_flight.is_empty() {
                 None
-            } else if let Some(permit) = this.scheduler.try_acquire() {
+            } else if let Some(permit) = this.limiter.try_acquire() {
                 Some(permit)
             } else {
                 break;
@@ -561,7 +562,7 @@ mod tests {
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let mut query_ctx = exe_ctx.mock_query_context_test_default();
-        query_ctx.tile_scheduler = TileScheduler::fixed(parallelism);
+        query_ctx.subquery_limiter = SubQueryLimiter::fixed(parallelism);
         query_ctx
     }
 
@@ -625,7 +626,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_does_not_deadlock_with_a_small_budget() {
+    async fn it_does_not_deadlock_with_a_low_limit() {
         let result = tokio::time::timeout(Duration::from_secs(10), run_nested(3, 2)).await;
         assert_eq!(result.expect("nested adapters deadlocked").0.len(), 4);
     }
