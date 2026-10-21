@@ -75,7 +75,7 @@ pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
     Reprojection, ReprojectionParams,
 };
-pub use retile::ReTileProcessor;
+pub use retile::{ReTile, ReTileParams, ReTileProcessor};
 pub use temporal_raster_aggregation::{
     Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
 };
