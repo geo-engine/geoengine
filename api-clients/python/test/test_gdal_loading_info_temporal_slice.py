@@ -69,7 +69,8 @@ class TestGdalLoadingInfoTemporalSlice(unittest.TestCase):
                             ''
                             ]
                         ], 
-                    allow_alphaband_as_mask = True, ),
+                    allow_alphaband_as_mask = True, 
+                    tile_size = null, ),
                 cache_ttl = 0
             )
         else:

@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { Coordinate2DFromJSON, Coordinate2DToJSON, } from './Coordinate2D';
 import { RenameBandsFromJSON, RenameBandsToJSON, } from './RenameBands';
 /**
  * Check if a given object implements the RasterStackerParameters interface.
@@ -28,6 +29,7 @@ export function RasterStackerParametersFromJSONTyped(json, ignoreDiscriminator) 
     }
     return {
         'renameBands': RenameBandsFromJSON(json['renameBands']),
+        'outputOrigin': json['outputOrigin'] == null ? undefined : Coordinate2DFromJSON(json['outputOrigin']),
     };
 }
 export function RasterStackerParametersToJSON(json) {
@@ -39,5 +41,6 @@ export function RasterStackerParametersToJSONTyped(value, ignoreDiscriminator = 
     }
     return {
         'renameBands': RenameBandsToJSON(value['renameBands']),
+        'outputOrigin': Coordinate2DToJSON(value['outputOrigin']),
     };
 }

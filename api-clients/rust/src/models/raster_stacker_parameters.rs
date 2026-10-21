@@ -16,6 +16,9 @@ pub struct RasterStackerParameters {
     /// Strategy for deriving output band names.  - `default`: appends ` (n)` with the smallest `n` that avoids a conflict. - `suffix`: appends one suffix per input. - `rename`: explicitly provides names for all resulting bands.
     #[serde(rename = "renameBands")]
     pub rename_bands: Box<models::RenameBands>,
+    /// Override the origin of the stacked output grid. If `None`, the first input's origin is used.
+    #[serde(rename = "outputOrigin", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub output_origin: Option<Option<Box<models::Coordinate2D>>>,
 }
 
 impl RasterStackerParameters {
@@ -23,6 +26,7 @@ impl RasterStackerParameters {
     pub fn new(rename_bands: models::RenameBands) -> RasterStackerParameters {
         RasterStackerParameters {
             rename_bands: Box::new(rename_bands),
+            output_origin: None,
         }
     }
 }
