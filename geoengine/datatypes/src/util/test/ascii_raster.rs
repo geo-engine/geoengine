@@ -413,7 +413,7 @@ fn format_time_instance(millis: i64, time_format: AsciiTimeFormat) -> String {
 }
 
 fn tile_size_of(shape: GridShape2D) -> TileSize {
-    TileSize::from(shape.into_inner())
+    TileSize::try_from(shape).expect("parsed tiles are non-empty")
 }
 
 fn tile_key<T>(tile: &RasterTile2D<T>) -> (TimeInterval, GridIdx2D, u32) {
@@ -920,7 +920,7 @@ mod tests {
         assert_eq!(*tiles[0].grid_array.shape_ref(), [2, 3].into());
         assert_eq!(
             AsciiRasterTiles::new(TWO_BY_TWO_TILES).tiling_specification(),
-            TilingSpecification::new([2, 3].into())
+            TilingSpecification::new(TileSize::new_unchecked(2, 3))
         );
 
         let GridOrEmpty::Grid(upper_left) = &tiles[0].grid_array else {

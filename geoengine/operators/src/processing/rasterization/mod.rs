@@ -668,6 +668,7 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialResolution,
     };
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{GridBoundingBox2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -697,8 +698,9 @@ mod tests {
 
     #[tokio::test]
     async fn fixed_grid_basic() {
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+        );
         let rasterization = Rasterization {
             params: RasterizationParams {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
@@ -760,8 +762,9 @@ mod tests {
 
     #[tokio::test]
     async fn fixed_grid_with_shift() {
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+        );
         let rasterization = Rasterization {
             params: RasterizationParams {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
@@ -823,8 +826,9 @@ mod tests {
 
     #[tokio::test]
     async fn density_basic() {
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+        );
         let rasterization = Rasterization {
             params: RasterizationParams {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
@@ -921,8 +925,9 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn density_radius_overlap() {
-        let execution_context =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+        );
         let rasterization = Rasterization {
             params: RasterizationParams {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),

@@ -155,7 +155,7 @@ mod tests {
         let tile_information = TileInformation {
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(3, 2),
+            tile_size: TileSize::new_unchecked(3, 2),
         };
 
         let raster_tiles: Vec<RasterTile2D<u8>> = vec![
@@ -222,7 +222,7 @@ mod tests {
         let tile_information = TileInformation {
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(3, 2),
+            tile_size: TileSize::new_unchecked(3, 2),
         };
 
         let raster_tiles: Vec<RasterTile2D<u8>> = vec![

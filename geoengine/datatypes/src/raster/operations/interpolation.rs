@@ -182,7 +182,7 @@ mod tests {
             Default::default(),
             TileInformation {
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 3),
+                tile_size: TileSize::new_unchecked(3, 3),
                 global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
@@ -197,7 +197,7 @@ mod tests {
 
         let output_info = TileInformation {
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(3, 3),
+            tile_size: TileSize::new_unchecked(3, 3),
             global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 0.5, -0.5),
         };
 
@@ -267,7 +267,7 @@ mod tests {
             Default::default(),
             TileInformation {
                 tile_position: TileIdx::new_y_x(0, 0),
-                tile_size: TileSize::new_y_x(3, 3),
+                tile_size: TileSize::new_unchecked(3, 3),
                 global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 1.0, -1.0),
             },
             0,
@@ -282,7 +282,7 @@ mod tests {
 
         let output_info = TileInformation {
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(4, 4),
+            tile_size: TileSize::new_unchecked(4, 4),
             global_geo_transform: GeoTransform::new_unchecked((0.0, 2.0).into(), 0.5, -0.5),
         };
 

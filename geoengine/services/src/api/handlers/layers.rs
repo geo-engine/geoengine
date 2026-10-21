@@ -2674,7 +2674,7 @@ mod tests {
             };
 
             let tiling_specification = TilingSpecification {
-                tile_size: TileSize::new_y_x(2, 2),
+                tile_size: TileSize::new_unchecked(2, 2),
             };
 
             let query_rectangle = RasterQueryRectangle::new(

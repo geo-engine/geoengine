@@ -1230,8 +1230,9 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
@@ -1285,7 +1286,7 @@ mod tests {
 
         let tile_size = GridShape2D::new_2d(512, 512);
         exe_ctx.tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
@@ -1435,7 +1436,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn raster_ndvi_3857_to_4326() -> Result<()> {
-        let tile_size = TileSize::new_y_x(200, 200);
+        let tile_size = TileSize::new_unchecked(200, 200);
         let data_geo_transform = GeoTransform::new_unchecked(
             Coordinate2D::new(-20_037_508.342_789_244, 19_971_868.880_408_562),
             14_052.950_258_048_738,
@@ -1564,7 +1565,7 @@ mod tests {
 
     #[tokio::test]
     async fn query_outside_projection_area_of_use_produces_empty_tiles() {
-        let tile_size = TileSize::new_y_x(600, 600);
+        let tile_size = TileSize::new_unchecked(600, 600);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636).into(),

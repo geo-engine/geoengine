@@ -45,7 +45,7 @@ use geoengine_datatypes::{
         BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
         TimeInterval, TimeStep,
     },
-    raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
+    raster::{GridBoundingBox2D, RasterDataType, RenameBands, TileSize, TilingSpecification},
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -283,7 +283,7 @@ impl Env {
         }
         let runtime = runtime.build().unwrap();
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec_and_tokio_handle(
-            TilingSpecification::new([512, 512].into()),
+            TilingSpecification::new(TileSize::default_512()),
             runtime.handle(),
         );
         // one pool for all cases: pools are not shut down, so one per case would pile up workers
