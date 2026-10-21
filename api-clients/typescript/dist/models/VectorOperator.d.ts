@@ -12,7 +12,6 @@ import type { ColumnRangeFilter } from './ColumnRangeFilter';
 import type { LineSimplification } from './LineSimplification';
 import type { MockPointSource } from './MockPointSource';
 import type { OgrSource } from './OgrSource';
-import type { OnnxObjectDetection } from './OnnxObjectDetection';
 import type { PointInPolygonFilter } from './PointInPolygonFilter';
 import type { RasterVectorJoin } from './RasterVectorJoin';
 import type { Reprojection } from './Reprojection';
@@ -35,8 +34,6 @@ export type VectorOperator = {
 } & MockPointSource | {
     type: 'OgrSource';
 } & OgrSource | {
-    type: 'OnnxObjectDetection';
-} & OnnxObjectDetection | {
     type: 'PointInPolygonFilter';
 } & PointInPolygonFilter | {
     type: 'RasterVectorJoin';
