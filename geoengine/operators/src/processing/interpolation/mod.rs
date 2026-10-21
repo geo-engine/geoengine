@@ -23,7 +23,6 @@ use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution, T
 use geoengine_datatypes::raster::{
     Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
     InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
-    TilingSpecification,
 };
 use geoengine_datatypes::util::PositiveFiniteF64;
 use rayon::ThreadPool;
@@ -90,7 +89,6 @@ impl RasterOperator for Interpolation {
             path,
             raster_source,
             &self.params,
-            context.tiling_specification(),
         )
         .map(InitializedRasterOperator::boxed)
     }
@@ -104,7 +102,6 @@ pub struct InitializedInterpolation<O: InitializedRasterOperator> {
     raster_source: O,
     path: WorkflowOperatorPath,
     interpolation_method: InterpolationMethod,
-    tiling_specification: TilingSpecification,
 }
 
 impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
@@ -113,7 +110,6 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         path: WorkflowOperatorPath,
         raster_source: O,
         params: &InterpolationParams,
-        tiling_specification: TilingSpecification,
     ) -> Result<Self> {
         let in_descriptor = raster_source.result_descriptor();
         let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
@@ -177,7 +173,6 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
             output_result_descriptor: out_descriptor,
             raster_source,
             interpolation_method: params.interpolation,
-            tiling_specification,
         };
 
         Ok(initialized_operator)
@@ -193,13 +188,11 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
                 InterpolationMethod::NearestNeighbor => InterploationProcessor::<_,_, NearestNeighbor>::new(
                         p,
                         self.output_result_descriptor.clone(),
-                        self.tiling_specification,
                     ).boxed()
                     .into(),
                 InterpolationMethod::BiLinear =>InterploationProcessor::<_,_, Bilinear>::new(
                         p,
                         self.output_result_descriptor.clone(),
-                        self.tiling_specification,
                     ).boxed()
                     .into(),
             }
@@ -326,7 +319,6 @@ where
 {
     source: Q,
     out_result_descriptor: RasterResultDescriptor,
-    tiling_specification: TilingSpecification,
     interpolation: PhantomData<I>,
 }
 
@@ -336,15 +328,10 @@ where
     P: Pixel,
     I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
-    pub fn new(
-        source: Q,
-        out_result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
-    ) -> Self {
+    pub fn new(source: Q, out_result_descriptor: RasterResultDescriptor) -> Self {
         Self {
             source,
             out_result_descriptor,
-            tiling_specification,
             interpolation: PhantomData,
         }
     }
@@ -391,7 +378,6 @@ where
             input_geo_transform,
             output_geo_transform,
             fold_fn: fold_future,
-            tiling_specification: self.tiling_specification,
             phantom: PhantomData,
             _phantom_pixel_type: PhantomData,
         };
@@ -437,7 +423,6 @@ pub struct InterpolationSubQuery<F, T, I> {
     input_geo_transform: GeoTransform,
     output_geo_transform: GeoTransform, // TODO remove because in adapter?
     fold_fn: F,
-    tiling_specification: TilingSpecification,
     phantom: PhantomData<I>,
     _phantom_pixel_type: PhantomData<T>,
 }
@@ -468,7 +453,6 @@ where
             tile_info,
             &query_rect,
             pool.clone(),
-            self.tiling_specification,
         )
         .boxed()
     }
@@ -598,7 +582,6 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
     tile_info: TileInformation,
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
-    _tiling_specification: TilingSpecification,
 ) -> impl Future<Output = Result<InterpolationAccu<T, I>>> + use<T, I> {
     let query_rect = query_rect.clone();
 

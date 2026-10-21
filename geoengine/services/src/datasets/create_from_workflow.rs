@@ -20,8 +20,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, TimeDescriptor,
-    WorkflowOperatorPath,
+    InitializedRasterOperator, RasterResultDescriptor, TimeDescriptor, WorkflowOperatorPath,
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
@@ -319,14 +318,9 @@ async fn create_dataset<C: SessionContext>(
         .end();
     let result_time_interval = TimeInterval::new(first_start, last_end)?;
 
-    let exe_ctx = ctx.execution_context()?;
-
-    let source_tiling_grid = TilingGrid::from_spatial_grid(
-        origin_result_descriptor
-            .spatial_grid_descriptor()
-            .spatial_grid,
-        exe_ctx.tiling_specification().tile_size,
-    );
+    let source_tiling_grid = origin_result_descriptor
+        .spatial_grid_descriptor()
+        .tiling_grid_definition();
     let query_tiling_grid = TilingGrid {
         pixel_bounds: query_rectangle.spatial_bounds(),
         ..source_tiling_grid

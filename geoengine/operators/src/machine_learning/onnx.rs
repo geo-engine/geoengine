@@ -24,8 +24,8 @@ use geoengine_datatypes::primitives::{
     BandSelection, Measurement, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
-    MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
+    EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridSize, MaskedGrid, Pixel,
+    RasterTile2D, UpdateIndexedElements,
 };
 use geoengine_datatypes::{machine_learning::MlModelName, raster::GridBoundingBox2D};
 use ndarray::{Array2, Array4};
@@ -76,7 +76,8 @@ impl RasterOperator for Onnx {
 
         let model_loading_info = context.ml_model_loading_info(&self.params.model).await?;
 
-        let tiling_shape = context.tiling_specification().tile_size.grid_shape();
+        // the model sees the input's tiles, whose size is source-specific
+        let tiling_shape = in_descriptor.spatial_grid.tile_size.grid_shape();
 
         // check that we can use the model input / output shape with the operator
         check_model_shape(&model_loading_info.metadata, tiling_shape)?;
@@ -114,7 +115,7 @@ impl RasterOperator for Onnx {
             result_descriptor: out_descriptor,
             source,
             model_loading_info,
-            tile_shape: context.tiling_specification().grid_shape(),
+            tile_shape: tiling_shape,
         }))
     }
 

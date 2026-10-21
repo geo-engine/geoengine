@@ -33,7 +33,7 @@ use geoengine_datatypes::{
         BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, VectorQueryRectangle,
     },
-    raster::{GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
+    raster::{GridBoundingBox2D, Pixel, RasterTile2D},
     spatial_reference::{CoordinateProjection, DefaultCoordinateProjector, SpatialReference},
     util::arrow::ArrowTyped,
 };
@@ -141,7 +141,6 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         path: WorkflowOperatorPath,
         params: ReprojectionParams,
         source_raster_operator: O,
-        _tiling_spec: TilingSpecification,
     ) -> Result<Self> {
         let in_desc: RasterResultDescriptor = source_raster_operator.result_descriptor().clone();
         let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
@@ -467,7 +466,6 @@ impl RasterOperator for Reprojection {
             path,
             self.params,
             initialized_source.raster,
-            context.tiling_specification(),
         )?;
 
         Ok(initialized_operator.boxed())
@@ -863,6 +861,7 @@ mod tests {
         CacheHint, DateTimeParseFormat, SpatialResolution, TimeGranularity, TimeInstance,
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::raster::{
         GeoTransform, GridBoundingBox2D, GridSize, SpatialGridDefinition, TileIdx, TileSize,
         TilesEqualIgnoringCacheHint,

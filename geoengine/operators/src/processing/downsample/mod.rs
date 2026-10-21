@@ -18,8 +18,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
-    GridOrEmpty, Pixel, RasterTile2D, TileInformation, TilingSpecification,
-    UpdateIndexedElementsParallel,
+    GridOrEmpty, Pixel, RasterTile2D, TileInformation, UpdateIndexedElementsParallel,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -92,7 +91,6 @@ impl RasterOperator for Downsampling {
             path,
             initialized_source.raster,
             self.params,
-            context.tiling_specification(),
         )
         .map(InitializedRasterOperator::boxed)
     }
@@ -106,7 +104,6 @@ pub struct InitializedDownsampling<O: InitializedRasterOperator> {
     output_result_descriptor: RasterResultDescriptor,
     raster_source: O,
     sampling_method: DownsamplingMethod,
-    tiling_specification: TilingSpecification,
 }
 
 impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
@@ -115,7 +112,6 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
         path: WorkflowOperatorPath,
         raster_source: O,
         params: DownsamplingParams,
-        tiling_specification: TilingSpecification,
     ) -> Result<Self> {
         let in_descriptor = raster_source.result_descriptor();
 
@@ -180,7 +176,6 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
             output_result_descriptor: out_descriptor,
             raster_source,
             sampling_method: params.sampling_method,
-            tiling_specification,
         })
     }
 }
@@ -194,7 +189,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
                 DownsamplingMethod::NearestNeighbor => DownsampleProcessor::<_,_>::new(
                         p,
                         self.output_result_descriptor.clone(),
-                        self.tiling_specification,
                     ).boxed()
                     .into(),
             }
@@ -297,7 +291,6 @@ where
 {
     source: Q,
     out_result_descriptor: RasterResultDescriptor,
-    tiling_specification: TilingSpecification,
 }
 
 impl<Q, P> DownsampleProcessor<Q, P>
@@ -305,15 +298,10 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Copy,
 {
-    pub fn new(
-        source: Q,
-        out_result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
-    ) -> Self {
+    pub fn new(source: Q, out_result_descriptor: RasterResultDescriptor) -> Self {
         Self {
             source,
             out_result_descriptor,
-            tiling_specification,
         }
     }
 }
@@ -370,7 +358,6 @@ where
             input_geo_transform: in_spatial_grid.tiling_grid_definition().geo_transform,
             output_geo_transform: tiling_grid_definition.geo_transform,
             fold_fn: fold_future,
-            tiling_specification: self.tiling_specification,
             _phantom_pixel_type: PhantomData,
         };
 
@@ -396,7 +383,6 @@ pub struct DownsampleSubQuery<F, T> {
     input_geo_transform: GeoTransform,
     output_geo_transform: GeoTransform,
     fold_fn: F,
-    tiling_specification: TilingSpecification,
     _phantom_pixel_type: PhantomData<T>,
 }
 
@@ -425,7 +411,6 @@ where
             tile_info,
             &query_rect,
             pool.clone(),
-            self.tiling_specification,
         )
         .boxed()
     }
@@ -528,7 +513,6 @@ pub fn create_accu<T: Pixel>(
     tile_info: TileInformation,
     _query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
-    _tiling_specification: TilingSpecification,
 ) -> impl Future<Output = Result<DownsampleAccu<T>>> + use<T> {
     crate::util::spawn_blocking(move || {
         DownsampleAccu::new(
@@ -608,6 +592,7 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::primitives::TimeStep;
     use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::raster::{Grid, RasterDataType, TileIdx};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
