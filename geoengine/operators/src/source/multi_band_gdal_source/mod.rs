@@ -312,7 +312,7 @@ impl RasterOperator for MultiBandGdalSource {
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
         let tile_size = meta_data
-            .tile_size()
+            .tile_size()?
             .unwrap_or_else(|| context.tiling_specification().tile_size);
         let op_name = CanonicOperatorName::from(&self);
         let op = if self.params.overview_level.is_none() {

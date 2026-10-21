@@ -71,8 +71,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         Ok(self.result_descriptor.clone())
     }
 
-    fn tile_size(&self) -> Option<TileSize> {
-        self.params.tile_size
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        Ok(self.params.tile_size)
     }
 
     fn box_clone(
@@ -160,8 +160,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         Ok(self.result_descriptor.clone())
     }
 
-    fn tile_size(&self) -> Option<TileSize> {
-        self.params.tile_size
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        Ok(self.params.tile_size)
     }
 
     fn box_clone(
@@ -241,8 +241,8 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         Ok(self.result_descriptor.clone())
     }
 
-    fn tile_size(&self) -> Option<TileSize> {
-        self.params.tile_size
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        Ok(self.params.tile_size)
     }
 
     fn box_clone(
@@ -331,10 +331,16 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         Ok(self.result_descriptor.clone())
     }
 
-    fn tile_size(&self) -> Option<TileSize> {
-        self.params
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        let mut overrides = self
+            .params
             .iter()
-            .find_map(|part| part.params.as_ref().and_then(|params| params.tile_size))
+            .filter_map(|part| part.params.as_ref().map(|params| params.tile_size));
+        let first = overrides.next().flatten();
+        if let Some(other) = overrides.find(|other| *other != first) {
+            return Err(Error::InconsistentTileSizeOverride { first, other });
+        }
+        Ok(first)
     }
 
     fn box_clone(
@@ -1000,6 +1006,30 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn meta_data_list_rejects_inconsistent_tile_size_overrides() {
+        let regular = create_regular_metadata();
+        let part = |tile_size| GdalLoadingInfoTemporalSlice {
+            time: TimeInterval::default(),
+            params: Some(GdalDatasetParameters {
+                tile_size,
+                ..regular.params.clone()
+            }),
+            cache_ttl: None,
+        };
+        let list = |params| GdalMetaDataList {
+            result_descriptor: regular.result_descriptor.clone(),
+            params,
+        };
+        let size = Some(TileSize::new_unchecked(256, 256));
+
+        assert_eq!(
+            list(vec![part(size), part(size)]).tile_size().unwrap(),
+            size
+        );
+        assert!(list(vec![part(size), part(None)]).tile_size().is_err());
     }
 
     #[allow(clippy::too_many_lines)]
