@@ -474,6 +474,28 @@ class OperatorsTests(unittest.TestCase):
             {"type": "MultiBandGdalSource", "params": {"data": "multi_tile"}},
         )
 
+    def test_retile(self):
+        source_operator = wb.operators.GdalSource("ndvi")
+
+        processing_graph = wb.operators.ReTile(
+            source_operator=source_operator,
+            tile_size=(640, 640),
+            output_origin=(100.0, -200.0),
+        )
+
+        self.assertEqual(
+            processing_graph.to_dict(),
+            {
+                "type": "ReTile",
+                "params": {"tileSize": [640, 640], "origin": {"x": 100.0, "y": -200.0}},
+                "sources": {"raster": {"type": "GdalSource", "params": {"data": "ndvi"}}},
+            },
+        )
+
+        self.assertEqual(
+            wb.operators.ReTile.from_operator_dict(processing_graph.to_dict()).to_dict(), processing_graph.to_dict()
+        )
+
     def test_band_filter_by_names(self):
         source_operator = wb.operators.MultiBandGdalSource("multi_tile")
 

@@ -15,6 +15,7 @@ use crate::api::model::{
         },
     },
 };
+use geoengine_datatypes::raster::TileSize;
 use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::{
@@ -60,9 +61,9 @@ use geoengine_operators::{
         RasterVectorJoin as OperatorsRasterVectorJoin,
         RasterVectorJoinParams as OperatorsRasterVectorJoinParameters,
         Rasterization as OperatorsRasterization,
-        RasterizationParams as OperatorsRasterizationParameters,
-        Reflectance as OperatorsReflectance, ReflectanceParams as OperatorsReflectanceParameters,
-        Reprojection as OperatorsReprojection,
+        RasterizationParams as OperatorsRasterizationParameters, ReTile as OperatorsReTile,
+        ReTileParams as OperatorsReTileParameters, Reflectance as OperatorsReflectance,
+        ReflectanceParams as OperatorsReflectanceParameters, Reprojection as OperatorsReprojection,
         ReprojectionParams as OperatorsReprojectionParameters, ScalingMode as OperatorsScalingMode,
         SlopeOffsetSelection as OperatorsSlopeOffsetSelection, Temperature as OperatorsTemperature,
         TemperatureParams as OperatorsTemperatureParameters,
@@ -658,6 +659,68 @@ impl TryFrom<TemporalRasterAggregation> for OperatorsTemporalRasterAggregation {
                 window: value.params.window.into(),
                 window_reference: value.params.window_reference.map(Into::into),
                 output_type: value.params.output_type.map(Into::into),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
+/// The `ReTile` operator re-tiles raster data onto a different tile grid without resampling.
+///
+/// Each output pixel maps to exactly one input pixel (identity). The output origin and tile
+/// size can be overridden via the parameters; by default the source's own geo-transform origin
+/// and the tiling specification's tile size are used.
+///
+/// ## Inputs
+///
+/// The `ReTile` operator expects exactly one _raster_ input.
+#[api_operator(
+    title = "ReTile",
+    examples(json!({
+        "type": "ReTile",
+        "params": {
+            "tileSize": [512, 512],
+            "origin": { "x": 2.0, "y": -2.0 }
+        },
+        "sources": {
+            "raster": {
+                "type": "GdalSource",
+                "params": { "data": "example" }
+            }
+        }
+    }))
+)]
+pub struct ReTile {
+    pub params: ReTileParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+/// Parameters for the `ReTile` operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReTileParameters {
+    /// Override the output tile size in pixels `[rows, columns]`.
+    /// If `None`, the tiling specification's tile size is used.
+    #[schema(examples(json!([512, 512])))]
+    pub tile_size: Option<[usize; 2]>,
+    /// Override the output tiling origin.
+    /// If `None`, the source's own geo-transform origin is used.
+    #[schema(examples(json!({ "x": 2.0, "y": -2.0 })))]
+    pub origin: Option<crate::api::model::datatypes::Coordinate2D>,
+}
+
+impl TryFrom<ReTile> for OperatorsReTile {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ReTile) -> Result<Self, Self::Error> {
+        Ok(OperatorsReTile {
+            params: OperatorsReTileParameters {
+                tile_size: value
+                    .params
+                    .tile_size
+                    .map(|[y, x]| TileSize::new(y, x))
+                    .transpose()?,
+                origin: value.params.origin.map(Into::into),
             },
             sources: (*value.sources).try_into()?,
         })
@@ -2967,6 +3030,34 @@ mod tests {
         );
         assert!(ops.params.output_band.is_none());
         assert!(ops.params.map_no_data);
+    }
+
+    #[test]
+    fn it_converts_retile_parameters() {
+        let api = ReTile {
+            r#type: Default::default(),
+            params: ReTileParameters {
+                tile_size: Some([4, 8]),
+                origin: Some(Coordinate2D { x: 2.0, y: -2.0 }),
+            },
+            sources: Box::new(SingleRasterSource {
+                raster: RasterOperator::GdalSource(GdalSource {
+                    r#type: Default::default(),
+                    params: GdalSourceParameters {
+                        data: NamedData::with_system_name("example_data"),
+                        overview_level: None,
+                    },
+                }),
+            }),
+        };
+
+        let operators = OperatorsReTile::try_from(api).expect("conversion failed");
+
+        assert_eq!(
+            operators.params.tile_size,
+            Some(TileSize::new_unchecked(4, 8))
+        );
+        assert_eq!(operators.params.origin, Some((2.0, -2.0).into()));
     }
 
     #[test]

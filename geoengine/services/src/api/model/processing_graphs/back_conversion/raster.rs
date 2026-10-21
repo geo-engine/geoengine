@@ -8,8 +8,9 @@ use crate::api::model::processing_graphs::{
     NeighborhoodKernel, Onnx, OnnxParameters, Radiance, RadianceParameters, RasterOperator,
     RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
     RasterTypeConversion, RasterTypeConversionParameters, Rasterization, RasterizationParameters,
-    Reflectance, ReflectanceParameters, RenameBands, Temperature, TemperatureParameters,
-    TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
+    ReTile, ReTileParameters, Reflectance, ReflectanceParameters, RenameBands, Temperature,
+    TemperatureParameters, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+    TimeShift, TimeShiftParameters,
     back_conversion::downcast_runtime_operator,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
@@ -26,6 +27,7 @@ use crate::api::model::processing_graphs::{
         TimeShiftParametersRelative,
     },
 };
+use geoengine_datatypes::raster::TileSize;
 use geoengine_datatypes::util::AsAny;
 use geoengine_operators::{
     engine::{OperatorName, RasterOperator as OperatorsRasterOperator},
@@ -45,9 +47,10 @@ use geoengine_operators::{
         Radiance as OperatorsRadiance, RasterScaling as OperatorsRasterScaling,
         RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
-        Rasterization as OperatorsRasterization, Reflectance as OperatorsReflectance,
-        Reprojection as OperatorsReprojection, ScalingMode as OperatorsScalingMode,
-        SlopeOffsetSelection as OperatorsSlopeOffsetSelection, Temperature as OperatorsTemperature,
+        Rasterization as OperatorsRasterization, ReTile as OperatorsReTile,
+        Reflectance as OperatorsReflectance, Reprojection as OperatorsReprojection,
+        ScalingMode as OperatorsScalingMode, SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
+        Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeShift as OperatorsTimeShift, TimeShiftParams as OperatorsTimeShiftParams,
     },
@@ -95,6 +98,7 @@ pub fn raster_operator_from_runtime(
         OperatorsRasterStacker => RasterStacker,
         OperatorsRasterTypeConversion => RasterTypeConversion,
         OperatorsRasterization => Rasterization,
+        OperatorsReTile => ReTile,
         OperatorsReprojection => Reprojection,
         OperatorsReflectance => Reflectance,
         OperatorsTemperature => Temperature,
@@ -600,6 +604,24 @@ impl TryFrom<&OperatorsRasterization> for Rasterization {
     }
 }
 
+impl TryFrom<&OperatorsReTile> for ReTile {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsReTile) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            params: ReTileParameters {
+                tile_size: value.params.tile_size.map(TileSize::into_inner),
+                origin: value.params.origin.map(Into::into),
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
+                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+            }
+            .into(),
+        })
+    }
+}
+
 impl TryFrom<&OperatorsReflectance> for Reflectance {
     type Error = anyhow::Error;
 
@@ -718,9 +740,9 @@ mod tests {
             RasterTypeConversion as OperatorsRasterTypeConversion,
             RasterTypeConversionParams as OperatorsRasterTypeConversionParams,
             Rasterization as OperatorsRasterization,
-            RasterizationParams as OperatorsRasterizationParams,
-            Reflectance as OperatorsReflectance, ReflectanceParams as OperatorsReflectanceParams,
-            Reprojection as OperatorsReprojection,
+            RasterizationParams as OperatorsRasterizationParams, ReTile as OperatorsReTile,
+            ReTileParams as OperatorsReTileParams, Reflectance as OperatorsReflectance,
+            ReflectanceParams as OperatorsReflectanceParams, Reprojection as OperatorsReprojection,
             ReprojectionParams as OperatorsReprojectionParams, ScalingMode as OperatorsScalingMode,
             SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
             Temperature as OperatorsTemperature, TemperatureParams as OperatorsTemperatureParams,
@@ -959,6 +981,18 @@ mod tests {
                     },
                 }),
                 |graph| matches!(graph, RasterOperator::Rasterization(_)),
+            ),
+            (
+                Box::new(OperatorsReTile {
+                    params: OperatorsReTileParams {
+                        tile_size: Some(TileSize::new_unchecked(256, 256)),
+                        origin: Some(Coordinate2D::new(0.0, 0.0)),
+                    },
+                    sources: SingleRasterSource {
+                        raster: raster_source(),
+                    },
+                }),
+                |graph| matches!(graph, RasterOperator::ReTile(_)),
             ),
             (
                 Box::new(OperatorsReflectance {
