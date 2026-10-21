@@ -576,6 +576,24 @@ impl TryFrom<&OperatorsPolygonRasterization> for PolygonRasterization {
     }
 }
 
+impl TryFrom<&OperatorsReTile> for ReTile {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsReTile) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            params: ReTileParameters {
+                tile_size: value.params.tile_size.map(TileSize::into_inner),
+                origin: value.params.origin.map(Into::into),
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
+                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+            }
+            .into(),
+        })
+    }
+}
+
 impl TryFrom<&OperatorsReflectance> for Reflectance {
     type Error = anyhow::Error;
 
@@ -699,7 +717,8 @@ mod tests {
             RasterTypeConversionParams as OperatorsRasterTypeConversionParams,
             Rasterization as OperatorsRasterization,
             RasterizationParams as OperatorsRasterizationParams,
-            RasterizationTime as OperatorsRasterizationTime, Reflectance as OperatorsReflectance,
+            RasterizationTime as OperatorsRasterizationTime, ReTile as OperatorsReTile,
+            ReTileParams as OperatorsReTileParams, Reflectance as OperatorsReflectance,
             ReflectanceParams as OperatorsReflectanceParams, Reprojection as OperatorsReprojection,
             ReprojectionParams as OperatorsReprojectionParams, ScalingMode as OperatorsScalingMode,
             SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
