@@ -158,6 +158,12 @@ impl SpatialGridDescriptor {
         self.is_compatible_grid_generic(&other.spatial_grid)
     }
 
+    /// Do both grids produce the same tiles (same origin, pixel size and tile size)?
+    /// Grid bounds may differ.
+    pub fn has_same_tiling(&self, other: &Self) -> bool {
+        self.geo_transform() == other.geo_transform() && self.tile_size == other.tile_size
+    }
+
     /// Tiles are anchored at the grid's origin, so operations that move the origin
     /// (e.g. [`Self::replace_origin`]) move the tile anchor as well.
     pub fn tiling_grid_definition(&self) -> TilingGrid {
@@ -1114,6 +1120,26 @@ mod tests {
             tiling.tile_idx_to_spatial(TileIdx::new_y_x(0, 0)),
             (2., -2.).into()
         );
+    }
+
+    #[test]
+    fn same_tiling_ignores_grid_bounds() {
+        let grid = |origin: (f64, f64), max: isize, tile_size| {
+            SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new_unchecked(origin.into(), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [max, max]).unwrap(),
+                tile_size,
+            )
+        };
+        let tile_size = TileSize::new_unchecked(4, 4);
+
+        assert!(grid((0., 0.), 9, tile_size).has_same_tiling(&grid((0., 0.), 3, tile_size)));
+        assert!(!grid((0., 0.), 9, tile_size).has_same_tiling(&grid((1., 0.), 9, tile_size)));
+        assert!(!grid((0., 0.), 9, tile_size).has_same_tiling(&grid(
+            (0., 0.),
+            9,
+            TileSize::new_unchecked(2, 2)
+        )));
     }
 
     #[test]
