@@ -96,6 +96,9 @@ impl PlotOperator for Statistics {
 
                 let in_descriptor = initialized_raster.result_descriptor();
 
+                // statistics count pixels: halo pixels would count multiple times
+                in_descriptor.ensure_no_tile_overlap(Statistics::TYPE_NAME)?;
+
                 let bands = select_bands(&in_descriptor.bands, &self.params.column_names)?;
 
                 let bbox = in_descriptor.spatial_bounds();
@@ -646,7 +649,7 @@ impl StatisticsOutput {
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
     use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, PlotSeriesSelection};
-    use geoengine_datatypes::raster::{GridShape2D, TileSize};
+    use geoengine_datatypes::raster::{GridShape2D, TileOverlap, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -743,6 +746,7 @@ mod tests {
                         RasterTile2D::new_with_tile_info(
                             TimeInterval::default(),
                             TileInformation {
+                                overlap: TileOverlap::zero(),
                                 global_geo_transform: TestDefault::test_default(),
                                 tile_position: [0, 0].into(),
                                 tile_size: TileSize::new_unchecked(
@@ -1341,6 +1345,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
                         tile_size,

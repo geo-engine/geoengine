@@ -8,6 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { AddTileOverlap } from './AddTileOverlap';
 import type { BandFilter } from './BandFilter';
 import type { BandNeighborhoodAggregate } from './BandNeighborhoodAggregate';
 import type { BandwiseExpression } from './BandwiseExpression';
@@ -25,6 +26,7 @@ import type { RasterTypeConversion } from './RasterTypeConversion';
 import type { Rasterization } from './Rasterization';
 import type { ReTile } from './ReTile';
 import type { Reflectance } from './Reflectance';
+import type { RemoveTileOverlap } from './RemoveTileOverlap';
 import type { Reprojection } from './Reprojection';
 import type { Temperature } from './Temperature';
 import type { TemporalRasterAggregation } from './TemporalRasterAggregation';
@@ -35,6 +37,8 @@ import type { TimeShift } from './TimeShift';
  * @export
  */
 export type RasterOperator = {
+    type: 'AddTileOverlap';
+} & AddTileOverlap | {
     type: 'BandFilter';
 } & BandFilter | {
     type: 'BandNeighborhoodAggregate';
@@ -69,6 +73,8 @@ export type RasterOperator = {
 } & ReTile | {
     type: 'Reflectance';
 } & Reflectance | {
+    type: 'RemoveTileOverlap';
+} & RemoveTileOverlap | {
     type: 'Reprojection';
 } & Reprojection | {
     type: 'Temperature';

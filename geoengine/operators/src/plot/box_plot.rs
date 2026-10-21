@@ -69,6 +69,8 @@ impl PlotOperator for BoxPlot {
 
                 let bands = select_bands(&in_descriptor.bands, &self.params.column_names)?;
 
+                // box plots count pixel values: halo pixels would count multiple times
+                in_descriptor.ensure_no_tile_overlap(BoxPlot::TYPE_NAME)?;
                 ensure!(
                     (1..=MAX_NUMBER_OF_RASTER_BANDS).contains(&bands.len()),
                     error::InvalidOperatorSpec {
@@ -497,7 +499,7 @@ mod tests {
     };
     use geoengine_datatypes::raster::{
         BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, MaskedGrid2D, RasterDataType,
-        RasterTile2D, TileIdx, TileInformation, TileSize, TilingSpecification,
+        RasterTile2D, TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -956,6 +958,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
@@ -1026,6 +1029,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
@@ -1101,6 +1105,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
@@ -1172,6 +1177,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
@@ -1245,6 +1251,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
@@ -1327,6 +1334,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
@@ -1396,6 +1404,7 @@ mod tests {
                         RasterTile2D::new_with_tile_info(
                             TimeInterval::default(),
                             TileInformation {
+                                overlap: TileOverlap::zero(),
                                 global_geo_transform: TestDefault::test_default(),
                                 tile_position: [0, 0].into(),
                                 tile_size: TileSize::new_unchecked(

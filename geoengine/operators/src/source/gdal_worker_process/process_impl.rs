@@ -651,6 +651,8 @@ impl GdalHandling {
 mod tests {
     use geoengine_datatypes::util::NonZeroFiniteF64;
 
+    use geoengine_datatypes::raster::TileOverlap;
+
     use super::super::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
@@ -728,6 +730,7 @@ mod tests {
         );
 
         TileInformation {
+            overlap: TileOverlap::zero(),
             tile_size: TileSize::new_unchecked(shape.y(), shape.x()),
             tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,

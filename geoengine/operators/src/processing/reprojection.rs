@@ -863,8 +863,8 @@ mod tests {
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
     use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridSize, SpatialGridDefinition, TileIdx, TileSize,
-        TilesEqualIgnoringCacheHint,
+        GeoTransform, GridBoundingBox2D, GridSize, SpatialGridDefinition, TileIdx, TileOverlap,
+        TileSize, TilesEqualIgnoringCacheHint,
     };
     use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
@@ -1137,6 +1137,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1146,6 +1147,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1157,6 +1159,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -1166,6 +1169,7 @@ mod tests {
                 grid_array: Grid::new([2, 2].into(), vec![7, 8, 9, 10]).unwrap().into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1177,6 +1181,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1188,6 +1193,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1199,6 +1205,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(5, 10),
@@ -1210,6 +1217,7 @@ mod tests {
                     .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -1362,7 +1370,7 @@ mod tests {
             .await;
 
         // get the worldfile
-        // println!("{}", res[0].tile_geo_transform().worldfile_string());
+        // println!("{}", res[0].core_geo_transform().worldfile_string());
 
         // This check is against a tile produced by the operator itself. It was visually validated. TODO: rebuild when open issues are solved.
         // A perfect validation would be against a GDAL output generated like this:

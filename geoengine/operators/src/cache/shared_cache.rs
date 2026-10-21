@@ -1033,6 +1033,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::{
         primitives::{BandSelection, CacheHint, DateTime, TimeInterval},
         raster::{Grid, GridBoundingBox2D, RasterProperties, RasterTile2D},
@@ -1096,6 +1097,7 @@ mod tests {
                 .into(),
             properties: RasterProperties::default(),
             cache_hint: CacheHint::max_duration(),
+            overlap: TileOverlap::zero(),
         }
     }
 
@@ -1112,6 +1114,7 @@ mod tests {
             )),
             properties: RasterProperties::default(),
             cache_hint: CacheHint::max_duration(),
+            overlap: TileOverlap::zero(),
         }
     }
 
@@ -1207,10 +1210,11 @@ mod tests {
 
     #[test]
     fn cache_byte_size() {
-        assert_eq!(create_compressed_tile().byte_size(), 276);
+        // a compressed tile includes the tile's `overlap` metadata (2 x u32)
+        assert_eq!(create_compressed_tile().byte_size(), 284);
         assert_eq!(
             CachedTiles::U8(Arc::new(vec![create_compressed_tile()])).byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 276
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 284
         );
         assert_eq!(
             CachedTiles::U8(Arc::new(vec![
@@ -1218,7 +1222,7 @@ mod tests {
                 create_compressed_tile()
             ]))
             .byte_size(),
-            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 276
+            /* enum + arc */ 16 + /* vec */ 24  + /* tile */ 2 * 284
         );
     }
 

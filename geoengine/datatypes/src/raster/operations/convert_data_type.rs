@@ -1,4 +1,6 @@
-use crate::raster::{BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, masked_grid::MaskedGrid};
+use crate::raster::{
+    BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, TileOverlap, masked_grid::MaskedGrid,
+};
 use num_traits::AsPrimitive;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
@@ -57,6 +59,7 @@ where
             properties: self.properties,
             tile_position: self.tile_position,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
+            overlap: TileOverlap::zero(),
         }
     }
 }
@@ -129,6 +132,7 @@ where
             properties: self.properties,
             tile_position: self.tile_position,
             cache_hint: self.cache_hint.clone_with_current_datetime(),
+            overlap: TileOverlap::zero(),
         }
     }
 }

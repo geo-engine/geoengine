@@ -101,6 +101,8 @@ impl PlotOperator for Histogram {
                     .await?;
 
                 let in_desc = raster_source.result_descriptor();
+                // histograms count pixels: halo pixels would count multiple times
+                in_desc.ensure_no_tile_overlap(Histogram::TYPE_NAME)?;
 
                 ensure!(
                     in_desc
@@ -708,6 +710,10 @@ impl From<HistogramMetadataInProgress> for HistogramMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::{
+        BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
+        TileIdx, TileInformation, TileOverlap, TileSize, TilingSpecification,
+    };
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterOperator,
@@ -724,10 +730,6 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, FeatureData, NoGeometry, PlotSeriesSelection,
         TimeInterval, VectorQueryRectangle,
-    };
-    use geoengine_datatypes::raster::{
-        BoundedGrid, EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
-        TileIdx, TileInformation, TileSize, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;
@@ -860,6 +862,7 @@ mod tests {
                 data: vec![RasterTile2D::new_with_tile_info(
                     TimeInterval::default(),
                     TileInformation {
+                        overlap: TileOverlap::zero(),
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
                         tile_size: TileSize::new_unchecked(3, 2),
@@ -1338,6 +1341,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
@@ -1547,6 +1551,7 @@ mod tests {
                     data: vec![RasterTile2D::new_with_tile_info(
                         TimeInterval::default(),
                         TileInformation {
+                            overlap: TileOverlap::zero(),
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
                             tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),

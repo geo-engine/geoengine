@@ -28,8 +28,8 @@ pub use self::raster_tile::{
     RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint, display_raster_tile_2d,
 };
 pub use self::tiling::{
-    TileIdx, TileIdx2DIter, TileInformation, TileInformationIter, TileSize, TilingGrid,
-    TilingSpecification, TilingStrategy,
+    TileIdx, TileIdx2DIter, TileInformation, TileInformationIter, TileOverlap, TileSize,
+    TilingGrid, TilingSpecification, TilingStrategy,
 };
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
