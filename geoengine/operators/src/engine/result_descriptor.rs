@@ -85,16 +85,6 @@ pub enum SpatialGridDescriptorState {
 }
 
 impl SpatialGridDescriptorState {
-    #[must_use]
-    pub fn merge(self, other: Self) -> Self {
-        match (self, other) {
-            (SpatialGridDescriptorState::Source, SpatialGridDescriptorState::Source) => {
-                SpatialGridDescriptorState::Source
-            }
-            _ => SpatialGridDescriptorState::Merged,
-        }
-    }
-
     pub fn is_source(self) -> bool {
         self == SpatialGridDescriptorState::Source
     }
@@ -142,31 +132,6 @@ impl SpatialGridDescriptor {
         }
     }
 
-    pub fn merge(&self, other: &SpatialGridDescriptor) -> Option<Self> {
-        let merged_grid = self.spatial_grid.merge(&other.spatial_grid)?;
-        let state = if self.spatial_grid.grid_bounds == merged_grid.grid_bounds
-            && other.spatial_grid.grid_bounds == merged_grid.grid_bounds
-        {
-            self.state.merge(other.state)
-        } else {
-            SpatialGridDescriptorState::Merged
-        };
-
-        let tile_size = if self.tile_size == other.tile_size {
-            self.tile_size
-        } else {
-            // When merging descriptors with different tile sizes, prefer self's
-            // (the left/primary descriptor's) tile size.
-            self.tile_size
-        };
-
-        Some(Self {
-            spatial_grid: merged_grid,
-            state,
-            tile_size,
-        })
-    }
-
     #[must_use]
     pub fn map<F: Fn(&SpatialGridDefinition) -> SpatialGridDefinition>(&self, map_fn: F) -> Self {
         Self {
@@ -193,6 +158,8 @@ impl SpatialGridDescriptor {
         self.is_compatible_grid_generic(&other.spatial_grid)
     }
 
+    /// Tiles are anchored at the grid's origin, so operations that move the origin
+    /// (e.g. [`Self::replace_origin`]) move the tile anchor as well.
     pub fn tiling_grid_definition(&self) -> TilingGrid {
         TilingGrid::from_spatial_grid(self.spatial_grid, self.tile_size)
     }
@@ -1089,6 +1056,7 @@ mod db_types {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::TileIdx;
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use serde_json::json;
 
@@ -1128,6 +1096,23 @@ mod tests {
                 time: None,
                 bbox: None,
             }
+        );
+    }
+
+    #[test]
+    fn moving_the_origin_moves_the_tile_anchor() {
+        let descriptor = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
+            GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(),
+            TileSize::new_unchecked(4, 4),
+        );
+        let moved = descriptor.replace_origin((2., -2.).into());
+
+        let tiling = moved.tiling_strategy();
+        assert_eq!(tiling.geo_transform.origin_coordinate, (2., -2.).into());
+        assert_eq!(
+            tiling.tile_idx_to_spatial(TileIdx::new_y_x(0, 0)),
+            (2., -2.).into()
         );
     }
 
