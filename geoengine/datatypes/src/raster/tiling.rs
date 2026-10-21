@@ -726,7 +726,7 @@ mod tests {
             -2.095_475_792_884_826_7E-8,
         );
 
-        let strat = TilingStrategy::new(TileSize::new_y_x(600, 600), geo_transform);
+        let strat = TilingStrategy::new(TileSize::new_unchecked(600, 600), geo_transform);
 
         let ul_idx = strat
             .geo_transform
@@ -871,7 +871,7 @@ mod tests {
         let tiling_grid = TilingGrid::from_spatial_grid_with_origin(
             source,
             (70., -170.).into(),
-            TileSize::new_y_x(4, 4),
+            TileSize::new_unchecked(4, 4),
         )
         .unwrap();
 
@@ -908,7 +908,7 @@ mod tests {
 
     #[test]
     fn tile_overlap_validation() {
-        let tile_size = TileSize::new_y_x(512, 512);
+        let tile_size = TileSize::new_unchecked(512, 512);
 
         assert!(TileOverlap::zero().is_valid_for_tile_size(tile_size));
         assert!(TileOverlap::new(512, 255).is_valid_for_tile_size(tile_size));
@@ -919,12 +919,12 @@ mod tests {
 
     #[test]
     fn overlapped_tile_information_bounds() {
-        let geo_transform = GeoTransform::new((0., 0.).into(), 1.0, -1.0);
+        let geo_transform = GeoTransform::new_unchecked((0., 0.).into(), 1.0, -1.0);
         let core = GridBoundingBox2D::new_min_max(2048, 3071, 1024, 2047).unwrap();
 
         let no_overlap = TileInformation::new(
             TileIdx::new_y_x(2, 1),
-            TileSize::new_y_x(1024, 1024),
+            TileSize::new_unchecked(1024, 1024),
             geo_transform,
         );
         assert_eq!(no_overlap.core_pixel_bounds(), core);
@@ -932,7 +932,7 @@ mod tests {
 
         let overlapped = TileInformation::new_with_overlap(
             TileIdx::new_y_x(2, 1),
-            TileSize::new_y_x(1024, 1024),
+            TileSize::new_unchecked(1024, 1024),
             geo_transform,
             TileOverlap::new(4, 8),
         );
@@ -946,11 +946,11 @@ mod tests {
     #[test]
     fn overlapped_tile_data_geo_reference() {
         // pixel (y, x) has upper-left corner (x * px, -y * px) for this transform
-        let geo_transform = GeoTransform::new((0., 0.).into(), 10., -10.);
+        let geo_transform = GeoTransform::new_unchecked((0., 0.).into(), 10., -10.);
         let overlap = TileOverlap::new(2, 3);
         let info = TileInformation::new_with_overlap(
             TileIdx::new_y_x(1, 1),
-            TileSize::new_y_x(4, 4),
+            TileSize::new_unchecked(4, 4),
             geo_transform,
             overlap,
         );
@@ -972,8 +972,8 @@ mod tests {
     #[test]
     fn overlapping_tiling_strategy_enumerates_cores() {
         let strat = TilingStrategy::new_with_overlap(
-            TileSize([4, 4].into()),
-            GeoTransform::new((0., 0.).into(), 1.0, -1.0),
+            TileSize::new_unchecked(4, 4),
+            GeoTransform::new_unchecked((0., 0.).into(), 1.0, -1.0),
             TileOverlap::new(1, 1),
         );
 

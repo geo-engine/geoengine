@@ -631,9 +631,8 @@ mod tests {
     use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::{Measurement, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
-        GeoTransform, GridBoundingBox2D, GridIdx2D, GridSize, RasterDataType,
-        RasterPropertiesEntryType, RasterPropertiesKey, TileIdx, TileInformation, TileOverlap,
-        TileSize, TilingStrategy,
+        GeoTransform, GridBoundingBox2D, GridSize, RasterDataType, RasterPropertiesEntryType,
+        RasterPropertiesKey, TileIdx, TileInformation, TileOverlap, TileSize, TilingStrategy,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::Identifier;

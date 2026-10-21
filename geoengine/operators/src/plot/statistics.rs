@@ -25,7 +25,7 @@ use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
-use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
+use geoengine_datatypes::raster::GridOrEmpty;
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -746,6 +746,7 @@ mod tests {
                         RasterTile2D::new_with_tile_info(
                             TimeInterval::default(),
                             TileInformation {
+                                overlap: TileOverlap::zero(),
                                 global_geo_transform: TestDefault::test_default(),
                                 tile_position: [0, 0].into(),
                                 tile_size: TileSize::new_unchecked(

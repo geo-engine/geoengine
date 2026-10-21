@@ -945,11 +945,9 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_unchecked(
-                tile_size.y(),
-                tile_size.x(),
-            ));
+        let tiling_specification = geoengine_datatypes::raster::TilingSpecification::new(
+            TileSize::new_unchecked(tile_size.y(), tile_size.x()),
+        );
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -1406,6 +1404,7 @@ mod tests {
                         RasterTile2D::new_with_tile_info(
                             TimeInterval::default(),
                             TileInformation {
+                                overlap: TileOverlap::zero(),
                                 global_geo_transform: TestDefault::test_default(),
                                 tile_position: [0, 0].into(),
                                 tile_size: TileSize::new_unchecked(

@@ -11,13 +11,6 @@
  * Do not edit the class manually.
  */
 
-import type { AddTileOverlap } from './AddTileOverlap';
-import {
-    instanceOfAddTileOverlap,
-    AddTileOverlapFromJSON,
-    AddTileOverlapFromJSONTyped,
-    AddTileOverlapToJSON,
-} from './AddTileOverlap';
 import type { BandFilter } from './BandFilter';
 import {
     instanceOfBandFilter,
@@ -137,13 +130,6 @@ import {
     ReflectanceFromJSONTyped,
     ReflectanceToJSON,
 } from './Reflectance';
-import type { RemoveTileOverlap } from './RemoveTileOverlap';
-import {
-    instanceOfRemoveTileOverlap,
-    RemoveTileOverlapFromJSON,
-    RemoveTileOverlapFromJSONTyped,
-    RemoveTileOverlapToJSON,
-} from './RemoveTileOverlap';
 import type { Reprojection } from './Reprojection';
 import {
     instanceOfReprojection,
@@ -178,7 +164,7 @@ import {
  * An operator that produces raster data.
  * @export
  */
-export type RasterOperator = { type: 'AddTileOverlap' } & AddTileOverlap | { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'ReTile' } & ReTile | { type: 'Reflectance' } & Reflectance | { type: 'RemoveTileOverlap' } & RemoveTileOverlap | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
+export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'ReTile' } & ReTile | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
 
 export function RasterOperatorFromJSON(json: any): RasterOperator {
     return RasterOperatorFromJSONTyped(json, false);
@@ -189,8 +175,6 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
         return json;
     }
     switch (json['type']) {
-        case 'AddTileOverlap':
-            return Object.assign({}, AddTileOverlapFromJSONTyped(json, true), { type: 'AddTileOverlap' } as const);
         case 'BandFilter':
             return Object.assign({}, BandFilterFromJSONTyped(json, true), { type: 'BandFilter' } as const);
         case 'BandNeighborhoodAggregate':
@@ -225,8 +209,6 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, ReTileFromJSONTyped(json, true), { type: 'ReTile' } as const);
         case 'Reflectance':
             return Object.assign({}, ReflectanceFromJSONTyped(json, true), { type: 'Reflectance' } as const);
-        case 'RemoveTileOverlap':
-            return Object.assign({}, RemoveTileOverlapFromJSONTyped(json, true), { type: 'RemoveTileOverlap' } as const);
         case 'Reprojection':
             return Object.assign({}, ReprojectionFromJSONTyped(json, true), { type: 'Reprojection' } as const);
         case 'Temperature':
@@ -249,8 +231,6 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
         return value;
     }
     switch (value['type']) {
-        case 'AddTileOverlap':
-            return Object.assign({}, AddTileOverlapToJSON(value), { type: 'AddTileOverlap' } as const);
         case 'BandFilter':
             return Object.assign({}, BandFilterToJSON(value), { type: 'BandFilter' } as const);
         case 'BandNeighborhoodAggregate':
@@ -285,8 +265,6 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
             return Object.assign({}, ReTileToJSON(value), { type: 'ReTile' } as const);
         case 'Reflectance':
             return Object.assign({}, ReflectanceToJSON(value), { type: 'Reflectance' } as const);
-        case 'RemoveTileOverlap':
-            return Object.assign({}, RemoveTileOverlapToJSON(value), { type: 'RemoveTileOverlap' } as const);
         case 'Reprojection':
             return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' } as const);
         case 'Temperature':

@@ -2660,8 +2660,7 @@ mod tests {
                 }
             };
 
-            let tiling_specification =
-                TilingSpecification::new(TileSize::new_unchecked(2, 2));
+            let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(2, 2));
 
             let query_rectangle = RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),

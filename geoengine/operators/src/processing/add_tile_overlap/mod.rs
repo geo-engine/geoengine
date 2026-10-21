@@ -352,7 +352,7 @@ mod tests {
     /// 3 | 4
     /// ```
     fn mock_raster_source() -> Box<MockRasterSource<f64>> {
-        let geo_transform = GeoTransform::new((0., 0.).into(), 1., -1.);
+        let geo_transform = GeoTransform::new_unchecked((0., 0.).into(), 1., -1.);
         let tile_shape = GridShape2D::new_2d(2, 2);
 
         let data = [[0usize, 0], [0, 1], [1, 0], [1, 1]]
@@ -385,7 +385,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         geo_transform,
                         GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
-                        TileSize::new_y_x(2, 2),
+                        TileSize::new_unchecked(2, 2),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -396,7 +396,7 @@ mod tests {
     fn mock_execution_context() -> MockExecutionContext {
         let mut context = MockExecutionContext::test_default();
         // mock tiles are 2x2 pixels
-        context.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        context.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
         context
     }
 

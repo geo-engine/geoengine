@@ -3274,7 +3274,10 @@ mod tests {
 
         let operators = OperatorsReTile::try_from(api).expect("conversion failed");
 
-        assert_eq!(operators.params.tile_size, Some(TileSize::new_unchecked(4, 8)));
+        assert_eq!(
+            operators.params.tile_size,
+            Some(TileSize::new_unchecked(4, 8))
+        );
         assert_eq!(operators.params.origin, Some((2.0, -2.0).into()));
     }
 

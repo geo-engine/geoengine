@@ -192,10 +192,12 @@ impl SpatialGridDescriptor {
         self.is_compatible_grid_generic(&other.spatial_grid)
     }
 
-    /// Do both grids produce the same tiles (same origin, pixel size and tile size)?
+    /// Do both grids produce the same tiles (same origin, pixel size, tile size and overlap)?
     /// Grid bounds may differ.
     pub fn has_same_tiling(&self, other: &Self) -> bool {
-        self.geo_transform() == other.geo_transform() && self.tile_size == other.tile_size
+        self.geo_transform() == other.geo_transform()
+            && self.tile_size == other.tile_size
+            && self.overlap == other.overlap
     }
 
     /// Tiles are anchored at the grid's origin, so operations that move the origin

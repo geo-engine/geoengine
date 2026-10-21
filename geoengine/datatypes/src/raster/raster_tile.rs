@@ -751,7 +751,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(2, 3),
-                TileSize::from(core_size),
+                TileSize::try_from(core_size).unwrap(),
                 geo_transform,
                 overlap,
             ),
@@ -771,7 +771,7 @@ mod tests {
         // reconstructed tile information preserves the core geometry
         let info = tile.tile_information();
         assert_eq!(info.overlap, overlap);
-        assert_eq!(info.tile_size, TileSize::from(core_size));
+        assert_eq!(info.tile_size, TileSize::try_from(core_size).unwrap());
         assert_eq!(
             info.core_pixel_bounds(),
             GridBoundingBox2D::new_unchecked(
@@ -794,7 +794,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(2, 3),
-                TileSize::from(core_size),
+                TileSize::try_from(core_size).unwrap(),
                 geo_transform,
                 overlap,
             ),
@@ -848,7 +848,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(2, 3),
-                TileSize::from(core_size),
+                TileSize::try_from(core_size).unwrap(),
                 geo_transform,
                 overlap,
             ),
@@ -908,7 +908,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(0, 0),
-                TileSize::from(core_size),
+                TileSize::try_from(core_size).unwrap(),
                 geo_transform,
                 overlap,
             ),
@@ -944,7 +944,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(0, 0),
-                TileSize::from(core_size),
+                TileSize::try_from(core_size).unwrap(),
                 geo_transform,
                 overlap,
             ),
@@ -965,7 +965,7 @@ mod tests {
             TimeInterval::default(),
             TileInformation::new_with_overlap(
                 TileIdx::new_y_x(0, 0),
-                TileSize::new_y_x(4, 4),
+                TileSize::new_unchecked(4, 4),
                 geo_transform,
                 TileOverlap::new(1, 1),
             ),
