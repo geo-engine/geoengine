@@ -538,6 +538,7 @@ mod tests {
 
         let accu = ReTileAccu::<u8> {
             output_tile_info: TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: GeoTransform::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size: TileSize::new_unchecked(4, 4),

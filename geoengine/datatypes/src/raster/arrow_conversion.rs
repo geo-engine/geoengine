@@ -49,7 +49,7 @@ fn raster_tile_2d_to_arrow_record_batch<P: Pixel>(
     let data_origin = tile
         .global_geo_transform
         .grid_idx_to_pixel_upper_left_coordinate_2d(tile.global_data_upper_left_pixel_idx());
-    let data_geo_transform = GeoTransform::new(
+    let data_geo_transform = GeoTransform::new_typed(
         data_origin,
         tile.global_geo_transform.x_pixel_size(),
         tile.global_geo_transform.y_pixel_size(),

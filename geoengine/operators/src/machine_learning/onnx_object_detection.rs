@@ -138,13 +138,13 @@ impl VectorOperator for OnnxObjectDetection {
         let actual = in_descriptor.spatial_grid.spatial_resolution();
         let expected = params.expected_resolution;
         let epsilon = params.resolution_epsilon;
-        let resolution_matches = (actual.x - expected).abs() / expected <= epsilon
-            && (actual.y - expected).abs() / expected <= epsilon;
+        let resolution_matches = (actual.x().get() - expected).abs() / expected <= epsilon
+            && (actual.y().get() - expected).abs() / expected <= epsilon;
         ensure!(
             resolution_matches,
             InputResolutionMismatch {
                 expected,
-                actual: actual.x,
+                actual: actual.x().get(),
                 epsilon,
             }
         );
@@ -412,12 +412,12 @@ impl QueryProcessor for OnnxObjectDetectionProcessor {
             for &i in &kept {
                 let det = &filtered[i];
                 let (x1, y1) = (
-                    origin.x + f64::from(det.x1) * tile_gt.x_pixel_size(),
-                    origin.y + f64::from(det.y1) * tile_gt.y_pixel_size(),
+                    origin.x + f64::from(det.x1) * tile_gt.x_pixel_size().get(),
+                    origin.y + f64::from(det.y1) * tile_gt.y_pixel_size().get(),
                 );
                 let (x2, y2) = (
-                    origin.x + f64::from(det.x2) * tile_gt.x_pixel_size(),
-                    origin.y + f64::from(det.y2) * tile_gt.y_pixel_size(),
+                    origin.x + f64::from(det.x2) * tile_gt.x_pixel_size().get(),
+                    origin.y + f64::from(det.y2) * tile_gt.y_pixel_size().get(),
                 );
                 let ring = vec![
                     (x1, y1).into(),
@@ -670,7 +670,7 @@ mod tests {
         // A halo-carrying tile stores `overlap + core + overlap` pixels with the
         // data corner at [0,0]; the model input is core-sized and must therefore
         // be read starting one halo in. This is the offset the query loop applies.
-        let core = TileSize::new_y_x(4, 4);
+        let core = TileSize::new_unchecked(4, 4);
         let overlap = TileOverlap::new(2, 2);
         let stored_y = core.axis_size_y() + 2 * overlap.axis_size_y();
         let stored_x = core.axis_size_x() + 2 * overlap.axis_size_x();
@@ -755,7 +755,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
-                        TileSize::new_y_x(4, 4),
+                        TileSize::new_unchecked(4, 4),
                     )
                     .with_tile_overlap(source_overlap),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -786,7 +786,7 @@ mod tests {
 
         let mut exe_ctx = MockExecutionContext::test_default();
         // Tiles must match the model's 4x4 input (no resampling).
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(4, 4);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(4, 4);
         exe_ctx.ml_models.insert(
             model_name,
             MlModelLoadingInfo {

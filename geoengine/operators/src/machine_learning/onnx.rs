@@ -427,7 +427,7 @@ where
                 // shared between the skip path and the normal return below
                 let out_tile_info = TileInformation::new_with_overlap(
                     tile_position,
-                    TileSize::from(core),
+                    TileSize::try_from(core).expect("the core is the input's non-zero tile size"),
                     global_geo_transform,
                     self.halo_out,
                 );
@@ -1410,7 +1410,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
-                        TileSize::new_y_x(2, 2),
+                        TileSize::new_unchecked(2, 2),
                     )
                     .with_tile_overlap(overlap),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -1436,7 +1436,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
         exe_ctx
             .ml_models
             .insert(model_name, ml_info((4, 4), (2, 2)));
@@ -1471,7 +1471,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
         exe_ctx
             .ml_models
             .insert(model_name, ml_info((4, 4), (2, 2)));
@@ -1498,7 +1498,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
         // 5x5 input on a 2x2 core => an odd 3px difference => asymmetric
         exe_ctx
             .ml_models
@@ -1556,7 +1556,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 5, 0, 5).unwrap(),
-                        TileSize::new_y_x(2, 2),
+                        TileSize::new_unchecked(2, 2),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -1584,7 +1584,7 @@ mod tests {
         .boxed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size = TileSize::new_y_x(2, 2);
+        exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
         exe_ctx
             .ml_models
             .insert(model_name, ml_info((4, 4), (2, 2)));

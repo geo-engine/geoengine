@@ -124,6 +124,7 @@ mod tests {
     use super::*;
     use crate::engine::RasterBandDescriptor;
     use geoengine_datatypes::primitives::{CacheHint, Measurement, TimeInterval};
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{
         EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, MaskedGrid2D, TileInformation,
@@ -134,6 +135,7 @@ mod tests {
         RasterTile2D::new_with_tile_info(
             TimeInterval::default(),
             TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: GeoTransform::test_default(),
                 tile_position: [1, 1].into(),
                 tile_size: TileSize::new_unchecked(3, 2),
