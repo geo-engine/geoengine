@@ -15,7 +15,6 @@ use crate::api::model::{
         },
     },
 };
-use geoengine_datatypes::raster::TileSize;
 use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::{
@@ -699,10 +698,9 @@ pub struct ReTile {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReTileParameters {
-    /// Override the output tile size in pixels `[rows, columns]`.
-    /// If `None`, the tiling specification's tile size is used.
-    #[schema(examples(json!([512, 512])))]
-    pub tile_size: Option<[usize; 2]>,
+    /// Override the output tile size.
+    /// If `None`, the configured default tile size is used.
+    pub tile_size: Option<crate::api::model::datatypes::TileSize>,
     /// Override the output tiling origin.
     /// If `None`, the source's own geo-transform origin is used.
     #[schema(examples(json!({ "x": 2.0, "y": -2.0 })))]
@@ -715,11 +713,7 @@ impl TryFrom<ReTile> for OperatorsReTile {
     fn try_from(value: ReTile) -> Result<Self, Self::Error> {
         Ok(OperatorsReTile {
             params: OperatorsReTileParameters {
-                tile_size: value
-                    .params
-                    .tile_size
-                    .map(|[y, x]| TileSize::new(y, x))
-                    .transpose()?,
+                tile_size: value.params.tile_size.map(Into::into),
                 origin: value.params.origin.map(Into::into),
             },
             sources: (*value.sources).try_into()?,
@@ -2983,6 +2977,7 @@ impl TryFrom<VectorExpression> for OperatorsVectorExpression {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileSize;
 
     use super::*;
     use crate::api::model::{
@@ -3038,7 +3033,7 @@ mod tests {
         let api = ReTile {
             r#type: Default::default(),
             params: ReTileParameters {
-                tile_size: Some([4, 8]),
+                tile_size: Some(TileSize::new_unchecked(4, 8).into()),
                 origin: Some(Coordinate2D { x: 2.0, y: -2.0 }),
             },
             sources: Box::new(SingleRasterSource {

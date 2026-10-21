@@ -1227,10 +1227,9 @@ pub struct GdalDatasetParameters {
     pub gdal_config_options: Option<Vec<GdalConfigOption>>,
     #[serde(default)]
     pub allow_alphaband_as_mask: bool,
-    /// Optional per-dataset tile size override.
+    /// Optional tile size override. If absent, the configured default tile size is used.
     #[serde(default)]
-    #[schema(value_type = Object)]
-    pub tile_size: Option<TileSize>,
+    pub tile_size: Option<crate::api::model::datatypes::TileSize>,
 }
 
 impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetParameters {
@@ -1251,7 +1250,7 @@ impl From<geoengine_operators::source::GdalDatasetParameters> for GdalDatasetPar
                 .gdal_config_options
                 .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
-            tile_size: value.tile_size,
+            tile_size: value.tile_size.map(Into::into),
         }
     }
 }
@@ -1275,7 +1274,7 @@ impl From<GdalDatasetParameters> for geoengine_operators::source::GdalDatasetPar
                 .map(|x| x.into_iter().map(Into::into).collect()),
             allow_alphaband_as_mask: value.allow_alphaband_as_mask,
             retry: None,
-            tile_size: value.tile_size,
+            tile_size: value.tile_size.map(Into::into),
         }
     }
 }
