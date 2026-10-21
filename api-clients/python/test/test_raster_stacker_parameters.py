@@ -35,7 +35,10 @@ class TestRasterStackerParameters(unittest.TestCase):
         model = RasterStackerParameters()
         if include_optional:
             return RasterStackerParameters(
-                rename_bands = None
+                rename_bands = None,
+                output_origin = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                    x = 1.337, 
+                    y = 1.337, )
             )
         else:
             return RasterStackerParameters(

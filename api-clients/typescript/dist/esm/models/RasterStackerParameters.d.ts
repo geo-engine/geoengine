@@ -8,6 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { Coordinate2D } from './Coordinate2D';
 import type { RenameBands } from './RenameBands';
 /**
  * Parameters for the `RasterStacker` operator.
@@ -25,6 +26,13 @@ export interface RasterStackerParameters {
      * @memberof RasterStackerParameters
      */
     renameBands: RenameBands;
+    /**
+     * Override the origin of the stacked output grid.
+     * If `None`, the first input's origin is used.
+     * @type {Coordinate2D}
+     * @memberof RasterStackerParameters
+     */
+    outputOrigin?: Coordinate2D | null;
 }
 /**
  * Check if a given object implements the RasterStackerParameters interface.

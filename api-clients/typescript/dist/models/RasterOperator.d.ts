@@ -23,6 +23,7 @@ import type { RasterScaling } from './RasterScaling';
 import type { RasterStacker } from './RasterStacker';
 import type { RasterTypeConversion } from './RasterTypeConversion';
 import type { Rasterization } from './Rasterization';
+import type { ReTile } from './ReTile';
 import type { Reflectance } from './Reflectance';
 import type { Reprojection } from './Reprojection';
 import type { Temperature } from './Temperature';
@@ -64,6 +65,8 @@ export type RasterOperator = {
 } & RasterTypeConversion | {
     type: 'Rasterization';
 } & Rasterization | {
+    type: 'ReTile';
+} & ReTile | {
     type: 'Reflectance';
 } & Reflectance | {
     type: 'Reprojection';

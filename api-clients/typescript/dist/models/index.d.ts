@@ -274,6 +274,8 @@ export * from './RasterVectorJoin';
 export * from './RasterVectorJoinParameters';
 export * from './Rasterization';
 export * from './RasterizationParameters';
+export * from './ReTile';
+export * from './ReTileParameters';
 export * from './Reflectance';
 export * from './ReflectanceParameters';
 export * from './Regular';

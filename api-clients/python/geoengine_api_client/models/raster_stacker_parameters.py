@@ -18,7 +18,8 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
+from geoengine_api_client.models.coordinate2_d import Coordinate2D
 from geoengine_api_client.models.rename_bands import RenameBands
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,7 +29,8 @@ class RasterStackerParameters(BaseModel):
     Parameters for the `RasterStacker` operator.
     """ # noqa: E501
     rename_bands: RenameBands = Field(description="Strategy for deriving output band names.  - `default`: appends ` (n)` with the smallest `n` that avoids a conflict. - `suffix`: appends one suffix per input. - `rename`: explicitly provides names for all resulting bands.", alias="renameBands")
-    __properties: ClassVar[List[str]] = ["renameBands"]
+    output_origin: Optional[Coordinate2D] = Field(default=None, description="Override the origin of the stacked output grid. If `None`, the first input's origin is used.", alias="outputOrigin")
+    __properties: ClassVar[List[str]] = ["renameBands", "outputOrigin"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -72,6 +74,14 @@ class RasterStackerParameters(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of rename_bands
         if self.rename_bands:
             _dict['renameBands'] = self.rename_bands.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of output_origin
+        if self.output_origin:
+            _dict['outputOrigin'] = self.output_origin.to_dict()
+        # set to None if output_origin (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_origin is None and "output_origin" in self.model_fields_set:
+            _dict['outputOrigin'] = None
+
         return _dict
 
     @classmethod
@@ -84,7 +94,8 @@ class RasterStackerParameters(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "renameBands": RenameBands.from_dict(obj["renameBands"]) if obj.get("renameBands") is not None else None
+            "renameBands": RenameBands.from_dict(obj["renameBands"]) if obj.get("renameBands") is not None else None,
+            "outputOrigin": Coordinate2D.from_dict(obj["outputOrigin"]) if obj.get("outputOrigin") is not None else None
         })
         return _obj
 
