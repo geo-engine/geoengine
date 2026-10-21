@@ -1,4 +1,4 @@
-use crate::engine::{OptionalSubQueryPermit, QueryContext, RasterQueryProcessor, SubQueryLimiter};
+use crate::engine::{QueryContext, RasterQueryProcessor, SubQueryHandout, SubQueryParallelism};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -34,7 +34,7 @@ pub trait FoldTileAccuMut: FoldTileAccu {
 type AdapterMarker<R, S, T> = fn() -> (R, S, T);
 
 /// Generates tiles by running ordered sub-queries, concurrently while the query's
-/// [`SubQueryLimiter`] has permits left.
+/// [`SubQueryParallelism`] has permits left.
 pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
 where
     PixelType: Pixel,
@@ -122,10 +122,10 @@ where
         .boxed();
 
         Self {
-            stream: LimitedSubQueries {
+            stream: ParallelSubQueries {
                 descriptors,
                 in_flight: FuturesOrdered::new(),
-                limiter: query_ctx.subquery_limiter(),
+                parallelism: query_ctx.subquery_parallelism(),
                 done: false,
             }
             .boxed(),
@@ -156,41 +156,37 @@ where
     }
 }
 
-type TileWithPermit<P> = (RasterTile2D<P>, Option<OptionalSubQueryPermit>);
+type TileWithHandout<P> = (RasterTile2D<P>, SubQueryHandout);
 
-/// Runs sub-queries in order. One always runs without a permit, so every adapter makes
-/// progress; optional ones only run while the [`SubQueryLimiter`] hands out permits, so
-/// nested adapters share one limit and the outermost adapter (which asks first) gets most
-/// of the parallelism.
+/// Runs sub-queries in order, each with a [`SubQueryHandout`] from the query's
+/// [`SubQueryParallelism`]: the first running one is always handed out, so every adapter
+/// makes progress; parallel ones only while permits are free, so nested adapters share one
+/// pool and the outermost adapter (which asks first) gets most of the parallelism.
 ///
-/// A permit is released when its tile is yielded, not when the sub-query finishes, so
-/// finished tiles waiting behind a slow one still count against the limit.
-struct LimitedSubQueries<'a, P: Pixel> {
+/// A handout is returned when its tile is yielded, not when the sub-query finishes, so
+/// finished tiles waiting behind a slow one still count against the available parallelism.
+struct ParallelSubQueries<'a, P: Pixel> {
     descriptors: BoxStream<'a, Result<BoxFuture<'a, Result<RasterTile2D<P>>>>>,
-    in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithPermit<P>>>>,
-    limiter: &'a SubQueryLimiter,
+    in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithHandout<P>>>>,
+    parallelism: &'a SubQueryParallelism,
     done: bool,
 }
 
-impl<P: Pixel> Stream for LimitedSubQueries<'_, P> {
+impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
     type Item = Result<RasterTile2D<P>>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
 
         while !this.done {
-            let permit = if this.in_flight.is_empty() {
-                None
-            } else if let Some(permit) = this.limiter.try_acquire() {
-                Some(permit)
-            } else {
+            let Some(handout) = this.parallelism.handout(this.in_flight.len()) else {
                 break;
             };
 
             match this.descriptors.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(sub_query))) => this
                     .in_flight
-                    .push_back(sub_query.map_ok(|tile| (tile, permit)).boxed()),
+                    .push_back(sub_query.map_ok(|tile| (tile, handout)).boxed()),
                 Poll::Ready(Some(Err(e))) => {
                     // queued behind the running sub-queries to keep the output order
                     this.in_flight
@@ -208,7 +204,7 @@ impl<P: Pixel> Stream for LimitedSubQueries<'_, P> {
                 this.in_flight = FuturesOrdered::new();
                 Poll::Ready(Some(Err(e)))
             }
-            Poll::Ready(Some(Ok((tile, _permit)))) => Poll::Ready(Some(Ok(tile))),
+            Poll::Ready(Some(Ok((tile, _handout)))) => Poll::Ready(Some(Ok(tile))),
             Poll::Ready(None) if !this.done => Poll::Pending,
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
@@ -562,7 +558,7 @@ mod tests {
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let mut query_ctx = exe_ctx.mock_query_context_test_default();
-        query_ctx.subquery_limiter = SubQueryLimiter::fixed(parallelism);
+        query_ctx.subquery_parallelism = SubQueryParallelism::fixed(parallelism);
         query_ctx
     }
 
@@ -626,7 +622,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_does_not_deadlock_with_a_low_limit() {
+    async fn it_does_not_deadlock_with_little_parallelism() {
         let result = tokio::time::timeout(Duration::from_secs(10), run_nested(3, 2)).await;
         assert_eq!(result.expect("nested adapters deadlocked").0.len(), 4);
     }

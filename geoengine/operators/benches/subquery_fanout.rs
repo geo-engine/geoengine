@@ -200,8 +200,8 @@ fn subquery_fanout_benchmark(c: &mut Criterion) {
     let (processor, mut query_context, query, tiling_strategy) = setup(&runtime);
 
     for factor in 1..=8 {
-        query_context.subquery_limiter =
-            geoengine_operators::engine::SubQueryLimiter::fixed(factor);
+        query_context.subquery_parallelism =
+            geoengine_operators::engine::SubQueryParallelism::fixed(factor);
         c.bench_function(&format!("subquery_fanout_{factor}"), |b| {
             b.to_async(&runtime)
                 .iter(|| run(&processor, &query_context, query.clone(), tiling_strategy));

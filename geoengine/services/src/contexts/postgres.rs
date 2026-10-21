@@ -34,7 +34,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
-    engine::{ChunkByteSize, SubQueryLimiter},
+    engine::{ChunkByteSize, SubQueryParallelism},
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
@@ -68,8 +68,8 @@ where
     tile_cache: Arc<SharedCache>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
-    max_parallel_subqueries_per_query: usize,
-    optional_subquery_permits: Arc<Semaphore>,
+    available_subquery_parallelism_per_query: usize,
+    subquery_parallelism_per_server: Arc<Semaphore>,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
@@ -128,9 +128,9 @@ where
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache: None,
             default_cache_ttl: CacheTtlSeconds::new(0),
-            max_parallel_subqueries_per_query:
-                SubQueryLimiter::DEFAULT_MAX_PARALLEL_SUBQUERIES_PER_QUERY,
-            optional_subquery_permits: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
+            available_subquery_parallelism_per_query:
+                SubQueryParallelism::DEFAULT_AVAILABLE_PER_QUERY,
+            subquery_parallelism_per_server: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             gdal_process_pool,
         })
@@ -198,9 +198,9 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
-            max_parallel_subqueries_per_query:
-                SubQueryLimiter::DEFAULT_MAX_PARALLEL_SUBQUERIES_PER_QUERY,
-            optional_subquery_permits: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
+            available_subquery_parallelism_per_query:
+                SubQueryParallelism::DEFAULT_AVAILABLE_PER_QUERY,
+            subquery_parallelism_per_server: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             gdal_process_pool,
         })
@@ -277,10 +277,10 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
-            max_parallel_subqueries_per_query: query_context_config
-                .max_parallel_subqueries_per_query,
-            optional_subquery_permits: Arc::new(Semaphore::new(
-                query_context_config.max_optional_subqueries,
+            available_subquery_parallelism_per_query: query_context_config
+                .available_subquery_parallelism_per_query,
+            subquery_parallelism_per_server: Arc::new(Semaphore::new(
+                query_context_config.available_subquery_parallelism_per_server,
             )),
             provider_registry,
             gdal_process_pool,
@@ -476,9 +476,9 @@ where
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
             self.context.default_cache_ttl,
-            SubQueryLimiter::new(
-                self.context.max_parallel_subqueries_per_query,
-                self.context.optional_subquery_permits.clone(),
+            SubQueryParallelism::new(
+                self.context.available_subquery_parallelism_per_query,
+                self.context.subquery_parallelism_per_server.clone(),
             ),
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),

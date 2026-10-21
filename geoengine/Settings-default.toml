@@ -40,13 +40,13 @@ tile_shape_pixels_y = 512
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
-# Running sub-queries of a query = 1 per active adapter + optional ones. An optional one needs
-# a free per-query permit AND a free server permit, and never waits for either.
-# max. sub-queries of one query running at once, including the guaranteed one (1 = sequential)
-max_parallel_subqueries_per_query = 4
-# server-wide limit on optional sub-queries of all queries together; when it is reached,
-# queries run sequentially (roughly `gdal_process_pool.max_active_processes`)
-max_optional_subqueries = 16
+# Sub-queries of one query that may run at once (1 = sequential). A query always gets at least
+# one, even when all parallelism is in use.
+available_subquery_parallelism_per_query = 4
+# Sub-queries all queries together may run in parallel, on top of the one each query always
+# runs; when they are in use, queries run sequentially (roughly
+# `gdal_process_pool.max_active_processes`)
+available_subquery_parallelism_per_server = 16
 
 [upload]
 path = "upload"
