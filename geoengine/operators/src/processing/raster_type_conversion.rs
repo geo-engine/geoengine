@@ -237,7 +237,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let raster: MaskedGrid2D<u8> = Grid2D::new(tile_size.into(), vec![7_u8, 7, 7, 6])
             .unwrap()

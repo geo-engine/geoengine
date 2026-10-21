@@ -428,7 +428,7 @@ mod tests {
     #[tokio::test]
     async fn single_raster() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -514,7 +514,7 @@ mod tests {
     #[tokio::test]
     async fn it_uses_only_pixels_in_query_rectangle() {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(
             tile_size_in_pixels.y(),
             tile_size_in_pixels.x(),
         ));
@@ -627,7 +627,7 @@ mod tests {
     #[tokio::test]
     async fn raster_series() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let temporal_raster_mean_plot = MeanRasterPixelValuesOverTime {
@@ -762,7 +762,7 @@ mod tests {
         measurements: [Measurement; 2],
     ) -> Result<PlotData> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let time_interval = TimeInterval::new(

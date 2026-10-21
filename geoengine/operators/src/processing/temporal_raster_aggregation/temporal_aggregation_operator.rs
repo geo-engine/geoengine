@@ -586,7 +586,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -715,7 +715,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -844,7 +844,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -973,7 +973,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1100,7 +1100,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1196,7 +1196,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1305,7 +1305,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1413,7 +1413,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1522,7 +1522,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1631,7 +1631,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1740,7 +1740,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1850,7 +1850,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1978,7 +1978,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2087,7 +2087,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2197,7 +2197,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2349,7 +2349,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2477,7 +2477,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2586,7 +2586,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -2695,7 +2695,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
@@ -3023,9 +3023,9 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 2),
+        ));
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
@@ -3204,9 +3204,9 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 2),
+        ));
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
@@ -3282,9 +3282,9 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 2),
+        ));
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),

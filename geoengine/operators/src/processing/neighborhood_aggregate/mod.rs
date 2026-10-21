@@ -463,9 +463,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution() {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 3)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let raster = make_raster();
 
@@ -524,9 +524,9 @@ mod tests {
 
     #[tokio::test]
     async fn check_make_raster() {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 3)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let raster = make_raster();
 
@@ -852,9 +852,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution_multi_bands() {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 3)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let operator = NeighborhoodAggregate {
             params: NeighborhoodAggregateParams {

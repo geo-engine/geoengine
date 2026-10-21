@@ -699,7 +699,7 @@ mod tests {
     #[tokio::test]
     async fn fixed_grid_basic() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {
@@ -760,7 +760,7 @@ mod tests {
     #[tokio::test]
     async fn fixed_grid_with_shift() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {
@@ -821,7 +821,7 @@ mod tests {
     #[tokio::test]
     async fn density_basic() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {
@@ -916,7 +916,7 @@ mod tests {
     #[tokio::test]
     async fn density_radius_overlap() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {

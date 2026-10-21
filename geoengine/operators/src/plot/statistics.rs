@@ -767,7 +767,7 @@ mod tests {
         bbox: BoundingBox2D,
     ) -> Result<serde_json::Value> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let statistics = Statistics {
@@ -798,7 +798,7 @@ mod tests {
     #[tokio::test]
     async fn it_creates_a_column_per_percentile() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
         let plot = Statistics {
             params: StatisticsParams {
@@ -1037,7 +1037,7 @@ mod tests {
     #[tokio::test]
     async fn vector_no_column() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1135,7 +1135,7 @@ mod tests {
     #[tokio::test]
     async fn vector_single_column() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1224,7 +1224,7 @@ mod tests {
     #[tokio::test]
     async fn vector_two_columns() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1322,7 +1322,7 @@ mod tests {
     #[tokio::test]
     async fn raster_percentile() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1411,7 +1411,7 @@ mod tests {
     #[tokio::test]
     async fn vector_percentiles() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(

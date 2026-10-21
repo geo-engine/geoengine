@@ -1009,7 +1009,7 @@ mod tests {
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let raster = raster_source
@@ -1230,7 +1230,7 @@ mod tests {
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let raster = raster_source
@@ -1551,7 +1551,7 @@ mod tests {
         .boxed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let raster = raster_source

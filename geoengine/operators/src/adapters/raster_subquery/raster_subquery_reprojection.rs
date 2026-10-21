@@ -443,7 +443,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_spec = TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2));
+        let tiling_spec = TilingSpecification::new(TileSize::new_unchecked(2, 2));
 
         let tiling_grid = result_descriptor.tiling_grid_definition();
         let tiling_strat = tiling_grid.tiling_strategy();

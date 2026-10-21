@@ -312,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn basic_unary() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -366,7 +366,7 @@ mod tests {
     #[tokio::test]
     async fn unary_map_no_data() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -420,7 +420,7 @@ mod tests {
     #[tokio::test]
     async fn basic_binary() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -482,7 +482,7 @@ mod tests {
     #[tokio::test]
     async fn basic_coalesce() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -558,7 +558,7 @@ mod tests {
         let no_data_value_option = Some(no_data_value);
 
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -633,7 +633,7 @@ mod tests {
         let no_data_value_option = Some(no_data_value);
 
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -704,7 +704,7 @@ mod tests {
     #[tokio::test]
     async fn it_classifies() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -782,7 +782,7 @@ mod tests {
     async fn test_functions() {
         let no_data_value = 0;
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -893,7 +893,7 @@ mod tests {
     async fn it_attaches_cache_hint_1() {
         let no_data_value = 0;
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -955,7 +955,7 @@ mod tests {
     async fn it_attaches_cache_hint_2() {
         let no_data_value = 0;
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -1019,7 +1019,7 @@ mod tests {
     async fn it_attaches_cache_hint_3() {
         let no_data_value = 0;
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let ectx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 

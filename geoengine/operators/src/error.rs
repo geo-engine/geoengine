@@ -472,11 +472,6 @@ pub enum Error {
         other: Option<TileSize>,
     },
 
-    #[snafu(display("Tile dimensions must be greater than zero: {tile_size:?}"))]
-    InvalidTileSize {
-        tile_size: TileSize,
-    },
-
     #[snafu(display(
         "Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."
     ))]
