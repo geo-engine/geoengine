@@ -891,7 +891,7 @@ mod tests {
     #[tokio::test]
     async fn simple_raster() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = Histogram {
@@ -943,7 +943,7 @@ mod tests {
     #[tokio::test]
     async fn simple_raster_without_spec() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = Histogram {
@@ -997,7 +997,7 @@ mod tests {
     #[tokio::test]
     async fn it_uses_only_pixels_in_query_rectangle() {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(
             tile_size_in_pixels.y(),
             tile_size_in_pixels.x(),
         ));
@@ -1341,10 +1341,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
-            tile_size.y(),
-            tile_size.x(),
-        ));
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
@@ -1560,10 +1558,8 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
-            tile_size.y(),
-            tile_size.x(),
-        ));
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {

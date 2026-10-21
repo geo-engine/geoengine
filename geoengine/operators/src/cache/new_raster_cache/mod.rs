@@ -1632,7 +1632,7 @@ mod tests {
         TilingSpecification,
     ) {
         let tile_size = TileSize::new_unchecked(2, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
         let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.);
 
         let raster: MaskedGrid2D<u8> =

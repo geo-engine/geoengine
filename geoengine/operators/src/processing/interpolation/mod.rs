@@ -686,9 +686,9 @@ mod tests {
 
     #[tokio::test]
     async fn nearest_neighbor_operator() -> Result<()> {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
 
         // test raster:
         // [0, 10)
@@ -1097,9 +1097,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_attaches_cache_hint() -> Result<()> {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
 
         let cache_hint = CacheHint::seconds(1234);
         let raster = make_raster(cache_hint);
@@ -1143,9 +1143,9 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_interpolates_multiple_bands() -> Result<()> {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
         let operator = Interpolation {
             params: InterpolationParams {
                 interpolation: InterpolationMethod::NearestNeighbor,

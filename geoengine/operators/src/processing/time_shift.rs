@@ -931,7 +931,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size.into()));
         let raster_tiles = vec![
@@ -1117,7 +1117,7 @@ mod tests {
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size.into()));
         let raster_tiles = vec![

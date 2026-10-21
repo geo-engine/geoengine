@@ -1405,7 +1405,7 @@ mod tests {
     }
 
     fn test_download_all_metadata_zip_tiling_spec() -> TilingSpecification {
-        TilingSpecification::with_zero_origin(TileSize::new_unchecked(600, 600))
+        TilingSpecification::new(TileSize::new_unchecked(600, 600))
     }
 
     #[ge_context::test(tiling_spec = "test_download_all_metadata_zip_tiling_spec")]

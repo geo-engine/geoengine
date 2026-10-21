@@ -391,7 +391,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(tile_size),
+            geoengine_datatypes::raster::TilingSpecification::new(tile_size),
         );
         let query_context = execution_context.mock_query_context_test_default();
 
@@ -521,7 +521,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(tile_size),
+            geoengine_datatypes::raster::TilingSpecification::new(tile_size),
         );
         let query_context = execution_context.mock_query_context_test_default();
 

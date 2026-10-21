@@ -1228,9 +1228,9 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
-        );
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(2, 2),
+        ));
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
@@ -1283,7 +1283,7 @@ mod tests {
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let tile_size = TileSize::new_unchecked(512, 512);
-        exe_ctx.tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        exe_ctx.tiling_specification = TilingSpecification::new(tile_size);
 
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
@@ -1486,9 +1486,8 @@ mod tests {
             cache_ttl: None,
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(tile_size),
-        );
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(tile_size));
 
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("ndvi");
@@ -1596,9 +1595,8 @@ mod tests {
             cache_ttl: None,
         };
 
-        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(tile_size),
-        );
+        let mut exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(tile_size));
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let id: DataId = DatasetId::new().into();

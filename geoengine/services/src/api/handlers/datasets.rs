@@ -2022,7 +2022,7 @@ mod tests {
     }
 
     fn ctx_tiling_spec_600x600() -> TilingSpecification {
-        TilingSpecification::with_zero_origin(TileSize::new_unchecked(600, 600))
+        TilingSpecification::new(TileSize::new_unchecked(600, 600))
     }
 
     #[ge_context::test(tiling_spec = "ctx_tiling_spec_600x600")]
@@ -3369,7 +3369,7 @@ mod tests {
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn create_dataset_tiling_specification() -> TilingSpecification {
-        TilingSpecification::with_zero_origin(TileSize::new_unchecked(600, 600))
+        TilingSpecification::new(TileSize::new_unchecked(600, 600))
     }
 
     #[ge_context::test(tiling_spec = "create_dataset_tiling_specification")]
