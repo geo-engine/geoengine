@@ -2485,6 +2485,13 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
+    fn tile_size_is_rows_columns_and_rejects_zero() {
+        let tile_size: super::TileSize = serde_json::from_str("[256, 512]").unwrap();
+        assert_eq!(serde_json::to_string(&tile_size).unwrap(), "[256,512]");
+        assert!(serde_json::from_str::<super::TileSize>("[0, 512]").is_err());
+    }
+
+    #[test]
     fn it_serializes_classification_measurement() -> Result<(), Error> {
         let measurement = ClassificationMeasurement {
             r#type: Default::default(),
@@ -2562,5 +2569,37 @@ mod tests {
             result.unwrap_err().to_string(),
             "The list must not contain duplicates"
         );
+    }
+}
+
+/// A tile size in pixels `[rows, columns]`. Both axes must be greater than zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(try_from = "[usize; 2]", into = "[usize; 2]")]
+#[schema(value_type = Vec<usize>, examples(json!([512, 512])))]
+pub struct TileSize(geoengine_datatypes::raster::TileSize);
+
+impl TryFrom<[usize; 2]> for TileSize {
+    type Error = geoengine_datatypes::error::Error;
+
+    fn try_from([y, x]: [usize; 2]) -> Result<Self, Self::Error> {
+        geoengine_datatypes::raster::TileSize::new(y, x).map(Self)
+    }
+}
+
+impl From<TileSize> for [usize; 2] {
+    fn from(value: TileSize) -> Self {
+        value.0.into_inner()
+    }
+}
+
+impl From<geoengine_datatypes::raster::TileSize> for TileSize {
+    fn from(value: geoengine_datatypes::raster::TileSize) -> Self {
+        Self(value)
+    }
+}
+
+impl From<TileSize> for geoengine_datatypes::raster::TileSize {
+    fn from(value: TileSize) -> Self {
+        value.0
     }
 }
