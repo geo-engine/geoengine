@@ -18,7 +18,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
     GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TileSize, TilingGrid,
-    TilingSpecification, TilingStrategy, UpdateIndexedElementsParallel,
+    UpdateIndexedElementsParallel,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,7 @@ impl RasterOperator for ReTile {
     ///
     /// Derives the output tiling specification from the input dataset's spatial grid:
     /// - **origin**: from `ReTileParams::origin`, or the input dataset's geo-transform origin
-    /// - **tile size**: from `ReTileParams::tile_size`, or the global tiling spec
+    /// - **tile size**: from `ReTileParams::tile_size`, or the configured default tile size
     ///
     /// Computes the output spatial grid (same spatial extent and resolution as input, but
     /// aligned to the new tiling origin) and stores it in the result descriptor.
@@ -80,14 +80,6 @@ impl RasterOperator for ReTile {
             .params
             .tile_size
             .unwrap_or_else(|| context.tiling_specification().tile_size);
-
-        if output_tile_size.axis_size_y() == 0 || output_tile_size.axis_size_x() == 0 {
-            return Err(crate::error::Error::InvalidTileSize {
-                tile_size: output_tile_size,
-            });
-        }
-
-        let tiling_spec = TilingSpecification::new(output_tile_size, output_origin);
 
         let output_tiling_grid = TilingGrid::from_spatial_grid_with_origin(
             in_spatial_grid.spatial_grid,
@@ -123,7 +115,6 @@ impl RasterOperator for ReTile {
             path,
             output_result_descriptor: out_descriptor,
             raster_source: initialized_source.raster,
-            tiling_specification: tiling_spec,
         }
         .boxed())
     }
@@ -133,15 +124,13 @@ impl RasterOperator for ReTile {
 
 /// The initialized (ready-to-execute) form of the `ReTile` operator.
 ///
-/// Stores the output result descriptor (with the re-aligned spatial grid),
-/// the source operator, and the output tiling specification for use in query
-/// processing and optimization.
+/// Stores the output result descriptor, whose spatial grid defines the output
+/// tiling (origin and tile size), and the source operator.
 pub struct InitializedReTile<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     output_result_descriptor: RasterResultDescriptor,
     raster_source: O,
-    tiling_specification: TilingSpecification,
 }
 
 impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTile<O> {
@@ -150,11 +139,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTi
 
         let res = call_on_generic_raster_processor!(
             source_processor,
-            p => ReTileProcessor::new(
-                p,
-                self.output_result_descriptor.clone(),
-                self.tiling_specification,
-            )
+            p => ReTileProcessor::new(p, self.output_result_descriptor.clone())
             .boxed()
             .into()
         );
@@ -182,10 +167,11 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTi
         &self,
         target_resolution: SpatialResolution,
     ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        let out_grid = self.output_result_descriptor.spatial_grid_descriptor();
         Ok(ReTile {
             params: ReTileParams {
-                tile_size: Some(self.tiling_specification.tile_size),
-                origin: Some(self.tiling_specification.tiling_origin_reference()),
+                tile_size: Some(out_grid.tile_size),
+                origin: Some(out_grid.geo_transform().origin_coordinate),
             },
             sources: SingleRasterSource {
                 raster: self.raster_source.optimize(target_resolution)?,
@@ -195,8 +181,8 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTi
     }
 }
 
-/// The query-time processor for `ReTile`. Holds the source query processor and the
-/// output tiling specification. Delegates to `RasterSubQueryAdapter` for the actual
+/// The query-time processor for `ReTile`. Produces tiles on the tiling of its output
+/// result descriptor and delegates to `RasterSubQueryAdapter` for the actual
 /// tile-level re-mapping.
 pub struct ReTileProcessor<Q, P>
 where
@@ -205,7 +191,6 @@ where
 {
     source: Q,
     out_result_descriptor: RasterResultDescriptor,
-    tiling_specification: TilingSpecification,
 }
 
 impl<Q, P> ReTileProcessor<Q, P>
@@ -213,15 +198,10 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Copy,
 {
-    pub fn new(
-        source: Q,
-        out_result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
-    ) -> Self {
+    pub fn new(source: Q, out_result_descriptor: RasterResultDescriptor) -> Self {
         Self {
             source,
             out_result_descriptor,
-            tiling_specification,
         }
     }
 }
@@ -266,13 +246,7 @@ where
             return self.source.query(query, ctx).await;
         }
 
-        // Use the stored tiling specification (with the correct output origin)
-        // instead of the context's global tiling spec.
-        // Similarly, derive the input geo transform from the source's spatial grid directly.
-        let tiling_strategy = TilingStrategy::new(
-            self.tiling_specification.tile_size,
-            out_spatial_grid.geo_transform(),
-        );
+        let tiling_strategy = out_spatial_grid.tiling_strategy();
 
         let input_geo_transform = in_spatial_grid.geo_transform();
 
@@ -504,6 +478,7 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType, TileIdx, TileSize};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -513,7 +488,7 @@ mod tests {
         let in_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(4, 4)),
+            TilingSpecification::new(TileSize::new_unchecked(4, 4)),
             8,
         );
 
@@ -632,7 +607,7 @@ mod tests {
         let tile_size = TileSize::new_unchecked(4, 4);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::with_zero_origin(tile_size),
+            TilingSpecification::new(tile_size),
             8,
         );
 

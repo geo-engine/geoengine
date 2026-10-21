@@ -632,7 +632,7 @@ mod tests {
         let tile_size = TileSize::new_unchecked(4, 4);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::with_zero_origin(tile_size),
+            TilingSpecification::new(tile_size),
             8,
         );
 
@@ -814,7 +814,7 @@ mod tests {
         let tile_size = TileSize::new_unchecked(3, 3);
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::with_zero_origin(tile_size),
+            TilingSpecification::new(tile_size),
             8,
         );
 

@@ -383,8 +383,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_ok() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -417,8 +416,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -460,8 +458,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_force_satellite() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -501,8 +498,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ok_illegal_input_to_masked() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -552,8 +548,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_force_satellite() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -579,8 +574,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_satellite() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -604,8 +598,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_satellite() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -629,8 +622,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_channel() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -654,8 +646,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_channel() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -679,8 +670,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_slope() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -704,8 +694,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_missing_offset() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -729,8 +718,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_unitless() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -755,8 +743,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_continuous() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let res = test_util::process(
@@ -788,8 +775,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_measurement_classification() {
-        let tiling_specification =
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2));
+        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(3, 2));
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
