@@ -48,7 +48,7 @@ impl FoldTileAccu for HeavyAccu {
             Grid::new(self.tile.tile_size_in_pixels, self.data)
                 .unwrap()
                 .into(),
-            Default::default(),
+            geoengine_datatypes::primitives::CacheHint::no_cache(),
         ))
     }
 
@@ -129,7 +129,7 @@ fn setup(
             .into(),
         time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
         spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(0., 8192.), 1., -1.),
+            GeoTransform::new(Coordinate2D::new(0., 8192.), 1., -1.).unwrap(),
             GridShape::new_2d(8192, 8192).bounding_box(),
         )),
         bands: RasterBandDescriptors::new_single_band(),
@@ -144,7 +144,7 @@ fn setup(
             .unwrap()
             .into(),
         properties: Default::default(),
-        cache_hint: Default::default(),
+        cache_hint: geoengine_datatypes::primitives::CacheHint::no_cache(),
     }];
 
     let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
