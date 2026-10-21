@@ -93,8 +93,9 @@ where
     async fn loading_info(&self, query: Q) -> Result<L>;
     async fn result_descriptor(&self) -> Result<R>;
 
-    fn tile_size(&self) -> Option<TileSize> {
-        None
+    /// The dataset's tile size override, `None` means the configured default tile size.
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        Ok(None)
     }
 
     fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>>;

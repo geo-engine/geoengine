@@ -1803,9 +1803,15 @@ mod tests {
 
         assert!(meta.is_ok());
 
+        let tile_size = Some(geoengine_datatypes::raster::TileSize::new_unchecked(
+            256, 128,
+        ));
         let meta = GdalMetaDataStatic {
             time: None,
-            params: gdal_params.clone(),
+            params: GdalDatasetParameters {
+                tile_size,
+                ..gdal_params.clone()
+            },
             result_descriptor: raster_descriptor.clone(),
             cache_ttl: None,
         };
@@ -1816,11 +1822,10 @@ mod tests {
             .unwrap()
             .id;
 
-        let meta: geoengine_operators::util::Result<
-            Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
-        > = db.meta_data(&id.into()).await;
+        let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
+            db.meta_data(&id.into()).await.unwrap();
 
-        assert!(meta.is_ok());
+        assert_eq!(meta.tile_size().unwrap(), tile_size);
 
         let meta = GdalMetaDataList {
             result_descriptor: raster_descriptor.clone(),

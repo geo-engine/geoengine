@@ -464,6 +464,14 @@ pub enum Error {
         index: usize,
     },
 
+    #[snafu(display(
+        "All files of a dataset must use the same tile size override, found {first:?} and {other:?}"
+    ))]
+    InconsistentTileSizeOverride {
+        first: Option<TileSize>,
+        other: Option<TileSize>,
+    },
+
     #[snafu(display("Tile dimensions must be greater than zero: {tile_size:?}"))]
     InvalidTileSize {
         tile_size: TileSize,
