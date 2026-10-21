@@ -282,7 +282,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::TileIdx;
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::{
         primitives::{CacheHint, TimeInterval, TimeStep},
         raster::{Grid, GridBoundingBox2D, MapElements, RenameBands, TilesEqualIgnoringCacheHint},
@@ -300,7 +300,6 @@ mod tests {
     };
 
     use super::*;
-    use geoengine_datatypes::raster::TileSize;
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -409,6 +408,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 TestDefault::test_default(),
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -431,6 +431,7 @@ mod tests {
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
+                output_origin: None,
                 rename_bands: RenameBands::Default,
             },
             sources: MultipleRasterSources {

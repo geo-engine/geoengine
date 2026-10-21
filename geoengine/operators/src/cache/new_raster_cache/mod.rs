@@ -1105,15 +1105,14 @@ where
         query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let tiling_spec = ctx.tiling_specification();
         let result_descriptor = self.result_descriptor();
 
         let time_intervals = self.time_query(query.time_interval(), ctx).await?;
         let bands = query.attributes().clone();
 
         let tile_info_iterator = result_descriptor
-            .tiling_grid_definition(tiling_spec)
-            .generate_data_tiling_strategy()
+            .tiling_grid_definition()
+            .tiling_strategy()
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds());
 
         let work: Vec<WorkItem> = tile_info_iterator
@@ -1633,7 +1632,7 @@ mod tests {
         TilingSpecification,
     ) {
         let tile_size = TileSize::new_unchecked(2, 2);
-        let tiling_specification = TilingSpecification::new(tile_size);
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
         let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.);
 
         let raster: MaskedGrid2D<u8> =
@@ -1658,6 +1657,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 tile_size.grid_shape().bounding_box(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };

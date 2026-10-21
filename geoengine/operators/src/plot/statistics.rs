@@ -377,8 +377,7 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
             BandSelection::new(self.bands.iter().map(|band| band.index).collect())?,
-            rd.tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
+            rd.tiling_grid_definition().geo_transform,
         );
         let query_bounds = raster_query_rect.spatial_bounds();
 
@@ -646,6 +645,7 @@ impl StatisticsOutput {
 mod tests {
     use geoengine_datatypes::collections::DataCollection;
     use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, PlotSeriesSelection};
+    use geoengine_datatypes::raster::{GridShape2D, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
@@ -660,8 +660,8 @@ mod tests {
         BoundingBox2D, FeatureData, Measurement, NoGeometry, TimeInterval,
     };
     use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridShape2D, RasterDataType,
-        RasterTile2D, TileIdx, TileInformation, TileSize, TilingSpecification,
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, RasterTile2D,
+        TileIdx, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
 
@@ -717,6 +717,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridShape2D::new_2d(3, 2).bounding_box(),
+                TileSize::new_unchecked(3, 2),
             ),
             bands: RasterBandDescriptors::new(
                 (0..num_bands)
@@ -765,7 +766,7 @@ mod tests {
         bbox: BoundingBox2D,
     ) -> Result<serde_json::Value> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
 
         let statistics = Statistics {
@@ -799,7 +800,7 @@ mod tests {
     #[tokio::test]
     async fn it_creates_a_column_per_percentile() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
         let plot = Statistics {
             params: StatisticsParams {
@@ -1041,7 +1042,7 @@ mod tests {
     #[tokio::test]
     async fn vector_no_column() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1142,7 +1143,7 @@ mod tests {
     #[tokio::test]
     async fn vector_single_column() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1234,7 +1235,7 @@ mod tests {
     #[tokio::test]
     async fn vector_two_columns() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(
@@ -1335,7 +1336,7 @@ mod tests {
     #[tokio::test]
     async fn raster_percentile() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1344,6 +1345,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 TestDefault::test_default(),
                 GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1426,7 +1428,7 @@ mod tests {
     #[tokio::test]
     async fn vector_percentiles() {
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
 
         let vector_source = MockFeatureCollectionSource::multiple(vec![
             DataCollection::from_slices(

@@ -699,7 +699,7 @@ pub struct RasterStacker {
 }
 
 /// Parameters for the `RasterStacker` operator.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterStackerParameters {
     /// Strategy for deriving output band names.
@@ -709,6 +709,11 @@ pub struct RasterStackerParameters {
     /// - `rename`: explicitly provides names for all resulting bands.
     #[schema(examples(json!({ "type": "default" }), json!({ "type": "suffix", "values": ["_a", "_b"] })))]
     pub rename_bands: RenameBands,
+    /// Override the origin of the stacked output grid.
+    /// If `None`, the first input's origin is used.
+    #[schema(examples(json!({ "x": 2.0, "y": -2.0 })))]
+    #[serde(default)]
+    pub output_origin: Option<crate::api::model::datatypes::Coordinate2D>,
 }
 
 impl TryFrom<RasterStacker> for OperatorsRasterStacker {
@@ -718,6 +723,7 @@ impl TryFrom<RasterStacker> for OperatorsRasterStacker {
         Ok(OperatorsRasterStacker {
             params: OperatorsRasterStackerParameters {
                 rename_bands: value.params.rename_bands.into(),
+                output_origin: value.params.output_origin.map(Into::into),
             },
             sources: (*value.sources).try_into()?,
         })
@@ -2965,6 +2971,16 @@ mod tests {
     }
 
     #[test]
+    fn raster_stacker_output_origin_defaults_when_absent() {
+        let params: RasterStackerParameters = serde_json::from_value(json!({
+            "renameBands": {"type": "default"}
+        }))
+        .expect("parameters should deserialize without outputOrigin");
+
+        assert!(params.output_origin.is_none());
+    }
+
+    #[test]
     fn it_converts_raster_vector_join_params() {
         let api = RasterVectorJoin {
             r#type: Default::default(),
@@ -3128,6 +3144,7 @@ mod tests {
                     r#type: Default::default(),
                     values: vec!["_a".to_string(), "_b".to_string()],
                 }),
+                output_origin: None,
             },
             sources: Box::new(MultipleRasterSources {
                 rasters: vec![

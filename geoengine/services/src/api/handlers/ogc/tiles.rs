@@ -343,6 +343,7 @@ impl TileQuery {
 		("session_token" = [])
 	)
 )]
+#[allow(clippy::too_many_lines)]
 pub async fn tile<C: ApplicationContext>(
     req: HttpRequest,
     session: C::Session,
@@ -732,7 +733,6 @@ mod tests {
             .and_then(|v| v.to_str().ok())
             .map(ToOwned::to_owned);
         let image_bytes = actix_web::test::read_body(res).await;
-
         assert_eq!(
             status,
             200,

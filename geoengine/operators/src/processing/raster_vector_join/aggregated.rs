@@ -99,8 +99,8 @@ where
             let spatial_bounds = query.spatial_bounds();
 
             let pixel_bounds = rd
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform()
+                .tiling_grid_definition()
+                .geo_transform
                 .bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
 
             let raster_query = RasterQueryRectangle::new(
@@ -366,6 +366,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -379,7 +380,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
 
         let raster_source = raster_source
@@ -471,6 +472,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -484,7 +486,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
 
         let raster_source = raster_source
@@ -566,6 +568,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
+                TileSize::new_unchecked(3, 2),
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("band_0".into()),
@@ -588,7 +591,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
 
         let raster_source = raster_source
@@ -712,6 +715,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -730,7 +734,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
 
         let raster_source = raster_source
@@ -874,6 +878,7 @@ mod tests {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 5]).unwrap(),
+                TileSize::new_unchecked(256, 256),
             ),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -894,7 +899,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
 
         let raster_source = raster_source
@@ -1140,6 +1145,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 2, 0, 5).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
@@ -1152,7 +1158,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
         );
 
         let raster = raster_source

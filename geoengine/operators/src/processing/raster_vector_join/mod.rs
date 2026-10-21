@@ -409,6 +409,7 @@ pub fn create_feature_aggregator<P: Pixel>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::raster::TileSize;
     use std::str::FromStr;
 
     use crate::engine::{
@@ -805,6 +806,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::test_default(),
                         GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
@@ -826,6 +828,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::test_default(),
                         GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),

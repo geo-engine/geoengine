@@ -99,7 +99,11 @@ impl RasterOperator for Rasterization {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterDataType::F64,
             time: crate::engine::TimeDescriptor::new_irregular(in_desc.time), // FIXME: the operator really should use a regular time axis
-            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, pixel_bounds),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                geo_transform,
+                pixel_bounds,
+                tiling_specification.tile_size,
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -345,12 +349,10 @@ impl QueryProcessor for GridRasterizationQueryProcessor {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> util::Result<BoxStream<'a, util::Result<Self::Output>>> {
-        let spatial_grid_desc = self
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification());
+        let spatial_grid_desc = self.result_descriptor.tiling_grid_definition();
 
-        let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
-        let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
+        let tiling_strategy = spatial_grid_desc.tiling_strategy();
+        let tiling_geo_transform = spatial_grid_desc.geo_transform;
         let query_time = query.time_interval();
 
         if let MultiPoint(points_processor) = &self.input {
@@ -364,7 +366,7 @@ impl QueryProcessor for GridRasterizationQueryProcessor {
             .then(move |tile_info| async move {
                 let tile_spatial_bounds = tile_info.spatial_partition();
 
-                let grid_size_x = tile_info.tile_size.axis_size_x();
+                let grid_size_x = tile_info.tile_size().axis_size_x();
 
                 let vector_query = VectorQueryRectangle::new(
                     tile_spatial_bounds.as_bbox(),
@@ -474,12 +476,10 @@ impl QueryProcessor for DensityRasterizationQueryProcessor {
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> util::Result<BoxStream<'a, util::Result<Self::Output>>> {
-        let spatial_grid_desc = self
-            .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification());
+        let spatial_grid_desc = self.result_descriptor.tiling_grid_definition();
 
-        let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
-        let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
+        let tiling_strategy = spatial_grid_desc.tiling_strategy();
+        let tiling_geo_transform = spatial_grid_desc.geo_transform;
         let query_time = query.time_interval();
 
         if let MultiPoint(points_processor) = &self.input {
@@ -699,7 +699,7 @@ mod tests {
     #[tokio::test]
     async fn fixed_grid_basic() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {
@@ -763,7 +763,7 @@ mod tests {
     #[tokio::test]
     async fn fixed_grid_with_shift() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {
@@ -827,7 +827,7 @@ mod tests {
     #[tokio::test]
     async fn density_basic() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {
@@ -926,7 +926,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn density_radius_overlap() {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new(TileSize::new_unchecked(2, 2)),
+            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 2)),
         );
         let rasterization = Rasterization {
             params: RasterizationParams {

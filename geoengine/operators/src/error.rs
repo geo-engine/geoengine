@@ -7,8 +7,8 @@ use bb8_postgres::bb8;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::primitives::{Coordinate2D, FeatureDataType, TimeInterval};
+use geoengine_datatypes::raster::{RasterDataType, TileSize};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use itertools::join;
 use snafu::prelude::*;
@@ -446,6 +446,19 @@ pub enum Error {
     CantMergeSpatialGridDescriptor {
         a: SpatialGridDescriptor,
         b: SpatialGridDescriptor,
+    },
+
+    #[snafu(display(
+        "The stacker requires all raster inputs to have the same pixel size and be aligned to the output grid (origin: {origin:?}). Input at index {index} is not pixel-aligned. Apply a ReTile or resampling operator before stacking."
+    ))]
+    RasterInputsNotReTileCompatible {
+        origin: Coordinate2D,
+        index: usize,
+    },
+
+    #[snafu(display("Tile dimensions must be greater than zero: {tile_size:?}"))]
+    InvalidTileSize {
+        tile_size: TileSize,
     },
 
     #[snafu(display(
