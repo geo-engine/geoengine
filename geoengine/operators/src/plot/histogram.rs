@@ -866,7 +866,7 @@ mod tests {
                     TileInformation {
                         global_geo_transform: TestDefault::test_default(),
                         tile_position: TileIdx::new_y_x(0, 0),
-                        tile_size: TileSize::new_y_x(3, 2),
+                        tile_size: TileSize::new_unchecked(3, 2),
                     },
                     0,
                     Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
@@ -891,7 +891,7 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster() {
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -943,7 +943,7 @@ mod tests {
 
     #[tokio::test]
     async fn simple_raster_without_spec() {
-        let tile_size = TileSize::new_y_x(3, 2);
+        let tile_size = TileSize::new_unchecked(3, 2);
         let tiling_specification = TilingSpecification { tile_size };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -999,7 +999,7 @@ mod tests {
     async fn it_uses_only_pixels_in_query_rectangle() {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
         let tiling_specification = TilingSpecification {
-            tile_size: TileSize::new_y_x(tile_size_in_pixels.y(), tile_size_in_pixels.x()),
+            tile_size: TileSize::new_unchecked(tile_size_in_pixels.y(), tile_size_in_pixels.x()),
         };
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -1341,7 +1341,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
             params: HistogramParams {
@@ -1359,7 +1359,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         EmptyGrid2D::<u8>::new(tile_size).into(),
@@ -1557,7 +1557,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
         let tiling_specification =
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x()));
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = Histogram {
@@ -1576,7 +1576,7 @@ mod tests {
                         TileInformation {
                             global_geo_transform: TestDefault::test_default(),
                             tile_position: TileIdx::new_y_x(0, 0),
-                            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+                            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
                         },
                         0,
                         Grid2D::new(tile_size, vec![4; 6]).unwrap().into(),

@@ -5,7 +5,7 @@ use super::{
 };
 use super::{
     GeoTransform, GeoTransformAccess, GridBounds, GridIndexAccess, GridShape, GridShape2D,
-    GridShape3D, GridShapeAccess, GridSize, Raster, TileIdx, TileInformation,
+    GridShape3D, GridShapeAccess, GridSize, Raster, TileIdx, TileInformation, TileSize,
     grid_or_empty::GridOrEmpty,
 };
 use crate::primitives::CacheHint;
@@ -67,7 +67,8 @@ where
     pub fn tile_information(&self) -> TileInformation {
         TileInformation::new(
             self.tile_position,
-            [self.grid_array.axis_size_y(), self.grid_array.axis_size_x()].into(),
+            // a tile's grid always has the (non-zero) shape of its tile size
+            TileSize::new_unchecked(self.grid_array.axis_size_y(), self.grid_array.axis_size_x()),
             self.global_geo_transform,
         )
     }
@@ -574,19 +575,19 @@ mod tests {
     fn tile_information_new() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_geo_transform, GeoTransform::test_default());
         assert_eq!(ti.tile_position, TileIdx::new_y_x(0, 0));
-        assert_eq!(ti.tile_size, TileSize::new_y_x(100, 100));
+        assert_eq!(ti.tile_size, TileSize::new_unchecked(100, 100));
     }
 
     #[test]
     fn tile_information_tile_position() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.tile_position(), TileIdx::new_y_x(0, 0));
@@ -596,7 +597,7 @@ mod tests {
     fn tile_information_local_upper_left() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.local_upper_left_pixel_idx(), GridIdx([0, 0]));
@@ -606,7 +607,7 @@ mod tests {
     fn tile_information_local_lower_left() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.local_lower_left_pixel_idx(), GridIdx([99, 0]));
@@ -616,7 +617,7 @@ mod tests {
     fn tile_information_local_upper_right() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.local_upper_right_pixel_idx(), GridIdx([0, 99]));
@@ -626,7 +627,7 @@ mod tests {
     fn tile_information_local_lower_right() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.local_lower_right_pixel_idx(), GridIdx([99, 99]));
@@ -636,7 +637,7 @@ mod tests {
     fn tile_information_global_upper_left_idx() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([0, 0]));
@@ -646,7 +647,7 @@ mod tests {
     fn tile_information_global_upper_left_idx_2_3() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(-2, 3),
-            TileSize::new_y_x(100, 1000),
+            TileSize::new_unchecked(100, 1000),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_left_pixel_idx(), GridIdx([-200, 3000]));
@@ -656,7 +657,7 @@ mod tests {
     fn tile_information_global_upper_right_idx() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([0, 99]));
@@ -666,7 +667,7 @@ mod tests {
     fn tile_information_global_upper_right_idx_2_3() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(-2, 3),
-            TileSize::new_y_x(100, 1000),
+            TileSize::new_unchecked(100, 1000),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_upper_right_pixel_idx(), GridIdx([-200, 3999]));
@@ -676,7 +677,7 @@ mod tests {
     fn tile_information_global_lower_right_idx() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([99, 99]));
@@ -686,7 +687,7 @@ mod tests {
     fn tile_information_global_lower_right_idx_2_3() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(-2, 3),
-            TileSize::new_y_x(100, 1000),
+            TileSize::new_unchecked(100, 1000),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_right_pixel_idx(), GridIdx([-101, 3999]));
@@ -696,7 +697,7 @@ mod tests {
     fn tile_information_global_lower_left_idx() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([99, 0]));
@@ -706,7 +707,7 @@ mod tests {
     fn tile_information_global_lower_left_idx_2_3() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(-2, 3),
-            TileSize::new_y_x(100, 1000),
+            TileSize::new_unchecked(100, 1000),
             GeoTransform::test_default(),
         );
         assert_eq!(ti.global_lower_left_pixel_idx(), GridIdx([-101, 3000]));
@@ -716,7 +717,7 @@ mod tests {
     fn tile_information_local_to_global_idx_0_0() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(0, 0),
-            TileSize::new_y_x(100, 100),
+            TileSize::new_unchecked(100, 100),
             GeoTransform::test_default(),
         );
         assert_eq!(
@@ -729,7 +730,7 @@ mod tests {
     fn tile_information_local_to_global_idx_2_3() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(-2, 3),
-            TileSize::new_y_x(100, 1000),
+            TileSize::new_unchecked(100, 1000),
             GeoTransform::test_default(),
         );
         assert_eq!(
@@ -742,7 +743,7 @@ mod tests {
     fn tile_information_spatial_partition() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(-2, 3),
-            TileSize::new_y_x(100, 1000),
+            TileSize::new_unchecked(100, 1000),
             GeoTransform::test_default(),
         );
         assert_eq!(
@@ -758,7 +759,7 @@ mod tests {
     fn tile_information_spatial_bounds_geotransform() {
         let ti = TileInformation::new(
             TileIdx::new_y_x(2, 3),
-            TileSize::new_y_x(10, 10),
+            TileSize::new_unchecked(10, 10),
             GeoTransform::new_with_coordinate_x_y_unchecked(-180., 0.1, 90., -0.1),
         );
         assert_eq!(

@@ -651,7 +651,7 @@ mod tests {
         };
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x())),
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x())),
             8,
         );
 
@@ -834,7 +834,7 @@ mod tests {
         };
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(
-            TilingSpecification::new(TileSize::new_y_x(tile_size.y(), tile_size.x())),
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x())),
             8,
         );
 

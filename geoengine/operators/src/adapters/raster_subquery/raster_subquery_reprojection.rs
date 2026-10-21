@@ -442,7 +442,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_spec = TilingSpecification::new(TileSize::from([2, 2]));
+        let tiling_spec = TilingSpecification::new(TileSize::new_unchecked(2, 2));
 
         let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
         let tiling_strat = tiling_grid.generate_data_tiling_strategy();
@@ -534,7 +534,7 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_spec = TilingSpecification::new(TileSize::new_y_x(2, 2));
+        let tiling_spec = TilingSpecification::new(TileSize::new_unchecked(2, 2));
         let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
         let tiling_strat = tiling_grid.generate_data_tiling_strategy();
         let in_spatial_grid = tiling_grid.tiling_spatial_grid_definition();

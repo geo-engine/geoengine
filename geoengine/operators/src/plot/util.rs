@@ -124,6 +124,7 @@ mod tests {
     use super::*;
     use crate::engine::RasterBandDescriptor;
     use geoengine_datatypes::primitives::{CacheHint, Measurement, TimeInterval};
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{
         EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, MaskedGrid2D, TileInformation,
     };
@@ -135,7 +136,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: GeoTransform::test_default(),
                 tile_position: [1, 1].into(),
-                tile_size: [3, 2].into(),
+                tile_size: TileSize::new_unchecked(3, 2),
             },
             0,
             grid_array,

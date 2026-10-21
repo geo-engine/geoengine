@@ -389,7 +389,7 @@ mod tests {
         // the file's own grid: a pixel size computed from bounds is off by rounding and does not
         // align with the file
         let tile_information = TileInformation {
-            tile_size: TileSize::new_y_x(8, 8),
+            tile_size: TileSize::new_unchecked(8, 8),
             tile_position: [0, 0].into(),
             global_geo_transform: GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
         };
@@ -554,7 +554,7 @@ mod tests {
                 let plan = TilePlan {
                     tile: TileInformation::new(
                         position.into(),
-                        TileSize::new_y_x(32, 32),
+                        TileSize::new_unchecked(32, 32),
                         GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
                     ),
                     time: TimeInterval::default(),
@@ -603,7 +603,7 @@ mod tests {
         let plan = TilePlan {
             tile: TileInformation::new(
                 [0, 0].into(),
-                TileSize::new_y_x(32, 32),
+                TileSize::new_unchecked(32, 32),
                 GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
             ),
             time: TimeInterval::default(),
@@ -647,7 +647,7 @@ mod tests {
             let plan = TilePlan {
                 tile: TileInformation::new(
                     [0, 0].into(),
-                    TileSize::new_y_x(32, 32),
+                    TileSize::new_unchecked(32, 32),
                     GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
                 ),
                 time: TimeInterval::default(),
@@ -689,7 +689,7 @@ mod tests {
         let plan = TilePlan {
             tile: TileInformation::new(
                 [0, 0].into(),
-                TileSize::new_y_x(8, 8),
+                TileSize::new_unchecked(8, 8),
                 GeoTransform::new_unchecked((0., 64.).into(), 8., -8.),
             ),
             time: TimeInterval::default(),
@@ -755,7 +755,7 @@ mod tests {
                     let plan = TilePlan {
                         tile: TileInformation::new(
                             [tile_y as isize, tile_x as isize].into(),
-                            TileSize::new_y_x(tile_size, tile_size),
+                            TileSize::new_unchecked(tile_size, tile_size),
                             GeoTransform::new_unchecked((0., 64.).into(), pixel_size, -pixel_size),
                         ),
                         time: TimeInterval::default(),

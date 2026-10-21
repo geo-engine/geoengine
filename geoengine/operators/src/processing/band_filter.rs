@@ -335,7 +335,7 @@ mod tests {
         let tile_info = TileInformation {
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
         };
 
         let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![1_u8, 2, 3, 4]).unwrap().into();
@@ -387,7 +387,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_y_x(
+            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_unchecked(
                 tile_size.y(),
                 tile_size.x(),
             )),
@@ -463,7 +463,7 @@ mod tests {
         let tile_info = TileInformation {
             global_geo_transform: TestDefault::test_default(),
             tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_y_x(tile_size.y(), tile_size.x()),
+            tile_size: TileSize::new_unchecked(tile_size.y(), tile_size.x()),
         };
 
         let band_0: MaskedGrid2D<u8> = Grid2D::new(tile_size, vec![1_u8, 2, 3, 4]).unwrap().into();
@@ -515,7 +515,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_y_x(
+            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_unchecked(
                 tile_size.y(),
                 tile_size.x(),
             )),

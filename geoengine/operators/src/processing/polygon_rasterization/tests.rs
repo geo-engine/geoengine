@@ -22,7 +22,7 @@ use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
 use geoengine_datatypes::primitives::{
     ClassificationMeasurement, DateTime, FeatureData, MultiPoint, MultiPolygon, TimeGranularity,
 };
-use geoengine_datatypes::raster::{RenameBands, TilingSpecification};
+use geoengine_datatypes::raster::{RenameBands, TileSize, TilingSpecification};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::{
@@ -70,7 +70,9 @@ fn params(value: BurnValue, time: RasterizationTime) -> PolygonRasterizationPara
 }
 
 fn exe_ctx_4x4() -> MockExecutionContext {
-    MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([4, 4].into()))
+    MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(TileSize::new_unchecked(
+        4, 4,
+    )))
 }
 
 async fn initialize(
