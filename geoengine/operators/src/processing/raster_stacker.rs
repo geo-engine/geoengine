@@ -21,7 +21,7 @@ use geoengine_datatypes::primitives::{
     BandSelection, Coordinate2D, RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
-    DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands, TilingSpecification,
+    DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
 };
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -122,14 +122,8 @@ impl RasterOperator for RasterStacker {
             )?;
         }
 
-        let output_tile_size = first_spatial_grid.tile_size;
-        if output_tile_size.axis_size_y() == 0 || output_tile_size.axis_size_x() == 0 {
-            return Err(crate::error::Error::InvalidTileSize {
-                tile_size: output_tile_size,
-            });
-        }
-        let result_spatial_grid = SpatialGridDescriptor::new_source(result_grid, output_tile_size);
-        let output_tiling_spec = TilingSpecification::new(output_tile_size, output_origin);
+        let result_spatial_grid =
+            SpatialGridDescriptor::new_source(result_grid, first_spatial_grid.tile_size);
 
         let time = in_descriptors.iter().skip(1).map(|rd| rd.time).fold(
             in_descriptors
@@ -177,7 +171,6 @@ impl RasterOperator for RasterStacker {
             rename_bands: self.params.rename_bands.clone(),
             raster_sources,
             bands_per_source,
-            output_tiling_spec,
         }))
     }
 
@@ -191,7 +184,6 @@ pub struct InitializedRasterStacker {
     rename_bands: RenameBands,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     bands_per_source: Vec<u32>,
-    output_tiling_spec: TilingSpecification,
 }
 
 impl InitializedRasterOperator for InitializedRasterStacker {
@@ -212,7 +204,6 @@ impl InitializedRasterOperator for InitializedRasterStacker {
 
         let bands_per_source = self.bands_per_source.clone();
         let target_spatial_grid = *self.result_descriptor.spatial_grid_descriptor();
-        let tiling_spec = self.output_tiling_spec;
 
         macro_rules! stacker_arm {
             ($getter:ident, $variant:ident) => {{
@@ -226,7 +217,6 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                             ),
                             source.as_ref(),
                             target_spatial_grid,
-                            tiling_spec,
                         )
                     })
                     .collect();
@@ -271,7 +261,12 @@ impl InitializedRasterOperator for InitializedRasterStacker {
         Ok(RasterStacker {
             params: RasterStackerParams {
                 rename_bands: self.rename_bands.clone(),
-                output_origin: Some(self.output_tiling_spec.tiling_origin_reference()),
+                output_origin: Some(
+                    self.result_descriptor
+                        .spatial_grid_descriptor()
+                        .geo_transform()
+                        .origin_coordinate,
+                ),
             },
             sources: MultipleRasterSources {
                 rasters: self
@@ -295,9 +290,7 @@ fn re_tile_source<T: Pixel>(
     processor: BoxRasterQueryProcessor<T>,
     source: &dyn InitializedRasterOperator,
     target_spatial_grid: SpatialGridDescriptor,
-    tiling_spec: TilingSpecification,
 ) -> BoxRasterQueryProcessor<T> {
-    // ponytail: pass-through avoids unnecessary re-tiling of already-aligned inputs.
     if source.result_descriptor().spatial_grid_descriptor() == &target_spatial_grid {
         return processor;
     }
@@ -307,7 +300,7 @@ fn re_tile_source<T: Pixel>(
         ..source.result_descriptor().clone()
     };
 
-    ReTileProcessor::new(processor, target_desc, tiling_spec).boxed()
+    ReTileProcessor::new(processor, target_desc).boxed()
 }
 
 pub(crate) struct RasterStackerProcessor<T> {

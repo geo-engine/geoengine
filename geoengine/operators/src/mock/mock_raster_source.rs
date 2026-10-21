@@ -556,7 +556,7 @@ mod tests {
         let deserialized: TypedRasterOperator = serde_json::from_value(serialized).unwrap();
 
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification::with_zero_origin(tile_size);
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -645,7 +645,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let query_processor = raster_source
@@ -778,7 +778,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(3, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(3, 2)),
         );
 
         let query_processor = raster_source

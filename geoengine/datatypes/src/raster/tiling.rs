@@ -183,35 +183,15 @@ impl Iterator for TileIdx2DIter {
     }
 }
 
-/// The static parameters required to create a `TilingStrategy`
+/// The configured default tile size, used by sources without their own tile size
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct TilingSpecification {
     pub tile_size: TileSize,
-    pub origin: Coordinate2D,
 }
 
 impl TilingSpecification {
-    /// Create a `TilingSpecification` with an explicit origin.
-    /// The origin should typically be derived from the dataset's geo-transform origin.
-    pub fn new(tile_size: TileSize, origin: Coordinate2D) -> Self {
-        Self { tile_size, origin }
-    }
-
-    /// Convenience constructor using `(0, 0)` as the tiling origin.
-    ///
-    /// **Warning:** `(0, 0)` is almost always wrong for real data.
-    /// Prefer `TilingSpecification::new(tile_size, dataset_origin)` and only
-    /// use this when the origin genuinely does not matter (e.g. unit tests
-    /// with mock data that has origin `(0, 0)`).
-    pub fn with_zero_origin(tile_size: TileSize) -> Self {
-        Self {
-            tile_size,
-            origin: Coordinate2D::new(0., 0.),
-        }
-    }
-
-    pub fn tiling_origin_reference(&self) -> Coordinate2D {
-        self.origin
+    pub fn new(tile_size: TileSize) -> Self {
+        Self { tile_size }
     }
 }
 
@@ -235,7 +215,7 @@ impl From<TilingSpecification> for GridShape2D {
 
 impl TestDefault for TilingSpecification {
     fn test_default() -> Self {
-        Self::with_zero_origin(TileSize::default_512())
+        Self::new(TileSize::default_512())
     }
 }
 
@@ -734,17 +714,6 @@ mod tests {
     }
 
     #[test]
-    fn tiling_specification_with_origin() {
-        let spec = TilingSpecification::with_zero_origin(TileSize::new_unchecked(512, 512));
-        assert_eq!(spec.origin, Coordinate2D::new(0., 0.));
-
-        let custom_origin = Coordinate2D::new(12.5, -3.7);
-        let spec_with_origin = TilingSpecification::new(spec.tile_size, custom_origin);
-        assert_eq!(spec_with_origin.origin, custom_origin);
-        assert_eq!(spec_with_origin.tile_size, spec.tile_size);
-    }
-
-    #[test]
     fn tiling_strategy_with_custom_origin() {
         let origin = Coordinate2D::new(10., -10.);
         let geo_transform = GeoTransform::new_unchecked(origin, 1.0, -1.0);
@@ -758,19 +727,6 @@ mod tests {
         // Tile (0,0) starts at global pixel (0,0)
         let tile_start = strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(0, 0));
         assert_eq!(tile_start, GridIdx2D::new_y_x(0, 0));
-    }
-
-    #[test]
-    fn tiling_grid_definition_with_custom_origin() {
-        let origin = Coordinate2D::new(100., -200.);
-        let spec = TilingSpecification::new(TileSize::new_unchecked(512, 512), origin);
-
-        let geo_transform = GeoTransform::new_unchecked(origin, 30., -30.);
-
-        // Verify that TilingStrategy built from this spec uses the custom origin
-        let strat = TilingStrategy::new(spec.tile_size, geo_transform);
-        assert_eq!(strat.geo_transform.origin_coordinate, origin);
-        assert_eq!(strat.tile_size, TileSize::new_unchecked(512, 512));
     }
 
     #[test]

@@ -964,10 +964,9 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification =
-            geoengine_datatypes::raster::TilingSpecification::with_zero_origin(
-                TileSize::new_unchecked(tile_size.y(), tile_size.x()),
-            );
+        let tiling_specification = geoengine_datatypes::raster::TilingSpecification::new(
+            TileSize::new_unchecked(tile_size.y(), tile_size.x()),
+        );
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -1040,10 +1039,8 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
-            tile_size.y(),
-            tile_size.x(),
-        ));
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1120,10 +1117,8 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
-            tile_size.y(),
-            tile_size.x(),
-        ));
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let box_plot = BoxPlot {
             params: BoxPlotParams {
                 column_names: vec![],
@@ -1195,10 +1190,8 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
-            tile_size.y(),
-            tile_size.x(),
-        ));
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let histogram = BoxPlot {
             params: BoxPlotParams {
@@ -1272,10 +1265,8 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
-            tile_size.y(),
-            tile_size.x(),
-        ));
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1359,10 +1350,8 @@ mod tests {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let tiling_specification = TilingSpecification::with_zero_origin(TileSize::new_unchecked(
-            tile_size.y(),
-            tile_size.x(),
-        ));
+        let tiling_specification =
+            TilingSpecification::new(TileSize::new_unchecked(tile_size.y(), tile_size.x()));
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let histogram = BoxPlot {
@@ -1481,7 +1470,7 @@ mod tests {
         bbox: BoundingBox2D,
     ) -> Result<PlotData> {
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(4, 2)),
+            TilingSpecification::new(TileSize::new_unchecked(4, 2)),
         );
 
         let query_processor = BoxPlot {
