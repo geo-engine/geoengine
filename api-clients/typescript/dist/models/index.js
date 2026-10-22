@@ -31,7 +31,6 @@ __exportStar(require("./AggregationMean"), exports);
 __exportStar(require("./AggregationMin"), exports);
 __exportStar(require("./AggregationPercentileEstimate"), exports);
 __exportStar(require("./AggregationSum"), exports);
-__exportStar(require("./ArunaDataProviderDefinition"), exports);
 __exportStar(require("./AttributeAggregateDef"), exports);
 __exportStar(require("./AttributeAggregateType"), exports);
 __exportStar(require("./AttributeFilter"), exports);

@@ -28,6 +28,7 @@ use crate::{
         storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
     },
 };
+use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::{
@@ -41,7 +42,6 @@ use snafu::ResultExt;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio_postgres::Transaction;
-use tonic::async_trait;
 use uuid::Uuid;
 
 #[async_trait]

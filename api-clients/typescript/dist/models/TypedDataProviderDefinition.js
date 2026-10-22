@@ -16,7 +16,6 @@ exports.TypedDataProviderDefinitionFromJSON = TypedDataProviderDefinitionFromJSO
 exports.TypedDataProviderDefinitionFromJSONTyped = TypedDataProviderDefinitionFromJSONTyped;
 exports.TypedDataProviderDefinitionToJSON = TypedDataProviderDefinitionToJSON;
 exports.TypedDataProviderDefinitionToJSONTyped = TypedDataProviderDefinitionToJSONTyped;
-const ArunaDataProviderDefinition_1 = require("./ArunaDataProviderDefinition");
 const CopernicusDataspaceDataProviderDefinition_1 = require("./CopernicusDataspaceDataProviderDefinition");
 const DatasetLayerListingProviderDefinition_1 = require("./DatasetLayerListingProviderDefinition");
 const EbvPortalDataProviderDefinition_1 = require("./EbvPortalDataProviderDefinition");
@@ -37,8 +36,6 @@ function TypedDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     switch (json['type']) {
-        case 'Aruna':
-            return Object.assign({}, (0, ArunaDataProviderDefinition_1.ArunaDataProviderDefinitionFromJSONTyped)(json, true), { type: 'Aruna' });
         case 'CopernicusDataspace':
             return Object.assign({}, (0, CopernicusDataspaceDataProviderDefinition_1.CopernicusDataspaceDataProviderDefinitionFromJSONTyped)(json, true), { type: 'CopernicusDataspace' });
         case 'DatasetLayerListing':
@@ -75,8 +72,6 @@ function TypedDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fal
         return value;
     }
     switch (value['type']) {
-        case 'Aruna':
-            return Object.assign({}, (0, ArunaDataProviderDefinition_1.ArunaDataProviderDefinitionToJSON)(value), { type: 'Aruna' });
         case 'CopernicusDataspace':
             return Object.assign({}, (0, CopernicusDataspaceDataProviderDefinition_1.CopernicusDataspaceDataProviderDefinitionToJSON)(value), { type: 'CopernicusDataspace' });
         case 'DatasetLayerListing':

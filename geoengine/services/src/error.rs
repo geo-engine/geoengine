@@ -2,7 +2,6 @@ use crate::api::model::datatypes::{
     DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
-use crate::datasets::external::aruna::error::ArunaProviderError;
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::HttpResponse;
@@ -376,11 +375,6 @@ pub enum Error {
     },
 
     #[snafu(context(false))]
-    ArunaProvider {
-        source: ArunaProviderError,
-    },
-
-    #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
@@ -510,6 +504,14 @@ pub enum Error {
     UnexpectedDatabaseVersionDuringMigration {
         expected: String,
         found: String,
+    },
+
+    #[snafu(display(
+        "Aruna providers are no longer supported. Remove them before migrating. Existing Aruna providers (id, name): {}",
+        providers.join(", ")
+    ))]
+    ArunaProvidersExist {
+        providers: Vec<String>,
     },
 
     #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once."))]

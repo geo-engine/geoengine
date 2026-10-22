@@ -10,7 +10,6 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { ArunaDataProviderDefinitionFromJSONTyped, ArunaDataProviderDefinitionToJSON, } from './ArunaDataProviderDefinition';
 import { CopernicusDataspaceDataProviderDefinitionFromJSONTyped, CopernicusDataspaceDataProviderDefinitionToJSON, } from './CopernicusDataspaceDataProviderDefinition';
 import { DatasetLayerListingProviderDefinitionFromJSONTyped, DatasetLayerListingProviderDefinitionToJSON, } from './DatasetLayerListingProviderDefinition';
 import { EbvPortalDataProviderDefinitionFromJSONTyped, EbvPortalDataProviderDefinitionToJSON, } from './EbvPortalDataProviderDefinition';
@@ -31,8 +30,6 @@ export function TypedDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminat
         return json;
     }
     switch (json['type']) {
-        case 'Aruna':
-            return Object.assign({}, ArunaDataProviderDefinitionFromJSONTyped(json, true), { type: 'Aruna' });
         case 'CopernicusDataspace':
             return Object.assign({}, CopernicusDataspaceDataProviderDefinitionFromJSONTyped(json, true), { type: 'CopernicusDataspace' });
         case 'DatasetLayerListing':
@@ -69,8 +66,6 @@ export function TypedDataProviderDefinitionToJSONTyped(value, ignoreDiscriminato
         return value;
     }
     switch (value['type']) {
-        case 'Aruna':
-            return Object.assign({}, ArunaDataProviderDefinitionToJSON(value), { type: 'Aruna' });
         case 'CopernicusDataspace':
             return Object.assign({}, CopernicusDataspaceDataProviderDefinitionToJSON(value), { type: 'CopernicusDataspace' });
         case 'DatasetLayerListing':
