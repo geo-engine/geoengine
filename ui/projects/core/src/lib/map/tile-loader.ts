@@ -389,6 +389,13 @@ export class TileLoader {
         }
     }
 
+    /** Cancels requests and retries while retaining loaded tiles and metadata URLs for reuse. */
+    cancelPending(reason: string): void {
+        for (const tile of this.outstanding) {
+            this.cancel(tile, reason);
+        }
+    }
+
     /** Gives up on one tile, reporting the condition the way a request that became obsolete does. */
     private cancel(tile: ImageTile, reason: string): void {
         this.diagnostic({event: 'aborted', tile: tile.getKey(), reason});

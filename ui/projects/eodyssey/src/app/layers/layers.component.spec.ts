@@ -186,6 +186,75 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
+    it('reads each source zoom limit and changes the applied limit only on Apply', async () => {
+        const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
+        getLayerCollectionItems.mockImplementation((_provider, collection) => {
+            if (collection === 'edv') {
+                return Promise.resolve({
+                    items: [
+                        {...dataset, properties: [...(dataset.properties ?? []), ['edv:minZoom', '4']]},
+                        {
+                            ...dataset,
+                            name: 'Z Other source',
+                            id: {...dataset.id, collectionId: 'other-dataset'},
+                            properties: [
+                                ['edv:dataset', 'other'],
+                                ['edv:minZoom', '5'],
+                            ],
+                        },
+                    ],
+                });
+            }
+            if (collection === 'other-dataset') {
+                return Promise.resolve({
+                    items: [
+                        {
+                            type: 'collection',
+                            name: 'Global',
+                            description: '',
+                            id: {providerId: 'provider', collectionId: 'other-region'},
+                            properties: [['edv:crs', 'EPSG:4326']],
+                        },
+                    ],
+                });
+            }
+            if (collection === 'other-region') {
+                return Promise.resolve({
+                    items: [{...(listings.region.items[0] as CollectionItem), id: {providerId: 'provider', layerId: 'other-layer'}}],
+                });
+            }
+            return Promise.resolve(listings[collection] ?? {items: []});
+        });
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedDataSource()?.minZoom).toBe(4);
+        expect(eodysseyLayerService.appliedDataSource()).toBeUndefined();
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.appliedDataSource()?.minZoom).toBe(4);
+        eodysseyLayerService.setSelectedDataSource('other');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedDataSource()?.minZoom).toBe(5);
+        expect(eodysseyLayerService.appliedDataSource()?.minZoom).toBe(4);
+        eodysseyLayerService.applySelectedPreset();
+        expect(eodysseyLayerService.appliedDataSource()?.minZoom).toBe(5);
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('other-layer');
+    });
+
+    it.each(['', '-1', '4.5', '256', 'NaN', 'Infinity'])('reports invalid zoom metadata %j', async (value) => {
+        const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'edv'
+                    ? {items: [{...dataset, properties: [...(dataset.properties ?? []), ['edv:minZoom', value]]}]}
+                    : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.catalogueError()).toContain('Invalid edv:minZoom');
+    });
+
     it('waits for the replacement view center and removes the old view listener', async () => {
         mockCoverageCatalogue();
         mapView.setCenter([9, 50]);

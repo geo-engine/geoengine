@@ -66,8 +66,10 @@ export class MainComponent {
     readonly currentTime = toSignal(this.projectService.getTimeStream());
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
+    readonly minTileZoom = computed(() => this.eodysseyLayerService.appliedDataSource()?.minZoom ?? 0);
+    readonly zoomRequired = signal(false);
     readonly tileLoading = signal(false);
-    readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || this.tileLoading());
+    readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
 
     readonly isLayersActive = isActive('/map/layers', this.router);
     readonly isComputeActive = isActive('/map/compute', this.router);

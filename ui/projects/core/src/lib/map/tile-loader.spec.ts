@@ -152,6 +152,27 @@ describe('TileLoader', () => {
         expect(image.src).toBe('');
     });
 
+    it('cancels pending retries without disposing the loader', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+        const {tile, load, setState} = makeTile();
+        const loader = new TileLoader({authHeaders: (): Record<string, string> => authHeaders});
+        load.mockImplementation(() => loader.load(tile, 'https://example.com/tile'));
+        loader.load(tile, 'https://example.com/tile');
+        await vi.advanceTimersByTimeAsync(0);
+
+        loader.cancelPending('view is below minimum tile zoom');
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(setState).toHaveBeenCalledWith(TileState.IDLE);
+
+        loader.load(tile, 'https://example.com/tile');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        loader.abortAll();
+    });
+
     it('retries a transient failure after a delay that grows with every attempt', async () => {
         vi.useFakeTimers();
         const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(mockBlob('', ''))});
