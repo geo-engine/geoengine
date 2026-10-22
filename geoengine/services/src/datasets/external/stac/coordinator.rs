@@ -76,8 +76,8 @@ impl fmt::Debug for Identity {
 /// arriving out of order cannot replenish the budget.
 #[derive(Debug)]
 struct RemoteQuota {
-    /// Server-reported capacity, conservatively reduced for local reservations.
-    remaining: usize,
+    /// Number of requests remaining, conservatively reduced for local reservations.
+    remaining_requests: usize,
     /// Absolute deadline derived from the server's relative reset duration.
     reset: Instant,
 }
@@ -86,9 +86,10 @@ impl RemoteQuota {
     /// Deduct other unfinished attempts that the server may not have counted yet,
     /// then retain the smaller budget and later reset from both observations.
     fn merge(current: &mut Option<Self>, mut observed: Self, outstanding: usize) {
-        observed.remaining = observed.remaining.saturating_sub(outstanding);
+        observed.remaining_requests = observed.remaining_requests.saturating_sub(outstanding);
         if let Some(current) = current {
-            current.remaining = current.remaining.min(observed.remaining);
+            current.remaining_requests =
+                current.remaining_requests.min(observed.remaining_requests);
             current.reset = current.reset.max(observed.reset);
         } else {
             *current = Some(observed);
@@ -96,7 +97,7 @@ impl RemoteQuota {
     }
 
     fn blocked_until(&self) -> Option<Instant> {
-        (self.remaining == 0).then_some(self.reset)
+        (self.remaining_requests == 0).then_some(self.reset)
     }
 }
 
@@ -169,9 +170,9 @@ enum Admission {
 struct State {
     /// One notification handle per queued attempt, also used as its unique identity.
     queue: VecDeque<Arc<Notify>>,
-    /// Admitted attempts still waiting for response headers or a transport error.
+    /// Number of admitted HTTP attempts still waiting for response headers or a transport error.
     /// Used to adjust server feedback; this is not a concurrency limit.
-    in_flight: usize,
+    in_flight_requests: usize,
     /// Learned policies, deduplicated by duration. Empty selects ten starts/second.
     windows: Vec<Window>,
     /// Chronological admission timestamps shared by every window. Completion,
@@ -255,7 +256,7 @@ impl State {
             return Admission::WaitUntil(deadline);
         }
         self.queue.pop_front();
-        self.in_flight += 1;
+        self.in_flight_requests += 1;
         self.starts.push_back(now);
         self.last_activity = now;
         for quota in self
@@ -264,7 +265,7 @@ impl State {
             .filter_map(|window| window.remote.as_mut())
             .chain(self.unscoped_quota.as_mut())
         {
-            quota.remaining = quota.remaining.saturating_sub(1);
+            quota.remaining_requests = quota.remaining_requests.saturating_sub(1);
         }
         self.wake_front();
         Admission::Admitted
@@ -296,7 +297,7 @@ impl State {
     }
 
     /// Merge response feedback while preserving policies absent from this response.
-    /// The responding attempt must already be released so `in_flight` counts only
+    /// The responding attempt must already be released so `in_flight_requests` counts only
     /// the other attempts to reserve against the reported remaining capacity.
     fn observe(&mut self, feedback: ResponseFeedback, now: Instant) {
         self.prune(now);
@@ -316,11 +317,11 @@ impl State {
                     .expect("the observed window was just inserted")
             };
             if let Some(remote) = remote {
-                RemoteQuota::merge(&mut window.remote, remote, self.in_flight);
+                RemoteQuota::merge(&mut window.remote, remote, self.in_flight_requests);
             }
         }
         if let Some(quota) = feedback.unscoped_quota {
-            RemoteQuota::merge(&mut self.unscoped_quota, quota, self.in_flight);
+            RemoteQuota::merge(&mut self.unscoped_quota, quota, self.in_flight_requests);
         }
         if let Some(deadline) = feedback.cooldown_until {
             self.cooldown_until = Some(
@@ -344,7 +345,7 @@ impl State {
                 }
             }
             RequestPhase::InFlight => {
-                self.in_flight = self.in_flight.saturating_sub(1);
+                self.in_flight_requests = self.in_flight_requests.saturating_sub(1);
                 self.last_activity = Instant::now();
             }
             RequestPhase::Finished => return,
@@ -401,7 +402,7 @@ impl StacRequestCoordinator {
                 Arc::new(Self {
                     state: Mutex::new(State {
                         queue: VecDeque::new(),
-                        in_flight: 0,
+                        in_flight_requests: 0,
                         windows: Vec::new(),
                         starts: VecDeque::new(),
                         unscoped_quota: None,
@@ -478,7 +479,7 @@ impl StacRequestCoordinator {
 
     /// Queue and dispatch one attempt using the current access token. Finish its
     /// guard as soon as headers or a transport error arrive; body decoding belongs
-    /// to `execute` and does not keep the attempt in `State::in_flight`.
+    /// to `execute` and does not keep the attempt in `State::in_flight_requests`.
     async fn execute_attempt(
         self: &Arc<Self>,
         client: &reqwest::Client,
@@ -548,7 +549,7 @@ impl StacRequestCoordinator {
 enum RequestPhase {
     /// Registered in the FIFO queue; the handle identifies the entry to remove.
     Queued(Arc<Notify>),
-    /// Capacity is reserved and the attempt contributes to `State::in_flight`.
+    /// Capacity is reserved and the attempt contributes to `State::in_flight_requests`.
     InFlight,
     /// Bookkeeping has been released; dropping the guard requires no cleanup.
     Finished,
@@ -560,7 +561,7 @@ enum RequestPhase {
 /// This guard holds a coordinator reference and lifecycle state, not a mutex lock.
 /// Normal completion calls [`Self::finish`] to release bookkeeping and apply
 /// response feedback atomically. `Drop` handles cancellation or unwinding by
-/// removing the waiter or decrementing [`State::in_flight`]. Neither path
+/// removing the waiter or decrementing [`State::in_flight_requests`]. Neither path
 /// refunds the admitted start recorded in the rolling history.
 struct RequestGuard {
     coordinator: Arc<StacRequestCoordinator>,
@@ -683,7 +684,7 @@ impl ResponseFeedback {
             }
             .unwrap_or(FALLBACK_DELAY);
             let quota = RemoteQuota {
-                remaining: available,
+                remaining_requests: available,
                 reset: now.checked_add(reset).unwrap_or(now + FALLBACK_DELAY),
             };
             let destination = if let Some(window) = scope.and_then(|duration| {
@@ -798,7 +799,7 @@ mod tests {
             .expect("the coordinator retries HTTP and decode failures internally");
         assert_eq!(result, json!({"complete": true}));
         let state = coordinator.state.lock().unwrap();
-        assert_eq!(state.in_flight, 0);
+        assert_eq!(state.in_flight_requests, 0);
     }
 
     #[tokio::test]
@@ -821,7 +822,7 @@ mod tests {
             .await
             .expect_err("terminal responses are returned as errors");
         assert_eq!(error.status(), Some(reqwest::StatusCode::NOT_FOUND));
-        assert_eq!(coordinator.state.lock().unwrap().in_flight, 0);
+        assert_eq!(coordinator.state.lock().unwrap().in_flight_requests, 0);
         coordinator.acquire().await.observe(&HeaderMap::new(), 200);
     }
 
@@ -1034,7 +1035,7 @@ mod tests {
             coordinator.state.lock().unwrap().windows[0]
                 .remote
                 .as_ref()
-                .map(|quota| quota.remaining),
+                .map(|quota| quota.remaining_requests),
             Some(7)
         );
 
@@ -1047,7 +1048,7 @@ mod tests {
             coordinator.state.lock().unwrap().windows[0]
                 .remote
                 .as_ref()
-                .map(|quota| quota.remaining),
+                .map(|quota| quota.remaining_requests),
             Some(7)
         );
     }
@@ -1110,7 +1111,7 @@ mod tests {
             coordinator.state.lock().unwrap().windows[0]
                 .remote
                 .as_ref()
-                .map(|quota| quota.remaining),
+                .map(|quota| quota.remaining_requests),
             Some(0)
         );
         assert!(
@@ -1152,7 +1153,10 @@ mod tests {
                     .unwrap();
                 assert_eq!(window.limit, limit);
                 assert_eq!(state.starts.len(), 1);
-                assert_eq!(window.remote.as_ref().unwrap().remaining, remaining);
+                assert_eq!(
+                    window.remote.as_ref().unwrap().remaining_requests,
+                    remaining
+                );
             }
         }
         coordinator
@@ -1198,7 +1202,7 @@ mod tests {
         })
         .await
         .expect("all twenty attempts must overlap without waiting for responses");
-        assert_eq!(coordinator.state.lock().unwrap().in_flight, 20);
+        assert_eq!(coordinator.state.lock().unwrap().in_flight_requests, 20);
         let mut next = Box::pin(coordinator.acquire());
         assert!(
             tokio::time::timeout(Duration::from_millis(10), &mut next)
@@ -1240,7 +1244,7 @@ mod tests {
                 .remote
                 .as_ref()
                 .unwrap()
-                .remaining,
+                .remaining_requests,
             0
         );
     }
@@ -1291,11 +1295,11 @@ mod tests {
         let mut state = coordinator.state.lock().unwrap();
         let now = Instant::now();
         state.windows[0].remote = Some(RemoteQuota {
-            remaining: 0,
+            remaining_requests: 0,
             reset: now + Duration::from_secs(1),
         });
         state.windows[1].remote = Some(RemoteQuota {
-            remaining: 0,
+            remaining_requests: 0,
             reset: now + Duration::from_secs(37),
         });
         let waiter = Arc::new(Notify::new());
@@ -1357,7 +1361,7 @@ mod tests {
         let now = Instant::now();
         let feedback = ResponseFeedback::parse(&headers, 200, now);
         let quota = feedback.unscoped_quota.unwrap();
-        assert_eq!(quota.remaining, 0);
+        assert_eq!(quota.remaining_requests, 0);
         assert_eq!(quota.reset, now + Duration::from_secs(50));
         assert!(
             feedback
@@ -1375,10 +1379,17 @@ mod tests {
         headers.append("x-ratelimit-remaining", "0".parse().unwrap());
         headers.append("x-ratelimit-remaining", "1799".parse().unwrap());
         let feedback = ResponseFeedback::parse(&headers, 200, now);
-        assert_eq!(feedback.unscoped_quota.unwrap().remaining, 0);
+        assert_eq!(feedback.unscoped_quota.unwrap().remaining_requests, 0);
         assert_eq!(feedback.windows.len(), 1);
         assert_eq!(feedback.windows[0].duration, Duration::from_mins(1));
-        assert_eq!(feedback.windows[0].remote.as_ref().unwrap().remaining, 1799);
+        assert_eq!(
+            feedback.windows[0]
+                .remote
+                .as_ref()
+                .unwrap()
+                .remaining_requests,
+            1799
+        );
     }
 
     #[tokio::test]
@@ -1530,7 +1541,7 @@ mod tests {
                     .expect("cold requests must not serialize on the first response"),
             );
         }
-        assert_eq!(coordinator.lock_state().in_flight, 10);
+        assert_eq!(coordinator.lock_state().in_flight_requests, 10);
         assert!(
             tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
                 .await
@@ -1539,7 +1550,7 @@ mod tests {
         for request in requests {
             request.finish(None);
         }
-        assert_eq!(coordinator.lock_state().in_flight, 0);
+        assert_eq!(coordinator.lock_state().in_flight_requests, 0);
         assert_eq!(
             coordinator.lock_state().starts.len(),
             10,
@@ -1588,8 +1599,8 @@ mod tests {
             .is_err()
         );
         drop(request);
-        assert_eq!(coordinator.lock_state().in_flight, 0);
+        assert_eq!(coordinator.lock_state().in_flight_requests, 0);
         coordinator.acquire().await.finish(None);
-        assert_eq!(coordinator.lock_state().in_flight, 0);
+        assert_eq!(coordinator.lock_state().in_flight_requests, 0);
     }
 }
