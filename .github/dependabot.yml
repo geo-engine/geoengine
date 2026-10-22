@@ -1,14 +1,5 @@
 version: 2
 
-multi-ecosystem-groups:
-  patch-updates:
-    schedule:
-      interval: "weekly"
-      day: "sunday" # to be checked before Monday
-    # This filter ensures only patches are bundled across all linked ecosystems
-    update-types:
-      - "patch"
-
 updates:
   - package-ecosystem: "cargo"
     # Look for `Cargo.toml` and `lock` files in the `root` directory
@@ -17,16 +8,19 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(backend)"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "patch-updates"
+      # Security updates ignore the groups above, so they need their own group
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   - package-ecosystem: "pip"
     directory: "/python"
@@ -34,16 +28,19 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(python)"
+      prefix-development: "build(python)"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "patch-updates"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
@@ -53,16 +50,18 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "ci"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "patch-updates"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     # Look for `package.json` and `lock` files in the `root` directory
@@ -71,13 +70,51 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(ui)"
+      prefix-development: "build(ui)"
     groups:
-      minor-and-major:
+      # One pull request per directory for all version updates
+      all:
         patterns:
           - "*"
-        update-types:
-          - "minor"
-          - "major"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "patch-updates"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    # Wait a week before proposing new versions (does not delay security updates)
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "npm"
+    directory: "/www"
+    schedule:
+      interval: "weekly"
+      day: "sunday" # to be checked before Monday
+    # Conventional commit prefix, scope must be allowed by .github/workflows/lint-pr-title.yml
+    commit-message:
+      prefix: "build(www)"
+      prefix-development: "build(www)"
+    groups:
+      # One pull request per directory for all version updates
+      all:
+        patterns:
+          - "*"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    # Wait a week before proposing new versions (does not delay security updates)
+    cooldown:
+      default-days: 7
+
+  # Test data only: suppress all updates, including security updates
+  - package-ecosystem: "npm"
+    directory: "/geoengine/test_data/ogc/tiles/openlayers"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
