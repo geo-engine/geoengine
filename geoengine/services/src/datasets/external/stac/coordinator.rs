@@ -438,9 +438,11 @@ impl StacRequestCoordinator {
         policy: &RetryPolicy,
     ) -> reqwest::Result<T> {
         let max_attempts = policy.max_retries.max(1);
+        let mut attempt = 0;
         let mut backoff_failures = 0;
         let operation_name = format!("Fetch STAC items from {}", request.url());
-        for attempt in 1..=max_attempts {
+        loop {
+            attempt += 1;
             let response = self.execute_attempt(client, &request, authentication).await;
             // The attempt has already applied any advertised windows to state.
             let server_controls_retry = response.as_ref().is_ok_and(|response| {
@@ -458,7 +460,7 @@ impl StacRequestCoordinator {
             }) {
                 return Err(error);
             }
-            if attempt == max_attempts {
+            if attempt >= max_attempts {
                 tracing::error!("{operation_name} failed after {max_attempts} attempts: {error}");
                 return Err(error);
             }
@@ -474,7 +476,6 @@ impl StacRequestCoordinator {
                 tokio::time::sleep(delay).await;
             }
         }
-        unreachable!("bounded STAC retry loop always returns")
     }
 
     /// Queue and dispatch one attempt using the current access token. Finish its
@@ -824,6 +825,38 @@ mod tests {
         assert_eq!(error.status(), Some(reqwest::StatusCode::NOT_FOUND));
         assert_eq!(coordinator.state.lock().unwrap().in_flight_requests, 0);
         coordinator.acquire().await.observe(&HeaderMap::new(), 200);
+    }
+
+    #[tokio::test]
+    async fn it_returns_the_http_error_when_the_attempt_budget_is_exhausted() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+
+        for max_retries in [0, 1, 3] {
+            let server = Server::run();
+            server.expect(
+                Expectation::matching(request::method_path("GET", "/items"))
+                    .times(max_retries.max(1) as usize)
+                    .respond_with(responders::status_code(500)),
+            );
+            let coordinator =
+                StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+            let client = reqwest::Client::new();
+            let request = client.get(server.url_str("/items")).build().unwrap();
+            let policy = RetryPolicy::new()
+                .max_retries(max_retries)
+                .initial_delay_ms(1);
+
+            let error = coordinator
+                .execute::<serde_json::Value>(&client, request, None, &policy)
+                .await
+                .expect_err("exhausting the attempt budget returns the HTTP error");
+
+            assert_eq!(
+                error.status(),
+                Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR)
+            );
+            assert_eq!(coordinator.lock_state().in_flight_requests, 0);
+        }
     }
 
     #[test]
