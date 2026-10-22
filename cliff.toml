@@ -97,6 +97,9 @@ filter_commits = false
 fail_on_unmatched_commit = false
 # An array of link parsers for extracting external references, and turning them into URLs, using regex.
 link_parsers = []
+# Only release tags mark releases. Other tags (e.g. `ge-backend-v0.8.0` from the
+# former UI repository or the `d_*` dataset tags) must not create sections.
+tag_pattern = "^v?[0-9]+\\.[0-9]+\\.[0-9]+$"
 # Include only the tags that belong to the current branch.
 use_branch_tags = false
 # Order releases topologically instead of chronologically.
