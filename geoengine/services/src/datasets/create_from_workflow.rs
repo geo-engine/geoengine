@@ -13,6 +13,7 @@ use crate::{
     error,
     tasks::{Task, TaskId, TaskManager, TaskStatusInfo},
 };
+use async_trait::async_trait;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -34,7 +35,6 @@ use snafu::{ResultExt, ensure};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
-use tonic::async_trait;
 use utoipa::ToSchema;
 
 /// parameter for the dataset from workflow task

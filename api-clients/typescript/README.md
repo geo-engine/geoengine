@@ -176,7 +176,6 @@ All URIs are relative to *https://geoengine.io/api*
 - [AggregationMin](docs/AggregationMin.md)
 - [AggregationPercentileEstimate](docs/AggregationPercentileEstimate.md)
 - [AggregationSum](docs/AggregationSum.md)
-- [ArunaDataProviderDefinition](docs/ArunaDataProviderDefinition.md)
 - [AttributeAggregateDef](docs/AttributeAggregateDef.md)
 - [AttributeAggregateType](docs/AttributeAggregateType.md)
 - [AttributeFilter](docs/AttributeFilter.md)

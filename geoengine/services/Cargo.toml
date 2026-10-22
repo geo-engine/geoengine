@@ -28,7 +28,6 @@ path = "src/bin/geoengine-cli.rs"
 bench = false
 
 [dependencies]
-actix = { workspace = true }
 actix-files = { workspace = true }
 actix-http = { workspace = true }
 actix-multipart = { workspace = true }
@@ -38,17 +37,14 @@ actix-web-httpauth = { workspace = true }
 actix-ws = { workspace = true }
 aes-gcm = { workspace = true }
 anyhow.workspace = true
-aruna-rust-api = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bb8-postgres = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-clap_derive.workspace = true
 clap.workspace = true
 config = { workspace = true }
 convert_case = { workspace = true }
-csv = { workspace = true }
 erased-serde = { workspace = true }
 flexi_logger = { workspace = true }
 float-cmp = { workspace = true }
@@ -93,11 +89,8 @@ stac = { workspace = true }
 stac-extensions = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tempfile = { workspace = true }
-time = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
-tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
 tracing-appender = { workspace = true }
@@ -119,9 +112,10 @@ nix = { version = "0.31", features = ["socket"] }
 [dev-dependencies]
 assert_cmd = { workspace = true }
 criterion = { workspace = true }
+csv = { workspace = true }
 httptest = { workspace = true }
 pretty_assertions = { workspace = true }
-prost = { workspace = true }             # must be compatbile with aruna-rust-api
+tempfile = { workspace = true }
 serial_test = { workspace = true }
 xml = { workspace = true }
 

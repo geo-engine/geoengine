@@ -11,13 +11,6 @@
  * Do not edit the class manually.
  */
 
-import type { ArunaDataProviderDefinition } from './ArunaDataProviderDefinition';
-import {
-    instanceOfArunaDataProviderDefinition,
-    ArunaDataProviderDefinitionFromJSON,
-    ArunaDataProviderDefinitionFromJSONTyped,
-    ArunaDataProviderDefinitionToJSON,
-} from './ArunaDataProviderDefinition';
 import type { CopernicusDataspaceDataProviderDefinition } from './CopernicusDataspaceDataProviderDefinition';
 import {
     instanceOfCopernicusDataspaceDataProviderDefinition,
@@ -108,7 +101,7 @@ import {
  * 
  * @export
  */
-export type TypedDataProviderDefinition = { type: 'Aruna' } & ArunaDataProviderDefinition | { type: 'CopernicusDataspace' } & CopernicusDataspaceDataProviderDefinition | { type: 'DatasetLayerListing' } & DatasetLayerListingProviderDefinition | { type: 'EbvPortal' } & EbvPortalDataProviderDefinition | { type: 'Edr' } & EdrDataProviderDefinition | { type: 'Gbif' } & GbifDataProviderDefinition | { type: 'GfbioAbcd' } & GfbioAbcdDataProviderDefinition | { type: 'GfbioCollections' } & GfbioCollectionsDataProviderDefinition | { type: 'NetCdfCf' } & NetCdfCfDataProviderDefinition | { type: 'Pangaea' } & PangaeaDataProviderDefinition | { type: 'SentinelS2L2ACogs' } & SentinelS2L2ACogsProviderDefinition | { type: 'StacProviderDefinition' } & StacDataProviderDefinition | { type: 'WildLIVE!' } & WildliveDataConnectorDefinition;
+export type TypedDataProviderDefinition = { type: 'CopernicusDataspace' } & CopernicusDataspaceDataProviderDefinition | { type: 'DatasetLayerListing' } & DatasetLayerListingProviderDefinition | { type: 'EbvPortal' } & EbvPortalDataProviderDefinition | { type: 'Edr' } & EdrDataProviderDefinition | { type: 'Gbif' } & GbifDataProviderDefinition | { type: 'GfbioAbcd' } & GfbioAbcdDataProviderDefinition | { type: 'GfbioCollections' } & GfbioCollectionsDataProviderDefinition | { type: 'NetCdfCf' } & NetCdfCfDataProviderDefinition | { type: 'Pangaea' } & PangaeaDataProviderDefinition | { type: 'SentinelS2L2ACogs' } & SentinelS2L2ACogsProviderDefinition | { type: 'StacProviderDefinition' } & StacDataProviderDefinition | { type: 'WildLIVE!' } & WildliveDataConnectorDefinition;
 
 export function TypedDataProviderDefinitionFromJSON(json: any): TypedDataProviderDefinition {
     return TypedDataProviderDefinitionFromJSONTyped(json, false);
@@ -119,8 +112,6 @@ export function TypedDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscri
         return json;
     }
     switch (json['type']) {
-        case 'Aruna':
-            return Object.assign({}, ArunaDataProviderDefinitionFromJSONTyped(json, true), { type: 'Aruna' } as const);
         case 'CopernicusDataspace':
             return Object.assign({}, CopernicusDataspaceDataProviderDefinitionFromJSONTyped(json, true), { type: 'CopernicusDataspace' } as const);
         case 'DatasetLayerListing':
@@ -159,8 +150,6 @@ export function TypedDataProviderDefinitionToJSONTyped(value?: TypedDataProvider
         return value;
     }
     switch (value['type']) {
-        case 'Aruna':
-            return Object.assign({}, ArunaDataProviderDefinitionToJSON(value), { type: 'Aruna' } as const);
         case 'CopernicusDataspace':
             return Object.assign({}, CopernicusDataspaceDataProviderDefinitionToJSON(value), { type: 'CopernicusDataspace' } as const);
         case 'DatasetLayerListing':
