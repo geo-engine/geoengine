@@ -58,7 +58,6 @@ All notable changes to this project will be documented in this file.
 - *(ui)* Clean up eslint config, use projectService and add import order, eqeqeq and switch rules ([#1346](https://github.com/geo-engine/geoengine/pull/1346))
 - *(www)* Update astro & dependencies ([#1256](https://github.com/geo-engine/geoengine/pull/1256))
 - Enhance linting commands to support automatic fixes across all justfiles ([#1317](https://github.com/geo-engine/geoengine/pull/1317))
-- Update version to 0.10.0
 - Group dependabot updates and use allowed conventional commit scopes ([#1351](https://github.com/geo-engine/geoengine/pull/1351))
 
 
@@ -100,11 +99,6 @@ All notable changes to this project will be documented in this file.
 - Add computation_id parameter to wfs_handler and implement response handling ([#1243](https://github.com/geo-engine/geoengine/pull/1243))
 
 
-### 💼 Other
-
-- Release 0.9.4 ([#1248](https://github.com/geo-engine/geoengine/pull/1248))
-
-
 ### 🚜 Refactor
 
 - Improve logging format and structure across multiple files ([#1240](https://github.com/geo-engine/geoengine/pull/1240))
@@ -133,7 +127,6 @@ All notable changes to this project will be documented in this file.
 ### 💼 Other
 
 - Update to rust 1.97 ([#1211](https://github.com/geo-engine/geoengine/pull/1211))
-- Version 0.9.3 ([#1228](https://github.com/geo-engine/geoengine/pull/1228))
 
 
 ### ⚙️ Miscellaneous Tasks
@@ -151,11 +144,6 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug Fixes
 
 - Still serve preline in production build ([#1183](https://github.com/geo-engine/geoengine/pull/1183))
-
-
-### 💼 Other
-
-- Version 0.9.2 ([#1191](https://github.com/geo-engine/geoengine/pull/1191))
 
 
 ### 🚜 Refactor
