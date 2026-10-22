@@ -242,15 +242,19 @@ impl
             .map(|(step, cell, bbox)| {
                 let metadata = self.clone();
                 let url = items_url.clone();
-                self.query_cache
-                    .get_or_fetch(self.dataset.clone(), cell, step, move || async move {
-                        metadata.search_bbox(url, bbox, step).await
-                    })
+                self.query_cache.get_or_fetch(
+                    self.dataset.clone(),
+                    cell,
+                    step,
+                    move || async move { metadata.search_bbox(url, bbox, step).await },
+                )
             })
             .buffer_unordered(MAX_CONCURRENT_CELL_SEARCHES)
-            .map_err(|error| geoengine_operators::error::Error::QueryingProcessorFailed {
-                source: Box::new(error),
-            })
+            .map_err(
+                |error| geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(error),
+                },
+            )
             .try_collect::<Vec<_>>()
             .await?;
         let mut tile_files = outputs
