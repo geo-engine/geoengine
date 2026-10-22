@@ -67,7 +67,7 @@ PYTHON_DEP_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.t
 API_CLIENT_VERSION_CMD := "python3 -c \"import configparser;cp=configparser.ConfigParser();cp.read('api-clients/.generation/config.ini');print(cp['general']['version'])\""
 
 # Increases the version number for Geo Engine and then updates api-clients, Python, UI, etc. accordingly.
-[arg("major", long="major", value="false", help="Whether to increase the minor version instead of the patch version.")]
+[arg("major", long="major", value="true", help="Whether to increase the minor version instead of the patch version.")]
 increase-version-number major="false": common::_clear
     cargo set-version \
         --bump {{ if major == "true" { "minor" } else { "patch" } }} \
