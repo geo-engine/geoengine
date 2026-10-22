@@ -162,8 +162,8 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     .await?;
 
     // Separate reqwest client for STAC API calls (not Geo Engine)
-    let stac_client = StacClient::new(reqwest::Client::new())
-        .with_authentication(provider_def.authentication.clone(), &provider_def.api_url)
+    let stac_client = StacClient::new(reqwest::Client::new(), &provider_def.api_url)?
+        .with_authentication(provider_def.authentication.clone())
         .await
         .context("Cannot authenticate with STAC API")?;
 
@@ -929,23 +929,9 @@ async fn query_item_collection_internal(
             query_url,
             query_params,
         } => {
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    client
-                        .get(query_url)
-                        .await?
-                        .query(&query_params)
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
-                },
-                "Query STAC first page",
-                &RetryPolicy::new(),
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await?;
+            let request = client.get(query_url).query(&query_params);
+            let item_collection: stac::ItemCollection =
+                client.execute_json(request, &RetryPolicy::new()).await?;
 
             let new_state = item_collection
                 .links
@@ -958,22 +944,9 @@ async fn query_item_collection_internal(
             Ok((item_collection, new_state))
         }
         QueryState::NextPage { next_url } => {
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    client
-                        .get(next_url)
-                        .await?
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
-                },
-                "Query STAC next page",
-                &RetryPolicy::new(),
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await?;
+            let request = client.get(next_url);
+            let item_collection: stac::ItemCollection =
+                client.execute_json(request, &RetryPolicy::new()).await?;
 
             let new_state = item_collection
                 .links
@@ -1405,7 +1378,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn harvest_pages_use_shared_stac_authentication() {
+    async fn it_harvests_pages_across_origins_with_shared_authentication() {
         use crate::datasets::external::stac::StacProviderAuthentication;
         use httptest::{
             Expectation, Server, all_of,
@@ -1415,6 +1388,7 @@ mod tests {
 
         for authenticated in [false, true] {
             let server = Server::run();
+            let next_server = Server::run();
             let authentication = authenticated.then(|| StacProviderAuthentication {
                 endpoint: server.url_str("/token"),
                 client_id: "client".into(),
@@ -1435,11 +1409,14 @@ mod tests {
             ))
             .unwrap();
             first_page["links"] = serde_json::json!([{
-                "rel": "next", "href": server.url_str("/next")
+                "rel": "next", "href": next_server.url_str("/next")
             }]);
             let last_page =
                 serde_json::json!({"type": "FeatureCollection", "features": [], "links": []});
-            for (path, page) in [("/items", first_page), ("/next", last_page)] {
+            for (page_server, path, page) in [
+                (&server, "/items", first_page),
+                (&next_server, "/next", last_page),
+            ] {
                 let expectation = if authenticated {
                     Expectation::matching(all_of![
                         request::method_path("GET", path),
@@ -1448,10 +1425,11 @@ mod tests {
                 } else {
                     Expectation::matching(request::method_path("GET", path))
                 };
-                server.expect(expectation.respond_with(responders::json_encoded(page)));
+                page_server.expect(expectation.respond_with(responders::json_encoded(page)));
             }
-            let client = StacClient::new(reqwest::Client::new())
-                .with_authentication(authentication, &server.url_str("/"))
+            let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"))
+                .unwrap()
+                .with_authentication(authentication)
                 .await
                 .unwrap();
             let pages = create_page_stream(
