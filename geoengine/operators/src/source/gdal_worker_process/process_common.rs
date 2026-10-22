@@ -342,14 +342,21 @@ where
                 no_data_value,
             } => {
                 let no_data_t = T::from_(no_data_value);
+                // converts all-no-data grids to `Empty`
                 GridAndProperties {
-                    grid: GridOrEmpty::new_grid(
-                        NoDataValueGrid::new(
-                            Grid::new(value.dimensions, data).expect("shape and data match"),
-                            Some(no_data_t),
-                        )
-                        .into(),
-                    ),
+                    grid: NoDataValueGrid::new(
+                        Grid::new(value.dimensions, data).expect("shape and data match"),
+                        Some(no_data_t),
+                    )
+                    .into(),
+                    properties: value.properties,
+                }
+            }
+            GdalDataGridVariant::WithExplicitMask { validity_mask, .. }
+                if validity_mask.iter().all(|&m| m == 0) =>
+            {
+                GridAndProperties {
+                    grid: GridOrEmpty::new_empty_shape(value.dimensions),
                     properties: value.properties,
                 }
             }
@@ -546,5 +553,62 @@ impl IpcChannelMessage {
         // Hash read advise
         self.0.read_advise.hash(state);
         self.0.data_type.hash(state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn to_grid(data_variant: GdalDataGridVariant<f32>) -> GridOrEmpty<GridBoundingBox2D, f32> {
+        GridAndProperties::from(GdalIpcPayload {
+            dimensions: GridBoundingBox2D::new([0, 0], [1, 1]).expect("valid bounds"),
+            properties: RasterProperties::default(),
+            data_variant,
+        })
+        .grid
+    }
+
+    #[test]
+    fn it_converts_all_no_data_to_empty() {
+        assert!(
+            to_grid(GdalDataGridVariant::WithNoData {
+                data: vec![-1.; 4],
+                no_data_value: -1.,
+            })
+            .is_empty()
+        );
+        assert!(
+            to_grid(GdalDataGridVariant::WithNoData {
+                data: vec![f32::NAN; 4],
+                no_data_value: f64::NAN,
+            })
+            .is_empty()
+        );
+        assert!(
+            to_grid(GdalDataGridVariant::WithExplicitMask {
+                data: vec![1.; 4],
+                validity_mask: vec![0; 4],
+            })
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn it_keeps_grids_with_valid_pixels() {
+        assert!(
+            to_grid(GdalDataGridVariant::WithNoData {
+                data: vec![-1., -1., 2., -1.],
+                no_data_value: -1.,
+            })
+            .is_grid()
+        );
+        assert!(
+            to_grid(GdalDataGridVariant::WithExplicitMask {
+                data: vec![1.; 4],
+                validity_mask: vec![0, 0, 255, 0],
+            })
+            .is_grid()
+        );
     }
 }
