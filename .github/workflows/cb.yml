@@ -33,7 +33,7 @@ jobs:
         working-directory: geoengine
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install GitHub CLI # cf. <https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian>
         run: |
@@ -105,7 +105,7 @@ jobs:
           save-data-file: true
           skip-fetch-gh-pages: true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
