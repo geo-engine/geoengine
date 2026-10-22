@@ -253,6 +253,7 @@ export class EOdysseyLayerService {
             defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
+            minZoom: parseMinZoom(metadata.get('edv:minZoom')),
         };
     }
 
@@ -477,4 +478,13 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
     }
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseMinZoom(value: string | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    const parsed = Number(value);
+    if (!value.trim() || !Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
+        throw new Error('Invalid edv:minZoom: ' + value);
+    }
+    return parsed;
 }

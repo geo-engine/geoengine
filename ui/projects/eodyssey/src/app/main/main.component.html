@@ -85,12 +85,21 @@
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="'CustomWebMercator'"
+                        [minZoom]="minTileZoom()"
                         [isVisible]="testIsVisible()"
                         (loading)="onTileLoading($event)"
+                        (zoomRequired)="zoomRequired.set($event)"
                     ></geoengine-ol-ogc-api-map-tile-layer>
                 }
             }
         </geoengine-map-container>
+
+        @if (mapTileLayer() && zoomRequired()) {
+            <div class="zoom-prompt" role="status">
+                <mat-icon aria-hidden="true">zoom_in</mat-icon>
+                <span>Zoom in further to load the selected layer.</span>
+            </div>
+        }
 
         @if (isLoading()) {
             <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>

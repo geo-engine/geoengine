@@ -24,6 +24,8 @@ export interface DataSourceDefinition {
     defaultTime?: number;
     defaultTimeStep?: TimeStepDuration;
     citation: string;
+    /** Minimum CustomWebMercator tile matrix index, independent of the map view zoom. */
+    minZoom?: number;
 }
 export interface DataSourceLayer {
     dataConnectorId: string;

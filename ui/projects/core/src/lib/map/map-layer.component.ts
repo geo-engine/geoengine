@@ -2,6 +2,7 @@ import {
     ChangeDetectionStrategy,
     Component,
     Directive,
+    DestroyRef,
     OnChanges,
     OnDestroy,
     OnInit,
@@ -18,9 +19,11 @@ import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {unByKey} from 'ol/Observable';
-import {get as olGetProj} from 'ol/proj';
+import {equivalent, get as olGetProj} from 'ol/proj';
+import {calculateSourceResolution} from 'ol/reproj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import TileGrid from 'ol/tilegrid/TileGrid';
+import TileState from 'ol/TileState';
 import {Observable, Subject, Subscription} from 'rxjs';
 import {NotificationService} from '@geoengine/common';
 import {
@@ -37,6 +40,7 @@ import {
 import {UUID} from '../backend/backend.model';
 import {CoreConfig} from '../config.service';
 import {AbortableTileLayer} from './abortable-tile-layer';
+import {MapService} from './map.service';
 import {
     TileDiagnostic,
     TileImageLike,
@@ -507,6 +511,11 @@ export class OlOgcApiMapTileLayerComponent
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
     readonly tmsId = input<TMSId>('Custom');
+    /** Minimum index in this source's OGC tile matrix set, not an OpenLayers view zoom. */
+    readonly minZoom = input(0);
+    readonly zoomRequired = output<boolean>();
+    private readonly mapService = inject(MapService);
+    private readonly destroyRef = inject(DestroyRef);
 
     // Show tile debug info instead of the actual layer. This is useful for debugging tile loading issues.
     readonly debug = input(false);
@@ -524,6 +533,7 @@ export class OlOgcApiMapTileLayerComponent
             sessionToken: this.sessionToken(),
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
+            minZoom: this.minZoom(),
         }),
         loader: async ({abortSignal}): Promise<OGCMapTile> => {
             // `source` is assigned after the await below, so the closures that read it must only
@@ -543,6 +553,7 @@ export class OlOgcApiMapTileLayerComponent
                 abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
                 onTileError: (tile): void => this.invalidateTileReprojection(tile),
                 onStateChange: (state): void => {
+                    if (this.destroyRef.destroyed) return;
                     if (state === 'loading') {
                         this.watchViewport(loader, sourceGrid());
                     } else {
@@ -570,7 +581,24 @@ export class OlOgcApiMapTileLayerComponent
                 },
                 wrapX: false, // wrapping does not work with our implementation
                 interpolate: false, // Stops blurry tiles when zooming in.
-                tileLoadFunction: loader.load,
+                tileLoadFunction: (tile, url): void => {
+                    if (tile.getTileCoord()[0] < this.minZoom()) {
+                        // Never fetch coarser fallback/preload tiles either.
+                        tile.setState(TileState.EMPTY);
+                        return;
+                    }
+                    const view = this.mapService.view();
+                    if (!view.isDef() || !this._mapLayer.isVisible(view)) {
+                        // maxResolution gates rendering; the queue can still drain tiles
+                        // from an earlier frame after the view has zoomed out.
+                        // Leave it requestable when the user zooms back in.
+                        this.invalidateTileReprojection(tile as OlImageTile);
+                        tile.setState(TileState.ERROR);
+                        tile.setState(TileState.IDLE);
+                        return;
+                    }
+                    loader.load(tile, url);
+                },
             });
 
             return source;
@@ -593,9 +621,42 @@ export class OlOgcApiMapTileLayerComponent
             this._mapLayer.setSource(this.source);
         });
 
-        effect(() => /* TODO: define in parent class */ {
-            const isVisible = this.isVisible();
-            this._mapLayer.setVisible(isVisible);
+        effect((onCleanup) => {
+            const source = this.tileSource.value();
+            const view = this.mapService.view();
+            const minZoom = this.minZoom();
+            this._mapLayer.setVisible(this.isVisible());
+            let wasBlocked: boolean | undefined;
+            const update = (): void => {
+                const resolution = view.getResolution();
+                const projection = source?.getProjection();
+                const ready = source?.getState() === 'ready';
+                // Adjacent matrix resolutions differ by two; their midpoint is
+                // the native, exclusive maxResolution cutoff.
+                let maxResolution = minZoom === 0 ? Infinity : ready ? 1.5 * (source.getTileGrid()?.getResolution(minZoom) ?? 0) : 0;
+                if (minZoom > 0 && projection && !equivalent(projection, view.getProjection())) {
+                    const center = view.getCenter();
+                    maxResolution =
+                        center && resolution !== undefined
+                            ? (maxResolution * resolution) / calculateSourceResolution(projection, view.getProjection(), center, resolution)
+                            : 0;
+                    if (!Number.isFinite(maxResolution)) maxResolution = 0;
+                }
+                this._mapLayer.setMaxResolution(maxResolution);
+                // Keep imagery gated while metadata loads, but only ask the user to
+                // zoom in once the actual source grid is known.
+                const blocked = minZoom > 0 && ready && (resolution === undefined || resolution >= maxResolution);
+                if (blocked && !wasBlocked) this.loader?.cancelPending('view is below minimum tile zoom');
+                if (blocked !== wasBlocked) this.zoomRequired.emit(blocked);
+                wasBlocked = blocked;
+            };
+            const viewListener = view.on(['change:resolution', 'change:center'], update);
+            const sourceListener = source?.on('change', update);
+            update();
+            onCleanup(() => {
+                unByKey(viewListener);
+                if (sourceListener) unByKey(sourceListener);
+            });
         });
 
         effect(() => {
