@@ -79,6 +79,10 @@ serial_test = { workspace = true }
 name = "ci_operators"
 harness = false
 
+[[bench]]
+name = "no_data_tiles"
+harness = false
+
 
 [lints]
 workspace = true
