@@ -1,7 +1,8 @@
-//! FIFO admission shared by configured STAC origin and credentials. Each HTTP
-//! attempt reserves capacity in every known window before dispatch. Queue and
-//! quota updates briefly lock scheduler state; those locks are released before
-//! HTTP calls or retry backoff.
+//! Coordinates outgoing STAC HTTP requests to respect shared server rate limits.
+//! Providers with the same configured STAC origin and credentials share a FIFO
+//! queue. Each HTTP attempt waits for its turn and reserves capacity in every
+//! known rate-limit window before dispatch. Queue and quota updates briefly lock
+//! scheduler state; those locks are released before HTTP calls or retry backoff.
 //!
 //! [`Identity`] selects a process-wide [`StacRequestCoordinator`], shared across
 //! providers and collections with the same configuration. Its [`State`] holds
