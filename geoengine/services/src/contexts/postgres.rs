@@ -34,7 +34,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
-    engine::ChunkByteSize,
+    engine::{ChunkByteSize, SubQueryParallelism},
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
@@ -42,6 +42,7 @@ use geoengine_operators::{
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::{path::PathBuf, sync::Arc};
+use tokio::sync::Semaphore;
 use tokio_postgres::error::SqlState;
 use tracing::{info, instrument};
 
@@ -67,6 +68,8 @@ where
     tile_cache: Arc<SharedCache>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
+    available_subquery_parallelism_per_query: usize,
+    subquery_parallelism_per_server: Arc<Semaphore>,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
@@ -125,6 +128,9 @@ where
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache: None,
             default_cache_ttl: CacheTtlSeconds::new(0),
+            available_subquery_parallelism_per_query:
+                SubQueryParallelism::DEFAULT_AVAILABLE_PER_QUERY,
+            subquery_parallelism_per_server: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             gdal_process_pool,
         })
@@ -192,6 +198,9 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
+            available_subquery_parallelism_per_query:
+                SubQueryParallelism::DEFAULT_AVAILABLE_PER_QUERY,
+            subquery_parallelism_per_server: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             gdal_process_pool,
         })
@@ -215,6 +224,7 @@ where
         gdal_process_pool_config: crate::config::GdalProcessPool,
     ) -> Result<Self> {
         cache_config.validate()?;
+        let query_context_config = get_config_element::<crate::config::QueryContext>()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -267,6 +277,11 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
+            available_subquery_parallelism_per_query: query_context_config
+                .available_subquery_parallelism_per_query,
+            subquery_parallelism_per_server: Arc::new(Semaphore::new(
+                query_context_config.available_subquery_parallelism_per_server,
+            )),
             provider_registry,
             gdal_process_pool,
         };
@@ -461,6 +476,10 @@ where
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
             self.context.default_cache_ttl,
+            SubQueryParallelism::new(
+                self.context.available_subquery_parallelism_per_query,
+                self.context.subquery_parallelism_per_server.clone(),
+            ),
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
             Some(

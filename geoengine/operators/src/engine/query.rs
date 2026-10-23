@@ -19,11 +19,88 @@ use geoengine_datatypes::{
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
+
+/// The parallelism available to the sub-queries of a query.
+///
+/// An adapter asks for a [`SubQueryHandout`] before each sub-query:
+/// - its first running sub-query is always handed out ([`SubQueryHandout::Guaranteed`]) and
+///   takes nothing from any pool, which guarantees progress and avoids deadlocks;
+/// - every further one ([`SubQueryHandout::Parallel`]) needs a free permit from the query's
+///   pool AND from the server's pool, and is refused instead of waiting.
+///
+/// The query's pool is shared by all adapters of the query, so nested adapters add up
+/// instead of multiplying their fanout. The server's pool is shared by all queries, so an
+/// idle server gives a single query its full parallelism and a busy one runs queries
+/// sequentially: parallelism within a query adds no throughput once the GDAL pool and the
+/// thread pool are saturated.
+pub struct SubQueryParallelism {
+    per_query: Arc<Semaphore>,
+    per_server: Arc<Semaphore>,
+}
+
+/// Permission to run one more sub-query, held until its tile is yielded.
+pub enum SubQueryHandout {
+    /// The first running sub-query of an adapter, always handed out.
+    Guaranteed,
+    /// A sub-query running in parallel to the guaranteed one.
+    Parallel(ParallelSubQueryPermit),
+}
+
+/// Returns its permits to the query's and the server's pool when dropped.
+pub struct ParallelSubQueryPermit {
+    _per_query: OwnedSemaphorePermit,
+    _per_server: OwnedSemaphorePermit,
+}
+
+impl SubQueryParallelism {
+    pub const DEFAULT_AVAILABLE_PER_QUERY: usize = 4;
+
+    /// Up to `available_per_query` sub-queries of the query run at once, counting the
+    /// guaranteed one, however deep adapters nest; fewer while `per_server` has no permits.
+    pub fn new(available_per_query: usize, per_server: Arc<Semaphore>) -> Self {
+        Self {
+            // the guaranteed sub-query takes no permit, so the pool holds the rest
+            per_query: Arc::new(Semaphore::new(available_per_query.saturating_sub(1))),
+            per_server,
+        }
+    }
+
+    /// Like [`Self::new`], with a server pool no other query uses.
+    pub fn fixed(available_per_query: usize) -> Self {
+        Self::new(
+            available_per_query,
+            Arc::new(Semaphore::new(available_per_query.saturating_sub(1))),
+        )
+    }
+
+    /// The handout for an adapter's next sub-query while it has `running` sub-queries in
+    /// flight; `None` when all parallelism is in use.
+    ///
+    /// Never waits: waiting on a permit deadlocks when outer sub-queries hold all of them.
+    pub fn handout(&self, running: usize) -> Option<SubQueryHandout> {
+        if running == 0 {
+            return Some(SubQueryHandout::Guaranteed);
+        }
+        let per_query = self.per_query.clone().try_acquire_owned().ok()?;
+        let per_server = self.per_server.clone().try_acquire_owned().ok()?;
+        Some(SubQueryHandout::Parallel(ParallelSubQueryPermit {
+            _per_query: per_query,
+            _per_server: per_server,
+        }))
+    }
+}
+
+impl Default for SubQueryParallelism {
+    fn default() -> Self {
+        Self::fixed(Self::DEFAULT_AVAILABLE_PER_QUERY)
+    }
+}
 
 impl ChunkByteSize {
     pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
@@ -61,6 +138,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
+    fn subquery_parallelism(&self) -> &SubQueryParallelism;
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 
@@ -189,6 +267,7 @@ pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
+    pub subquery_parallelism: SubQueryParallelism,
 
     pub cache: Option<Arc<SharedCache>>,
     pub quota_tracking: Option<QuotaTracking>,
@@ -214,6 +293,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
+            subquery_parallelism: SubQueryParallelism::default(),
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -241,6 +321,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
+            subquery_parallelism: SubQueryParallelism::default(),
             cache,
             quota_checker,
             quota_tracking,
@@ -266,6 +347,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
+            subquery_parallelism: SubQueryParallelism::default(),
             gdal_process_pool,
             cache: None,
             quota_checker: None,
@@ -290,6 +372,10 @@ impl QueryContext for MockQueryContext {
 
     fn default_cache_ttl(&self) -> CacheTtlSeconds {
         self.default_cache_ttl
+    }
+
+    fn subquery_parallelism(&self) -> &SubQueryParallelism {
+        &self.subquery_parallelism
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
@@ -391,5 +477,55 @@ mod tests {
             Some(Err(error::Error::QueryCanceled))
         ));
         assert!(stream.next().await.is_none());
+    }
+
+    fn is_parallel(handout: Option<&SubQueryHandout>) -> bool {
+        matches!(handout, Some(SubQueryHandout::Parallel(_)))
+    }
+
+    #[test]
+    fn it_always_hands_out_the_guaranteed_subquery() {
+        for parallelism in [
+            SubQueryParallelism::fixed(0),
+            SubQueryParallelism::fixed(1),
+            SubQueryParallelism::new(4, Arc::new(Semaphore::new(0))),
+        ] {
+            assert!(matches!(
+                parallelism.handout(0),
+                Some(SubQueryHandout::Guaranteed)
+            ));
+            assert!(parallelism.handout(1).is_none());
+        }
+    }
+
+    #[test]
+    fn it_hands_out_up_to_the_available_parallelism() {
+        let parallelism = SubQueryParallelism::fixed(3);
+        let held = [parallelism.handout(1), parallelism.handout(2)];
+        assert!(held.iter().all(|h| is_parallel(h.as_ref())));
+        // the guaranteed one plus 2 parallel ones = 3
+        assert!(parallelism.handout(3).is_none());
+
+        drop(held);
+        assert!(is_parallel(parallelism.handout(1).as_ref()));
+    }
+
+    #[test]
+    fn it_shares_the_server_pool_between_queries() {
+        let per_server = Arc::new(Semaphore::new(2));
+        let busy = SubQueryParallelism::new(4, per_server.clone());
+        let other = SubQueryParallelism::new(4, per_server.clone());
+
+        let held = [busy.handout(1), busy.handout(2)];
+        assert!(other.handout(1).is_none(), "server pool is used up");
+        // the per-query permit taken before the server refused is returned
+        assert_eq!(other.per_query.available_permits(), 3);
+        assert!(matches!(
+            other.handout(0),
+            Some(SubQueryHandout::Guaranteed)
+        ));
+
+        drop(held);
+        assert!(is_parallel(other.handout(1).as_ref()));
     }
 }
