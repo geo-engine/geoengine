@@ -806,7 +806,7 @@ where
         let time_stream = self.time_query(query.time_interval(), ctx).await?;
 
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-        Ok(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+        Ok(RasterSubQueryAdapter::<'a, P>::new(
             &self.source,
             query,
             tiling_strat,
