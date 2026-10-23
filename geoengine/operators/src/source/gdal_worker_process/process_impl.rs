@@ -14,10 +14,11 @@ use gdal::{
     errors::GdalError,
     raster::{GdalType, RasterBand as GdalRasterBand},
 };
-use gdal_sys::VSICurlPartialClearCache;
+use gdal_sys::{GDALGetDataCoverageStatus, VSICurlPartialClearCache};
 use geoengine_datatypes::{
     primitives::Coordinate2D,
     raster::{GridSize, Pixel, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType},
+    util::helpers::equals_or_both_nan,
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use num::FromPrimitive;
@@ -34,6 +35,10 @@ use tracing::debug;
 
 /// Global storage for the detected path, initialized on first access.
 static GDALSOURCE_PROCESS_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+/// `GDALGetDataCoverageStatus` flags from `gdal.h`; they are defines and thus missing in `gdal_sys`.
+const GDAL_DATA_COVERAGE_STATUS_DATA: i32 = 0x02;
+const GDAL_DATA_COVERAGE_STATUS_EMPTY: i32 = 0x04;
 
 static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1000;
 static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
@@ -421,6 +426,22 @@ impl GdalHandling {
         .entered();
         let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
+        let dataset_mask_flags = rasterband.mask_flags()?;
+
+        if dataset_mask_flags.is_alpha() && !dataset_params.allow_alphaband_as_mask {
+            return Err(IpcProcessError::AlphaBandAsMaskNotAllowed);
+        }
+
+        if Self::is_missing_in_file::<T>(
+            rasterband,
+            read_window,
+            !(dataset_mask_flags.is_all_valid() || dataset_mask_flags.is_nodata()),
+            dataset_params,
+        )? {
+            debug!("read window is not stored in the file --> skip reading.");
+            return Ok(GdalDataGridVariant::Empty);
+        }
+
         let read_start = Instant::now();
         let buffer = rasterband.read_as::<T>(
             read_window.gdal_window_start(), // pixelspace origin
@@ -435,8 +456,6 @@ impl GdalHandling {
             read_window.size_y,
         );
         let (_, buffer_data) = buffer.into_shape_and_vec();
-
-        let dataset_mask_flags = rasterband.mask_flags()?;
 
         if dataset_mask_flags.is_all_valid() {
             // Even if GDAL reports all pixels as valid, honor an explicit
@@ -469,9 +488,6 @@ impl GdalHandling {
 
         if dataset_mask_flags.is_alpha() {
             debug!("raster uses alpha band to mask pixels.");
-            if !dataset_params.allow_alphaband_as_mask {
-                return Err(IpcProcessError::AlphaBandAsMaskNotAllowed);
-            }
         }
 
         debug!("use mask based no-data handling.");
@@ -488,6 +504,61 @@ impl GdalHandling {
             data: buffer_data,
             validity_mask: mask_buffer_data,
         })
+    }
+
+    /// Checks if the read window is missing in a sparse file (e.g. written with `SPARSE_OK`), so that reading it would only return no-data.
+    fn is_missing_in_file<T: Pixel>(
+        rasterband: &GdalRasterBand,
+        read_window: &GdalReadWindow,
+        uses_mask_band: bool,
+        dataset_params: &GdalDatasetParameters,
+    ) -> Result<bool, IpcProcessError> {
+        if !Self::is_missing_in_band(rasterband, read_window) {
+            return Ok(false);
+        }
+
+        if !uses_mask_band {
+            // GDAL fills missing blocks with the band's no-data value or 0, which might be valid data
+            let fill_value = T::from_(rasterband.no_data_value().unwrap_or(0.));
+            let no_data_value = dataset_params
+                .no_data_value
+                .or_else(|| rasterband.no_data_value());
+            return Ok(no_data_value.is_some_and(|v| equals_or_both_nan(&T::from_(v), &fill_value)));
+        }
+
+        // the mask must be missing as well, otherwise it can mark the filled pixels as valid
+        let mask_band = rasterband.open_mask_band()?;
+        Ok(Self::is_missing_in_band(&mask_band, read_window))
+    }
+
+    /// Asks the driver whether the window has no data stored. Drivers that cannot tell report data.
+    fn is_missing_in_band(band: &GdalRasterBand, read_window: &GdalReadWindow) -> bool {
+        let (x, y) = read_window.gdal_window_start();
+        let (width, height) = read_window.gdal_window_size();
+        let (Ok(x), Ok(y), Ok(width), Ok(height)) = (
+            x.try_into(),
+            y.try_into(),
+            width.try_into(),
+            height.try_into(),
+        ) else {
+            return false;
+        };
+
+        // stops at the first block with data
+        let status = unsafe {
+            GDALGetDataCoverageStatus(
+                band.c_rasterband(),
+                x,
+                y,
+                width,
+                height,
+                GDAL_DATA_COVERAGE_STATUS_DATA,
+                std::ptr::null_mut(),
+            )
+        };
+
+        status & GDAL_DATA_COVERAGE_STATUS_DATA == 0
+            && status & GDAL_DATA_COVERAGE_STATUS_EMPTY != 0
     }
 
     pub fn properties_from_gdal_metadata<'a, I, M>(
@@ -1675,5 +1746,98 @@ mod tests {
                 panic!("Expected WithNoData or AllValid variant, but got {other:?}");
             }
         }
+    }
+
+    /// Reads one 256x256 tile of the sparse test files. Only the left tile (`x = 0`) is stored in the files.
+    fn load_sparse_tile(
+        file_name: &str,
+        x: isize,
+        no_data_value: Option<f64>,
+    ) -> GdalDataGridVariant<u8> {
+        let params = GdalDatasetParameters {
+            file_path: test_data!("raster/sparse").join(file_name),
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (8.0, 57.4).into(),
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
+            },
+            width: 512,
+            height: 256,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        };
+
+        let gdal_read_advice = GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new([0, x].into(), [256, 256].into()),
+            read_window_bounds: GridBoundingBox2D::new([0, x], [255, x + 255]).unwrap(),
+            bounds_of_target: GridBoundingBox2D::new([0, x], [255, x + 255]).unwrap(),
+            flip_y: false,
+        };
+
+        let mut gdc = GdalDatasetHolder::new();
+        let dataset = gdc.get_or_open(&params).unwrap();
+
+        GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice)
+            .unwrap()
+            .data_variant
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn it_skips_reading_tiles_missing_in_sparse_files() {
+        // the band's no-data value fills the missing tile
+        assert!(matches!(
+            load_sparse_tile("sparse_nodata.tif", 256, None),
+            GdalDataGridVariant::Empty
+        ));
+        // the override matches the fill value 0
+        assert!(matches!(
+            load_sparse_tile("sparse_no_nodata.tif", 256, Some(0.)),
+            GdalDataGridVariant::Empty
+        ));
+        // data and mask are both missing
+        assert!(matches!(
+            load_sparse_tile("sparse_mask.tif", 256, None),
+            GdalDataGridVariant::Empty
+        ));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn it_reads_tiles_missing_in_sparse_files_if_the_fill_value_is_valid() {
+        // without no-data, the fill value 0 is valid data
+        assert!(matches!(
+            load_sparse_tile("sparse_no_nodata.tif", 256, None),
+            GdalDataGridVariant::AllValid { .. }
+        ));
+        // the override differs from the fill value 0
+        assert!(matches!(
+            load_sparse_tile("sparse_nodata.tif", 256, Some(255.)),
+            GdalDataGridVariant::WithNoData { .. }
+        ));
+        // the stored mask marks the filled pixels as valid
+        assert!(matches!(
+            load_sparse_tile("sparse_dense_mask.tif", 256, None),
+            GdalDataGridVariant::WithExplicitMask { .. }
+        ));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn it_reads_tiles_stored_in_sparse_files() {
+        assert!(matches!(
+            load_sparse_tile("sparse_nodata.tif", 0, None),
+            GdalDataGridVariant::WithNoData { .. }
+        ));
+        assert!(matches!(
+            load_sparse_tile("sparse_mask.tif", 0, None),
+            GdalDataGridVariant::WithExplicitMask { .. }
+        ));
     }
 }
