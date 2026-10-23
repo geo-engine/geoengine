@@ -83,6 +83,9 @@ harness = false
 name = "no_data_tiles"
 harness = false
 
+[[bench]]
+name = "subquery_gdal"
+harness = false
 
 [lints]
 workspace = true
