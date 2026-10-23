@@ -72,6 +72,12 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
         None
     }
 
+    /// The runtime that runs query tasks, see [`crate::util::spawn_query`].
+    /// `None` runs them on the current runtime.
+    fn processing_runtime(&self) -> Option<&tokio::runtime::Handle> {
+        None
+    }
+
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
 

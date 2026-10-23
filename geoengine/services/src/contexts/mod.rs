@@ -146,6 +146,7 @@ pub struct QueryContextImpl {
     abort_registration: QueryAbortRegistration,
     abort_trigger: Option<QueryAbortTrigger>,
     gdal_process_pool: Arc<GdalProcessPool>,
+    processing_runtime: Option<tokio::runtime::Handle>,
 }
 
 impl QueryContextImpl {
@@ -169,6 +170,7 @@ impl QueryContextImpl {
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
+            processing_runtime: None,
         }
     }
 
@@ -183,6 +185,7 @@ impl QueryContextImpl {
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
+        processing_runtime: Option<tokio::runtime::Handle>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
@@ -197,6 +200,7 @@ impl QueryContextImpl {
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
+            processing_runtime,
         }
     }
 }
@@ -243,6 +247,10 @@ impl QueryContext for QueryContextImpl {
 
     fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
         self.new_raster_cache.clone()
+    }
+
+    fn processing_runtime(&self) -> Option<&tokio::runtime::Handle> {
+        self.processing_runtime.as_ref()
     }
 }
 

@@ -11,8 +11,9 @@ use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,
     engine::{
         InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
-        QueryProcessorExt, TypedRasterOperator, TypedVectorOperator,
+        TypedRasterOperator, TypedVectorOperator,
     },
+    util::spawn_query,
 };
 use tokio::{
     sync::mpsc::{Receiver, Sender, error::TrySendError},
@@ -30,8 +31,8 @@ pub struct WebsocketStreamTask {
 }
 
 impl WebsocketStreamTask {
-    pub async fn new_raster_initialized<C: QueryContext + 'static>(
-        initialized_operator: Box<dyn InitializedRasterOperator>,
+    pub fn new_raster_initialized<C: QueryContext + 'static>(
+        initialized_operator: &dyn InitializedRasterOperator,
         query_rectangle: RasterQueryRectangle,
         mut query_ctx: C,
     ) -> Result<Self> {
@@ -42,9 +43,7 @@ impl WebsocketStreamTask {
         let abort_handle = query_ctx.abort_trigger()?;
 
         let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
-            let tile_stream = p
-                .query_into_owned_stream(query_rectangle, Box::new(query_ctx))
-                .await?;
+            let tile_stream = spawn_query(p, query_rectangle, Box::new(query_ctx));
 
             tile_stream.and_then(
                 move |tile| crate::util::spawn_blocking(
@@ -73,7 +72,7 @@ impl WebsocketStreamTask {
             .initialize(processing_graph_operator_path_root, &execution_ctx)
             .await?;
 
-        Self::new_raster_initialized(initialized_operator, query_rectangle, query_ctx).await
+        Self::new_raster_initialized(initialized_operator.as_ref(), query_rectangle, query_ctx)
     }
 
     pub async fn new_vector<C: SessionContext>(
@@ -95,9 +94,7 @@ impl WebsocketStreamTask {
         let abort_handle = query_ctx.abort_trigger()?;
 
         let byte_stream = call_on_generic_vector_processor!(query_processor, p => {
-            let batch_stream = p
-                .query_into_owned_stream(query_rectangle, Box::new(query_ctx))
-                .await?;
+            let batch_stream = spawn_query(p, query_rectangle, Box::new(query_ctx));
 
             batch_stream.and_then(
                 move |batch| crate::util::spawn_blocking(

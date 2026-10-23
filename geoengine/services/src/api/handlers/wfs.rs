@@ -33,12 +33,11 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        ProcessingGraphOperatorPath, QueryContext, QueryProcessor, ResultDescriptor,
-        SingleRasterOrVectorSource, TypedVectorQueryProcessor, VectorOperator,
-        VectorQueryProcessor,
+        ProcessingGraphOperatorPath, QueryContext, ResultDescriptor, SingleRasterOrVectorSource,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     },
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
-    util::{abortable_query_execution, input::RasterOrVectorOperator},
+    util::{abortable_query_execution, input::RasterOrVectorOperator, spawn_query},
 };
 use reqwest::Url;
 use serde::Deserialize;
@@ -632,7 +631,7 @@ where
 
     let features: Vec<serde_json::Value> = Vec::new();
     // TODO: more efficient merging of the partial feature collections
-    let stream = processor.query(query_rect, &query_ctx).await?;
+    let stream = spawn_query(processor, query_rect, Box::new(query_ctx));
 
     let future: BoxFuture<geoengine_operators::util::Result<(Vec<_>, Option<CacheHint>)>> =
         Box::pin(stream.try_fold(

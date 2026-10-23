@@ -4,7 +4,7 @@ use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalSourceTimePlaceholder, TimeReference,
 };
-use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
+use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions, spawn_query};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
@@ -223,10 +223,7 @@ async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
 where
     T: Pixel + GdalType,
 {
-    let mut tile_stream = processor
-        .raster_query(query_rect, &query_ctx)
-        .await?
-        .enumerate();
+    let mut tile_stream = spawn_query(processor, query_rect, Box::new(query_ctx)).enumerate();
     let mut tiles = Vec::new();
     while let Some((tile_index, tile)) = tile_stream.next().await {
         if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
@@ -389,10 +386,8 @@ where
                     gdal_config_options,
                 );
 
-            let mut tile_stream = processor
-                .raster_query(query_rect.clone(), &query_ctx)
-                .await?
-                .enumerate();
+            let mut tile_stream =
+                spawn_query(processor, query_rect.clone(), Box::new(query_ctx)).enumerate();
 
             let tiles_intersecting_qrect = tiling_strategy
                 .num_tiles_intersecting_grid_bounds(query_rect.spatial_bounds());

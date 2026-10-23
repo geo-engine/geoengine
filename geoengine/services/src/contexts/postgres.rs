@@ -72,6 +72,8 @@ where
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
     ort_environment: OrtEnvironment,
+    /// runs query tasks, so they leave the single-threaded HTTP workers
+    processing_runtime: tokio::runtime::Handle,
 }
 
 /// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
@@ -149,6 +151,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            processing_runtime: tokio::runtime::Handle::current(),
         })
     }
 
@@ -221,6 +224,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            processing_runtime: tokio::runtime::Handle::current(),
         })
     }
 
@@ -301,6 +305,8 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            // the server builds its context on the main runtime, which then runs all queries
+            processing_runtime: tokio::runtime::Handle::current(),
         };
 
         if created_schema {
@@ -502,6 +508,7 @@ where
                 computation,
             )),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
+            Some(self.context.processing_runtime.clone()),
         ))
     }
 
@@ -1135,6 +1142,22 @@ mod tests {
         db.logout().await.unwrap();
 
         assert!(app_ctx.session_by_id(session.id).await.is_err());
+    }
+
+    #[ge_context::test]
+    async fn it_runs_queries_on_the_runtime_it_was_created_on(app_ctx: PostgresContext<NoTls>) {
+        use geoengine_operators::engine::QueryContext;
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let query_ctx = app_ctx
+            .session_context(session)
+            .query_context(ProcessingGraphId::new(), ComputationId::new())
+            .unwrap();
+
+        assert_eq!(
+            query_ctx.processing_runtime().map(tokio::runtime::Handle::id),
+            Some(tokio::runtime::Handle::current().id())
+        );
     }
 
     #[ge_context::test]

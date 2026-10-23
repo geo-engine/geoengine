@@ -22,6 +22,7 @@ use std::sync::{Mutex, MutexGuard};
 
 pub use self::async_util::{
     abortable_query_execution, spawn, spawn_blocking, spawn_blocking_with_thread_pool,
+    spawn_plot_query, spawn_query,
 };
 pub use self::gdal_config_options::{GdalConfigOptions, TemporaryGdalThreadLocalConfigOptions};
 pub use self::rayon::create_rayon_thread_pool;

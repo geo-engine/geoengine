@@ -1,6 +1,6 @@
 use super::abortable_query_execution;
-use crate::engine::{BoxRasterQueryProcessor, QueryAbortTrigger, QueryContext, QueryProcessor};
-use crate::util::Result;
+use crate::engine::{BoxRasterQueryProcessor, QueryAbortTrigger, QueryContext};
+use crate::util::{Result, spawn_query};
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
@@ -128,7 +128,7 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     debug_assert_eq!(query_rect.attributes().count(), 1);
 
     // the tile stream will allways produce tiles aligned to the tiling origin
-    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+    let tile_stream = spawn_query(processor, query_rect.clone(), Box::new(query_ctx));
     let output_cache_hint = CacheHint::max_duration();
 
     let output_grid =
@@ -178,7 +178,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     let green_band_index = band_positions[1];
     let blue_band_index = band_positions[2];
 
-    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+    let tile_stream = spawn_query(processor, query_rect.clone(), Box::new(query_ctx));
     let accu = Ok((tile_template, output_cache_hint));
 
     let output_tile = Box::pin(tile_stream.try_chunks(rgb_channel_count).fold(
