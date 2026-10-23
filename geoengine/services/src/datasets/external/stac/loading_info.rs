@@ -10,6 +10,7 @@ use crate::util::join_base_url_and_path;
 use crate::util::retry::{RetryPolicy, retry_http};
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
+use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
@@ -38,6 +39,9 @@ use std::sync::Arc;
 use tracing::debug;
 use typed_floats::tf64::NonNaN;
 use url::Url;
+
+/// Upper bound of STAC cell searches one loading info request runs in parallel.
+const MAX_CONCURRENT_CELL_SEARCHES: usize = 8;
 
 /// Multi-band raster metadata queried from a STAC provider.
 #[derive(Debug, Clone)]
@@ -217,7 +221,7 @@ impl
         }
 
         let mut time_steps = Vec::new();
-        let mut tile_files = Vec::new();
+        let mut searches = Vec::new();
         for step in regular_time_steps(self.time_dimension, time_interval)? {
             let step = step?;
             time_steps.push(step);
@@ -229,22 +233,34 @@ impl
                 let Some(bbox) = stac_query_bbox(clipped, self.dataset.projection)? else {
                     continue;
                 };
-                let metadata = self.clone();
-                let url = items_url.clone();
-                let output = self
-                    .query_cache
-                    .get_or_fetch(self.dataset.clone(), cell.index, step, move || async move {
-                        metadata.search_bbox(url, bbox, step).await
-                    })
-                    .await
-                    .map_err(|error| {
-                        geoengine_operators::error::Error::QueryingProcessorFailed {
-                            source: Box::new(error),
-                        }
-                    })?;
-                tile_files.extend(output.iter().cloned());
+                searches.push((step, cell.index, bbox));
             }
         }
+
+        // Cell searches are independent; the result is sorted and deduplicated below.
+        let outputs = futures::stream::iter(searches)
+            .map(|(step, cell, bbox)| {
+                let metadata = self.clone();
+                let url = items_url.clone();
+                self.query_cache.get_or_fetch(
+                    self.dataset.clone(),
+                    cell,
+                    step,
+                    move || async move { metadata.search_bbox(url, bbox, step).await },
+                )
+            })
+            .buffer_unordered(MAX_CONCURRENT_CELL_SEARCHES)
+            .map_err(
+                |error| geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(error),
+                },
+            )
+            .try_collect::<Vec<_>>()
+            .await?;
+        let mut tile_files = outputs
+            .iter()
+            .flat_map(|output| output.iter().cloned())
+            .collect::<Vec<_>>();
 
         tile_files.retain(|file| {
             time_interval.intersects(&file.time)
@@ -2338,6 +2354,50 @@ mod grid_request_tests {
         );
         let warm = meta.loading_info(query(area, interval(3))).await.unwrap();
         assert_eq!(warm.tile_files(interval(3), tile, 0).len(), 5);
+    }
+
+    #[tokio::test]
+    async fn cells_of_one_query_are_searched_concurrently() {
+        let server = Server::run();
+        let starts = Arc::new(Mutex::new(Vec::new()));
+        for (bbox, id, left, bottom) in [
+            ("0.00000,0.00000,1.00000,1.00000", "southwest", 0., 0.),
+            ("1.00000,0.00000,2.00000,1.00000", "southeast", 1., 0.),
+            ("0.00000,1.00000,1.00000,2.00000", "northwest", 0., 1.),
+            ("1.00000,1.00000,2.00000,2.00000", "northeast", 1., 1.),
+        ] {
+            expect_search(
+                &server,
+                bbox,
+                vec![item_at(id, left, bottom)],
+                Duration::from_millis(300),
+                starts.clone(),
+            );
+        }
+        let provider = provider(
+            &server,
+            0,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let area = SpatialPartition2D::new((0.5, 1.5).into(), (1.5, 0.5).into()).unwrap();
+        // Four sequential 300 ms searches would take 1.2 s.
+        let result = tokio::time::timeout(
+            Duration::from_millis(800),
+            meta.loading_info(query(area, interval(3))),
+        )
+        .await
+        .expect("cell searches of one query must run concurrently")
+        .unwrap();
+        assert_eq!(starts.lock().unwrap().len(), 4);
+        let tile = TileInformation::new(
+            GridIdx2D::new([0, 0]),
+            GridShape::new([10, 10]),
+            GeoTransform::new_unchecked((0.5, 1.5).into(), 0.1, -0.1),
+        );
+        assert_eq!(result.tile_files(interval(3), tile, 0).len(), 4);
     }
 
     #[tokio::test]
