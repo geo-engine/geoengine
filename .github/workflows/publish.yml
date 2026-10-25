@@ -51,7 +51,7 @@ jobs:
       id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check if tag is already published
         id: tag
         run: echo "tag_already_published=$(just repo::is-api-client-python-already-published)" >> $GITHUB_OUTPUT
@@ -60,7 +60,7 @@ jobs:
         run: echo "Version is already published, skipping publish step."
       - name: Set up Python ${{ env.python-version }}
         if: steps.tag.outputs.tag_already_published == 'false'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.python-version }}
       - name: Install dependencies, build a binary wheel & a source tarball
@@ -81,7 +81,7 @@ jobs:
       id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check if tag is already published
         id: tag
         run: echo "tag_already_published=$(just repo is-api-client-typescript-already-published)" >> $GITHUB_OUTPUT
@@ -90,7 +90,7 @@ jobs:
         run: echo "Version is already published, skipping publish step."
       - name: Use Node.js ${{ env.node-version }}
         if: steps.tag.outputs.tag_already_published == 'false'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.node-version }}
           registry-url: "https://registry.npmjs.org"
@@ -114,7 +114,7 @@ jobs:
       id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Rust ${{ env.rust-version }}
         uses: actions-rs/toolchain@v1
         with:
@@ -155,7 +155,7 @@ jobs:
       id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Check if tag is already published
         id: tag
         run: echo "tag_already_published=$(just repo is-python-library-already-published)" >> $GITHUB_OUTPUT
@@ -164,7 +164,7 @@ jobs:
         run: echo "Version is already published, skipping publish step."
       - name: Set up Python ${{ env.python-version }}
         if: steps.tag.outputs.tag_already_published == 'false'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.python-version }}
       - name: Install dependencies & build package
@@ -186,7 +186,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-tags: true # we need to fetch tags to check if the tag already exists
       - name: Store tag and check if tag is already published
@@ -275,13 +275,13 @@ jobs:
       - uses: extractions/setup-just@v4
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           path: geoengine
 
       - name: Checkout container files
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: geo-engine/geoengine-container
           ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
@@ -368,13 +368,13 @@ jobs:
       - uses: extractions/setup-just@v4
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           path: geoengine
 
       - name: Checkout container files
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: geo-engine/geoengine-container
           ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
@@ -428,7 +428,7 @@ jobs:
       - name: Post to a Slack channel
         if: contains(needs.*.result, 'failure')
         id: slack
-        uses: slackapi/slack-github-action@v1.23.0
+        uses: slackapi/slack-github-action@v4.0.0
         with:
           channel-id: "geoengine-dev-core"
           slack-message: "⚠️ The workflow ${{ github.workflow }} in the repository ${{ github.event.repository.name }} FAILED!"

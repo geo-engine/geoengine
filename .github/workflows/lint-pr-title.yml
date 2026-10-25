@@ -16,7 +16,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: geo-engine/conventional-pr-title@v1
+      - uses: geo-engine/conventional-pr-title@v2
         with:
           types: |-
             build
