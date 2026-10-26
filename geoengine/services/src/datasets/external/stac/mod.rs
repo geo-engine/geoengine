@@ -2,7 +2,6 @@ use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
-use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{CacheTtlSeconds, SpatialResolution, TimeDimension};
@@ -18,6 +17,9 @@ mod cache;
 #[cfg(test)]
 #[path = "client_cache_tests.rs"]
 mod client_cache_tests;
+#[cfg(test)]
+#[path = "client_transport_tests.rs"]
+mod client_transport_tests;
 pub(crate) mod common;
 mod coordinator;
 mod grid;
@@ -25,6 +27,7 @@ mod listing;
 mod loading_info;
 mod storage;
 use cache::StacQueryCache;
+pub(crate) use coordinator::StacClient;
 pub use coordinator::StacRequestRegistry;
 pub use grid::{ProjectedStacGrid, StacGrid, StacGridCell, StacGridCells};
 pub use loading_info::StacMultiBandMetaData;
@@ -382,94 +385,6 @@ impl DataProvider for StacDataProvider {
         Err(crate::error::Error::NotImplemented {
             message: "STAC provenance is not yet implemented".to_owned(),
         })
-    }
-}
-
-/// STAC HTTP transport with a shared provider coordinator.
-/// Clones share the connection pool, token renewal state and coordinator.
-#[derive(Clone)]
-pub(crate) struct StacClient {
-    client: reqwest::Client,
-    origin: url::Url,
-    request_registry: StacRequestRegistry,
-    cached_coordinator: Arc<ArcSwapOption<coordinator::StacRequestCoordinator>>,
-    coordinator_authentication: Option<StacProviderAuthentication>,
-    authentication: Option<auth::StacAuthentication>,
-}
-
-impl fmt::Debug for StacClient {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("StacClient")
-            .field("origin", &self.origin)
-            .field(
-                "coordinator_authentication",
-                &self.coordinator_authentication,
-            )
-            .field("authenticated", &self.authentication.is_some())
-            .finish_non_exhaustive()
-    }
-}
-
-impl StacClient {
-    pub(crate) fn new(
-        client: reqwest::Client,
-        stac_api_url: &str,
-        request_registry: StacRequestRegistry,
-    ) -> crate::error::Result<Self> {
-        let origin = url::Url::parse(stac_api_url)?;
-        Ok(Self {
-            client,
-            origin,
-            request_registry,
-            cached_coordinator: Arc::new(ArcSwapOption::empty()),
-            coordinator_authentication: None,
-            authentication: None,
-        })
-    }
-
-    pub(crate) async fn with_authentication(
-        mut self,
-        config: Option<StacProviderAuthentication>,
-    ) -> crate::error::Result<Self> {
-        // Reconfiguration must not mutate the cache shared with clones that still
-        // use the previous authentication identity.
-        self.cached_coordinator = Arc::new(ArcSwapOption::empty());
-        self.coordinator_authentication = config.clone();
-        self.authentication = match config {
-            Some(config) => {
-                Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
-            }
-            None => None,
-        };
-        Ok(self)
-    }
-
-    pub(crate) fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
-        self.client.get(url)
-    }
-
-    /// Executes a request through the provider's shared coordinator and authentication.
-    /// Pagination URLs are followed as supplied by the STAC server.
-    pub(crate) async fn execute_json<T: serde::de::DeserializeOwned>(
-        &self,
-        request: reqwest::RequestBuilder,
-        policy: &crate::util::retry::RetryPolicy,
-    ) -> reqwest::Result<T> {
-        let request = request.build()?;
-        let coordinator = match self.cached_coordinator.load_full() {
-            Some(coordinator) if !coordinator.is_closed() => coordinator,
-            _ => {
-                let coordinator = self
-                    .request_registry
-                    .shared(&self.origin, self.coordinator_authentication.as_ref());
-                self.cached_coordinator.store(Some(coordinator.clone()));
-                coordinator
-            }
-        };
-        coordinator
-            .execute(&self.client, request, self.authentication.as_ref(), policy)
-            .await
     }
 }
 

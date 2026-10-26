@@ -57,13 +57,16 @@ Build authorization at dispatch time so time spent queued cannot stale the token
 
 ## Integration with the grid cache
 
-Attach the coordinator to the STAC client during provider construction and auth
-initialization. Route first and subsequent pages through the coordinated send
-API. Preserve provider-specific transport timeout settings. The coordinator owns
-HTTP dispatch, header observation and both rate-limit and transient retries.
-Callers receive decoded JSON or an error; permits and queue admission
-are private implementation details. JSON decode failures retain their existing
-retry policy inside the coordinator, alongside HTTP and transport failures.
+Merge request execution into `StacClient`, which owns its provider-specific HTTP
+transport, authentication, bounded retries, and JSON decoding. Route first and
+subsequent pages through `execute_json`. Cache a shared `ActorChannels` handle
+for the configured origin and authentication identity; the registry holds only
+these channel and lifecycle records. The actor owns admission, HTTP dispatch and
+header observation. Separate clients can share quota state while retaining their
+own transport timeouts and token renewal state. Callers receive decoded JSON or
+an error; permits and queue admission remain private implementation details.
+JSON decode failures retain their existing retry policy alongside HTTP and
+transport failures.
 
 Moka `StacQueryCache::get_or_fetch` remains the owner of dataset/cell/time-step
 coalescing. Its initializer covers queue waits, cooldowns, all pages, and result
@@ -89,7 +92,7 @@ The coordinator actor exclusively owns scheduler state. Callers submit owned
 attempts and await their individual reply channels. The event loop polls admitted
 HTTP operations concurrently, applies completed response feedback, and admits
 queued attempts when all constraints allow. JSON decoding and retry backoff stay
-in the caller's `execute` future; each retry rejoins FIFO admission.
+in the client's `execute_json` future; each retry rejoins FIFO admission.
 
 Dropping a reply receiver cancels queued or admitted work. Queued cancellation
 consumes no quota; admitted cancellation releases outstanding bookkeeping while
@@ -105,7 +108,7 @@ identity of existing clones. A closed actor triggers a replacement lookup and
 updates the shared cache. The cached Arc keeps a live actor retained between
 requests until the client clones release it.
 
-The first registry lookup creates the coordinator and both channels together
+The first registry lookup creates the shared channel and lifecycle record
 and spawns its HTTP actor. A closed actor is replaced atomically under the same
 key. No `OnceLock` or separate registry worker thread is needed.
 

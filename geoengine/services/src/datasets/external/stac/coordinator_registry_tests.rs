@@ -39,10 +39,10 @@ async fn it_ignores_retirement_from_an_old_coordinator_after_replacement() {
     let old = registry.shared(&origin, None);
     let old_weak = Arc::downgrade(&old);
     drop(old);
-    assert!(StacRequestCoordinator::try_retire(&old_weak));
+    assert!(ActorChannels::try_retire(&old_weak));
     let replacement = registry.shared(&origin, None);
     assert!(!old_weak.ptr_eq(&Arc::downgrade(&replacement)));
-    assert!(StacRequestCoordinator::try_retire(&old_weak));
+    assert!(ActorChannels::try_retire(&old_weak));
     let looked_up = registry.shared(&origin, None);
     assert!(Arc::ptr_eq(&replacement, &looked_up));
 }
@@ -57,16 +57,16 @@ fn it_replaces_a_closed_actor_after_its_tokio_runtime_shuts_down() {
             .unwrap();
         runtime.block_on(async { registry.shared(&origin, None) })
     };
-    assert!(first.channels.jobs.is_closed());
+    assert!(first.jobs.is_closed());
     let second_runtime = tokio::runtime::Builder::new_current_thread()
         .enable_time()
         .build()
         .unwrap();
     let second = second_runtime.block_on(async { registry.shared(&origin, None) });
     assert!(!Arc::ptr_eq(&first, &second));
-    assert!(!second.channels.jobs.is_closed());
+    assert!(!second.jobs.is_closed());
     drop(second_runtime);
-    assert!(second.channels.jobs.is_closed());
+    assert!(second.jobs.is_closed());
 }
 
 #[tokio::test]
@@ -148,13 +148,13 @@ async fn it_never_retires_a_coordinator_handed_out_by_a_racing_lookup() {
         let retire_barrier = barrier.clone();
         let retire = tokio::spawn(async move {
             retire_barrier.wait().await;
-            StacRequestCoordinator::try_retire(&weak)
+            ActorChannels::try_retire(&weak)
         });
         barrier.wait().await;
         let coordinator = lookup.await.unwrap();
         retire.await.unwrap();
         let current = registry.shared(&origin, None);
         assert!(Arc::ptr_eq(&current, &coordinator));
-        assert!(!coordinator.channels.jobs.is_closed());
+        assert!(!coordinator.jobs.is_closed());
     }
 }

@@ -37,8 +37,8 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
             }
         }) as RunningAttempt
     });
-    let jobs = coordinator.channels.jobs.clone();
-    let cancellations = coordinator.channels.cancellations.clone();
+    let jobs = coordinator.jobs.clone();
+    let cancellations = coordinator.cancellations.clone();
 
     let mut replies = Vec::new();
     for id in 0..10 {
@@ -98,7 +98,7 @@ fn controlled_coordinator(
     label: &str,
 ) -> (
     StacRequestRegistry,
-    Arc<StacRequestCoordinator>,
+    Arc<ActorChannels>,
     mpsc::UnboundedReceiver<StartedAttempt>,
 ) {
     let registry = StacRequestRegistry::new();
@@ -124,19 +124,21 @@ fn controlled_coordinator(
 }
 
 fn execute_job(
-    coordinator: Arc<StacRequestCoordinator>,
+    coordinator: Arc<ActorChannels>,
     id: usize,
 ) -> tokio::task::JoinHandle<reqwest::Result<serde_json::Value>> {
     tokio::spawn(async move {
-        let client = reqwest::Client::new();
-        coordinator
-            .execute(
-                &client,
-                client
-                    .get(format!("https://actor.test/{id}"))
-                    .build()
-                    .unwrap(),
-                None,
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            "https://actor.test/",
+            StacRequestRegistry::new(),
+        )
+        .unwrap();
+        // Inject the controlled dispatcher while exercising the real client API.
+        client.cached_coordinator.store(Some(coordinator));
+        client
+            .execute_json(
+                client.get(format!("https://actor.test/{id}")),
                 &RetryPolicy::new().max_retries(1),
             )
             .await
@@ -237,9 +239,9 @@ async fn it_retires_only_registry_owned_coordinators() {
         None,
     );
     let weak = Arc::downgrade(&coordinator);
-    assert!(!StacRequestCoordinator::try_retire(&weak));
+    assert!(!ActorChannels::try_retire(&weak));
     drop(coordinator);
-    assert!(StacRequestCoordinator::try_retire(&weak));
+    assert!(ActorChannels::try_retire(&weak));
     assert!(weak.upgrade().is_none());
     tokio::task::yield_now().await;
 }

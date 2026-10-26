@@ -14,15 +14,15 @@ async fn it_returns_the_http_error_when_the_attempt_budget_is_exhausted() {
                 .respond_with(responders::status_code(500)),
         );
         let registry = StacRequestRegistry::new();
-        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let client = reqwest::Client::new();
-        let request = client.get(server.url_str("/items")).build().unwrap();
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let request = client.get(server.url_str("/items"));
         let policy = RetryPolicy::new()
             .max_retries(max_retries)
             .initial_delay_ms(1);
 
-        let error = coordinator
-            .execute::<serde_json::Value>(&client, request, None, &policy)
+        let error = client
+            .execute_json::<serde_json::Value>(request, &policy)
             .await
             .expect_err("exhausting the attempt budget returns the HTTP error");
 
@@ -42,14 +42,11 @@ async fn it_uses_the_callers_attempt_limit_for_rate_limit_retries() {
             .times(2)
             .respond_with(responders::status_code(429)),
     );
-    let client = reqwest::Client::new();
     let registry = StacRequestRegistry::new();
-    let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-    let error = coordinator
-        .execute::<serde_json::Value>(
-            &client,
-            client.get(server.url_str("/limited")).build().unwrap(),
-            None,
+    let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+    let error = client
+        .execute_json::<serde_json::Value>(
+            client.get(server.url_str("/limited")),
             &RetryPolicy::new().max_retries(2),
         )
         .await
@@ -73,18 +70,12 @@ async fn it_backs_off_exponentially_for_headerless_rate_limits() {
                 responders::status_code(if starts.len() < 4 { 429 } else { 200 }).body("null")
             }),
     );
-    let client = reqwest::Client::new();
     let registry = StacRequestRegistry::new();
-    let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+    let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
     let policy = RetryPolicy::new().max_retries(4).initial_delay_ms(600);
     tokio::time::timeout(
         Duration::from_secs(10),
-        coordinator.execute::<serde_json::Value>(
-            &client,
-            client.get(server.url_str("/limited")).build().unwrap(),
-            None,
-            &policy,
-        ),
+        client.execute_json::<serde_json::Value>(client.get(server.url_str("/limited")), &policy),
     )
     .await
     .expect("headerless rate limits must recover within the attempt budget")
@@ -117,18 +108,14 @@ async fn it_uses_server_rate_limits_without_adding_exponential_backoff() {
                     responders::status_code(200).body("null"),
                 ]),
         );
-        let client = reqwest::Client::new();
         let registry = StacRequestRegistry::new();
-        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
         let policy = RetryPolicy::new().max_retries(2).initial_delay_ms(10_000);
         tokio::time::timeout(
             Duration::from_secs(3),
-            coordinator.execute::<serde_json::Value>(
-                &client,
-                client.get(server.url_str("/limited")).build().unwrap(),
-                None,
-                &policy,
-            ),
+            client
+                .execute_json::<serde_json::Value>(client.get(server.url_str("/limited")), &policy),
         )
         .await
         .expect("server-controlled retries must not add the ten-second policy backoff")
@@ -151,14 +138,12 @@ async fn it_shares_the_attempt_budget_between_rate_limits_and_other_failures() {
                     responders::status_code(statuses[1]),
                 ]),
         );
-        let client = reqwest::Client::new();
         let registry = StacRequestRegistry::new();
-        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let error = coordinator
-            .execute::<serde_json::Value>(
-                &client,
-                client.get(server.url_str("/items")).build().unwrap(),
-                None,
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let error = client
+            .execute_json::<serde_json::Value>(
+                client.get(server.url_str("/items")),
                 &RetryPolicy::new().max_retries(2).initial_delay_ms(1),
             )
             .await

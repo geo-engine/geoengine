@@ -3,13 +3,13 @@
 //! queue. A channel actor owns that queue and all quota state, admits requests in
 //! order, and runs admitted HTTP attempts concurrently.
 //!
-//! [`Identity`] selects a [`StacRequestCoordinator`] inside an owned
+//! [`Identity`] selects shared [`ActorChannels`] inside an owned
 //! [`StacRequestRegistry`], shared across providers and collections that use that
 //! registry. The actor owns the FIFO queue and [`State`], which holds request
 //! history, learned rate-limit windows and server feedback. Admitted HTTP
 //! attempts may overlap.
 //!
-//! One [`StacRequestCoordinator::execute`] call may make several HTTP attempts.
+//! One [`StacClient::execute_json`] call may make several HTTP attempts.
 //! Each attempt is an owned channel job with a one-shot reply. The actor applies
 //! response feedback before replying. Failures and cancellation keep an admitted
 //! request start charged against the rolling windows.
@@ -18,8 +18,9 @@
 //! then join its tail again. A 429 sets a shared cooldown; retries also back off
 //! unless the server supplies quota windows or usable retry timing. Admission
 //! waits for the cooldown and all quota constraints.
-use super::auth::StacAuthentication;
+use super::{StacProviderAuthentication, auth::StacAuthentication};
 use crate::util::retry::{RetryPolicy, is_terminal};
+use arc_swap::ArcSwapOption;
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
@@ -320,10 +321,13 @@ struct AttemptReply {
     server_controls_retry: bool,
 }
 
-#[derive(Clone, Debug)]
-struct ActorChannels {
+/// Shared request and cancellation channels plus their registry identity.
+#[derive(Debug)]
+pub(super) struct ActorChannels {
     jobs: mpsc::UnboundedSender<AttemptJob>,
     cancellations: mpsc::UnboundedSender<()>,
+    identity: Identity,
+    registry: Weak<CoordinatorMap>,
 }
 
 /// Close the reply before notifying the actor, so a cancellation wakeup cannot
@@ -347,22 +351,11 @@ type AttemptOutcome = (
     Option<reqwest::Result<reqwest::Response>>,
 );
 type RunningAttempt = Pin<Box<dyn Future<Output = AttemptOutcome> + Send>>;
-type CoordinatorMap = DashMap<Identity, Arc<StacRequestCoordinator>>;
+type CoordinatorMap = DashMap<Identity, Arc<ActorChannels>>;
 type ActorReceivers = (
     mpsc::UnboundedReceiver<AttemptJob>,
     mpsc::UnboundedReceiver<()>,
 );
-
-/// Shared channel endpoint for one configured origin and authentication identity.
-///
-/// The actor owns FIFO admission and quota state. Provider and client clones only
-/// submit owned jobs; they never hold a scheduler lock while waiting or sending.
-#[derive(Debug)]
-pub(super) struct StacRequestCoordinator {
-    channels: ActorChannels,
-    identity: Identity,
-    registry: Weak<CoordinatorMap>,
-}
 
 /// Application- or operation-owned coordinator registry.
 #[derive(Clone, Default)]
@@ -390,8 +383,8 @@ impl StacRequestRegistry {
     pub(super) fn shared(
         &self,
         origin: &Url,
-        authentication: Option<&super::StacProviderAuthentication>,
-    ) -> Arc<StacRequestCoordinator> {
+        authentication: Option<&StacProviderAuthentication>,
+    ) -> Arc<ActorChannels> {
         #[cfg(test)]
         self.lookup_count.fetch_add(1, Ordering::Relaxed);
         let identity = identity_for(origin, authentication);
@@ -403,29 +396,25 @@ impl StacRequestRegistry {
         self.lookup_count.load(Ordering::Relaxed)
     }
 
-    fn shared_with_dispatch<F>(
-        &self,
-        identity: Identity,
-        dispatch: F,
-    ) -> Arc<StacRequestCoordinator>
+    fn shared_with_dispatch<F>(&self, identity: Identity, dispatch: F) -> Arc<ActorChannels>
     where
         F: Fn(AttemptJob) -> RunningAttempt + Send + 'static,
     {
         // A closed actor is replaced only for this identity. Other entries
         // retire themselves after their retained quota history expires.
-        let (coordinator, receivers) = match self.coordinators.entry(identity.clone()) {
-            Entry::Occupied(mut entry) if entry.get().channels.jobs.is_closed() => {
-                let (coordinator, receivers) =
+        let (channels, receivers) = match self.coordinators.entry(identity.clone()) {
+            Entry::Occupied(mut entry) if entry.get().jobs.is_closed() => {
+                let (channels, receivers) =
                     Self::new_coordinator(identity, Arc::downgrade(&self.coordinators));
-                entry.insert(coordinator.clone());
-                (coordinator, Some(receivers))
+                entry.insert(channels.clone());
+                (channels, Some(receivers))
             }
             Entry::Occupied(entry) => (entry.get().clone(), None),
             Entry::Vacant(entry) => {
-                let (coordinator, receivers) =
+                let (channels, receivers) =
                     Self::new_coordinator(identity, Arc::downgrade(&self.coordinators));
-                entry.insert(coordinator.clone());
-                (coordinator, Some(receivers))
+                entry.insert(channels.clone());
+                (channels, Some(receivers))
             }
         };
 
@@ -433,25 +422,23 @@ impl StacRequestRegistry {
             tokio::spawn(run_actor(
                 jobs,
                 cancellations,
-                Arc::downgrade(&coordinator),
+                Arc::downgrade(&channels),
                 dispatch,
             ));
         }
-        coordinator
+        channels
     }
 
     fn new_coordinator(
         identity: Identity,
         registry: Weak<CoordinatorMap>,
-    ) -> (Arc<StacRequestCoordinator>, ActorReceivers) {
+    ) -> (Arc<ActorChannels>, ActorReceivers) {
         let (jobs, job_receiver) = mpsc::unbounded_channel();
         let (cancellations, cancellation_receiver) = mpsc::unbounded_channel();
         (
-            Arc::new(StacRequestCoordinator {
-                channels: ActorChannels {
-                    jobs,
-                    cancellations,
-                },
+            Arc::new(ActorChannels {
+                jobs,
+                cancellations,
                 identity,
                 registry,
             }),
@@ -475,34 +462,137 @@ fn identity_for(
     }
 }
 
-impl StacRequestCoordinator {
+/// Shared channel endpoint for one configured origin and authentication identity.
+///
+/// The actor owns FIFO admission and quota state. Provider and client clones only
+/// submit owned jobs; they never hold a scheduler lock while waiting or sending.
+impl ActorChannels {
     pub(super) fn is_closed(&self) -> bool {
-        self.channels.jobs.is_closed()
+        self.jobs.is_closed()
     }
 
-    /// Executes and decodes a STAC request, owning admission, header feedback and
-    /// retries. Tokens are read after admission, and each retry enters the queue.
-    /// The policy's attempt limit includes rate-limit, HTTP, transport and decode failures.
-    ///
-    /// Transient retries back off before joining the queue again. A 429 retry
-    /// also backs off unless a learned quota window or usable server retry timing
-    /// lets admission control the retry delay.
-    /// No scheduler mutex is held during exponential backoff or
-    /// JSON decoding.
-    pub(super) async fn execute<T: DeserializeOwned>(
-        self: &Arc<Self>,
-        client: &reqwest::Client,
-        request: reqwest::Request,
-        authentication: Option<&StacAuthentication>,
+    /// Request retirement in registry lookup order. The actor can stop when its
+    /// entry was removed or is already absent; external owners prevent removal.
+    fn try_retire(self_weak: &Weak<Self>) -> bool {
+        let Some(channels) = self_weak.upgrade() else {
+            return true;
+        };
+        let registry = channels.registry.clone();
+        let identity = channels.identity.clone();
+        drop(channels);
+        let Some(registry) = registry.upgrade() else {
+            return true;
+        };
+        match registry.entry(identity) {
+            Entry::Occupied(entry)
+                if std::ptr::eq(Arc::as_ptr(entry.get()), self_weak.as_ptr()) =>
+            {
+                if Arc::strong_count(entry.get()) == 1 {
+                    drop(entry.remove());
+                    true
+                } else {
+                    false
+                }
+            }
+            Entry::Occupied(_) | Entry::Vacant(_) => true,
+        }
+    }
+}
+
+/// STAC HTTP transport with a shared request channel.
+/// Clones share the connection pool, token renewal state and cached channel.
+#[derive(Clone)]
+pub(crate) struct StacClient {
+    client: reqwest::Client,
+    origin: Url,
+    pub(super) request_registry: StacRequestRegistry,
+    pub(super) cached_coordinator: Arc<ArcSwapOption<ActorChannels>>,
+    coordinator_authentication: Option<StacProviderAuthentication>,
+    pub(super) authentication: Option<StacAuthentication>,
+}
+
+impl fmt::Debug for StacClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StacClient")
+            .field("origin", &self.origin)
+            .field(
+                "coordinator_authentication",
+                &self.coordinator_authentication,
+            )
+            .field("authenticated", &self.authentication.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+impl StacClient {
+    /// Creates a client without starting an actor or requiring a Tokio runtime.
+    pub(crate) fn new(
+        client: reqwest::Client,
+        stac_api_url: &str,
+        request_registry: StacRequestRegistry,
+    ) -> crate::error::Result<Self> {
+        let origin = Url::parse(stac_api_url)?;
+        Ok(Self {
+            client,
+            origin,
+            request_registry,
+            cached_coordinator: Arc::new(ArcSwapOption::empty()),
+            coordinator_authentication: None,
+            authentication: None,
+        })
+    }
+
+    /// Initializes authentication with a separate channel cache for this identity.
+    pub(crate) async fn with_authentication(
+        mut self,
+        config: Option<StacProviderAuthentication>,
+    ) -> crate::error::Result<Self> {
+        // Reconfiguration must not mutate the cache shared with clones that still
+        // use the previous authentication identity.
+        self.cached_coordinator = Arc::new(ArcSwapOption::empty());
+        self.coordinator_authentication = config.clone();
+        self.authentication = match config {
+            Some(config) => {
+                Some(StacAuthentication::initialize(self.client.clone(), config).await?)
+            }
+            None => None,
+        };
+        Ok(self)
+    }
+
+    /// Builds a GET request using this provider's HTTP transport.
+    pub(crate) fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.client.get(url)
+    }
+
+    /// Executes a request through the client's shared channel and authentication.
+    /// Pagination URLs are followed as supplied by the STAC server. All failures
+    /// share the policy's attempt budget. Retries rejoin FIFO admission after
+    /// backoff, unless server quota information controls the retry delay.
+    pub(crate) async fn execute_json<T: DeserializeOwned>(
+        &self,
+        request: reqwest::RequestBuilder,
         policy: &RetryPolicy,
     ) -> reqwest::Result<T> {
+        let request = request.build()?;
+        let channels = match self.cached_coordinator.load_full() {
+            Some(channels) if !channels.is_closed() => channels,
+            _ => {
+                let channels = self
+                    .request_registry
+                    .shared(&self.origin, self.coordinator_authentication.as_ref());
+                self.cached_coordinator.store(Some(channels.clone()));
+                channels
+            }
+        };
         let max_attempts = policy.max_retries.max(1);
         let mut attempt = 0;
         let mut backoff_failures = 0;
         let operation_name = format!("Fetch STAC items from {}", request.url());
         loop {
             attempt += 1;
-            let reply = self.execute_attempt(client, &request, authentication).await;
+            let reply = self.execute_attempt(&channels, &request).await;
             let response = reply.response;
             let server_controls_retry = reply.server_controls_retry;
             let result = async { response?.error_for_status()?.json::<T>().await }.await;
@@ -519,8 +609,6 @@ impl StacRequestCoordinator {
                 tracing::error!("{operation_name} failed after {max_attempts} attempts: {error}");
                 return Err(error);
             }
-            // Every failure consumes the same attempt budget. Without server
-            // quota information, 429s use the same backoff as other failures.
             if !server_controls_retry {
                 let delay =
                     Duration::from_millis(policy.initial_delay_ms * 2_u64.pow(backoff_failures));
@@ -533,12 +621,11 @@ impl StacRequestCoordinator {
         }
     }
 
-    /// Submit one owned job and wait for the actor to apply completion feedback.
+    /// Submit one owned attempt and wait for quota feedback before decoding.
     async fn execute_attempt(
-        self: &Arc<Self>,
-        client: &reqwest::Client,
+        &self,
+        channels: &ActorChannels,
         request: &reqwest::Request,
-        authentication: Option<&StacAuthentication>,
     ) -> AttemptReply {
         let request_copy = request
             .try_clone()
@@ -546,21 +633,21 @@ impl StacRequestCoordinator {
         let (reply, receiver) = oneshot::channel();
         let mut pending = PendingAttempt {
             reply: receiver,
-            cancellation: Some(self.channels.cancellations.clone()),
+            cancellation: Some(channels.cancellations.clone()),
         };
         let job = AttemptJob {
-            client: client.clone(),
+            client: self.client.clone(),
             request: request_copy,
-            authentication: authentication.cloned(),
+            authentication: self.authentication.clone(),
             reply,
         };
         assert!(
-            self.channels.jobs.send(job).is_ok(),
-            "the actor stays alive while this coordinator is externally owned"
+            channels.jobs.send(job).is_ok(),
+            "the actor stays alive while this client holds its channel"
         );
         let reply = (&mut pending.reply)
             .await
-            .expect("the actor stays alive while this coordinator is externally owned");
+            .expect("the actor stays alive while this client holds its channel");
         pending.cancellation = None;
         reply
     }
@@ -589,7 +676,7 @@ async fn run_attempt(job: AttemptJob) -> AttemptOutcome {
 async fn run_actor<F>(
     mut receiver: mpsc::UnboundedReceiver<AttemptJob>,
     mut cancellations: mpsc::UnboundedReceiver<()>,
-    coordinator: Weak<StacRequestCoordinator>,
+    coordinator: Weak<ActorChannels>,
     dispatch: F,
 ) where
     F: Fn(AttemptJob) -> RunningAttempt + Send + 'static,
@@ -654,7 +741,7 @@ async fn run_actor<F>(
             () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } }, if deadline.is_some() => {},
             () = async { if let Some(deadline) = idle_deadline { tokio::time::sleep_until(deadline.into()).await } }, if idle_deadline.is_some() => {
                 if state.retain_until() <= Instant::now() && queued.is_empty() && running.is_empty()
-                    && StacRequestCoordinator::try_retire(&coordinator) {
+                    && ActorChannels::try_retire(&coordinator) {
                     return;
                 }
             },
@@ -683,35 +770,6 @@ fn complete_attempt(state: &mut State, (reply, response): AttemptOutcome) {
             response,
             server_controls_retry,
         });
-    }
-}
-
-impl StacRequestCoordinator {
-    /// Request retirement in registry lookup order. The actor can stop when its
-    /// entry was removed or is already absent; external owners prevent removal.
-    fn try_retire(self_weak: &Weak<Self>) -> bool {
-        let Some(coordinator) = self_weak.upgrade() else {
-            return true;
-        };
-        let registry = coordinator.registry.clone();
-        let identity = coordinator.identity.clone();
-        drop(coordinator);
-        let Some(registry) = registry.upgrade() else {
-            return true;
-        };
-        match registry.entry(identity) {
-            Entry::Occupied(entry)
-                if std::ptr::eq(Arc::as_ptr(entry.get()), self_weak.as_ptr()) =>
-            {
-                if Arc::strong_count(entry.get()) == 1 {
-                    drop(entry.remove());
-                    true
-                } else {
-                    false
-                }
-            }
-            Entry::Occupied(_) | Entry::Vacant(_) => true,
-        }
     }
 }
 
@@ -1041,14 +1099,12 @@ mod tests {
                 ]),
         );
         let registry = StacRequestRegistry::new();
-        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let client = reqwest::Client::new();
-        let request = client.get(server.url_str("/items")).build().unwrap();
-        let result: Value = coordinator
-            .execute(
-                &client,
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let request = client.get(server.url_str("/items"));
+        let result: Value = client
+            .execute_json(
                 request,
-                None,
                 &RetryPolicy::new().max_retries(4).initial_delay_ms(1),
             )
             .await
@@ -1067,13 +1123,11 @@ mod tests {
                     .respond_with(responders::status_code(500)),
             );
             let registry = StacRequestRegistry::new();
-            let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-            let client = reqwest::Client::new();
-            let error = coordinator
-                .execute::<serde_json::Value>(
-                    &client,
-                    client.get(server.url_str("/items")).build().unwrap(),
-                    None,
+            let client =
+                StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+            let error = client
+                .execute_json::<serde_json::Value>(
+                    client.get(server.url_str("/items")),
                     &RetryPolicy::new()
                         .max_retries(max_retries)
                         .initial_delay_ms(1),
@@ -1100,21 +1154,15 @@ mod tests {
             );
         }
         let registry = StacRequestRegistry::new();
-        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let client = reqwest::Client::new();
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
         let mut tasks = tokio::task::JoinSet::new();
         for path in ["/one", "/two"] {
-            let coordinator = coordinator.clone();
             let client = client.clone();
             let url = server.url_str(path);
             tasks.spawn(async move {
-                coordinator
-                    .execute::<Value>(
-                        &client,
-                        client.get(url).build().unwrap(),
-                        None,
-                        &RetryPolicy::new(),
-                    )
+                client
+                    .execute_json::<Value>(client.get(url), &RetryPolicy::new())
                     .await
                     .unwrap()
             });
@@ -1152,19 +1200,13 @@ mod tests {
                 }),
         );
         let registry = StacRequestRegistry::new();
-        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let client = reqwest::Client::new();
-        let first_coordinator = coordinator.clone();
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
         let first_client = client.clone();
         let first_url = server.url_str("/items");
         let first = tokio::spawn(async move {
-            first_coordinator
-                .execute::<Value>(
-                    &first_client,
-                    first_client.get(first_url).build().unwrap(),
-                    None,
-                    &RetryPolicy::new(),
-                )
+            first_client
+                .execute_json::<Value>(first_client.get(first_url), &RetryPolicy::new())
                 .await
         });
         tokio::time::timeout(Duration::from_secs(1), async {
@@ -1179,12 +1221,7 @@ mod tests {
 
         let result = tokio::time::timeout(
             Duration::from_secs(1),
-            coordinator.execute::<Value>(
-                &client,
-                client.get(server.url_str("/items")).build().unwrap(),
-                None,
-                &RetryPolicy::new(),
-            ),
+            client.execute_json::<Value>(client.get(server.url_str("/items")), &RetryPolicy::new()),
         )
         .await
         .expect("the next caller should proceed after cancellation")
@@ -1202,13 +1239,11 @@ mod tests {
                 .respond_with(responders::status_code(404)),
         );
         let registry = StacRequestRegistry::new();
-        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let client = reqwest::Client::new();
-        let error = coordinator
-            .execute::<serde_json::Value>(
-                &client,
-                client.get(server.url_str("/missing")).build().unwrap(),
-                None,
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let error = client
+            .execute_json::<serde_json::Value>(
+                client.get(server.url_str("/missing")),
                 &RetryPolicy::new().stop_on_status(&[400, 404]),
             )
             .await

@@ -16,7 +16,7 @@ or configuration changes are needed.
    admitted HTTP operations concurrently.
 2. Apply completion feedback and release outstanding bookkeeping before replying
    or admitting further work. Keep JSON decoding and bounded retries in
-   `execute`; retries rejoin admission after backoff. Read authorization after
+   `StacClient::execute_json`; retries rejoin admission after backoff. Read authorization after
    admission so queued requests use a fresh token.
 3. Handle dropped replies as cancellation. Remove queued work without charging
    quota, cancel admitted work, and retain admitted start timestamps. Cancellation
@@ -25,7 +25,7 @@ or configuration changes are needed.
    database handles, execution contexts, and provider clients. Preserve quota
    sharing across queries and sessions. CLI harvesting owns one registry per
    operation; standalone providers can receive an explicitly shared registry.
-5. Store coordinator entries in `Arc<DashMap<Identity, Arc<Coordinator>>>`.
+5. Store coordinator entries in `Arc<DashMap<Identity, Arc<ActorChannels>>>`.
    Registry construction simply allocates the map and requires no Tokio runtime.
    At first lookup, create both channels and the coordinator together, then start
    its actor on the current Tokio runtime. This removes all `OnceLock` use in the
@@ -41,7 +41,13 @@ or configuration changes are needed.
    its own cache so existing clones keep their previous identity. A closed actor
    causes a replacement lookup and updates the cache for all clones. Keep
    construction outside a Tokio runtime possible without a mutex or `OnceLock`.
-8. Keep registry references weak inside coordinators. Preserve history and server
+8. Merge `StacRequestCoordinator` request execution into `StacClient` and remove
+   the separate coordinator wrapper. The registry stores shared `ActorChannels`
+   records containing senders, identity, and a weak registry reference. Keep each
+   provider's HTTP transport and authentication on its client; only quota
+   scheduling is shared. Verify distinct timeout settings on two clients sharing
+   the same channel.
+9. Keep registry references weak inside coordinators. Preserve history and server
    deadlines while actors remain retained. A cached client keeps its actor
    alive; idle expiry can release map entries after clients drop their handles. Dropping application/client owners releases the registry without a
    reference cycle. Adapt concurrency, cancellation, retention, and integration
@@ -67,11 +73,12 @@ DashMap registry, coordinator reuse, and validation results.
 
 ## Validation results
 
-- All 175 selected STAC tests pass, with three ignored, including local HTTP,
+- All 176 selected STAC tests pass, with three ignored, including local HTTP,
   authentication, retry, grid-cache coalescing, provider/database integration,
   concurrent registry lookup, and lookup/retirement race coverage. Three client
   cache regressions verify lookup counts across requests/clones, authentication
-  reconfiguration, and actor replacement after runtime shutdown.
+  reconfiguration, and actor replacement after runtime shutdown. A shared-channel
+  regression verifies that clients retain their own HTTP timeouts.
 - Strict Clippy for all service features and targets, Rust formatting, Markdown
   formatting, and `git diff --check` pass.
 - `CARGO_NET_OFFLINE=true just ci backend` stops during dependency installation
