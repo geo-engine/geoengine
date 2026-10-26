@@ -13,7 +13,7 @@ use geoengine_datatypes::{
     raster::{
         ConvertDataType, FromIndexFnParallel, GeoTransform, GridBoundingBox2D, GridIdx2D,
         GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
-        MapElementsParallel, Pixel, RasterTile2D,
+        MapElementsParallel, MaskedGrid2D, Pixel, RasterTile2D,
     },
 };
 use geoengine_expression::LinkedExpression;
@@ -80,7 +80,7 @@ where
                 .zip_bands(source_query, ctx)
                 .await?
                 .and_then(move |rasters| async move {
-                    if Tuple::all_empty(&rasters) {
+                    if !self.map_no_data && Tuple::all_empty(&rasters) {
                         return Ok(Tuple::empty_raster(&rasters));
                     }
 
@@ -236,10 +236,30 @@ where
                 .map_err(RasterExpressionError::from)?
         };
 
+        if raster.is_empty() && !map_no_data {
+            return Ok(GridOrEmpty::new_empty_shape(raster.grid_shape()));
+        }
+
+        let empty_result = if map_no_data {
+            expression(None).map(TO::from_)
+        } else {
+            None
+        };
+
+        if raster.is_empty() {
+            return match empty_result {
+                Some(value) => Ok(GridOrEmpty::new_grid(MaskedGrid2D::new_filled(
+                    raster.grid_shape(),
+                    value,
+                ))),
+                None => Ok(GridOrEmpty::new_empty_shape(raster.grid_shape())),
+            };
+        }
+
         let map_fn = |in_value: Option<f64>| {
             // TODO: could be a |in_value: T1| if map no data is false!
-            if !map_no_data && in_value.is_none() {
-                return None;
+            if in_value.is_none() {
+                return empty_result;
             }
 
             let result = expression(in_value);
@@ -349,12 +369,32 @@ where
                 .map_err(RasterExpressionError::from)?
         };
 
+        if !map_no_data && rasters.0.is_empty() && rasters.1.is_empty() {
+            return Ok(GridOrEmpty::new_empty_shape(rasters.0.grid_shape()));
+        }
+
+        let empty_result = if map_no_data {
+            expression(None, None).map(TO::from_)
+        } else {
+            None
+        };
+
+        if rasters.0.is_empty() && rasters.1.is_empty() {
+            return match empty_result {
+                Some(value) => Ok(GridOrEmpty::new_grid(MaskedGrid2D::new_filled(
+                    rasters.0.grid_shape(),
+                    value,
+                ))),
+                None => Ok(GridOrEmpty::new_empty_shape(rasters.0.grid_shape())),
+            };
+        }
+
         let map_fn = |lin_idx: usize| {
             let t0_value = rasters.0.get_at_grid_index_unchecked(lin_idx);
             let t1_value = rasters.1.get_at_grid_index_unchecked(lin_idx);
 
-            if !map_no_data && (t0_value.is_none() || t1_value.is_none()) {
-                return None;
+            if t0_value.is_none() || t1_value.is_none() {
+                return empty_result;
             }
 
             let result = expression(t0_value, t1_value);
@@ -517,14 +557,41 @@ macro_rules! impl_expression_tuple_processor {
                     program.function_nary().map_err(RasterExpressionError::from)?
                 };
 
+                let all_empty = rasters.iter().all(|r| r.grid_array.is_empty());
+
+                if all_empty && !map_no_data {
+                    return Ok(GridOrEmpty::new_empty_shape(rasters[0].grid_shape()));
+                };
+
+                // call expression with $N None values correctly:
+                let empty_result = if map_no_data {
+                    expression(
+                        $(
+                            { let _ = $I; None } // this is a nice trick to get the correct number of None values for the function call
+                        ),+
+                    ).map(TO::from_)
+                } else {
+                    None
+                };
+
+                if all_empty {
+                    return match empty_result {
+                        Some(value) => Ok(GridOrEmpty::new_grid(MaskedGrid2D::new_filled(
+                            rasters[0].grid_shape(),
+                            value,
+                        ))),
+                        None => Ok(GridOrEmpty::new_empty_shape(rasters[0].grid_shape())),
+                    };
+                }
+
                 let map_fn = |lin_idx: usize| {
                     $(
                         let $PIXEL = rasters[$I].get_at_grid_index_unchecked(lin_idx);
                         let $IS_NODATA = $PIXEL.is_none();
                     )*
 
-                    if !map_no_data && ( $($IS_NODATA)||* ) {
-                        return None;
+                    if $( $IS_NODATA )||* {
+                        return empty_result;
                     }
 
                     let result = expression(
