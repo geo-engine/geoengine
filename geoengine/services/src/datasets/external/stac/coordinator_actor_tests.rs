@@ -205,6 +205,50 @@ async fn it_releases_cancelled_inflight_bookkeeping_before_merging_feedback() {
 }
 
 #[tokio::test]
+async fn it_charges_completed_newer_attempts_against_delayed_quota_feedback() {
+    for (scoped, cancelled) in [(false, false), (false, true), (true, false), (true, true)] {
+        let (_registry, coordinator, mut starts) = controlled_coordinator("delayed-quota");
+        let first = execute_job(coordinator.clone(), 1);
+        let (_, first_response) = next_start(&mut starts).await;
+        let second = execute_job(coordinator.clone(), 2);
+        let (_, mut second_response) = next_start(&mut starts).await;
+
+        // The newer request consumes the server's final slot, but supplies no
+        // feedback, either because its headers omit quotas or it is cancelled.
+        if cancelled {
+            second.abort();
+            assert!(second.await.unwrap_err().is_cancelled());
+            tokio::time::timeout(Duration::from_secs(1), second_response.closed())
+                .await
+                .unwrap();
+        } else {
+            second_response.send(response(2, None)).unwrap();
+            second.await.unwrap().unwrap();
+        }
+
+        // The older response was prepared before the newer request consumed its
+        // slot. Its remaining=1 must not make that capacity available again.
+        let mut delayed = response(1, Some(1));
+        if !scoped {
+            delayed.headers_mut().remove("x-ratelimit-limit");
+        }
+        first_response.send(delayed).unwrap();
+        first.await.unwrap().unwrap();
+
+        let third = execute_job(coordinator, 3);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), starts.recv())
+                .await
+                .is_err(),
+            "a completed newer attempt must stay charged until reset"
+        );
+        let (_, third_response) = next_start(&mut starts).await;
+        third_response.send(response(3, None)).unwrap();
+        third.await.unwrap().unwrap();
+    }
+}
+
+#[tokio::test]
 async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
     let (registry, coordinator, mut starts) = controlled_coordinator("retained-quota");
     let previous = Arc::downgrade(&coordinator);

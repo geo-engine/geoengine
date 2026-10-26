@@ -86,10 +86,10 @@ struct RemoteQuota {
 }
 
 impl RemoteQuota {
-    /// Deduct other unfinished attempts that the server may not have counted yet,
+    /// Deduct other local reservations that the server may not have counted yet,
     /// then retain the smaller budget and later reset from both observations.
-    fn merge(current: &mut Option<Self>, mut observed: Self, outstanding: usize) {
-        observed.remaining_requests = observed.remaining_requests.saturating_sub(outstanding);
+    fn merge(current: &mut Option<Self>, mut observed: Self, reservations: usize) {
+        observed.remaining_requests = observed.remaining_requests.saturating_sub(reservations);
         if let Some(current) = current {
             current.remaining_requests =
                 current.remaining_requests.min(observed.remaining_requests);
@@ -155,6 +155,10 @@ struct State {
     /// Number of admitted HTTP attempts still waiting for response headers or a transport error.
     /// Used to adjust server feedback; this is not a concurrency limit.
     in_flight_requests: usize,
+    /// Monotonic completion count, including failures and cancellation. Attempts
+    /// snapshot this at admission so delayed feedback also charges other
+    /// requests that finished while they were running.
+    completed_requests: usize,
     /// Learned policies, deduplicated by duration. Empty selects ten starts/second.
     windows: Vec<Window>,
     /// Chronological admission timestamps shared by every window. Completion,
@@ -262,10 +266,16 @@ impl State {
     }
 
     /// Merge response feedback while preserving policies absent from this response.
-    /// The responding attempt must already be released so `in_flight_requests` counts only
-    /// the other attempts to reserve against the reported remaining capacity.
-    fn observe(&mut self, feedback: ResponseFeedback, now: Instant) {
+    /// The responding attempt must already be released. Charge both other
+    /// in-flight attempts and those that completed since its admission, excluding
+    /// the responding attempt itself, against the reported remaining capacity.
+    fn observe(&mut self, feedback: ResponseFeedback, now: Instant, completed_before: usize) {
         self.prune(now);
+        let reservations = self.in_flight_requests
+            + self
+                .completed_requests
+                .saturating_sub(completed_before)
+                .saturating_sub(1);
         for mut observed in feedback.windows {
             let remote = observed.remote.take();
             let window = if let Some(index) = self
@@ -282,11 +292,11 @@ impl State {
                     .expect("the observed window was just inserted")
             };
             if let Some(remote) = remote {
-                RemoteQuota::merge(&mut window.remote, remote, self.in_flight_requests);
+                RemoteQuota::merge(&mut window.remote, remote, reservations);
             }
         }
         if let Some(quota) = feedback.unscoped_quota {
-            RemoteQuota::merge(&mut self.unscoped_quota, quota, self.in_flight_requests);
+            RemoteQuota::merge(&mut self.unscoped_quota, quota, reservations);
         }
         if let Some(deadline) = feedback.cooldown_until {
             self.cooldown_until = Some(
@@ -299,6 +309,7 @@ impl State {
     /// Release one in-flight attempt. Its request start remains charged.
     fn release(&mut self) {
         self.in_flight_requests = self.in_flight_requests.saturating_sub(1);
+        self.completed_requests += 1;
         self.last_activity = Instant::now();
     }
 }
@@ -666,6 +677,7 @@ async fn run_actor<F>(
     let now = Instant::now();
     let mut state = State {
         in_flight_requests: 0,
+        completed_requests: 0,
         windows: Vec::new(),
         starts: VecDeque::new(),
         unscoped_quota: None,
@@ -673,13 +685,13 @@ async fn run_actor<F>(
         last_activity: now,
     };
     let mut queued: VecDeque<AttemptJob> = VecDeque::new();
-    let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
+    let mut running = FuturesUnordered::new();
     let mut jobs_open = true;
     let mut cancellations_open = true;
 
     loop {
-        while let Some(Some(outcome)) = running.next().now_or_never() {
-            complete_attempt(&mut state, outcome);
+        while let Some(Some((completed_before, outcome))) = running.next().now_or_never() {
+            complete_attempt(&mut state, completed_before, outcome);
         }
 
         let mut deadline = None;
@@ -690,7 +702,9 @@ async fn run_actor<F>(
                 deadline = Some(until);
                 queued.push_front(job);
             } else {
-                running.push(dispatch(job));
+                let completed_before = state.completed_requests;
+                let attempt = dispatch(job);
+                running.push(async move { (completed_before, attempt.await) });
                 continue;
             }
         }
@@ -710,7 +724,9 @@ async fn run_actor<F>(
         tokio::select! {
             biased;
             outcome = running.next(), if !running.is_empty() => {
-                if let Some(outcome) = outcome { complete_attempt(&mut state, outcome); }
+                if let Some((completed_before, outcome)) = outcome {
+                    complete_attempt(&mut state, completed_before, outcome);
+                }
             },
             cancellation = cancellations.recv(), if cancellations_open => match cancellation {
                 Some(()) => queued.retain(|job| !job.reply.is_closed()),
@@ -731,7 +747,7 @@ async fn run_actor<F>(
     }
 }
 
-fn complete_attempt(state: &mut State, (reply, response): AttemptOutcome) {
+fn complete_attempt(state: &mut State, completed_before: usize, (reply, response): AttemptOutcome) {
     state.release();
     if let Some(response) = response {
         let feedback = response.as_ref().ok().map(|response| {
@@ -742,7 +758,7 @@ fn complete_attempt(state: &mut State, (reply, response): AttemptOutcome) {
             )
         });
         if let Some(feedback) = feedback {
-            state.observe(feedback, Instant::now());
+            state.observe(feedback, Instant::now(), completed_before);
         }
         let server_controls_retry = response.as_ref().is_ok_and(|response| {
             response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
@@ -766,7 +782,7 @@ fn normalize_endpoint(endpoint: &str) -> String {
 /// Known policies carry their associated remaining/reset quota inside [`Window`].
 /// Ambiguous quota feedback is kept separately, and a 429 contributes a shared
 /// cooldown. [`State::observe`] merges these observations with existing constraints
-/// and accounts for other unfinished attempts.
+/// and accounts for other requests that were active or admitted since dispatch.
 struct ResponseFeedback {
     /// Advertised policies, deduplicated by duration, with any identifiable quotas.
     windows: Vec<Window>,
@@ -995,6 +1011,7 @@ mod tests {
         let now = Instant::now();
         let mut state = State {
             in_flight_requests: 0,
+            completed_requests: 0,
             windows: Vec::new(),
             starts: VecDeque::new(),
             unscoped_quota: None,
@@ -1016,6 +1033,7 @@ mod tests {
         let now = Instant::now();
         let mut state = State {
             in_flight_requests: 0,
+            completed_requests: 0,
             windows: Vec::new(),
             starts: VecDeque::new(),
             unscoped_quota: None,
@@ -1028,6 +1046,7 @@ mod tests {
         state.observe(
             ResponseFeedback::parse(&headers, 429, Instant::now()),
             Instant::now(),
+            0,
         );
         assert!(state.reserve(Instant::now()).is_some());
         assert_eq!(state.windows[0].limit, 2);

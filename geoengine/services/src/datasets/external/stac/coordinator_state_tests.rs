@@ -4,6 +4,7 @@ use super::*;
 fn state(now: Instant) -> State {
     State {
         in_flight_requests: 0,
+        completed_requests: 0,
         windows: Vec::new(),
         starts: VecDeque::new(),
         unscoped_quota: None,
@@ -13,8 +14,13 @@ fn state(now: Instant) -> State {
 }
 
 fn observe(state: &mut State, headers: &HeaderMap, status: u16, now: Instant) {
+    let completed_before = state.completed_requests;
     state.release();
-    state.observe(ResponseFeedback::parse(headers, status, now), now);
+    state.observe(
+        ResponseFeedback::parse(headers, status, now),
+        now,
+        completed_before,
+    );
 }
 
 fn parse_limits(headers: &HeaderMap) -> Vec<Window> {
@@ -227,6 +233,7 @@ fn it_allows_the_advertised_parallel_capacity_without_refunding_completions() {
     state.observe(
         ResponseFeedback::parse(&quota_headers(&[("20;w=1", "20", "1")]), 200, now),
         now,
+        state.completed_requests,
     );
     for _ in 0..20 {
         assert_eq!(state.reserve(now), None);
@@ -253,6 +260,7 @@ fn it_replaces_fallback_capacity_with_learned_policies() {
     state.observe(
         ResponseFeedback::parse(&quota_headers(&[("20;w=1", "10", "1")]), 200, now),
         now,
+        state.completed_requests,
     );
     assert_eq!(state.reserve(now), None);
     assert_eq!(state.starts.len(), 11);
@@ -287,7 +295,11 @@ fn it_uses_bounded_fallback_reset_and_the_longer_429_delay() {
     let mut state = state(now);
     let mut headers = HeaderMap::new();
     headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
-    state.observe(ResponseFeedback::parse(&headers, 200, now), now);
+    state.observe(
+        ResponseFeedback::parse(&headers, 200, now),
+        now,
+        state.completed_requests,
+    );
     assert_eq!(state.reserve(now), Some(now + FALLBACK_DELAY));
     assert_eq!(state.reserve(now + FALLBACK_DELAY), None);
     headers.insert(RETRY_AFTER, "1".parse().unwrap());
@@ -307,7 +319,11 @@ fn it_retains_history_and_remote_deadlines_until_the_latest_expiry() {
     let mut headers = HeaderMap::new();
     headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
     headers.insert("x-ratelimit-reset", "3600".parse().unwrap());
-    state.observe(ResponseFeedback::parse(&headers, 200, now), now);
+    state.observe(
+        ResponseFeedback::parse(&headers, 200, now),
+        now,
+        state.completed_requests,
+    );
     assert_eq!(state.retain_until(), now + Duration::from_hours(1));
     state
         .windows
