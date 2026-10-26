@@ -1,6 +1,6 @@
 use super::abortable_query_execution;
-use crate::engine::{BoxRasterQueryProcessor, QueryAbortTrigger, QueryContext};
-use crate::util::{Result, spawn_query};
+use crate::engine::{BoxRasterQueryProcessor, QueryContext};
+use crate::util::{Result, owned_query_stream, processing_runtime, spawn_query_task};
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
@@ -79,39 +79,46 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     }
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
+    let runtime = processing_runtime(&query_ctx);
 
-    match raster_colorizer {
-        RasterColorizer::SingleBand { band_colorizer, .. } => {
-            single_band_colorizer_to_png_bytes(
-                processor,
-                query_rect,
-                query_ctx,
-                width,
-                height,
-                band_colorizer,
-                conn_closed,
-                query_abort_trigger,
-            )
-            .await
+    // query, blit and encode run as one task, so the caller's runtime only awaits the bytes
+    let work = async move {
+        match raster_colorizer {
+            RasterColorizer::SingleBand { band_colorizer, .. } => {
+                single_band_colorizer_to_png_bytes(
+                    processor,
+                    query_rect,
+                    query_ctx,
+                    width,
+                    height,
+                    band_colorizer,
+                )
+                .await
+            }
+            RasterColorizer::MultiBand {
+                rgb_params: rgba_params,
+                ..
+            } => {
+                multi_band_colorizer_to_png_bytes(
+                    processor,
+                    query_rect,
+                    query_ctx,
+                    width,
+                    height,
+                    rgba_params,
+                    band_positions,
+                )
+                .await
+            }
         }
-        RasterColorizer::MultiBand {
-            rgb_params: rgba_params,
-            ..
-        } => {
-            multi_band_colorizer_to_png_bytes(
-                processor,
-                query_rect,
-                query_ctx,
-                width,
-                height,
-                rgba_params,
-                band_positions,
-                conn_closed,
-                query_abort_trigger,
-            )
-            .await
-        }
-    }
+    };
+
+    abortable_query_execution(
+        spawn_query_task(runtime, work),
+        conn_closed,
+        query_abort_trigger,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -122,13 +129,12 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     width: u32,
     height: u32,
     colorizer: Colorizer,
-    conn_closed: BoxFuture<'_, ()>,
-    query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
     debug_assert_eq!(query_rect.attributes().count(), 1);
 
     // the tile stream will allways produce tiles aligned to the tiling origin
-    let tile_stream = spawn_query(processor, query_rect.clone(), Box::new(query_ctx));
+    let tile_stream =
+        owned_query_stream(processor, query_rect.clone(), Box::new(query_ctx)).await?;
     let output_cache_hint = CacheHint::max_duration();
 
     let output_grid =
@@ -152,9 +158,12 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
             }
         }));
 
-    let (result, ch) =
-        abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((result.unbounded().to_png(width, height, &colorizer)?, ch))
+    let (result, ch) = output_tile.await?;
+    let png =
+        crate::util::spawn_blocking(move || result.unbounded().to_png(width, height, &colorizer))
+            .await
+            .boxed_context(error::UnexpectedComputational)??;
+    Ok((png, ch))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -166,8 +175,6 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     height: u32,
     rgb_params: RgbParams,
     band_positions: Vec<usize>,
-    conn_closed: BoxFuture<'_, ()>,
-    query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
     let rgb_channel_count = query_rect.attributes().count() as usize;
     let no_data_color = rgb_params.no_data_color;
@@ -178,7 +185,8 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     let green_band_index = band_positions[1];
     let blue_band_index = band_positions[2];
 
-    let tile_stream = spawn_query(processor, query_rect.clone(), Box::new(query_ctx));
+    let tile_stream =
+        owned_query_stream(processor, query_rect.clone(), Box::new(query_ctx)).await?;
     let accu = Ok((tile_template, output_cache_hint));
 
     let output_tile = Box::pin(tile_stream.try_chunks(rgb_channel_count).fold(
@@ -212,14 +220,15 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         },
     ));
 
-    let (result, ch) =
-        abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((
+    let (result, ch) = output_tile.await?;
+    let png = crate::util::spawn_blocking(move || {
         result
             .unbounded()
-            .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?,
-        ch,
-    ))
+            .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)
+    })
+    .await
+    .boxed_context(error::UnexpectedComputational)??;
+    Ok((png, ch))
 }
 
 fn blit_tile<T>(

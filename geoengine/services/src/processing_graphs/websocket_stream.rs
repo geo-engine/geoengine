@@ -13,7 +13,7 @@ use geoengine_operators::{
         InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
         TypedRasterOperator, TypedVectorOperator,
     },
-    util::spawn_query,
+    util::{QUERY_TASK_CHANNEL_CAPACITY, owned_query_stream, processing_runtime, spawn_stream},
 };
 use tokio::{
     sync::mpsc::{Receiver, Sender, error::TrySendError},
@@ -42,14 +42,19 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
-            let tile_stream = spawn_query(p, query_rectangle, Box::new(query_ctx));
+        let runtime = processing_runtime(&query_ctx);
 
-            tile_stream.and_then(
-                move |tile| crate::util::spawn_blocking(
-                    move || raster_tile_2d_to_arrow_ipc_file(tile, spatial_reference).map_err(Into::into)
-                ).err_into().map(| r | r.and_then(std::convert::identity))
-            ).boxed()
+        // the query and the IPC encoding run in the task; this side only forwards bytes
+        let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
+            let tile_stream = owned_query_stream(p, query_rectangle, Box::new(query_ctx));
+
+            spawn_stream(&runtime, QUERY_TASK_CHANNEL_CAPACITY, async move {
+                Ok(tile_stream.await?.and_then(
+                    move |tile| crate::util::spawn_blocking(
+                        move || raster_tile_2d_to_arrow_ipc_file(tile, spatial_reference).map_err(Into::into)
+                    ).err_into().map(| r | r.and_then(std::convert::identity))
+                ).boxed())
+            })
         });
 
         // TODO: think about buffering the stream?
@@ -93,14 +98,19 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let byte_stream = call_on_generic_vector_processor!(query_processor, p => {
-            let batch_stream = spawn_query(p, query_rectangle, Box::new(query_ctx));
+        let runtime = processing_runtime(&query_ctx);
 
-            batch_stream.and_then(
-                move |batch| crate::util::spawn_blocking(
-                    move || batch.to_arrow_ipc_file_bytes(spatial_reference).map_err(Into::into)
-                ).err_into().map(| r | r.and_then(std::convert::identity))
-            ).boxed()
+        // the query and the IPC encoding run in the task; this side only forwards bytes
+        let byte_stream = call_on_generic_vector_processor!(query_processor, p => {
+            let batch_stream = owned_query_stream(p, query_rectangle, Box::new(query_ctx));
+
+            spawn_stream(&runtime, QUERY_TASK_CHANNEL_CAPACITY, async move {
+                Ok(batch_stream.await?.and_then(
+                    move |batch| crate::util::spawn_blocking(
+                        move || batch.to_arrow_ipc_file_bytes(spatial_reference).map_err(Into::into)
+                    ).err_into().map(| r | r.and_then(std::convert::identity))
+                ).boxed())
+            })
         });
 
         // TODO: think about buffering the stream?

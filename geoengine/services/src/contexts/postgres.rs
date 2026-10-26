@@ -136,7 +136,9 @@ where
         );
 
         Ok(PostgresContext {
-            task_manager: Default::default(),
+            task_manager: Arc::new(TypedTaskManagerBackend::new(
+                tokio::runtime::Handle::current(),
+            )),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -203,7 +205,9 @@ where
         };
 
         Ok(PostgresContext {
-            task_manager: Default::default(),
+            task_manager: Arc::new(TypedTaskManagerBackend::new(
+                tokio::runtime::Handle::current(),
+            )),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
@@ -284,7 +288,9 @@ where
         };
 
         let app_ctx = PostgresContext {
-            task_manager: Default::default(),
+            task_manager: Arc::new(TypedTaskManagerBackend::new(
+                tokio::runtime::Handle::current(),
+            )),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -1155,7 +1161,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            query_ctx.processing_runtime().map(tokio::runtime::Handle::id),
+            query_ctx
+                .processing_runtime()
+                .map(tokio::runtime::Handle::id),
             Some(tokio::runtime::Handle::current().id())
         );
     }

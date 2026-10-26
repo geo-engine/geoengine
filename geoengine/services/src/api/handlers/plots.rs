@@ -24,7 +24,7 @@ use geoengine_operators::{
         ExecutionContext, InitializedPlotOperator, ProcessingGraphOperatorPath, QueryContext,
         ResultDescriptor, TypedPlotOperator, TypedPlotQueryProcessor,
     },
-    util::{abortable_query_execution, spawn_plot_query},
+    util::{abortable_query_execution, processing_runtime, spawn_query_task},
 };
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -197,24 +197,31 @@ async fn get_plot_handler<C: ApplicationContext>(
     let mut query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
+    let runtime = processing_runtime(&query_ctx);
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();
 
     let data = match processor {
         TypedPlotQueryProcessor::JsonPlain(processor) => {
-            let json = spawn_plot_query(processor, query_rect, Box::new(query_ctx));
+            let json = spawn_query_task(runtime, async move {
+                processor.plot_query(query_rect, &query_ctx).await
+            });
             abortable_query_execution(json, conn_closed, query_abort_trigger).await?
         }
         TypedPlotQueryProcessor::JsonVega(processor) => {
-            let chart = spawn_plot_query(processor, query_rect, Box::new(query_ctx));
+            let chart = spawn_query_task(runtime, async move {
+                processor.plot_query(query_rect, &query_ctx).await
+            });
             let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
             let chart = chart?;
 
             serde_json::to_value(chart).context(error::SerdeJson)?
         }
         TypedPlotQueryProcessor::ImagePng(processor) => {
-            let png_bytes = spawn_plot_query(processor, query_rect, Box::new(query_ctx));
+            let png_bytes = spawn_query_task(runtime, async move {
+                processor.plot_query(query_rect, &query_ctx).await
+            });
             let png_bytes =
                 abortable_query_execution(png_bytes, conn_closed, query_abort_trigger).await;
             let png_bytes = png_bytes?;

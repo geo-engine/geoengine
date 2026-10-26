@@ -14,10 +14,11 @@ use std::{
     sync::Arc,
 };
 use tokio::{
+    runtime::Handle,
     sync::{RwLock, RwLockWriteGuard},
     task::JoinHandle,
 };
-use tracing::warn;
+use tracing::{Instrument, warn};
 
 type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
 
@@ -29,6 +30,8 @@ pub struct SimpleTaskManagerBackend {
     // these two lists won't be cleaned-up
     status_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
     status_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
+    /// runs the tasks; `None` runs them on the runtime that schedules them
+    runtime: Option<Handle>,
 }
 
 struct TaskHandle {
@@ -39,6 +42,24 @@ struct TaskHandle {
 }
 
 impl SimpleTaskManagerBackend {
+    /// Runs tasks on `runtime` instead of the runtime that schedules them, e.g. an HTTP worker.
+    pub fn with_runtime(runtime: Handle) -> Self {
+        Self {
+            runtime: Some(runtime),
+            ..Default::default()
+        }
+    }
+
+    fn spawn<F>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        match &self.runtime {
+            Some(runtime) => runtime.spawn(future.in_current_span()),
+            None => crate::util::spawn(future),
+        }
+    }
+
     async fn write_lock_all(&self) -> WriteLockAll<'_> {
         let (tasks_by_id, status_by_id, task_list, unique_tasks) = tokio::join!(
             self.tasks_by_id.write(),
@@ -279,7 +300,7 @@ fn run_task(
     task_ctx: SimpleTaskManagerContext,
     notify: Option<oneshot::Sender<TaskStatus>>,
 ) -> JoinHandle<()> {
-    crate::util::spawn(async move {
+    task_manager.clone().spawn(async move {
         let result = task.run(task_ctx.clone()).await;
 
         let mut update_lock = task_manager.write_lock_for_update().await;
@@ -400,7 +421,7 @@ fn clean_up_phase(
         status: task_handle.status.clone(),
     };
 
-    let handle = crate::util::spawn(async move {
+    let handle = task_manager.clone().spawn(async move {
         let result = task.cleanup_on_error(task_ctx.clone()).await;
 
         let mut update_lock = task_manager.write_lock_for_update().await;

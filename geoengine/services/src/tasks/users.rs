@@ -23,6 +23,16 @@ pub struct TypedTaskManagerBackend {
     task_type_by_id: RwLock<HashMap<TaskId, &'static str>>,
 }
 
+impl TypedTaskManagerBackend {
+    /// Runs tasks on `runtime` instead of the runtime that schedules them, e.g. an HTTP worker.
+    pub fn new(runtime: tokio::runtime::Handle) -> Self {
+        Self {
+            simple_task_manager: SimpleTaskManagerBackend::with_runtime(runtime),
+            task_type_by_id: RwLock::default(),
+        }
+    }
+}
+
 pub struct UserTaskManager {
     backend: Arc<TypedTaskManagerBackend>,
     session: UserSession,

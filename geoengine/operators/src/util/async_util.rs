@@ -1,29 +1,46 @@
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, StreamExt, future::BoxFuture};
-use geoengine_datatypes::primitives::{PlotQueryRectangle, QueryRectangle};
+use geoengine_datatypes::primitives::QueryRectangle;
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::runtime::Handle;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinError, JoinHandle};
 use tokio_util::task::AbortOnDropHandle;
 use tracing::debug;
 use tracing::{Instrument, Level, span};
 
 use crate::{
-    engine::{
-        PlotQueryProcessor, QueryAbortTrigger, QueryContext, QueryProcessor, QueryProcessorExt,
-    },
+    engine::{QueryAbortTrigger, QueryContext, QueryProcessor, QueryProcessorExt},
     error,
     util::Result,
 };
 
 /// How many finished items a query task may run ahead of its consumer: enough to keep both
 /// busy, few enough to bound what a slow consumer holds in memory.
-const QUERY_TASK_CHANNEL_CAPACITY: usize = 2;
+pub const QUERY_TASK_CHANNEL_CAPACITY: usize = 2;
 
-/// Runs a query as a task on the query context's processing runtime (else the current one) and
-/// streams its items through a bounded channel, so the caller's runtime, e.g. an HTTP worker,
-/// only receives finished items. Dropping the stream aborts the task.
+/// The runtime that runs the query tasks of `query_ctx`: its processing runtime, else the current one.
+pub fn processing_runtime<C: QueryContext + ?Sized>(query_ctx: &C) -> Handle {
+    query_ctx
+        .processing_runtime()
+        .cloned()
+        .unwrap_or_else(Handle::current)
+}
+
+/// Runs `work` as a task on `runtime`, so the caller's runtime, e.g. an HTTP worker, only awaits
+/// the result. Dropping the returned future aborts the task; a panic becomes an error.
+pub async fn spawn_query_task<T, F>(runtime: Handle, work: F) -> Result<T>
+where
+    T: Send + 'static,
+    F: Future<Output = Result<T>> + Send + 'static,
+{
+    AbortOnDropHandle::new(runtime.spawn(work.in_current_span()))
+        .await
+        .map_err(join_error)?
+}
+
+/// Runs a query as a task on the query context's processing runtime and streams its items
+/// through a bounded channel. Dropping the stream aborts the task.
 pub fn spawn_query<Q>(
     processor: Q,
     query: QueryRectangle<Q::SpatialBounds, Q::Selection>,
@@ -33,16 +50,52 @@ where
     Q: QueryProcessor + 'static,
     Q::Output: Send + 'static,
 {
-    let runtime = query_ctx
-        .processing_runtime()
-        .cloned()
-        .unwrap_or_else(Handle::current);
-    let (sender, mut receiver) = tokio::sync::mpsc::channel(QUERY_TASK_CHANNEL_CAPACITY);
+    spawn_stream(
+        &processing_runtime(query_ctx.as_ref()),
+        QUERY_TASK_CHANNEL_CAPACITY,
+        owned_query_stream(processor, query, query_ctx),
+    )
+}
+
+/// [`QueryProcessorExt::query_into_owned_stream`] as a boxed `'static` future. Awaiting it inside
+/// another task keeps the processor's trait object type out of that task's `Send` inference.
+pub fn owned_query_stream<Q>(
+    processor: Q,
+    query: QueryRectangle<Q::SpatialBounds, Q::Selection>,
+    query_ctx: Box<dyn QueryContext>,
+) -> BoxFuture<'static, Result<BoxStream<'static, Result<Q::Output>>>>
+where
+    Q: QueryProcessor + 'static,
+    Q::Output: Send + 'static,
+{
+    async move {
+        Ok(processor
+            .query_into_owned_stream(query, query_ctx)
+            .await?
+            .boxed())
+    }
+    .boxed()
+}
+
+/// Builds a stream with `build` and drives it as a task on `runtime`, handing items to the
+/// consumer through a channel of `capacity`. Work mapped onto the built stream, e.g. encoding,
+/// runs in the task too. Dropping the returned stream aborts the task; a build error is the
+/// first item and a panic the last one.
+pub fn spawn_stream<T, F>(
+    runtime: &Handle,
+    capacity: usize,
+    build: F,
+) -> BoxStream<'static, Result<T>>
+where
+    T: Send + 'static,
+    F: Future<Output = Result<BoxStream<'static, Result<T>>>> + Send + 'static,
+{
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(capacity);
 
     let task = AbortOnDropHandle::new(
         runtime.spawn(
             async move {
-                let mut stream = match processor.query_into_owned_stream(query, query_ctx).await {
+                let mut stream = match build.await {
                     Ok(stream) => stream,
                     Err(error) => {
                         sender.send(Err(error)).await.ok();
@@ -62,25 +115,15 @@ where
     let items = futures::stream::poll_fn(move |cx| receiver.poll_recv(cx));
     // a panicked task closes the channel early, so its error ends the stream instead
     let task_error = futures::stream::once(task)
-        .filter_map(|outcome| async move { outcome.err().map(|error| Err(error.into())) });
+        .filter_map(|outcome| async move { outcome.err().map(|error| Err(join_error(error))) });
 
     items.chain(task_error).boxed()
 }
 
-/// Like [`spawn_query`] for a plot, whose result is a single value.
-pub async fn spawn_plot_query<T: Send + 'static>(
-    processor: Box<dyn PlotQueryProcessor<OutputFormat = T>>,
-    query: PlotQueryRectangle,
-    query_ctx: Box<dyn QueryContext>,
-) -> Result<T> {
-    let runtime = query_ctx
-        .processing_runtime()
-        .cloned()
-        .unwrap_or_else(Handle::current);
-    AbortOnDropHandle::new(runtime.spawn(
-        async move { processor.plot_query(query, query_ctx.as_ref()).await }.in_current_span(),
-    ))
-    .await?
+fn join_error(error: JoinError) -> error::Error {
+    // the `Display` of a panicked task's error carries the panic message
+    tracing::error!("query task failed: {error}");
+    error.into()
 }
 
 /// A wrapper around `tokio::task::spawn_blocking` that wraps the
@@ -274,6 +317,55 @@ mod tests {
         );
         // the consumed item, the channel's capacity and one item waiting to be sent
         assert!(after_drop <= 2 + QUERY_TASK_CHANNEL_CAPACITY);
+    }
+
+    #[tokio::test]
+    async fn it_runs_the_query_task_on_the_given_runtime() {
+        let processing = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .thread_name("processing-test")
+            .build()
+            .unwrap();
+
+        let thread = spawn_query_task(processing.handle().clone(), async {
+            Ok(std::thread::current().name().map(ToOwned::to_owned))
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(thread.as_deref(), Some("processing-test"));
+        processing.shutdown_background();
+    }
+
+    #[tokio::test]
+    async fn it_aborts_the_query_task_when_its_future_is_dropped() {
+        let ticks = Arc::new(AtomicUsize::new(0));
+        let task_ticks = ticks.clone();
+        let task = spawn_query_task(Handle::current(), async move {
+            loop {
+                task_ticks.fetch_add(1, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            #[allow(unreachable_code)]
+            Ok(())
+        });
+
+        // drops the task's future after the timeout
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), task)
+                .await
+                .is_err()
+        );
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        let after_drop = ticks.load(Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(after_drop > 0);
+        assert_eq!(
+            ticks.load(Ordering::SeqCst),
+            after_drop,
+            "task kept running"
+        );
     }
 
     #[tokio::test]
