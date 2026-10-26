@@ -19,7 +19,7 @@
 //! unless the server supplies quota windows or usable retry timing. Admission
 //! waits for the cooldown and all quota constraints.
 use super::{StacProviderAuthentication, auth::StacAuthentication};
-use crate::util::retry::{RetryPolicy, is_terminal};
+use crate::util::retry::{RetryDelay, RetryPolicy, retry_http_with_delay};
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
@@ -575,39 +575,23 @@ impl StacClient {
         let channels = self
             .request_registry
             .shared(&self.origin, self.coordinator_authentication.as_ref());
-        let max_attempts = policy.max_retries.max(1);
-        let mut attempt = 0;
-        let mut backoff_failures = 0;
         let operation_name = format!("Fetch STAC items from {}", request.url());
-        loop {
-            attempt += 1;
-            let reply = self.execute_attempt(&channels, &request).await;
-            let response = reply.response;
-            let server_controls_retry = reply.server_controls_retry;
-            let result = async { response?.error_for_status()?.json::<T>().await }.await;
-            let error = match result {
-                Ok(value) => return Ok(value),
-                Err(error) => error,
-            };
-            if is_terminal(&error, policy, &|error| {
-                error.status().map(|status| status.as_u16())
-            }) {
-                return Err(error);
-            }
-            if attempt >= max_attempts {
-                tracing::error!("{operation_name} failed after {max_attempts} attempts: {error}");
-                return Err(error);
-            }
-            if !server_controls_retry {
-                let delay =
-                    Duration::from_millis(policy.initial_delay_ms * 2_u64.pow(backoff_failures));
-                backoff_failures += 1;
-                tracing::warn!(
-                    "{operation_name} failed (attempt {attempt}/{max_attempts}): {error}. Retrying in {delay:?}..."
-                );
-                tokio::time::sleep(delay).await;
-            }
-        }
+        retry_http_with_delay(
+            || async {
+                let reply = self.execute_attempt(&channels, &request).await;
+                let delay = if reply.server_controls_retry {
+                    RetryDelay::None
+                } else {
+                    RetryDelay::Backoff
+                };
+                let result = async { reply.response?.error_for_status()?.json::<T>().await }.await;
+                (result, delay)
+            },
+            &operation_name,
+            policy,
+            |error| error.status().map(|status| status.as_u16()),
+        )
+        .await
     }
 
     /// Submit one owned attempt and wait for quota feedback before decoding.

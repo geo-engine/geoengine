@@ -116,9 +116,46 @@ where
     Fut: std::future::Future<Output = Result<T, E>>,
     E: std::fmt::Display,
 {
+    retry_http_with_delay(
+        || {
+            let attempt = operation();
+            async move { (attempt.await, RetryDelay::Backoff) }
+        },
+        operation_name,
+        policy,
+        extract_status,
+    )
+    .await
+}
+
+/// Delay to apply before retrying a failed attempt.
+pub(crate) enum RetryDelay {
+    /// Use the policy's exponential backoff, advancing its failure counter.
+    Backoff,
+    /// Let the caller's scheduler handle the delay without advancing backoff.
+    None,
+}
+
+/// Retry with one shared attempt budget and a delay choice from each attempt.
+/// Terminal checks, logging and backoff are identical to [`retry_http`]. Attempts
+/// whose delay is managed externally still consume the same retry budget.
+pub(crate) async fn retry_http_with_delay<F, Fut, T, E>(
+    mut operation: F,
+    operation_name: &str,
+    policy: &RetryPolicy,
+    extract_status: impl Fn(&E) -> Option<u16>,
+) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = (Result<T, E>, RetryDelay)>,
+    E: std::fmt::Display,
+{
+    let max_attempts = policy.max_retries.max(1);
     let mut attempt = 0;
+    let mut backoff_failures = 0;
     loop {
-        match operation().await {
+        let (result, retry_delay) = operation().await;
+        match result {
             Ok(result) => return Ok(result),
             Err(err) => {
                 if is_terminal(&err, policy, &extract_status) {
@@ -126,27 +163,28 @@ where
                 }
 
                 attempt += 1;
-                if attempt >= policy.max_retries {
-                    error!(
-                        "{operation_name} failed after {} attempts: {err}",
-                        policy.max_retries
-                    );
+                if attempt >= max_attempts {
+                    error!("{operation_name} failed after {max_attempts} attempts: {err}");
                     return Err(err);
                 }
 
-                let delay = Duration::from_millis(policy.initial_delay_ms * 2_u64.pow(attempt - 1));
-                warn!(
-                    "{operation_name} failed (attempt {attempt}/{}): {err}. Retrying in {delay:?}...",
-                    policy.max_retries
-                );
-                tokio::time::sleep(delay).await;
+                if let RetryDelay::Backoff = retry_delay {
+                    let delay = Duration::from_millis(
+                        policy.initial_delay_ms * 2_u64.pow(backoff_failures),
+                    );
+                    backoff_failures += 1;
+                    warn!(
+                        "{operation_name} failed (attempt {attempt}/{max_attempts}): {err}. Retrying in {delay:?}..."
+                    );
+                    tokio::time::sleep(delay).await;
+                }
             }
         }
     }
 }
 
 /// Decide whether `err` should abort the retry loop under `policy`.
-pub(crate) fn is_terminal<E: std::fmt::Display>(
+fn is_terminal<E: std::fmt::Display>(
     err: &E,
     policy: &RetryPolicy,
     extract_status: &impl Fn(&E) -> Option<u16>,
@@ -188,10 +226,11 @@ pub(crate) fn is_terminal<E: std::fmt::Display>(
 
 #[cfg(test)]
 mod tests {
-    use super::{RetryPolicy, retry_http};
+    use super::{RetryDelay, RetryPolicy, retry_http, retry_http_with_delay};
     use std::fmt;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
 
     #[derive(Debug, Clone)]
     struct TestError {
@@ -210,6 +249,61 @@ mod tests {
     }
 
     impl std::error::Error for TestError {}
+
+    #[tokio::test]
+    async fn it_skips_backoff_without_exceeding_the_attempt_budget() {
+        for max_retries in [0, 1, 3] {
+            let mut attempts = 0;
+            let result = tokio::time::timeout(
+                Duration::from_millis(100),
+                retry_http_with_delay(
+                    || {
+                        attempts += 1;
+                        async { (Err::<(), _>("rate limited"), RetryDelay::None) }
+                    },
+                    "scheduled retry",
+                    &RetryPolicy::new()
+                        .max_retries(max_retries)
+                        .initial_delay_ms(10_000),
+                    |_| None,
+                ),
+            )
+            .await
+            .expect("externally scheduled retries must skip policy backoff");
+            assert_eq!(result.unwrap_err(), "rate limited");
+            assert_eq!(attempts, max_retries.max(1));
+        }
+    }
+
+    #[tokio::test]
+    async fn it_only_advances_backoff_for_attempts_using_policy_delays() {
+        let mut starts = Vec::new();
+        tokio::time::timeout(
+            Duration::from_millis(700),
+            retry_http_with_delay(
+                || {
+                    let attempt = starts.len();
+                    starts.push(Instant::now());
+                    async move {
+                        match attempt {
+                            0 | 2 => (Err("rate limited"), RetryDelay::None),
+                            1 | 3 => (Err("server error"), RetryDelay::Backoff),
+                            _ => (Ok(()), RetryDelay::None),
+                        }
+                    }
+                },
+                "mixed failures",
+                &RetryPolicy::new().max_retries(5).initial_delay_ms(100),
+                |_| None,
+            ),
+        )
+        .await
+        .expect("scheduled retries must not increase exponential backoff")
+        .unwrap();
+        assert_eq!(starts.len(), 5);
+        assert!(starts[2].duration_since(starts[1]) >= Duration::from_millis(100));
+        assert!(starts[4].duration_since(starts[3]) >= Duration::from_millis(200));
+    }
 
     #[tokio::test]
     async fn retry_http_retries_until_success() {
