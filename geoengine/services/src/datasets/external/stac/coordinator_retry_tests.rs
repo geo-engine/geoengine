@@ -149,7 +149,7 @@ async fn it_shares_the_attempt_budget_between_rate_limits_and_other_failures() {
             .await
             .unwrap_err();
         if statuses[1] == 200 {
-            assert!(error.is_decode());
+            assert!(matches!(error, StacClientError::Http { source } if source.is_decode()));
         } else {
             assert_eq!(error.status().unwrap().as_u16(), statuses[1]);
         }

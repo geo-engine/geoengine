@@ -126,7 +126,7 @@ fn controlled_coordinator(
 fn execute_job(
     coordinator: Arc<ActorChannels>,
     id: usize,
-) -> tokio::task::JoinHandle<reqwest::Result<serde_json::Value>> {
+) -> tokio::task::JoinHandle<Result<serde_json::Value, StacClientError>> {
     execute_job_with_policy(coordinator, id, RetryPolicy::new().max_retries(1))
 }
 
@@ -134,7 +134,7 @@ fn execute_job_with_policy(
     coordinator: Arc<ActorChannels>,
     id: usize,
     policy: RetryPolicy,
-) -> tokio::task::JoinHandle<reqwest::Result<serde_json::Value>> {
+) -> tokio::task::JoinHandle<Result<serde_json::Value, StacClientError>> {
     tokio::spawn(async move {
         // Use the fixture's registry and origin so lookup selects its dispatcher.
         let registry = StacRequestRegistry {

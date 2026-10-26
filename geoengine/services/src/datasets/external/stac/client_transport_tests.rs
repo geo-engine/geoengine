@@ -1,4 +1,5 @@
 //! Shared scheduling must preserve each provider's HTTP transport configuration.
+use super::coordinator::StacClientError;
 use super::*;
 use httptest::{Expectation, Server, matchers::request, responders};
 use std::time::Duration;
@@ -38,7 +39,7 @@ async fn it_shares_quota_channels_while_preserving_each_clients_timeout() {
         .execute_json::<serde_json::Value>(fast.get(server.url_str("/items")), &policy)
         .await
         .unwrap_err();
-    assert!(error.is_timeout());
+    assert!(matches!(error, StacClientError::Http { source } if source.is_timeout()));
     let result = slow
         .execute_json::<serde_json::Value>(slow.get(server.url_str("/items")), &policy)
         .await

@@ -69,6 +69,62 @@ fn it_replaces_a_closed_actor_after_its_tokio_runtime_shuts_down() {
     assert!(second.jobs.is_closed());
 }
 
+#[test]
+fn it_returns_an_error_when_the_actor_runtime_stops_during_a_request() {
+    let registry = StacRequestRegistry::new();
+    let origin = origin("shutdown-during-request");
+    let actor_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let channels = actor_runtime.block_on(async { registry.shared(&origin, None) });
+    let client = StacClient::new(reqwest::Client::new(), origin.as_str(), registry).unwrap();
+    let caller_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let policy = RetryPolicy::new();
+    let mut request =
+        Box::pin(client.execute_json::<serde_json::Value>(client.get(origin), &policy));
+    assert!(
+        caller_runtime
+            .block_on(async { request.as_mut().now_or_never() })
+            .is_none()
+    );
+
+    // A different runtime owns the actor, so no HTTP work runs before shutdown.
+    drop(actor_runtime);
+    assert!(channels.jobs.is_closed());
+    let error = caller_runtime
+        .block_on(async { tokio::time::timeout(Duration::from_millis(100), request).await })
+        .expect("a stopped coordinator must fail without retrying")
+        .unwrap_err();
+    assert!(matches!(error, StacClientError::CoordinatorStopped));
+}
+
+#[test]
+fn it_returns_an_error_when_submission_races_with_actor_shutdown() {
+    let registry = StacRequestRegistry::new();
+    let origin = origin("shutdown-before-submission");
+    let actor_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let channels = actor_runtime.block_on(async { registry.shared(&origin, None) });
+    let client = StacClient::new(reqwest::Client::new(), origin.as_str(), registry).unwrap();
+    let request = client.get(origin).build().unwrap();
+    drop(actor_runtime);
+
+    let caller_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let error = caller_runtime
+        .block_on(client.execute_attempt(&channels, &request))
+        .unwrap_err();
+    assert!(matches!(error, StacClientError::CoordinatorStopped));
+}
+
 #[tokio::test]
 async fn it_separates_independent_registry_owners() {
     let first_registry = StacRequestRegistry::new();

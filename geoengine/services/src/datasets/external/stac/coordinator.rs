@@ -19,12 +19,13 @@
 //! unless the server supplies quota windows or usable retry timing. Admission
 //! waits for the cooldown and all quota constraints.
 use super::{StacProviderAuthentication, auth::StacAuthentication};
-use crate::util::retry::{RetryDelay, RetryPolicy, retry_http_with_delay};
+use crate::util::retry::{RetryAction, RetryPolicy, retry_http_with_action};
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde::de::DeserializeOwned;
+use snafu::Snafu;
 use std::{
     collections::VecDeque,
     fmt,
@@ -524,6 +525,25 @@ impl fmt::Debug for StacClient {
     }
 }
 
+/// Failures of the STAC transport or its request coordinator.
+#[derive(Debug, Snafu)]
+pub(crate) enum StacClientError {
+    #[snafu(transparent)]
+    Http { source: reqwest::Error },
+    #[snafu(display("STAC request coordinator stopped before completing the request"))]
+    CoordinatorStopped,
+}
+
+impl StacClientError {
+    /// HTTP status reported by the server, if this failure has one.
+    pub(crate) fn status(&self) -> Option<reqwest::StatusCode> {
+        match self {
+            Self::Http { source } => source.status(),
+            Self::CoordinatorStopped => None,
+        }
+    }
+}
+
 impl StacClient {
     /// Creates a client without starting an actor or requiring a Tokio runtime.
     pub(crate) fn new(
@@ -570,22 +590,25 @@ impl StacClient {
         &self,
         request: reqwest::RequestBuilder,
         policy: &RetryPolicy,
-    ) -> reqwest::Result<T> {
+    ) -> Result<T, StacClientError> {
         let request = request.build()?;
         let channels = self
             .request_registry
             .shared(&self.origin, self.coordinator_authentication.as_ref());
         let operation_name = format!("Fetch STAC items from {}", request.url());
-        retry_http_with_delay(
+        retry_http_with_action(
             || async {
-                let reply = self.execute_attempt(&channels, &request).await;
-                let delay = if reply.server_controls_retry {
-                    RetryDelay::None
+                let reply = match self.execute_attempt(&channels, &request).await {
+                    Ok(reply) => reply,
+                    Err(error) => return (Err(error), RetryAction::Abort),
+                };
+                let action = if reply.server_controls_retry {
+                    RetryAction::Scheduled
                 } else {
-                    RetryDelay::Backoff
+                    RetryAction::Backoff
                 };
                 let result = async { reply.response?.error_for_status()?.json::<T>().await }.await;
-                (result, delay)
+                (result.map_err(StacClientError::from), action)
             },
             &operation_name,
             policy,
@@ -599,7 +622,7 @@ impl StacClient {
         &self,
         channels: &ActorChannels,
         request: &reqwest::Request,
-    ) -> AttemptReply {
+    ) -> Result<AttemptReply, StacClientError> {
         let request_copy = request
             .try_clone()
             .expect("STAC API searches are replayable GET requests");
@@ -618,15 +641,15 @@ impl StacClient {
                 .cloned(),
             reply,
         };
-        assert!(
-            channels.jobs.send(job).is_ok(),
-            "the actor stays alive while this client holds its channel"
-        );
+        channels
+            .jobs
+            .send(job)
+            .map_err(|_| StacClientError::CoordinatorStopped)?;
         let reply = (&mut pending.reply)
             .await
-            .expect("the actor stays alive while this client holds its channel");
+            .map_err(|_| StacClientError::CoordinatorStopped)?;
         pending.cancellation = None;
-        reply
+        Ok(reply)
     }
 }
 
