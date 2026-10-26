@@ -12,7 +12,7 @@ a Rust-based API server that implements the project's geospatial data APIs, data
 ## Requirements
 
 - Install Rust (stable toolchain) and `cargo` — see <https://rustup.rs/>
-- GDAL (>= 3.8.4) and its development headers (`libgdal-dev` on Debian/Ubuntu)
+- GDAL (>= 3.12) and its development headers (`libgdal-dev` on Debian/Ubuntu)
 - Proj (>= 9.4) and its development headers (`libproj-dev` on Debian/Ubuntu)
 - A PostgreSQL database (if using the PostGIS extension for geospatial storage)
 
