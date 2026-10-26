@@ -355,11 +355,17 @@ impl Drop for PendingAttempt {
     }
 }
 
-type AttemptOutcome = (
-    oneshot::Sender<AttemptReply>,
-    Option<reqwest::Result<reqwest::Response>>,
-);
-type RunningAttempt = Pin<Box<dyn Future<Output = AttemptOutcome> + Send>>;
+/// An admitted attempt's response and the bookkeeping needed to apply it.
+#[derive(Debug)]
+struct AttemptCompletion {
+    /// Completion count captured when this attempt was admitted.
+    completed_before: usize,
+    reply: oneshot::Sender<AttemptReply>,
+    /// `None` indicates that the caller cancelled the attempt.
+    response: Option<reqwest::Result<reqwest::Response>>,
+}
+
+type RunningAttempt = Pin<Box<dyn Future<Output = AttemptCompletion> + Send>>;
 type CoordinatorMap = DashMap<Identity, Arc<ActorChannels>>;
 type ActorReceivers = (
     mpsc::UnboundedReceiver<AttemptJob>,
@@ -393,12 +399,14 @@ impl StacRequestRegistry {
         authentication: Option<&StacProviderAuthentication>,
     ) -> Arc<ActorChannels> {
         let identity = identity_for(origin, authentication);
-        self.shared_with_dispatch(identity, |job| Box::pin(run_attempt(job)) as RunningAttempt)
+        self.shared_with_dispatch(identity, |job, completed_before| {
+            Box::pin(run_attempt(job, completed_before)) as RunningAttempt
+        })
     }
 
     fn shared_with_dispatch<F>(&self, identity: Identity, dispatch: F) -> Arc<ActorChannels>
     where
-        F: Fn(AttemptJob) -> RunningAttempt + Send + 'static,
+        F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
     {
         // A closed actor is replaced only for this identity. Other entries
         // retire themselves after their retained quota history expires.
@@ -655,7 +663,7 @@ impl StacClient {
     }
 }
 
-async fn run_attempt(job: AttemptJob) -> AttemptOutcome {
+async fn run_attempt(job: AttemptJob, completed_before: usize) -> AttemptCompletion {
     let AttemptJob {
         client,
         request,
@@ -669,9 +677,14 @@ async fn run_attempt(job: AttemptJob) -> AttemptOutcome {
         }
         request.send().await
     };
-    tokio::select! {
-        () = reply.closed() => (reply, None),
-        response = send => (reply, Some(response)),
+    let response = tokio::select! {
+        () = reply.closed() => None,
+        response = send => Some(response),
+    };
+    AttemptCompletion {
+        completed_before,
+        reply,
+        response,
     }
 }
 
@@ -681,7 +694,7 @@ async fn run_actor<F>(
     coordinator: Weak<ActorChannels>,
     dispatch: F,
 ) where
-    F: Fn(AttemptJob) -> RunningAttempt + Send + 'static,
+    F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
 {
     let now = Instant::now();
     let mut state = State {
@@ -694,13 +707,13 @@ async fn run_actor<F>(
         last_activity: now,
     };
     let mut queued: VecDeque<AttemptJob> = VecDeque::new();
-    let mut running = FuturesUnordered::new();
+    let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
     let mut jobs_open = true;
     let mut cancellations_open = true;
 
     loop {
-        while let Some(Some((completed_before, outcome))) = running.next().now_or_never() {
-            complete_attempt(&mut state, completed_before, outcome);
+        while let Some(Some(completion)) = running.next().now_or_never() {
+            complete_attempt(&mut state, completion);
         }
 
         let mut deadline = None;
@@ -711,9 +724,7 @@ async fn run_actor<F>(
                 deadline = Some(until);
                 queued.push_front(job);
             } else {
-                let completed_before = state.completed_requests;
-                let attempt = dispatch(job);
-                running.push(async move { (completed_before, attempt.await) });
+                running.push(dispatch(job, state.completed_requests));
                 continue;
             }
         }
@@ -733,8 +744,8 @@ async fn run_actor<F>(
         tokio::select! {
             biased;
             outcome = running.next(), if !running.is_empty() => {
-                if let Some((completed_before, outcome)) = outcome {
-                    complete_attempt(&mut state, completed_before, outcome);
+                if let Some(completion) = outcome {
+                    complete_attempt(&mut state, completion);
                 }
             },
             cancellation = cancellations.recv(), if cancellations_open => match cancellation {
@@ -756,25 +767,30 @@ async fn run_actor<F>(
     }
 }
 
-fn complete_attempt(state: &mut State, completed_before: usize, (reply, response): AttemptOutcome) {
+fn complete_attempt(state: &mut State, completion: AttemptCompletion) {
+    let AttemptCompletion {
+        completed_before,
+        reply,
+        response,
+    } = completion;
     state.release();
-    if let Some(response) = response {
-        let server_controls_retry = if let Ok(response) = &response {
-            let now = Instant::now();
-            let feedback =
-                ResponseFeedback::parse(response.headers(), response.status().as_u16(), now);
-            let has_retry_timing = feedback.has_retry_timing;
-            state.observe(feedback, now, completed_before);
-            response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
-                && (has_retry_timing || !state.windows.is_empty())
-        } else {
-            false
-        };
-        let _ = reply.send(AttemptReply {
-            response,
-            server_controls_retry,
-        });
-    }
+    let Some(response) = response else {
+        return;
+    };
+    let server_controls_retry = if let Ok(response) = &response {
+        let now = Instant::now();
+        let feedback = ResponseFeedback::parse(response.headers(), response.status().as_u16(), now);
+        let has_retry_timing = feedback.has_retry_timing;
+        state.observe(feedback, now, completed_before);
+        response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+            && (has_retry_timing || !state.windows.is_empty())
+    } else {
+        false
+    };
+    let _ = reply.send(AttemptReply {
+        response,
+        server_controls_retry,
+    });
 }
 
 /// Canonicalize valid OAuth endpoint URLs for registry matching, preserving the

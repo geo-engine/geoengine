@@ -25,15 +25,19 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
     let registry = StacRequestRegistry::new();
     let (started, mut starts) = mpsc::unbounded_channel::<String>();
     let identity = identity_for(&Url::parse("https://parallel.actor.test").unwrap(), None);
-    let coordinator = registry.shared_with_dispatch(identity, move |job| {
+    let coordinator = registry.shared_with_dispatch(identity, move |job, completed_before| {
         let path = job.request.url().path().to_owned();
         let started = started.clone();
         Box::pin(async move {
             let AttemptJob { mut reply, .. } = job;
             let _ = started.send(path);
             tokio::select! {
-                () = reply.closed() => (reply, None),
-                outcome = pending::<AttemptOutcome>() => outcome,
+                () = reply.closed() => AttemptCompletion {
+                    completed_before,
+                    reply,
+                    response: None,
+                },
+                completion = pending::<AttemptCompletion>() => completion,
             }
         }) as RunningAttempt
     });
@@ -107,16 +111,21 @@ fn controlled_coordinator(
         &Url::parse(&format!("https://{label}.actor.test")).unwrap(),
         None,
     );
-    let coordinator = registry.shared_with_dispatch(identity, move |job| {
+    let coordinator = registry.shared_with_dispatch(identity, move |job, completed_before| {
         let started = started.clone();
         Box::pin(async move {
             let (finish, response) = oneshot::channel();
             let path = job.request.url().path().to_owned();
             let mut reply = job.reply;
             started.send((path, finish)).unwrap();
-            tokio::select! {
-                () = reply.closed() => (reply, None),
-                response = response => (reply, response.ok().map(Ok)),
+            let response = tokio::select! {
+                () = reply.closed() => None,
+                response = response => response.ok().map(Ok),
+            };
+            AttemptCompletion {
+                completed_before,
+                reply,
+                response,
             }
         }) as RunningAttempt
     });
