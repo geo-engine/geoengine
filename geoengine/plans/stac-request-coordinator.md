@@ -59,7 +59,7 @@ Build authorization at dispatch time so time spent queued cannot stale the token
 
 Merge request execution into `StacClient`, which owns its provider-specific HTTP
 transport, authentication, bounded retries, and JSON decoding. Route first and
-subsequent pages through `execute_json`. Cache a shared `ActorChannels` handle
+subsequent pages through `execute_json`. Look up a shared `ActorChannels` handle
 for the configured origin and authentication identity; the registry holds only
 these channel and lifecycle records. The actor owns admission, HTTP dispatch and
 header observation. Separate clients can share quota state while retaining their
@@ -99,14 +99,13 @@ consumes no quota; admitted cancellation releases outstanding bookkeeping while
 preserving the charged timestamp. A cancellation wakeup prevents a removed FIFO
 head from delaying later requests behind an admission timer.
 
-Synchronous provider construction does not require a Tokio runtime. The first
-request selects its coordinator from the context-owned DashMap registry using
-the configured origin and authentication, then caches the Arc on the client.
-Clones share this atomic optional Arc; later requests use it without another
-registry lookup. Authentication changes use a separate cache, preserving the
-identity of existing clones. A closed actor triggers a replacement lookup and
-updates the shared cache. The cached Arc keeps a live actor retained between
-requests until the client clones release it.
+Synchronous provider construction does not require a Tokio runtime. Each
+`execute_json` call selects its coordinator from the context-owned DashMap
+registry using the configured origin and authentication. Hold the returned Arc
+locally through the entire retry loop; retries reuse the same channel. Clients
+store no coordinator cache. Authentication reconfiguration changes only that
+client's identity and token state, preserving existing clones. Registry lookup
+replaces a closed actor atomically, including after a Tokio runtime shuts down.
 
 The first registry lookup creates the shared channel and lifecycle record
 and spawns its HTTP actor. A closed actor is replaced atomically under the same
@@ -138,9 +137,8 @@ not capped. Unrepresentable deadlines are ignored. Every window uses the same
 request history, retained for the longest known window or five minutes, whichever
 is longer. The limit-th most recent timestamp determines local capacity in O(1)
 per policy. Header policies and feedback are parsed together once by the actor, using the
-same `Window` type as scheduler state. Registry lookup is needed for initial
-client use, a changed authentication identity, or recovery of a closed actor;
-normal requests and retries use the cached coordinator.
+same `Window` type as scheduler state. Each JSON call performs one registry
+lookup; all retries use its selected coordinator.
 
 ## Validation commands
 

@@ -20,14 +20,11 @@
 //! waits for the cooldown and all quota constraints.
 use super::{StacProviderAuthentication, auth::StacAuthentication};
 use crate::util::retry::{RetryPolicy, is_terminal};
-use arc_swap::ArcSwapOption;
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde::de::DeserializeOwned;
-#[cfg(test)]
-use std::sync::atomic::Ordering;
 use std::{
     collections::VecDeque,
     fmt,
@@ -361,8 +358,6 @@ type ActorReceivers = (
 #[derive(Clone, Default)]
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
-    #[cfg(test)]
-    lookup_count: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl fmt::Debug for StacRequestRegistry {
@@ -385,15 +380,8 @@ impl StacRequestRegistry {
         origin: &Url,
         authentication: Option<&StacProviderAuthentication>,
     ) -> Arc<ActorChannels> {
-        #[cfg(test)]
-        self.lookup_count.fetch_add(1, Ordering::Relaxed);
         let identity = identity_for(origin, authentication);
         self.shared_with_dispatch(identity, |job| Box::pin(run_attempt(job)) as RunningAttempt)
-    }
-
-    #[cfg(test)]
-    pub(super) fn lookup_count(&self) -> usize {
-        self.lookup_count.load(Ordering::Relaxed)
     }
 
     fn shared_with_dispatch<F>(&self, identity: Identity, dispatch: F) -> Arc<ActorChannels>
@@ -467,6 +455,7 @@ fn identity_for(
 /// The actor owns FIFO admission and quota state. Provider and client clones only
 /// submit owned jobs; they never hold a scheduler lock while waiting or sending.
 impl ActorChannels {
+    #[cfg(test)]
     pub(super) fn is_closed(&self) -> bool {
         self.jobs.is_closed()
     }
@@ -500,13 +489,12 @@ impl ActorChannels {
 }
 
 /// STAC HTTP transport with a shared request channel.
-/// Clones share the connection pool, token renewal state and cached channel.
+/// Clones share the connection pool, token renewal state and request registry.
 #[derive(Clone)]
 pub(crate) struct StacClient {
     client: reqwest::Client,
     origin: Url,
     pub(super) request_registry: StacRequestRegistry,
-    pub(super) cached_coordinator: Arc<ArcSwapOption<ActorChannels>>,
     coordinator_authentication: Option<StacProviderAuthentication>,
     pub(super) authentication: Option<StacAuthentication>,
 }
@@ -537,20 +525,16 @@ impl StacClient {
             client,
             origin,
             request_registry,
-            cached_coordinator: Arc::new(ArcSwapOption::empty()),
             coordinator_authentication: None,
             authentication: None,
         })
     }
 
-    /// Initializes authentication with a separate channel cache for this identity.
+    /// Initializes authentication and the configured quota identity for this client.
     pub(crate) async fn with_authentication(
         mut self,
         config: Option<StacProviderAuthentication>,
     ) -> crate::error::Result<Self> {
-        // Reconfiguration must not mutate the cache shared with clones that still
-        // use the previous authentication identity.
-        self.cached_coordinator = Arc::new(ArcSwapOption::empty());
         self.coordinator_authentication = config.clone();
         self.authentication = match config {
             Some(config) => {
@@ -576,16 +560,9 @@ impl StacClient {
         policy: &RetryPolicy,
     ) -> reqwest::Result<T> {
         let request = request.build()?;
-        let channels = match self.cached_coordinator.load_full() {
-            Some(channels) if !channels.is_closed() => channels,
-            _ => {
-                let channels = self
-                    .request_registry
-                    .shared(&self.origin, self.coordinator_authentication.as_ref());
-                self.cached_coordinator.store(Some(channels.clone()));
-                channels
-            }
-        };
+        let channels = self
+            .request_registry
+            .shared(&self.origin, self.coordinator_authentication.as_ref());
         let max_attempts = policy.max_retries.max(1);
         let mut attempt = 0;
         let mut backoff_failures = 0;

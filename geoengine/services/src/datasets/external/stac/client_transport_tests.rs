@@ -44,8 +44,9 @@ async fn it_shares_quota_channels_while_preserving_each_clients_timeout() {
         .await
         .unwrap();
     assert_eq!(result, serde_json::json!({"complete": true}));
+    let origin = url::Url::parse(&server.url_str("/")).unwrap();
     assert!(Arc::ptr_eq(
-        &fast.cached_coordinator.load_full().unwrap(),
-        &slow.cached_coordinator.load_full().unwrap(),
+        &fast.request_registry.shared(&origin, None),
+        &slow.request_registry.shared(&origin, None),
     ));
 }

@@ -15,8 +15,8 @@ use std::{fmt, sync::Arc};
 mod auth;
 mod cache;
 #[cfg(test)]
-#[path = "client_cache_tests.rs"]
-mod client_cache_tests;
+#[path = "client_registry_tests.rs"]
+mod client_registry_tests;
 #[cfg(test)]
 #[path = "client_transport_tests.rs"]
 mod client_transport_tests;

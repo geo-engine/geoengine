@@ -128,14 +128,12 @@ fn execute_job(
     id: usize,
 ) -> tokio::task::JoinHandle<reqwest::Result<serde_json::Value>> {
     tokio::spawn(async move {
-        let client = StacClient::new(
-            reqwest::Client::new(),
-            "https://actor.test/",
-            StacRequestRegistry::new(),
-        )
-        .unwrap();
-        // Inject the controlled dispatcher while exercising the real client API.
-        client.cached_coordinator.store(Some(coordinator));
+        // Use the fixture's registry and origin so lookup selects its dispatcher.
+        let registry = StacRequestRegistry {
+            coordinators: coordinator.registry.upgrade().unwrap(),
+        };
+        let origin = format!("https://{}/", coordinator.identity.host);
+        let client = StacClient::new(reqwest::Client::new(), &origin, registry).unwrap();
         client
             .execute_json(
                 client.get(format!("https://actor.test/{id}")),

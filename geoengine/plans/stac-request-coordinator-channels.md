@@ -35,12 +35,12 @@ or configuration changes are needed.
    the map guard before any await or HTTP operation. Retirement must match the
    exact coordinator instance and confirm registry-only strong ownership under
    the entry guard. An older actor cannot remove its replacement.
-7. Retain the selected coordinator on `StacClient` in an atomic optional Arc
-   shared by client clones. First use populates the cache; normal requests clone
-   that handle without consulting DashMap. Authentication reconfiguration gets
-   its own cache so existing clones keep their previous identity. A closed actor
-   causes a replacement lookup and updates the cache for all clones. Keep
-   construction outside a Tokio runtime possible without a mutex or `OnceLock`.
+7. Select the coordinator from DashMap once per `StacClient::execute_json`
+   call using the configured origin and authentication. Keep that Arc locally
+   throughout retries so admission and quota history stay shared. The registry
+   replaces closed actors during lookup. Synchronous client construction needs
+   no Tokio runtime, mutex, or `OnceLock`, and no separate coordinator cache or
+   atomic swap dependency is needed.
 8. Merge `StacRequestCoordinator` request execution into `StacClient` and remove
    the separate coordinator wrapper. The registry stores shared `ActorChannels`
    records containing senders, identity, and a weak registry reference. Keep each
@@ -48,8 +48,9 @@ or configuration changes are needed.
    scheduling is shared. Verify distinct timeout settings on two clients sharing
    the same channel.
 9. Keep registry references weak inside coordinators. Preserve history and server
-   deadlines while actors remain retained. A cached client keeps its actor
-   alive; idle expiry can release map entries after clients drop their handles. Dropping application/client owners releases the registry without a
+   deadlines while actors remain retained. An active request keeps its actor
+   alive; idle expiry releases unused map entries after retained quota history
+   expires. Dropping application/client owners releases the registry without a
    reference cycle. Adapt concurrency, cancellation, retention, and integration
    regressions to eager actor startup and direct registry lookup.
 
@@ -75,10 +76,10 @@ DashMap registry, coordinator reuse, and validation results.
 
 - All 176 selected STAC tests pass, with three ignored, including local HTTP,
   authentication, retry, grid-cache coalescing, provider/database integration,
-  concurrent registry lookup, and lookup/retirement race coverage. Three client
-  cache regressions verify lookup counts across requests/clones, authentication
-  reconfiguration, and actor replacement after runtime shutdown. A shared-channel
-  regression verifies that clients retain their own HTTP timeouts.
+  concurrent registry lookup, and lookup/retirement race coverage. Client
+  regressions verify registry reuse across requests/clones, authentication
+  isolation after reconfiguration, and actor replacement after runtime shutdown.
+  A shared-channel regression verifies that clients retain their own HTTP timeouts.
 - Strict Clippy for all service features and targets, Rust formatting, Markdown
   formatting, and `git diff --check` pass.
 - `CARGO_NET_OFFLINE=true just ci backend` stops during dependency installation

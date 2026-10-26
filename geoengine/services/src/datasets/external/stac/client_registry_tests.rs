@@ -1,4 +1,4 @@
-//! STAC client coordinator-cache behavior.
+//! STAC client registry reuse, authentication isolation, and runtime recovery.
 use super::*;
 
 #[tokio::test]
@@ -24,11 +24,13 @@ async fn it_reuses_the_coordinator_across_requests_and_client_clones() {
     let clone = client.clone();
     let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
 
+    let origin = url::Url::parse(&server.url_str("/")).unwrap();
+    let coordinator = registry.shared(&origin, None);
+
     client
         .execute_json::<Value>(client.get(server.url_str("/first")), &policy)
         .await
         .unwrap();
-    assert_eq!(registry.lookup_count(), 1);
     clone
         .execute_json::<Value>(clone.get(server.url_str("/second")), &policy)
         .await
@@ -38,11 +40,11 @@ async fn it_reuses_the_coordinator_across_requests_and_client_clones() {
         .await
         .unwrap();
 
-    assert_eq!(registry.lookup_count(), 1);
+    assert!(Arc::ptr_eq(&coordinator, &registry.shared(&origin, None)));
 }
 
 #[tokio::test]
-async fn it_gives_auth_reconfiguration_a_separate_cache_from_existing_clones() {
+async fn it_preserves_existing_clones_authentication_after_reconfiguration() {
     use httptest::{
         Expectation, Server, all_of,
         matchers::{any, contains, not, request},
@@ -55,7 +57,7 @@ async fn it_gives_auth_reconfiguration_a_separate_cache_from_existing_clones() {
         Expectation::matching(request::method_path("POST", "/token"))
             .times(1)
             .respond_with(responders::json_encoded(json!({
-                "access_token": "cache-test-token", "expires_in": 3600
+                "access_token": "registry-test-token", "expires_in": 3600
             }))),
     );
     server.expect(
@@ -69,7 +71,7 @@ async fn it_gives_auth_reconfiguration_a_separate_cache_from_existing_clones() {
     server.expect(
         Expectation::matching(all_of![
             request::method_path("GET", "/authenticated"),
-            request::headers(contains(("authorization", "Bearer cache-test-token"))),
+            request::headers(contains(("authorization", "Bearer registry-test-token"))),
         ])
         .times(2)
         .respond_with(responders::status_code(200).body("null")),
@@ -91,7 +93,6 @@ async fn it_gives_auth_reconfiguration_a_separate_cache_from_existing_clones() {
         )
         .await
         .unwrap();
-    assert_eq!(registry.lookup_count(), 1);
 
     let authenticated = anonymous
         .clone()
@@ -113,12 +114,10 @@ async fn it_gives_auth_reconfiguration_a_separate_cache_from_existing_clones() {
         .execute_json::<Value>(anonymous.get(server.url_str("/anonymous")), &policy)
         .await
         .unwrap();
-
-    assert_eq!(registry.lookup_count(), 2);
 }
 
 #[test]
-fn it_replaces_a_cached_coordinator_once_after_runtime_shutdown() {
+fn it_replaces_a_closed_coordinator_after_runtime_shutdown() {
     use httptest::{Expectation, Server, matchers::request, responders};
     use serde_json::Value;
 
@@ -143,15 +142,16 @@ fn it_replaces_a_cached_coordinator_once_after_runtime_shutdown() {
         .enable_all()
         .build()
         .unwrap();
-    first_runtime.block_on(async {
+    let origin = url::Url::parse(&server.url_str("/")).unwrap();
+    let first_coordinator = first_runtime.block_on(async {
         client
             .execute_json::<Value>(request("/first"), &policy)
             .await
             .unwrap();
+        registry.shared(&origin, None)
     });
-    assert_eq!(registry.lookup_count(), 1);
     drop(first_runtime);
-    assert!(client.cached_coordinator.load_full().unwrap().is_closed());
+    assert!(first_coordinator.is_closed());
 
     let second_runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -162,11 +162,13 @@ fn it_replaces_a_cached_coordinator_once_after_runtime_shutdown() {
             .execute_json::<Value>(request("/second"), &policy)
             .await
             .unwrap();
-        assert!(!client.cached_coordinator.load_full().unwrap().is_closed());
+        let replacement = registry.shared(&origin, None);
+        assert!(!replacement.is_closed());
+        assert!(!Arc::ptr_eq(&first_coordinator, &replacement));
         client
             .execute_json::<Value>(request("/third"), &policy)
             .await
             .unwrap();
+        assert!(Arc::ptr_eq(&replacement, &registry.shared(&origin, None)));
     });
-    assert_eq!(registry.lookup_count(), 2);
 }
