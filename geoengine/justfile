@@ -57,12 +57,12 @@ lint-sql fix="false": common::_clear
 build mode="":
     cargo build --locked --workspace --bins {{ mode }} --verbose
 
-# Build gdalsource-process in dev or release mode.
+# Build the GDAL helper processes (gdalsource-process, gdalwriter-process) in dev or release mode.
 # `--workspace` unifies features as in `build`, so the operators crate is not compiled a second time.
 [arg('mode', pattern='|--release')]
 [group("build")]
 build-gdalsource-process mode="":
-    cargo build --workspace --bin gdalsource-process --locked {{ mode }} --verbose
+    cargo build --workspace --bin gdalsource-process --bin gdalwriter-process --locked {{ mode }} --verbose
 
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
@@ -89,8 +89,8 @@ test-coverage-services filter="": common::_clear
 [arg('mode', pattern='|--release')]
 [group("run")]
 run mode="": common::_clear
-    # one call, so `operators` is compiled once for both binaries; the CLI is not needed here
-    cargo build --bin geoengine-server --bin gdalsource-process {{ mode }}
+    # one call, so `operators` is compiled once for all binaries; the CLI is not needed here
+    cargo build --bin geoengine-server --bin gdalsource-process --bin gdalwriter-process {{ mode }}
     cargo run --bin geoengine-server {{ mode }}
 
 # Run the CLI
