@@ -35,9 +35,15 @@ or configuration changes are needed.
    the map guard before any await or HTTP operation. Retirement must match the
    exact coordinator instance and confirm registry-only strong ownership under
    the entry guard. An older actor cannot remove its replacement.
-7. Keep registry references weak inside coordinators. Preserve history and server
-   deadlines while actors remain retained, and release map entries after idle
-   expiry. Dropping application/client owners releases the registry without a
+7. Retain the selected coordinator on `StacClient` in an atomic optional Arc
+   shared by client clones. First use populates the cache; normal requests clone
+   that handle without consulting DashMap. Authentication reconfiguration gets
+   its own cache so existing clones keep their previous identity. A closed actor
+   causes a replacement lookup and updates the cache for all clones. Keep
+   construction outside a Tokio runtime possible without a mutex or `OnceLock`.
+8. Keep registry references weak inside coordinators. Preserve history and server
+   deadlines while actors remain retained. A cached client keeps its actor
+   alive; idle expiry can release map entries after clients drop their handles. Dropping application/client owners releases the registry without a
    reference cycle. Adapt concurrency, cancellation, retention, and integration
    regressions to eager actor startup and direct registry lookup.
 
@@ -54,15 +60,18 @@ Run from `geoengine/`:
 - `cargo clippy -p geoengine-services --all-features --all-targets --offline -- -D warnings`
 - `git diff --check`
 
-The complete repository backend CI remains the broader integration check. The
-new PR should target `main` as an alternative to #1343 and describe the actor
-scheduler, context-owned DashMap registry, and validation results.
+The complete repository backend CI remains the broader integration check.
+[PR #1366](https://github.com/geo-engine/geoengine/pull/1366) reviews this
+alternative against #1343 and describes the actor scheduler, context-owned
+DashMap registry, coordinator reuse, and validation results.
 
 ## Validation results
 
-- All 172 selected STAC tests pass, with three ignored, including local HTTP,
+- All 175 selected STAC tests pass, with three ignored, including local HTTP,
   authentication, retry, grid-cache coalescing, provider/database integration,
-  concurrent registry lookup, and lookup/retirement race coverage.
+  concurrent registry lookup, and lookup/retirement race coverage. Three client
+  cache regressions verify lookup counts across requests/clones, authentication
+  reconfiguration, and actor replacement after runtime shutdown.
 - Strict Clippy for all service features and targets, Rust formatting, Markdown
   formatting, and `git diff --check` pass.
 - `CARGO_NET_OFFLINE=true just ci backend` stops during dependency installation

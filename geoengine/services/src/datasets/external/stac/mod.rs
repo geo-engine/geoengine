@@ -2,6 +2,7 @@ use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{CacheTtlSeconds, SpatialResolution, TimeDimension};
@@ -14,6 +15,9 @@ use std::{fmt, sync::Arc};
 
 mod auth;
 mod cache;
+#[cfg(test)]
+#[path = "client_cache_tests.rs"]
+mod client_cache_tests;
 pub(crate) mod common;
 mod coordinator;
 mod grid;
@@ -383,13 +387,28 @@ impl DataProvider for StacDataProvider {
 
 /// STAC HTTP transport with a shared provider coordinator.
 /// Clones share the connection pool, token renewal state and coordinator.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct StacClient {
     client: reqwest::Client,
     origin: url::Url,
     request_registry: StacRequestRegistry,
+    cached_coordinator: Arc<ArcSwapOption<coordinator::StacRequestCoordinator>>,
     coordinator_authentication: Option<StacProviderAuthentication>,
     authentication: Option<auth::StacAuthentication>,
+}
+
+impl fmt::Debug for StacClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StacClient")
+            .field("origin", &self.origin)
+            .field(
+                "coordinator_authentication",
+                &self.coordinator_authentication,
+            )
+            .field("authenticated", &self.authentication.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 impl StacClient {
@@ -403,6 +422,7 @@ impl StacClient {
             client,
             origin,
             request_registry,
+            cached_coordinator: Arc::new(ArcSwapOption::empty()),
             coordinator_authentication: None,
             authentication: None,
         })
@@ -412,6 +432,9 @@ impl StacClient {
         mut self,
         config: Option<StacProviderAuthentication>,
     ) -> crate::error::Result<Self> {
+        // Reconfiguration must not mutate the cache shared with clones that still
+        // use the previous authentication identity.
+        self.cached_coordinator = Arc::new(ArcSwapOption::empty());
         self.coordinator_authentication = config.clone();
         self.authentication = match config {
             Some(config) => {
@@ -434,9 +457,16 @@ impl StacClient {
         policy: &crate::util::retry::RetryPolicy,
     ) -> reqwest::Result<T> {
         let request = request.build()?;
-        let coordinator = self
-            .request_registry
-            .shared(&self.origin, self.coordinator_authentication.as_ref());
+        let coordinator = match self.cached_coordinator.load_full() {
+            Some(coordinator) if !coordinator.is_closed() => coordinator,
+            _ => {
+                let coordinator = self
+                    .request_registry
+                    .shared(&self.origin, self.coordinator_authentication.as_ref());
+                self.cached_coordinator.store(Some(coordinator.clone()));
+                coordinator
+            }
+        };
         coordinator
             .execute(&self.client, request, self.authentication.as_ref(), policy)
             .await

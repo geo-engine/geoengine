@@ -25,6 +25,8 @@ use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde::de::DeserializeOwned;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
 use std::{
     collections::VecDeque,
     fmt,
@@ -366,6 +368,8 @@ pub(super) struct StacRequestCoordinator {
 #[derive(Clone, Default)]
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
+    #[cfg(test)]
+    lookup_count: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl fmt::Debug for StacRequestRegistry {
@@ -388,8 +392,15 @@ impl StacRequestRegistry {
         origin: &Url,
         authentication: Option<&super::StacProviderAuthentication>,
     ) -> Arc<StacRequestCoordinator> {
+        #[cfg(test)]
+        self.lookup_count.fetch_add(1, Ordering::Relaxed);
         let identity = identity_for(origin, authentication);
         self.shared_with_dispatch(identity, |job| Box::pin(run_attempt(job)) as RunningAttempt)
+    }
+
+    #[cfg(test)]
+    pub(super) fn lookup_count(&self) -> usize {
+        self.lookup_count.load(Ordering::Relaxed)
     }
 
     fn shared_with_dispatch<F>(
@@ -465,6 +476,10 @@ fn identity_for(
 }
 
 impl StacRequestCoordinator {
+    pub(super) fn is_closed(&self) -> bool {
+        self.channels.jobs.is_closed()
+    }
+
     /// Executes and decodes a STAC request, owning admission, header feedback and
     /// retries. Tokens are read after admission, and each retry enters the queue.
     /// The policy's attempt limit includes rate-limit, HTTP, transport and decode failures.

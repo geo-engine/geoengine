@@ -96,12 +96,18 @@ consumes no quota; admitted cancellation releases outstanding bookkeeping while
 preserving the charged timestamp. A cancellation wakeup prevents a removed FIFO
 head from delaying later requests behind an admission timer.
 
-Synchronous provider construction does not require a Tokio runtime. Each client
-execution looks up its coordinator in the context-owned DashMap registry using
-the configured origin and authentication. The first lookup creates the
-coordinator and both channels together and spawns its HTTP actor. A closed actor
-is replaced atomically under the same key. No `OnceLock` or separate registry
-worker thread is needed.
+Synchronous provider construction does not require a Tokio runtime. The first
+request selects its coordinator from the context-owned DashMap registry using
+the configured origin and authentication, then caches the Arc on the client.
+Clones share this atomic optional Arc; later requests use it without another
+registry lookup. Authentication changes use a separate cache, preserving the
+identity of existing clones. A closed actor triggers a replacement lookup and
+updates the shared cache. The cached Arc keeps a live actor retained between
+requests until the client clones release it.
+
+The first registry lookup creates the coordinator and both channels together
+and spawns its HTTP actor. A closed actor is replaced atomically under the same
+key. No `OnceLock` or separate registry worker thread is needed.
 
 The application context constructs one `StacRequestRegistry` and shares its
 handle with database handles, so execution contexts and provider initialization
@@ -129,8 +135,9 @@ not capped. Unrepresentable deadlines are ignored. Every window uses the same
 request history, retained for the longest known window or five minutes, whichever
 is longer. The limit-th most recent timestamp determines local capacity in O(1)
 per policy. Header policies and feedback are parsed together once by the actor, using the
-same `Window` type as scheduler state. Registry lookup happens once per client
-execution, independently of HTTP attempts and retry backoff.
+same `Window` type as scheduler state. Registry lookup is needed for initial
+client use, a changed authentication identity, or recovery of a closed actor;
+normal requests and retries use the cached coordinator.
 
 ## Validation commands
 

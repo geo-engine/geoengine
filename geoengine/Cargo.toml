@@ -92,6 +92,7 @@ arrow = { version = "59.1", features = ["ipc_compression"] }
 arrow-array = "59.1"
 arrow-ord = "59.1"
 arrow-schema = { version = "59.1", features = ["serde"] }
+arc-swap = "1.9"
 aruna-rust-api = "2.0.2"
 assert_cmd = "2.2"
 async-stream = "0.3"
