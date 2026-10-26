@@ -2,7 +2,7 @@
 
 ## Purpose and scope
 
-All STAC HTTP attempts within one backend process use a FIFO coordinator shared
+All STAC HTTP attempts within one application context use a FIFO coordinator shared
 by configured server origin (scheme, host, effective port) and full configured
 authentication identity (token endpoint, client id, username, password), or
 anonymous identity.
@@ -16,7 +16,7 @@ OAuth token endpoints and GDAL asset reads remain outside STAC coordination.
 
 ## Scheduling
 
-Add a private `coordinator` module with a process-wide registry, secret-safe
+Add a private `coordinator` module with an application-owned registry, secret-safe
 identity, and shared scheduler state. Retain registry entries while a client or
 attempt holds them, and for at least the longest learned window after activity;
 reclaim unused entries after their actor's retained deadlines expire. Retention
@@ -103,13 +103,22 @@ if a previous actor's runtime has stopped. Retries continue using the selected
 coordinator. The HTTP actor starts lazily, and registry retention preserves quota
 history across provider reconstruction.
 
-A process-wide worker owns the registry map on one dedicated thread. It handles
-lookup and retirement messages in order and replies through oneshot channels.
+The application context constructs one `StacRequestRegistry` and shares its
+handle with database handles, so execution contexts and provider initialization
+use the same quota registry across queries and sessions. Query contexts do not
+create a fresh registry: that would split a remote server's quota across queries.
+Standalone providers can receive an explicit shared registry; CLI harvesting
+creates one for its operation.
+
+A worker owns each registry map on one dedicated thread. It handles lookup and
+retirement messages in order and replies through oneshot channels.
 The final ownership check and removal therefore cannot race with a lookup that
 hands a coordinator to a new provider. This worker is independent of individual
 Tokio runtime lifetimes, and async callers never block waiting for its messages.
-Neither registry operations nor HTTP request scheduling acquires an explicit
-mutex.
+There is no global registry or global `OnceLock`. Coordinators refer weakly to
+their registry, so dropping its context and clients closes the input channel and
+allows the worker to exit. Neither registry operations nor HTTP request
+scheduling acquires an explicit mutex.
 
 All server feedback can lower capacity, irrespective of dispatch order. It cannot
 refill capacity until reset, because dispatch order need not match server

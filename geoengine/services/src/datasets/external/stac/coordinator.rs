@@ -3,10 +3,11 @@
 //! queue. A channel actor owns that queue and all quota state, admits requests in
 //! order, and runs admitted HTTP attempts concurrently.
 //!
-//! [`Identity`] selects a process-wide [`StacRequestCoordinator`], shared across
-//! providers and collections with the same configuration. The actor owns the
-//! FIFO queue and [`State`], which holds request history, learned rate-limit
-//! windows and server feedback. Admitted HTTP attempts may overlap.
+//! [`Identity`] selects a [`StacRequestCoordinator`] inside an owned
+//! [`StacRequestRegistry`], shared across providers and collections that use that
+//! registry. The actor owns the FIFO queue and [`State`], which holds request
+//! history, learned rate-limit windows and server feedback. Admitted HTTP
+//! attempts may overlap.
 //!
 //! One [`StacRequestCoordinator::execute`] call may make several HTTP attempts.
 //! Each attempt is an owned channel job with a one-shot reply. The actor applies
@@ -353,6 +354,7 @@ type RunningAttempt = Pin<Box<dyn Future<Output = AttemptOutcome> + Send>>;
 pub(super) struct StacRequestCoordinator {
     channels: OnceLock<ActorChannels>,
     created_at: Instant,
+    registry: Weak<Sender<RegistryCommand>>,
 }
 
 /// Lookups and retirement are serialized by the registry's sole owner.
@@ -367,22 +369,69 @@ enum RegistryCommand {
     },
 }
 
-/// The registry outlives individual Tokio runtimes. Its dedicated worker alone
-/// blocks on the receiver; async callers await their individual reply channels.
-static REGISTRY: OnceLock<Sender<RegistryCommand>> = OnceLock::new();
-
-fn registry() -> &'static Sender<RegistryCommand> {
-    REGISTRY.get_or_init(|| {
-        let (sender, receiver) = std_mpsc::channel();
-        std::thread::Builder::new()
-            .name("stac-coordinator-registry".to_owned())
-            .spawn(move || run_registry(receiver))
-            .expect("the process-wide STAC coordinator registry thread should start");
-        sender
-    })
+/// Application- or operation-owned coordinator registry. Clones share one
+/// worker, while coordinators retain only a weak sender so they cannot keep the
+/// registry alive.
+#[derive(Clone)]
+pub struct StacRequestRegistry {
+    sender: Arc<Sender<RegistryCommand>>,
 }
 
-fn run_registry(receiver: Receiver<RegistryCommand>) {
+impl fmt::Debug for StacRequestRegistry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StacRequestRegistry")
+            .finish_non_exhaustive()
+    }
+}
+
+impl StacRequestRegistry {
+    /// Create a registry with one dedicated thread to own coordinator entries.
+    ///
+    /// # Errors
+    /// Returns an I/O error if the registry worker thread cannot be started.
+    pub fn new() -> std::io::Result<Self> {
+        let (sender, receiver) = std_mpsc::channel();
+        let sender = Arc::new(sender);
+        let weak_sender = Arc::downgrade(&sender);
+        std::thread::Builder::new()
+            .name("stac-coordinator-registry".to_owned())
+            .spawn(move || run_registry(receiver, &weak_sender))?;
+        Ok(Self { sender })
+    }
+
+    /// Find or create the coordinator for this configured origin and authentication.
+    /// Provider ids, collection ids and refreshed access tokens do not split quotas.
+    pub(super) async fn shared(
+        &self,
+        origin: &Url,
+        authentication: Option<&super::StacProviderAuthentication>,
+    ) -> Arc<StacRequestCoordinator> {
+        let identity = Identity {
+            scheme: origin.scheme().to_ascii_lowercase(),
+            host: origin.host_str().unwrap_or_default().to_ascii_lowercase(),
+            port: origin.port_or_known_default().unwrap_or(0),
+            token_endpoint: authentication.map(|a| normalize_endpoint(&a.endpoint)),
+            client_id: authentication.map(|a| a.client_id.clone()),
+            username: authentication.map(|a| a.username.clone()),
+            password: authentication.map(|a| a.password.clone()),
+        };
+        let (reply, response) = oneshot::channel();
+        assert!(
+            self.sender
+                .send(RegistryCommand::Lookup { identity, reply })
+                .is_ok(),
+            "the owned STAC coordinator registry remains available"
+        );
+        response
+            .await
+            .expect("the owned STAC coordinator registry replies to lookups")
+    }
+}
+
+fn run_registry(
+    receiver: Receiver<RegistryCommand>,
+    registry_sender: &Weak<Sender<RegistryCommand>>,
+) {
     let mut coordinators = HashMap::<Identity, Arc<StacRequestCoordinator>>::new();
     for command in receiver {
         match command {
@@ -403,6 +452,7 @@ fn run_registry(receiver: Receiver<RegistryCommand>) {
                         Arc::new(StacRequestCoordinator {
                             channels: OnceLock::new(),
                             created_at: now,
+                            registry: registry_sender.clone(),
                         })
                     })
                     .clone();
@@ -434,34 +484,6 @@ fn run_registry(receiver: Receiver<RegistryCommand>) {
 }
 
 impl StacRequestCoordinator {
-    /// Find or create the coordinator for this configured origin and authentication.
-    /// Provider ids, collection ids and refreshed access tokens do not split quotas.
-    /// This lookup also reclaims expired registry entries that have no other owners.
-    pub(super) async fn shared(
-        origin: &Url,
-        authentication: Option<&super::StacProviderAuthentication>,
-    ) -> Arc<Self> {
-        let identity = Identity {
-            scheme: origin.scheme().to_ascii_lowercase(),
-            host: origin.host_str().unwrap_or_default().to_ascii_lowercase(),
-            port: origin.port_or_known_default().unwrap_or(0),
-            token_endpoint: authentication.map(|a| normalize_endpoint(&a.endpoint)),
-            client_id: authentication.map(|a| a.client_id.clone()),
-            username: authentication.map(|a| a.username.clone()),
-            password: authentication.map(|a| a.password.clone()),
-        };
-        let (reply, response) = oneshot::channel();
-        assert!(
-            registry()
-                .send(RegistryCommand::Lookup { identity, reply })
-                .is_ok(),
-            "the process-wide STAC coordinator registry remains available"
-        );
-        response
-            .await
-            .expect("the process-wide STAC coordinator registry replies to lookups")
-    }
-
     /// Executes and decodes a STAC request, owning admission, header feedback and
     /// retries. Tokens are read after admission, and each retry enters the queue.
     /// The policy's attempt limit includes rate-limit, HTTP, transport and decode failures.
@@ -686,8 +708,16 @@ impl StacRequestCoordinator {
     /// Request retirement in registry lookup order. The actor can stop when its
     /// entry was removed or is already absent; external owners prevent removal.
     async fn try_retire(self_weak: &Weak<Self>) -> bool {
+        let Some(coordinator) = self_weak.upgrade() else {
+            return true;
+        };
+        let registry = coordinator.registry.clone();
+        drop(coordinator);
+        let Some(sender) = registry.upgrade() else {
+            return true;
+        };
         let (reply, response) = oneshot::channel();
-        if registry()
+        if sender
             .send(RegistryCommand::Retire {
                 coordinator: self_weak.clone(),
                 reply,
@@ -988,25 +1018,28 @@ mod tests {
 
     #[tokio::test]
     async fn it_coordinators_share_by_normalized_origin_and_auth_identity() {
+        let registry = StacRequestRegistry::new().unwrap();
         let credentials = super::super::StacProviderAuthentication {
             endpoint: "https://auth.example/token/".to_owned(),
             client_id: "client".to_owned(),
             username: "user".to_owned(),
             password: "secret-value-must-not-be-debugged".to_owned(),
         };
-        let first = StacRequestCoordinator::shared(
-            &Url::parse("https://STAC.example:443/api").unwrap(),
-            Some(&credentials),
-        )
-        .await;
-        let same = StacRequestCoordinator::shared(
-            &Url::parse("https://stac.example/other").unwrap(),
-            Some(&credentials),
-        )
-        .await;
-        let anonymous =
-            StacRequestCoordinator::shared(&Url::parse("https://stac.example").unwrap(), None)
-                .await;
+        let first = registry
+            .shared(
+                &Url::parse("https://STAC.example:443/api").unwrap(),
+                Some(&credentials),
+            )
+            .await;
+        let same = registry
+            .shared(
+                &Url::parse("https://stac.example/other").unwrap(),
+                Some(&credentials),
+            )
+            .await;
+        let anonymous = registry
+            .shared(&Url::parse("https://stac.example").unwrap(), None)
+            .await;
         assert!(Arc::ptr_eq(&first, &same));
         assert!(!Arc::ptr_eq(&first, &anonymous));
         assert!(!format!("{first:?}").contains("secret-value-must-not-be-debugged"));
@@ -1027,8 +1060,10 @@ mod tests {
                     responders::json_encoded(json!({"complete": true})),
                 ]),
         );
-        let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
+        let registry = StacRequestRegistry::new().unwrap();
+        let coordinator = registry
+            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
+            .await;
         let client = reqwest::Client::new();
         let request = client.get(server.url_str("/items")).build().unwrap();
         let result: Value = coordinator
@@ -1053,9 +1088,10 @@ mod tests {
                     .times(max_retries.max(1) as usize)
                     .respond_with(responders::status_code(500)),
             );
-            let coordinator =
-                StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None)
-                    .await;
+            let registry = StacRequestRegistry::new().unwrap();
+            let coordinator = registry
+                .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
+                .await;
             let client = reqwest::Client::new();
             let error = coordinator
                 .execute::<serde_json::Value>(
@@ -1087,8 +1123,10 @@ mod tests {
                     .respond_with(responders::status_code(200).body(body)),
             );
         }
-        let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
+        let registry = StacRequestRegistry::new().unwrap();
+        let coordinator = registry
+            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
+            .await;
         let client = reqwest::Client::new();
         let mut tasks = tokio::task::JoinSet::new();
         for path in ["/one", "/two"] {
@@ -1139,8 +1177,10 @@ mod tests {
                     responders::delay_and_then(delay, responders::json_encoded(body))
                 }),
         );
-        let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
+        let registry = StacRequestRegistry::new().unwrap();
+        let coordinator = registry
+            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
+            .await;
         let client = reqwest::Client::new();
         let first_coordinator = coordinator.clone();
         let first_client = client.clone();
@@ -1189,8 +1229,10 @@ mod tests {
                 .times(1)
                 .respond_with(responders::status_code(404)),
         );
-        let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
+        let registry = StacRequestRegistry::new().unwrap();
+        let coordinator = registry
+            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
+            .await;
         let client = reqwest::Client::new();
         let error = coordinator
             .execute::<serde_json::Value>(

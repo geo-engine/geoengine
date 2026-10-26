@@ -33,7 +33,7 @@ policy. No API or configuration changes are planned.
    actual HTTP concurrency, FIFO admission, cancellation, response routing,
    shared quota feedback, retries, authentication, pagination, and cache sharing.
 
-6. Give a process-wide registry worker exclusive ownership of the identity map.
+6. Give an application-owned registry worker exclusive ownership of the identity map.
    Lookups and retirement requests use messages and oneshot replies. Serialize
    the final ownership check and removal with lookups to preserve quota sharing
    when providers are reconstructed. Keep this worker on one dedicated thread,
@@ -43,10 +43,20 @@ policy. No API or configuration changes are planned.
    configured origin and credentials. This extra channel round trip selects a
    live coordinator even when the runtime that hosted a prior actor has stopped;
    retries within an execution continue using the selected coordinator.
+7. Construct the registry in `PostgresContext` and clone its handle into
+   `PostgresDb`, which execution contexts already carry. Provider initialization
+   obtains this shared registry from the database handle. Preserve sharing across
+   sessions and queries; independently created query registries would split quota
+   accounting. CLI harvests and standalone operations explicitly own their
+   registries. Remove global registry initialization, use weak references from
+   coordinators back to their registry, and close the worker when its last owning
+   handle is dropped. Propagate worker startup errors through context creation.
 
 Neither the registry nor request scheduling uses an explicit mutex or read/write
-lock. An actor must not retain itself indefinitely or require a Tokio runtime
-during synchronous provider construction. Channels and one-time initialization
+lock. There is no global registry or global `OnceLock`; the instance-local
+`OnceLock` only initializes a coordinator's HTTP actor lazily. An actor must not
+retain itself or its registry indefinitely or require a Tokio runtime during
+synchronous provider construction. Channels and one-time initialization
 still provide their own synchronization; this does not claim that every
 underlying library operation is lock-free.
 
@@ -67,12 +77,14 @@ implementation it reuses, the channel-owned registry, and validation results.
 
 - Strict Clippy for all service features and targets, Rust formatting, Markdown
   formatting, and `git diff --check` pass.
-- All 31 coordinator tests that do not require sockets pass, including the actual
+- All 33 coordinator tests that do not require sockets pass, including the actual
   actor's concurrent admission, FIFO, cancellation, out-of-order replies, and
   provider reconstruction tests. Registry tests also cover concurrent identity
   lookup, pending and cancelled replies, safe retirement, and independent Tokio
-  runtime lifetimes. Ten mocked HTTP coordinator tests also compile.
-- The full STAC selection has 126 passing tests, 44 failures from denied local
+  runtime lifetimes. Registry ownership isolation and shutdown tests pass, as
+  does initialization of independent providers with a shared context registry
+  without connecting to PostgreSQL. Ten mocked HTTP coordinator tests also compile.
+- The full STAC selection has 129 passing tests, 44 failures from denied local
   HTTP listeners or database sockets, and three ignored tests. Every failure
   reports `PermissionDenied`; socket-dependent tests also fail on the unchanged
   implementation in this workspace.

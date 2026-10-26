@@ -21,6 +21,7 @@ mod listing;
 mod loading_info;
 mod storage;
 use cache::StacQueryCache;
+pub use coordinator::StacRequestRegistry;
 pub use grid::{ProjectedStacGrid, StacGrid, StacGridCell, StacGridCells};
 pub use loading_info::StacMultiBandMetaData;
 
@@ -221,11 +222,14 @@ impl StacProviderDatasetBand {
 
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
-    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+    async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         let mut definition = *self;
         let authentication = definition.authentication.take();
         validate_authentication(authentication.as_ref())?;
-        let mut provider = StacDataProvider::from_definition(definition)?;
+        let mut provider = StacDataProvider::from_definition_with_request_registry(
+            definition,
+            db.stac_request_registry().clone(),
+        )?;
 
         provider.client = provider.client.with_authentication(authentication).await?;
 
@@ -314,8 +318,19 @@ pub struct StacDataProvider {
 impl StacDataProvider {
     /// Builds a provider from its persisted definition after validating its configuration.
     ///
+    /// This standalone constructor creates its own request registry. Use
+    /// [`Self::from_definition_with_request_registry`] to share quotas across providers.
+    ///
     /// Authentication is installed asynchronously by [`StacDataProviderDefinition::initialize`].
     pub fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
+        Self::from_definition_with_request_registry(definition, StacRequestRegistry::new()?)
+    }
+
+    /// Builds a provider with the registry shared by its application or standalone operation.
+    pub fn from_definition_with_request_registry(
+        definition: StacDataProviderDefinition,
+        request_registry: StacRequestRegistry,
+    ) -> crate::error::Result<Self> {
         validate_s3_config(definition.s3_config.as_ref())?;
         validate_time_dimension(definition.time_dimension)?;
         let grid = definition.stac_grid.unwrap_or_default().validate()?;
@@ -326,7 +341,7 @@ impl StacDataProvider {
             ))
             .build()
             .unwrap_or_default();
-        let client = StacClient::new(client, &definition.api_url)?;
+        let client = StacClient::new(client, &definition.api_url, request_registry)?;
 
         Ok(Self {
             id: definition.id,
@@ -372,16 +387,22 @@ impl DataProvider for StacDataProvider {
 pub(crate) struct StacClient {
     client: reqwest::Client,
     origin: url::Url,
+    request_registry: StacRequestRegistry,
     coordinator_authentication: Option<StacProviderAuthentication>,
     authentication: Option<auth::StacAuthentication>,
 }
 
 impl StacClient {
-    pub(crate) fn new(client: reqwest::Client, stac_api_url: &str) -> crate::error::Result<Self> {
+    pub(crate) fn new(
+        client: reqwest::Client,
+        stac_api_url: &str,
+        request_registry: StacRequestRegistry,
+    ) -> crate::error::Result<Self> {
         let origin = url::Url::parse(stac_api_url)?;
         Ok(Self {
             client,
             origin,
+            request_registry,
             coordinator_authentication: None,
             authentication: None,
         })
@@ -413,11 +434,10 @@ impl StacClient {
         policy: &crate::util::retry::RetryPolicy,
     ) -> reqwest::Result<T> {
         let request = request.build()?;
-        let coordinator = coordinator::StacRequestCoordinator::shared(
-            &self.origin,
-            self.coordinator_authentication.as_ref(),
-        )
-        .await;
+        let coordinator = self
+            .request_registry
+            .shared(&self.origin, self.coordinator_authentication.as_ref())
+            .await;
         coordinator
             .execute(&self.client, request, self.authentication.as_ref(), policy)
             .await
@@ -427,6 +447,58 @@ impl StacClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn it_injects_the_context_registry_into_independently_initialized_providers() {
+        use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
+        use tokio_postgres::NoTls;
+
+        // No connection is needed: STAC initialization obtains the registry from
+        // its database handle without touching PostgreSQL or a remote STAC API.
+        let pool = Pool::builder().build_unchecked(PostgresConnectionManager::new(
+            tokio_postgres::Config::new(),
+            NoTls,
+        ));
+        let request_registry = StacRequestRegistry::new().unwrap();
+        let db = crate::contexts::PostgresDb::new(
+            pool,
+            crate::users::UserSession::admin_session(),
+            Arc::new(crate::layers::provider_registry::DataConnectorRegistry::default()),
+            request_registry.clone(),
+        );
+        let mut definition: StacDataProviderDefinition =
+            serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
+                include_str!("../../../../../test_data/provider_defs_api/stac_sentinel2.json"),
+            )
+            .unwrap()
+            .into();
+        definition.api_url = "https://context-owned-registry.test".to_owned();
+        definition.authentication = None;
+        definition.s3_config = None;
+        let first = Box::new(definition.clone())
+            .initialize(db.clone())
+            .await
+            .unwrap();
+        definition.id = DataProviderId::from_u128(2);
+        definition.collection_name = "another-collection".to_owned();
+        let second = Box::new(definition).initialize(db).await.unwrap();
+        let first = first
+            .as_ref()
+            .as_any()
+            .downcast_ref::<StacDataProvider>()
+            .unwrap();
+        let second = second
+            .as_ref()
+            .as_any()
+            .downcast_ref::<StacDataProvider>()
+            .unwrap();
+        let origin = url::Url::parse("https://context-owned-registry.test").unwrap();
+        let expected = request_registry.shared(&origin, None).await;
+        let first_coordinator = first.client.request_registry.shared(&origin, None).await;
+        let second_coordinator = second.client.request_registry.shared(&origin, None).await;
+        assert!(Arc::ptr_eq(&expected, &first_coordinator));
+        assert!(Arc::ptr_eq(&expected, &second_coordinator));
+    }
 
     type AuthenticationBucketArrivals =
         Arc<std::sync::Mutex<Vec<(&'static str, std::time::Instant)>>>;
@@ -508,7 +580,9 @@ mod tests {
         use std::time::{Duration, Instant};
 
         let (server, arrivals) = authentication_bucket_server(authenticated);
+        let request_registry = StacRequestRegistry::new().unwrap();
         let create_client = |username: Option<&str>| {
+            let request_registry = request_registry.clone();
             let config = username.map(|username| StacProviderAuthentication {
                 endpoint: server.url_str("/token"),
                 client_id: "client".into(),
@@ -517,7 +591,7 @@ mod tests {
             });
             let api_url = server.url_str("/");
             async move {
-                StacClient::new(reqwest::Client::new(), &api_url)
+                StacClient::new(reqwest::Client::new(), &api_url, request_registry)
                     .unwrap()
                     .with_authentication(config)
                     .await
@@ -596,7 +670,12 @@ mod tests {
                     ),
             );
         }
-        let client = StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap();
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            StacRequestRegistry::new().unwrap(),
+        )
+        .unwrap();
         let cloned = client.clone();
         let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
         let started = Instant::now();
@@ -666,16 +745,20 @@ mod tests {
             .times(1)
             .respond_with(responders::status_code(200).body("null")),
         );
-        let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"))
-            .unwrap()
-            .with_authentication(Some(StacProviderAuthentication {
-                endpoint: server.url_str("/token"),
-                client_id: "client".into(),
-                username: "user".into(),
-                password: "password".into(),
-            }))
-            .await
-            .unwrap();
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            StacRequestRegistry::new().unwrap(),
+        )
+        .unwrap()
+        .with_authentication(Some(StacProviderAuthentication {
+            endpoint: server.url_str("/token"),
+            client_id: "client".into(),
+            username: "user".into(),
+            password: "password".into(),
+        }))
+        .await
+        .unwrap();
         let queued = client
             .get(server.url_str("/queued"))
             .timeout(Duration::from_millis(100));

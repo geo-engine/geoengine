@@ -121,6 +121,9 @@ pub struct LayerProviderListingOptions {
 
 #[async_trait]
 pub trait LayerProviderDb: Send + Sync + 'static {
+    /// Shared STAC request coordination for this database's application context.
+    fn stac_request_registry(&self) -> &crate::datasets::external::stac::StacRequestRegistry;
+
     async fn add_layer_provider(
         &self,
         provider: TypedDataProviderDefinition,

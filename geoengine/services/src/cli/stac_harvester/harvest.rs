@@ -162,10 +162,14 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     .await?;
 
     // Separate reqwest client for STAC API calls (not Geo Engine)
-    let stac_client = StacClient::new(reqwest::Client::new(), &provider_def.api_url)?
-        .with_authentication(provider_def.authentication.clone())
-        .await
-        .context("Cannot authenticate with STAC API")?;
+    let stac_client = StacClient::new(
+        reqwest::Client::new(),
+        &provider_def.api_url,
+        crate::datasets::external::stac::StacRequestRegistry::new()?,
+    )?
+    .with_authentication(provider_def.authentication.clone())
+    .await
+    .context("Cannot authenticate with STAC API")?;
 
     let created_datasets = setup_datasets(&api_config, &params, provider_def).await?;
 
@@ -1427,11 +1431,15 @@ mod tests {
                 };
                 page_server.expect(expectation.respond_with(responders::json_encoded(page)));
             }
-            let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"))
-                .unwrap()
-                .with_authentication(authentication)
-                .await
-                .unwrap();
+            let client = StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+            )
+            .unwrap()
+            .with_authentication(authentication)
+            .await
+            .unwrap();
             let pages = create_page_stream(
                 QueryState::FirstPage {
                     query_url: server.url_str("/items"),

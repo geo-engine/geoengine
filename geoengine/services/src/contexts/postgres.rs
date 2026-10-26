@@ -6,7 +6,7 @@ use crate::{
         MigrationResult, QueryContextImpl, QuotaCheckerImpl, SessionContext, SessionId,
         initialize_database, migrations,
     },
-    datasets::{DatasetName, upload::Volumes},
+    datasets::{DatasetName, external::stac::StacRequestRegistry, upload::Volumes},
     error::{self, Error, Result},
     layers::{
         add_from_directory::{
@@ -68,6 +68,7 @@ where
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
     provider_registry: Arc<DataConnectorRegistry>,
+    stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
 }
 
@@ -94,10 +95,12 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
+        let stac_request_registry = StacRequestRegistry::new()?;
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
             provider_registry.clone(),
+            stac_request_registry.clone(),
         );
         let quota = initialize_quota_tracking(
             quota_config.mode,
@@ -126,6 +129,7 @@ where
             new_raster_cache: None,
             default_cache_ttl: CacheTtlSeconds::new(0),
             provider_registry,
+            stac_request_registry,
             gdal_process_pool,
         })
     }
@@ -147,10 +151,12 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
+        let stac_request_registry = StacRequestRegistry::new()?;
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
             provider_registry.clone(),
+            stac_request_registry.clone(),
         );
         let quota = initialize_quota_tracking(
             quota_config.mode,
@@ -193,6 +199,7 @@ where
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
+            stac_request_registry,
             gdal_process_pool,
         })
     }
@@ -222,10 +229,12 @@ where
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
+        let stac_request_registry = StacRequestRegistry::new()?;
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
             provider_registry.clone(),
+            stac_request_registry.clone(),
         );
         let quota = initialize_quota_tracking(
             quota_config.mode,
@@ -268,6 +277,7 @@ where
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
+            stac_request_registry,
             gdal_process_pool,
         };
 
@@ -441,6 +451,7 @@ where
             self.context.pool.clone(),
             self.session.clone(),
             self.context.provider_registry.clone(),
+            self.context.stac_request_registry.clone(),
         )
     }
 
@@ -516,6 +527,7 @@ where
     pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
     pub(crate) session: UserSession,
     pub(crate) provider_registry: Arc<DataConnectorRegistry>,
+    pub(crate) stac_request_registry: StacRequestRegistry,
 }
 
 impl<Tls> PostgresDb<Tls>
@@ -529,11 +541,13 @@ where
         conn_pool: Pool<PostgresConnectionManager<Tls>>,
         session: UserSession,
         provider_registry: Arc<DataConnectorRegistry>,
+        stac_request_registry: StacRequestRegistry,
     ) -> Self {
         Self {
             conn_pool,
             session,
             provider_registry,
+            stac_request_registry,
         }
     }
 

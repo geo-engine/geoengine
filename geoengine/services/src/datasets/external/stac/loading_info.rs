@@ -1252,7 +1252,12 @@ mod tests {
                 time_dimension: definition.time_dimension,
                 dataset,
                 page_limit: definition.page_limit,
-                client: StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap(),
+                client: StacClient::new(
+                    reqwest::Client::new(),
+                    &server.url_str("/"),
+                    crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+                )
+                .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
@@ -1305,7 +1310,12 @@ mod tests {
             time_dimension: definition.time_dimension,
             dataset: definition.datasets[0].clone(),
             page_limit: definition.page_limit,
-            client: StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap(),
+            client: StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+            )
+            .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
@@ -1471,18 +1481,22 @@ mod tests {
             .respond_with(responders::json_encoded(stac_items_response())),
         );
 
-        let client = StacClient::new(reqwest::Client::new(), &server.url_str("/"))
-            .unwrap()
-            .with_authentication(Some(
-                crate::datasets::external::stac::StacProviderAuthentication {
-                    endpoint: server.url_str("/token"),
-                    client_id: "my-client-id".to_owned(),
-                    username: "test-user".to_owned(),
-                    password: "test-password".to_owned(),
-                },
-            ))
-            .await
-            .expect("initial password grant should succeed");
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+        )
+        .unwrap()
+        .with_authentication(Some(
+            crate::datasets::external::stac::StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                client_id: "my-client-id".to_owned(),
+                username: "test-user".to_owned(),
+                password: "test-password".to_owned(),
+            },
+        ))
+        .await
+        .expect("initial password grant should succeed");
 
         let initial_query = StacQueryState::FirstPage {
             query_url: Url::parse(&server.url_str("/initial-items")).unwrap(),
@@ -1964,6 +1978,20 @@ mod grid_request_tests {
     }
 
     fn provider(server: &Server, cache_bytes: usize, grid: StacGrid) -> StacDataProvider {
+        provider_with_registry(
+            server,
+            cache_bytes,
+            grid,
+            crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+        )
+    }
+
+    fn provider_with_registry(
+        server: &Server,
+        cache_bytes: usize,
+        grid: StacGrid,
+        request_registry: crate::datasets::external::stac::StacRequestRegistry,
+    ) -> StacDataProvider {
         let dataset = StacProviderDataset {
             name: "test".to_owned(),
             description: String::new(),
@@ -1979,27 +2007,30 @@ mod grid_request_tests {
                 band_name: None,
             })],
         };
-        let mut provider = StacDataProvider::from_definition(StacDataProviderDefinition {
-            id: DataProviderId::new(),
-            name: "test".to_owned(),
-            description: String::new(),
-            api_url: server.url_str("/"),
-            collection_name: "test".to_owned(),
-            s3_config: None,
-            authentication: None,
-            time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
-                TimeStep {
-                    granularity: TimeGranularity::Days,
-                    step: 1,
-                },
-            )),
-            datasets: vec![dataset],
-            priority: None,
-            page_limit: 100,
-            query_timeout_secs: 5,
-            cache_ttl_secs: None,
-            stac_grid: Some(grid),
-        })
+        let mut provider = StacDataProvider::from_definition_with_request_registry(
+            StacDataProviderDefinition {
+                id: DataProviderId::new(),
+                name: "test".to_owned(),
+                description: String::new(),
+                api_url: server.url_str("/"),
+                collection_name: "test".to_owned(),
+                s3_config: None,
+                authentication: None,
+                time_dimension: TimeDimension::Regular(
+                    RegularTimeDimension::new_with_epoch_origin(TimeStep {
+                        granularity: TimeGranularity::Days,
+                        step: 1,
+                    }),
+                ),
+                datasets: vec![dataset],
+                priority: None,
+                page_limit: 100,
+                query_timeout_secs: 5,
+                cache_ttl_secs: None,
+                stac_grid: Some(grid),
+            },
+            request_registry,
+        )
         .unwrap();
         provider.query_cache = Arc::new(StacQueryCache::new(cache_bytes, Duration::from_mins(1)));
         provider
@@ -2726,7 +2757,12 @@ mod grid_request_tests {
                 .times(crate::util::retry::DEFAULT_MAX_RETRIES as usize)
                 .respond_with(responders::status_code(429).append_header("x-ratelimit-reset", "1")),
         );
-        let client = super::StacClient::new(reqwest::Client::new(), &server.url_str("/")).unwrap();
+        let client = super::StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+        )
+        .unwrap();
         let state = super::StacQueryState::NextPage {
             next_url: server.url_str("/always-limited").parse().unwrap(),
         };
@@ -2783,9 +2819,13 @@ mod grid_request_tests {
             let grid = StacGrid {
                 target_number_of_cells: 64_800,
             };
-            let mut other_provider = provider(&server, cache_bytes, grid);
+            let request_registry =
+                crate::datasets::external::stac::StacRequestRegistry::new().unwrap();
+            let mut other_provider =
+                provider_with_registry(&server, cache_bytes, grid, request_registry.clone());
             other_provider.collection_name = "other".to_owned();
-            let query_provider = provider(&server, cache_bytes, grid);
+            let query_provider =
+                provider_with_registry(&server, cache_bytes, grid, request_registry);
             let exhausted = Instant::now();
             other_provider
                 .client
