@@ -59,7 +59,7 @@
         "@angular/forms": "^22.1.2",
         "@angular/material": "^22.1.2",
         "@angular/platform-browser": "^22.1.2",
-        "@angular/router": "^22.1.2",
+        "@angular/router": "^22.2.1",
         "@codemirror/lang-json": "~6.0.2",
         "@codemirror/lang-rust": "~6.0.2",
         "@codemirror/language": "~6.12.4",
@@ -75,7 +75,7 @@
         "flatgeobuf": "4.4.0",
         "immutable": "~5.1.9",
         "keycharm": "0.4.0",
-        "moment": "~2.30.1",
+        "moment": "~2.31.0",
         "ngx-color-picker": "~20.1.1",
         "ngx-mat-select-search": "~8.0.6",
         "ol": "~10.10.0",
@@ -124,7 +124,7 @@
         "ts-node": "~10.9.2",
         "typescript": "6.0.3",
         "typescript-eslint": "^8.67.0",
-        "vitest": "^4.1.9"
+        "vitest": "^5.0.5"
     },
     "overrides": {
         "@angular-devkit/build-angular": {
