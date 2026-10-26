@@ -131,7 +131,7 @@ where
 /// How to handle a failed attempt, subject to the policy's terminal conditions.
 #[derive(Clone, Copy)]
 pub(crate) enum RetryAction {
-    /// Use the policy's exponential backoff, advancing its failure counter.
+    /// Use the policy's exponential backoff, doubling the delay for next time.
     Backoff,
     /// Let the caller's scheduler handle the delay without advancing backoff.
     Scheduled,
@@ -155,7 +155,7 @@ where
 {
     let max_attempts = policy.max_retries.max(1);
     let mut attempt = 0;
-    let mut backoff_failures = 0;
+    let mut delay = Duration::from_millis(policy.initial_delay_ms);
     loop {
         let (result, action) = operation().await;
         match result {
@@ -174,14 +174,20 @@ where
                 }
 
                 if let RetryAction::Backoff = action {
-                    let delay = Duration::from_millis(
-                        policy.initial_delay_ms * 2_u64.pow(backoff_failures),
-                    );
-                    backoff_failures += 1;
+                    let Some(deadline) = tokio::time::Instant::now().checked_add(delay) else {
+                        warn!(
+                            operation = operation_name,
+                            ?delay,
+                            error = %err,
+                            "Retry deadline cannot be represented; returning the last failure"
+                        );
+                        return Err(err);
+                    };
                     warn!(
                         "{operation_name} failed (attempt {attempt}/{max_attempts}): {err}. Retrying in {delay:?}..."
                     );
-                    tokio::time::sleep(delay).await;
+                    tokio::time::sleep_until(deadline).await;
+                    delay = delay.saturating_mul(2);
                 }
             }
         }
@@ -254,6 +260,27 @@ mod tests {
     }
 
     impl std::error::Error for TestError {}
+
+    #[tokio::test]
+    async fn it_retries_with_zero_delay_for_large_attempt_budgets() {
+        let mut attempts = 0;
+        let result = tokio::time::timeout(
+            Duration::from_secs(2),
+            retry_http(
+                || {
+                    attempts += 1;
+                    async { Err::<(), _>("temporary error") }
+                },
+                "zero-delay retries",
+                &RetryPolicy::new().max_retries(66).initial_delay_ms(0),
+                |_| None,
+            ),
+        )
+        .await
+        .expect("zero-delay retries must finish without growing the delay");
+        assert_eq!(result.unwrap_err(), "temporary error");
+        assert_eq!(attempts, 66);
+    }
 
     #[tokio::test]
     async fn it_returns_aborted_failures_without_retrying() {
