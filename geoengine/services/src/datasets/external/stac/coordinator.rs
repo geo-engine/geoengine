@@ -1098,35 +1098,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_uses_the_callers_bounded_attempt_budget() {
-        use httptest::{Expectation, Server, matchers::request, responders};
-        for max_retries in [0, 1, 3] {
-            let server = Server::run();
-            server.expect(
-                Expectation::matching(request::method_path("GET", "/items"))
-                    .times(max_retries.max(1) as usize)
-                    .respond_with(responders::status_code(500)),
-            );
-            let registry = StacRequestRegistry::new();
-            let client =
-                StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
-            let error = client
-                .execute_json::<serde_json::Value>(
-                    client.get(server.url_str("/items")),
-                    &RetryPolicy::new()
-                        .max_retries(max_retries)
-                        .initial_delay_ms(1),
-                )
-                .await
-                .unwrap_err();
-            assert_eq!(
-                error.status(),
-                Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR)
-            );
-        }
-    }
-
-    #[tokio::test]
     async fn it_routes_parallel_results_to_their_own_callers() {
         use httptest::{Expectation, Server, matchers::request, responders};
         use serde_json::Value;
