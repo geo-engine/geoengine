@@ -551,7 +551,8 @@ impl StacClient {
     }
 
     /// Executes a request through the client's shared channel and authentication.
-    /// Pagination URLs are followed as supplied by the STAC server. All failures
+    /// Pagination URLs are followed as supplied by the STAC server, with
+    /// authentication restricted to the configured origin. All failures
     /// share the policy's attempt budget. Retries rejoin FIFO admission after
     /// backoff, unless server quota information controls the retry delay.
     pub(crate) async fn execute_json<T: DeserializeOwned>(
@@ -615,7 +616,11 @@ impl StacClient {
         let job = AttemptJob {
             client: self.client.clone(),
             request: request_copy,
-            authentication: self.authentication.clone(),
+            authentication: self
+                .authentication
+                .as_ref()
+                .filter(|_| self.origin.origin() == request.url().origin())
+                .cloned(),
             reply,
         };
         assert!(

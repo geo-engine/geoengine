@@ -1382,17 +1382,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_harvests_pages_across_origins_with_shared_authentication() {
+    async fn it_harvests_pages_with_authentication_only_for_the_configured_origin() {
         use crate::datasets::external::stac::StacProviderAuthentication;
         use httptest::{
             Expectation, Server, all_of,
-            matchers::{contains, request},
+            matchers::{any, contains, not, request},
             responders,
         };
 
-        for authenticated in [false, true] {
+        for (authenticated, same_origin) in
+            [(false, false), (false, true), (true, false), (true, true)]
+        {
             let server = Server::run();
             let next_server = Server::run();
+            let next_server = if same_origin { &server } else { &next_server };
             let authentication = authenticated.then(|| StacProviderAuthentication {
                 endpoint: server.url_str("/token"),
                 client_id: "client".into(),
@@ -1419,15 +1422,18 @@ mod tests {
                 serde_json::json!({"type": "FeatureCollection", "features": [], "links": []});
             for (page_server, path, page) in [
                 (&server, "/items", first_page),
-                (&next_server, "/next", last_page),
+                (next_server, "/next", last_page),
             ] {
-                let expectation = if authenticated {
+                let expectation = if authenticated && (path == "/items" || same_origin) {
                     Expectation::matching(all_of![
                         request::method_path("GET", path),
                         request::headers(contains(("authorization", "Bearer access"))),
                     ])
                 } else {
-                    Expectation::matching(request::method_path("GET", path))
+                    Expectation::matching(all_of![
+                        request::method_path("GET", path),
+                        request::headers(not(contains(("authorization", any())))),
+                    ])
                 };
                 page_server.expect(expectation.respond_with(responders::json_encoded(page)));
             }
