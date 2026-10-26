@@ -1,8 +1,29 @@
-//! Shared scheduling must preserve each provider's HTTP transport configuration.
+//! STAC request validation and provider-specific HTTP transport configuration.
 use super::coordinator::StacClientError;
 use super::*;
 use httptest::{Expectation, Server, matchers::request, responders};
 use std::time::Duration;
+
+#[tokio::test]
+async fn it_rejects_streaming_request_bodies_without_panicking() {
+    let client = StacClient::new(
+        reqwest::Client::new(),
+        "https://non-replayable.test",
+        StacRequestRegistry::new(),
+    )
+    .unwrap();
+    let body =
+        reqwest::Body::wrap_stream(futures::stream::pending::<Result<Vec<u8>, std::io::Error>>());
+    let request = client.get("https://non-replayable.test/items").body(body);
+    let error = tokio::time::timeout(
+        Duration::from_millis(100),
+        client.execute_json::<serde_json::Value>(request, &crate::util::retry::RetryPolicy::new()),
+    )
+    .await
+    .expect("non-replayable requests must fail before sending or retrying")
+    .unwrap_err();
+    assert!(matches!(error, StacClientError::RequestNotReplayable));
+}
 
 #[tokio::test]
 async fn it_shares_quota_channels_while_preserving_each_clients_timeout() {

@@ -532,6 +532,8 @@ pub(crate) enum StacClientError {
     Http { source: reqwest::Error },
     #[snafu(display("STAC request coordinator stopped before completing the request"))]
     CoordinatorStopped,
+    #[snafu(display("STAC requests must have replayable bodies"))]
+    RequestNotReplayable,
 }
 
 impl StacClientError {
@@ -539,7 +541,7 @@ impl StacClientError {
     pub(crate) fn status(&self) -> Option<reqwest::StatusCode> {
         match self {
             Self::Http { source } => source.status(),
-            Self::CoordinatorStopped => None,
+            Self::CoordinatorStopped | Self::RequestNotReplayable => None,
         }
     }
 }
@@ -625,7 +627,7 @@ impl StacClient {
     ) -> Result<AttemptReply, StacClientError> {
         let request_copy = request
             .try_clone()
-            .expect("STAC API searches are replayable GET requests");
+            .ok_or(StacClientError::RequestNotReplayable)?;
         let (reply, receiver) = oneshot::channel();
         let mut pending = PendingAttempt {
             reply: receiver,
