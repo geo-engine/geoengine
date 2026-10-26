@@ -8,7 +8,9 @@ pub mod storage;
 pub mod upload;
 
 #[cfg(test)]
-pub(crate) use create_from_processing_graph::RasterDatasetFromProcessingGraphResult;
+pub(crate) use create_from_processing_graph::{
+    DATASET_MANIFEST_FILE_NAME, RasterDatasetFromProcessingGraphResult,
+};
 pub(crate) use create_from_processing_graph::{
     RasterDatasetFromProcessingGraph, RasterDatasetFromProcessingGraphParams,
     schedule_raster_dataset_from_processing_graph_task,
