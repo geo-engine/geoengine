@@ -1,18 +1,16 @@
 //! Coordinates outgoing STAC HTTP requests to respect shared server rate limits.
 //! Providers with the same configured STAC origin and credentials share a FIFO
-//! queue. Each HTTP attempt waits for its turn and reserves capacity in every
-//! known rate-limit window before dispatch. Queue and quota updates briefly lock
-//! scheduler state; those locks are released before HTTP calls or retry backoff.
+//! queue. A channel actor owns that queue and all quota state, admits requests in
+//! order, and runs admitted HTTP attempts concurrently.
 //!
 //! [`Identity`] selects a process-wide [`StacRequestCoordinator`], shared across
-//! providers and collections with the same configuration. Its [`State`] holds
-//! the FIFO queue, request history, learned rate-limit windows and server feedback.
-//! Admission follows queue order, while admitted HTTP attempts may overlap.
+//! providers and collections with the same configuration. The actor owns the
+//! FIFO queue and [`State`], which holds request history, learned rate-limit
+//! windows and server feedback. Admitted HTTP attempts may overlap.
 //!
 //! One [`StacRequestCoordinator::execute`] call may make several HTTP attempts.
-//! Each attempt gets a [`RequestGuard`] that tracks its queue membership and
-//! completion. Response headers become [`ResponseFeedback`], which is applied
-//! when the guard finishes. Failures and cancellation keep the recorded
+//! Each attempt is an owned channel job with a one-shot reply. The actor applies
+//! response feedback before replying. Failures and cancellation keep an admitted
 //! request start charged against the rolling windows.
 //!
 //! Retries for transient failures wait for exponential backoff outside the queue,
@@ -22,15 +20,18 @@
 use super::auth::StacAuthentication;
 use crate::util::retry::{RetryPolicy, is_terminal};
 use chrono::{DateTime, Utc};
+use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde::de::DeserializeOwned;
 use std::{
     collections::{HashMap, VecDeque},
     fmt,
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex, OnceLock, Weak},
     time::{Duration, Instant, SystemTime},
 };
-use tokio::sync::Notify;
+use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 /// Default cooldown/reset delay and duration of the initial ten-request window.
@@ -143,33 +144,12 @@ impl Window {
     }
 }
 
-/// Result of one admission check under the scheduler mutex.
+/// Mutable quota data owned exclusively by the coordinator actor.
 ///
-/// This tells the async caller what to await after releasing the mutex. Waits
-/// always lead to another check because notifications and deadlines can race
-/// with cancellations or new server feedback.
-#[derive(Debug)]
-enum Admission {
-    /// The attempt left the queue and reserved capacity in the current state.
-    Admitted,
-    /// Another attempt is ahead in the FIFO queue; wait for notification.
-    WaitForChange,
-    /// The attempt is at the front but a quota or cooldown blocks it. Wait for
-    /// this deadline or a notification that the scheduling state changed.
-    WaitUntil(Instant),
-}
-
-/// Mutable scheduling data for one [`Identity`], protected by a mutex held briefly
-/// for each update.
-///
-/// Queue changes, admission reservations and response feedback are applied
-/// atomically here. Async waiting, HTTP dispatch and JSON decoding happen outside
-/// this state. The history of request starts enforces rates independently of how many
-/// attempts are currently waiting for response headers.
+/// The history of request starts enforces rates independently of how many attempts
+/// are currently waiting for response headers.
 #[derive(Debug)]
 struct State {
-    /// One notification handle per queued attempt, also used as its unique identity.
-    queue: VecDeque<Arc<Notify>>,
     /// Number of admitted HTTP attempts still waiting for response headers or a transport error.
     /// Used to adjust server feedback; this is not a concurrency limit.
     in_flight_requests: usize,
@@ -187,13 +167,6 @@ struct State {
 }
 
 impl State {
-    /// Wake only the queue head, which is the only waiter eligible for admission.
-    fn wake_front(&self) {
-        if let Some(waiter) = self.queue.front() {
-            waiter.notify_one();
-        }
-    }
-
     /// Preserve starts for the longest learned policy, with a minimum history
     /// for policies that may first appear in later responses.
     fn history_duration(&self) -> Duration {
@@ -222,16 +195,8 @@ impl State {
             .unwrap_or(self.last_activity)
     }
 
-    /// Admit the queue head only when every known window and server constraint
-    /// permits it. Record the start and decrement remaining quotas before dispatch.
-    fn admit(&mut self, waiter: &Arc<Notify>, now: Instant) -> Admission {
-        if !self
-            .queue
-            .front()
-            .is_some_and(|front| Arc::ptr_eq(front, waiter))
-        {
-            return Admission::WaitForChange;
-        }
+    /// Return a blocking deadline, or reserve capacity and return `None`.
+    fn reserve(&mut self, now: Instant) -> Option<Instant> {
         self.prune(now);
         // Before learning policies, use the fallback immediately. There is no
         // special bootstrap request or wait for its headers.
@@ -253,9 +218,8 @@ impl State {
             .chain(self.cooldown_until)
             .max();
         if let Some(deadline) = deadline {
-            return Admission::WaitUntil(deadline);
+            return Some(deadline);
         }
-        self.queue.pop_front();
         self.in_flight_requests += 1;
         self.starts.push_back(now);
         self.last_activity = now;
@@ -267,8 +231,7 @@ impl State {
         {
             quota.remaining_requests = quota.remaining_requests.saturating_sub(1);
         }
-        self.wake_front();
-        Admission::Admitted
+        None
     }
 
     /// Expire old starts, server quotas and cooldowns while keeping learned policies.
@@ -331,42 +294,69 @@ impl State {
         }
     }
 
-    /// Remove a queued attempt or decrement the count of unfinished HTTP attempts.
-    /// An admitted attempt's timestamp remains charged against local rate limits.
-    fn release(&mut self, phase: &RequestPhase) {
-        match phase {
-            RequestPhase::Queued(waiter) => {
-                if let Some(index) = self
-                    .queue
-                    .iter()
-                    .position(|entry| Arc::ptr_eq(entry, waiter))
-                {
-                    self.queue.remove(index);
-                }
-            }
-            RequestPhase::InFlight => {
-                self.in_flight_requests = self.in_flight_requests.saturating_sub(1);
-                self.last_activity = Instant::now();
-            }
-            RequestPhase::Finished => return,
-        }
-        self.wake_front();
+    /// Release one in-flight attempt. Its request start remains charged.
+    fn release(&mut self) {
+        self.in_flight_requests = self.in_flight_requests.saturating_sub(1);
+        self.last_activity = Instant::now();
     }
 }
 
-/// Shared admission and retry scheduler for one configured origin and auth identity.
+/// One owned HTTP attempt and its private completion channel.
+#[derive(Debug)]
+struct AttemptJob {
+    client: reqwest::Client,
+    request: reqwest::Request,
+    authentication: Option<StacAuthentication>,
+    reply: oneshot::Sender<AttemptReply>,
+}
+
+#[derive(Debug)]
+struct AttemptReply {
+    response: reqwest::Result<reqwest::Response>,
+    server_controls_retry: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ActorChannels {
+    jobs: mpsc::UnboundedSender<AttemptJob>,
+    cancellations: mpsc::UnboundedSender<()>,
+}
+
+/// Close the reply before notifying the actor, so a cancellation wakeup cannot
+/// race ahead of the receiver being dropped and leave a queued job behind.
+struct PendingAttempt {
+    reply: oneshot::Receiver<AttemptReply>,
+    cancellation: Option<mpsc::UnboundedSender<()>>,
+}
+
+impl Drop for PendingAttempt {
+    fn drop(&mut self) {
+        if let Some(sender) = &self.cancellation {
+            self.reply.close();
+            let _ = sender.send(());
+        }
+    }
+}
+
+type AttemptOutcome = (
+    oneshot::Sender<AttemptReply>,
+    Option<reqwest::Result<reqwest::Response>>,
+);
+type RunningAttempt = Pin<Box<dyn Future<Output = AttemptOutcome> + Send>>;
+
+/// Shared channel endpoint for one configured origin and authentication identity.
 ///
-/// The registry supplies shared ownership across providers, collections and client
-/// clones. Each HTTP attempt briefly locks `state` to reserve capacity, then runs
-/// independently until its headers or transport error can update the scheduler.
+/// The actor owns FIFO admission and quota state. Provider and client clones only
+/// submit owned jobs; they never hold a scheduler lock while waiting or sending.
 #[derive(Debug)]
 pub(super) struct StacRequestCoordinator {
-    state: Mutex<State>,
+    channels: OnceLock<ActorChannels>,
+    created_at: Instant,
 }
 
 /// Process-wide coordinator ownership. Lookups reclaim unused entries only after
 /// their request history and server deadlines expire, preserving quotas across
-/// provider reconstruction. When both locks are needed, lock registry before state.
+/// provider reconstruction.
 static REGISTRY: OnceLock<Mutex<HashMap<Identity, Arc<StacRequestCoordinator>>>> = OnceLock::new();
 
 impl StacRequestCoordinator {
@@ -390,35 +380,26 @@ impl StacRequestCoordinator {
             .get_or_init(|| Mutex::new(HashMap::new()))
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // The registry is the only mutex. Dispatch and cancellation never acquire it.
         let now = Instant::now();
-        // Only lookup locks both structures, always registry -> state. Dispatch
-        // and cancellation never acquire the registry lock.
         registry.retain(|_, coordinator| {
-            Arc::strong_count(coordinator) > 1 || coordinator.lock_state().retain_until() > now
+            coordinator.channels.get().map_or_else(
+                || {
+                    Arc::strong_count(coordinator) > 1
+                        || coordinator.created_at + MIN_RETENTION > now
+                },
+                |channels| !channels.jobs.is_closed(),
+            )
         });
         registry
             .entry(identity)
             .or_insert_with(|| {
                 Arc::new(Self {
-                    state: Mutex::new(State {
-                        queue: VecDeque::new(),
-                        in_flight_requests: 0,
-                        windows: Vec::new(),
-                        starts: VecDeque::new(),
-                        unscoped_quota: None,
-                        cooldown_until: None,
-                        last_activity: now,
-                    }),
+                    channels: OnceLock::new(),
+                    created_at: now,
                 })
             })
             .clone()
-    }
-
-    fn lock_state(&self) -> MutexGuard<'_, State> {
-        // Cancellation cleanup must not panic again while unwinding a panic.
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Executes and decodes a STAC request, owning admission, header feedback and
@@ -428,7 +409,7 @@ impl StacRequestCoordinator {
     /// Transient retries back off before joining the queue again. A 429 retry
     /// also backs off unless a learned quota window or usable server retry timing
     /// lets admission control the retry delay.
-    /// No request guard or scheduler mutex is held during exponential backoff or
+    /// No scheduler mutex is held during exponential backoff or
     /// JSON decoding.
     pub(super) async fn execute<T: DeserializeOwned>(
         self: &Arc<Self>,
@@ -443,13 +424,9 @@ impl StacRequestCoordinator {
         let operation_name = format!("Fetch STAC items from {}", request.url());
         loop {
             attempt += 1;
-            let response = self.execute_attempt(client, &request, authentication).await;
-            // The attempt has already applied any advertised windows to state.
-            let server_controls_retry = response.as_ref().is_ok_and(|response| {
-                response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
-                    && (rate_limit_delay(response.headers()).is_some()
-                        || !self.lock_state().windows.is_empty())
-            });
+            let reply = self.execute_attempt(client, &request, authentication).await;
+            let response = reply.response;
+            let server_controls_retry = reply.server_controls_retry;
             let result = async { response?.error_for_status()?.json::<T>().await }.await;
             let error = match result {
                 Ok(value) => return Ok(value),
@@ -478,125 +455,194 @@ impl StacRequestCoordinator {
         }
     }
 
-    /// Queue and dispatch one attempt using the current access token. Finish its
-    /// guard as soon as headers or a transport error arrive; body decoding belongs
-    /// to `execute` and does not keep the attempt in `State::in_flight_requests`.
+    /// Submit one owned job and wait for the actor to apply completion feedback.
     async fn execute_attempt(
         self: &Arc<Self>,
         client: &reqwest::Client,
         request: &reqwest::Request,
         authentication: Option<&StacAuthentication>,
-    ) -> reqwest::Result<reqwest::Response> {
-        let request_guard = self.acquire().await;
+    ) -> AttemptReply {
         let request_copy = request
             .try_clone()
             .expect("STAC API searches are replayable GET requests");
-        let mut request_builder = reqwest::RequestBuilder::from_parts(client.clone(), request_copy);
-        if let Some(authentication) = authentication {
-            let token = authentication.access_token().await;
-            request_builder = request_builder.bearer_auth(token);
-        }
-        let response = request_builder.send().await;
-        request_guard.finish(
-            response
-                .as_ref()
-                .ok()
-                .map(|response| (response.headers(), response.status().as_u16())),
-        );
-        response
-    }
-
-    /// Join the FIFO tail and wait until this attempt can reserve capacity.
-    /// Only the head waits on a quota timer; other waiters await notifications.
-    /// Dropping this future removes its queued attempt through the request guard.
-    async fn acquire(self: &Arc<Self>) -> RequestGuard {
-        let waiter = Arc::new(Notify::new());
-        let mut request = RequestGuard {
-            coordinator: self.clone(),
-            phase: RequestPhase::Queued(waiter.clone()),
-        };
-        // Enqueue and the first admission check share one lock acquisition.
-        let mut admission = {
-            let mut state = self.lock_state();
-            state.queue.push_back(waiter.clone());
-            state.admit(&waiter, Instant::now())
-        };
-        loop {
-            match admission {
-                Admission::Admitted => {
-                    request.phase = RequestPhase::InFlight;
-                    return request;
-                }
-                Admission::WaitForChange => waiter.notified().await,
-                Admission::WaitUntil(deadline) => tokio::select! {
-                    () = waiter.notified() => {},
-                    () = tokio::time::sleep_until(deadline.into()) => {},
-                },
+        let channels = self.channels.get_or_init(|| {
+            let (job_sender, job_receiver) = mpsc::unbounded_channel();
+            let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
+            tokio::spawn(run_actor(
+                job_receiver,
+                cancellation_receiver,
+                Arc::downgrade(self),
+                |job| Box::pin(run_attempt(job)),
+            ));
+            ActorChannels {
+                jobs: job_sender,
+                cancellations: cancellation_sender,
             }
-            admission = self.lock_state().admit(&waiter, Instant::now());
+        });
+        let (reply, receiver) = oneshot::channel();
+        let mut pending = PendingAttempt {
+            reply: receiver,
+            cancellation: Some(channels.cancellations.clone()),
+        };
+        let job = AttemptJob {
+            client: client.clone(),
+            request: request_copy,
+            authentication: authentication.cloned(),
+            reply,
+        };
+        assert!(
+            channels.jobs.send(job).is_ok(),
+            "the actor stays alive while this coordinator is externally owned"
+        );
+        let reply = (&mut pending.reply)
+            .await
+            .expect("the actor stays alive while this coordinator is externally owned");
+        pending.cancellation = None;
+        reply
+    }
+}
+
+async fn run_attempt(job: AttemptJob) -> AttemptOutcome {
+    let AttemptJob {
+        client,
+        request,
+        authentication,
+        mut reply,
+    } = job;
+    let send = async {
+        let mut request = reqwest::RequestBuilder::from_parts(client, request);
+        if let Some(authentication) = authentication {
+            request = request.bearer_auth(authentication.access_token().await);
+        }
+        request.send().await
+    };
+    tokio::select! {
+        () = reply.closed() => (reply, None),
+        response = send => (reply, Some(response)),
+    }
+}
+
+async fn run_actor<F>(
+    mut receiver: mpsc::UnboundedReceiver<AttemptJob>,
+    mut cancellations: mpsc::UnboundedReceiver<()>,
+    coordinator: Weak<StacRequestCoordinator>,
+    dispatch: F,
+) where
+    F: Fn(AttemptJob) -> RunningAttempt + Send + 'static,
+{
+    let now = Instant::now();
+    let mut state = State {
+        in_flight_requests: 0,
+        windows: Vec::new(),
+        starts: VecDeque::new(),
+        unscoped_quota: None,
+        cooldown_until: None,
+        last_activity: now,
+    };
+    let mut queued: VecDeque<AttemptJob> = VecDeque::new();
+    let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
+    let mut jobs_open = true;
+    let mut cancellations_open = true;
+
+    loop {
+        while let Some(Some(outcome)) = running.next().now_or_never() {
+            complete_attempt(&mut state, outcome);
+        }
+
+        let mut deadline = None;
+        if let Some(job) = queued.pop_front() {
+            if job.reply.is_closed() {
+                continue;
+            } else if let Some(until) = state.reserve(Instant::now()) {
+                deadline = Some(until);
+                queued.push_front(job);
+            } else {
+                running.push(dispatch(job));
+                continue;
+            }
+        }
+
+        if !jobs_open && queued.is_empty() && running.is_empty() {
+            return;
+        }
+        let idle_deadline = (queued.is_empty() && running.is_empty()).then(|| {
+            let now = Instant::now();
+            let deadline = state.retain_until();
+            if deadline <= now && coordinator.strong_count() > 1 {
+                now + MIN_RETENTION
+            } else {
+                deadline
+            }
+        });
+        tokio::select! {
+            biased;
+            outcome = running.next(), if !running.is_empty() => {
+                if let Some(outcome) = outcome { complete_attempt(&mut state, outcome); }
+            },
+            cancellation = cancellations.recv(), if cancellations_open => match cancellation {
+                Some(()) => queued.retain(|job| !job.reply.is_closed()),
+                None => cancellations_open = false,
+            },
+            job = receiver.recv(), if jobs_open => match job {
+                Some(job) => queued.push_back(job),
+                None => jobs_open = false,
+            },
+            () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } }, if deadline.is_some() => {},
+            () = async { if let Some(deadline) = idle_deadline { tokio::time::sleep_until(deadline.into()).await } }, if idle_deadline.is_some() => {
+                if state.retain_until() <= Instant::now() && queued.is_empty() && running.is_empty()
+                    && StacRequestCoordinator::try_retire(&coordinator) {
+                    return;
+                }
+            },
         }
     }
-
-    #[cfg(test)]
-    fn notify(&self) {
-        self.lock_state().wake_front();
-    }
 }
 
-/// Cleanup obligation of a single attempt throughout its lifetime.
-///
-/// [`Admission`] describes one scheduling decision; this enum records which
-/// resources [`RequestGuard`] must release when the attempt finishes or is dropped.
-enum RequestPhase {
-    /// Registered in the FIFO queue; the handle identifies the entry to remove.
-    Queued(Arc<Notify>),
-    /// Capacity is reserved and the attempt contributes to `State::in_flight_requests`.
-    InFlight,
-    /// Bookkeeping has been released; dropping the guard requires no cleanup.
-    Finished,
-}
-
-/// Owns cleanup for one attempt from queue insertion until response headers or a
-/// transport error arrive.
-///
-/// This guard holds a coordinator reference and lifecycle state, not a mutex lock.
-/// Normal completion calls [`Self::finish`] to release bookkeeping and apply
-/// response feedback atomically. `Drop` handles cancellation or unwinding by
-/// removing the waiter or decrementing [`State::in_flight_requests`]. Neither path
-/// refunds the admitted start recorded in the rolling history.
-struct RequestGuard {
-    coordinator: Arc<StacRequestCoordinator>,
-    phase: RequestPhase,
-}
-
-impl RequestGuard {
-    /// Finish an attempt and publish its headers in the same state update as its
-    /// release. `None` represents a transport failure with no response headers.
-    /// Header parsing happens before the scheduler mutex is acquired.
-    fn finish(mut self, response: Option<(&HeaderMap, u16)>) {
-        let feedback = response
-            .map(|(headers, status)| ResponseFeedback::parse(headers, status, Instant::now()));
-        let mut state = self.coordinator.lock_state();
-        state.release(&self.phase);
-        self.phase = RequestPhase::Finished;
+fn complete_attempt(state: &mut State, (reply, response): AttemptOutcome) {
+    state.release();
+    if let Some(response) = response {
+        let feedback = response.as_ref().ok().map(|response| {
+            ResponseFeedback::parse(
+                response.headers(),
+                response.status().as_u16(),
+                Instant::now(),
+            )
+        });
         if let Some(feedback) = feedback {
             state.observe(feedback, Instant::now());
         }
-    }
-
-    #[cfg(test)]
-    fn observe(self, headers: &HeaderMap, status: u16) {
-        self.finish(Some((headers, status)));
+        let server_controls_retry = response.as_ref().is_ok_and(|response| {
+            response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+                && (rate_limit_delay(response.headers()).is_some() || !state.windows.is_empty())
+        });
+        let _ = reply.send(AttemptReply {
+            response,
+            server_controls_retry,
+        });
     }
 }
 
-impl Drop for RequestGuard {
-    fn drop(&mut self) {
-        if !matches!(self.phase, RequestPhase::Finished) {
-            // A short synchronous lock is necessary to atomically remove the
-            // cancelled waiter/reservation. No caller holds this lock across an
-            // await, and poison recovery keeps cleanup from double-panicking.
-            self.coordinator.lock_state().release(&self.phase);
+impl StacRequestCoordinator {
+    /// Remove this idle coordinator atomically with registry lookup, but only
+    /// when the registry owns its final strong reference.
+    fn try_retire(self_weak: &Weak<Self>) -> bool {
+        let mut registry = REGISTRY
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let key = registry
+            .iter()
+            .find(|(_, coordinator)| std::ptr::eq(Arc::as_ptr(coordinator), self_weak.as_ptr()))
+            .map(|(identity, _)| identity.clone());
+        if let Some(key) = key
+            && registry
+                .get(&key)
+                .is_some_and(|coordinator| Arc::strong_count(coordinator) == 1)
+        {
+            registry.remove(&key);
+            true
+        } else {
+            false
         }
     }
 }
@@ -607,7 +653,7 @@ fn normalize_endpoint(endpoint: &str) -> String {
     Url::parse(endpoint).map_or_else(|_| endpoint.to_owned(), |url| url.to_string())
 }
 
-/// Scheduling constraints extracted from one HTTP response before locking state.
+/// Scheduling constraints extracted from one HTTP response by the actor.
 ///
 /// Known policies carry their associated remaining/reset quota inside [`Window`].
 /// Ambiguous quota feedback is kept separately, and a 429 contributes a shared
@@ -769,94 +815,12 @@ fn retry_after(headers: &HeaderMap) -> Option<Duration> {
 mod tests {
     use super::*;
 
-    fn parse_limits(headers: &HeaderMap) -> Vec<Window> {
-        ResponseFeedback::parse(headers, 200, Instant::now()).windows
-    }
-
-    #[tokio::test]
-    async fn it_execute_json_owns_http_and_decode_retries() {
-        use httptest::{Expectation, Server, matchers::request, responders};
-        use serde_json::{Value, json};
-
-        let server = Server::run();
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/items"))
-                .times(4)
-                .respond_with(responders::cycle![
-                    responders::status_code(429),
-                    responders::status_code(500),
-                    responders::status_code(200).body("invalid json"),
-                    responders::json_encoded(json!({"complete": true})),
-                ]),
-        );
-        let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let client = reqwest::Client::new();
-        let request = client.get(server.url_str("/items")).build().unwrap();
-        let policy = RetryPolicy::new().max_retries(4).initial_delay_ms(1);
-        let result: Value = coordinator
-            .execute(&client, request, None, &policy)
-            .await
-            .expect("the coordinator retries HTTP and decode failures internally");
-        assert_eq!(result, json!({"complete": true}));
-        let state = coordinator.state.lock().unwrap();
-        assert_eq!(state.in_flight_requests, 0);
-    }
-
-    #[tokio::test]
-    async fn it_execute_returns_terminal_http_errors_and_releases_admission() {
-        use httptest::{Expectation, Server, matchers::request, responders};
-
-        let server = Server::run();
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/missing"))
-                .times(1)
-                .respond_with(responders::status_code(404)),
-        );
-        let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let client = reqwest::Client::new();
-        let request = client.get(server.url_str("/missing")).build().unwrap();
-        let policy = RetryPolicy::new().stop_on_status(&[400, 404]);
-        let error = coordinator
-            .execute::<serde_json::Value>(&client, request, None, &policy)
-            .await
-            .expect_err("terminal responses are returned as errors");
-        assert_eq!(error.status(), Some(reqwest::StatusCode::NOT_FOUND));
-        assert_eq!(coordinator.state.lock().unwrap().in_flight_requests, 0);
-        coordinator.acquire().await.observe(&HeaderMap::new(), 200);
-    }
-
-    #[tokio::test]
-    async fn it_returns_the_http_error_when_the_attempt_budget_is_exhausted() {
-        use httptest::{Expectation, Server, matchers::request, responders};
-
-        for max_retries in [0, 1, 3] {
-            let server = Server::run();
-            server.expect(
-                Expectation::matching(request::method_path("GET", "/items"))
-                    .times(max_retries.max(1) as usize)
-                    .respond_with(responders::status_code(500)),
-            );
-            let coordinator =
-                StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-            let client = reqwest::Client::new();
-            let request = client.get(server.url_str("/items")).build().unwrap();
-            let policy = RetryPolicy::new()
-                .max_retries(max_retries)
-                .initial_delay_ms(1);
-
-            let error = coordinator
-                .execute::<serde_json::Value>(&client, request, None, &policy)
-                .await
-                .expect_err("exhausting the attempt budget returns the HTTP error");
-
-            assert_eq!(
-                error.status(),
-                Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR)
-            );
-            assert_eq!(coordinator.lock_state().in_flight_requests, 0);
-        }
+    fn quota_headers(limit: &str, remaining: &str, reset: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-limit", limit.parse().unwrap());
+        headers.insert("x-ratelimit-remaining", remaining.parse().unwrap());
+        headers.insert("x-ratelimit-reset", reset.parse().unwrap());
+        headers
     }
 
     #[test]
@@ -864,11 +828,11 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("x-ratelimit-limit", "10, 10;w=1, 60;w=60".parse().unwrap());
         headers.insert("x-ratelimit-reset", "1".parse().unwrap());
-        let windows = parse_limits(&headers);
-        assert_eq!(windows.len(), 2);
-        assert_eq!(windows[0].limit, 10);
-        assert_eq!(windows[0].duration, Duration::from_secs(1));
-        assert_eq!(windows[1].limit, 60);
+        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now());
+        assert_eq!(feedback.windows.len(), 2);
+        assert_eq!(feedback.windows[0].limit, 10);
+        assert_eq!(feedback.windows[0].duration, Duration::from_secs(1));
+        assert_eq!(feedback.windows[1].limit, 60);
         assert_eq!(
             header_values(&headers, "x-ratelimit-reset")
                 .next()
@@ -890,7 +854,7 @@ mod tests {
     }
 
     #[test]
-    fn it_requires_usable_server_retry_timing() {
+    fn it_rejects_unusable_retry_timing_and_uses_the_longest_valid_delay() {
         let mut headers = HeaderMap::new();
         assert_eq!(rate_limit_delay(&headers), None);
         for value in ["invalid", "0", "-1", "18446744073709551615"] {
@@ -904,7 +868,72 @@ mod tests {
     }
 
     #[test]
-    fn it_coordinators_share_by_normalized_origin_and_full_auth_identity() {
+    fn it_deduplicates_windows_and_keeps_the_stricter_duplicate() {
+        let headers = quota_headers(
+            "20, 20;w=1, 20;w=1, 1800;w=60, 15;w=1, 100000;w=172800",
+            "19",
+            "1",
+        );
+        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now());
+        assert_eq!(feedback.windows.len(), 3);
+        assert_eq!(feedback.windows[0].limit, 15);
+        assert_eq!(feedback.windows[2].limit, 100_000);
+        assert_eq!(feedback.windows[2].duration, Duration::from_hours(48));
+    }
+
+    #[test]
+    fn it_state_reserves_fallback_capacity_and_does_not_refund_failed_starts() {
+        let now = Instant::now();
+        let mut state = State {
+            in_flight_requests: 0,
+            windows: Vec::new(),
+            starts: VecDeque::new(),
+            unscoped_quota: None,
+            cooldown_until: None,
+            last_activity: now,
+        };
+        for _ in 0..10 {
+            assert_eq!(state.reserve(Instant::now()), None);
+        }
+        assert!(state.reserve(Instant::now()).is_some());
+        assert_eq!(state.starts.len(), 10);
+        state.release();
+        assert_eq!(state.starts.len(), 10);
+        assert_eq!(state.in_flight_requests, 9);
+    }
+
+    #[test]
+    fn it_state_applies_feedback_before_admitting_the_next_attempt() {
+        let now = Instant::now();
+        let mut state = State {
+            in_flight_requests: 0,
+            windows: Vec::new(),
+            starts: VecDeque::new(),
+            unscoped_quota: None,
+            cooldown_until: None,
+            last_activity: now,
+        };
+        assert_eq!(state.reserve(now), None);
+        let headers = quota_headers("2;w=60", "0", "60");
+        state.release();
+        state.observe(
+            ResponseFeedback::parse(&headers, 429, Instant::now()),
+            Instant::now(),
+        );
+        assert!(state.reserve(Instant::now()).is_some());
+        assert_eq!(state.windows[0].limit, 2);
+        assert_eq!(
+            state.windows[0]
+                .remote
+                .as_ref()
+                .map(|quota| quota.remaining_requests),
+            Some(0)
+        );
+        assert!(state.cooldown_until.is_some());
+    }
+
+    #[test]
+    fn it_coordinators_share_by_normalized_origin_and_auth_identity() {
         let credentials = super::super::StacProviderAuthentication {
             endpoint: "https://auth.example/token/".to_owned(),
             client_id: "client".to_owned(),
@@ -915,725 +944,217 @@ mod tests {
             &Url::parse("https://STAC.example:443/api").unwrap(),
             Some(&credentials),
         );
-        let same_identity = StacRequestCoordinator::shared(
+        let same = StacRequestCoordinator::shared(
             &Url::parse("https://stac.example/other").unwrap(),
             Some(&credentials),
         );
         let anonymous =
             StacRequestCoordinator::shared(&Url::parse("https://stac.example").unwrap(), None);
-
-        assert!(Arc::ptr_eq(&first, &same_identity));
+        assert!(Arc::ptr_eq(&first, &same));
         assert!(!Arc::ptr_eq(&first, &anonymous));
         assert!(!format!("{first:?}").contains("secret-value-must-not-be-debugged"));
     }
 
-    async fn wait_for_queue(coordinator: &StacRequestCoordinator, expected: usize) {
-        tokio::time::timeout(Duration::from_secs(1), async {
-            loop {
-                if coordinator.state.lock().unwrap().queue.len() == expected {
-                    return;
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .expect("request should reach coordinator queue");
-    }
-
-    fn isolated_coordinator(label: &str) -> Arc<StacRequestCoordinator> {
-        StacRequestCoordinator::shared(
-            &Url::parse(&format!("https://{label}.stac-coordinator.test")).unwrap(),
-            None,
-        )
-    }
-
     #[tokio::test]
-    async fn it_queued_attempts_are_admitted_in_fifo_order_after_window_opens() {
-        let coordinator = isolated_coordinator("fifo");
-        {
-            let mut state = coordinator.state.lock().unwrap();
-            state.windows.push(Window::new(1, Duration::from_mins(1)));
-            state.starts.push_back(Instant::now());
-        }
-
-        let order = Arc::new(Mutex::new(Vec::new()));
-        let first_order = order.clone();
-        let first_coordinator = coordinator.clone();
-        let mut first = tokio::spawn(async move {
-            let _permit = first_coordinator.acquire().await;
-            first_order.lock().unwrap().push(1);
-        });
-        wait_for_queue(&coordinator, 1).await;
-        let second_order = order.clone();
-        let second_coordinator = coordinator.clone();
-        let mut second = tokio::spawn(async move {
-            let _permit = second_coordinator.acquire().await;
-            second_order.lock().unwrap().push(2);
-        });
-        wait_for_queue(&coordinator, 2).await;
-        assert!(!first.is_finished());
-
-        coordinator.state.lock().unwrap().starts.clear();
-        coordinator.notify();
-        tokio::time::timeout(Duration::from_millis(200), &mut first)
-            .await
-            .expect("first queued request should be admitted")
-            .unwrap();
-
-        // The first admission fills the one request window again. Open it
-        // explicitly to let the second waiter proceed without a one minute test.
-        coordinator.state.lock().unwrap().starts.clear();
-        coordinator.notify();
-        tokio::time::timeout(Duration::from_millis(200), &mut second)
-            .await
-            .expect("second queued request should be admitted")
-            .unwrap();
-        assert_eq!(*order.lock().unwrap(), [1, 2]);
-    }
-
-    #[tokio::test]
-    async fn it_cancelling_a_queued_attempt_does_not_block_later_requests() {
-        let coordinator = isolated_coordinator("cancel");
-        let first = coordinator.acquire().await;
-        coordinator.lock_state().cooldown_until = Some(Instant::now() + Duration::from_mins(1));
-        let queued_coordinator = coordinator.clone();
-        let queued = tokio::spawn(async move { queued_coordinator.acquire().await });
-        wait_for_queue(&coordinator, 1).await;
-        queued.abort();
-        tokio::time::timeout(Duration::from_secs(1), async {
-            loop {
-                if coordinator.state.lock().unwrap().queue.is_empty() {
-                    break;
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .expect("cancelled queue entry should be removed");
-
-        first.observe(&HeaderMap::new(), 200);
-        coordinator.lock_state().cooldown_until = None;
-        let later = tokio::time::timeout(Duration::from_millis(200), coordinator.acquire())
-            .await
-            .expect("later request should not be blocked by cancellation");
-        later.observe(&HeaderMap::new(), 200);
-    }
-
-    #[tokio::test]
-    async fn it_the_long_rate_limit_window_remains_enforced_after_the_short_window_opens() {
-        let coordinator = isolated_coordinator("long-window");
-        {
-            let mut state = coordinator.state.lock().unwrap();
-            let now = Instant::now();
-            state.windows.push(Window::new(10, Duration::from_secs(1)));
-            state.windows.push(Window::new(60, Duration::from_mins(1)));
-            state.starts =
-                std::iter::repeat_n(now.checked_sub(Duration::from_secs(30)).unwrap(), 60)
-                    .collect();
-        }
-
-        let mut waiting = Box::pin(coordinator.acquire());
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), &mut waiting)
-                .await
-                .is_err()
-        );
-        coordinator.state.lock().unwrap().starts.clear();
-        coordinator.notify();
-        let permit = tokio::time::timeout(Duration::from_millis(200), &mut waiting)
-            .await
-            .expect("opening the long window should admit the queued request");
-        permit.observe(&HeaderMap::new(), 200);
-    }
-
-    #[tokio::test]
-    async fn it_outstanding_dispatches_reduce_observed_remaining_and_stale_headers_do_not_refill_it()
-     {
-        let coordinator = isolated_coordinator("remaining");
-        let first = coordinator.acquire().await;
-        let mut bootstrap_headers = HeaderMap::new();
-        bootstrap_headers.insert("x-ratelimit-limit", "10;w=60".parse().unwrap());
-        bootstrap_headers.insert("x-ratelimit-remaining", "9".parse().unwrap());
-        bootstrap_headers.insert("x-ratelimit-reset", "60".parse().unwrap());
-        first.observe(&bootstrap_headers, 200);
-
-        let older = coordinator.acquire().await;
-        let newer = coordinator.acquire().await;
-        let mut newer_headers = HeaderMap::new();
-        newer_headers.insert("x-ratelimit-limit", "10;w=60".parse().unwrap());
-        newer_headers.insert("x-ratelimit-remaining", "8".parse().unwrap());
-        newer_headers.insert("x-ratelimit-reset", "60".parse().unwrap());
-        newer.observe(&newer_headers, 200);
-        assert_eq!(
-            coordinator.state.lock().unwrap().windows[0]
-                .remote
-                .as_ref()
-                .map(|quota| quota.remaining_requests),
-            Some(7)
-        );
-
-        let mut stale_headers = HeaderMap::new();
-        stale_headers.insert("x-ratelimit-limit", "10;w=60".parse().unwrap());
-        stale_headers.insert("x-ratelimit-remaining", "9".parse().unwrap());
-        stale_headers.insert("x-ratelimit-reset", "60".parse().unwrap());
-        older.observe(&stale_headers, 200);
-        assert_eq!(
-            coordinator.state.lock().unwrap().windows[0]
-                .remote
-                .as_ref()
-                .map(|quota| quota.remaining_requests),
-            Some(7)
-        );
-    }
-
-    #[tokio::test]
-    async fn it_keeps_attempt_history_after_transport_failure() {
-        let coordinator = isolated_coordinator("bootstrap-failure");
-        drop(coordinator.acquire().await);
-        let response = coordinator.acquire().await;
-        let mut headers = HeaderMap::new();
-        headers.insert("x-ratelimit-limit", "2;w=60".parse().unwrap());
-        response.observe(&headers, 200);
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
-                .await
-                .is_err(),
-            "both attempts reserve window capacity"
-        );
-    }
-
-    #[tokio::test]
-    async fn it_shares_429_cooldown_and_honors_the_longer_reset() {
-        let coordinator = isolated_coordinator("shared-cooldown");
-        let response = coordinator.acquire().await;
-        let mut headers = HeaderMap::new();
-        headers.insert(RETRY_AFTER, "1".parse().unwrap());
-        headers.insert("x-ratelimit-reset", "2".parse().unwrap());
-        let observed = Instant::now();
-        response.observe(&headers, 429);
-        let same = isolated_coordinator("shared-cooldown");
-        assert!(Arc::ptr_eq(&same, &coordinator));
-        assert!(
-            coordinator.state.lock().unwrap().cooldown_until.unwrap()
-                >= observed + Duration::from_secs(2)
-        );
-        let mut waiting = Box::pin(same.acquire());
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), &mut waiting)
-                .await
-                .is_err()
-        );
-        coordinator.state.lock().unwrap().cooldown_until = Some(Instant::now());
-        coordinator.notify();
-        tokio::time::timeout(Duration::from_millis(200), &mut waiting)
-            .await
-            .expect("all callers resume after the shared cooldown");
-    }
-
-    #[tokio::test]
-    async fn it_exhausted_remaining_without_reset_uses_a_bounded_cooldown() {
-        let coordinator = isolated_coordinator("missing-reset");
-        let first = coordinator.acquire().await;
-        let mut headers = HeaderMap::new();
-        headers.insert("x-ratelimit-limit", "2;w=60".parse().unwrap());
-        headers.insert("x-ratelimit-remaining", "1".parse().unwrap());
-        first.observe(&headers, 200);
-
-        let second = coordinator.acquire().await;
-        assert_eq!(
-            coordinator.state.lock().unwrap().windows[0]
-                .remote
-                .as_ref()
-                .map(|quota| quota.remaining_requests),
-            Some(0)
-        );
-        assert!(
-            coordinator.state.lock().unwrap().windows[0]
-                .remote
-                .as_ref()
-                .is_some_and(|quota| quota.reset > Instant::now())
-        );
-        drop(second);
-    }
-
-    fn quota_headers(policies: &[(&str, &str, &str)]) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        for (limit, remaining, reset) in policies {
-            headers.append("x-ratelimit-limit", limit.parse().unwrap());
-            headers.append("x-ratelimit-remaining", remaining.parse().unwrap());
-            headers.append("x-ratelimit-reset", reset.parse().unwrap());
-        }
-        headers
-    }
-
-    #[tokio::test]
-    async fn it_preserves_both_repeated_and_alternating_server_policies() {
-        let coordinator = isolated_coordinator("multiple-policies");
-        let minute = ("1800, 1800;w=60, 1800;w=60", "1799", "50");
-        let second = ("20, 20;w=1, 20;w=1", "19", "1");
-        coordinator
-            .acquire()
-            .await
-            .observe(&quota_headers(&[minute, second]), 200);
-        {
-            let state = coordinator.state.lock().unwrap();
-            assert_eq!(state.windows.len(), 2, "duplicates are one policy");
-            for (duration, limit, remaining) in [(60, 1800, 1799), (1, 20, 19)] {
-                let window = state
-                    .windows
-                    .iter()
-                    .find(|window| window.duration == Duration::from_secs(duration))
-                    .unwrap();
-                assert_eq!(window.limit, limit);
-                assert_eq!(state.starts.len(), 1);
-                assert_eq!(
-                    window.remote.as_ref().unwrap().remaining_requests,
-                    remaining
-                );
-            }
-        }
-        coordinator
-            .acquire()
-            .await
-            .observe(&quota_headers(&[second]), 200);
-        coordinator
-            .acquire()
-            .await
-            .observe(&quota_headers(&[minute]), 200);
-        let state = coordinator.state.lock().unwrap();
-        assert_eq!(
-            state.windows.len(),
-            2,
-            "reporting the binding policy preserves the other policy"
-        );
-        assert_eq!(state.starts.len(), 3);
-    }
-
-    #[tokio::test]
-    async fn it_admits_twenty_parallel_requests_and_blocks_the_twenty_first() {
-        let coordinator = isolated_coordinator("parallel-twenty");
-        coordinator
-            .acquire()
-            .await
-            .observe(&quota_headers(&[("20, 20;w=1, 20;w=1", "19", "1")]), 200);
-        // Move into a fresh window without a real one-second test delay.
-        {
-            let mut state = coordinator.state.lock().unwrap();
-            state.starts.clear();
-            state.windows[0].remote = None;
-        }
-        let mut requests = tokio::task::JoinSet::new();
-        for _ in 0..20 {
-            let coordinator = coordinator.clone();
-            requests.spawn(async move { coordinator.acquire().await });
-        }
-        let mut permits = Vec::new();
-        tokio::time::timeout(Duration::from_millis(500), async {
-            while let Some(permit) = requests.join_next().await {
-                permits.push(permit.unwrap());
-            }
-        })
-        .await
-        .expect("all twenty attempts must overlap without waiting for responses");
-        assert_eq!(coordinator.state.lock().unwrap().in_flight_requests, 20);
-        let mut next = Box::pin(coordinator.acquire());
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), &mut next)
-                .await
-                .is_err()
-        );
-        drop(permits);
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), &mut next)
-                .await
-                .is_err(),
-            "completion does not refund rate-limit reservations"
-        );
-        coordinator.state.lock().unwrap().starts.clear();
-        coordinator.notify();
-        tokio::time::timeout(Duration::from_millis(200), next)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn it_older_responses_can_reduce_but_never_refill_capacity() {
-        let coordinator = isolated_coordinator("older-exhaustion");
-        let headers = quota_headers(&[("20;w=60", "19", "60")]);
-        coordinator.acquire().await.observe(&headers, 200);
-        let older = coordinator.acquire().await;
-        let newer = coordinator.acquire().await;
-        newer.observe(&quota_headers(&[("20;w=60", "18", "60")]), 200);
-        // Other clients can consume the server quota before the older request
-        // is processed; dispatch order does not determine server ordering.
-        older.observe(&quota_headers(&[("20;w=60", "0", "60")]), 200);
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
-                .await
-                .is_err()
-        );
-        assert_eq!(
-            coordinator.state.lock().unwrap().windows[0]
-                .remote
-                .as_ref()
-                .unwrap()
-                .remaining_requests,
-            0
-        );
-    }
-
-    #[tokio::test]
-    async fn it_retains_long_reset_deadlines_across_provider_reconstruction() {
-        let origin = Url::parse("https://retained-reset.stac-coordinator.test").unwrap();
-        let coordinator = StacRequestCoordinator::shared(&origin, None);
-        let mut headers = HeaderMap::new();
-        headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
-        headers.insert("x-ratelimit-reset", "3600".parse().unwrap());
-        coordinator.acquire().await.observe(&headers, 200);
-        {
-            let mut state = coordinator.state.lock().unwrap();
-            state.last_activity = Instant::now().checked_sub(Duration::from_mins(10)).unwrap();
-            assert!(state.retain_until() >= state.unscoped_quota.as_ref().unwrap().reset);
-        }
-        let previous = Arc::downgrade(&coordinator);
-        drop(coordinator);
-        let reconstructed = StacRequestCoordinator::shared(&origin, None);
-        assert!(previous.ptr_eq(&Arc::downgrade(&reconstructed)));
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), reconstructed.acquire())
-                .await
-                .is_err()
-        );
-        // Once both history and feedback expire the registry can reclaim it.
-        {
-            let mut state = reconstructed.state.lock().unwrap();
-            state.unscoped_quota.as_mut().unwrap().reset = Instant::now();
-        }
-        drop(reconstructed);
-        let replacement = StacRequestCoordinator::shared(&origin, None);
-        assert!(!previous.ptr_eq(&Arc::downgrade(&replacement)));
-    }
-
-    #[tokio::test]
-    async fn it_waits_for_the_binding_constraint_across_arbitrary_windows() {
-        let coordinator = isolated_coordinator("binding-window");
-        coordinator.acquire().await.observe(
-            &quota_headers(&[
-                ("2;w=1", "1", "1"),
-                ("7;w=37", "6", "37"),
-                ("90;w=3600", "89", "3600"),
-            ]),
-            200,
-        );
-        let mut state = coordinator.state.lock().unwrap();
-        let now = Instant::now();
-        state.windows[0].remote = Some(RemoteQuota {
-            remaining_requests: 0,
-            reset: now + Duration::from_secs(1),
-        });
-        state.windows[1].remote = Some(RemoteQuota {
-            remaining_requests: 0,
-            reset: now + Duration::from_secs(37),
-        });
-        let waiter = Arc::new(Notify::new());
-        state.queue.push_back(waiter.clone());
-        assert!(
-            matches!(state.admit(&waiter, now), Admission::WaitUntil(deadline) if deadline == now + Duration::from_secs(37))
-        );
-        // At 37s both exhausted policies reset; the hourly policy still has
-        // capacity, so it must not serialize dispatch or delay it for an hour.
-        assert!(matches!(
-            state.admit(&waiter, now + Duration::from_secs(37)),
-            Admission::Admitted
-        ));
-    }
-
-    #[test]
-    fn it_deduplicates_windows_and_keeps_the_stricter_duplicate() {
-        let headers = quota_headers(&[
-            ("20, 20;w=1, 20;w=1", "19", "1"),
-            ("1800, 1800;w=60, 1800;w=60", "1799", "50"),
-            ("15;w=1, 100000;w=172800", "14", "1"),
-        ]);
-        let windows = parse_limits(&headers);
-        assert_eq!(windows.len(), 3);
-        assert_eq!(windows[0].limit, 15);
-        assert_eq!(
-            windows[2].limit, 100_000,
-            "do not impose an artificial request cap"
-        );
-        assert_eq!(windows[2].duration, Duration::from_hours(48));
-        let mut malformed = HeaderMap::new();
-        malformed.insert(
-            "x-ratelimit-limit",
-            "0;w=1, 2;w=0, invalid, 10;w=18446744073709551615"
-                .parse()
-                .unwrap(),
-        );
-        assert!(parse_limits(&malformed).is_empty());
-    }
-
-    #[tokio::test]
-    async fn it_replaces_the_fallback_with_the_advertised_capacity() {
-        let coordinator = isolated_coordinator("fallback-upgrade");
-        coordinator.acquire().await.observe(&HeaderMap::new(), 200);
-        coordinator
-            .acquire()
-            .await
-            .observe(&quota_headers(&[("20;w=1", "18", "1")]), 200);
-        let state = coordinator.state.lock().unwrap();
-        assert_eq!(state.windows.len(), 1);
-        assert_eq!(state.windows[0].limit, 20);
-        assert_eq!(state.starts.len(), 2);
-    }
-
-    #[test]
-    fn it_does_not_assign_ambiguous_feedback_to_the_wrong_window() {
-        let mut headers = quota_headers(&[("20;w=1", "19", "1"), ("1800;w=60", "1799", "50")]);
-        headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
-        let now = Instant::now();
-        let feedback = ResponseFeedback::parse(&headers, 200, now);
-        let quota = feedback.unscoped_quota.unwrap();
-        assert_eq!(quota.remaining_requests, 0);
-        assert_eq!(quota.reset, now + Duration::from_secs(50));
-        assert!(
-            feedback
-                .windows
-                .iter()
-                .all(|window| window.remote.is_none())
-        );
-        headers.remove("x-ratelimit-limit");
-        headers.append(
-            "x-ratelimit-limit",
-            reqwest::header::HeaderValue::from_bytes(&[255]).unwrap(),
-        );
-        headers.append("x-ratelimit-limit", "1800;w=60".parse().unwrap());
-        headers.remove("x-ratelimit-remaining");
-        headers.append("x-ratelimit-remaining", "0".parse().unwrap());
-        headers.append("x-ratelimit-remaining", "1799".parse().unwrap());
-        let feedback = ResponseFeedback::parse(&headers, 200, now);
-        assert_eq!(feedback.unscoped_quota.unwrap().remaining_requests, 0);
-        assert_eq!(feedback.windows.len(), 1);
-        assert_eq!(feedback.windows[0].duration, Duration::from_mins(1));
-        assert_eq!(
-            feedback.windows[0]
-                .remote
-                .as_ref()
-                .unwrap()
-                .remaining_requests,
-            1799
-        );
-    }
-
-    #[tokio::test]
-    async fn it_uses_the_callers_attempt_limit_for_rate_limit_retries() {
+    async fn it_execute_json_owns_http_and_decode_retries() {
         use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::{Value, json};
         let server = Server::run();
         server.expect(
-            Expectation::matching(request::method_path("GET", "/limited"))
-                .times(2)
-                .respond_with(responders::status_code(429)),
-        );
-        let client = reqwest::Client::new();
-        let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let error = coordinator
-            .execute::<serde_json::Value>(
-                &client,
-                client.get(server.url_str("/limited")).build().unwrap(),
-                None,
-                &RetryPolicy::new().max_retries(2),
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(error.status(), Some(reqwest::StatusCode::TOO_MANY_REQUESTS));
-    }
-
-    #[tokio::test]
-    async fn it_backs_off_exponentially_for_headerless_rate_limits() {
-        use httptest::{Expectation, Server, matchers::request, responders};
-
-        let server = Server::run();
-        let starts = Arc::new(Mutex::new(Vec::new()));
-        let response_starts = starts.clone();
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/limited"))
+            Expectation::matching(request::method_path("GET", "/items"))
                 .times(4)
-                .respond_with(move || {
-                    let mut starts = response_starts.lock().unwrap();
-                    starts.push(Instant::now());
-                    responders::status_code(if starts.len() < 4 { 429 } else { 200 }).body("null")
-                }),
+                .respond_with(responders::cycle![
+                    responders::status_code(429),
+                    responders::status_code(500),
+                    responders::status_code(200).body("invalid json"),
+                    responders::json_encoded(json!({"complete": true})),
+                ]),
         );
-        let client = reqwest::Client::new();
         let coordinator =
             StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-        let policy = RetryPolicy::new().max_retries(4).initial_delay_ms(600);
-        tokio::time::timeout(
-            Duration::from_secs(10),
-            coordinator.execute::<serde_json::Value>(
+        let client = reqwest::Client::new();
+        let request = client.get(server.url_str("/items")).build().unwrap();
+        let result: Value = coordinator
+            .execute(
                 &client,
-                client.get(server.url_str("/limited")).build().unwrap(),
+                request,
                 None,
-                &policy,
-            ),
-        )
-        .await
-        .expect("headerless rate limits must recover within the attempt budget")
-        .unwrap();
-        let starts = starts.lock().unwrap();
-        for (attempt, pair) in starts.windows(2).enumerate() {
-            assert!(
-                pair[1].duration_since(pair[0])
-                    >= Duration::from_millis(600 * 2_u64.pow(attempt as u32)),
-                "each headerless 429 must increase the retry delay"
-            );
-        }
-    }
-
-    #[tokio::test]
-    async fn it_uses_server_rate_limits_without_adding_exponential_backoff() {
-        use httptest::{Expectation, Server, matchers::request, responders};
-
-        for (header, value) in [
-            ("retry-after", "1"),
-            ("x-ratelimit-reset", "1"),
-            ("x-ratelimit-limit", "100;w=1"),
-        ] {
-            let server = Server::run();
-            server.expect(
-                Expectation::matching(request::method_path("GET", "/limited"))
-                    .times(2)
-                    .respond_with(responders::cycle![
-                        responders::status_code(429).append_header(header, value),
-                        responders::status_code(200).body("null"),
-                    ]),
-            );
-            let client = reqwest::Client::new();
-            let coordinator =
-                StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
-            let policy = RetryPolicy::new().max_retries(2).initial_delay_ms(10_000);
-            tokio::time::timeout(
-                Duration::from_secs(3),
-                coordinator.execute::<serde_json::Value>(
-                    &client,
-                    client.get(server.url_str("/limited")).build().unwrap(),
-                    None,
-                    &policy,
-                ),
+                &RetryPolicy::new().max_retries(4).initial_delay_ms(1),
             )
             .await
-            .expect("server-controlled retries must not add the ten-second policy backoff")
             .unwrap();
-        }
+        assert_eq!(result, json!({"complete": true}));
     }
 
     #[tokio::test]
-    async fn it_shares_the_attempt_budget_between_rate_limits_and_other_failures() {
+    async fn it_uses_the_callers_bounded_attempt_budget() {
         use httptest::{Expectation, Server, matchers::request, responders};
-
-        for statuses in [[429, 500], [500, 429], [429, 200]] {
+        for max_retries in [0, 1, 3] {
             let server = Server::run();
             server.expect(
                 Expectation::matching(request::method_path("GET", "/items"))
-                    .times(2)
-                    .respond_with(responders::cycle![
-                        responders::status_code(statuses[0]),
-                        // A 200 with an empty body exercises JSON decode errors.
-                        responders::status_code(statuses[1]),
-                    ]),
+                    .times(max_retries.max(1) as usize)
+                    .respond_with(responders::status_code(500)),
             );
-            let client = reqwest::Client::new();
             let coordinator =
                 StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+            let client = reqwest::Client::new();
             let error = coordinator
                 .execute::<serde_json::Value>(
                     &client,
                     client.get(server.url_str("/items")).build().unwrap(),
                     None,
-                    &RetryPolicy::new().max_retries(2).initial_delay_ms(1),
+                    &RetryPolicy::new()
+                        .max_retries(max_retries)
+                        .initial_delay_ms(1),
                 )
                 .await
                 .unwrap_err();
-            if statuses[1] == 200 {
-                assert!(error.is_decode());
-            } else {
-                assert_eq!(error.status().unwrap().as_u16(), statuses[1]);
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn it_uses_fallback_capacity_without_waiting_for_headers() {
-        let coordinator = isolated_coordinator("cold-concurrency");
-        let mut requests = Vec::new();
-        for _ in 0..10 {
-            requests.push(
-                tokio::time::timeout(Duration::from_millis(200), coordinator.acquire())
-                    .await
-                    .expect("cold requests must not serialize on the first response"),
+            assert_eq!(
+                error.status(),
+                Some(reqwest::StatusCode::INTERNAL_SERVER_ERROR)
             );
         }
-        assert_eq!(coordinator.lock_state().in_flight_requests, 10);
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
-                .await
-                .is_err()
-        );
-        for request in requests {
-            request.finish(None);
-        }
-        assert_eq!(coordinator.lock_state().in_flight_requests, 0);
-        assert_eq!(
-            coordinator.lock_state().starts.len(),
-            10,
-            "completion does not refund starts"
-        );
     }
 
     #[tokio::test]
-    async fn it_learns_a_longer_window_from_the_shared_history() {
-        let coordinator = isolated_coordinator("shared-history");
-        coordinator
-            .acquire()
-            .await
-            .observe(&quota_headers(&[("20;w=1", "19", "1")]), 200);
-        {
-            let mut state = coordinator.lock_state();
-            state.starts[0] = Instant::now().checked_sub(Duration::from_secs(2)).unwrap();
+    async fn it_routes_parallel_results_to_their_own_callers() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+        let server = Server::run();
+        for (path, body) in [("/one", r#"{"id":1}"#), ("/two", r#"{"id":2}"#)] {
+            server.expect(
+                Expectation::matching(request::method_path("GET", path))
+                    .times(1)
+                    .respond_with(responders::status_code(200).body(body)),
+            );
         }
-        coordinator
-            .acquire()
-            .await
-            .observe(&quota_headers(&[("2;w=60", "0", "60")]), 200);
-        assert_eq!(
-            coordinator.lock_state().starts.len(),
-            2,
-            "short-window expiration preserves history for newly learned policies"
-        );
-        assert!(
-            tokio::time::timeout(Duration::from_millis(10), coordinator.acquire())
-                .await
-                .is_err()
-        );
+        let coordinator =
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        let client = reqwest::Client::new();
+        let mut tasks = tokio::task::JoinSet::new();
+        for path in ["/one", "/two"] {
+            let coordinator = coordinator.clone();
+            let client = client.clone();
+            let url = server.url_str(path);
+            tasks.spawn(async move {
+                coordinator
+                    .execute::<Value>(
+                        &client,
+                        client.get(url).build().unwrap(),
+                        None,
+                        &RetryPolicy::new(),
+                    )
+                    .await
+                    .unwrap()
+            });
+        }
+        let mut values = Vec::new();
+        while let Some(value) = tasks.join_next().await {
+            values.push(value.unwrap());
+        }
+        assert!(values.contains(&serde_json::json!({"id": 1})));
+        assert!(values.contains(&serde_json::json!({"id": 2})));
     }
 
     #[tokio::test]
-    async fn it_cleans_up_cancelled_requests_even_after_mutex_poisoning() {
-        let coordinator = isolated_coordinator("poison-cleanup");
-        let request = coordinator.acquire().await;
-        let poisoner = coordinator.clone();
-        assert!(
-            std::thread::spawn(move || {
-                let _state = poisoner.state.lock().unwrap();
-                panic!("simulate an unrelated panic while holding scheduler state");
-            })
-            .join()
-            .is_err()
+    async fn it_cancels_an_inflight_attempt_and_allows_the_next_job() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+        let server = Server::run();
+        let starts = Arc::new(Mutex::new(0));
+        let response_starts = starts.clone();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/items"))
+                .times(2)
+                .respond_with(move || {
+                    let mut starts = response_starts.lock().unwrap();
+                    *starts += 1;
+                    let (delay, body) = if *starts == 1 {
+                        (
+                            Duration::from_secs(10),
+                            serde_json::json!({"discarded": true}),
+                        )
+                    } else {
+                        (Duration::ZERO, serde_json::json!({"ok": true}))
+                    };
+                    responders::delay_and_then(delay, responders::json_encoded(body))
+                }),
         );
-        drop(request);
-        assert_eq!(coordinator.lock_state().in_flight_requests, 0);
-        coordinator.acquire().await.finish(None);
-        assert_eq!(coordinator.lock_state().in_flight_requests, 0);
+        let coordinator =
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        let client = reqwest::Client::new();
+        let first_coordinator = coordinator.clone();
+        let first_client = client.clone();
+        let first_url = server.url_str("/items");
+        let first = tokio::spawn(async move {
+            first_coordinator
+                .execute::<Value>(
+                    &first_client,
+                    first_client.get(first_url).build().unwrap(),
+                    None,
+                    &RetryPolicy::new(),
+                )
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while *starts.lock().unwrap() == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the first request should reach the server before cancellation");
+        first.abort();
+        assert!(first.await.unwrap_err().is_cancelled());
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            coordinator.execute::<Value>(
+                &client,
+                client.get(server.url_str("/items")).build().unwrap(),
+                None,
+                &RetryPolicy::new(),
+            ),
+        )
+        .await
+        .expect("the next caller should proceed after cancellation")
+        .unwrap();
+        assert_eq!(result, serde_json::json!({"ok": true}));
+    }
+
+    #[tokio::test]
+    async fn it_returns_terminal_http_errors() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/missing"))
+                .times(1)
+                .respond_with(responders::status_code(404)),
+        );
+        let coordinator =
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        let client = reqwest::Client::new();
+        let error = coordinator
+            .execute::<serde_json::Value>(
+                &client,
+                client.get(server.url_str("/missing")).build().unwrap(),
+                None,
+                &RetryPolicy::new().stop_on_status(&[400, 404]),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.status(), Some(reqwest::StatusCode::NOT_FOUND));
     }
 }
+
+#[cfg(test)]
+#[path = "coordinator_state_tests.rs"]
+mod state_tests;
+
+#[cfg(test)]
+#[path = "coordinator_actor_tests.rs"]
+mod actor_tests;
+
+#[cfg(test)]
+#[path = "coordinator_retry_tests.rs"]
+mod retry_tests;

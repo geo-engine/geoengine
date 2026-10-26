@@ -19,16 +19,18 @@ OAuth token endpoints and GDAL asset reads remain outside STAC coordination.
 Add a private `coordinator` module with a process-wide registry, secret-safe
 identity, and shared scheduler state. Retain registry entries while a client or
 attempt holds them, and for at least the longest learned window after activity;
-prune unused expired entries on registry lookup. Retention also covers every
-active server reset and cooldown deadline. This preserves quota history
-across provider reconstruction. Serialize enqueue/admission with FIFO tickets and Tokio notifications,
-but allow HTTP attempts to overlap after reserving quota: a fresh twenty-request
-window admits twenty attempts without waiting for any of their responses. Wake
-only the front FIFO waiter; only that waiter runs an admission timer. Learn
-server policies as response headers arrive, using the fallback rate immediately
-instead of serializing a bootstrap request. Reserve quota before dispatch;
-release outstanding bookkeeping even on cancellation or
-network failure. Do not hold cache locks during queue waits or HTTP calls.
+reclaim unused entries after their actor's retained deadlines expire. Retention
+also covers every active server reset and cooldown deadline. This preserves quota
+history across provider reconstruction. Each coordinator receives owned HTTP
+attempts through a channel and exclusively owns its FIFO queue and quota state.
+Its event loop runs admitted attempts concurrently: a fresh twenty-request window
+admits twenty attempts without waiting for any of their responses. One timer
+tracks the next admission deadline. Learn server policies as response headers
+arrive, using the fallback rate immediately instead of serializing a bootstrap
+request. Reserve quota before dispatch; release outstanding bookkeeping even on
+cancellation or network failure. Send results through each attempt's reply
+channel after applying feedback. Do not hold cache locks during queue waits or
+HTTP calls.
 
 Track all advertised quota windows using one shared rolling timestamp history. Parse
 `x-ratelimit-limit: 10, 10;w=1, 60;w=60`, `remaining: 9`, and `reset: 1`.
@@ -83,19 +85,21 @@ header races; correct findings and rerun affected checks.
 
 ## Implementation details
 
-Short synchronous mutex sections protect scheduler state; no guard spans an
-await. Cancellation removes queued waiters or releases in-flight bookkeeping
-synchronously, including during runtime shutdown. One guard follows each attempt
-through `Queued`, `InFlight`, and `Finished`; admission results are a separate
-enum. There is no discovery phase. Request counts represent actual counts.
+The coordinator actor exclusively owns scheduler state. Callers submit owned
+attempts and await their individual reply channels. The event loop polls admitted
+HTTP operations concurrently, applies completed response feedback, and admits
+queued attempts when all constraints allow. JSON decoding and retry backoff stay
+in the caller's `execute` future; each retry rejoins FIFO admission.
 
-Normal completion (including transport errors) explicitly releases the attempt
-and applies response feedback with one scheduler lock. The guard's `Drop` only
-locks for cancellation/unwinding. Lock sections contain no awaits, and recover
-poisoned mutexes so cleanup cannot panic again because a mutex was poisoned.
-Enqueueing and the first admission check also share a single lock acquisition.
-The registry mutex is independent and is used only for lookup/reclamation;
-only lookup acquires both locks, in registry-to-state order.
+Dropping a reply receiver cancels queued or admitted work. Queued cancellation
+consumes no quota; admitted cancellation releases outstanding bookkeeping while
+preserving the charged timestamp. A cancellation wakeup prevents a removed FIFO
+head from delaying later requests behind an admission timer.
+
+Synchronous provider construction does not require a Tokio runtime. The actor
+starts lazily, and registry retention preserves quota history across provider
+reconstruction. The short process-wide registry mutex remains for lookup and
+idle reclamation; HTTP request scheduling does not acquire a mutex.
 
 All server feedback can lower capacity, irrespective of dispatch order. It cannot
 refill capacity until reset, because dispatch order need not match server
@@ -107,9 +111,9 @@ fixed constants. Advertised request counts, window durations and cooldowns are
 not capped. Unrepresentable deadlines are ignored. Every window uses the same
 request history, retained for the longest known window or five minutes, whichever
 is longer. The limit-th most recent timestamp determines local capacity in O(1)
-per policy. Header policies and feedback are parsed together once, outside the
-scheduler lock, using the same `Window` type as scheduler state. Normal request
-processing never locks the process-wide registry.
+per policy. Header policies and feedback are parsed together once by the actor, using the
+same `Window` type as scheduler state. Normal request processing never locks
+the process-wide registry.
 
 ## Validation commands
 
@@ -121,3 +125,6 @@ processing never locks the process-wide registry.
 - `cargo clippy -p geoengine-services --all-features --all-targets -- -D warnings`
 - `cargo fmt --all -- --check`
 - `git diff --check`
+
+The alternative implementation steps are recorded in
+[the channel coordinator plan](stac-request-coordinator-channels.md).
