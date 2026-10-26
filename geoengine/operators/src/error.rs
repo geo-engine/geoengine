@@ -243,6 +243,11 @@ pub enum Error {
         source: tokio::task::JoinError,
     },
 
+    #[snafu(display("GDAL writer process failed: {source}"))]
+    GdalWriterProcess {
+        source: crate::source::gdal_worker_process::process_common::IpcProcessError,
+    },
+
     OgrSourceColumnsSpecMissing,
 
     EmptyInput,

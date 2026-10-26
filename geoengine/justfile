@@ -46,13 +46,13 @@ lint-sql fix="false": common::_clear
 build mode="":
     cargo build --bin geoengine-server --locked {{ mode }} --verbose
     cargo build --bin geoengine-cli --locked {{ mode }} --verbose    
-    cargo build --bin gdalsource-process --locked {{ mode }} --verbose
+    cargo build --bin gdalsource-process --bin gdalwriter-process --locked {{ mode }} --verbose
 
-# Build gdalsource-process in dev or release mode.
+# Build the GDAL helper processes (gdalsource-process, gdalwriter-process) in dev or release mode.
 [arg('mode', pattern='|--release')]
 [group("build")]
 build-gdalsource-process mode="":
-    cargo build --bin gdalsource-process --locked {{ mode }} --verbose
+    cargo build --bin gdalsource-process --bin gdalwriter-process --locked {{ mode }} --verbose
 
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
@@ -79,7 +79,7 @@ test-coverage-services filter="": common::_clear
 [arg('mode', pattern='|--release')]
 [group("run")]
 run mode="": common::_clear
-    cargo build --bin gdalsource-process {{ mode }}
+    cargo build --bin gdalsource-process --bin gdalwriter-process {{ mode }}
     cargo run {{ mode }}
 
 # Run the CLI

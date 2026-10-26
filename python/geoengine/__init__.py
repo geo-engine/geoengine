@@ -41,6 +41,7 @@ from .datasets import (
     dataset_info_by_name,
     dataset_metadata_by_name,
     delete_dataset,
+    import_dataset,
     list_datasets,
     upload_dataframe,
     volume_by_name,

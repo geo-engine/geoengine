@@ -1625,12 +1625,29 @@ mod tests {
             uploads: vec![response.upload],
         };
 
+        // the manifest holds the bodies of the dataset and tiles requests for an import
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(
+                crate::datasets::upload::UploadRootPath::root_path(&response.upload)
+                    .unwrap()
+                    .join(crate::datasets::DATASET_MANIFEST_FILE_NAME),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let definition: crate::api::model::services::DatasetDefinition =
+            serde_json::from_value(manifest["definition"].clone()).unwrap();
+        assert_eq!(definition.properties.source_operator, "MultiBandGdalSource");
+        let tiles: Vec<crate::api::handlers::datasets::AddDatasetTile> =
+            serde_json::from_value(manifest["tiles"].clone()).unwrap();
+        assert_eq!(tiles.len(), 1);
+        assert!(tiles[0].params.file_path.is_relative());
+
         // query the newly created dataset
-        let operator_b = geoengine_operators::source::GdalSource {
-            params: geoengine_operators::source::GdalSourceParameters {
-                data: response.dataset.into(),
-                overview_level: None,
-            },
+        let operator_b = geoengine_operators::source::MultiBandGdalSource {
+            params: geoengine_operators::source::MultiBandGdalSourceParameters::new(
+                response.dataset.into(),
+            ),
         }
         .boxed();
 
