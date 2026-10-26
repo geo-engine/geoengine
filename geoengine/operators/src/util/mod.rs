@@ -1,6 +1,7 @@
 mod async_util;
 pub mod gdal;
 mod gdal_config_options;
+pub mod gdal_writer_process;
 pub mod input;
 pub mod math;
 pub mod number_statistics;
