@@ -1,0 +1,262 @@
+//! Startup code shared by the GDAL helper processes (`gdalsource-process`, `gdalwriter-process`):
+//! argument parsing, logging, OpenTelemetry and process-global GDAL options.
+
+use super::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace::SdkTracerProvider;
+use std::fmt::Display;
+use tracing::Subscriber;
+use tracing_appender::{
+    non_blocking::WorkerGuard,
+    rolling::{RollingFileAppender, Rotation},
+};
+use tracing_subscriber::{
+    EnvFilter,
+    fmt::{
+        FormatFields,
+        format::{DefaultFields, Writer},
+    },
+    layer::{Layer, SubscriberExt},
+    util::SubscriberInitExt,
+};
+
+pub type Token = String;
+
+/// Runs the `main` of a GDAL helper process: parses `<token> <config-json>`, sets up logging,
+/// OpenTelemetry and the GDAL options of the [`WorkerConfig`], calls `run` and flushes the logs.
+///
+/// `service_name` names the process in telemetry and its span.
+///
+/// # Panics
+/// Panics if the arguments are invalid or the telemetry runtime cannot be created.
+pub fn run_helper_process(service_name: &'static str, run: impl FnOnce(Token)) {
+    let (token, worker_config) = setup(service_name);
+
+    // The OTLP exporter needs a tokio runtime. We keep the worker's main loop synchronous and
+    // dedicate a single background thread to the runtime that drives the exporter.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .expect("Failed to create tokio runtime for telemetry");
+
+    let runtime_guard = runtime.enter();
+    let (provider, stderr_guard, file_guard) = init_subscriber(
+        &worker_config.logging,
+        &worker_config.open_telemetry,
+        &token,
+        service_name,
+    );
+
+    let _worker_span = tracing::info_span!(
+        "gdal_worker",
+        service = service_name,
+        worker_id = worker_config.logging.worker_id,
+    )
+    .entered();
+
+    if let Some(ref opts) = worker_config.gdal_config_options {
+        set_gdal_process_global_options(opts);
+    }
+    reroute_gdal_logging();
+    run(token);
+
+    drop(runtime_guard);
+    if let Some(provider) = provider
+        && let Err(err) = provider.shutdown()
+    {
+        tracing::error!("Failed to flush OpenTelemetry provider: {err}");
+    }
+    drop(stderr_guard);
+    drop(file_guard);
+}
+
+pub fn exit_with_error(msg: impl Display) -> ! {
+    tracing::error!("Error: {msg}");
+    std::process::exit(1);
+}
+
+fn setup(service_name: &str) -> (Token, WorkerConfig) {
+    let args: Vec<String> = std::env::args().collect();
+    match args.as_slice() {
+        [_bin, token, config_json] => {
+            let config: WorkerConfig = serde_json::from_str(config_json)
+                .unwrap_or_else(|e| panic!("Failed to parse worker config JSON: {e}"));
+            (token.clone(), config)
+        }
+        _ => {
+            panic!("Usage: {service_name} <token> <config-json>")
+        }
+    }
+}
+
+/// We install a GDAL error handler that logs all messages with our log macros.
+fn reroute_gdal_logging() {
+    gdal::config::set_error_handler(|error_type, error_num, error_msg| {
+        const LOG_TARGET: &str = "GDAL";
+        match error_type {
+            gdal::errors::CplErrType::None => {
+                // should never log anything
+                tracing::info!(target: LOG_TARGET, "GDAL None {error_num}: {error_msg}");
+            }
+            gdal::errors::CplErrType::Debug => {
+                tracing::debug!(target: LOG_TARGET, "GDAL Debug {error_num}: {error_msg}");
+            }
+            gdal::errors::CplErrType::Warning => {
+                tracing::warn!(target: LOG_TARGET, "GDAL Warning {error_num}: {error_msg}");
+            }
+            gdal::errors::CplErrType::Failure => {
+                tracing::error!(target: LOG_TARGET, "GDAL Failure {error_num}: {error_msg}");
+            }
+            gdal::errors::CplErrType::Fatal => {
+                tracing::error!(target: LOG_TARGET, "GDAL Fatal {error_num}: {error_msg}");
+            }
+        }
+    });
+}
+
+/// Configure GDAL process-global options once before any dataset is opened.
+///
+/// Some VSICURL-related options (e.g. `VSI_CACHE_SIZE`, `CPL_VSIL_CURL_CHUNK_SIZE`) are frozen by
+/// GDAL after the first `/vsicurl/` access: the cache pool is allocated once and there is no public
+/// API to resize it at runtime. Changing those options therefore requires restarting the worker
+/// process so the new values are passed via the config at spawn time.
+///
+/// Per-open options such as `GDAL_DISABLE_READDIR_ON_OPEN` or
+/// `CPL_VSIL_CURL_ALLOWED_EXTENSIONS` can additionally be overridden per request via
+/// `GdalDatasetParameters.gdal_config_options`.
+fn set_gdal_process_global_options(options: &[(String, String)]) {
+    for (key, value) in options {
+        if let Err(err) = gdal::config::set_config_option(key, value) {
+            tracing::warn!("Failed to set GDAL config option {key}={value}: {err}");
+        }
+    }
+    // Log what was applied: several of these are frozen at first /vsicurl/ use, so the only
+    // way to tell a tuning change took effect is to see it here rather than assume it.
+    tracing::info!(?options, "GDAL worker config options applied");
+}
+
+/// Initializes a tracing subscriber. Writes to stderr (filtered by `log_spec`) and,
+/// if enabled, to a per-worker rolling log file (filtered by `log_spec`). The filename includes
+/// the worker's IPC token so multiple workers do not corrupt a shared file.
+///
+/// When `open_telemetry` is enabled, an OpenTelemetry OTLP layer is added and the corresponding
+/// tracer provider is returned so it can be flushed on shutdown.
+///
+/// # Panics
+/// Panics if `log_spec` cannot be parsed as an `EnvFilter`.
+#[allow(clippy::print_stderr)] // subscriber not yet initialized
+fn init_subscriber(
+    logging_config: &WorkerLoggingConfig,
+    open_telemetry_config: &OpenTelemetryConfig,
+    token: &str,
+    service_name: &str,
+) -> (Option<SdkTracerProvider>, WorkerGuard, Option<WorkerGuard>) {
+    // we use the non-blocking wrapper around stderr so that we don't block the worker on logging. The guard is dropped at the end of main to flush any remaining logs.
+    let (non_blocking_writer, stderr_guard) = tracing_appender::non_blocking(std::io::stderr());
+    let stderr_layer = tracing_subscriber::fmt::layer()
+        .pretty()
+        .with_file(false)
+        .with_target(true)
+        .with_ansi(true)
+        .with_writer(non_blocking_writer)
+        .with_filter(EnvFilter::new(&logging_config.log_spec));
+
+    let (file_layer, file_guard) = if logging_config.log_to_file {
+        let (layer, guard) = file_layer_with_filter(logging_config);
+        (Some(layer), Some(guard))
+    } else {
+        (None, None)
+    };
+
+    if open_telemetry_config.enabled {
+        let endpoint = open_telemetry_config.endpoint.clone();
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint)
+            .build()
+            .unwrap_or_else(|err| {
+                eprintln!("Failed to build OTLP exporter: {err}. Exiting worker.");
+                std::process::exit(1);
+            });
+
+        let provider = SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .with_resource(
+                opentelemetry_sdk::Resource::builder_empty()
+                    .with_attribute(opentelemetry::KeyValue::new(
+                        "service.name",
+                        format!("Geo Engine {service_name}"),
+                    ))
+                    .with_attribute(opentelemetry::KeyValue::new(
+                        "service.instance.id",
+                        token.to_string(),
+                    ))
+                    .build(),
+            )
+            .build();
+
+        let opentelemetry_filter = EnvFilter::new(&logging_config.log_spec);
+        let opentelemetry = tracing_opentelemetry::layer()
+            .with_tracer(provider.tracer(service_name.to_string()))
+            .with_filter(opentelemetry_filter);
+
+        tracing_subscriber::registry()
+            .with(stderr_layer)
+            .with(file_layer)
+            .with(opentelemetry)
+            .init();
+
+        return (Some(provider), stderr_guard, file_guard);
+    }
+
+    tracing_subscriber::registry()
+        .with(stderr_layer)
+        .with(file_layer)
+        .init();
+    (None, stderr_guard, file_guard)
+}
+
+// We use a custom formatter because there are still format flags within spans even when
+// `with_ansi` is false due to bug: https://github.com/tokio-rs/tracing/issues/1817
+struct FileFormatterWorkaround(DefaultFields);
+
+impl<'writer> FormatFields<'writer> for FileFormatterWorkaround {
+    fn format_fields<R: tracing_subscriber::field::RecordFields>(
+        &self,
+        writer: Writer<'writer>,
+        fields: R,
+    ) -> core::fmt::Result {
+        self.0.format_fields(writer, fields)
+    }
+}
+
+fn file_layer_with_filter<S>(
+    logging_config: &WorkerLoggingConfig,
+) -> (impl Layer<S> + use<S>, WorkerGuard)
+where
+    S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    // short retention because number_of_processes workers each produce rotated files.
+    let file_appender = RollingFileAppender::builder()
+        .max_log_files(3)
+        .filename_prefix(format!(
+            "{}-{}",
+            logging_config.filename_prefix, logging_config.worker_id,
+        ))
+        .filename_suffix("log")
+        .rotation(Rotation::DAILY)
+        .build(logging_config.log_directory.as_deref().unwrap_or("./"))
+        .expect("failed to initialize rolling file appender");
+
+    let (non_blocking_writer, guard) = tracing_appender::non_blocking(file_appender);
+
+    let layer = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .fmt_fields(FileFormatterWorkaround(DefaultFields::default()))
+        .with_writer(non_blocking_writer)
+        .with_filter(EnvFilter::new(&logging_config.log_spec));
+
+    (layer, guard)
+}
