@@ -759,20 +759,17 @@ async fn run_actor<F>(
 fn complete_attempt(state: &mut State, completed_before: usize, (reply, response): AttemptOutcome) {
     state.release();
     if let Some(response) = response {
-        let feedback = response.as_ref().ok().map(|response| {
-            ResponseFeedback::parse(
-                response.headers(),
-                response.status().as_u16(),
-                Instant::now(),
-            )
-        });
-        if let Some(feedback) = feedback {
-            state.observe(feedback, Instant::now(), completed_before);
-        }
-        let server_controls_retry = response.as_ref().is_ok_and(|response| {
+        let server_controls_retry = if let Ok(response) = &response {
+            let now = Instant::now();
+            let feedback =
+                ResponseFeedback::parse(response.headers(), response.status().as_u16(), now);
+            let has_retry_timing = feedback.has_retry_timing;
+            state.observe(feedback, now, completed_before);
             response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
-                && (rate_limit_delay(response.headers()).is_some() || !state.windows.is_empty())
-        });
+                && (has_retry_timing || !state.windows.is_empty())
+        } else {
+            false
+        };
         let _ = reply.send(AttemptReply {
             response,
             server_controls_retry,
@@ -799,6 +796,8 @@ struct ResponseFeedback {
     unscoped_quota: Option<RemoteQuota>,
     /// Monotonic deadline from a 429's Retry-After/reset headers or fallback delay.
     cooldown_until: Option<Instant>,
+    /// Whether the 429 supplied usable retry timing, rather than a fallback.
+    has_retry_timing: bool,
 }
 
 impl ResponseFeedback {
@@ -809,10 +808,16 @@ impl ResponseFeedback {
         let limits: Vec<_> = headers.get_all("x-ratelimit-limit").iter().collect();
         let remaining: Vec<_> = headers.get_all("x-ratelimit-remaining").iter().collect();
         let resets: Vec<_> = headers.get_all("x-ratelimit-reset").iter().collect();
+        let retry_delay = if status == 429 {
+            rate_limit_delay(headers)
+        } else {
+            None
+        };
         let mut feedback = Self {
             windows: Vec::new(),
             unscoped_quota: None,
             cooldown_until: None,
+            has_retry_timing: retry_delay.is_some(),
         };
         for index in 0..limits.len().max(remaining.len()) {
             let value = limits.get(index).and_then(|value| value.to_str().ok());
@@ -880,7 +885,7 @@ impl ResponseFeedback {
             RemoteQuota::merge(destination, quota, 0);
         }
         if status == 429 {
-            let delay = rate_limit_delay(headers).unwrap_or(FALLBACK_DELAY);
+            let delay = retry_delay.unwrap_or(FALLBACK_DELAY);
             feedback.cooldown_until = Some(now.checked_add(delay).unwrap_or(now + FALLBACK_DELAY));
         }
         feedback
@@ -995,10 +1000,12 @@ mod tests {
             headers.insert(RETRY_AFTER, value.parse().unwrap());
             headers.insert("x-ratelimit-reset", value.parse().unwrap());
             assert_eq!(rate_limit_delay(&headers), None);
+            assert!(!ResponseFeedback::parse(&headers, 429, Instant::now()).has_retry_timing);
         }
         headers.insert(RETRY_AFTER, "2".parse().unwrap());
         headers.insert("x-ratelimit-reset", "3".parse().unwrap());
         assert_eq!(rate_limit_delay(&headers), Some(Duration::from_secs(3)));
+        assert!(ResponseFeedback::parse(&headers, 429, Instant::now()).has_retry_timing);
     }
 
     #[test]

@@ -211,29 +211,35 @@ async fn it_releases_cancelled_inflight_bookkeeping_before_merging_feedback() {
 
 #[tokio::test]
 async fn it_retries_rate_limits_through_admission_without_policy_backoff() {
-    let (_registry, coordinator, mut starts) = controlled_coordinator("rate-limit-retry");
-    let query = execute_job_with_policy(
-        coordinator,
-        1,
-        RetryPolicy::new().max_retries(2).initial_delay_ms(10_000),
-    );
-    let (_, first_response) = next_start(&mut starts).await;
-    let limited = Instant::now();
-    first_response
-        .send(
-            httptest::http::Response::builder()
-                .status(429)
-                .header(RETRY_AFTER, "1")
-                .body("")
-                .unwrap()
-                .into(),
-        )
-        .unwrap();
-    let (path, retried_response) = next_start(&mut starts).await;
-    assert_eq!(path, "/1");
-    assert!(limited.elapsed() >= Duration::from_secs(1));
-    retried_response.send(response(1, None)).unwrap();
-    assert_eq!(query.await.unwrap().unwrap(), serde_json::json!({"id": 1}));
+    for (header, value) in [
+        ("retry-after", "1"),
+        ("x-ratelimit-reset", "1"),
+        ("x-ratelimit-limit", "100;w=1"),
+    ] {
+        let (_registry, coordinator, mut starts) = controlled_coordinator("rate-limit-retry");
+        let query = execute_job_with_policy(
+            coordinator,
+            1,
+            RetryPolicy::new().max_retries(2).initial_delay_ms(10_000),
+        );
+        let (_, first_response) = next_start(&mut starts).await;
+        let limited = Instant::now();
+        first_response
+            .send(
+                httptest::http::Response::builder()
+                    .status(429)
+                    .header(header, value)
+                    .body("")
+                    .unwrap()
+                    .into(),
+            )
+            .unwrap();
+        let (path, retried_response) = next_start(&mut starts).await;
+        assert_eq!(path, "/1");
+        assert!(limited.elapsed() >= Duration::from_secs(1));
+        retried_response.send(response(1, None)).unwrap();
+        assert_eq!(query.await.unwrap().unwrap(), serde_json::json!({"id": 1}));
+    }
 }
 
 #[tokio::test]
