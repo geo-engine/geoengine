@@ -204,6 +204,9 @@ pub struct MockQueryContext {
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
 
+    /// see [`QueryContext::processing_runtime`]; `None` runs query tasks on the current runtime
+    pub processing_runtime: Option<tokio::runtime::Handle>,
+
     gdal_process_pool: Arc<GdalProcessPool>,
 }
 
@@ -228,6 +231,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            processing_runtime: None,
             gdal_process_pool,
         }
     }
@@ -255,6 +259,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            processing_runtime: None,
             gdal_process_pool,
         }
     }
@@ -281,6 +286,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            processing_runtime: None,
         }
     }
 }
@@ -288,6 +294,10 @@ impl MockQueryContext {
 impl QueryContext for MockQueryContext {
     fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
+    }
+
+    fn processing_runtime(&self) -> Option<&tokio::runtime::Handle> {
+        self.processing_runtime.as_ref()
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {

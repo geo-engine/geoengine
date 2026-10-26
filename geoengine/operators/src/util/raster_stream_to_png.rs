@@ -361,8 +361,12 @@ pub enum PngCreationError {
 #[cfg(test)]
 mod tests {
 
-    use crate::engine::{MockExecutionContext, RasterQueryProcessor};
+    use crate::engine::{
+        MockExecutionContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor,
+    };
     use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
+    use async_trait::async_trait;
+    use futures::stream::BoxStream;
     use geoengine_datatypes::primitives::{DateTime, TimeInstance};
     use geoengine_datatypes::{
         primitives::BandSelection,
@@ -370,6 +374,7 @@ mod tests {
         test_data,
         util::{assert_image_equals, test::TestDefault},
     };
+    use std::sync::{Arc, Mutex};
 
     use super::*;
 
@@ -424,5 +429,122 @@ mod tests {
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "png_from_stream.png");
 
         assert_image_equals(test_data!("raster/png/png_from_stream.png"), &image_bytes);
+    }
+
+    /// Records the name of the thread that creates the query and polls each of its tiles.
+    struct ThreadRecording {
+        inner: BoxRasterQueryProcessor<u8>,
+        threads: Arc<Mutex<Vec<Option<String>>>>,
+    }
+
+    fn record_thread(threads: &Mutex<Vec<Option<String>>>) {
+        threads
+            .lock()
+            .unwrap()
+            .push(std::thread::current().name().map(ToOwned::to_owned));
+    }
+
+    #[async_trait]
+    impl QueryProcessor for ThreadRecording {
+        type Output = RasterTile2D<u8>;
+        type SpatialBounds = GridBoundingBox2D;
+        type Selection = BandSelection;
+        type ResultDescription = RasterResultDescriptor;
+
+        async fn _query<'a>(
+            &'a self,
+            query: RasterQueryRectangle,
+            ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<RasterTile2D<u8>>>> {
+            record_thread(&self.threads);
+            let threads = self.threads.clone();
+            Ok(self
+                .inner
+                .query(query, ctx)
+                .await?
+                .inspect(move |_| record_thread(&threads))
+                .boxed())
+        }
+
+        fn result_descriptor(&self) -> &RasterResultDescriptor {
+            self.inner.result_descriptor()
+        }
+    }
+
+    #[async_trait]
+    impl RasterQueryProcessor for ThreadRecording {
+        type RasterType = u8;
+
+        async fn _time_query<'a>(
+            &'a self,
+            query: TimeInterval,
+            ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+            self.inner.time_query(query, ctx).await
+        }
+    }
+
+    #[tokio::test]
+    async fn png_from_stream_runs_on_the_processing_runtime() {
+        let processing = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("processing-test")
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let exe_ctx = MockExecutionContext::test_default();
+        let mut ctx = exe_ctx.mock_query_context_test_default();
+        ctx.processing_runtime = Some(processing.handle().clone());
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let meta_data = create_ndvi_meta_data();
+
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            meta_data.result_descriptor.clone(),
+            tiling_specification,
+            Box::new(meta_data),
+        );
+
+        let threads = Arc::new(Mutex::new(Vec::new()));
+        let processor = ThreadRecording {
+            inner: gdal_source.boxed(),
+            threads: threads.clone(),
+        };
+
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),
+            TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
+        );
+
+        let (image_bytes, _) = raster_stream_to_png_bytes(
+            processor.boxed(),
+            query,
+            ctx,
+            600,
+            600,
+            None,
+            None,
+            Box::pin(futures::future::pending()),
+        )
+        .await
+        .unwrap();
+
+        assert_image_equals(test_data!("raster/png/png_from_stream.png"), &image_bytes);
+
+        let threads = threads.lock().unwrap().clone();
+        assert!(
+            threads.len() > 1,
+            "the query and at least one tile: {threads:?}"
+        );
+        assert!(
+            threads
+                .iter()
+                .all(|thread| thread.as_deref() == Some("processing-test")),
+            "{threads:?}"
+        );
+
+        processing.shutdown_background();
     }
 }
