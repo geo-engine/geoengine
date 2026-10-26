@@ -346,8 +346,7 @@ impl StacDataProvider {
             .timeout(std::time::Duration::from_secs(
                 definition.query_timeout_secs as u64,
             ))
-            .build()
-            .unwrap_or_default();
+            .build()?;
         let client = StacClient::new(client, &definition.api_url, request_registry)?;
 
         Ok(Self {
