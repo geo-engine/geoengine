@@ -1255,7 +1255,7 @@ mod tests {
                 client: StacClient::new(
                     reqwest::Client::new(),
                     &server.url_str("/"),
-                    crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+                    crate::datasets::external::stac::StacRequestRegistry::new(),
                 )
                 .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
@@ -1313,7 +1313,7 @@ mod tests {
             client: StacClient::new(
                 reqwest::Client::new(),
                 &server.url_str("/"),
-                crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
             )
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
@@ -1484,7 +1484,7 @@ mod tests {
         let client = StacClient::new(
             reqwest::Client::new(),
             &server.url_str("/"),
-            crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+            crate::datasets::external::stac::StacRequestRegistry::new(),
         )
         .unwrap()
         .with_authentication(Some(
@@ -1982,7 +1982,7 @@ mod grid_request_tests {
             server,
             cache_bytes,
             grid,
-            crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+            crate::datasets::external::stac::StacRequestRegistry::new(),
         )
     }
 
@@ -2760,7 +2760,7 @@ mod grid_request_tests {
         let client = super::StacClient::new(
             reqwest::Client::new(),
             &server.url_str("/"),
-            crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+            crate::datasets::external::stac::StacRequestRegistry::new(),
         )
         .unwrap();
         let state = super::StacQueryState::NextPage {
@@ -2819,8 +2819,7 @@ mod grid_request_tests {
             let grid = StacGrid {
                 target_number_of_cells: 64_800,
             };
-            let request_registry =
-                crate::datasets::external::stac::StacRequestRegistry::new().unwrap();
+            let request_registry = crate::datasets::external::stac::StacRequestRegistry::new();
             let mut other_provider =
                 provider_with_registry(&server, cache_bytes, grid, request_registry.clone());
             other_provider.collection_name = "other".to_owned();

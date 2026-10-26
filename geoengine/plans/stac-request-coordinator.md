@@ -97,11 +97,11 @@ preserving the charged timestamp. A cancellation wakeup prevents a removed FIFO
 head from delaying later requests behind an admission timer.
 
 Synchronous provider construction does not require a Tokio runtime. Each client
-execution looks up its coordinator asynchronously using the configured origin
-and authentication. This additional channel round trip selects a live coordinator
-if a previous actor's runtime has stopped. Retries continue using the selected
-coordinator. The HTTP actor starts lazily, and registry retention preserves quota
-history across provider reconstruction.
+execution looks up its coordinator in the context-owned DashMap registry using
+the configured origin and authentication. The first lookup creates the
+coordinator and both channels together and spawns its HTTP actor. A closed actor
+is replaced atomically under the same key. No `OnceLock` or separate registry
+worker thread is needed.
 
 The application context constructs one `StacRequestRegistry` and shares its
 handle with database handles, so execution contexts and provider initialization
@@ -110,15 +110,13 @@ create a fresh registry: that would split a remote server's quota across queries
 Standalone providers can receive an explicit shared registry; CLI harvesting
 creates one for its operation.
 
-A worker owns each registry map on one dedicated thread. It handles lookup and
-retirement messages in order and replies through oneshot channels.
-The final ownership check and removal therefore cannot race with a lookup that
-hands a coordinator to a new provider. This worker is independent of individual
-Tokio runtime lifetimes, and async callers never block waiting for its messages.
-There is no global registry or global `OnceLock`. Coordinators refer weakly to
-their registry, so dropping its context and clients closes the input channel and
-allows the worker to exit. Neither registry operations nor HTTP request
-scheduling acquires an explicit mutex.
+DashMap entry guards protect lookup, creation, replacement, and idle retirement.
+Retirement checks the exact coordinator pointer and registry-only ownership
+under that same guard, preventing removal of a coordinator handed to a caller or
+of a newer replacement. Release every map guard before awaiting or doing HTTP
+work. Request quota state stays private to each actor. Coordinators refer weakly
+to their registry so dropping its context and clients releases it without a
+reference cycle.
 
 All server feedback can lower capacity, irrespective of dispatch order. It cannot
 refill capacity until reset, because dispatch order need not match server

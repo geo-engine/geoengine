@@ -165,7 +165,7 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     let stac_client = StacClient::new(
         reqwest::Client::new(),
         &provider_def.api_url,
-        crate::datasets::external::stac::StacRequestRegistry::new()?,
+        crate::datasets::external::stac::StacRequestRegistry::new(),
     )?
     .with_authentication(provider_def.authentication.clone())
     .await
@@ -1434,7 +1434,7 @@ mod tests {
             let client = StacClient::new(
                 reqwest::Client::new(),
                 &server.url_str("/"),
-                crate::datasets::external::stac::StacRequestRegistry::new().unwrap(),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
             )
             .unwrap()
             .with_authentication(authentication)

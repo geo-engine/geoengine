@@ -385,7 +385,7 @@ pub mod tests {
                 roles: vec![RoleId::from_u128(0xb589a590_9c0c_4b55_9aa2_d178a5f42a78)],
             },
             Arc::new(crate::layers::provider_registry::DataConnectorRegistry::default()),
-            crate::datasets::external::stac::StacRequestRegistry::new()?,
+            crate::datasets::external::stac::StacRequestRegistry::new(),
         );
 
         let projects = db

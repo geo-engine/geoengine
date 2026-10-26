@@ -95,7 +95,7 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = StacRequestRegistry::new()?;
+        let stac_request_registry = StacRequestRegistry::new();
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
@@ -151,7 +151,7 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = StacRequestRegistry::new()?;
+        let stac_request_registry = StacRequestRegistry::new();
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
@@ -229,7 +229,7 @@ where
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
-        let stac_request_registry = StacRequestRegistry::new()?;
+        let stac_request_registry = StacRequestRegistry::new();
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),

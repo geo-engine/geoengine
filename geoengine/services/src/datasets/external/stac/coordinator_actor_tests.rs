@@ -2,14 +2,6 @@
 use super::*;
 use std::future::pending;
 
-fn test_coordinator(registry: &StacRequestRegistry) -> Arc<StacRequestCoordinator> {
-    Arc::new(StacRequestCoordinator {
-        channels: OnceLock::new(),
-        created_at: Instant::now(),
-        registry: Arc::downgrade(&registry.sender),
-    })
-}
-
 fn test_job(id: usize) -> (AttemptJob, oneshot::Receiver<AttemptReply>) {
     let client = reqwest::Client::new();
     let request = client
@@ -30,29 +22,23 @@ fn test_job(id: usize) -> (AttemptJob, oneshot::Receiver<AttemptReply>) {
 
 #[tokio::test]
 async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
-    let registry = StacRequestRegistry::new().unwrap();
-    let coordinator = test_coordinator(&registry);
-    let weak = Arc::downgrade(&coordinator);
-    let (jobs, job_receiver) = mpsc::unbounded_channel();
-    let (cancellations, cancellation_receiver) = mpsc::unbounded_channel();
+    let registry = StacRequestRegistry::new();
     let (started, mut starts) = mpsc::unbounded_channel::<String>();
-    let actor = tokio::spawn(run_actor(
-        job_receiver,
-        cancellation_receiver,
-        weak,
-        move |job| {
-            let path = job.request.url().path().to_owned();
-            let started = started.clone();
-            Box::pin(async move {
-                let AttemptJob { mut reply, .. } = job;
-                let _ = started.send(path);
-                tokio::select! {
-                    () = reply.closed() => (reply, None),
-                    outcome = pending::<AttemptOutcome>() => outcome,
-                }
-            })
-        },
-    ));
+    let identity = identity_for(&Url::parse("https://parallel.actor.test").unwrap(), None);
+    let coordinator = registry.shared_with_dispatch(identity, move |job| {
+        let path = job.request.url().path().to_owned();
+        let started = started.clone();
+        Box::pin(async move {
+            let AttemptJob { mut reply, .. } = job;
+            let _ = started.send(path);
+            tokio::select! {
+                () = reply.closed() => (reply, None),
+                outcome = pending::<AttemptOutcome>() => outcome,
+            }
+        }) as RunningAttempt
+    });
+    let jobs = coordinator.channels.jobs.clone();
+    let cancellations = coordinator.channels.cancellations.clone();
 
     let mut replies = Vec::new();
     for id in 0..10 {
@@ -103,57 +89,37 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
     drop(replies);
     drop(jobs);
     drop(cancellations);
-    tokio::time::timeout(Duration::from_secs(1), actor)
-        .await
-        .expect("actor should exit after all senders and jobs are dropped")
-        .expect("actor task should complete");
 }
 
 // Drive real actor jobs and reply decoding with controlled responses and no sockets.
 type StartedAttempt = (String, oneshot::Sender<reqwest::Response>);
 
-async fn controlled_coordinator(
+fn controlled_coordinator(
     label: &str,
 ) -> (
     StacRequestRegistry,
     Arc<StacRequestCoordinator>,
     mpsc::UnboundedReceiver<StartedAttempt>,
 ) {
-    let registry = StacRequestRegistry::new().unwrap();
-    let coordinator = registry
-        .shared(
-            &Url::parse(&format!("https://{label}.actor.test")).unwrap(),
-            None,
-        )
-        .await;
-    let (jobs, receiver) = mpsc::unbounded_channel();
-    let (cancellations, cancellation_receiver) = mpsc::unbounded_channel();
+    let registry = StacRequestRegistry::new();
     let (started, starts) = mpsc::unbounded_channel();
-    coordinator
-        .channels
-        .set(ActorChannels {
-            jobs,
-            cancellations,
-        })
-        .expect("the isolated test actor has not been started");
-    tokio::spawn(run_actor(
-        receiver,
-        cancellation_receiver,
-        Arc::downgrade(&coordinator),
-        move |job| {
-            let started = started.clone();
-            Box::pin(async move {
-                let (finish, response) = oneshot::channel();
-                let path = job.request.url().path().to_owned();
-                let mut reply = job.reply;
-                started.send((path, finish)).unwrap();
-                tokio::select! {
-                    () = reply.closed() => (reply, None),
-                    response = response => (reply, response.ok().map(Ok)),
-                }
-            })
-        },
-    ));
+    let identity = identity_for(
+        &Url::parse(&format!("https://{label}.actor.test")).unwrap(),
+        None,
+    );
+    let coordinator = registry.shared_with_dispatch(identity, move |job| {
+        let started = started.clone();
+        Box::pin(async move {
+            let (finish, response) = oneshot::channel();
+            let path = job.request.url().path().to_owned();
+            let mut reply = job.reply;
+            started.send((path, finish)).unwrap();
+            tokio::select! {
+                () = reply.closed() => (reply, None),
+                response = response => (reply, response.ok().map(Ok)),
+            }
+        }) as RunningAttempt
+    });
     (registry, coordinator, starts)
 }
 
@@ -197,7 +163,7 @@ fn response(id: usize, remaining: Option<usize>) -> reqwest::Response {
 
 #[tokio::test]
 async fn it_routes_out_of_order_responses_without_waiting_for_earlier_attempts() {
-    let (_registry, coordinator, mut starts) = controlled_coordinator("response-routing").await;
+    let (_registry, coordinator, mut starts) = controlled_coordinator("response-routing");
     let first = execute_job(coordinator.clone(), 1);
     let (first_path, first_response) = next_start(&mut starts).await;
     let second = execute_job(coordinator, 2);
@@ -216,7 +182,7 @@ async fn it_routes_out_of_order_responses_without_waiting_for_earlier_attempts()
 
 #[tokio::test]
 async fn it_releases_cancelled_inflight_bookkeeping_before_merging_feedback() {
-    let (_registry, coordinator, mut starts) = controlled_coordinator("inflight-cancel").await;
+    let (_registry, coordinator, mut starts) = controlled_coordinator("inflight-cancel");
     let first = execute_job(coordinator.clone(), 1);
     let (_, first_response) = next_start(&mut starts).await;
     first.abort();
@@ -240,19 +206,17 @@ async fn it_releases_cancelled_inflight_bookkeeping_before_merging_feedback() {
 
 #[tokio::test]
 async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
-    let (registry, coordinator, mut starts) = controlled_coordinator("retained-quota").await;
+    let (registry, coordinator, mut starts) = controlled_coordinator("retained-quota");
     let previous = Arc::downgrade(&coordinator);
     let first = execute_job(coordinator.clone(), 1);
     let (_, first_response) = next_start(&mut starts).await;
     first_response.send(response(1, Some(0))).unwrap();
     first.await.unwrap().unwrap();
     drop(coordinator);
-    let reconstructed = registry
-        .shared(
-            &Url::parse("https://retained-quota.actor.test/collection").unwrap(),
-            None,
-        )
-        .await;
+    let reconstructed = registry.shared(
+        &Url::parse("https://retained-quota.actor.test/collection").unwrap(),
+        None,
+    );
     assert!(previous.ptr_eq(&Arc::downgrade(&reconstructed)));
     let second = execute_job(reconstructed, 2);
     assert!(
@@ -267,16 +231,15 @@ async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
 
 #[tokio::test]
 async fn it_retires_only_registry_owned_coordinators() {
-    let registry = StacRequestRegistry::new().unwrap();
-    let coordinator = registry
-        .shared(
-            &Url::parse("https://idle-retirement.actor.test").unwrap(),
-            None,
-        )
-        .await;
+    let registry = StacRequestRegistry::new();
+    let coordinator = registry.shared(
+        &Url::parse("https://idle-retirement.actor.test").unwrap(),
+        None,
+    );
     let weak = Arc::downgrade(&coordinator);
-    assert!(!StacRequestCoordinator::try_retire(&weak).await);
+    assert!(!StacRequestCoordinator::try_retire(&weak));
     drop(coordinator);
-    assert!(StacRequestCoordinator::try_retire(&weak).await);
+    assert!(StacRequestCoordinator::try_retire(&weak));
     assert!(weak.upgrade().is_none());
+    tokio::task::yield_now().await;
 }

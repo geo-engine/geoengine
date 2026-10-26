@@ -323,7 +323,7 @@ impl StacDataProvider {
     ///
     /// Authentication is installed asynchronously by [`StacDataProviderDefinition::initialize`].
     pub fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
-        Self::from_definition_with_request_registry(definition, StacRequestRegistry::new()?)
+        Self::from_definition_with_request_registry(definition, StacRequestRegistry::new())
     }
 
     /// Builds a provider with the registry shared by its application or standalone operation.
@@ -436,8 +436,7 @@ impl StacClient {
         let request = request.build()?;
         let coordinator = self
             .request_registry
-            .shared(&self.origin, self.coordinator_authentication.as_ref())
-            .await;
+            .shared(&self.origin, self.coordinator_authentication.as_ref());
         coordinator
             .execute(&self.client, request, self.authentication.as_ref(), policy)
             .await
@@ -459,7 +458,7 @@ mod tests {
             tokio_postgres::Config::new(),
             NoTls,
         ));
-        let request_registry = StacRequestRegistry::new().unwrap();
+        let request_registry = StacRequestRegistry::new();
         let db = crate::contexts::PostgresDb::new(
             pool,
             crate::users::UserSession::admin_session(),
@@ -493,9 +492,9 @@ mod tests {
             .downcast_ref::<StacDataProvider>()
             .unwrap();
         let origin = url::Url::parse("https://context-owned-registry.test").unwrap();
-        let expected = request_registry.shared(&origin, None).await;
-        let first_coordinator = first.client.request_registry.shared(&origin, None).await;
-        let second_coordinator = second.client.request_registry.shared(&origin, None).await;
+        let expected = request_registry.shared(&origin, None);
+        let first_coordinator = first.client.request_registry.shared(&origin, None);
+        let second_coordinator = second.client.request_registry.shared(&origin, None);
         assert!(Arc::ptr_eq(&expected, &first_coordinator));
         assert!(Arc::ptr_eq(&expected, &second_coordinator));
     }
@@ -580,7 +579,7 @@ mod tests {
         use std::time::{Duration, Instant};
 
         let (server, arrivals) = authentication_bucket_server(authenticated);
-        let request_registry = StacRequestRegistry::new().unwrap();
+        let request_registry = StacRequestRegistry::new();
         let create_client = |username: Option<&str>| {
             let request_registry = request_registry.clone();
             let config = username.map(|username| StacProviderAuthentication {
@@ -673,7 +672,7 @@ mod tests {
         let client = StacClient::new(
             reqwest::Client::new(),
             &server.url_str("/"),
-            StacRequestRegistry::new().unwrap(),
+            StacRequestRegistry::new(),
         )
         .unwrap();
         let cloned = client.clone();
@@ -748,7 +747,7 @@ mod tests {
         let client = StacClient::new(
             reqwest::Client::new(),
             &server.url_str("/"),
-            StacRequestRegistry::new().unwrap(),
+            StacRequestRegistry::new(),
         )
         .unwrap()
         .with_authentication(Some(StacProviderAuthentication {

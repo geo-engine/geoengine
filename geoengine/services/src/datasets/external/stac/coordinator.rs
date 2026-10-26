@@ -21,16 +21,16 @@
 use super::auth::StacAuthentication;
 use crate::util::retry::{RetryPolicy, is_terminal};
 use chrono::{DateTime, Utc};
+use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
 use reqwest::header::{HeaderMap, RETRY_AFTER};
 use serde::de::DeserializeOwned;
-use std::sync::mpsc::{self as std_mpsc, Receiver, Sender};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     fmt,
     future::Future,
     pin::Pin,
-    sync::{Arc, OnceLock, Weak},
+    sync::{Arc, Weak},
     time::{Duration, Instant, SystemTime},
 };
 use tokio::sync::{mpsc, oneshot};
@@ -345,6 +345,11 @@ type AttemptOutcome = (
     Option<reqwest::Result<reqwest::Response>>,
 );
 type RunningAttempt = Pin<Box<dyn Future<Output = AttemptOutcome> + Send>>;
+type CoordinatorMap = DashMap<Identity, Arc<StacRequestCoordinator>>;
+type ActorReceivers = (
+    mpsc::UnboundedReceiver<AttemptJob>,
+    mpsc::UnboundedReceiver<()>,
+);
 
 /// Shared channel endpoint for one configured origin and authentication identity.
 ///
@@ -352,29 +357,15 @@ type RunningAttempt = Pin<Box<dyn Future<Output = AttemptOutcome> + Send>>;
 /// submit owned jobs; they never hold a scheduler lock while waiting or sending.
 #[derive(Debug)]
 pub(super) struct StacRequestCoordinator {
-    channels: OnceLock<ActorChannels>,
-    created_at: Instant,
-    registry: Weak<Sender<RegistryCommand>>,
+    channels: ActorChannels,
+    identity: Identity,
+    registry: Weak<CoordinatorMap>,
 }
 
-/// Lookups and retirement are serialized by the registry's sole owner.
-enum RegistryCommand {
-    Lookup {
-        identity: Identity,
-        reply: oneshot::Sender<Arc<StacRequestCoordinator>>,
-    },
-    Retire {
-        coordinator: Weak<StacRequestCoordinator>,
-        reply: oneshot::Sender<bool>,
-    },
-}
-
-/// Application- or operation-owned coordinator registry. Clones share one
-/// worker, while coordinators retain only a weak sender so they cannot keep the
-/// registry alive.
-#[derive(Clone)]
+/// Application- or operation-owned coordinator registry.
+#[derive(Clone, Default)]
 pub struct StacRequestRegistry {
-    sender: Arc<Sender<RegistryCommand>>,
+    coordinators: Arc<CoordinatorMap>,
 }
 
 impl fmt::Debug for StacRequestRegistry {
@@ -385,101 +376,91 @@ impl fmt::Debug for StacRequestRegistry {
 }
 
 impl StacRequestRegistry {
-    /// Create a registry with one dedicated thread to own coordinator entries.
-    ///
-    /// # Errors
-    /// Returns an I/O error if the registry worker thread cannot be started.
-    pub fn new() -> std::io::Result<Self> {
-        let (sender, receiver) = std_mpsc::channel();
-        let sender = Arc::new(sender);
-        let weak_sender = Arc::downgrade(&sender);
-        std::thread::Builder::new()
-            .name("stac-coordinator-registry".to_owned())
-            .spawn(move || run_registry(receiver, &weak_sender))?;
-        Ok(Self { sender })
+    /// Create an empty request registry.
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// Find or create the coordinator for this configured origin and authentication.
+    /// Find or create the coordinator for this origin and authentication.
     /// Provider ids, collection ids and refreshed access tokens do not split quotas.
-    pub(super) async fn shared(
+    pub(super) fn shared(
         &self,
         origin: &Url,
         authentication: Option<&super::StacProviderAuthentication>,
     ) -> Arc<StacRequestCoordinator> {
-        let identity = Identity {
-            scheme: origin.scheme().to_ascii_lowercase(),
-            host: origin.host_str().unwrap_or_default().to_ascii_lowercase(),
-            port: origin.port_or_known_default().unwrap_or(0),
-            token_endpoint: authentication.map(|a| normalize_endpoint(&a.endpoint)),
-            client_id: authentication.map(|a| a.client_id.clone()),
-            username: authentication.map(|a| a.username.clone()),
-            password: authentication.map(|a| a.password.clone()),
+        let identity = identity_for(origin, authentication);
+        self.shared_with_dispatch(identity, |job| Box::pin(run_attempt(job)) as RunningAttempt)
+    }
+
+    fn shared_with_dispatch<F>(
+        &self,
+        identity: Identity,
+        dispatch: F,
+    ) -> Arc<StacRequestCoordinator>
+    where
+        F: Fn(AttemptJob) -> RunningAttempt + Send + 'static,
+    {
+        // A closed actor is replaced only for this identity. Other entries
+        // retire themselves after their retained quota history expires.
+        let (coordinator, receivers) = match self.coordinators.entry(identity.clone()) {
+            Entry::Occupied(mut entry) if entry.get().channels.jobs.is_closed() => {
+                let (coordinator, receivers) =
+                    Self::new_coordinator(identity, Arc::downgrade(&self.coordinators));
+                entry.insert(coordinator.clone());
+                (coordinator, Some(receivers))
+            }
+            Entry::Occupied(entry) => (entry.get().clone(), None),
+            Entry::Vacant(entry) => {
+                let (coordinator, receivers) =
+                    Self::new_coordinator(identity, Arc::downgrade(&self.coordinators));
+                entry.insert(coordinator.clone());
+                (coordinator, Some(receivers))
+            }
         };
-        let (reply, response) = oneshot::channel();
-        assert!(
-            self.sender
-                .send(RegistryCommand::Lookup { identity, reply })
-                .is_ok(),
-            "the owned STAC coordinator registry remains available"
-        );
-        response
-            .await
-            .expect("the owned STAC coordinator registry replies to lookups")
+
+        if let Some((jobs, cancellations)) = receivers {
+            tokio::spawn(run_actor(
+                jobs,
+                cancellations,
+                Arc::downgrade(&coordinator),
+                dispatch,
+            ));
+        }
+        coordinator
+    }
+
+    fn new_coordinator(
+        identity: Identity,
+        registry: Weak<CoordinatorMap>,
+    ) -> (Arc<StacRequestCoordinator>, ActorReceivers) {
+        let (jobs, job_receiver) = mpsc::unbounded_channel();
+        let (cancellations, cancellation_receiver) = mpsc::unbounded_channel();
+        (
+            Arc::new(StacRequestCoordinator {
+                channels: ActorChannels {
+                    jobs,
+                    cancellations,
+                },
+                identity,
+                registry,
+            }),
+            (job_receiver, cancellation_receiver),
+        )
     }
 }
 
-fn run_registry(
-    receiver: Receiver<RegistryCommand>,
-    registry_sender: &Weak<Sender<RegistryCommand>>,
-) {
-    let mut coordinators = HashMap::<Identity, Arc<StacRequestCoordinator>>::new();
-    for command in receiver {
-        match command {
-            RegistryCommand::Lookup { identity, reply } => {
-                let now = Instant::now();
-                coordinators.retain(|_, coordinator| {
-                    coordinator.channels.get().map_or_else(
-                        || {
-                            Arc::strong_count(coordinator) > 1
-                                || coordinator.created_at + MIN_RETENTION > now
-                        },
-                        |channels| !channels.jobs.is_closed(),
-                    )
-                });
-                let coordinator = coordinators
-                    .entry(identity)
-                    .or_insert_with(|| {
-                        Arc::new(StacRequestCoordinator {
-                            channels: OnceLock::new(),
-                            created_at: now,
-                            registry: registry_sender.clone(),
-                        })
-                    })
-                    .clone();
-                // If the receiver was cancelled, the failed send drops this Arc;
-                // the registry remains the sole owner of its normal retained entry.
-                let _ = reply.send(coordinator);
-            }
-            RegistryCommand::Retire { coordinator, reply } => {
-                let identity = coordinators
-                    .iter()
-                    .find(|(_, current)| std::ptr::eq(Arc::as_ptr(current), coordinator.as_ptr()))
-                    .map(|(identity, _)| identity.clone());
-                let retired = match identity {
-                    Some(identity)
-                        if coordinators
-                            .get(&identity)
-                            .is_some_and(|current| Arc::strong_count(current) == 1) =>
-                    {
-                        coordinators.remove(&identity);
-                        true
-                    }
-                    None => true,
-                    Some(_) => false,
-                };
-                let _ = reply.send(retired);
-            }
-        }
+fn identity_for(
+    origin: &Url,
+    authentication: Option<&super::StacProviderAuthentication>,
+) -> Identity {
+    Identity {
+        scheme: origin.scheme().to_ascii_lowercase(),
+        host: origin.host_str().unwrap_or_default().to_ascii_lowercase(),
+        port: origin.port_or_known_default().unwrap_or(0),
+        token_endpoint: authentication.map(|a| normalize_endpoint(&a.endpoint)),
+        client_id: authentication.map(|a| a.client_id.clone()),
+        username: authentication.map(|a| a.username.clone()),
+        password: authentication.map(|a| a.password.clone()),
     }
 }
 
@@ -547,24 +528,10 @@ impl StacRequestCoordinator {
         let request_copy = request
             .try_clone()
             .expect("STAC API searches are replayable GET requests");
-        let channels = self.channels.get_or_init(|| {
-            let (job_sender, job_receiver) = mpsc::unbounded_channel();
-            let (cancellation_sender, cancellation_receiver) = mpsc::unbounded_channel();
-            tokio::spawn(run_actor(
-                job_receiver,
-                cancellation_receiver,
-                Arc::downgrade(self),
-                |job| Box::pin(run_attempt(job)),
-            ));
-            ActorChannels {
-                jobs: job_sender,
-                cancellations: cancellation_sender,
-            }
-        });
         let (reply, receiver) = oneshot::channel();
         let mut pending = PendingAttempt {
             reply: receiver,
-            cancellation: Some(channels.cancellations.clone()),
+            cancellation: Some(self.channels.cancellations.clone()),
         };
         let job = AttemptJob {
             client: client.clone(),
@@ -573,7 +540,7 @@ impl StacRequestCoordinator {
             reply,
         };
         assert!(
-            channels.jobs.send(job).is_ok(),
+            self.channels.jobs.send(job).is_ok(),
             "the actor stays alive while this coordinator is externally owned"
         );
         let reply = (&mut pending.reply)
@@ -672,7 +639,7 @@ async fn run_actor<F>(
             () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } }, if deadline.is_some() => {},
             () = async { if let Some(deadline) = idle_deadline { tokio::time::sleep_until(deadline.into()).await } }, if idle_deadline.is_some() => {
                 if state.retain_until() <= Instant::now() && queued.is_empty() && running.is_empty()
-                    && StacRequestCoordinator::try_retire(&coordinator).await {
+                    && StacRequestCoordinator::try_retire(&coordinator) {
                     return;
                 }
             },
@@ -707,26 +674,29 @@ fn complete_attempt(state: &mut State, (reply, response): AttemptOutcome) {
 impl StacRequestCoordinator {
     /// Request retirement in registry lookup order. The actor can stop when its
     /// entry was removed or is already absent; external owners prevent removal.
-    async fn try_retire(self_weak: &Weak<Self>) -> bool {
+    fn try_retire(self_weak: &Weak<Self>) -> bool {
         let Some(coordinator) = self_weak.upgrade() else {
             return true;
         };
         let registry = coordinator.registry.clone();
+        let identity = coordinator.identity.clone();
         drop(coordinator);
-        let Some(sender) = registry.upgrade() else {
+        let Some(registry) = registry.upgrade() else {
             return true;
         };
-        let (reply, response) = oneshot::channel();
-        if sender
-            .send(RegistryCommand::Retire {
-                coordinator: self_weak.clone(),
-                reply,
-            })
-            .is_err()
-        {
-            return false;
+        match registry.entry(identity) {
+            Entry::Occupied(entry)
+                if std::ptr::eq(Arc::as_ptr(entry.get()), self_weak.as_ptr()) =>
+            {
+                if Arc::strong_count(entry.get()) == 1 {
+                    drop(entry.remove());
+                    true
+                } else {
+                    false
+                }
+            }
+            Entry::Occupied(_) | Entry::Vacant(_) => true,
         }
-        response.await.unwrap_or(false)
     }
 }
 
@@ -1018,31 +988,26 @@ mod tests {
 
     #[tokio::test]
     async fn it_coordinators_share_by_normalized_origin_and_auth_identity() {
-        let registry = StacRequestRegistry::new().unwrap();
+        let registry = StacRequestRegistry::new();
         let credentials = super::super::StacProviderAuthentication {
             endpoint: "https://auth.example/token/".to_owned(),
             client_id: "client".to_owned(),
             username: "user".to_owned(),
             password: "secret-value-must-not-be-debugged".to_owned(),
         };
-        let first = registry
-            .shared(
-                &Url::parse("https://STAC.example:443/api").unwrap(),
-                Some(&credentials),
-            )
-            .await;
-        let same = registry
-            .shared(
-                &Url::parse("https://stac.example/other").unwrap(),
-                Some(&credentials),
-            )
-            .await;
-        let anonymous = registry
-            .shared(&Url::parse("https://stac.example").unwrap(), None)
-            .await;
+        let first = registry.shared(
+            &Url::parse("https://STAC.example:443/api").unwrap(),
+            Some(&credentials),
+        );
+        let same = registry.shared(
+            &Url::parse("https://stac.example/other").unwrap(),
+            Some(&credentials),
+        );
+        let anonymous = registry.shared(&Url::parse("https://stac.example").unwrap(), None);
         assert!(Arc::ptr_eq(&first, &same));
         assert!(!Arc::ptr_eq(&first, &anonymous));
         assert!(!format!("{first:?}").contains("secret-value-must-not-be-debugged"));
+        tokio::task::yield_now().await;
     }
 
     #[tokio::test]
@@ -1060,10 +1025,8 @@ mod tests {
                     responders::json_encoded(json!({"complete": true})),
                 ]),
         );
-        let registry = StacRequestRegistry::new().unwrap();
-        let coordinator = registry
-            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
-            .await;
+        let registry = StacRequestRegistry::new();
+        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
         let client = reqwest::Client::new();
         let request = client.get(server.url_str("/items")).build().unwrap();
         let result: Value = coordinator
@@ -1088,10 +1051,8 @@ mod tests {
                     .times(max_retries.max(1) as usize)
                     .respond_with(responders::status_code(500)),
             );
-            let registry = StacRequestRegistry::new().unwrap();
-            let coordinator = registry
-                .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
-                .await;
+            let registry = StacRequestRegistry::new();
+            let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
             let client = reqwest::Client::new();
             let error = coordinator
                 .execute::<serde_json::Value>(
@@ -1123,10 +1084,8 @@ mod tests {
                     .respond_with(responders::status_code(200).body(body)),
             );
         }
-        let registry = StacRequestRegistry::new().unwrap();
-        let coordinator = registry
-            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
-            .await;
+        let registry = StacRequestRegistry::new();
+        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
         let client = reqwest::Client::new();
         let mut tasks = tokio::task::JoinSet::new();
         for path in ["/one", "/two"] {
@@ -1177,10 +1136,8 @@ mod tests {
                     responders::delay_and_then(delay, responders::json_encoded(body))
                 }),
         );
-        let registry = StacRequestRegistry::new().unwrap();
-        let coordinator = registry
-            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
-            .await;
+        let registry = StacRequestRegistry::new();
+        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
         let client = reqwest::Client::new();
         let first_coordinator = coordinator.clone();
         let first_client = client.clone();
@@ -1229,10 +1186,8 @@ mod tests {
                 .times(1)
                 .respond_with(responders::status_code(404)),
         );
-        let registry = StacRequestRegistry::new().unwrap();
-        let coordinator = registry
-            .shared(&Url::parse(&server.url_str("/")).unwrap(), None)
-            .await;
+        let registry = StacRequestRegistry::new();
+        let coordinator = registry.shared(&Url::parse(&server.url_str("/")).unwrap(), None);
         let client = reqwest::Client::new();
         let error = coordinator
             .execute::<serde_json::Value>(

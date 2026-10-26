@@ -6,40 +6,25 @@ fn origin(label: &str) -> Url {
     Url::parse(&format!("https://{label}.registry.test")).unwrap()
 }
 
-fn identity(label: &str) -> Identity {
-    Identity {
-        scheme: "https".to_owned(),
-        host: format!("{label}.registry.test"),
-        port: 443,
-        token_endpoint: None,
-        client_id: None,
-        username: None,
-        password: None,
-    }
-}
-
-fn lookup(
-    registry: &StacRequestRegistry,
-    label: &str,
-) -> oneshot::Receiver<Arc<StacRequestCoordinator>> {
-    let (reply, receiver) = oneshot::channel();
-    assert!(
-        registry
-            .sender
-            .send(RegistryCommand::Lookup {
-                identity: identity(label),
-                reply,
-            })
-            .is_ok()
-    );
-    receiver
-}
-
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn it_serializes_concurrent_lookups_for_the_same_identity() {
-    let registry = StacRequestRegistry::new().unwrap();
+    let registry = StacRequestRegistry::new();
     let origin = origin("concurrent-lookups");
-    let coordinators = join_all((0..64).map(|_| registry.shared(&origin, None))).await;
+    let barrier = Arc::new(tokio::sync::Barrier::new(65));
+    let lookups: Vec<_> = (0..64)
+        .map(|_| {
+            let registry = registry.clone();
+            let origin = origin.clone();
+            let barrier = barrier.clone();
+            tokio::spawn(async move {
+                barrier.wait().await;
+                registry.shared(&origin, None)
+            })
+        })
+        .collect();
+    barrier.wait().await;
+    let tasks = join_all(lookups).await;
+    let coordinators: Vec<_> = tasks.into_iter().map(Result::unwrap).collect();
     assert!(
         coordinators
             .iter()
@@ -48,110 +33,65 @@ async fn it_serializes_concurrent_lookups_for_the_same_identity() {
 }
 
 #[tokio::test]
-async fn it_keeps_pending_lookup_replies_alive_during_retirement() {
-    let registry = StacRequestRegistry::new().unwrap();
-    let label = "pending-lookup";
-    let coordinator = registry.shared(&origin(label), None).await;
-    let weak = Arc::downgrade(&coordinator);
-    drop(coordinator);
-
-    // FIFO registry commands put an owning Arc into this reply before checking
-    // retirement, even though the caller has not consumed that reply yet.
-    let pending = lookup(&registry, label);
-    assert!(!StacRequestCoordinator::try_retire(&weak).await);
-    let reconstructed = pending.await.unwrap();
-    assert!(weak.ptr_eq(&Arc::downgrade(&reconstructed)));
-    drop(reconstructed);
-    assert!(StacRequestCoordinator::try_retire(&weak).await);
-}
-
-#[tokio::test]
-async fn it_does_not_leak_ownership_when_a_lookup_is_cancelled() {
-    let registry = StacRequestRegistry::new().unwrap();
-    let label = "cancelled-lookup";
-    let coordinator = registry.shared(&origin(label), None).await;
-    let weak = Arc::downgrade(&coordinator);
-    drop(coordinator);
-    let (reply, receiver) = oneshot::channel();
-    drop(receiver);
-    assert!(
-        registry
-            .sender
-            .send(RegistryCommand::Lookup {
-                identity: identity(label),
-                reply,
-            })
-            .is_ok()
-    );
-    assert!(StacRequestCoordinator::try_retire(&weak).await);
-    assert!(weak.upgrade().is_none());
-}
-
-#[tokio::test]
 async fn it_ignores_retirement_from_an_old_coordinator_after_replacement() {
-    let registry = StacRequestRegistry::new().unwrap();
+    let registry = StacRequestRegistry::new();
     let origin = origin("retired-generation");
-    let old = registry.shared(&origin, None).await;
+    let old = registry.shared(&origin, None);
     let old_weak = Arc::downgrade(&old);
     drop(old);
-    assert!(StacRequestCoordinator::try_retire(&old_weak).await);
-    let replacement = registry.shared(&origin, None).await;
+    assert!(StacRequestCoordinator::try_retire(&old_weak));
+    let replacement = registry.shared(&origin, None);
     assert!(!old_weak.ptr_eq(&Arc::downgrade(&replacement)));
-    assert!(StacRequestCoordinator::try_retire(&old_weak).await);
-    let looked_up = registry.shared(&origin, None).await;
+    assert!(StacRequestCoordinator::try_retire(&old_weak));
+    let looked_up = registry.shared(&origin, None);
     assert!(Arc::ptr_eq(&replacement, &looked_up));
 }
 
 #[test]
-fn it_preserves_a_registry_across_independent_tokio_runtime_lifetimes() {
-    let registry = StacRequestRegistry::new().unwrap();
+fn it_replaces_a_closed_actor_after_its_tokio_runtime_shuts_down() {
+    let registry = StacRequestRegistry::new();
     let origin = origin("independent-runtimes");
     let first = {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .unwrap();
-        runtime.block_on(registry.shared(&origin, None))
+        runtime.block_on(async { registry.shared(&origin, None) })
     };
-    let second = {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .build()
-            .unwrap();
-        runtime.block_on(registry.shared(&origin, None))
-    };
-    assert!(Arc::ptr_eq(&first, &second));
+    assert!(first.channels.jobs.is_closed());
+    let second_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()
+        .unwrap();
+    let second = second_runtime.block_on(async { registry.shared(&origin, None) });
+    assert!(!Arc::ptr_eq(&first, &second));
+    assert!(!second.channels.jobs.is_closed());
+    drop(second_runtime);
+    assert!(second.channels.jobs.is_closed());
 }
 
 #[tokio::test]
 async fn it_separates_independent_registry_owners() {
-    let first_registry = StacRequestRegistry::new().unwrap();
-    let second_registry = StacRequestRegistry::new().unwrap();
+    let first_registry = StacRequestRegistry::new();
+    let second_registry = StacRequestRegistry::new();
     let origin = origin("independent-owners");
-    let first = first_registry.shared(&origin, None).await;
-    let second = second_registry.shared(&origin, None).await;
+    let first = first_registry.shared(&origin, None);
+    let second = second_registry.shared(&origin, None);
     assert!(!Arc::ptr_eq(&first, &second));
 }
 
 #[tokio::test]
 async fn it_does_not_keep_the_registry_alive_through_coordinator_ownership() {
-    let registry = StacRequestRegistry::new().unwrap();
-    let origin = origin("weak-registry-owner");
-    let coordinator = registry.shared(&origin, None).await;
-    let weak_sender = Arc::downgrade(&registry.sender);
+    let registry = StacRequestRegistry::new();
+    let coordinator = registry.shared(&origin("weak-registry-owner"), None);
+    let weak_registry = Arc::downgrade(&registry.coordinators);
     drop(registry);
-    assert!(weak_sender.upgrade().is_none());
+    assert!(weak_registry.upgrade().is_none());
     assert!(coordinator.registry.upgrade().is_none());
-    tokio::time::timeout(Duration::from_secs(1), async {
-        while Arc::strong_count(&coordinator) > 1 {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("the registry worker should release its retained entries when its owners drop");
 }
 
 #[tokio::test]
 async fn it_separates_registry_entries_by_every_configured_credential() {
-    let registry = StacRequestRegistry::new().unwrap();
+    let registry = StacRequestRegistry::new();
     let origin = origin("credential-buckets");
     let credentials = super::super::StacProviderAuthentication {
         endpoint: "https://auth.example/token".to_owned(),
@@ -159,7 +99,7 @@ async fn it_separates_registry_entries_by_every_configured_credential() {
         username: "user".to_owned(),
         password: "secret".to_owned(),
     };
-    let shared = registry.shared(&origin, Some(&credentials)).await;
+    let shared = registry.shared(&origin, Some(&credentials));
     let mut buckets = vec![shared];
     for field in 0..4 {
         let mut different = credentials.clone();
@@ -169,7 +109,7 @@ async fn it_separates_registry_entries_by_every_configured_credential() {
             2 => different.username = "other-user".to_owned(),
             _ => different.password = "other-secret".to_owned(),
         }
-        let coordinator = registry.shared(&origin, Some(&different)).await;
+        let coordinator = registry.shared(&origin, Some(&different));
         assert!(
             buckets
                 .iter()
@@ -180,26 +120,41 @@ async fn it_separates_registry_entries_by_every_configured_credential() {
 }
 
 #[tokio::test]
-async fn it_replaces_a_closed_request_actor_without_retiring_its_replacement() {
-    let registry = StacRequestRegistry::new().unwrap();
-    let origin = origin("closed-request-actor");
-    let stale = registry.shared(&origin, None).await;
-    let weak = Arc::downgrade(&stale);
-    let (jobs, receiver) = mpsc::unbounded_channel();
-    let (cancellations, cancellation_receiver) = mpsc::unbounded_channel();
-    stale
-        .channels
-        .set(ActorChannels {
-            jobs,
-            cancellations,
-        })
-        .unwrap();
-    // Dropping the actor's receivers models its Tokio runtime shutting down.
-    drop(receiver);
-    drop(cancellation_receiver);
-    let replacement = registry.shared(&origin, None).await;
-    assert!(!Arc::ptr_eq(&stale, &replacement));
-    assert!(StacRequestCoordinator::try_retire(&weak).await);
-    let current = registry.shared(&origin, None).await;
-    assert!(Arc::ptr_eq(&replacement, &current));
+async fn it_keeps_cloned_registry_handles_in_the_same_sharing_domain() {
+    let registry = StacRequestRegistry::new();
+    let cloned = registry.clone();
+    let origin = origin("cloned-registry");
+    let first = registry.shared(&origin, None);
+    let second = cloned.shared(&origin, None);
+    assert!(Arc::ptr_eq(&first, &second));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn it_never_retires_a_coordinator_handed_out_by_a_racing_lookup() {
+    let registry = StacRequestRegistry::new();
+    for iteration in 0..64 {
+        let origin = origin(&format!("retirement-race-{iteration}"));
+        let original = registry.shared(&origin, None);
+        let weak = Arc::downgrade(&original);
+        drop(original);
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+        let lookup_registry = registry.clone();
+        let lookup_origin = origin.clone();
+        let lookup_barrier = barrier.clone();
+        let lookup = tokio::spawn(async move {
+            lookup_barrier.wait().await;
+            lookup_registry.shared(&lookup_origin, None)
+        });
+        let retire_barrier = barrier.clone();
+        let retire = tokio::spawn(async move {
+            retire_barrier.wait().await;
+            StacRequestCoordinator::try_retire(&weak)
+        });
+        barrier.wait().await;
+        let coordinator = lookup.await.unwrap();
+        retire.await.unwrap();
+        let current = registry.shared(&origin, None);
+        assert!(Arc::ptr_eq(&current, &coordinator));
+        assert!(!coordinator.channels.jobs.is_closed());
+    }
 }
