@@ -372,18 +372,17 @@ impl DataProvider for StacDataProvider {
 pub(crate) struct StacClient {
     client: reqwest::Client,
     origin: url::Url,
-    coordinator: Arc<coordinator::StacRequestCoordinator>,
+    coordinator_authentication: Option<StacProviderAuthentication>,
     authentication: Option<auth::StacAuthentication>,
 }
 
 impl StacClient {
     pub(crate) fn new(client: reqwest::Client, stac_api_url: &str) -> crate::error::Result<Self> {
         let origin = url::Url::parse(stac_api_url)?;
-        let coordinator = coordinator::StacRequestCoordinator::shared(&origin, None);
         Ok(Self {
             client,
             origin,
-            coordinator,
+            coordinator_authentication: None,
             authentication: None,
         })
     }
@@ -392,8 +391,7 @@ impl StacClient {
         mut self,
         config: Option<StacProviderAuthentication>,
     ) -> crate::error::Result<Self> {
-        self.coordinator =
-            coordinator::StacRequestCoordinator::shared(&self.origin, config.as_ref());
+        self.coordinator_authentication = config.clone();
         self.authentication = match config {
             Some(config) => {
                 Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
@@ -415,7 +413,12 @@ impl StacClient {
         policy: &crate::util::retry::RetryPolicy,
     ) -> reqwest::Result<T> {
         let request = request.build()?;
-        self.coordinator
+        let coordinator = coordinator::StacRequestCoordinator::shared(
+            &self.origin,
+            self.coordinator_authentication.as_ref(),
+        )
+        .await;
+        coordinator
             .execute(&self.client, request, self.authentication.as_ref(), policy)
             .await
     }

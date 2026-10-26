@@ -13,7 +13,8 @@ policy. No API or configuration changes are planned.
 1. Replace the scheduler mutex, notification queue, and request guards with an
    actor per coordinator. Submit owned HTTP attempts through a Tokio channel;
    each attempt carries a oneshot reply sender. Keep synchronous provider
-   construction possible by starting the actor lazily.
+   construction possible by looking up its coordinator asynchronously on first
+   execution and starting the request actor lazily.
 2. Give the actor exclusive ownership of FIFO admission, request history, learned
    quota windows, outstanding counts, and cooldowns. Its event loop accepts new
    jobs, processes completed attempts, and wakes at the next admission deadline.
@@ -32,10 +33,22 @@ policy. No API or configuration changes are planned.
    actual HTTP concurrency, FIFO admission, cancellation, response routing,
    shared quota feedback, retries, authentication, pagination, and cache sharing.
 
-The process-wide registry may retain its short synchronous lookup mutex.
-Request admission, completion, cancellation, and retry decisions must not lock
-scheduler state. An actor must not retain itself indefinitely or require a
-Tokio runtime during synchronous provider construction.
+6. Give a process-wide registry worker exclusive ownership of the identity map.
+   Lookups and retirement requests use messages and oneshot replies. Serialize
+   the final ownership check and removal with lookups to preserve quota sharing
+   when providers are reconstructed. Keep this worker on one dedicated thread,
+   independent of the runtime that happens to make the first request. Only that
+   worker blocks on its message receiver; async callers await reply channels.
+   Each client execution looks up its coordinator asynchronously using the
+   configured origin and credentials. This extra channel round trip selects a
+   live coordinator even when the runtime that hosted a prior actor has stopped;
+   retries within an execution continue using the selected coordinator.
+
+Neither the registry nor request scheduling uses an explicit mutex or read/write
+lock. An actor must not retain itself indefinitely or require a Tokio runtime
+during synchronous provider construction. Channels and one-time initialization
+still provide their own synchronization; this does not claim that every
+underlying library operation is lock-free.
 
 ## Validation
 
@@ -48,16 +61,18 @@ Run from `geoengine/`:
 
 The complete repository backend CI remains the broader integration check.
 The new PR should target `main` as an alternative to #1343 and state which
-implementation it reuses, the remaining registry mutex, and validation results.
+implementation it reuses, the channel-owned registry, and validation results.
 
 ## Validation results
 
 - Strict Clippy for all service features and targets, Rust formatting, Markdown
   formatting, and `git diff --check` pass.
-- All 24 coordinator tests that do not require sockets pass, including the actual
+- All 31 coordinator tests that do not require sockets pass, including the actual
   actor's concurrent admission, FIFO, cancellation, out-of-order replies, and
-  provider reconstruction tests. Ten mocked HTTP coordinator tests also compile.
-- The full STAC selection has 119 passing tests, 44 failures from denied local
+  provider reconstruction tests. Registry tests also cover concurrent identity
+  lookup, pending and cancelled replies, safe retirement, and independent Tokio
+  runtime lifetimes. Ten mocked HTTP coordinator tests also compile.
+- The full STAC selection has 126 passing tests, 44 failures from denied local
   HTTP listeners or database sockets, and three ignored tests. Every failure
   reports `PermissionDenied`; socket-dependent tests also fail on the unchanged
   implementation in this workspace.

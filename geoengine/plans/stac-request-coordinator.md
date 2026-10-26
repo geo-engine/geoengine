@@ -96,10 +96,20 @@ consumes no quota; admitted cancellation releases outstanding bookkeeping while
 preserving the charged timestamp. A cancellation wakeup prevents a removed FIFO
 head from delaying later requests behind an admission timer.
 
-Synchronous provider construction does not require a Tokio runtime. The actor
-starts lazily, and registry retention preserves quota history across provider
-reconstruction. The short process-wide registry mutex remains for lookup and
-idle reclamation; HTTP request scheduling does not acquire a mutex.
+Synchronous provider construction does not require a Tokio runtime. Each client
+execution looks up its coordinator asynchronously using the configured origin
+and authentication. This additional channel round trip selects a live coordinator
+if a previous actor's runtime has stopped. Retries continue using the selected
+coordinator. The HTTP actor starts lazily, and registry retention preserves quota
+history across provider reconstruction.
+
+A process-wide worker owns the registry map on one dedicated thread. It handles
+lookup and retirement messages in order and replies through oneshot channels.
+The final ownership check and removal therefore cannot race with a lookup that
+hands a coordinator to a new provider. This worker is independent of individual
+Tokio runtime lifetimes, and async callers never block waiting for its messages.
+Neither registry operations nor HTTP request scheduling acquires an explicit
+mutex.
 
 All server feedback can lower capacity, irrespective of dispatch order. It cannot
 refill capacity until reset, because dispatch order need not match server
@@ -112,8 +122,8 @@ not capped. Unrepresentable deadlines are ignored. Every window uses the same
 request history, retained for the longest known window or five minutes, whichever
 is longer. The limit-th most recent timestamp determines local capacity in O(1)
 per policy. Header policies and feedback are parsed together once by the actor, using the
-same `Window` type as scheduler state. Normal request processing never locks
-the process-wide registry.
+same `Window` type as scheduler state. Registry lookup happens once per client
+execution, independently of HTTP attempts and retry backoff.
 
 ## Validation commands
 

@@ -110,7 +110,7 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
 // Drive real actor jobs and reply decoding with controlled responses and no sockets.
 type StartedAttempt = (String, oneshot::Sender<reqwest::Response>);
 
-fn controlled_coordinator(
+async fn controlled_coordinator(
     label: &str,
 ) -> (
     Arc<StacRequestCoordinator>,
@@ -119,7 +119,8 @@ fn controlled_coordinator(
     let coordinator = StacRequestCoordinator::shared(
         &Url::parse(&format!("https://{label}.actor.test")).unwrap(),
         None,
-    );
+    )
+    .await;
     let (jobs, receiver) = mpsc::unbounded_channel();
     let (cancellations, cancellation_receiver) = mpsc::unbounded_channel();
     let (started, starts) = mpsc::unbounded_channel();
@@ -191,7 +192,7 @@ fn response(id: usize, remaining: Option<usize>) -> reqwest::Response {
 
 #[tokio::test]
 async fn it_routes_out_of_order_responses_without_waiting_for_earlier_attempts() {
-    let (coordinator, mut starts) = controlled_coordinator("response-routing");
+    let (coordinator, mut starts) = controlled_coordinator("response-routing").await;
     let first = execute_job(coordinator.clone(), 1);
     let (first_path, first_response) = next_start(&mut starts).await;
     let second = execute_job(coordinator, 2);
@@ -210,7 +211,7 @@ async fn it_routes_out_of_order_responses_without_waiting_for_earlier_attempts()
 
 #[tokio::test]
 async fn it_releases_cancelled_inflight_bookkeeping_before_merging_feedback() {
-    let (coordinator, mut starts) = controlled_coordinator("inflight-cancel");
+    let (coordinator, mut starts) = controlled_coordinator("inflight-cancel").await;
     let first = execute_job(coordinator.clone(), 1);
     let (_, first_response) = next_start(&mut starts).await;
     first.abort();
@@ -234,7 +235,7 @@ async fn it_releases_cancelled_inflight_bookkeeping_before_merging_feedback() {
 
 #[tokio::test]
 async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
-    let (coordinator, mut starts) = controlled_coordinator("retained-quota");
+    let (coordinator, mut starts) = controlled_coordinator("retained-quota").await;
     let previous = Arc::downgrade(&coordinator);
     let first = execute_job(coordinator.clone(), 1);
     let (_, first_response) = next_start(&mut starts).await;
@@ -244,7 +245,8 @@ async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
     let reconstructed = StacRequestCoordinator::shared(
         &Url::parse("https://retained-quota.actor.test/collection").unwrap(),
         None,
-    );
+    )
+    .await;
     assert!(previous.ptr_eq(&Arc::downgrade(&reconstructed)));
     let second = execute_job(reconstructed, 2);
     assert!(
@@ -257,15 +259,16 @@ async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
     second.await.unwrap().unwrap();
 }
 
-#[test]
-fn it_retires_only_registry_owned_coordinators() {
+#[tokio::test]
+async fn it_retires_only_registry_owned_coordinators() {
     let coordinator = StacRequestCoordinator::shared(
         &Url::parse("https://idle-retirement.actor.test").unwrap(),
         None,
-    );
+    )
+    .await;
     let weak = Arc::downgrade(&coordinator);
-    assert!(!StacRequestCoordinator::try_retire(&weak));
+    assert!(!StacRequestCoordinator::try_retire(&weak).await);
     drop(coordinator);
-    assert!(StacRequestCoordinator::try_retire(&weak));
+    assert!(StacRequestCoordinator::try_retire(&weak).await);
     assert!(weak.upgrade().is_none());
 }

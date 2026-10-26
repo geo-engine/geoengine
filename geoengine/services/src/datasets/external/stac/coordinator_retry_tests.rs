@@ -1,5 +1,6 @@
 //! HTTP retry regressions retained from PR #1343.
 use super::*;
+use std::sync::Mutex;
 
 #[tokio::test]
 async fn it_returns_the_http_error_when_the_attempt_budget_is_exhausted() {
@@ -13,7 +14,7 @@ async fn it_returns_the_http_error_when_the_attempt_budget_is_exhausted() {
                 .respond_with(responders::status_code(500)),
         );
         let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
         let client = reqwest::Client::new();
         let request = client.get(server.url_str("/items")).build().unwrap();
         let policy = RetryPolicy::new()
@@ -43,7 +44,7 @@ async fn it_uses_the_callers_attempt_limit_for_rate_limit_retries() {
     );
     let client = reqwest::Client::new();
     let coordinator =
-        StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
     let error = coordinator
         .execute::<serde_json::Value>(
             &client,
@@ -74,7 +75,7 @@ async fn it_backs_off_exponentially_for_headerless_rate_limits() {
     );
     let client = reqwest::Client::new();
     let coordinator =
-        StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+        StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
     let policy = RetryPolicy::new().max_retries(4).initial_delay_ms(600);
     tokio::time::timeout(
         Duration::from_secs(10),
@@ -118,7 +119,7 @@ async fn it_uses_server_rate_limits_without_adding_exponential_backoff() {
         );
         let client = reqwest::Client::new();
         let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
         let policy = RetryPolicy::new().max_retries(2).initial_delay_ms(10_000);
         tokio::time::timeout(
             Duration::from_secs(3),
@@ -152,7 +153,7 @@ async fn it_shares_the_attempt_budget_between_rate_limits_and_other_failures() {
         );
         let client = reqwest::Client::new();
         let coordinator =
-            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None);
+            StacRequestCoordinator::shared(&Url::parse(&server.url_str("/")).unwrap(), None).await;
         let error = coordinator
             .execute::<serde_json::Value>(
                 &client,
