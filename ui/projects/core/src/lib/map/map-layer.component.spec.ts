@@ -38,7 +38,7 @@ const tileset = {
     },
 };
 
-describe('OGC map tile minimum zoom', () => {
+describe('OGC map tile minimum matrix index', () => {
     let fixture: ComponentFixture<OlOgcApiMapTileLayerComponent>;
     let mapService: MapService;
     let view: View;
@@ -58,7 +58,7 @@ describe('OGC map tile minimum zoom', () => {
             spatialReference: new SpatialReference('EPSG:3857'),
             time: new Time(new Date('2026-04-01T00:00:00Z')),
             tmsId: 'CustomWebMercator',
-            minZoom: 4,
+            minTileMatrixIndex: 4,
         })) {
             fixture.componentRef.setInput(key, value);
         }
@@ -275,7 +275,7 @@ describe('OGC map tile minimum zoom', () => {
     });
 
     it('leaves sources without a zoom limit unrestricted', async () => {
-        fixture.componentRef.setInput('minZoom', 0);
+        fixture.componentRef.setInput('minTileMatrixIndex', 0);
         fixture.detectChanges();
         await fixture.whenStable();
         expect(zoomRequired).toHaveBeenLastCalledWith(false);
@@ -287,7 +287,7 @@ describe('OGC map tile minimum zoom', () => {
     });
 
     it('hides a layer whose minimum matrix is outside the tileset', async () => {
-        fixture.componentRef.setInput('minZoom', resolutions.length);
+        fixture.componentRef.setInput('minTileMatrixIndex', resolutions.length);
         fixture.detectChanges();
         await fixture.whenStable();
         expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(0);

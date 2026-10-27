@@ -186,20 +186,20 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
-    it('reads each source zoom limit and changes the applied limit only on Apply', async () => {
+    it('reads each source minimum tile matrix index and changes the applied limit only on Apply', async () => {
         const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
         getLayerCollectionItems.mockImplementation((_provider, collection) => {
             if (collection === 'edv') {
                 return Promise.resolve({
                     items: [
-                        {...dataset, properties: [...(dataset.properties ?? []), ['edv:minZoom', '4']]},
+                        {...dataset, properties: [...(dataset.properties ?? []), ['edv:minTileMatrixIndex', '4']]},
                         {
                             ...dataset,
                             name: 'Z Other source',
                             id: {...dataset.id, collectionId: 'other-dataset'},
                             properties: [
                                 ['edv:dataset', 'other'],
-                                ['edv:minZoom', '5'],
+                                ['edv:minTileMatrixIndex', '5'],
                             ],
                         },
                     ],
@@ -227,32 +227,96 @@ describe('LayersComponent', () => {
         });
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.selectedDataSource()?.minZoom).toBe(4);
+        expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(4);
         expect(eodysseyLayerService.appliedDataSource()).toBeUndefined();
         eodysseyLayerService.applySelectedPreset();
-        expect(eodysseyLayerService.appliedDataSource()?.minZoom).toBe(4);
+        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
         eodysseyLayerService.setSelectedDataSource('other');
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.selectedDataSource()?.minZoom).toBe(5);
-        expect(eodysseyLayerService.appliedDataSource()?.minZoom).toBe(4);
+        expect(eodysseyLayerService.selectedDataSource()?.minTileMatrixIndex).toBe(5);
+        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(4);
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(4);
         eodysseyLayerService.applySelectedPreset();
-        expect(eodysseyLayerService.appliedDataSource()?.minZoom).toBe(5);
+        expect(eodysseyLayerService.appliedDataSource()?.minTileMatrixIndex).toBe(5);
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
         expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('other-layer');
     });
 
-    it.each(['', '-1', '4.5', '256', 'NaN', 'Infinity'])('reports invalid zoom metadata %j', async (value) => {
-        const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
+    it.each([0, 2, undefined])(
+        'uses preset limit %j before the source fallback and changes it only on Apply',
+        async (minTileMatrixIndex) => {
+            const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
+            getLayerCollectionItems.mockImplementation((_provider, collection) => {
+                if (collection === 'edv') {
+                    return Promise.resolve({
+                        items: [{...dataset, properties: [...(dataset.properties ?? []), ['edv:minTileMatrixIndex', '9']]}],
+                    });
+                }
+                if (collection === 'region') {
+                    return Promise.resolve({
+                        items: listings.region.items.map((item, index) => {
+                            const preset = item as Extract<CollectionItem, {type: 'layer'}>;
+                            const value = index === 0 ? minTileMatrixIndex : 6;
+                            return {
+                                ...preset,
+                                properties: [
+                                    ...(preset.properties ?? []),
+                                    ...(value === undefined ? [] : [['edv:minTileMatrixIndex', String(value)]]),
+                                ],
+                            };
+                        }),
+                    });
+                }
+                return Promise.resolve(listings[collection] ?? {items: []});
+            });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(0);
+            eodysseyLayerService.applySelectedPreset();
+            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(minTileMatrixIndex ?? 9);
+            eodysseyLayerService.setSelectedPreset('Alternate');
+            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(minTileMatrixIndex ?? 9);
+            eodysseyLayerService.applySelectedPreset();
+            expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(6);
+        },
+    );
+
+    it('reports invalid preset tile matrix index metadata instead of using the source fallback', async () => {
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
             Promise.resolve(
-                collection === 'edv'
-                    ? {items: [{...dataset, properties: [...(dataset.properties ?? []), ['edv:minZoom', value]]}]}
+                collection === 'region'
+                    ? {
+                          items: listings.region.items.map((item) => ({
+                              ...(item as CollectionItem),
+                              properties: [
+                                  ['edv:presetKey', 'invalid'],
+                                  ['edv:minTileMatrixIndex', '-1'],
+                              ],
+                          })),
+                      }
                     : (listings[collection] ?? {items: []}),
             ),
         );
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(eodysseyLayerService.catalogueError()).toContain('Invalid edv:minZoom');
+        expect(eodysseyLayerService.variantError()).toContain('Invalid edv:minTileMatrixIndex');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+    });
+
+    it.each(['', '-1', '4.5', '256', 'NaN', 'Infinity'])('reports invalid tile matrix index metadata %j', async (value) => {
+        const dataset = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
+        getLayerCollectionItems.mockImplementation((_provider, collection) =>
+            Promise.resolve(
+                collection === 'edv'
+                    ? {items: [{...dataset, properties: [...(dataset.properties ?? []), ['edv:minTileMatrixIndex', value]]}]}
+                    : (listings[collection] ?? {items: []}),
+            ),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.catalogueError()).toContain('Invalid edv:minTileMatrixIndex');
     });
 
     it('waits for the replacement view center and removes the old view listener', async () => {

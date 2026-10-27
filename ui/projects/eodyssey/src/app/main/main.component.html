@@ -85,7 +85,7 @@
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="'CustomWebMercator'"
-                        [minZoom]="minTileZoom()"
+                        [minTileMatrixIndex]="minTileMatrixIndex()"
                         [isVisible]="testIsVisible()"
                         (loading)="onTileLoading($event)"
                         (zoomRequired)="zoomRequired.set($event)"

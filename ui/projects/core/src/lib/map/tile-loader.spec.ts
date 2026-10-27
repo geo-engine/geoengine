@@ -162,7 +162,7 @@ describe('TileLoader', () => {
         loader.load(tile, 'https://example.com/tile');
         await vi.advanceTimersByTimeAsync(0);
 
-        loader.cancelPending('view is below minimum tile zoom');
+        loader.cancelPending('view is below minimum tile matrix index');
         await vi.advanceTimersByTimeAsync(10000);
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(setState).toHaveBeenCalledWith(TileState.IDLE);
