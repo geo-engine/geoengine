@@ -106,7 +106,7 @@ criterion = { package = "codspeed-criterion-compat", version = "6.0", features =
 crs-definitions = { version = "0.6.0", features = ["proj4"] }
 csv = "1.4"
 erased-serde = "0.4"
-fallible-iterator = "=0.2.0" # only for postgres-protocol
+fallible-iterator = "=0.3.0" # only for postgres-protocol
 flexi_logger = { version = "0.31", features = ["trc"] }
 float-cmp = "0.10"
 futures = "0.3"
@@ -148,14 +148,14 @@ postgres-types = { version = "0.2", features = ["array-impls", "derive", "with-c
 pretty_assertions = "1.4"
 prettyplease = "0.3"
 proc-macro2 = "1.0"
-proj = "=0.28.0" # needs to stay fixed to use fixed proj version
+proj = "=0.29.0" # needs to stay fixed to use fixed proj version
 proj-sys = "=0.25.0" # needs to stay fixed to use fixed proj version
 pwhash = "1.0"
 quote = "1.0"
 rand = "0.10"
 rayon = "1.12"
 regex = "1.13"
-reqwest = { version = "=0.12.28", features = ["json", "multipart", "stream"] } # has to match with `oauth`
+reqwest = { version = "=0.13.5", features = ["json", "multipart", "stream"] } # has to match with `oauth`
 rustc-hash = { version = "2.1", default-features = false }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_bytes = "0.11"
