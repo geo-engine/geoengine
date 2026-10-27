@@ -13,6 +13,8 @@
 //! Each attempt is an owned channel job with a one-shot reply. The actor applies
 //! response feedback before replying. Failures and cancellation keep an admitted
 //! request start charged against the rolling windows.
+//! Each coordinator bounds queued and running attempts together; additional
+//! callers wait asynchronously for capacity. Cancellation wakeups are coalesced.
 //!
 //! Retries for transient failures wait for exponential backoff outside the queue,
 //! then join its tail again. A 429 sets a shared cooldown; retries also back off
@@ -34,13 +36,15 @@ use std::{
     sync::{Arc, Weak},
     time::{Duration, Instant, SystemTime},
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 use url::Url;
 
 /// Duration of the initial ten-request rate-limit window.
 const DEFAULT_WINDOW_DURATION: Duration = Duration::from_secs(1);
 /// Cooldown/reset delay when the server supplies no usable timing.
 const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(1);
+/// Bound jobs across the channel, actor queue and running HTTP attempts.
+const MAX_PENDING_ATTEMPTS: usize = 256;
 /// Keep recent starts and idle coordinators long enough to learn further policies
 /// and preserve quota accounting when providers are reconstructed.
 const MIN_RETENTION: Duration = Duration::from_mins(5);
@@ -327,6 +331,7 @@ struct AttemptJob {
     request: reqwest::Request,
     authentication: Option<StacAuthentication>,
     reply: oneshot::Sender<AttemptReply>,
+    permit: OwnedSemaphorePermit,
 }
 
 #[derive(Debug)]
@@ -335,11 +340,14 @@ struct AttemptReply {
     server_controls_retry: bool,
 }
 
-/// Shared request and cancellation channels plus their registry identity.
+/// Shared request channel and cancellation notification plus their registry identity.
 #[derive(Debug)]
 pub(super) struct ActorChannels {
-    jobs: mpsc::UnboundedSender<AttemptJob>,
-    cancellations: mpsc::UnboundedSender<()>,
+    // Each job owns a permit until its completion is processed, so draining the
+    // channel into the actor's queue cannot bypass backpressure.
+    jobs: mpsc::Sender<AttemptJob>,
+    capacity: Arc<Semaphore>,
+    cancellations: Arc<Notify>,
     identity: Identity,
     registry: Weak<CoordinatorMap>,
 }
@@ -348,14 +356,14 @@ pub(super) struct ActorChannels {
 /// race ahead of the receiver being dropped and leave a queued job behind.
 struct PendingAttempt {
     reply: oneshot::Receiver<AttemptReply>,
-    cancellation: Option<mpsc::UnboundedSender<()>>,
+    cancellation: Option<Arc<Notify>>,
 }
 
 impl Drop for PendingAttempt {
     fn drop(&mut self) {
-        if let Some(sender) = &self.cancellation {
+        if let Some(notification) = &self.cancellation {
             self.reply.close();
-            let _ = sender.send(());
+            notification.notify_one();
         }
     }
 }
@@ -368,14 +376,12 @@ struct AttemptCompletion {
     reply: oneshot::Sender<AttemptReply>,
     /// `None` indicates that the caller cancelled the attempt.
     response: Option<reqwest::Result<reqwest::Response>>,
+    permit: OwnedSemaphorePermit,
 }
 
 type RunningAttempt = Pin<Box<dyn Future<Output = AttemptCompletion> + Send>>;
+
 type CoordinatorMap = DashMap<Identity, Arc<ActorChannels>>;
-type ActorReceivers = (
-    mpsc::UnboundedReceiver<AttemptJob>,
-    mpsc::UnboundedReceiver<()>,
-);
 
 /// Application- or operation-owned coordinator registry.
 #[derive(Clone, Debug, Default)]
@@ -424,10 +430,10 @@ impl StacRequestRegistry {
             }
         };
 
-        if let Some((jobs, cancellations)) = receivers {
+        if let Some(jobs) = receivers {
             tokio::spawn(run_actor(
                 jobs,
-                cancellations,
+                channels.cancellations.clone(),
                 Arc::downgrade(&channels),
                 dispatch,
             ));
@@ -438,17 +444,17 @@ impl StacRequestRegistry {
     fn new_coordinator(
         identity: Identity,
         registry: Weak<CoordinatorMap>,
-    ) -> (Arc<ActorChannels>, ActorReceivers) {
-        let (jobs, job_receiver) = mpsc::unbounded_channel();
-        let (cancellations, cancellation_receiver) = mpsc::unbounded_channel();
+    ) -> (Arc<ActorChannels>, mpsc::Receiver<AttemptJob>) {
+        let (jobs, job_receiver) = mpsc::channel(MAX_PENDING_ATTEMPTS);
         (
             Arc::new(ActorChannels {
                 jobs,
-                cancellations,
+                capacity: Arc::new(Semaphore::new(MAX_PENDING_ATTEMPTS)),
+                cancellations: Arc::new(Notify::new()),
                 identity,
                 registry,
             }),
-            (job_receiver, cancellation_receiver),
+            job_receiver,
         )
     }
 }
@@ -636,6 +642,12 @@ impl StacClient {
         let request_copy = request
             .try_clone()
             .ok_or(StacClientError::RequestNotReplayable)?;
+        let permit = channels
+            .capacity
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| StacClientError::CoordinatorStopped)?;
         let (reply, receiver) = oneshot::channel();
         let mut pending = PendingAttempt {
             reply: receiver,
@@ -650,10 +662,12 @@ impl StacClient {
                 .filter(|_| self.origin.origin() == request.url().origin())
                 .cloned(),
             reply,
+            permit,
         };
         channels
             .jobs
             .send(job)
+            .await
             .map_err(|_| StacClientError::CoordinatorStopped)?;
         let reply = (&mut pending.reply)
             .await
@@ -669,6 +683,7 @@ async fn run_attempt(job: AttemptJob, completed_before: usize) -> AttemptComplet
         request,
         authentication,
         mut reply,
+        permit,
     } = job;
     let send = async {
         let mut request = reqwest::RequestBuilder::from_parts(client, request);
@@ -685,12 +700,13 @@ async fn run_attempt(job: AttemptJob, completed_before: usize) -> AttemptComplet
         completed_before,
         reply,
         response,
+        permit,
     }
 }
 
 async fn run_actor<F>(
-    mut receiver: mpsc::UnboundedReceiver<AttemptJob>,
-    mut cancellations: mpsc::UnboundedReceiver<()>,
+    mut receiver: mpsc::Receiver<AttemptJob>,
+    cancellations: Arc<Notify>,
     coordinator: Weak<ActorChannels>,
     dispatch: F,
 ) where
@@ -709,7 +725,6 @@ async fn run_actor<F>(
     let mut queued: VecDeque<AttemptJob> = VecDeque::new();
     let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
     let mut jobs_open = true;
-    let mut cancellations_open = true;
 
     loop {
         while let Some(Some(completion)) = running.next().now_or_never() {
@@ -748,10 +763,7 @@ async fn run_actor<F>(
                     complete_attempt(&mut state, completion);
                 }
             },
-            cancellation = cancellations.recv(), if cancellations_open => match cancellation {
-                Some(()) => queued.retain(|job| !job.reply.is_closed()),
-                None => cancellations_open = false,
-            },
+            () = cancellations.notified() => queued.retain(|job| !job.reply.is_closed()),
             job = receiver.recv(), if jobs_open => match job {
                 Some(job) => queued.push_back(job),
                 None => jobs_open = false,
@@ -772,6 +784,7 @@ fn complete_attempt(state: &mut State, completion: AttemptCompletion) {
         completed_before,
         reply,
         response,
+        permit: _permit,
     } = completion;
     state.release();
     let Some(response) = response else {

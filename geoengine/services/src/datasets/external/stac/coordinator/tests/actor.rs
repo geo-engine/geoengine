@@ -2,7 +2,10 @@
 use super::*;
 use std::future::pending;
 
-fn test_job(id: usize) -> (AttemptJob, oneshot::Receiver<AttemptReply>) {
+fn test_job(
+    coordinator: &ActorChannels,
+    id: usize,
+) -> (AttemptJob, oneshot::Receiver<AttemptReply>) {
     let client = reqwest::Client::new();
     let request = client
         .get(format!("https://actor.test/{id}"))
@@ -15,6 +18,7 @@ fn test_job(id: usize) -> (AttemptJob, oneshot::Receiver<AttemptReply>) {
             request,
             authentication: None,
             reply,
+            permit: coordinator.capacity.clone().try_acquire_owned().unwrap(),
         },
         receiver,
     )
@@ -29,13 +33,16 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
         let path = job.request.url().path().to_owned();
         let started = started.clone();
         Box::pin(async move {
-            let AttemptJob { mut reply, .. } = job;
+            let AttemptJob {
+                mut reply, permit, ..
+            } = job;
             let _ = started.send(path);
             tokio::select! {
                 () = reply.closed() => AttemptCompletion {
                     completed_before,
                     reply,
                     response: None,
+                    permit,
                 },
                 completion = pending::<AttemptCompletion>() => completion,
             }
@@ -46,8 +53,10 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
 
     let mut replies = Vec::new();
     for id in 0..10 {
-        let (job, reply) = test_job(id);
-        jobs.send(job).expect("actor should receive each test job");
+        let (job, reply) = test_job(&coordinator, id);
+        jobs.send(job)
+            .await
+            .expect("actor should receive each test job");
         replies.push(reply);
     }
     let mut first_wave = Vec::new();
@@ -64,11 +73,13 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
         (0..10).map(|id| format!("/{id}")).collect::<Vec<_>>()
     );
 
-    let (cancelled_job, cancelled_reply) = test_job(10);
-    let (later_job, later_reply) = test_job(11);
+    let (cancelled_job, cancelled_reply) = test_job(&coordinator, 10);
+    let (later_job, later_reply) = test_job(&coordinator, 11);
     jobs.send(cancelled_job)
+        .await
         .expect("actor should receive the queued test job");
     jobs.send(later_job)
+        .await
         .expect("actor should receive the following test job");
     replies.push(cancelled_reply);
     replies.push(later_reply);
@@ -80,9 +91,7 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
     );
 
     drop(replies.remove(10));
-    cancellations
-        .send(())
-        .expect("actor should receive the cancellation wakeup");
+    cancellations.notify_one();
     let next = tokio::time::timeout(Duration::from_secs(2), starts.recv())
         .await
         .expect("the next FIFO job should run when the rate window opens")
@@ -126,6 +135,7 @@ fn controlled_coordinator(
                 completed_before,
                 reply,
                 response,
+                permit: job.permit,
             }
         }) as RunningAttempt
     });
@@ -162,6 +172,98 @@ async fn next_start(starts: &mut mpsc::UnboundedReceiver<StartedAttempt>) -> Sta
         .await
         .expect("the actor should dispatch the eligible attempt")
         .expect("the actor should keep its dispatch channel open")
+}
+
+#[tokio::test]
+async fn it_backpressures_attempts_until_an_inflight_job_completes() {
+    let (_registry, coordinator, mut starts) = controlled_coordinator("backpressure-completion");
+    // Leave two slots, keeping the test independent of the production limit.
+    let _reserved = coordinator
+        .capacity
+        .clone()
+        .acquire_many_owned(u32::try_from(MAX_PENDING_ATTEMPTS - 2).unwrap())
+        .await
+        .unwrap();
+    let first = execute_job(coordinator.clone(), 1);
+    let (_, first_response) = next_start(&mut starts).await;
+    let second = execute_job(coordinator.clone(), 2);
+    let (_, second_response) = next_start(&mut starts).await;
+    let third = execute_job(coordinator.clone(), 3);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), starts.recv())
+            .await
+            .is_err()
+    );
+    assert_eq!(coordinator.capacity.available_permits(), 0);
+    first_response.send(response(1, None)).unwrap();
+    first.await.unwrap().unwrap();
+    let (path, third_response) = next_start(&mut starts).await;
+    assert_eq!(path, "/3");
+    assert!(!second.is_finished());
+    third_response.send(response(3, None)).unwrap();
+    third.await.unwrap().unwrap();
+    second_response.send(response(2, None)).unwrap();
+    second.await.unwrap().unwrap();
+    assert_eq!(coordinator.capacity.available_permits(), 2);
+}
+
+#[tokio::test]
+async fn it_releases_backpressure_when_waiting_queued_and_inflight_callers_cancel() {
+    let (_registry, coordinator, mut starts) = controlled_coordinator("backpressure-cancellation");
+    let _reserved = coordinator
+        .capacity
+        .clone()
+        .acquire_many_owned(u32::try_from(MAX_PENDING_ATTEMPTS - 2).unwrap())
+        .await
+        .unwrap();
+    let first = execute_job(coordinator.clone(), 1);
+    let (_, first_response) = next_start(&mut starts).await;
+    let inflight = execute_job(coordinator.clone(), 2);
+    let (_, mut inflight_response) = next_start(&mut starts).await;
+    let queued = execute_job(coordinator.clone(), 3);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), starts.recv())
+            .await
+            .is_err()
+    );
+    let mut limited = response(1, Some(0));
+    limited
+        .headers_mut()
+        .insert("x-ratelimit-reset", "60".parse().unwrap());
+    first_response.send(limited).unwrap();
+    first.await.unwrap().unwrap();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while coordinator.capacity.available_permits() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    // One in-flight job and one job waiting for server quota now occupy both slots.
+    let waiting = execute_job(coordinator.clone(), 4);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), starts.recv())
+            .await
+            .is_err()
+    );
+    waiting.abort();
+    assert!(waiting.await.unwrap_err().is_cancelled());
+    assert_eq!(coordinator.capacity.available_permits(), 0);
+    queued.abort();
+    assert!(queued.await.unwrap_err().is_cancelled());
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while coordinator.capacity.available_permits() != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("cancelling a queued job must release capacity before quota reset");
+    inflight.abort();
+    assert!(inflight.await.unwrap_err().is_cancelled());
+    tokio::time::timeout(Duration::from_secs(1), inflight_response.closed())
+        .await
+        .unwrap();
+    assert_eq!(coordinator.capacity.available_permits(), 2);
 }
 
 fn response(id: usize, remaining: Option<usize>) -> reqwest::Response {
