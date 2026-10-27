@@ -29,25 +29,27 @@ async fn it_runs_parallel_attempts_and_skips_a_cancelled_fifo_head() {
     let registry = StacRequestRegistry::new();
     let (started, mut starts) = mpsc::unbounded_channel::<String>();
     let identity = identity_for(&Url::parse("https://parallel.actor.test").unwrap(), None);
-    let coordinator = registry.shared_with_dispatch(identity, move |job, completed_before| {
-        let path = job.request.url().path().to_owned();
-        let started = started.clone();
-        Box::pin(async move {
-            let AttemptJob {
-                mut reply, permit, ..
-            } = job;
-            let _ = started.send(path);
-            tokio::select! {
-                () = reply.closed() => AttemptCompletion {
-                    completed_before,
-                    reply,
-                    response: None,
-                    permit,
-                },
-                completion = pending::<AttemptCompletion>() => completion,
-            }
-        }) as RunningAttempt
-    });
+    let coordinator = registry
+        .shared_with_dispatch(identity, move |job, completed_before| {
+            let path = job.request.url().path().to_owned();
+            let started = started.clone();
+            Box::pin(async move {
+                let AttemptJob {
+                    mut reply, permit, ..
+                } = job;
+                let _ = started.send(path);
+                tokio::select! {
+                    () = reply.closed() => AttemptCompletion {
+                        completed_before,
+                        reply,
+                        response: None,
+                        permit,
+                    },
+                    completion = pending::<AttemptCompletion>() => completion,
+                }
+            }) as RunningAttempt
+        })
+        .unwrap();
     let jobs = coordinator.jobs.clone();
     let cancellations = coordinator.cancellations.clone();
 
@@ -120,25 +122,27 @@ fn controlled_coordinator(
         &Url::parse(&format!("https://{label}.actor.test")).unwrap(),
         None,
     );
-    let coordinator = registry.shared_with_dispatch(identity, move |job, completed_before| {
-        let started = started.clone();
-        Box::pin(async move {
-            let (finish, response) = oneshot::channel();
-            let path = job.request.url().path().to_owned();
-            let mut reply = job.reply;
-            started.send((path, finish)).unwrap();
-            let response = tokio::select! {
-                () = reply.closed() => None,
-                response = response => response.ok().map(Ok),
-            };
-            AttemptCompletion {
-                completed_before,
-                reply,
-                response,
-                permit: job.permit,
-            }
-        }) as RunningAttempt
-    });
+    let coordinator = registry
+        .shared_with_dispatch(identity, move |job, completed_before| {
+            let started = started.clone();
+            Box::pin(async move {
+                let (finish, response) = oneshot::channel();
+                let path = job.request.url().path().to_owned();
+                let mut reply = job.reply;
+                started.send((path, finish)).unwrap();
+                let response = tokio::select! {
+                    () = reply.closed() => None,
+                    response = response => response.ok().map(Ok),
+                };
+                AttemptCompletion {
+                    completed_before,
+                    reply,
+                    response,
+                    permit: job.permit,
+                }
+            }) as RunningAttempt
+        })
+        .unwrap();
     (registry, coordinator, starts)
 }
 
@@ -406,10 +410,12 @@ async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
     first_response.send(response(1, Some(0))).unwrap();
     first.await.unwrap().unwrap();
     drop(coordinator);
-    let reconstructed = registry.shared(
-        &Url::parse("https://retained-quota.actor.test/collection").unwrap(),
-        None,
-    );
+    let reconstructed = registry
+        .shared(
+            &Url::parse("https://retained-quota.actor.test/collection").unwrap(),
+            None,
+        )
+        .unwrap();
     assert!(previous.ptr_eq(&Arc::downgrade(&reconstructed)));
     let second = execute_job(reconstructed, 2);
     assert!(
@@ -425,10 +431,12 @@ async fn it_preserves_learned_quota_when_providers_are_reconstructed() {
 #[tokio::test]
 async fn it_retires_only_registry_owned_coordinators() {
     let registry = StacRequestRegistry::new();
-    let coordinator = registry.shared(
-        &Url::parse("https://idle-retirement.actor.test").unwrap(),
-        None,
-    );
+    let coordinator = registry
+        .shared(
+            &Url::parse("https://idle-retirement.actor.test").unwrap(),
+            None,
+        )
+        .unwrap();
     let weak = Arc::downgrade(&coordinator);
     assert!(!ActorChannels::try_retire(&weak));
     drop(coordinator);

@@ -433,9 +433,13 @@ mod tests {
             .downcast_ref::<StacDataProvider>()
             .unwrap();
         let origin = url::Url::parse("https://context-owned-registry.test").unwrap();
-        let expected = request_registry.shared(&origin, None);
-        let first_coordinator = first.client.request_registry.shared(&origin, None);
-        let second_coordinator = second.client.request_registry.shared(&origin, None);
+        let expected = request_registry.shared(&origin, None).unwrap();
+        let first_coordinator = first.client.request_registry.shared(&origin, None).unwrap();
+        let second_coordinator = second
+            .client
+            .request_registry
+            .shared(&origin, None)
+            .unwrap();
         assert!(Arc::ptr_eq(&expected, &first_coordinator));
         assert!(Arc::ptr_eq(&expected, &second_coordinator));
     }
@@ -838,7 +842,7 @@ mod tests {
         let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
 
         let origin = url::Url::parse(&server.url_str("/")).unwrap();
-        let coordinator = registry.shared(&origin, None);
+        let coordinator = registry.shared(&origin, None).unwrap();
 
         client
             .execute_json::<Value>(client.get(server.url_str("/first")), &policy)
@@ -853,7 +857,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(Arc::ptr_eq(&coordinator, &registry.shared(&origin, None)));
+        assert!(Arc::ptr_eq(
+            &coordinator,
+            &registry.shared(&origin, None).unwrap()
+        ));
     }
 
     #[tokio::test]
@@ -961,7 +968,7 @@ mod tests {
                 .execute_json::<Value>(request("/first"), &policy)
                 .await
                 .unwrap();
-            registry.shared(&origin, None)
+            registry.shared(&origin, None).unwrap()
         });
         drop(first_runtime);
         assert!(first_coordinator.is_closed());
@@ -975,14 +982,17 @@ mod tests {
                 .execute_json::<Value>(request("/second"), &policy)
                 .await
                 .unwrap();
-            let replacement = registry.shared(&origin, None);
+            let replacement = registry.shared(&origin, None).unwrap();
             assert!(!replacement.is_closed());
             assert!(!Arc::ptr_eq(&first_coordinator, &replacement));
             client
                 .execute_json::<Value>(request("/third"), &policy)
                 .await
                 .unwrap();
-            assert!(Arc::ptr_eq(&replacement, &registry.shared(&origin, None)));
+            assert!(Arc::ptr_eq(
+                &replacement,
+                &registry.shared(&origin, None).unwrap()
+            ));
         });
     }
 
@@ -1054,8 +1064,8 @@ mod tests {
         assert_eq!(result, serde_json::json!({"complete": true}));
         let origin = url::Url::parse(&server.url_str("/")).unwrap();
         assert!(Arc::ptr_eq(
-            &fast.request_registry.shared(&origin, None),
-            &slow.request_registry.shared(&origin, None),
+            &fast.request_registry.shared(&origin, None).unwrap(),
+            &slow.request_registry.shared(&origin, None).unwrap(),
         ));
     }
 }

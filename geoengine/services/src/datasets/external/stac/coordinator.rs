@@ -45,6 +45,8 @@ const DEFAULT_WINDOW_DURATION: Duration = Duration::from_secs(1);
 const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(1);
 /// Bound jobs across the channel, actor queue and running HTTP attempts.
 const MAX_PENDING_ATTEMPTS: usize = 256;
+/// Bound retained quota identities per application or harvesting operation.
+const MAX_COORDINATORS: usize = 1024;
 /// Keep recent starts and idle coordinators long enough to learn further policies
 /// and preserve quota accounting when providers are reconstructed.
 const MIN_RETENTION: Duration = Duration::from_mins(5);
@@ -350,6 +352,8 @@ pub(super) struct ActorChannels {
     cancellations: Arc<Notify>,
     identity: Identity,
     registry: Weak<CoordinatorMap>,
+    // Replacement actors for the same identity share its registry slot.
+    registry_slot: Arc<OwnedSemaphorePermit>,
 }
 
 /// Close the reply before notifying the actor, so a cancellation wakeup cannot
@@ -381,9 +385,28 @@ struct AttemptCompletion {
 
 type RunningAttempt = Pin<Box<dyn Future<Output = AttemptCompletion> + Send>>;
 
-type CoordinatorMap = DashMap<Identity, Arc<ActorChannels>>;
+#[derive(Debug)]
+struct CoordinatorMap {
+    entries: DashMap<Identity, Arc<ActorChannels>>,
+    capacity: Arc<Semaphore>,
+}
+
+impl Default for CoordinatorMap {
+    fn default() -> Self {
+        Self {
+            entries: DashMap::new(),
+            capacity: Arc::new(Semaphore::new(MAX_COORDINATORS)),
+        }
+    }
+}
 
 /// Application- or operation-owned coordinator registry.
+///
+/// At most 1024 origin/credential identities are retained. New identities fail
+/// when full; existing identities continue sharing their quota state. Idle
+/// coordinators are removed after at least five minutes, extended by learned
+/// policy windows and server deadlines. Relevant quota history is never evicted
+/// to make room for another identity.
 #[derive(Clone, Debug, Default)]
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
@@ -401,36 +424,52 @@ impl StacRequestRegistry {
         &self,
         origin: &Url,
         authentication: Option<&StacProviderAuthentication>,
-    ) -> Arc<ActorChannels> {
+    ) -> Result<Arc<ActorChannels>, StacClientError> {
         let identity = identity_for(origin, authentication);
         self.shared_with_dispatch(identity, |job, completed_before| {
             Box::pin(run_attempt(job, completed_before)) as RunningAttempt
         })
     }
 
-    fn shared_with_dispatch<F>(&self, identity: Identity, dispatch: F) -> Arc<ActorChannels>
+    fn shared_with_dispatch<F>(
+        &self,
+        identity: Identity,
+        dispatch: F,
+    ) -> Result<Arc<ActorChannels>, StacClientError>
     where
         F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
     {
         // A closed actor is replaced only for this identity. Other entries
         // retire themselves after their retained quota history expires.
-        let (channels, receivers) = match self.coordinators.entry(identity.clone()) {
+        let (channels, receiver) = match self.coordinators.entries.entry(identity.clone()) {
             Entry::Occupied(mut entry) if entry.get().jobs.is_closed() => {
-                let (channels, receivers) =
-                    Self::new_coordinator(identity, Arc::downgrade(&self.coordinators));
+                let (channels, receivers) = Self::new_coordinator(
+                    identity,
+                    Arc::downgrade(&self.coordinators),
+                    entry.get().registry_slot.clone(),
+                );
                 entry.insert(channels.clone());
                 (channels, Some(receivers))
             }
             Entry::Occupied(entry) => (entry.get().clone(), None),
             Entry::Vacant(entry) => {
-                let (channels, receivers) =
-                    Self::new_coordinator(identity, Arc::downgrade(&self.coordinators));
+                let slot = self
+                    .coordinators
+                    .capacity
+                    .clone()
+                    .try_acquire_owned()
+                    .map_err(|_| StacClientError::RegistryFull)?;
+                let (channels, receivers) = Self::new_coordinator(
+                    identity,
+                    Arc::downgrade(&self.coordinators),
+                    Arc::new(slot),
+                );
                 entry.insert(channels.clone());
                 (channels, Some(receivers))
             }
         };
 
-        if let Some(jobs) = receivers {
+        if let Some(jobs) = receiver {
             tokio::spawn(run_actor(
                 jobs,
                 channels.cancellations.clone(),
@@ -438,12 +477,13 @@ impl StacRequestRegistry {
                 dispatch,
             ));
         }
-        channels
+        Ok(channels)
     }
 
     fn new_coordinator(
         identity: Identity,
         registry: Weak<CoordinatorMap>,
+        registry_slot: Arc<OwnedSemaphorePermit>,
     ) -> (Arc<ActorChannels>, mpsc::Receiver<AttemptJob>) {
         let (jobs, job_receiver) = mpsc::channel(MAX_PENDING_ATTEMPTS);
         (
@@ -453,6 +493,7 @@ impl StacRequestRegistry {
                 cancellations: Arc::new(Notify::new()),
                 identity,
                 registry,
+                registry_slot,
             }),
             job_receiver,
         )
@@ -498,7 +539,7 @@ impl ActorChannels {
         let Some(registry) = registry.upgrade() else {
             return true;
         };
-        match registry.entry(identity) {
+        match registry.entries.entry(identity) {
             Entry::Occupied(entry)
                 if std::ptr::eq(Arc::as_ptr(entry.get()), self_weak.as_ptr()) =>
             {
@@ -546,6 +587,8 @@ pub(crate) enum StacClientError {
     Http { source: reqwest::Error },
     #[snafu(display("STAC request coordinator stopped before completing the request"))]
     CoordinatorStopped,
+    #[snafu(display("STAC request registry has reached its coordinator limit"))]
+    RegistryFull,
     #[snafu(display("STAC requests must have replayable bodies"))]
     RequestNotReplayable,
 }
@@ -555,7 +598,7 @@ impl StacClientError {
     pub(crate) fn status(&self) -> Option<reqwest::StatusCode> {
         match self {
             Self::Http { source } => source.status(),
-            Self::CoordinatorStopped | Self::RequestNotReplayable => None,
+            Self::CoordinatorStopped | Self::RegistryFull | Self::RequestNotReplayable => None,
         }
     }
 }
@@ -610,7 +653,7 @@ impl StacClient {
         let request = request.build()?;
         let channels = self
             .request_registry
-            .shared(&self.origin, self.coordinator_authentication.as_ref());
+            .shared(&self.origin, self.coordinator_authentication.as_ref())?;
         let operation_name = format!("Fetch STAC items from {}", request.url());
         retry_http_with_action(
             || async {
@@ -1126,15 +1169,21 @@ mod tests {
             username: "user".to_owned(),
             password: "secret-value-must-not-be-debugged".to_owned(),
         };
-        let first = registry.shared(
-            &Url::parse("https://STAC.example:443/api").unwrap(),
-            Some(&credentials),
-        );
-        let same = registry.shared(
-            &Url::parse("https://stac.example/other").unwrap(),
-            Some(&credentials),
-        );
-        let anonymous = registry.shared(&Url::parse("https://stac.example").unwrap(), None);
+        let first = registry
+            .shared(
+                &Url::parse("https://STAC.example:443/api").unwrap(),
+                Some(&credentials),
+            )
+            .unwrap();
+        let same = registry
+            .shared(
+                &Url::parse("https://stac.example/other").unwrap(),
+                Some(&credentials),
+            )
+            .unwrap();
+        let anonymous = registry
+            .shared(&Url::parse("https://stac.example").unwrap(), None)
+            .unwrap();
         assert!(Arc::ptr_eq(&first, &same));
         assert!(!Arc::ptr_eq(&first, &anonymous));
         assert!(!format!("{first:?}").contains("secret-value-must-not-be-debugged"));
