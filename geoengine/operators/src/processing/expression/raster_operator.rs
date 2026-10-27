@@ -550,8 +550,9 @@ mod tests {
             result[0].as_ref().unwrap().grid_array,
             GridOrEmpty::from(
                 MaskedGrid2D::new(
-                    Grid2D::new([3, 2].into(), vec![1, 2, 6, 4, 5, 0],).unwrap(),
-                    Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false],).unwrap()
+                    Grid2D::new([3, 2].into(), vec![1, 2, 0, 4, 5, 0],).unwrap(),
+                    Grid2D::new([3, 2].into(), vec![true, true, false, true, true, false],)
+                        .unwrap()
                 )
                 .unwrap()
             )
