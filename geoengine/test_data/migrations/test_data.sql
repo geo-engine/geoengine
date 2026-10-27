@@ -74,8 +74,8 @@ VALUES (
         NULL,
         NULL
     )::"Symbology",
-    ARRAY[]::"PropertyType" [],
-    ARRAY[]::"TextTextKeyValue" []
+    ARRAY[]::"PropertyType"[],
+    ARRAY[]::"TextTextKeyValue"[]
 );
 
 INSERT INTO datasets (
@@ -106,7 +106,7 @@ VALUES (
             (0.1, 0.1)::"SpatialResolution",
             ARRAY[
                 ('band', (NULL, NULL)::"Measurement")::"RasterBandDescriptor"
-            ]::"RasterBandDescriptor" []
+            ]::"RasterBandDescriptor"[]
         )::"RasterResultDescriptor", -- noqa: PRS
         NULL,
         NULL
@@ -129,9 +129,9 @@ VALUES (
                 1800,
                 'Error'::"FileNotFoundHandling",
                 0.0,
-                ARRAY[]::"GdalMetadataMapping" [],
-                ARRAY[]::TEXT [],
-                ARRAY[]::"StringPair" [],
+                ARRAY[]::"GdalMetadataMapping"[],
+                ARRAY[]::TEXT[],
+                ARRAY[]::"StringPair"[],
                 FALSE,
                 ROW(0)::"GdalRetryOptions"
             )::"GdalDatasetParameters",
@@ -148,7 +148,7 @@ VALUES (
                     (
                         'band', (NULL, NULL)::"Measurement"
                     )::"RasterBandDescriptor"
-                ]::"RasterBandDescriptor" []
+                ]::"RasterBandDescriptor"[]
             )::"RasterResultDescriptor",
             0
         )::"GdalMetaDataStatic",
@@ -167,7 +167,7 @@ VALUES (
                         0.0,
                         ARRAY[128, 128, 128, 255]::"RgbaColor"
                     )::"Breakpoint"
-                    ]::"Breakpoint" [],
+                    ]::"Breakpoint"[],
                     ARRAY[0, 0, 0, 0]::"RgbaColor",
                     ARRAY[0, 0, 0, 0]::"RgbaColor",
                     ARRAY[0, 0, 0, 0]::"RgbaColor",
@@ -220,7 +220,7 @@ VALUES (
             1000,
             'GBIF Dump',
             10,
-            ARRAY[]::TEXT []
+            ARRAY[]::TEXT[]
         )::"GbifDataProviderDefinition",
         NULL,
         NULL,

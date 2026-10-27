@@ -106,7 +106,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.6", features = ["derive"] }
 config = "0.15"
 convert_case = "0.12"
-criterion = { package = "codspeed-criterion-compat", version = "4.7", features = ["async_tokio"], default-features = false }
+criterion = { package = "codspeed-criterion-compat", version = "6.0", features = ["async_tokio"], default-features = false }
 csv = "1.4"
 erased-serde = "0.4"
 fallible-iterator = "=0.2.0" # only for postgres-protocol
@@ -220,11 +220,7 @@ utoipa = { version = "6.0", features = [
     "uuid",
 ] }
 utoipa-swagger-ui = { version = "10", features = ["actix-web"] }
-uuid = { version = "=1.17.0", features = [
-    "serde",
-    "v4",
-    "v5",
-] } # must be compatible with `bb8-postgres`
+uuid = { version = "1.29", features = ["serde", "v4", "v5"] } # major version must match `tokio-postgres`' `with-uuid-1` feature
 validator = { version = "0.21", features = ["derive"] }
 vergen = "10.0"
 vergen-gitcl = "10.0"

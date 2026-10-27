@@ -38,7 +38,7 @@ lint-rustfmt write="": common::_clear
 [arg('fix', long='fix', value='true', help='Automatically apply fixes where possible.')]
 [group("lint")]
 lint-sql fix="false": common::_clear
-    pipx run sqlfluff==4.2.2 {{ if fix == "true" { "fix" } else { "lint" } }}
+    pipx run sqlfluff==4.4.0 {{ if fix == "true" { "fix" } else { "lint" } }}
 
 # Build in dev or release mode.
 [arg('mode', pattern='|--release')]
