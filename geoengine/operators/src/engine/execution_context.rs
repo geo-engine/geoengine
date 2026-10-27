@@ -8,6 +8,7 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::machine_learning::MlModelLoadingInfo;
+use crate::machine_learning::onnx_util::OrtEnvironment;
 use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
@@ -26,7 +27,6 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
-use ort::environment::Environment;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -79,7 +79,7 @@ pub trait ExecutionContext: Send
     }
 
     /// The ONNX Runtime environment for creating ML model sessions.
-    fn ort_environment(&self) -> &Environment;
+    fn ort_environment(&self) -> &OrtEnvironment;
 }
 
 #[async_trait]
@@ -118,7 +118,7 @@ pub struct MockExecutionContext {
     pub tiling_specification: TilingSpecification,
     pub default_cache_ttl: CacheTtlSeconds,
     pub gdal_process_pool: Arc<GdalProcessPool>,
-    pub ort_environment: Environment,
+    pub ort_environment: OrtEnvironment,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -322,7 +322,7 @@ impl ExecutionContext for MockExecutionContext {
             .ok_or_else(|| Error::UnknownMlModelName { name: name.clone() })
     }
 
-    fn ort_environment(&self) -> &Environment {
+    fn ort_environment(&self) -> &OrtEnvironment {
         &self.ort_environment
     }
 }
@@ -533,7 +533,7 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         self.inner.ml_model_loading_info(name).await
     }
 
-    fn ort_environment(&self) -> &Environment {
+    fn ort_environment(&self) -> &OrtEnvironment {
         self.inner.ort_environment()
     }
 }

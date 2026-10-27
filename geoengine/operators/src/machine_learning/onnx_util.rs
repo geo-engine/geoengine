@@ -13,11 +13,34 @@ use geoengine_datatypes::{
 };
 use ort::{environment::Environment, session::Session};
 use snafu::{ResultExt, ensure};
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 
-/// Creates the ONNX Runtime environment.
+/// The ONNX Runtime environment of an application, created on first use.
 ///
 /// ONNX Runtime allows only one environment per process.
-/// Create it once at startup and pass it to everything that creates sessions.
+/// Create one `OrtEnvironment` per application and clone it into everything that creates sessions.
+/// Creating it lazily avoids initializing ONNX Runtime (and its log output) if no model is used.
+#[derive(Clone, Debug, Default)]
+pub struct OrtEnvironment(Arc<OnceCell<Environment>>);
+
+impl OrtEnvironment {
+    /// Returns the environment and creates it on first use.
+    pub async fn get(&self) -> Result<&Environment, MachineLearningError> {
+        self.0
+            .get_or_try_init(|| async { create_ort_environment() })
+            .await
+    }
+}
+
+impl From<Environment> for OrtEnvironment {
+    fn from(environment: Environment) -> Self {
+        Self(Arc::new(OnceCell::new_with(Some(environment))))
+    }
+}
+
+/// Creates an ONNX Runtime environment.
+/// Prefer [`OrtEnvironment`], since ONNX Runtime allows only one environment per process.
 pub fn create_ort_environment() -> Result<Environment, MachineLearningError> {
     ort::init().build().context(Ort)
 }

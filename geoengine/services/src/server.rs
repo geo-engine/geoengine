@@ -16,9 +16,9 @@ use crate::{
 use actix_files::Files;
 use actix_web::{App, FromRequest, HttpServer, http, middleware, web};
 use bb8_postgres::tokio_postgres::NoTls;
-use geoengine_datatypes::{error::BoxedResultExt, raster::TilingSpecification};
+use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::{
-    engine::ChunkByteSize, machine_learning::onnx_util::create_ort_environment,
+    engine::ChunkByteSize, machine_learning::onnx_util::OrtEnvironment,
     util::gdal::register_gdal_drivers_from_list,
 };
 use std::{net::SocketAddr, path::PathBuf};
@@ -186,7 +186,7 @@ async fn start_postgres(
             cache_config,
             quota_config,
             gdal_process_pool_config,
-            create_ort_environment().boxed_context(crate::error::MachineLearning)?,
+            OrtEnvironment::default(),
         )
         .await?;
 

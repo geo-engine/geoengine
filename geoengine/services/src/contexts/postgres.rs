@@ -35,11 +35,11 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
     engine::ChunkByteSize,
+    machine_learning::onnx_util::OrtEnvironment,
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
 };
-use ort::environment::Environment;
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::{path::PathBuf, sync::Arc};
@@ -70,7 +70,7 @@ where
     default_cache_ttl: CacheTtlSeconds,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
-    ort_environment: Environment,
+    ort_environment: OrtEnvironment,
 }
 
 /// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
@@ -82,7 +82,7 @@ pub struct ContextSpec<Tls> {
     pub quota_config: Quota,
     pub oidc_manager: OidcManager,
     pub gdal_process_pool_config: crate::config::GdalProcessPool,
-    pub ort_environment: Environment,
+    pub ort_environment: OrtEnvironment,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -156,7 +156,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
-        ort_environment: Environment,
+        ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -233,7 +233,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
-        ort_environment: Environment,
+        ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);

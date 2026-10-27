@@ -10,7 +10,8 @@ use crate::{
         MachineLearningError, MlModelInputNoDataHandling, MlModelLoadingInfo,
         error::{InputTypeMismatch, Ort},
         onnx_util::{
-            check_model_input_features, check_model_shape, load_onnx_model_from_loading_info,
+            OrtEnvironment, check_model_input_features, check_model_shape,
+            load_onnx_model_from_loading_info,
         },
     },
     optimization::OptimizationError,
@@ -29,7 +30,6 @@ use geoengine_datatypes::raster::{
 };
 use geoengine_datatypes::{machine_learning::MlModelName, raster::GridBoundingBox2D};
 use ndarray::{Array2, Array4};
-use ort::environment::Environment;
 use ort::value::{IntoTensorElementType, PrimitiveTensorElementType, TensorRef};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
@@ -131,7 +131,7 @@ pub struct InitializedOnnx {
     source: Box<dyn InitializedRasterOperator>,
     model_loading_info: MlModelLoadingInfo,
     tile_shape: GridShape2D,
-    ort_environment: Environment,
+    ort_environment: OrtEnvironment,
 }
 
 impl InitializedRasterOperator for InitializedOnnx {
@@ -193,7 +193,7 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
     model_loading_info: MlModelLoadingInfo,
     phantom: std::marker::PhantomData<TOut>,
     tile_shape: GridShape2D,
-    ort_environment: Environment,
+    ort_environment: OrtEnvironment,
 }
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
@@ -202,7 +202,7 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
         result_descriptor: RasterResultDescriptor,
         model_loading_info: MlModelLoadingInfo,
         tile_shape: GridShape2D,
-        ort_environment: Environment,
+        ort_environment: OrtEnvironment,
     ) -> Self {
         Self {
             source,
@@ -254,8 +254,10 @@ where
 
         // TODO: re-use session accross queries?
         // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914
-        let mut session =
-            load_onnx_model_from_loading_info(&self.ort_environment, &self.model_loading_info)?;
+        let mut session = load_onnx_model_from_loading_info(
+            self.ort_environment.get().await?,
+            &self.model_loading_info,
+        )?;
         let input_name = session.inputs()[0].name().to_string(); // clone input name to avoid mutability problems
 
         let stream = self
@@ -553,9 +555,10 @@ mod tests {
     use ndarray::{Array1, Array2, arr2, array};
     use ort::value::TensorRef;
 
-    #[test]
-    fn ort() {
-        let mut session = ort::session::Session::builder(&test_ort_environment())
+    #[tokio::test]
+    async fn ort() {
+        let ort_environment = test_ort_environment();
+        let mut session = ort::session::Session::builder(ort_environment.get().await.unwrap())
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -576,9 +579,10 @@ mod tests {
         assert_eq!(data, &[33i64, 33, 42, 42]);
     }
 
-    #[test]
-    fn ort_dynamic() {
-        let mut session = ort::session::Session::builder(&test_ort_environment())
+    #[tokio::test]
+    async fn ort_dynamic() {
+        let ort_environment = test_ort_environment();
+        let mut session = ort::session::Session::builder(ort_environment.get().await.unwrap())
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -612,9 +616,10 @@ mod tests {
         assert_eq!(data, &[33i64, 33, 42, 42]);
     }
 
-    #[test]
-    fn regression() {
-        let mut session = ort::session::Session::builder(&test_ort_environment())
+    #[tokio::test]
+    async fn regression() {
+        let ort_environment = test_ort_environment();
+        let mut session = ort::session::Session::builder(ort_environment.get().await.unwrap())
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();

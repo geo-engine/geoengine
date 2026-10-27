@@ -36,7 +36,7 @@ use geoengine_operators::{
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
         QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
     },
-    machine_learning::MlModelLoadingInfo,
+    machine_learning::{MlModelLoadingInfo, onnx_util::OrtEnvironment},
     meta::{
         quota::{QuotaCheck, QuotaChecker, QuotaTracking},
         wrapper::InitializedOperatorWrapper,
@@ -48,7 +48,6 @@ use geoengine_operators::{
         gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     },
 };
-use ort::environment::Environment;
 use rayon::ThreadPool;
 use std::{str::FromStr, sync::Arc};
 use tokio::sync::RwLock;
@@ -263,7 +262,7 @@ where
     gdal_process_pool: Arc<GdalProcessPool>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
-    ort_environment: Environment,
+    ort_environment: OrtEnvironment,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -277,7 +276,7 @@ where
         gdal_process_pool: Arc<GdalProcessPool>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         default_cache_ttl: CacheTtlSeconds,
-        ort_environment: Environment,
+        ort_environment: OrtEnvironment,
     ) -> Self {
         Self {
             db,
@@ -431,7 +430,7 @@ where
         })
     }
 
-    fn ort_environment(&self) -> &Environment {
+    fn ort_environment(&self) -> &OrtEnvironment {
         &self.ort_environment
     }
 }

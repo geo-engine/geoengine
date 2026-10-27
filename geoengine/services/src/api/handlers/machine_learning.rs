@@ -85,8 +85,10 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
         exe_context.tiling_specification().tile_size_in_pixels,
     )?;
     // initialize model
-    let session =
-        load_onnx_model_from_loading_info(exe_context.ort_environment(), &ml_model_metadata)?;
+    let session = load_onnx_model_from_loading_info(
+        exe_context.ort_environment().get().await?,
+        &ml_model_metadata,
+    )?;
     // Check that the model is initializable and that the types are vaild
     check_onnx_model_matches_metadata(&session, &ml_model_metadata.metadata)?;
 
