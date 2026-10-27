@@ -32,6 +32,7 @@ use geoengine_operators::source::{
     GdalRetryOptions, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset, TileFile,
 };
+use itertools::Itertools;
 use stac::Item;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -220,26 +221,25 @@ impl
             ));
         }
 
-        let mut time_steps = Vec::new();
-        let mut searches = Vec::new();
-        for step in regular_time_steps(self.time_dimension, time_interval)? {
-            let step = step?;
-            time_steps.push(step);
+        let time_steps = regular_time_steps(self.time_dimension, time_interval)?
+            .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
 
-            for cell in cells.clone() {
-                let Some(clipped) = grid.clip_cell_to_extent(cell.bbox) else {
-                    continue;
-                };
-                let Some(bbox) = stac_query_bbox(clipped, self.dataset.projection)? else {
-                    continue;
-                };
-                searches.push((step, cell.index, bbox));
-            }
+        // Cell bounds do not depend on the time step, so they are projected once.
+        let mut cell_bboxes = Vec::new();
+        for cell in cells {
+            let Some(clipped) = grid.clip_cell_to_extent(cell.bbox) else {
+                continue;
+            };
+            let Some(bbox) = stac_query_bbox(clipped, self.dataset.projection)? else {
+                continue;
+            };
+            cell_bboxes.push((cell.index, bbox));
         }
 
-        // Cell searches are independent; the result is sorted and deduplicated below.
-        let outputs = futures::stream::iter(searches)
-            .map(|(step, cell, bbox)| {
+        // Searches are created lazily and are independent; the result is sorted and deduplicated below.
+        let searches = time_steps.iter().copied().cartesian_product(cell_bboxes);
+        let mut tile_files = futures::stream::iter(searches)
+            .map(|(step, (cell, bbox))| {
                 let metadata = self.clone();
                 let url = items_url.clone();
                 self.query_cache.get_or_fetch(
@@ -255,12 +255,11 @@ impl
                     source: Box::new(error),
                 },
             )
-            .try_collect::<Vec<_>>()
+            .try_fold(Vec::new(), |mut files, output| async move {
+                files.extend(output.iter().cloned());
+                Ok(files)
+            })
             .await?;
-        let mut tile_files = outputs
-            .iter()
-            .flat_map(|output| output.iter().cloned())
-            .collect::<Vec<_>>();
 
         tile_files.retain(|file| {
             time_interval.intersects(&file.time)
