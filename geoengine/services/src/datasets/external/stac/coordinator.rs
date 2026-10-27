@@ -37,8 +37,10 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
-/// Default cooldown/reset delay and duration of the initial ten-request window.
-const FALLBACK_DELAY: Duration = Duration::from_secs(1);
+/// Duration of the initial ten-request rate-limit window.
+const DEFAULT_WINDOW_DURATION: Duration = Duration::from_secs(1);
+/// Cooldown/reset delay when the server supplies no usable timing.
+const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(1);
 /// Keep recent starts and idle coordinators long enough to learn further policies
 /// and preserve quota accounting when providers are reconstructed.
 const MIN_RETENTION: Duration = Duration::from_mins(5);
@@ -211,7 +213,7 @@ impl State {
         // Before learning policies, use the fallback immediately. There is no
         // special bootstrap request or wait for its headers.
         let local = if self.windows.is_empty() {
-            Window::new(10, FALLBACK_DELAY).blocked_until(&self.starts, now)
+            Window::new(10, DEFAULT_WINDOW_DURATION).blocked_until(&self.starts, now)
         } else {
             self.windows
                 .iter()
@@ -878,11 +880,10 @@ impl ResponseFeedback {
                 header_values(headers, "x-ratelimit-reset")
                     .filter_map(parse_seconds)
                     .max()
-            }
-            .unwrap_or(FALLBACK_DELAY);
+            };
             let quota = RemoteQuota {
                 remaining_requests: available,
-                reset: now.checked_add(reset).unwrap_or(now + FALLBACK_DELAY),
+                reset: deadline_after(now, reset),
             };
             let destination = if let Some(window) = scope.and_then(|duration| {
                 feedback
@@ -897,8 +898,7 @@ impl ResponseFeedback {
             RemoteQuota::merge(destination, quota, 0);
         }
         if status == 429 {
-            let delay = retry_delay.unwrap_or(FALLBACK_DELAY);
-            feedback.cooldown_until = Some(now.checked_add(delay).unwrap_or(now + FALLBACK_DELAY));
+            feedback.cooldown_until = Some(deadline_after(now, retry_delay));
         }
         feedback
     }
@@ -929,6 +929,15 @@ fn header_values<'a>(headers: &'a HeaderMap, name: &str) -> impl Iterator<Item =
         .get_all(name)
         .iter()
         .filter_map(|value| value.to_str().ok())
+}
+
+/// Convert server timing to a deadline. An unrepresentable duration is unusable
+/// server feedback, so use the same short delay as for missing/invalid timing.
+/// `Instant` has no saturating addition or portable maximum value.
+fn deadline_after(now: Instant, delay: Option<Duration>) -> Instant {
+    delay
+        .and_then(|delay| now.checked_add(delay))
+        .unwrap_or_else(|| now + DEFAULT_RETRY_DELAY)
 }
 
 /// Accept integer seconds only when they can form a representable monotonic deadline.
@@ -1119,6 +1128,21 @@ mod tests {
         assert!(debug.contains("client_id"));
         assert!(!debug.contains("secret-value-must-not-be-debugged"));
         tokio::task::yield_now().await;
+    }
+
+    #[test]
+    fn it_uses_a_short_fallback_for_unrepresentable_deadlines() {
+        let now = Instant::now();
+        assert_eq!(deadline_after(now, Some(Duration::ZERO)), now);
+        assert_eq!(
+            deadline_after(now, Some(Duration::from_mins(1))),
+            now + Duration::from_mins(1)
+        );
+        assert_eq!(
+            deadline_after(now, Some(Duration::MAX)),
+            now + DEFAULT_RETRY_DELAY
+        );
+        assert_eq!(deadline_after(now, None), now + DEFAULT_RETRY_DELAY);
     }
 
     #[tokio::test]

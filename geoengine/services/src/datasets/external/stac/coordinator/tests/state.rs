@@ -256,7 +256,7 @@ fn it_replaces_fallback_capacity_with_learned_policies() {
         assert_eq!(state.reserve(now), None);
         state.release();
     }
-    assert_eq!(state.reserve(now), Some(now + FALLBACK_DELAY));
+    assert_eq!(state.reserve(now), Some(now + DEFAULT_WINDOW_DURATION));
     state.observe(
         ResponseFeedback::parse(&quota_headers(&[("20;w=1", "10", "1")]), 200, now),
         now,
@@ -300,14 +300,14 @@ fn it_uses_bounded_fallback_reset_and_the_longer_429_delay() {
         now,
         state.completed_requests,
     );
-    assert_eq!(state.reserve(now), Some(now + FALLBACK_DELAY));
-    assert_eq!(state.reserve(now + FALLBACK_DELAY), None);
+    assert_eq!(state.reserve(now), Some(now + DEFAULT_RETRY_DELAY));
+    assert_eq!(state.reserve(now + DEFAULT_RETRY_DELAY), None);
     headers.insert(RETRY_AFTER, "1".parse().unwrap());
     headers.insert("x-ratelimit-reset", "2".parse().unwrap());
-    observe(&mut state, &headers, 429, now + FALLBACK_DELAY);
+    observe(&mut state, &headers, 429, now + DEFAULT_RETRY_DELAY);
     assert_eq!(
-        state.reserve(now + FALLBACK_DELAY),
-        Some(now + FALLBACK_DELAY + Duration::from_secs(2))
+        state.reserve(now + DEFAULT_RETRY_DELAY),
+        Some(now + DEFAULT_RETRY_DELAY + Duration::from_secs(2))
     );
 }
 
