@@ -13,9 +13,11 @@ Inside this directory, drop the module prefix (`just test` instead of `just back
 - Build: `just backend build`.
   Run the server: `just backend run`.
   This also builds the `gdalsource-process` binary the server needs.
-- Lint: `just backend lint` (rustfmt check + clippy + sqlfluff).
+- Lint: `just backend lint` (rustfmt check + Cargo.toml format check + clippy + sqlfluff).
   CI-strict clippy: `just backend lint-clippy --deny-warnings`.
   - Format: `just backend lint-rustfmt --write`.
+  - Cargo.toml: `just backend lint-toml --write` (taplo, configured in `.taplo.toml`).
+    Every dependency is one line, and dependency tables are sorted alphabetically.
   - SQL only: `just backend lint-sql`.
 - Before committing: `just ci backend` runs the same install → lint → build → test sequence as CI.
 - Tests: `just backend test [filter]`.
