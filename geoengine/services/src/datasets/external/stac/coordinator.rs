@@ -48,7 +48,7 @@ const MIN_RETENTION: Duration = Duration::from_mins(5);
 /// The origin is the configured STAC scheme, host and effective port. Configured
 /// OAuth credentials distinguish authenticated buckets; absent credentials select
 /// the anonymous bucket. Provider ids, collection paths and renewed access tokens
-/// do not affect sharing. The custom `Debug` implementation omits credential fields.
+/// do not affect sharing. The custom `Debug` implementation omits the password.
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Identity {
     scheme: String,
@@ -66,6 +66,9 @@ impl fmt::Debug for Identity {
             .field("scheme", &self.scheme)
             .field("host", &self.host)
             .field("port", &self.port)
+            .field("token_endpoint", &self.token_endpoint)
+            .field("client_id", &self.client_id)
+            .field("username", &self.username)
             .field("authenticated", &self.password.is_some())
             .finish_non_exhaustive()
     }
@@ -373,16 +376,9 @@ type ActorReceivers = (
 );
 
 /// Application- or operation-owned coordinator registry.
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
-}
-
-impl fmt::Debug for StacRequestRegistry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("StacRequestRegistry")
-            .finish_non_exhaustive()
-    }
 }
 
 impl StacRequestRegistry {
@@ -1118,6 +1114,10 @@ mod tests {
         assert!(Arc::ptr_eq(&first, &same));
         assert!(!Arc::ptr_eq(&first, &anonymous));
         assert!(!format!("{first:?}").contains("secret-value-must-not-be-debugged"));
+        let debug = format!("{registry:?}");
+        assert!(debug.contains("https://auth.example/token/"));
+        assert!(debug.contains("client_id"));
+        assert!(!debug.contains("secret-value-must-not-be-debugged"));
         tokio::task::yield_now().await;
     }
 
