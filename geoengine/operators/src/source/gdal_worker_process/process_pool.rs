@@ -58,6 +58,10 @@ const SCORE_NEARBY_WINDOW_MAX: f64 = 50.0;
 /// Default baseline score given to completely fresh workers.
 const SCORE_FRESH_WORKER_DEFAULT: f64 = 0.5;
 
+/// Maximum score of a worker that has to evict its open dataset. Grows with idle time, so the
+/// least recently used worker is evicted. Must stay below `SCORE_FRESH_WORKER_DEFAULT`.
+const SCORE_EVICTION_MAX: f64 = 0.4;
+
 /// High-affinity immediate dispatch cutoff threshold. If a candidate worker's affinity score
 /// matches or exceeds this, we short-circuit the matrix evaluation instantly.
 const IMMEDIATE_DISPATCH_THRESHOLD: f64 = SCORE_DATASET_MATCH + SCORE_BAND_MATCH;
@@ -132,25 +136,22 @@ impl WorkerAffinity {
     ) -> f64 {
         let idle_duration = now.saturating_duration_since(self.timestamp).as_secs_f64();
 
-        if idle_duration > CACHE_TTL_SECS {
-            return 0.0; // Cache expired, connections likely closed or dead
+        // Cache expired or another dataset: prefer the least recently used worker for eviction
+        if idle_duration > CACHE_TTL_SECS || self.dataset_hash != dataset_hash {
+            return SCORE_EVICTION_MAX * (idle_duration / CACHE_TTL_SECS).min(1.0);
         }
 
         let decay = 1.0 - (idle_duration / CACHE_TTL_SECS);
-        let mut score = 0.0;
+        let mut score = SCORE_DATASET_MATCH * decay;
 
-        if self.dataset_hash == dataset_hash {
-            score += SCORE_DATASET_MATCH * decay;
+        if self.band == band {
+            score += SCORE_BAND_MATCH * decay;
 
-            if self.band == band {
-                score += SCORE_BAND_MATCH * decay;
-
-                let dist = calculate_grid_distance(&self.spatial_window, window);
-                if dist == 0.0 {
-                    score += SCORE_EXACT_WINDOW_MATCH * decay;
-                } else {
-                    score += (SCORE_NEARBY_WINDOW_MAX / (1.0 + dist)) * decay;
-                }
+            let dist = calculate_grid_distance(&self.spatial_window, window);
+            if dist == 0.0 {
+                score += SCORE_EXACT_WINDOW_MATCH * decay;
+            } else {
+                score += (SCORE_NEARBY_WINDOW_MAX / (1.0 + dist)) * decay;
             }
         }
 
@@ -1143,8 +1144,11 @@ mod tests {
         let w = window([0, 0], [7, 7]);
         let aff = make_affinity(42, 1, w);
         let score = aff.calculate_score(99, 1, &w, aff.timestamp);
-
         assert_approx_eq!(f64, score, 0.0);
+
+        let half_ttl_later = aff.timestamp + Duration::from_secs_f64(CACHE_TTL_SECS / 2.0);
+        let score = aff.calculate_score(99, 1, &w, half_ttl_later);
+        assert_approx_eq!(f64, score, SCORE_EVICTION_MAX / 2.0);
     }
 
     #[test]
@@ -1156,7 +1160,7 @@ mod tests {
             .unwrap();
         let score = aff.calculate_score(42, 1, &w, Instant::now());
 
-        assert_approx_eq!(f64, score, 0.0);
+        assert_approx_eq!(f64, score, SCORE_EVICTION_MAX);
     }
 
     // --- BrokerState dispatch tests ---
@@ -1352,6 +1356,54 @@ mod tests {
         assert_eq!(state.stats.fresh, 1);
         assert_eq!(state.stats.evictions, 1);
         assert_eq!(state.stats.cancelled_dropped, 1);
+    }
+
+    fn affinity_idle_for(dataset_hash: u64, idle_secs: u64) -> WorkerAffinity {
+        let mut aff = make_affinity(dataset_hash, 1, window([0, 0], [255, 255]));
+        aff.timestamp = Instant::now()
+            .checked_sub(Duration::from_secs(idle_secs))
+            .unwrap();
+        aff
+    }
+
+    #[test]
+    fn it_evicts_least_recently_used_worker() {
+        let (mut w0, mut rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, 300));
+        let (mut w1, _rx1) = dummy_worker(1);
+        w1.affinity = Some(affinity_idle_for(200, 60));
+        let (mut w2, _rx2) = dummy_worker(2);
+        w2.affinity = Some(affinity_idle_for(300, 1));
+
+        let mut state = BrokerState::new(vec![w0, w1, w2], 4, 4, SchedulingStrategy::GlobalMatrix);
+        // most recently released worker first, as `swap_remove` tends to leave it
+        state.idle_workers = vec![2, 1, 0];
+
+        let (req, _resp) = make_request(400, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        let job = rx0
+            .try_recv()
+            .expect("the longest idle worker should be evicted");
+        assert_eq!(job.dataset_hash, 400);
+        assert_eq!(state.stats.evictions, 1);
+    }
+
+    #[test]
+    fn it_prefers_fresh_worker_over_eviction() {
+        let (mut w0, _rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, 3600));
+        let (w1, mut rx1) = dummy_worker(1);
+
+        let mut state = BrokerState::new(vec![w0, w1], 4, 4, SchedulingStrategy::GlobalMatrix);
+
+        let (req, _resp) = make_request(400, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        rx1.try_recv().expect("the fresh worker should be used");
+        assert_eq!(state.stats.fresh, 1);
     }
 
     // --- Leader/follower dedup test ---
