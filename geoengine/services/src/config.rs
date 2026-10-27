@@ -441,6 +441,35 @@ pub struct GdalProcessPool {
     pub worker: GdalProcessPoolWorkerConfig,
 }
 
+impl GdalProcessPool {
+    /// Rejects sizes with which GDAL reads would never be dispatched or limits would have no effect.
+    pub fn validate(&self) -> Result<()> {
+        let invalid = |reason: String| Err(crate::error::Error::InvalidConfig { reason });
+        if self.number_of_processes == 0
+            || self.max_active_processes == 0
+            || self.max_dataset_processes == 0
+        {
+            return invalid(format!(
+                "gdal_process_pool sizes must be at least 1, got number_of_processes = {}, max_active_processes = {}, max_dataset_processes = {}",
+                self.number_of_processes, self.max_active_processes, self.max_dataset_processes
+            ));
+        }
+        if self.max_active_processes > self.number_of_processes {
+            return invalid(format!(
+                "gdal_process_pool.max_active_processes ({}) must not exceed number_of_processes ({})",
+                self.max_active_processes, self.number_of_processes
+            ));
+        }
+        if self.max_dataset_processes > self.max_active_processes {
+            return invalid(format!(
+                "gdal_process_pool.max_dataset_processes ({}) must not exceed max_active_processes ({})",
+                self.max_dataset_processes, self.max_active_processes
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Configuration for GDAL worker processes, passed from the main process at spawn time.
 #[derive(Debug, Default, Deserialize)]
 pub struct GdalProcessPoolWorkerConfig {
@@ -736,4 +765,41 @@ pub struct WildliveOidc {
 
 impl ConfigElement for Wildlive {
     const KEY: &'static str = "wildlive";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pool(
+        number_of_processes: u64,
+        max_active_processes: u64,
+        max_dataset_processes: u64,
+    ) -> GdalProcessPool {
+        GdalProcessPool {
+            number_of_processes,
+            max_active_processes,
+            max_dataset_processes,
+            worker: GdalProcessPoolWorkerConfig::default(),
+        }
+    }
+
+    #[test]
+    fn it_accepts_valid_pool_sizes() {
+        assert!(pool(32, 16, 8).validate().is_ok());
+        assert!(pool(2, 2, 2).validate().is_ok());
+    }
+
+    #[test]
+    fn it_rejects_zero_pool_sizes() {
+        assert!(pool(0, 0, 0).validate().is_err());
+        assert!(pool(32, 0, 0).validate().is_err());
+        assert!(pool(32, 16, 0).validate().is_err());
+    }
+
+    #[test]
+    fn it_rejects_inconsistent_pool_sizes() {
+        assert!(pool(8, 16, 8).validate().is_err());
+        assert!(pool(32, 8, 16).validate().is_err());
+    }
 }
