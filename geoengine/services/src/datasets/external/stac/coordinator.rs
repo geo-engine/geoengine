@@ -478,8 +478,10 @@ impl ActorChannels {
         self.jobs.is_closed()
     }
 
-    /// Request retirement in registry lookup order. The actor can stop when its
-    /// entry was removed or is already absent; external owners prevent removal.
+    /// Try to remove an unused coordinator from the registry before stopping its
+    /// actor. Called only after quota history and server deadlines expire.
+    /// The registry entry lock serializes removal with lookups, and external
+    /// owners prevent removal. A replacement for this identity is left intact.
     fn try_retire(self_weak: &Weak<Self>) -> bool {
         let Some(channels) = self_weak.upgrade() else {
             return true;
