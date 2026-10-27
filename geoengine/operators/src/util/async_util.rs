@@ -19,6 +19,7 @@ use crate::{
 /// busy, few enough to bound what a slow consumer holds in memory.
 pub const QUERY_TASK_CHANNEL_CAPACITY: usize = 2;
 
+/// Runs `work` as a task on `runtime`, so the caller's runtime, e.g. an HTTP worker, only awaits
 /// the result. Dropping the returned future aborts the task; a panic becomes an error.
 pub async fn spawn_query_task<T, F>(runtime: Handle, work: F) -> Result<T>
 where

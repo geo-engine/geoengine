@@ -201,7 +201,7 @@ pub struct MockQueryContext {
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
 
-    /// see [`QueryContext::processing_runtime`]; `None` runs query tasks on the current runtime
+    /// see [`QueryContext::processing_runtime`]; the constructors use the current runtime
     pub processing_runtime: tokio::runtime::Handle,
 
     gdal_process_pool: Arc<GdalProcessPool>,

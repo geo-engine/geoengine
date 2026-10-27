@@ -494,7 +494,8 @@ mod tests {
             .unwrap();
 
         let exe_ctx = MockExecutionContext::test_default();
-        let ctx = exe_ctx.mock_query_context_test_default();
+        let mut ctx = exe_ctx.mock_query_context_test_default();
+        ctx.processing_runtime = processing.handle().clone();
         let tiling_specification = TilingSpecification::new([600, 600].into());
 
         let meta_data = create_ndvi_meta_data();
