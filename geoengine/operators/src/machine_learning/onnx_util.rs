@@ -1,10 +1,9 @@
-use super::{MachineLearningError, error::Ort};
 use crate::machine_learning::{
-    MlModelLoadingInfo, MlModelMetadata,
+    MachineLearningError, MlModelLoadingInfo, MlModelMetadata,
     error::{
         InvalidInputPixelShape, InvalidInputTensorShape, InvalidOutputPixelShape,
         InvalidOutputType, MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
-        MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
+        MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, Ort, UnsupportedInOutMapping,
         UnsupportedNumberOfOutputAttributes,
     },
 };
@@ -12,13 +11,22 @@ use geoengine_datatypes::{
     machine_learning::MlTensorShape3D,
     raster::{GridShape2D, GridSize, RasterDataType},
 };
-use ort::session::Session;
+use ort::{environment::Environment, session::Session};
 use snafu::{ResultExt, ensure};
 
+/// Creates the ONNX Runtime environment.
+///
+/// ONNX Runtime allows only one environment per process.
+/// Create it once at startup and pass it to everything that creates sessions.
+pub fn create_ort_environment() -> Result<Environment, MachineLearningError> {
+    ort::init().build().context(Ort)
+}
+
 pub fn load_onnx_model_from_loading_info(
+    ort_environment: &Environment,
     ml_model_loading_info: &MlModelLoadingInfo,
 ) -> Result<Session, MachineLearningError> {
-    ort::session::Session::builder()
+    Session::builder(ort_environment)
         .context(Ort)?
         .commit_from_file(&ml_model_loading_info.storage_path)
         .context(Ort)

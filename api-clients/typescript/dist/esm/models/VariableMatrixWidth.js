@@ -14,11 +14,11 @@
  * Check if a given object implements the VariableMatrixWidth interface.
  */
 export function instanceOfVariableMatrixWidth(value) {
-    if (!('coalesc' in value) || value['coalesc'] === undefined)
+    if (!('coalesce' in value) || value['coalesce'] === undefined)
         return false;
     if (!('minTileRow' in value) || value['minTileRow'] === undefined)
         return false;
-    if (!('smaxTileRow' in value) || value['smaxTileRow'] === undefined)
+    if (!('maxTileRow' in value) || value['maxTileRow'] === undefined)
         return false;
     return true;
 }
@@ -30,9 +30,9 @@ export function VariableMatrixWidthFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'coalesc': json['coalesc'],
+        'coalesce': json['coalesce'],
         'minTileRow': json['minTileRow'],
-        'smaxTileRow': json['smaxTileRow'],
+        'maxTileRow': json['maxTileRow'],
     };
 }
 export function VariableMatrixWidthToJSON(json) {
@@ -43,8 +43,8 @@ export function VariableMatrixWidthToJSONTyped(value, ignoreDiscriminator = fals
         return value;
     }
     return {
-        'coalesc': value['coalesc'],
+        'coalesce': value['coalesce'],
         'minTileRow': value['minTileRow'],
-        'smaxTileRow': value['smaxTileRow'],
+        'maxTileRow': value['maxTileRow'],
     };
 }

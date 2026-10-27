@@ -57,7 +57,7 @@ impl ResponseError for MachineLearningError {
     path = "/ml/models",
     request_body = MlModel,
     responses(
-        (status = 200, body = MlModelNameResponse)
+        (status = 200, description = "Name of the added ML model", body = MlModelNameResponse)
     ),
     security(
         ("session_token" = [])
@@ -85,7 +85,8 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
         exe_context.tiling_specification().tile_size_in_pixels,
     )?;
     // initialize model
-    let session = load_onnx_model_from_loading_info(&ml_model_metadata)?;
+    let session =
+        load_onnx_model_from_loading_info(exe_context.ort_environment(), &ml_model_metadata)?;
     // Check that the model is initializable and that the types are vaild
     check_onnx_model_matches_metadata(&session, &ml_model_metadata.metadata)?;
 
@@ -100,7 +101,7 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     get,
     path = "/ml/models",
     responses(
-        (status = 200, body = [MlModel])
+        (status = 200, description = "List of ML models", body = [MlModel])
     ),
     security(
         ("session_token" = [])
@@ -128,7 +129,7 @@ pub(crate) async fn list_ml_models<C: ApplicationContext>(
     get,
     path = "/ml/models/{model_name}",
     responses(
-        (status = 200, body = MlModel)
+        (status = 200, description = "The ML model", body = MlModel)
     ),
     params(
         ("model_name" = ApiMlModelName, description = "Ml Model Name")

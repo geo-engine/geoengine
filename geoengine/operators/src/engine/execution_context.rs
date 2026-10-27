@@ -16,6 +16,7 @@ use crate::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
 };
+use crate::util::test::test_ort_environment;
 use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
@@ -25,6 +26,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
+use ort::environment::Environment;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -75,6 +77,9 @@ pub trait ExecutionContext: Send
     fn gdal_process_pool(&self) -> &Arc<GdalProcessPool> {
         self.get_gdal_pool()
     }
+
+    /// The ONNX Runtime environment for creating ML model sessions.
+    fn ort_environment(&self) -> &Environment;
 }
 
 #[async_trait]
@@ -113,6 +118,7 @@ pub struct MockExecutionContext {
     pub tiling_specification: TilingSpecification,
     pub default_cache_ttl: CacheTtlSeconds,
     pub gdal_process_pool: Arc<GdalProcessPool>,
+    pub ort_environment: Environment,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -125,6 +131,7 @@ impl TestDefault for MockExecutionContext {
             tiling_specification: TilingSpecification::test_default(),
             default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            ort_environment: test_ort_environment(),
         }
     }
 }
@@ -148,6 +155,7 @@ impl MockExecutionContext {
                 2,
                 WorkerConfig::default(),
             ),
+            ort_environment: test_ort_environment(),
         }
     }
 
@@ -160,6 +168,7 @@ impl MockExecutionContext {
             tiling_specification,
             default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            ort_environment: test_ort_environment(),
         }
     }
 
@@ -175,6 +184,7 @@ impl MockExecutionContext {
             tiling_specification,
             default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            ort_environment: test_ort_environment(),
         }
     }
 
@@ -310,6 +320,10 @@ impl ExecutionContext for MockExecutionContext {
             .get(name)
             .cloned()
             .ok_or_else(|| Error::UnknownMlModelName { name: name.clone() })
+    }
+
+    fn ort_environment(&self) -> &Environment {
+        &self.ort_environment
     }
 }
 
@@ -517,6 +531,10 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 
     async fn ml_model_loading_info(&self, name: &MlModelName) -> Result<MlModelLoadingInfo> {
         self.inner.ml_model_loading_info(name).await
+    }
+
+    fn ort_environment(&self) -> &Environment {
+        self.inner.ort_environment()
     }
 }
 

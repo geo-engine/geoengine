@@ -53,9 +53,9 @@ class TestTileMatrix(unittest.TestCase):
                 matrix_height = 1,
                 variable_matrix_widths = [
                     geoengine_api_client.models.variable_matrix_width.VariableMatrixWidth(
-                        coalesc = 2, 
+                        coalesce = 2, 
                         min_tile_row = 0, 
-                        smax_tile_row = 0, )
+                        max_tile_row = 0, )
                     ]
             )
         else:

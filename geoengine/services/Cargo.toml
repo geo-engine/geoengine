@@ -68,6 +68,7 @@ openidconnect = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
+ort = { workspace = true }
 paste = { workspace = true }
 pbkdf2 = { workspace = true }
 postgres-protocol = { workspace = true }

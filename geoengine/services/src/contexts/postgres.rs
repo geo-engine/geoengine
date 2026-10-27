@@ -39,6 +39,7 @@ use geoengine_operators::{
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
 };
+use ort::environment::Environment;
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::{path::PathBuf, sync::Arc};
@@ -69,6 +70,19 @@ where
     default_cache_ttl: CacheTtlSeconds,
     provider_registry: Arc<DataConnectorRegistry>,
     gdal_process_pool: Arc<GdalProcessPool>,
+    ort_environment: Environment,
+}
+
+/// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
+pub struct ContextSpec<Tls> {
+    pub config: Config,
+    pub tls: Tls,
+    pub exe_ctx_tiling_spec: TilingSpecification,
+    pub query_ctx_chunk_size: ChunkByteSize,
+    pub quota_config: Quota,
+    pub oidc_manager: OidcManager,
+    pub gdal_process_pool_config: crate::config::GdalProcessPool,
+    pub ort_environment: Environment,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -79,13 +93,16 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     pub async fn new_with_context_spec(
-        config: Config,
-        tls: Tls,
-        exe_ctx_tiling_spec: TilingSpecification,
-        query_ctx_chunk_size: ChunkByteSize,
-        quota_config: Quota,
-        oidc_db: OidcManager,
-        gdal_process_pool_config: crate::config::GdalProcessPool,
+        ContextSpec {
+            config,
+            tls,
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
+            quota_config,
+            oidc_manager,
+            gdal_process_pool_config,
+            ort_environment,
+        }: ContextSpec<Tls>,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -118,7 +135,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_manager: oidc_db,
+            oidc_manager,
             quota,
             pool,
             volumes: Default::default(),
@@ -127,6 +144,7 @@ where
             default_cache_ttl: CacheTtlSeconds::new(0),
             provider_registry,
             gdal_process_pool,
+            ort_environment,
         })
     }
 
@@ -138,6 +156,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
+        ort_environment: Environment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -194,6 +213,7 @@ where
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
             gdal_process_pool,
+            ort_environment,
         })
     }
 
@@ -213,6 +233,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
+        ort_environment: Environment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -269,6 +290,7 @@ where
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
             gdal_process_pool,
+            ort_environment,
         };
 
         if created_schema {
@@ -480,6 +502,7 @@ where
             self.context.gdal_process_pool.clone(),
             self.context.new_raster_cache.clone(),
             self.context.default_cache_ttl,
+            self.context.ort_environment.clone(),
         ))
     }
 

@@ -29,6 +29,7 @@ use geoengine_datatypes::raster::{
 };
 use geoengine_datatypes::{machine_learning::MlModelName, raster::GridBoundingBox2D};
 use ndarray::{Array2, Array4};
+use ort::environment::Environment;
 use ort::value::{IntoTensorElementType, PrimitiveTensorElementType, TensorRef};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
@@ -115,6 +116,7 @@ impl RasterOperator for Onnx {
             source,
             model_loading_info,
             tile_shape: context.tiling_specification().grid_shape(),
+            ort_environment: context.ort_environment().clone(),
         }))
     }
 
@@ -129,6 +131,7 @@ pub struct InitializedOnnx {
     source: Box<dyn InitializedRasterOperator>,
     model_loading_info: MlModelLoadingInfo,
     tile_shape: GridShape2D,
+    ort_environment: Environment,
 }
 
 impl InitializedRasterOperator for InitializedOnnx {
@@ -148,6 +151,7 @@ impl InitializedRasterOperator for InitializedOnnx {
                         self.result_descriptor.clone(),
                         self.model_loading_info.clone(),
                         self.tile_shape,
+                        self.ort_environment.clone(),
                     )
                     .boxed()
                 )
@@ -189,6 +193,7 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
     model_loading_info: MlModelLoadingInfo,
     phantom: std::marker::PhantomData<TOut>,
     tile_shape: GridShape2D,
+    ort_environment: Environment,
 }
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
@@ -197,6 +202,7 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
         result_descriptor: RasterResultDescriptor,
         model_loading_info: MlModelLoadingInfo,
         tile_shape: GridShape2D,
+        ort_environment: Environment,
     ) -> Self {
         Self {
             source,
@@ -204,6 +210,7 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
             model_loading_info,
             phantom: Default::default(),
             tile_shape,
+            ort_environment,
         }
     }
 }
@@ -247,7 +254,8 @@ where
 
         // TODO: re-use session accross queries?
         // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914
-        let mut session = load_onnx_model_from_loading_info(&self.model_loading_info)?;
+        let mut session =
+            load_onnx_model_from_loading_info(&self.ort_environment, &self.model_loading_info)?;
         let input_name = session.inputs()[0].name().to_string(); // clone input name to avoid mutability problems
 
         let stream = self
@@ -516,6 +524,7 @@ mod tests {
     use crate::machine_learning::MlModelOutputNoDataHandling;
     use crate::machine_learning::onnx::Onnx;
     use crate::machine_learning::onnx::OnnxParams;
+    use crate::util::test::test_ort_environment;
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
@@ -546,7 +555,7 @@ mod tests {
 
     #[test]
     fn ort() {
-        let mut session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder(&test_ort_environment())
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -569,7 +578,7 @@ mod tests {
 
     #[test]
     fn ort_dynamic() {
-        let mut session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder(&test_ort_environment())
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
@@ -605,7 +614,7 @@ mod tests {
 
     #[test]
     fn regression() {
-        let mut session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder(&test_ort_environment())
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();

@@ -35,15 +35,15 @@ class TestVariableMatrixWidth(unittest.TestCase):
         model = VariableMatrixWidth()
         if include_optional:
             return VariableMatrixWidth(
-                coalesc = 2,
+                coalesce = 2,
                 min_tile_row = 0,
-                smax_tile_row = 0
+                max_tile_row = 0
             )
         else:
             return VariableMatrixWidth(
-                coalesc = 2,
+                coalesce = 2,
                 min_tile_row = 0,
-                smax_tile_row = 0,
+                max_tile_row = 0,
         )
         """
 

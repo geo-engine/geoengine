@@ -1,8 +1,7 @@
-use std::path::Path;
-
 use super::Result;
 use crate::{
     engine::{ExecutionContext, QueryContext, RasterOperator, WorkflowOperatorPath},
+    machine_learning::onnx_util::create_ort_environment,
     util::gdal::gdal_open_dataset,
 };
 use futures::StreamExt;
@@ -15,6 +14,20 @@ use geoengine_datatypes::{
     },
     util::test::assert_eq_two_list_of_tiles_u8,
 };
+use ort::environment::Environment;
+use std::path::Path;
+use std::sync::LazyLock;
+
+/// ONNX Runtime allows only one environment per process, but tests create many contexts.
+/// Only for tests: the server creates its environment once at startup and passes it on.
+static TEST_ORT_ENVIRONMENT: LazyLock<Environment> = LazyLock::new(|| {
+    create_ort_environment().expect("ONNX Runtime environment should be creatable in tests")
+});
+
+/// Returns the ONNX Runtime environment shared by all tests of this process.
+pub fn test_ort_environment() -> Environment {
+    TEST_ORT_ENVIRONMENT.clone()
+}
 
 pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryContext>(
     exe_ctx: &E,
