@@ -393,8 +393,8 @@ where
             let t0_value = rasters.0.get_at_grid_index_unchecked(lin_idx);
             let t1_value = rasters.1.get_at_grid_index_unchecked(lin_idx);
 
-            if t0_value.is_none() || t1_value.is_none() {
-                return empty_result;
+            if !map_no_data && (t0_value.is_none() || t1_value.is_none()) {
+                return None;
             }
 
             let result = expression(t0_value, t1_value);
@@ -590,8 +590,8 @@ macro_rules! impl_expression_tuple_processor {
                         let $IS_NODATA = $PIXEL.is_none();
                     )*
 
-                    if $( $IS_NODATA )||* {
-                        return empty_result;
+                    if !map_no_data && ( $($IS_NODATA)||* ) {
+                        return None;
                     }
 
                     let result = expression(
