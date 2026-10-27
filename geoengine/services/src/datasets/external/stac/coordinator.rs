@@ -967,6 +967,11 @@ fn retry_after(headers: &HeaderMap) -> Option<Duration> {
 
 #[cfg(test)]
 mod tests {
+    mod actor;
+    mod registry;
+    mod retry;
+    mod state;
+
     use super::*;
     use std::sync::Mutex;
 
@@ -1255,19 +1260,3 @@ mod tests {
         assert_eq!(error.status(), Some(reqwest::StatusCode::NOT_FOUND));
     }
 }
-
-#[cfg(test)]
-#[path = "coordinator_state_tests.rs"]
-mod state_tests;
-
-#[cfg(test)]
-#[path = "coordinator_actor_tests.rs"]
-mod actor_tests;
-
-#[cfg(test)]
-#[path = "coordinator_retry_tests.rs"]
-mod retry_tests;
-
-#[cfg(test)]
-#[path = "coordinator_registry_tests.rs"]
-mod registry_tests;

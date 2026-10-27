@@ -149,7 +149,7 @@ async fn it_does_not_keep_the_registry_alive_through_coordinator_ownership() {
 async fn it_separates_registry_entries_by_every_configured_credential() {
     let registry = StacRequestRegistry::new();
     let origin = origin("credential-buckets");
-    let credentials = super::super::StacProviderAuthentication {
+    let credentials = StacProviderAuthentication {
         endpoint: "https://auth.example/token".to_owned(),
         client_id: "client".to_owned(),
         username: "user".to_owned(),
