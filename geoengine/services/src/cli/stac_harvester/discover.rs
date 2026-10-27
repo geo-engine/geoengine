@@ -1354,7 +1354,7 @@ mod tests {
             false,
             "sentinel-2-l2a",
         );
-        assert!(!datasets.is_empty());
+        assert_ne!(datasets, [] as [_; 0]);
         assert!(datasets.iter().all(|dataset| {
             dataset.spatial_grid.geo_transform().origin_coordinate == (0.0, 0.0).into()
         }));

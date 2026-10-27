@@ -468,14 +468,11 @@ pub(crate) async fn layer(
 
     let netcdf_entity = entity(&transaction, provider_id, file_name, entity_id)
         .await?
-        .map_or(
-            NetCdfEntity {
-                // defensive default
-                name: String::new(),
-                id: entity_id,
-            },
-            |entity| entity,
-        );
+        .unwrap_or(NetCdfEntity {
+            // defensive default
+            name: String::new(),
+            id: entity_id,
+        });
 
     let data_range: Option<DataRange> =
         data_range(&transaction, provider_id, file_name, group_path).await?;

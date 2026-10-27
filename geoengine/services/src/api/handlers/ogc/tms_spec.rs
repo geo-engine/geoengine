@@ -847,7 +847,7 @@ pub fn calculate_number_of_zoom_levels(
         }
 
         // equivalent to: ceil(log2(tiles)) using bit operations
-        let transitions = usize::BITS - (tiles_at_max_resolution - 1).leading_zeros();
+        let transitions = (tiles_at_max_resolution - 1).bit_width();
 
         transitions + 1
     }

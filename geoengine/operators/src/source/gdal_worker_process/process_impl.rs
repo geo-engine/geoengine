@@ -1657,7 +1657,7 @@ mod tests {
                 no_data_value,
             } => {
                 // If we get here, the override is being honored
-                assert!(!data.is_empty());
+                assert_ne!(*data, [] as [u8; 0]);
                 assert_eq!(
                     *no_data_value, 100.,
                     "no_data_value should be the override (100.0)"

@@ -1376,7 +1376,7 @@ mod tests {
                 .unwrap();
             assert_eq!(info.time_steps(), expected);
             for step in info.time_steps() {
-                assert!(info.tile_files(*step, tile, 0).is_empty());
+                assert_eq!(info.tile_files(*step, tile, 0), [] as [_; 0]);
             }
         }
     }
@@ -2093,7 +2093,7 @@ mod grid_request_tests {
             .expect("time-only queries must not perform STAC searches")
             .unwrap();
             assert_eq!(info.time_steps(), expected);
-            assert!(info.tile_files(expected[0], tile(0.), 0).is_empty());
+            assert_eq!(info.tile_files(expected[0], tile(0.), 0), [] as [_; 0]);
         }
 
         // Time-only queries also bypass URL parsing and reprojection entirely.

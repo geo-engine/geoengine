@@ -324,7 +324,7 @@ impl InitializedVectorExpression {
         for<'g> <<FeatureCollection<G> as IntoGeometryOptionsIterator<'g>>::GeometryOptionIterator as IntoParallelIterator>::Iter:
         IndexedParallelIterator + Send,
         TypedVectorQueryProcessor: From<Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>>,
-    {
+{
         VectorExpressionColumnProcessor {
             source,
             result_descriptor: self.result_descriptor.clone(),
@@ -355,7 +355,7 @@ impl InitializedVectorExpression {
             IndexedParallelIterator + Send,
         for<'g> <FeatureCollection<GIn> as IntoGeometryOptionsIterator<'g>>::GeometryType: AsExpressionGeo,
         TypedVectorQueryProcessor: From<Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<GOut>>>>,
-    {
+{
         VectorExpressionGeometryProcessor {
             source,
             result_descriptor: self.result_descriptor.clone(),
@@ -1208,7 +1208,7 @@ mod tests {
         C: 'static,
         Box<dyn VectorQueryProcessor<VectorType = C>>: TryFrom<TypedVectorQueryProcessor>,
         <Box<dyn VectorQueryProcessor<VectorType = C>> as TryFrom<TypedVectorQueryProcessor>>::Error: std::fmt::Debug,
-    {
+{
         let operator = operator
             .boxed()
             .initialize(

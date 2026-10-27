@@ -1734,13 +1734,13 @@ mod tests {
 
         // check that other user B cannot access datasets of user A
 
-        assert!(
+        assert_eq!(
             db_b.dataset_autocomplete_search(None, "Ogr".to_owned(), 10, 0)
                 .await
-                .unwrap()
-                .is_empty()
+                .unwrap(),
+            [] as [String; 0]
         );
-        assert!(
+        assert_eq!(
             db_b.dataset_autocomplete_search(
                 Some(vec!["upload".to_string()]),
                 "Ogr".to_owned(),
@@ -1748,8 +1748,8 @@ mod tests {
                 0
             )
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+            [] as [String; 0]
         );
     }
 

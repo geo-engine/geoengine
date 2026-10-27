@@ -1113,7 +1113,7 @@ mod tests {
     #[test]
     fn test_gdal_config_options_for_s3_empty() {
         let options = gdal_config_options_for_s3(None);
-        assert!(options.is_empty());
+        assert_eq!(options, [] as [_; 0]);
     }
 
     #[test]
