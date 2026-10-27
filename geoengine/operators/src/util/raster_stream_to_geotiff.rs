@@ -5,8 +5,8 @@ use crate::source::{
     GdalLoadingInfoTemporalSlice, GdalSourceTimePlaceholder, TimeReference,
 };
 use crate::util::{
-    Result, TemporaryGdalThreadLocalConfigOptions, owned_query_stream, processing_runtime,
-    spawn_query, spawn_query_task,
+    Result, TemporaryGdalThreadLocalConfigOptions, owned_query_stream, spawn_query,
+    spawn_query_task,
 };
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
@@ -57,7 +57,7 @@ where
     let tiling_strategy = tiling_grid_def.generate_data_tiling_strategy();
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
-    let runtime = processing_runtime(&query_ctx);
+    let runtime = query_ctx.processing_runtime().clone();
 
     // query, GeoTIFF writing and copying the bytes run as one task off the caller's runtime
     let work = async move {

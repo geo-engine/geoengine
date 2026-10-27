@@ -24,7 +24,7 @@ use geoengine_operators::{
         ExecutionContext, InitializedPlotOperator, ProcessingGraphOperatorPath, QueryContext,
         ResultDescriptor, TypedPlotOperator, TypedPlotQueryProcessor,
     },
-    util::{abortable_query_execution, processing_runtime, spawn_query_task},
+    util::{abortable_query_execution, spawn_query_task},
 };
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -197,7 +197,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let mut query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
-    let runtime = processing_runtime(&query_ctx);
+    let runtime = query_ctx.processing_runtime().clone();
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();

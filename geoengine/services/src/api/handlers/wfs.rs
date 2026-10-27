@@ -39,7 +39,7 @@ use geoengine_operators::{
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
     util::{
         abortable_query_execution, input::RasterOrVectorOperator, owned_query_stream,
-        processing_runtime, spawn_query_task,
+        spawn_query_task,
     },
 };
 use reqwest::Url;
@@ -632,7 +632,7 @@ where
     let query_abort_trigger = query_ctx.abort_trigger()?;
     let default_cache_ttl = query_ctx.default_cache_ttl();
 
-    let runtime = processing_runtime(&query_ctx);
+    let runtime = query_ctx.processing_runtime().clone();
 
     // query and GeoJSON merging run as one task off the caller's runtime
     let work = async move {

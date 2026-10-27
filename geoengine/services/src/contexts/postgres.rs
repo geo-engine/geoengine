@@ -514,7 +514,7 @@ where
                 computation,
             )),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
-            Some(self.context.processing_runtime.clone()),
+            self.context.processing_runtime.clone(),
         ))
     }
 
@@ -1161,10 +1161,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            query_ctx
-                .processing_runtime()
-                .map(tokio::runtime::Handle::id),
-            Some(tokio::runtime::Handle::current().id())
+            query_ctx.processing_runtime().id(),
+            tokio::runtime::Handle::current().id()
         );
     }
 

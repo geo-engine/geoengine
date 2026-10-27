@@ -13,7 +13,7 @@ use geoengine_operators::{
         InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
         TypedRasterOperator, TypedVectorOperator,
     },
-    util::{QUERY_TASK_CHANNEL_CAPACITY, owned_query_stream, processing_runtime, spawn_stream},
+    util::{QUERY_TASK_CHANNEL_CAPACITY, owned_query_stream, spawn_stream},
 };
 use tokio::{
     sync::mpsc::{Receiver, Sender, error::TrySendError},
@@ -42,7 +42,7 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let runtime = processing_runtime(&query_ctx);
+        let runtime = query_ctx.processing_runtime().clone();
 
         // the query and the IPC encoding run in the task; this side only forwards bytes
         let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
@@ -98,7 +98,7 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let runtime = processing_runtime(&query_ctx);
+        let runtime = query_ctx.processing_runtime().clone();
 
         // the query and the IPC encoding run in the task; this side only forwards bytes
         let byte_stream = call_on_generic_vector_processor!(query_processor, p => {

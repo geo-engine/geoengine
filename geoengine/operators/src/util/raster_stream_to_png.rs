@@ -1,6 +1,6 @@
 use super::abortable_query_execution;
 use crate::engine::{BoxRasterQueryProcessor, QueryContext};
-use crate::util::{Result, owned_query_stream, processing_runtime, spawn_query_task};
+use crate::util::{Result, owned_query_stream, spawn_query_task};
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
@@ -79,7 +79,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     }
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
-    let runtime = processing_runtime(&query_ctx);
+    let runtime = query_ctx.processing_runtime().clone();
 
     // query, blit and encode run as one task, so the caller's runtime only awaits the bytes
     let work = async move {
@@ -494,8 +494,7 @@ mod tests {
             .unwrap();
 
         let exe_ctx = MockExecutionContext::test_default();
-        let mut ctx = exe_ctx.mock_query_context_test_default();
-        ctx.processing_runtime = Some(processing.handle().clone());
+        let ctx = exe_ctx.mock_query_context_test_default();
         let tiling_specification = TilingSpecification::new([600, 600].into());
 
         let meta_data = create_ndvi_meta_data();

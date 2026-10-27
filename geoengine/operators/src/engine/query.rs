@@ -73,10 +73,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     }
 
     /// The runtime that runs query tasks, see [`crate::util::spawn_query`].
-    /// `None` runs them on the current runtime.
-    fn processing_runtime(&self) -> Option<&tokio::runtime::Handle> {
-        None
-    }
+    fn processing_runtime(&self) -> &tokio::runtime::Handle;
 
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
@@ -205,7 +202,7 @@ pub struct MockQueryContext {
     pub abort_trigger: Option<QueryAbortTrigger>,
 
     /// see [`QueryContext::processing_runtime`]; `None` runs query tasks on the current runtime
-    pub processing_runtime: Option<tokio::runtime::Handle>,
+    pub processing_runtime: tokio::runtime::Handle,
 
     gdal_process_pool: Arc<GdalProcessPool>,
 }
@@ -231,7 +228,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            processing_runtime: None,
+            processing_runtime: tokio::runtime::Handle::current(),
             gdal_process_pool,
         }
     }
@@ -259,7 +256,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            processing_runtime: None,
+            processing_runtime: tokio::runtime::Handle::current(),
             gdal_process_pool,
         }
     }
@@ -286,7 +283,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            processing_runtime: None,
+            processing_runtime: tokio::runtime::Handle::current(),
         }
     }
 }
@@ -296,8 +293,8 @@ impl QueryContext for MockQueryContext {
         self.chunk_byte_size
     }
 
-    fn processing_runtime(&self) -> Option<&tokio::runtime::Handle> {
-        self.processing_runtime.as_ref()
+    fn processing_runtime(&self) -> &tokio::runtime::Handle {
+        &self.processing_runtime
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {

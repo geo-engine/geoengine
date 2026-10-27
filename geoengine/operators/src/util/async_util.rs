@@ -19,15 +19,6 @@ use crate::{
 /// busy, few enough to bound what a slow consumer holds in memory.
 pub const QUERY_TASK_CHANNEL_CAPACITY: usize = 2;
 
-/// The runtime that runs the query tasks of `query_ctx`: its processing runtime, else the current one.
-pub fn processing_runtime<C: QueryContext + ?Sized>(query_ctx: &C) -> Handle {
-    query_ctx
-        .processing_runtime()
-        .cloned()
-        .unwrap_or_else(Handle::current)
-}
-
-/// Runs `work` as a task on `runtime`, so the caller's runtime, e.g. an HTTP worker, only awaits
 /// the result. Dropping the returned future aborts the task; a panic becomes an error.
 pub async fn spawn_query_task<T, F>(runtime: Handle, work: F) -> Result<T>
 where
@@ -51,7 +42,7 @@ where
     Q::Output: Send + 'static,
 {
     spawn_stream(
-        &processing_runtime(query_ctx.as_ref()),
+        &query_ctx.as_ref().processing_runtime().clone(),
         QUERY_TASK_CHANNEL_CAPACITY,
         owned_query_stream(processor, query, query_ctx),
     )
