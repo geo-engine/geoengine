@@ -200,16 +200,26 @@ endpoint = "http://127.0.0.1:4317"
 #
 # Two categories:
 # 1. Frozen at first /vsicurl/ use (changing these requires restarting the worker process):
-#    - VSI_CACHE, VSI_CACHE_SIZE
 #    - CPL_VSIL_CURL_CHUNK_SIZE
+#    - CPL_VSIL_CURL_CACHE_SIZE
 # 2. Read per dataset open (can also be overridden per request via gdal_config_options):
+#    - VSI_CACHE, VSI_CACHE_SIZE
 #    - GDAL_DISABLE_READDIR_ON_OPEN
 #    - CPL_VSIL_CURL_ALLOWED_EXTENSIONS
+#    - GDAL_HTTP_TIMEOUT, GDAL_HTTP_CONNECTTIMEOUT
+#
+# Every worker process has its own caches, so the GDAL memory bound of the pool is about
+# number_of_processes * (GDAL_CACHEMAX + VSI_CACHE_SIZE + CPL_VSIL_CURL_CACHE_SIZE (default 16mb)).
 GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
 CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
 CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
 VSI_CACHE = "TRUE"
-VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
+VSI_CACHE_SIZE = "67108864" # 64mb per open file; a worker keeps one file open
+# block cache in mb per worker; without it, GDAL uses 5% of the RAM per worker process
+GDAL_CACHEMAX = "256"
+# abort reads of hanging remotes, otherwise they block a worker forever (seconds)
+GDAL_HTTP_TIMEOUT = "60"
+GDAL_HTTP_CONNECTTIMEOUT = "10"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
