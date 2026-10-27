@@ -512,7 +512,7 @@ export class OlOgcApiMapTileLayerComponent
     readonly time = input.required<Time>();
     readonly tmsId = input<TMSId>('Custom');
     /** Minimum index in this source's OGC tile matrix set, not an OpenLayers view zoom. */
-    readonly minZoom = input(0);
+    readonly minTileMatrixIndex = input(0);
     readonly zoomRequired = output<boolean>();
     private readonly mapService = inject(MapService);
     private readonly destroyRef = inject(DestroyRef);
@@ -533,7 +533,7 @@ export class OlOgcApiMapTileLayerComponent
             sessionToken: this.sessionToken(),
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
-            minZoom: this.minZoom(),
+            minTileMatrixIndex: this.minTileMatrixIndex(),
         }),
         loader: async ({abortSignal}): Promise<OGCMapTile> => {
             // `source` is assigned after the await below, so the closures that read it must only
@@ -582,7 +582,7 @@ export class OlOgcApiMapTileLayerComponent
                 wrapX: false, // wrapping does not work with our implementation
                 interpolate: false, // Stops blurry tiles when zooming in.
                 tileLoadFunction: (tile, url): void => {
-                    if (tile.getTileCoord()[0] < this.minZoom()) {
+                    if (tile.getTileCoord()[0] < this.minTileMatrixIndex()) {
                         // Never fetch coarser fallback/preload tiles either.
                         tile.setState(TileState.EMPTY);
                         return;
@@ -624,7 +624,7 @@ export class OlOgcApiMapTileLayerComponent
         effect((onCleanup) => {
             const source = this.tileSource.value();
             const view = this.mapService.view();
-            const minZoom = this.minZoom();
+            const minTileMatrixIndex = this.minTileMatrixIndex();
             this._mapLayer.setVisible(this.isVisible());
             let wasBlocked: boolean | undefined;
             const update = (): void => {
@@ -633,8 +633,9 @@ export class OlOgcApiMapTileLayerComponent
                 const ready = source?.getState() === 'ready';
                 // Adjacent matrix resolutions differ by two; their midpoint is
                 // the native, exclusive maxResolution cutoff.
-                let maxResolution = minZoom === 0 ? Infinity : ready ? 1.5 * (source.getTileGrid()?.getResolution(minZoom) ?? 0) : 0;
-                if (minZoom > 0 && projection && !equivalent(projection, view.getProjection())) {
+                let maxResolution =
+                    minTileMatrixIndex === 0 ? Infinity : ready ? 1.5 * (source.getTileGrid()?.getResolution(minTileMatrixIndex) ?? 0) : 0;
+                if (minTileMatrixIndex > 0 && projection && !equivalent(projection, view.getProjection())) {
                     const center = view.getCenter();
                     maxResolution =
                         center && resolution !== undefined
@@ -645,8 +646,8 @@ export class OlOgcApiMapTileLayerComponent
                 this._mapLayer.setMaxResolution(maxResolution);
                 // Keep imagery gated while metadata loads, but only ask the user to
                 // zoom in once the actual source grid is known.
-                const blocked = minZoom > 0 && ready && (resolution === undefined || resolution >= maxResolution);
-                if (blocked && !wasBlocked) this.loader?.cancelPending('view is below minimum tile zoom');
+                const blocked = minTileMatrixIndex > 0 && ready && (resolution === undefined || resolution >= maxResolution);
+                if (blocked && !wasBlocked) this.loader?.cancelPending('view is below minimum tile matrix index');
                 if (blocked !== wasBlocked) this.zoomRequired.emit(blocked);
                 wasBlocked = blocked;
             };

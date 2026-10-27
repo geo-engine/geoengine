@@ -66,6 +66,10 @@ export class EOdysseyLayerService {
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
+    readonly appliedMinTileMatrixIndex = computed(() => {
+        const applied = this.appliedVisualization();
+        return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
+    });
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -253,7 +257,7 @@ export class EOdysseyLayerService {
             defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
-            minZoom: parseMinZoom(metadata.get('edv:minZoom')),
+            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
         };
     }
 
@@ -277,6 +281,7 @@ export class EOdysseyLayerService {
             connectorId: item.id.providerId,
             layerId: item.id.layerId,
             order: parseFiniteNumber(metadata.get('edv:order')) ?? 0,
+            minTileMatrixIndex: parseMinTileMatrixIndex(metadata.get('edv:minTileMatrixIndex')),
         };
     }
 
@@ -480,11 +485,11 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function parseMinZoom(value: string | undefined): number | undefined {
+function parseMinTileMatrixIndex(value: string | undefined): number | undefined {
     if (value === undefined) return undefined;
     const parsed = Number(value);
     if (!value.trim() || !Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
-        throw new Error('Invalid edv:minZoom: ' + value);
+        throw new Error('Invalid edv:minTileMatrixIndex: ' + value);
     }
     return parsed;
 }
