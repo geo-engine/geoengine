@@ -23,15 +23,15 @@ use tracing::{Instrument, warn};
 type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
 
 /// An in-memory implementation of the [`TaskManager`] trait.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct SimpleTaskManagerBackend {
     tasks_by_id: Db<HashMap<TaskId, TaskHandle>>,
     unique_tasks: Db<HashSet<(&'static str, String)>>,
     // these two lists won't be cleaned-up
     status_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
     status_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
-    /// runs the tasks; `None` runs them on the runtime that schedules them
-    runtime: Option<Handle>,
+    /// runs the tasks, so they don't run on the runtime that schedules them, e.g. an HTTP worker
+    runtime: Handle,
 }
 
 struct TaskHandle {
@@ -43,10 +43,13 @@ struct TaskHandle {
 
 impl SimpleTaskManagerBackend {
     /// Runs tasks on `runtime` instead of the runtime that schedules them, e.g. an HTTP worker.
-    pub fn with_runtime(runtime: Handle) -> Self {
+    pub fn new(runtime: Handle) -> Self {
         Self {
-            runtime: Some(runtime),
-            ..Default::default()
+            tasks_by_id: Db::default(),
+            unique_tasks: Db::default(),
+            status_by_id: Db::default(),
+            status_list: Db::default(),
+            runtime,
         }
     }
 
@@ -54,10 +57,7 @@ impl SimpleTaskManagerBackend {
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        match &self.runtime {
-            Some(runtime) => runtime.spawn(future.in_current_span()),
-            None => crate::util::spawn(future),
-        }
+        self.runtime.spawn(future.in_current_span())
     }
 
     async fn write_lock_all(&self) -> WriteLockAll<'_> {

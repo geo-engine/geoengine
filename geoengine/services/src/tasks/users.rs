@@ -17,7 +17,6 @@ const ADMIN_ONLY_TASKS: [&str; 3] = [
     crate::api::handlers::ebv::EBV_REMOVE_OVERVIEW_TASK_TYPE,
 ];
 
-#[derive(Default)]
 pub struct TypedTaskManagerBackend {
     simple_task_manager: SimpleTaskManagerBackend,
     task_type_by_id: RwLock<HashMap<TaskId, &'static str>>,
@@ -27,7 +26,7 @@ impl TypedTaskManagerBackend {
     /// Runs tasks on `runtime` instead of the runtime that schedules them, e.g. an HTTP worker.
     pub fn new(runtime: tokio::runtime::Handle) -> Self {
         Self {
-            simple_task_manager: SimpleTaskManagerBackend::with_runtime(runtime),
+            simple_task_manager: SimpleTaskManagerBackend::new(runtime),
             task_type_by_id: RwLock::default(),
         }
     }
