@@ -8,7 +8,9 @@ use crate::{
         model::responses::ErrorResponse,
     },
     config::{Postgres, Quota, get_config_element},
-    contexts::{ApplicationContext, GeoEngineDb, PostgresContext, SessionContext, SessionId},
+    contexts::{
+        ApplicationContext, ContextSpec, GeoEngineDb, PostgresContext, SessionContext, SessionId,
+    },
     datasets::{
         AddDataset, DatasetIdAndName, DatasetName,
         listing::Provenance,
@@ -78,6 +80,7 @@ use geoengine_operators::{
             create_ndvi_meta_data, create_ndvi_meta_data_with_cache_ttl, create_ports_meta_data,
         },
         input::RasterOrVectorOperator,
+        test::test_ort_environment,
     },
 };
 use rand::Rng;
@@ -1528,15 +1531,16 @@ where
         std::panic::catch_unwind(move || {
             tokio::task::block_in_place(move || {
                 Handle::current().block_on(async move {
-                    let ctx = PostgresContext::new_with_context_spec(
-                        db_config.pg_config(),
-                        tokio_postgres::NoTls,
+                    let ctx = PostgresContext::new_with_context_spec(ContextSpec {
+                        config: db_config.pg_config(),
+                        tls: tokio_postgres::NoTls,
                         exe_ctx_tiling_spec,
                         query_ctx_chunk_size,
                         quota_config,
-                        oidc_db(),
+                        oidc_manager: oidc_db(),
                         gdal_process_pool_config,
-                    )
+                        ort_environment: test_ort_environment(),
+                    })
                     .await
                     .unwrap();
                     f(ctx, db_config.clone()).await

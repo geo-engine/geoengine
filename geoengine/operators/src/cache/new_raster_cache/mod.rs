@@ -735,7 +735,7 @@ impl StorageFormat for TypedCompressedRasterTile2D {
         .map_err(|source| CacheError::CouldNotRunDecompressionTask { source })?
     }
 
-    async fn byte_size(&self) -> Result<usize> {
+    fn byte_size(&self) -> impl std::future::Future<Output = Result<usize>> + Send {
         let size = match self {
             TypedCompressedRasterTile2D::I8(compressed) => compressed.byte_size(),
             TypedCompressedRasterTile2D::I16(compressed) => compressed.byte_size(),
@@ -748,11 +748,11 @@ impl StorageFormat for TypedCompressedRasterTile2D {
             TypedCompressedRasterTile2D::F32(compressed) => compressed.byte_size(),
             TypedCompressedRasterTile2D::F64(compressed) => compressed.byte_size(),
         };
-        Ok(size)
+        std::future::ready(Ok(size))
     }
 
-    async fn is_expired(&self) -> bool {
-        match self {
+    fn is_expired(&self) -> impl std::future::Future<Output = bool> + Send {
+        let expired = match self {
             TypedCompressedRasterTile2D::I8(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::I16(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::I32(compressed) => compressed.cache_hint.is_expired(),
@@ -763,7 +763,8 @@ impl StorageFormat for TypedCompressedRasterTile2D {
             TypedCompressedRasterTile2D::U64(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::F32(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::F64(compressed) => compressed.cache_hint.is_expired(),
-        }
+        };
+        std::future::ready(expired)
     }
 }
 

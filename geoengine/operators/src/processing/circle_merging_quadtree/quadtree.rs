@@ -169,7 +169,7 @@ impl<'a> Iterator for RectangleIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.stack.pop_front().map(|node| {
             if let Some(ref link) = node.link {
-                for child_node in link.iter() {
+                for child_node in link {
                     self.stack.push_back(child_node);
                 }
             }

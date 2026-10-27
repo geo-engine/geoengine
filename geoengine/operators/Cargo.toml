@@ -39,8 +39,8 @@ ndarray = { workspace = true }
 num = { workspace = true }
 num-traits = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 ort = { workspace = true }
 ouroboros = { workspace = true }
 paste = { workspace = true }
@@ -67,13 +67,13 @@ typetag = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-async-stream = { workspace = true }
 approx = { workspace = true }
+async-stream = { workspace = true }
 criterion = { workspace = true }
 httptest = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
 serial_test = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
 
 [[bench]]
 name = "ci_operators"

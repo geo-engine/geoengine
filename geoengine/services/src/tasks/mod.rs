@@ -23,17 +23,14 @@ use validator::{Validate, ValidationError};
 /// A database that allows scheduling and retrieving tasks.
 #[async_trait::async_trait]
 pub trait TaskManager<C: TaskContext>: Send + Sync {
-    #[must_use]
     async fn schedule_task(
         &self,
         task: Box<dyn Task<C>>,
         notify: Option<oneshot::Sender<TaskStatus>>,
     ) -> Result<TaskId, TaskError>;
 
-    #[must_use]
     async fn get_task_status(&self, task_id: TaskId) -> Result<TaskStatus, TaskError>;
 
-    #[must_use]
     async fn list_tasks(
         &self,
         options: TaskListOptions,

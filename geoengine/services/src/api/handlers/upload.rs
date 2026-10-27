@@ -132,7 +132,7 @@ pub struct UploadFilesResponse {
     get,
     path = "/uploads/{upload_id}/files",
     responses(
-        (status = 200, body = UploadFilesResponse,
+        (status = 200, description = "Files of the upload", body = UploadFilesResponse,
             example = json!({"files": ["file1", "file2"]}))
     ),
     params(
@@ -169,7 +169,7 @@ pub struct UploadFileLayersResponse {
     get,
     path = "/uploads/{upload_id}/files/{file_name}/layers",
     responses(
-        (status = 200, body = UploadFileLayersResponse,
+        (status = 200, description = "Layers of the upload file", body = UploadFileLayersResponse,
              example = json!({"layers": ["layer1", "layer2"]}))
     ),
     params(

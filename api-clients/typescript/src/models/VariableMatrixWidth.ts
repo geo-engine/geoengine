@@ -23,7 +23,7 @@ export interface VariableMatrixWidth {
      * @type {number}
      * @memberof VariableMatrixWidth
      */
-    coalesc: number;
+    coalesce: number;
     /**
      * First tile row where the coalescence factor applies for this tilematrix
      * @type {number}
@@ -35,16 +35,16 @@ export interface VariableMatrixWidth {
      * @type {number}
      * @memberof VariableMatrixWidth
      */
-    smaxTileRow: number;
+    maxTileRow: number;
 }
 
 /**
  * Check if a given object implements the VariableMatrixWidth interface.
  */
 export function instanceOfVariableMatrixWidth(value: object): value is VariableMatrixWidth {
-    if (!('coalesc' in value) || value['coalesc'] === undefined) return false;
+    if (!('coalesce' in value) || value['coalesce'] === undefined) return false;
     if (!('minTileRow' in value) || value['minTileRow'] === undefined) return false;
-    if (!('smaxTileRow' in value) || value['smaxTileRow'] === undefined) return false;
+    if (!('maxTileRow' in value) || value['maxTileRow'] === undefined) return false;
     return true;
 }
 
@@ -58,9 +58,9 @@ export function VariableMatrixWidthFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'coalesc': json['coalesc'],
+        'coalesce': json['coalesce'],
         'minTileRow': json['minTileRow'],
-        'smaxTileRow': json['smaxTileRow'],
+        'maxTileRow': json['maxTileRow'],
     };
 }
 
@@ -75,9 +75,9 @@ export function VariableMatrixWidthToJSONTyped(value?: VariableMatrixWidth | nul
 
     return {
         
-        'coalesc': value['coalesc'],
+        'coalesce': value['coalesce'],
         'minTileRow': value['minTileRow'],
-        'smaxTileRow': value['smaxTileRow'],
+        'maxTileRow': value['maxTileRow'],
     };
 }
 

@@ -871,7 +871,7 @@ async fn add_layer<C: ApplicationContext>(
     ),
     request_body = UpdateLayer,
     responses(
-        (status = 200)
+        (status = 200, description = "Layer was updated")
     ),
     security(
         ("session_token" = [])
@@ -970,7 +970,7 @@ async fn add_collection<C: ApplicationContext>(
     ),
     request_body = UpdateLayerCollection,
     responses(
-        (status = 200)
+        (status = 200, description = "Layer collection was updated")
     ),
     security(
         ("session_token" = [])

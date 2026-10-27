@@ -19,7 +19,7 @@ export interface VariableMatrixWidth {
      * @type {number}
      * @memberof VariableMatrixWidth
      */
-    coalesc: number;
+    coalesce: number;
     /**
      * First tile row where the coalescence factor applies for this tilematrix
      * @type {number}
@@ -31,7 +31,7 @@ export interface VariableMatrixWidth {
      * @type {number}
      * @memberof VariableMatrixWidth
      */
-    smaxTileRow: number;
+    maxTileRow: number;
 }
 /**
  * Check if a given object implements the VariableMatrixWidth interface.

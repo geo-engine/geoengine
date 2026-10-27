@@ -7,9 +7,9 @@ Variable Matrix Width data structure
 
 Name | Type
 ------------ | -------------
-`coalesc` | number
+`coalesce` | number
 `minTileRow` | number
-`smaxTileRow` | number
+`maxTileRow` | number
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { VariableMatrixWidth } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "coalesc": null,
+  "coalesce": null,
   "minTileRow": null,
-  "smaxTileRow": null,
+  "maxTileRow": null,
 } satisfies VariableMatrixWidth
 
 console.log(example)

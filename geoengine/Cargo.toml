@@ -50,7 +50,7 @@ pedantic = { level = "warn", priority = 0 }
 correctness = "deny"
 
 # disable some pedantic lints
-result_large_err = { level = "allow", priority = 1 }          # TODO: investigate this
+result_large_err = { level = "allow", priority = 1 } # TODO: investigate this
 cast_possible_truncation = { level = "allow", priority = 1 }
 cast_possible_wrap = { level = "allow", priority = 1 }
 cast_precision_loss = { level = "allow", priority = 1 }
@@ -77,36 +77,33 @@ unwrap_used = { level = "warn", priority = 1 }
 multiple_crate_versions = { level = "allow", priority = 1 }
 
 [workspace.dependencies]
-actix-files = "0.6"
-actix-http = { version = "3.13", features = ["ws"] }
+actix-files = "0.7"
+actix-http = { version = "3.20", features = ["ws"] }
 actix-multipart = "0.8"
-actix-rt = "2.11"
-actix-web = "4.14"
+actix-rt = "2.15"
+actix-web = "4.18"
 actix-web-httpauth = "0.8"
 actix-ws = "0.4"
-aes-gcm = "0.11.0"
+aes-gcm = "0.11.1"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "59.1", features = ["ipc_compression"] }
-arrow-array = "59.1"
-arrow-ord = "59.1"
-arrow-schema = { version = "59.1", features = ["serde"] }
+arrow = { version = "60.0", features = ["ipc_compression"] }
+arrow-array = "60.0"
+arrow-ord = "60.0"
+arrow-schema = { version = "60.0", features = ["serde"] }
 assert_cmd = "2.2"
 async-stream = "0.3"
 async-trait = "0.1"
-base64 = "0.22"
-bb8-postgres = { version = "0.9", features = [
-    "with-uuid-1",
-    "with-chrono-0_4",
-    "with-serde_json-1",
-] }
-bytemuck = "1.25.0"
+base64 = "0.23"
+bb8-postgres = { version = "0.9", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"] }
+bytemuck = "1.25.2"
 bytes = "1.12" # for postgres-types impls
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.6", features = ["derive"] }
 config = "0.15"
-convert_case = "0.11"
-criterion = { package = "codspeed-criterion-compat", version = "4.7", features = ["async_tokio"], default-features = false }
+convert_case = "0.12"
+criterion = { package = "codspeed-criterion-compat", version = "6.0", features = ["async_tokio"], default-features = false }
+crs-definitions = { version = "0.6.0", features = ["proj4"] }
 csv = "1.4"
 erased-serde = "0.4"
 fallible-iterator = "=0.2.0" # only for postgres-protocol
@@ -116,50 +113,40 @@ futures = "0.3"
 futures-util = "0.3"
 gdal = "0.19"
 gdal-sys = "0.12"
-# when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
-geo = "0.33.1"
-geo-types = "0.7.19"                                      # important for compatibility when linking expressions
+geo = "0.33.1" # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
+geo-types = "0.7.20" # important for compatibility when linking expressions
+geodesy = { version = "0.15" }
 geojson = { version = "1.0", features = ["geo-types"] }
-geodesy = {version = "0.15"}
-crs-definitions = { version = "0.5.0", features = ["proj4"] }
 httptest = "0.16"
-ipc-channel = "0.22.0"
 image = "0.25"
 indoc = "2.0"
+ipc-channel = "0.23.1"
 itertools = "0.15"
 libloading = "0.9"
-lru = "0.18"
-moka = { version = "0.12.16", features = ["future"] }
+lru = "0.19"
 lz4_flex = "0.14"
 mime = "0.3"
-ndarray = { version = "0.17", features = ["approx"] }     # has to match with `ort`
+moka = { version = "0.12.16", features = ["future"] }
+ndarray = { version = "0.17", features = ["approx"] } # has to match with `ort`
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
 ogcapi-types = { git = "https://github.com/georust/ogcapi", branch = "main", features = ["common", "tiles"], default-features = false }
 openidconnect = "4.0"
-# `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
-opentelemetry = { version = "0.32", default-features = false, features = [
-    "trace",
-] }
-opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic"] }
-ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-21"] } # allow default features again wrt. <https://github.com/pykeio/ort/issues/553>
+opentelemetry = { version = "0.33", default-features = false, features = ["trace"] } # version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
+opentelemetry-otlp = { version = "0.33", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.33", features = ["rt-tokio"] }
+ort = { version = "2.0.0-rc.15", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-21"] } # allow default features again wrt. <https://github.com/pykeio/ort/issues/553>
 ouroboros = "0.18"
 paste = "1.0"
 pbkdf2 = "0.13.0"
-pest = "2.8"
-pest_derive = "2.8"
+pest = "2.9"
+pest_derive = "2.9"
 pin-project = "1.1"
 postgres-protocol = "0.6"
-postgres-types = { version = "0.2", features = [
-    "array-impls",
-    "derive",
-    "with-chrono-0_4",
-    "with-uuid-1",
-] }
+postgres-types = { version = "0.2", features = ["array-impls", "derive", "with-chrono-0_4", "with-uuid-1"] }
 pretty_assertions = "1.4"
-prettyplease = "0.2"
+prettyplease = "0.3"
 proc-macro2 = "1.0"
 proj = "=0.28.0" # needs to stay fixed to use fixed proj version
 proj-sys = "=0.25.0" # needs to stay fixed to use fixed proj version
@@ -168,67 +155,41 @@ quote = "1.0"
 rand = "0.10"
 rayon = "1.12"
 regex = "1.13"
-reqwest = { version = "=0.12.28", features = [
-    "json",
-    "multipart",
-    "stream",
-] } # has to match with `oauth`
+reqwest = { version = "=0.12.28", features = ["json", "multipart", "stream"] } # has to match with `oauth`
 rustc-hash = { version = "2.1", default-features = false }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_bytes = "0.11"
 serde_json = "1.0"
 serde_urlencoded = "0.7"
-serde_with = "3.21"
-serial_test = "3.5"
+serde_with = "3.24"
+serial_test = "4.0"
 sha2 = "0.11"
 snafu = "0.9"
 stac = "0.17"
-stac-extensions = "0.1.12"
+stac-extensions = "0.1.17"
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"
-syn = { version = "2.0", features = ["full", "extra-traits"] }
+syn = { version = "3.0", features = ["full", "extra-traits"] }
 tempfile = "3.27"
-tokio = { version = "1.53", features = [
-    "fs",
-    "io-std",
-    "macros",
-    "signal",
-    "sync",
-    "rt-multi-thread",
-    "time",
-] }
-tokio-util = "0.7"
+tokio = { version = "1.54", features = ["fs", "io-std", "macros", "signal", "sync", "rt-multi-thread", "time"] }
 tokio-postgres = "0.7"
+tokio-util = "0.7"
 toml = { version = "1.1", features = ["parse"] }
 tracing = { version = "0.1", features = ["release_max_level_debug"] }
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.33" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
-tracing-subscriber = { version = "0.3", features = [
-    "local-time",
-    "ansi",
-    "tracing-log",
-] }
 tracing-appender = "0.2"
+tracing-opentelemetry = "0.34" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
+tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "tracing-log"] }
 typed_floats = { version = "1.0.7", features = ["serde"] }
 typetag = "0.2"
 url = { version = "2.5", features = ["serde"] }
-utoipa = { version = "5.5", features = [
-    "actix_extras",
-    "chrono",
-    "debug",
-    "url",
-    "uuid",
-] }
-utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
-uuid = { version = "=1.17.0", features = [
-    "serde",
-    "v4",
-    "v5",
-] } # must be compatible with `bb8-postgres`
-validator = { version = "0.20", features = ["derive"] }
+utoipa = { version = "6.0", features = ["actix_extras", "chrono", "debug", "url", "uuid"] }
+utoipa-swagger-ui = { version = "10", features = ["actix-web"] }
+uuid = { version = "1.29", features = ["serde", "v4", "v5"] } # major version must match `tokio-postgres`' `with-uuid-1` feature
+validator = { version = "0.21", features = ["derive"] }
 vergen = "10.0"
 vergen-gitcl = "10.0"
 walkdir = "2.5"
 wkt = "0.14"
-xml = "1.3"
-zip = "8.6"
+xml = "1.4"
+zip = "9.1"

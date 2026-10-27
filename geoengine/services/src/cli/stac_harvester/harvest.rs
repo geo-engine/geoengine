@@ -1464,7 +1464,7 @@ mod tests {
                 1,
             );
             futures::pin_mut!(pages);
-            assert!(!pages.next().await.unwrap().unwrap().items.is_empty());
+            assert_ne!(pages.next().await.unwrap().unwrap().items, [] as [_; 0]);
             assert!(pages.next().await.is_none());
         }
     }
