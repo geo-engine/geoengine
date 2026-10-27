@@ -5,7 +5,10 @@ use std::future::pending;
 fn test_job(
     coordinator: &ActorChannels,
     id: usize,
-) -> (AttemptJob, oneshot::Receiver<AttemptReply>) {
+) -> (
+    AttemptJob,
+    oneshot::Receiver<Result<AttemptReply, StacClientError>>,
+) {
     let client = reqwest::Client::new();
     let request = client
         .get(format!("https://actor.test/{id}"))
@@ -279,6 +282,48 @@ fn response(id: usize, remaining: Option<usize>) -> reqwest::Response {
             .header("x-ratelimit-reset", "1");
     }
     builder.body(format!("{{\"id\":{id}}}")).unwrap().into()
+}
+
+#[tokio::test]
+async fn it_returns_invalid_timing_without_retrying_or_stopping_the_actor() {
+    for (header, value, status) in [
+        ("x-ratelimit-reset", u64::MAX.to_string(), 200),
+        ("x-ratelimit-reset", u64::MAX.to_string(), 429),
+        ("retry-after", u64::MAX.to_string(), 429),
+        ("x-ratelimit-limit", format!("1;w={}", u64::MAX), 200),
+    ] {
+        let (_registry, coordinator, mut starts) = controlled_coordinator("invalid-timing");
+        let query = execute_job_with_policy(
+            coordinator.clone(),
+            1,
+            RetryPolicy::new().max_retries(3).initial_delay_ms(1),
+        );
+        let (_, first_response) = next_start(&mut starts).await;
+        first_response
+            .send(
+                httptest::http::Response::builder()
+                    .status(status)
+                    .header(header, value)
+                    .header("x-ratelimit-remaining", "0")
+                    .body("")
+                    .unwrap()
+                    .into(),
+            )
+            .unwrap();
+        let error = tokio::time::timeout(Duration::from_secs(1), query)
+            .await
+            .expect("invalid timing must fail without waiting or retrying")
+            .unwrap()
+            .unwrap_err();
+        assert!(matches!(error, StacClientError::InvalidRateLimitTiming));
+        assert_eq!(error.status(), None);
+
+        let next = execute_job(coordinator, 2);
+        let (path, next_response) = next_start(&mut starts).await;
+        assert_eq!(path, "/2", "invalid timing must not trigger a retry");
+        next_response.send(response(2, None)).unwrap();
+        next.await.unwrap().unwrap();
+    }
 }
 
 #[tokio::test]

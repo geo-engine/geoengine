@@ -150,7 +150,7 @@ impl Window {
             .len()
             .checked_sub(self.limit)
             .and_then(|index| starts.get(index))
-            .map(|at| saturating_deadline(*at, self.duration))
+            .and_then(|at| at.checked_add(self.duration))
             .filter(|deadline| *deadline > now)
             .into_iter()
             .chain(self.remote.as_ref().and_then(RemoteQuota::blocked_until))
@@ -199,19 +199,18 @@ impl State {
     /// Deadline after which an unused coordinator's history, quotas and cooldown
     /// no longer require its registry entry to be retained.
     fn retain_until(&self) -> Instant {
-        std::iter::once(saturating_deadline(
-            self.last_activity,
-            self.history_duration(),
-        ))
-        .chain(self.cooldown_until)
-        .chain(self.unscoped_quota.as_ref().map(|quota| quota.reset))
-        .chain(
-            self.windows
-                .iter()
-                .filter_map(|window| window.remote.as_ref().map(|quota| quota.reset)),
-        )
-        .max()
-        .unwrap_or(self.last_activity)
+        self.last_activity
+            .checked_add(self.history_duration())
+            .into_iter()
+            .chain(self.cooldown_until)
+            .chain(self.unscoped_quota.as_ref().map(|quota| quota.reset))
+            .chain(
+                self.windows
+                    .iter()
+                    .filter_map(|window| window.remote.as_ref().map(|quota| quota.reset)),
+            )
+            .max()
+            .unwrap_or(self.last_activity)
     }
 
     /// Return a blocking deadline, or reserve capacity and return `None`.
@@ -333,7 +332,7 @@ struct AttemptJob {
     client: reqwest::Client,
     request: reqwest::Request,
     authentication: Option<StacAuthentication>,
-    reply: oneshot::Sender<AttemptReply>,
+    reply: oneshot::Sender<Result<AttemptReply, StacClientError>>,
     permit: OwnedSemaphorePermit,
 }
 
@@ -360,7 +359,7 @@ pub(super) struct ActorChannels {
 /// Close the reply before notifying the actor, so a cancellation wakeup cannot
 /// race ahead of the receiver being dropped and leave a queued job behind.
 struct PendingAttempt {
-    reply: oneshot::Receiver<AttemptReply>,
+    reply: oneshot::Receiver<Result<AttemptReply, StacClientError>>,
     cancellation: Option<Arc<Notify>>,
 }
 
@@ -378,7 +377,7 @@ impl Drop for PendingAttempt {
 struct AttemptCompletion {
     /// Completion count captured when this attempt was admitted.
     completed_before: usize,
-    reply: oneshot::Sender<AttemptReply>,
+    reply: oneshot::Sender<Result<AttemptReply, StacClientError>>,
     /// `None` indicates that the caller cancelled the attempt.
     response: Option<reqwest::Result<reqwest::Response>>,
     permit: OwnedSemaphorePermit,
@@ -592,6 +591,8 @@ pub(crate) enum StacClientError {
     RegistryFull,
     #[snafu(display("STAC requests must have replayable bodies"))]
     RequestNotReplayable,
+    #[snafu(display("STAC response contains a rate-limit duration that cannot form a deadline"))]
+    InvalidRateLimitTiming,
 }
 
 impl StacClientError {
@@ -599,7 +600,10 @@ impl StacClientError {
     pub(crate) fn status(&self) -> Option<reqwest::StatusCode> {
         match self {
             Self::Http { source } => source.status(),
-            Self::CoordinatorStopped | Self::RegistryFull | Self::RequestNotReplayable => None,
+            Self::CoordinatorStopped
+            | Self::RegistryFull
+            | Self::RequestNotReplayable
+            | Self::InvalidRateLimitTiming => None,
         }
     }
 }
@@ -717,7 +721,7 @@ impl StacClient {
             .await
             .map_err(|_| StacClientError::CoordinatorStopped)?;
         pending.cancellation = None;
-        Ok(reply)
+        reply
     }
 }
 
@@ -836,7 +840,14 @@ fn complete_attempt(state: &mut State, completion: AttemptCompletion) {
     };
     let server_controls_retry = if let Ok(response) = &response {
         let now = Instant::now();
-        let feedback = ResponseFeedback::parse(response.headers(), response.status().as_u16(), now);
+        let feedback =
+            match ResponseFeedback::parse(response.headers(), response.status().as_u16(), now) {
+                Ok(feedback) => feedback,
+                Err(error) => {
+                    let _ = reply.send(Err(error));
+                    return;
+                }
+            };
         let has_retry_timing = feedback.has_retry_timing;
         state.observe(feedback, now, completed_before);
         response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
@@ -844,10 +855,10 @@ fn complete_attempt(state: &mut State, completion: AttemptCompletion) {
     } else {
         false
     };
-    let _ = reply.send(AttemptReply {
+    let _ = reply.send(Ok(AttemptReply {
         response,
         server_controls_retry,
-    });
+    }));
 }
 
 /// Canonicalize valid OAuth endpoint URLs for registry matching, preserving the
@@ -877,7 +888,7 @@ impl ResponseFeedback {
     /// Parse rate-limit policies and relative reset seconds. Repeated header fields
     /// retain their positions so ambiguous remaining counts stay unscoped. For a
     /// 429, use the longest usable Retry-After/reset delay or the fixed fallback.
-    fn parse(headers: &HeaderMap, status: u16, now: Instant) -> Self {
+    fn parse(headers: &HeaderMap, status: u16, now: Instant) -> Result<Self, StacClientError> {
         let limits: Vec<_> = headers.get_all("x-ratelimit-limit").iter().collect();
         let remaining: Vec<_> = headers.get_all("x-ratelimit-remaining").iter().collect();
         let resets: Vec<_> = headers.get_all("x-ratelimit-reset").iter().collect();
@@ -917,6 +928,7 @@ impl ResponseFeedback {
                 .filter(|first| matching.all(|duration| duration == *first))
                 .filter(|_| limits.len() == remaining.len());
             for policy in policies {
+                checked_deadline(now, policy.duration)?;
                 if let Some(previous) = feedback
                     .windows
                     .iter_mut()
@@ -943,7 +955,7 @@ impl ResponseFeedback {
             .unwrap_or(DEFAULT_RETRY_DELAY);
             let quota = RemoteQuota {
                 remaining_requests: available,
-                reset: saturating_deadline(now, reset),
+                reset: checked_deadline(now, reset)?,
             };
             let destination = if let Some(window) = scope.and_then(|duration| {
                 feedback
@@ -958,12 +970,12 @@ impl ResponseFeedback {
             RemoteQuota::merge(destination, quota, 0);
         }
         if status == 429 {
-            feedback.cooldown_until = Some(saturating_deadline(
+            feedback.cooldown_until = Some(checked_deadline(
                 now,
                 retry_delay.unwrap_or(DEFAULT_RETRY_DELAY),
-            ));
+            )?);
         }
-        feedback
+        Ok(feedback)
     }
 }
 
@@ -994,38 +1006,14 @@ fn header_values<'a>(headers: &'a HeaderMap, name: &str) -> impl Iterator<Item =
         .filter_map(|value| value.to_str().ok())
 }
 
-/// Add a delay, saturating at the latest deadline usable by Tokio's timer.
-/// Leave one millisecond of headroom for the timer's deadline rounding.
-/// `Instant` has no portable maximum, so find the boundary only on overflow.
-fn saturating_deadline(now: Instant, delay: Duration) -> Instant {
-    let checked_deadline = |delay| {
-        let deadline = now.checked_add(delay)?;
-        deadline.checked_add(Duration::from_millis(1))?;
-        Some(deadline)
-    };
-    if let Some(deadline) = checked_deadline(delay) {
-        return deadline;
-    }
-
-    let mut lower = Duration::ZERO;
-    let mut upper = delay;
-    let mut deadline = now;
-    loop {
-        let remaining = upper.saturating_sub(lower);
-        if remaining <= Duration::from_nanos(1) {
-            return deadline;
-        }
-        let middle = lower + remaining / 2;
-        if let Some(candidate) = checked_deadline(middle) {
-            lower = middle;
-            deadline = candidate;
-        } else {
-            upper = middle;
-        }
-    }
+/// Convert a server delay once, reserving headroom for Tokio's timer rounding.
+fn checked_deadline(now: Instant, delay: Duration) -> Result<Instant, StacClientError> {
+    now.checked_add(delay)
+        .filter(|deadline| deadline.checked_add(Duration::from_millis(1)).is_some())
+        .ok_or(StacClientError::InvalidRateLimitTiming)
 }
 
-/// Parse nonnegative integer seconds, preserving large delays for saturation.
+/// Parse nonnegative integer seconds; deadline conversion validates the duration.
 fn parse_seconds(value: &str) -> Option<Duration> {
     value.trim().parse().ok().map(Duration::from_secs)
 }
@@ -1077,7 +1065,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("x-ratelimit-limit", "10, 10;w=1, 60;w=60".parse().unwrap());
         headers.insert("x-ratelimit-reset", "1".parse().unwrap());
-        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now());
+        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now()).unwrap();
         assert_eq!(feedback.windows.len(), 2);
         assert_eq!(feedback.windows[0].limit, 10);
         assert_eq!(feedback.windows[0].duration, Duration::from_secs(1));
@@ -1110,12 +1098,20 @@ mod tests {
             headers.insert(RETRY_AFTER, value.parse().unwrap());
             headers.insert("x-ratelimit-reset", value.parse().unwrap());
             assert_eq!(rate_limit_delay(&headers), None);
-            assert!(!ResponseFeedback::parse(&headers, 429, Instant::now()).has_retry_timing);
+            assert!(
+                !ResponseFeedback::parse(&headers, 429, Instant::now())
+                    .unwrap()
+                    .has_retry_timing
+            );
         }
         headers.insert(RETRY_AFTER, "2".parse().unwrap());
         headers.insert("x-ratelimit-reset", "3".parse().unwrap());
         assert_eq!(rate_limit_delay(&headers), Some(Duration::from_secs(3)));
-        assert!(ResponseFeedback::parse(&headers, 429, Instant::now()).has_retry_timing);
+        assert!(
+            ResponseFeedback::parse(&headers, 429, Instant::now())
+                .unwrap()
+                .has_retry_timing
+        );
     }
 
     #[test]
@@ -1125,7 +1121,7 @@ mod tests {
             "19",
             "1",
         );
-        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now());
+        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now()).unwrap();
         assert_eq!(feedback.windows.len(), 3);
         assert_eq!(feedback.windows[0].limit, 15);
         assert_eq!(feedback.windows[2].limit, 100_000);
@@ -1170,7 +1166,7 @@ mod tests {
         let headers = quota_headers("2;w=60", "0", "60");
         state.release();
         state.observe(
-            ResponseFeedback::parse(&headers, 429, Instant::now()),
+            ResponseFeedback::parse(&headers, 429, Instant::now()).unwrap(),
             Instant::now(),
             0,
         );
@@ -1221,50 +1217,36 @@ mod tests {
     }
 
     #[test]
-    fn it_saturates_unrepresentable_deadlines_without_shortening_the_delay() {
+    fn it_rejects_unrepresentable_deadlines() {
         let now = Instant::now();
-        assert_eq!(saturating_deadline(now, Duration::ZERO), now);
+        assert_eq!(checked_deadline(now, Duration::ZERO).unwrap(), now);
         assert_eq!(
-            saturating_deadline(now, Duration::from_mins(1)),
+            checked_deadline(now, Duration::from_mins(1)).unwrap(),
             now + Duration::from_mins(1)
         );
-        let saturated = saturating_deadline(now, Duration::MAX);
-        assert!(saturated > now + Duration::from_hours(1));
-        assert!(saturated.checked_add(Duration::from_millis(1)).is_some());
-        assert!(saturated.checked_add(Duration::from_secs(1)).is_none());
-        assert_eq!(
-            saturating_deadline(saturated, Duration::from_secs(1)),
-            saturated
-        );
+        assert!(matches!(
+            checked_deadline(now, Duration::MAX),
+            Err(StacClientError::InvalidRateLimitTiming)
+        ));
     }
 
-    #[tokio::test]
-    async fn it_saturates_server_reset_and_retry_after_headers() {
+    #[test]
+    fn it_rejects_unrepresentable_reset_and_retry_after_headers() {
         let now = Instant::now();
-        let saturated = saturating_deadline(now, Duration::MAX);
-        let mut headers = HeaderMap::new();
-        headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
-        headers.insert("x-ratelimit-reset", u64::MAX.to_string().parse().unwrap());
-        for status in [200, 429] {
-            let feedback = ResponseFeedback::parse(&headers, status, now);
-            assert_eq!(feedback.unscoped_quota.unwrap().reset, saturated);
-            assert_eq!(
-                feedback.cooldown_until,
-                (status == 429).then_some(saturated)
-            );
+        for (header, status) in [
+            ("x-ratelimit-reset", 200),
+            ("x-ratelimit-reset", 429),
+            ("retry-after", 429),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
+            headers.insert(header, u64::MAX.to_string().parse().unwrap());
+            assert!(matches!(
+                ResponseFeedback::parse(&headers, status, now),
+                Err(StacClientError::InvalidRateLimitTiming)
+            ));
         }
-        headers.clear();
-        headers.insert(RETRY_AFTER, u64::MAX.to_string().parse().unwrap());
-        let feedback = ResponseFeedback::parse(&headers, 429, now);
-        assert!(feedback.has_retry_timing);
-        assert_eq!(feedback.cooldown_until, Some(saturated));
-        assert!(
-            tokio::time::sleep_until(saturated.into())
-                .now_or_never()
-                .is_none()
-        );
-
-        let feedback = ResponseFeedback::parse(&HeaderMap::new(), 429, now);
+        let feedback = ResponseFeedback::parse(&HeaderMap::new(), 429, now).unwrap();
         assert_eq!(feedback.cooldown_until, Some(now + DEFAULT_RETRY_DELAY));
     }
 

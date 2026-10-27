@@ -17,14 +17,16 @@ fn observe(state: &mut State, headers: &HeaderMap, status: u16, now: Instant) {
     let completed_before = state.completed_requests;
     state.release();
     state.observe(
-        ResponseFeedback::parse(headers, status, now),
+        ResponseFeedback::parse(headers, status, now).unwrap(),
         now,
         completed_before,
     );
 }
 
 fn parse_limits(headers: &HeaderMap) -> Vec<Window> {
-    ResponseFeedback::parse(headers, 200, Instant::now()).windows
+    ResponseFeedback::parse(headers, 200, Instant::now())
+        .unwrap()
+        .windows
 }
 
 fn quota_headers(policies: &[(&str, &str, &str)]) -> HeaderMap {
@@ -63,20 +65,16 @@ fn it_deduplicates_windows_and_keeps_the_stricter_duplicate() {
 }
 
 #[test]
-fn it_saturates_large_windows_without_bypassing_admission_or_retention() {
-    let now = Instant::now();
-    let mut state = state(now);
+fn it_rejects_unrepresentable_policy_windows() {
     let mut headers = HeaderMap::new();
     headers.insert(
         "x-ratelimit-limit",
         format!("1;w={}", u64::MAX).parse().unwrap(),
     );
-    state.observe(ResponseFeedback::parse(&headers, 200, now), now, 0);
-    assert_eq!(state.windows.len(), 1);
-    let saturated = saturating_deadline(now, Duration::MAX);
-    assert_eq!(state.reserve(now), None);
-    assert_eq!(state.reserve(now), Some(saturated));
-    assert_eq!(state.retain_until(), saturated);
+    assert!(matches!(
+        ResponseFeedback::parse(&headers, 200, Instant::now()),
+        Err(StacClientError::InvalidRateLimitTiming)
+    ));
 }
 
 #[test]
@@ -84,7 +82,7 @@ fn it_does_not_assign_ambiguous_feedback_to_the_wrong_window() {
     let mut headers = quota_headers(&[("20;w=1", "19", "1"), ("1800;w=60", "1799", "50")]);
     headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
     let now = Instant::now();
-    let feedback = ResponseFeedback::parse(&headers, 200, now);
+    let feedback = ResponseFeedback::parse(&headers, 200, now).unwrap();
     let quota = feedback.unscoped_quota.unwrap();
     assert_eq!(quota.remaining_requests, 0);
     assert_eq!(quota.reset, now + Duration::from_secs(50));
@@ -103,7 +101,7 @@ fn it_does_not_assign_ambiguous_feedback_to_the_wrong_window() {
     headers.remove("x-ratelimit-remaining");
     headers.append("x-ratelimit-remaining", "0".parse().unwrap());
     headers.append("x-ratelimit-remaining", "1799".parse().unwrap());
-    let feedback = ResponseFeedback::parse(&headers, 200, now);
+    let feedback = ResponseFeedback::parse(&headers, 200, now).unwrap();
     assert_eq!(feedback.unscoped_quota.unwrap().remaining_requests, 0);
     assert_eq!(feedback.windows.len(), 1);
     assert_eq!(feedback.windows[0].duration, Duration::from_mins(1));
@@ -248,7 +246,7 @@ fn it_allows_the_advertised_parallel_capacity_without_refunding_completions() {
     let now = Instant::now();
     let mut state = state(now);
     state.observe(
-        ResponseFeedback::parse(&quota_headers(&[("20;w=1", "20", "1")]), 200, now),
+        ResponseFeedback::parse(&quota_headers(&[("20;w=1", "20", "1")]), 200, now).unwrap(),
         now,
         state.completed_requests,
     );
@@ -275,7 +273,7 @@ fn it_replaces_fallback_capacity_with_learned_policies() {
     }
     assert_eq!(state.reserve(now), Some(now + DEFAULT_WINDOW_DURATION));
     state.observe(
-        ResponseFeedback::parse(&quota_headers(&[("20;w=1", "10", "1")]), 200, now),
+        ResponseFeedback::parse(&quota_headers(&[("20;w=1", "10", "1")]), 200, now).unwrap(),
         now,
         state.completed_requests,
     );
@@ -313,7 +311,7 @@ fn it_uses_bounded_fallback_reset_and_the_longer_429_delay() {
     let mut headers = HeaderMap::new();
     headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
     state.observe(
-        ResponseFeedback::parse(&headers, 200, now),
+        ResponseFeedback::parse(&headers, 200, now).unwrap(),
         now,
         state.completed_requests,
     );
@@ -337,7 +335,7 @@ fn it_retains_history_and_remote_deadlines_until_the_latest_expiry() {
     headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
     headers.insert("x-ratelimit-reset", "3600".parse().unwrap());
     state.observe(
-        ResponseFeedback::parse(&headers, 200, now),
+        ResponseFeedback::parse(&headers, 200, now).unwrap(),
         now,
         state.completed_requests,
     );
