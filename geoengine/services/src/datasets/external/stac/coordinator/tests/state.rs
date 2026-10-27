@@ -55,11 +55,28 @@ fn it_deduplicates_windows_and_keeps_the_stricter_duplicate() {
     let mut malformed = HeaderMap::new();
     malformed.insert(
         "x-ratelimit-limit",
-        "0;w=1, 2;w=0, invalid, 10;w=18446744073709551615"
+        "0;w=1, 2;w=0, invalid, 10;w=18446744073709551616"
             .parse()
             .unwrap(),
     );
     assert!(parse_limits(&malformed).is_empty());
+}
+
+#[test]
+fn it_saturates_large_windows_without_bypassing_admission_or_retention() {
+    let now = Instant::now();
+    let mut state = state(now);
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "x-ratelimit-limit",
+        format!("1;w={}", u64::MAX).parse().unwrap(),
+    );
+    state.observe(ResponseFeedback::parse(&headers, 200, now), now, 0);
+    assert_eq!(state.windows.len(), 1);
+    let saturated = saturating_deadline(now, Duration::MAX);
+    assert_eq!(state.reserve(now), None);
+    assert_eq!(state.reserve(now), Some(saturated));
+    assert_eq!(state.retain_until(), saturated);
 }
 
 #[test]

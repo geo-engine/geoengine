@@ -150,7 +150,7 @@ impl Window {
             .len()
             .checked_sub(self.limit)
             .and_then(|index| starts.get(index))
-            .and_then(|at| at.checked_add(self.duration))
+            .map(|at| saturating_deadline(*at, self.duration))
             .filter(|deadline| *deadline > now)
             .into_iter()
             .chain(self.remote.as_ref().and_then(RemoteQuota::blocked_until))
@@ -199,18 +199,19 @@ impl State {
     /// Deadline after which an unused coordinator's history, quotas and cooldown
     /// no longer require its registry entry to be retained.
     fn retain_until(&self) -> Instant {
-        self.last_activity
-            .checked_add(self.history_duration())
-            .into_iter()
-            .chain(self.cooldown_until)
-            .chain(self.unscoped_quota.as_ref().map(|quota| quota.reset))
-            .chain(
-                self.windows
-                    .iter()
-                    .filter_map(|window| window.remote.as_ref().map(|quota| quota.reset)),
-            )
-            .max()
-            .unwrap_or(self.last_activity)
+        std::iter::once(saturating_deadline(
+            self.last_activity,
+            self.history_duration(),
+        ))
+        .chain(self.cooldown_until)
+        .chain(self.unscoped_quota.as_ref().map(|quota| quota.reset))
+        .chain(
+            self.windows
+                .iter()
+                .filter_map(|window| window.remote.as_ref().map(|quota| quota.reset)),
+        )
+        .max()
+        .unwrap_or(self.last_activity)
     }
 
     /// Return a blocking deadline, or reserve capacity and return `None`.
@@ -938,10 +939,11 @@ impl ResponseFeedback {
                 header_values(headers, "x-ratelimit-reset")
                     .filter_map(parse_seconds)
                     .max()
-            };
+            }
+            .unwrap_or(DEFAULT_RETRY_DELAY);
             let quota = RemoteQuota {
                 remaining_requests: available,
-                reset: deadline_after(now, reset),
+                reset: saturating_deadline(now, reset),
             };
             let destination = if let Some(window) = scope.and_then(|duration| {
                 feedback
@@ -956,7 +958,10 @@ impl ResponseFeedback {
             RemoteQuota::merge(destination, quota, 0);
         }
         if status == 429 {
-            feedback.cooldown_until = Some(deadline_after(now, retry_delay));
+            feedback.cooldown_until = Some(saturating_deadline(
+                now,
+                retry_delay.unwrap_or(DEFAULT_RETRY_DELAY),
+            ));
         }
         feedback
     }
@@ -989,19 +994,40 @@ fn header_values<'a>(headers: &'a HeaderMap, name: &str) -> impl Iterator<Item =
         .filter_map(|value| value.to_str().ok())
 }
 
-/// Convert server timing to a deadline. An unrepresentable duration is unusable
-/// server feedback, so use the same short delay as for missing/invalid timing.
-/// `Instant` has no saturating addition or portable maximum value.
-fn deadline_after(now: Instant, delay: Option<Duration>) -> Instant {
-    delay
-        .and_then(|delay| now.checked_add(delay))
-        .unwrap_or_else(|| now + DEFAULT_RETRY_DELAY)
+/// Add a delay, saturating at the latest deadline usable by Tokio's timer.
+/// Leave one millisecond of headroom for the timer's deadline rounding.
+/// `Instant` has no portable maximum, so find the boundary only on overflow.
+fn saturating_deadline(now: Instant, delay: Duration) -> Instant {
+    let checked_deadline = |delay| {
+        let deadline = now.checked_add(delay)?;
+        deadline.checked_add(Duration::from_millis(1))?;
+        Some(deadline)
+    };
+    if let Some(deadline) = checked_deadline(delay) {
+        return deadline;
+    }
+
+    let mut lower = Duration::ZERO;
+    let mut upper = delay;
+    let mut deadline = now;
+    loop {
+        let remaining = upper.saturating_sub(lower);
+        if remaining <= Duration::from_nanos(1) {
+            return deadline;
+        }
+        let middle = lower + remaining / 2;
+        if let Some(candidate) = checked_deadline(middle) {
+            lower = middle;
+            deadline = candidate;
+        } else {
+            upper = middle;
+        }
+    }
 }
 
-/// Accept integer seconds only when they can form a representable monotonic deadline.
+/// Parse nonnegative integer seconds, preserving large delays for saturation.
 fn parse_seconds(value: &str) -> Option<Duration> {
-    let duration = Duration::from_secs(value.trim().parse().ok()?);
-    Instant::now().checked_add(duration).map(|_| duration)
+    value.trim().parse().ok().map(Duration::from_secs)
 }
 
 /// Longest usable server retry delay, before applying any local fallback.
@@ -1080,7 +1106,7 @@ mod tests {
     fn it_rejects_unusable_retry_timing_and_uses_the_longest_valid_delay() {
         let mut headers = HeaderMap::new();
         assert_eq!(rate_limit_delay(&headers), None);
-        for value in ["invalid", "0", "-1", "18446744073709551615"] {
+        for value in ["invalid", "0", "-1", "18446744073709551616"] {
             headers.insert(RETRY_AFTER, value.parse().unwrap());
             headers.insert("x-ratelimit-reset", value.parse().unwrap());
             assert_eq!(rate_limit_delay(&headers), None);
@@ -1195,18 +1221,51 @@ mod tests {
     }
 
     #[test]
-    fn it_uses_a_short_fallback_for_unrepresentable_deadlines() {
+    fn it_saturates_unrepresentable_deadlines_without_shortening_the_delay() {
         let now = Instant::now();
-        assert_eq!(deadline_after(now, Some(Duration::ZERO)), now);
+        assert_eq!(saturating_deadline(now, Duration::ZERO), now);
         assert_eq!(
-            deadline_after(now, Some(Duration::from_mins(1))),
+            saturating_deadline(now, Duration::from_mins(1)),
             now + Duration::from_mins(1)
         );
+        let saturated = saturating_deadline(now, Duration::MAX);
+        assert!(saturated > now + Duration::from_hours(1));
+        assert!(saturated.checked_add(Duration::from_millis(1)).is_some());
+        assert!(saturated.checked_add(Duration::from_secs(1)).is_none());
         assert_eq!(
-            deadline_after(now, Some(Duration::MAX)),
-            now + DEFAULT_RETRY_DELAY
+            saturating_deadline(saturated, Duration::from_secs(1)),
+            saturated
         );
-        assert_eq!(deadline_after(now, None), now + DEFAULT_RETRY_DELAY);
+    }
+
+    #[tokio::test]
+    async fn it_saturates_server_reset_and_retry_after_headers() {
+        let now = Instant::now();
+        let saturated = saturating_deadline(now, Duration::MAX);
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
+        headers.insert("x-ratelimit-reset", u64::MAX.to_string().parse().unwrap());
+        for status in [200, 429] {
+            let feedback = ResponseFeedback::parse(&headers, status, now);
+            assert_eq!(feedback.unscoped_quota.unwrap().reset, saturated);
+            assert_eq!(
+                feedback.cooldown_until,
+                (status == 429).then_some(saturated)
+            );
+        }
+        headers.clear();
+        headers.insert(RETRY_AFTER, u64::MAX.to_string().parse().unwrap());
+        let feedback = ResponseFeedback::parse(&headers, 429, now);
+        assert!(feedback.has_retry_timing);
+        assert_eq!(feedback.cooldown_until, Some(saturated));
+        assert!(
+            tokio::time::sleep_until(saturated.into())
+                .now_or_never()
+                .is_none()
+        );
+
+        let feedback = ResponseFeedback::parse(&HeaderMap::new(), 429, now);
+        assert_eq!(feedback.cooldown_until, Some(now + DEFAULT_RETRY_DELAY));
     }
 
     #[tokio::test]
