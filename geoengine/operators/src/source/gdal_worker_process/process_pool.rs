@@ -493,9 +493,20 @@ impl GdalProcessPool {
             Self::STRATEGY,
         );
 
-        let mut last_stats_report = Instant::now();
+        let mut stats_tick = tokio::time::interval(STATS_REPORT_INTERVAL);
+        stats_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-        while let Some(first_cmd) = rx.recv().await {
+        loop {
+            let first_cmd = tokio::select! {
+                cmd = rx.recv() => match cmd {
+                    Some(cmd) => cmd,
+                    None => break,
+                },
+                _ = stats_tick.tick() => {
+                    state.report_and_reset_stats();
+                    continue;
+                }
+            };
             let start_tick = Instant::now();
             let mut batch = vec![first_cmd];
 
@@ -584,11 +595,6 @@ impl GdalProcessPool {
             }
 
             state.try_dispatch();
-
-            if last_stats_report.elapsed() >= STATS_REPORT_INTERVAL {
-                state.report_and_reset_stats();
-                last_stats_report = Instant::now();
-            }
 
             let elapsed = start_tick.elapsed();
             if elapsed > THROTTLING_THRESHOLD_DURATION {
