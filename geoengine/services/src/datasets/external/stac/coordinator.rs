@@ -1,0 +1,1391 @@
+//! Coordinates outgoing STAC HTTP requests to respect shared server rate limits.
+//! Providers with the same configured STAC origin and credentials share a FIFO
+//! queue. A channel actor owns that queue and all quota state, admits requests in
+//! order, and runs admitted HTTP attempts concurrently.
+//!
+//! [`Identity`] selects shared [`ActorChannels`] inside an owned
+//! [`StacRequestRegistry`], shared across providers and collections that use that
+//! registry. The actor owns the FIFO queue and [`State`], which holds request
+//! history, learned rate-limit windows and server feedback. Admitted HTTP
+//! attempts may overlap.
+//!
+//! One [`StacClient::execute_json`] call may make several HTTP attempts.
+//! Each attempt is an owned channel job with a one-shot reply. The actor applies
+//! response feedback before replying. Failures and cancellation keep an admitted
+//! request start charged against the rolling windows.
+//! Each coordinator bounds queued and running attempts together; additional
+//! callers wait asynchronously for capacity. Cancellation wakeups are coalesced.
+//!
+//! Retries for transient failures wait for exponential backoff outside the queue,
+//! then join its tail again. A 429 sets a shared cooldown; retries also back off
+//! unless the server supplies quota windows or usable retry timing. Admission
+//! waits for the cooldown and all quota constraints.
+use super::{StacProviderAuthentication, auth::StacAuthentication};
+use crate::util::retry::{RetryAction, RetryPolicy, retry_http_with_action};
+use chrono::{DateTime, Utc};
+use dashmap::{DashMap, mapref::entry::Entry};
+use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
+use reqwest::header::{HeaderMap, RETRY_AFTER};
+use serde::de::DeserializeOwned;
+use snafu::Snafu;
+use std::{
+    collections::VecDeque,
+    fmt,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Weak},
+    time::{Duration, Instant, SystemTime},
+};
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
+use url::Url;
+
+/// Duration of the initial ten-request rate-limit window.
+const DEFAULT_WINDOW_DURATION: Duration = Duration::from_secs(1);
+/// Cooldown/reset delay when the server supplies no usable timing.
+const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(1);
+/// Bound jobs across the channel, actor queue and running HTTP attempts.
+const MAX_PENDING_ATTEMPTS: usize = 256;
+/// Bound retained quota identities per application or harvesting operation.
+const MAX_COORDINATORS: usize = 1024;
+/// Keep recent starts and idle coordinators long enough to learn further policies
+/// and preserve quota accounting when providers are reconstructed.
+const MIN_RETENTION: Duration = Duration::from_mins(5);
+
+/// Registry key identifying providers that share one quota bucket.
+///
+/// The origin is the configured STAC scheme, host and effective port. Configured
+/// OAuth credentials distinguish authenticated buckets; absent credentials select
+/// the anonymous bucket. Provider ids, collection paths and renewed access tokens
+/// do not affect sharing. The custom `Debug` implementation omits the password.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct Identity {
+    scheme: String,
+    host: String,
+    port: u16,
+    token_endpoint: Option<String>,
+    client_id: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+}
+
+impl fmt::Debug for Identity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StacCoordinatorIdentity")
+            .field("scheme", &self.scheme)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("token_endpoint", &self.token_endpoint)
+            .field("client_id", &self.client_id)
+            .field("username", &self.username)
+            .field("authenticated", &self.password.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Remaining server capacity and the monotonic deadline at which it expires.
+///
+/// This supplements local request history with server knowledge, including quota
+/// consumed by other clients. It can belong to a known [`Window`] or apply to the
+/// whole coordinator when the headers do not identify a window unambiguously.
+/// Merging observations only reduces remaining capacity until reset, so responses
+/// arriving out of order cannot replenish the budget.
+#[derive(Debug)]
+struct RemoteQuota {
+    /// Number of requests remaining, conservatively reduced for local reservations.
+    remaining_requests: usize,
+    /// Absolute deadline derived from the server's relative reset duration.
+    reset: Instant,
+}
+
+impl RemoteQuota {
+    /// Deduct other local reservations that the server may not have counted yet,
+    /// then retain the smaller budget and later reset from both observations.
+    fn merge(current: &mut Option<Self>, mut observed: Self, reservations: usize) {
+        observed.remaining_requests = observed.remaining_requests.saturating_sub(reservations);
+        if let Some(current) = current {
+            current.remaining_requests =
+                current.remaining_requests.min(observed.remaining_requests);
+            current.reset = current.reset.max(observed.reset);
+        } else {
+            *current = Some(observed);
+        }
+    }
+
+    fn blocked_until(&self) -> Option<Instant> {
+        (self.remaining_requests == 0).then_some(self.reset)
+    }
+}
+
+/// One rate-limit policy: at most `limit` starts within a rolling `duration`.
+///
+/// Admission must satisfy both this local limit and any associated server quota.
+/// Policies are identified by duration and all use [`State::starts`] as their
+/// history. The same type represents policies parsed from headers and those
+/// retained by the scheduler.
+#[derive(Debug)]
+struct Window {
+    /// Maximum number of admissions within the rolling interval.
+    limit: usize,
+    /// Length of the rolling interval used to count recent request starts.
+    duration: Duration,
+    /// Additional remaining/reset constraint reported for this policy, if known.
+    remote: Option<RemoteQuota>,
+}
+
+impl Window {
+    fn new(limit: usize, duration: Duration) -> Self {
+        Self {
+            limit,
+            duration,
+            remote: None,
+        }
+    }
+
+    /// Return the later deadline imposed by local starts and an exhausted server
+    /// quota. `None` means this window permits another request.
+    fn blocked_until(&self, starts: &VecDeque<Instant>, now: Instant) -> Option<Instant> {
+        // The limit-th most recent start determines when capacity returns. This
+        // is O(1), even with a long shared history or a newly lowered limit.
+        starts
+            .len()
+            .checked_sub(self.limit)
+            .and_then(|index| starts.get(index))
+            .and_then(|at| at.checked_add(self.duration))
+            .filter(|deadline| *deadline > now)
+            .into_iter()
+            .chain(self.remote.as_ref().and_then(RemoteQuota::blocked_until))
+            .max()
+    }
+}
+
+/// Mutable quota data owned exclusively by the coordinator actor.
+///
+/// The history of request starts enforces rates independently of how many attempts
+/// are currently waiting for response headers.
+#[derive(Debug)]
+struct State {
+    /// Number of admitted HTTP attempts still waiting for response headers or a transport error.
+    /// Used to adjust server feedback; this is not a concurrency limit.
+    in_flight_requests: usize,
+    /// Monotonic completion count, including failures and cancellation. Attempts
+    /// snapshot this at admission so delayed feedback also charges other
+    /// requests that finished while they were running.
+    completed_requests: usize,
+    /// Learned policies, deduplicated by duration. Empty selects ten starts/second.
+    windows: Vec<Window>,
+    /// Chronological admission timestamps shared by every window. Completion,
+    /// failure and cancellation do not refund these reservations.
+    starts: VecDeque<Instant>,
+    /// Server remaining/reset feedback without an unambiguous window association.
+    unscoped_quota: Option<RemoteQuota>,
+    /// Shared admission barrier learned from 429 responses.
+    cooldown_until: Option<Instant>,
+    /// Last admission or release of an admitted attempt, used for idle retention.
+    last_activity: Instant,
+}
+
+impl State {
+    /// Preserve starts for the longest learned policy, with a minimum history
+    /// for policies that may first appear in later responses.
+    fn history_duration(&self) -> Duration {
+        self.windows
+            .iter()
+            .map(|window| window.duration)
+            .max()
+            .unwrap_or_default()
+            .max(MIN_RETENTION)
+    }
+
+    /// Deadline after which an unused coordinator's history, quotas and cooldown
+    /// no longer require its registry entry to be retained.
+    fn retain_until(&self) -> Instant {
+        self.last_activity
+            .checked_add(self.history_duration())
+            .into_iter()
+            .chain(self.cooldown_until)
+            .chain(self.unscoped_quota.as_ref().map(|quota| quota.reset))
+            .chain(
+                self.windows
+                    .iter()
+                    .filter_map(|window| window.remote.as_ref().map(|quota| quota.reset)),
+            )
+            .max()
+            .unwrap_or(self.last_activity)
+    }
+
+    /// Return a blocking deadline, or reserve capacity and return `None`.
+    fn reserve(&mut self, now: Instant) -> Option<Instant> {
+        self.prune(now);
+        // Before learning policies, use the fallback immediately. There is no
+        // special bootstrap request or wait for its headers.
+        let local = if self.windows.is_empty() {
+            Window::new(10, DEFAULT_WINDOW_DURATION).blocked_until(&self.starts, now)
+        } else {
+            self.windows
+                .iter()
+                .filter_map(|window| window.blocked_until(&self.starts, now))
+                .max()
+        };
+        let deadline = local
+            .into_iter()
+            .chain(
+                self.unscoped_quota
+                    .as_ref()
+                    .and_then(RemoteQuota::blocked_until),
+            )
+            .chain(self.cooldown_until)
+            .max();
+        if let Some(deadline) = deadline {
+            return Some(deadline);
+        }
+        self.in_flight_requests += 1;
+        self.starts.push_back(now);
+        self.last_activity = now;
+        for quota in self
+            .windows
+            .iter_mut()
+            .filter_map(|window| window.remote.as_mut())
+            .chain(self.unscoped_quota.as_mut())
+        {
+            quota.remaining_requests = quota.remaining_requests.saturating_sub(1);
+        }
+        None
+    }
+
+    /// Expire old starts, server quotas and cooldowns while keeping learned policies.
+    fn prune(&mut self, now: Instant) {
+        let history_duration = self.history_duration();
+        while self
+            .starts
+            .front()
+            .is_some_and(|at| now.duration_since(*at) >= history_duration)
+        {
+            self.starts.pop_front();
+        }
+        for quota in self
+            .windows
+            .iter_mut()
+            .map(|window| &mut window.remote)
+            .chain(std::iter::once(&mut self.unscoped_quota))
+        {
+            if quota.as_ref().is_some_and(|quota| quota.reset <= now) {
+                *quota = None;
+            }
+        }
+        if self.cooldown_until.is_some_and(|until| until <= now) {
+            self.cooldown_until = None;
+        }
+    }
+
+    /// Merge response feedback while preserving policies absent from this response.
+    /// The responding attempt must already be released. Charge both other
+    /// in-flight attempts and those that completed since its admission, excluding
+    /// the responding attempt itself, against the reported remaining capacity.
+    fn observe(&mut self, feedback: ResponseFeedback, now: Instant, completed_before: usize) {
+        self.prune(now);
+        let reservations = self.in_flight_requests
+            + self
+                .completed_requests
+                .saturating_sub(completed_before)
+                .saturating_sub(1);
+        for mut observed in feedback.windows {
+            let remote = observed.remote.take();
+            let window = if let Some(index) = self
+                .windows
+                .iter()
+                .position(|window| window.duration == observed.duration)
+            {
+                self.windows[index].limit = observed.limit;
+                &mut self.windows[index]
+            } else {
+                self.windows.push(observed);
+                self.windows
+                    .last_mut()
+                    .expect("the observed window was just inserted")
+            };
+            if let Some(remote) = remote {
+                RemoteQuota::merge(&mut window.remote, remote, reservations);
+            }
+        }
+        if let Some(quota) = feedback.unscoped_quota {
+            RemoteQuota::merge(&mut self.unscoped_quota, quota, reservations);
+        }
+        if let Some(deadline) = feedback.cooldown_until {
+            self.cooldown_until = Some(
+                self.cooldown_until
+                    .map_or(deadline, |current| current.max(deadline)),
+            );
+        }
+    }
+
+    /// Release one in-flight attempt. Its request start remains charged.
+    fn release(&mut self) {
+        self.in_flight_requests = self.in_flight_requests.saturating_sub(1);
+        self.completed_requests += 1;
+        self.last_activity = Instant::now();
+    }
+}
+
+/// One owned HTTP attempt and its private completion channel.
+#[derive(Debug)]
+struct AttemptJob {
+    client: reqwest::Client,
+    request: reqwest::Request,
+    authentication: Option<StacAuthentication>,
+    reply: oneshot::Sender<Result<AttemptReply, StacClientError>>,
+    permit: OwnedSemaphorePermit,
+}
+
+#[derive(Debug)]
+struct AttemptReply {
+    response: reqwest::Result<reqwest::Response>,
+    server_controls_retry: bool,
+}
+
+/// Shared request channel and cancellation notification plus their registry identity.
+#[derive(Debug)]
+pub(super) struct ActorChannels {
+    // Each job owns a permit until its completion is processed, so draining the
+    // channel into the actor's queue cannot bypass backpressure.
+    jobs: mpsc::Sender<AttemptJob>,
+    capacity: Arc<Semaphore>,
+    cancellations: Arc<Notify>,
+    identity: Identity,
+    registry: Weak<CoordinatorMap>,
+    // Replacement actors for the same identity share its registry slot.
+    registry_slot: Arc<OwnedSemaphorePermit>,
+}
+
+/// Close the reply before notifying the actor, so a cancellation wakeup cannot
+/// race ahead of the receiver being dropped and leave a queued job behind.
+struct PendingAttempt {
+    reply: oneshot::Receiver<Result<AttemptReply, StacClientError>>,
+    cancellation: Option<Arc<Notify>>,
+}
+
+impl Drop for PendingAttempt {
+    fn drop(&mut self) {
+        if let Some(notification) = &self.cancellation {
+            self.reply.close();
+            notification.notify_one();
+        }
+    }
+}
+
+/// An admitted attempt's response and the bookkeeping needed to apply it.
+#[derive(Debug)]
+struct AttemptCompletion {
+    /// Completion count captured when this attempt was admitted.
+    completed_before: usize,
+    reply: oneshot::Sender<Result<AttemptReply, StacClientError>>,
+    /// `None` indicates that the caller cancelled the attempt.
+    response: Option<reqwest::Result<reqwest::Response>>,
+    permit: OwnedSemaphorePermit,
+}
+
+type RunningAttempt = Pin<Box<dyn Future<Output = AttemptCompletion> + Send>>;
+
+#[derive(Debug)]
+struct CoordinatorMap {
+    entries: DashMap<Identity, Arc<ActorChannels>>,
+    capacity: Arc<Semaphore>,
+}
+
+impl Default for CoordinatorMap {
+    fn default() -> Self {
+        Self {
+            entries: DashMap::new(),
+            capacity: Arc::new(Semaphore::new(MAX_COORDINATORS)),
+        }
+    }
+}
+
+/// Application- or operation-owned coordinator registry.
+///
+/// At most 1024 origin/credential identities are retained. New identities fail
+/// when full; existing identities continue sharing their quota state. Idle
+/// coordinators are removed after at least five minutes, extended by learned
+/// policy windows and server deadlines. Relevant quota history is never evicted
+/// to make room for another identity.
+#[derive(Clone, Debug, Default)]
+pub struct StacRequestRegistry {
+    coordinators: Arc<CoordinatorMap>,
+}
+
+impl StacRequestRegistry {
+    /// Create an empty request registry.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Find or create the coordinator for this origin and authentication.
+    /// Provider ids, collection ids and refreshed access tokens do not split quotas.
+    pub(super) fn shared(
+        &self,
+        origin: &Url,
+        authentication: Option<&StacProviderAuthentication>,
+    ) -> Result<Arc<ActorChannels>, StacClientError> {
+        let identity = identity_for(origin, authentication);
+        self.shared_with_dispatch(identity, |job, completed_before| {
+            Box::pin(run_attempt(job, completed_before)) as RunningAttempt
+        })
+    }
+
+    fn shared_with_dispatch<F>(
+        &self,
+        identity: Identity,
+        dispatch: F,
+    ) -> Result<Arc<ActorChannels>, StacClientError>
+    where
+        F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
+    {
+        // A closed actor is replaced only for this identity. Other entries
+        // retire themselves after their retained quota history expires.
+        let (channels, receiver) = match self.coordinators.entries.entry(identity.clone()) {
+            Entry::Occupied(mut entry) if entry.get().jobs.is_closed() => {
+                let (channels, receivers) = Self::new_coordinator(
+                    identity,
+                    Arc::downgrade(&self.coordinators),
+                    entry.get().registry_slot.clone(),
+                );
+                entry.insert(channels.clone());
+                (channels, Some(receivers))
+            }
+            Entry::Occupied(entry) => (entry.get().clone(), None),
+            Entry::Vacant(entry) => {
+                let slot = self
+                    .coordinators
+                    .capacity
+                    .clone()
+                    .try_acquire_owned()
+                    .map_err(|_| StacClientError::RegistryFull)?;
+                let (channels, receivers) = Self::new_coordinator(
+                    identity,
+                    Arc::downgrade(&self.coordinators),
+                    Arc::new(slot),
+                );
+                entry.insert(channels.clone());
+                (channels, Some(receivers))
+            }
+        };
+
+        if let Some(jobs) = receiver {
+            tokio::spawn(run_actor(
+                jobs,
+                channels.cancellations.clone(),
+                Arc::downgrade(&channels),
+                dispatch,
+            ));
+        }
+        Ok(channels)
+    }
+
+    fn new_coordinator(
+        identity: Identity,
+        registry: Weak<CoordinatorMap>,
+        registry_slot: Arc<OwnedSemaphorePermit>,
+    ) -> (Arc<ActorChannels>, mpsc::Receiver<AttemptJob>) {
+        let (jobs, job_receiver) = mpsc::channel(MAX_PENDING_ATTEMPTS);
+        (
+            Arc::new(ActorChannels {
+                jobs,
+                capacity: Arc::new(Semaphore::new(MAX_PENDING_ATTEMPTS)),
+                cancellations: Arc::new(Notify::new()),
+                identity,
+                registry,
+                registry_slot,
+            }),
+            job_receiver,
+        )
+    }
+}
+
+fn identity_for(
+    origin: &Url,
+    authentication: Option<&super::StacProviderAuthentication>,
+) -> Identity {
+    Identity {
+        scheme: origin.scheme().to_ascii_lowercase(),
+        host: origin.host_str().unwrap_or_default().to_ascii_lowercase(),
+        port: origin.port_or_known_default().unwrap_or(0),
+        token_endpoint: authentication.map(|a| normalize_endpoint(&a.endpoint)),
+        client_id: authentication.map(|a| a.client_id.clone()),
+        username: authentication.map(|a| a.username.clone()),
+        password: authentication.map(|a| a.password.clone()),
+    }
+}
+
+/// Shared channel endpoint for one configured origin and authentication identity.
+///
+/// The actor owns FIFO admission and quota state. Provider and client clones only
+/// submit owned jobs; they never hold a scheduler lock while waiting or sending.
+impl ActorChannels {
+    #[cfg(test)]
+    pub(super) fn is_closed(&self) -> bool {
+        self.jobs.is_closed()
+    }
+
+    /// Try to remove an unused coordinator from the registry before stopping its
+    /// actor. Called only after quota history and server deadlines expire.
+    /// The registry entry lock serializes removal with lookups, and external
+    /// owners prevent removal. A replacement for this identity is left intact.
+    fn try_retire(self_weak: &Weak<Self>) -> bool {
+        let Some(channels) = self_weak.upgrade() else {
+            return true;
+        };
+        let registry = channels.registry.clone();
+        let identity = channels.identity.clone();
+        drop(channels);
+        let Some(registry) = registry.upgrade() else {
+            return true;
+        };
+        match registry.entries.entry(identity) {
+            Entry::Occupied(entry)
+                if std::ptr::eq(Arc::as_ptr(entry.get()), self_weak.as_ptr()) =>
+            {
+                if Arc::strong_count(entry.get()) == 1 {
+                    drop(entry.remove());
+                    true
+                } else {
+                    false
+                }
+            }
+            Entry::Occupied(_) | Entry::Vacant(_) => true,
+        }
+    }
+}
+
+/// STAC HTTP transport with a shared request channel.
+/// Clones share the connection pool, token renewal state and request registry.
+#[derive(Clone)]
+pub(crate) struct StacClient {
+    client: reqwest::Client,
+    origin: Url,
+    pub(super) request_registry: StacRequestRegistry,
+    coordinator_authentication: Option<StacProviderAuthentication>,
+    pub(super) authentication: Option<StacAuthentication>,
+}
+
+impl fmt::Debug for StacClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("StacClient")
+            .field("origin", &self.origin)
+            .field(
+                "coordinator_authentication",
+                &self.coordinator_authentication,
+            )
+            .field("authenticated", &self.authentication.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Failures of the STAC transport or its request coordinator.
+#[derive(Debug, Snafu)]
+pub(crate) enum StacClientError {
+    #[snafu(transparent)]
+    Http { source: reqwest::Error },
+    #[snafu(display("STAC request coordinator stopped before completing the request"))]
+    CoordinatorStopped,
+    #[snafu(display("STAC request registry has reached its coordinator limit"))]
+    RegistryFull,
+    #[snafu(display("STAC requests must have replayable bodies"))]
+    RequestNotReplayable,
+    #[snafu(display("STAC response contains a rate-limit duration that cannot form a deadline"))]
+    InvalidRateLimitTiming,
+}
+
+impl StacClientError {
+    /// HTTP status reported by the server, if this failure has one.
+    pub(crate) fn status(&self) -> Option<reqwest::StatusCode> {
+        match self {
+            Self::Http { source } => source.status(),
+            Self::CoordinatorStopped
+            | Self::RegistryFull
+            | Self::RequestNotReplayable
+            | Self::InvalidRateLimitTiming => None,
+        }
+    }
+}
+
+impl StacClient {
+    /// Creates a client without starting an actor or requiring a Tokio runtime.
+    pub(crate) fn new(
+        client: reqwest::Client,
+        stac_api_url: &str,
+        request_registry: StacRequestRegistry,
+    ) -> crate::error::Result<Self> {
+        let origin = Url::parse(stac_api_url)?;
+        Ok(Self {
+            client,
+            origin,
+            request_registry,
+            coordinator_authentication: None,
+            authentication: None,
+        })
+    }
+
+    /// Initializes authentication and the configured quota identity for this client.
+    pub(crate) async fn with_authentication(
+        mut self,
+        config: Option<StacProviderAuthentication>,
+    ) -> crate::error::Result<Self> {
+        self.coordinator_authentication = config.clone();
+        self.authentication = match config {
+            Some(config) => {
+                Some(StacAuthentication::initialize(self.client.clone(), config).await?)
+            }
+            None => None,
+        };
+        Ok(self)
+    }
+
+    /// Builds a GET request using this provider's HTTP transport.
+    pub(crate) fn get(&self, url: impl reqwest::IntoUrl) -> reqwest::RequestBuilder {
+        self.client.get(url)
+    }
+
+    /// Executes a request through the client's shared channel and authentication.
+    /// Pagination URLs are followed as supplied by the STAC server, with
+    /// authentication restricted to the configured origin. All failures
+    /// share the policy's attempt budget. Retries rejoin FIFO admission after
+    /// backoff, unless server quota information controls the retry delay.
+    pub(crate) async fn execute_json<T: DeserializeOwned>(
+        &self,
+        request: reqwest::RequestBuilder,
+        policy: &RetryPolicy,
+    ) -> Result<T, StacClientError> {
+        let request = request.build()?;
+        let channels = self
+            .request_registry
+            .shared(&self.origin, self.coordinator_authentication.as_ref())?;
+        let operation_name = format!("Fetch STAC items from {}", request.url());
+        retry_http_with_action(
+            || async {
+                let reply = match self.execute_attempt(&channels, &request).await {
+                    Ok(reply) => reply,
+                    Err(error) => return (Err(error), RetryAction::Abort),
+                };
+                let action = if reply.server_controls_retry {
+                    RetryAction::Scheduled
+                } else {
+                    RetryAction::Backoff
+                };
+                let result = async { reply.response?.error_for_status()?.json::<T>().await }.await;
+                (result.map_err(StacClientError::from), action)
+            },
+            &operation_name,
+            policy,
+            |error| error.status().map(|status| status.as_u16()),
+        )
+        .await
+    }
+
+    /// Submit one owned attempt and wait for quota feedback before decoding.
+    async fn execute_attempt(
+        &self,
+        channels: &ActorChannels,
+        request: &reqwest::Request,
+    ) -> Result<AttemptReply, StacClientError> {
+        let request_copy = request
+            .try_clone()
+            .ok_or(StacClientError::RequestNotReplayable)?;
+        let permit = channels
+            .capacity
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| StacClientError::CoordinatorStopped)?;
+        let (reply, receiver) = oneshot::channel();
+        let mut pending = PendingAttempt {
+            reply: receiver,
+            cancellation: Some(channels.cancellations.clone()),
+        };
+        let job = AttemptJob {
+            client: self.client.clone(),
+            request: request_copy,
+            authentication: self
+                .authentication
+                .as_ref()
+                .filter(|_| self.origin.origin() == request.url().origin())
+                .cloned(),
+            reply,
+            permit,
+        };
+        channels
+            .jobs
+            .send(job)
+            .await
+            .map_err(|_| StacClientError::CoordinatorStopped)?;
+        let reply = (&mut pending.reply)
+            .await
+            .map_err(|_| StacClientError::CoordinatorStopped)?;
+        pending.cancellation = None;
+        reply
+    }
+}
+
+async fn run_attempt(job: AttemptJob, completed_before: usize) -> AttemptCompletion {
+    let AttemptJob {
+        client,
+        request,
+        authentication,
+        mut reply,
+        permit,
+    } = job;
+    let send = async {
+        let mut request = reqwest::RequestBuilder::from_parts(client, request);
+        if let Some(authentication) = authentication {
+            request = request.bearer_auth(authentication.access_token().await);
+        }
+        request.send().await
+    };
+    let response = tokio::select! {
+        () = reply.closed() => None,
+        response = send => Some(response),
+    };
+    AttemptCompletion {
+        completed_before,
+        reply,
+        response,
+        permit,
+    }
+}
+
+async fn run_actor<F>(
+    mut receiver: mpsc::Receiver<AttemptJob>,
+    cancellations: Arc<Notify>,
+    coordinator: Weak<ActorChannels>,
+    dispatch: F,
+) where
+    F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
+{
+    let now = Instant::now();
+    let mut state = State {
+        in_flight_requests: 0,
+        completed_requests: 0,
+        windows: Vec::new(),
+        starts: VecDeque::new(),
+        unscoped_quota: None,
+        cooldown_until: None,
+        last_activity: now,
+    };
+    let mut queued: VecDeque<AttemptJob> = VecDeque::new();
+    let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
+    let mut jobs_open = true;
+
+    loop {
+        while let Some(Some(completion)) = running.next().now_or_never() {
+            complete_attempt(&mut state, completion);
+        }
+
+        let mut deadline = None;
+        if let Some(job) = queued.pop_front() {
+            if job.reply.is_closed() {
+                continue;
+            } else if let Some(until) = state.reserve(Instant::now()) {
+                deadline = Some(until);
+                queued.push_front(job);
+            } else {
+                running.push(dispatch(job, state.completed_requests));
+                continue;
+            }
+        }
+
+        if !jobs_open && queued.is_empty() && running.is_empty() {
+            return;
+        }
+        let idle_deadline = (queued.is_empty() && running.is_empty()).then(|| {
+            let now = Instant::now();
+            let deadline = state.retain_until();
+            if deadline <= now && coordinator.strong_count() > 1 {
+                now + MIN_RETENTION
+            } else {
+                deadline
+            }
+        });
+        tokio::select! {
+            biased;
+            outcome = running.next(), if !running.is_empty() => {
+                if let Some(completion) = outcome {
+                    complete_attempt(&mut state, completion);
+                }
+            },
+            () = cancellations.notified() => queued.retain(|job| !job.reply.is_closed()),
+            job = receiver.recv(), if jobs_open => match job {
+                Some(job) => queued.push_back(job),
+                None => jobs_open = false,
+            },
+            () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } }, if deadline.is_some() => {},
+            () = async { if let Some(deadline) = idle_deadline { tokio::time::sleep_until(deadline.into()).await } }, if idle_deadline.is_some() => {
+                if state.retain_until() <= Instant::now() && queued.is_empty() && running.is_empty()
+                    && ActorChannels::try_retire(&coordinator) {
+                    return;
+                }
+            },
+        }
+    }
+}
+
+fn complete_attempt(state: &mut State, completion: AttemptCompletion) {
+    let AttemptCompletion {
+        completed_before,
+        reply,
+        response,
+        permit: _permit,
+    } = completion;
+    state.release();
+    let Some(response) = response else {
+        return;
+    };
+    let server_controls_retry = if let Ok(response) = &response {
+        let now = Instant::now();
+        let feedback =
+            match ResponseFeedback::parse(response.headers(), response.status().as_u16(), now) {
+                Ok(feedback) => feedback,
+                Err(error) => {
+                    let _ = reply.send(Err(error));
+                    return;
+                }
+            };
+        let has_retry_timing = feedback.has_retry_timing;
+        state.observe(feedback, now, completed_before);
+        response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS
+            && (has_retry_timing || !state.windows.is_empty())
+    } else {
+        false
+    };
+    let _ = reply.send(Ok(AttemptReply {
+        response,
+        server_controls_retry,
+    }));
+}
+
+/// Canonicalize valid OAuth endpoint URLs for registry matching, preserving the
+/// original text when parsing fails.
+fn normalize_endpoint(endpoint: &str) -> String {
+    Url::parse(endpoint).map_or_else(|_| endpoint.to_owned(), |url| url.to_string())
+}
+
+/// Scheduling constraints extracted from one HTTP response by the actor.
+///
+/// Known policies carry their associated remaining/reset quota inside [`Window`].
+/// Ambiguous quota feedback is kept separately, and a 429 contributes a shared
+/// cooldown. [`State::observe`] merges these observations with existing constraints
+/// and accounts for other requests that were active or admitted since dispatch.
+struct ResponseFeedback {
+    /// Advertised policies, deduplicated by duration, with any identifiable quotas.
+    windows: Vec<Window>,
+    /// Remaining/reset feedback that could not be assigned to one advertised policy.
+    unscoped_quota: Option<RemoteQuota>,
+    /// Monotonic deadline from a 429's Retry-After/reset headers or fallback delay.
+    cooldown_until: Option<Instant>,
+    /// Whether the 429 supplied usable retry timing, rather than a fallback.
+    has_retry_timing: bool,
+}
+
+impl ResponseFeedback {
+    /// Parse rate-limit policies and relative reset seconds. Repeated header fields
+    /// retain their positions so ambiguous remaining counts stay unscoped. For a
+    /// 429, use the longest usable Retry-After/reset delay or the fixed fallback.
+    fn parse(headers: &HeaderMap, status: u16, now: Instant) -> Result<Self, StacClientError> {
+        let limits: Vec<_> = headers.get_all("x-ratelimit-limit").iter().collect();
+        let remaining: Vec<_> = headers.get_all("x-ratelimit-remaining").iter().collect();
+        let resets: Vec<_> = headers.get_all("x-ratelimit-reset").iter().collect();
+        let retry_delay = if status == 429 {
+            rate_limit_delay(headers)
+        } else {
+            None
+        };
+        let mut feedback = Self {
+            windows: Vec::new(),
+            unscoped_quota: None,
+            cooldown_until: None,
+            has_retry_timing: retry_delay.is_some(),
+        };
+        for index in 0..limits.len().max(remaining.len()) {
+            let value = limits.get(index).and_then(|value| value.to_str().ok());
+            let policies = value.map(parse_limit_field).unwrap_or_default();
+            // A bare leading count identifies the binding policy only when it
+            // matches one duration. Preserve malformed field positions, and do
+            // not guess associations when repeated field counts differ.
+            let active = value.and_then(|value| {
+                value
+                    .split(',')
+                    .next()?
+                    .split(';')
+                    .next()?
+                    .trim()
+                    .parse::<usize>()
+                    .ok()
+            });
+            let mut matching = policies
+                .iter()
+                .filter(|window| Some(window.limit) == active)
+                .map(|window| window.duration);
+            let scope = matching
+                .next()
+                .filter(|first| matching.all(|duration| duration == *first))
+                .filter(|_| limits.len() == remaining.len());
+            for policy in policies {
+                checked_deadline(now, policy.duration)?;
+                if let Some(previous) = feedback
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.duration == policy.duration)
+                {
+                    previous.limit = previous.limit.min(policy.limit);
+                } else {
+                    feedback.windows.push(policy);
+                }
+            }
+            let Some(available) = remaining
+                .get(index)
+                .and_then(|value| value.to_str().ok()?.trim().parse().ok())
+            else {
+                continue;
+            };
+            let reset = if resets.len() == remaining.len() {
+                resets[index].to_str().ok().and_then(parse_seconds)
+            } else {
+                header_values(headers, "x-ratelimit-reset")
+                    .filter_map(parse_seconds)
+                    .max()
+            }
+            .unwrap_or(DEFAULT_RETRY_DELAY);
+            let quota = RemoteQuota {
+                remaining_requests: available,
+                reset: checked_deadline(now, reset)?,
+            };
+            let destination = if let Some(window) = scope.and_then(|duration| {
+                feedback
+                    .windows
+                    .iter_mut()
+                    .find(|window| window.duration == duration)
+            }) {
+                &mut window.remote
+            } else {
+                &mut feedback.unscoped_quota
+            };
+            RemoteQuota::merge(destination, quota, 0);
+        }
+        if status == 429 {
+            feedback.cooldown_until = Some(checked_deadline(
+                now,
+                retry_delay.unwrap_or(DEFAULT_RETRY_DELAY),
+            )?);
+        }
+        Ok(feedback)
+    }
+}
+
+/// Extract positive `limit;w=seconds` policies from a comma-separated limit field.
+/// The bare leading count identifies a binding policy but has no window duration.
+fn parse_limit_field(value: &str) -> Vec<Window> {
+    value
+        .split(',')
+        .filter_map(|item| {
+            let mut fields = item.trim().split(';');
+            let limit = fields
+                .next()?
+                .trim()
+                .parse::<usize>()
+                .ok()
+                .filter(|limit| *limit > 0)?;
+            let duration =
+                fields.find_map(|field| field.trim().strip_prefix("w=").and_then(parse_seconds))?;
+            (!duration.is_zero()).then(|| Window::new(limit, duration))
+        })
+        .collect()
+}
+
+fn header_values<'a>(headers: &'a HeaderMap, name: &str) -> impl Iterator<Item = &'a str> {
+    headers
+        .get_all(name)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+}
+
+/// Convert a server delay once, reserving headroom for Tokio's timer rounding.
+fn checked_deadline(now: Instant, delay: Duration) -> Result<Instant, StacClientError> {
+    now.checked_add(delay)
+        .filter(|deadline| deadline.checked_add(Duration::from_millis(1)).is_some())
+        .ok_or(StacClientError::InvalidRateLimitTiming)
+}
+
+/// Parse nonnegative integer seconds; deadline conversion validates the duration.
+fn parse_seconds(value: &str) -> Option<Duration> {
+    value.trim().parse().ok().map(Duration::from_secs)
+}
+
+/// Longest usable server retry delay, before applying any local fallback.
+fn rate_limit_delay(headers: &HeaderMap) -> Option<Duration> {
+    retry_after(headers)
+        .into_iter()
+        .chain(header_values(headers, "x-ratelimit-reset").filter_map(parse_seconds))
+        .max()
+        .filter(|delay| !delay.is_zero())
+}
+
+/// Interpret Retry-After as relative seconds or an HTTP date. Wall-clock dates
+/// become a duration here; the scheduler subsequently stores a monotonic deadline.
+fn retry_after(headers: &HeaderMap) -> Option<Duration> {
+    let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
+    if let Some(duration) = parse_seconds(value) {
+        return Some(duration);
+    }
+    let date = DateTime::parse_from_rfc2822(value)
+        .ok()?
+        .with_timezone(&Utc);
+    (date - DateTime::<Utc>::from(SystemTime::now()))
+        .to_std()
+        .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    mod actor;
+    mod registry;
+    mod retry;
+    mod state;
+
+    use super::*;
+    use std::sync::Mutex;
+
+    fn quota_headers(limit: &str, remaining: &str, reset: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-limit", limit.parse().unwrap());
+        headers.insert("x-ratelimit-remaining", remaining.parse().unwrap());
+        headers.insert("x-ratelimit-reset", reset.parse().unwrap());
+        headers
+    }
+
+    #[test]
+    fn it_parses_all_advertised_windows_and_relative_reset() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-limit", "10, 10;w=1, 60;w=60".parse().unwrap());
+        headers.insert("x-ratelimit-reset", "1".parse().unwrap());
+        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now()).unwrap();
+        assert_eq!(feedback.windows.len(), 2);
+        assert_eq!(feedback.windows[0].limit, 10);
+        assert_eq!(feedback.windows[0].duration, Duration::from_secs(1));
+        assert_eq!(feedback.windows[1].limit, 60);
+        assert_eq!(
+            header_values(&headers, "x-ratelimit-reset")
+                .next()
+                .and_then(parse_seconds),
+            Some(Duration::from_secs(1))
+        );
+    }
+
+    #[test]
+    fn it_retry_after_accepts_seconds_and_http_dates() {
+        let mut headers = HeaderMap::new();
+        headers.insert(RETRY_AFTER, "3".parse().unwrap());
+        assert_eq!(retry_after(&headers), Some(Duration::from_secs(3)));
+        headers.insert(
+            RETRY_AFTER,
+            "Mon, 21 Oct 2030 07:28:00 GMT".parse().unwrap(),
+        );
+        assert!(retry_after(&headers).is_some());
+    }
+
+    #[test]
+    fn it_rejects_unusable_retry_timing_and_uses_the_longest_valid_delay() {
+        let mut headers = HeaderMap::new();
+        assert_eq!(rate_limit_delay(&headers), None);
+        for value in ["invalid", "0", "-1", "18446744073709551616"] {
+            headers.insert(RETRY_AFTER, value.parse().unwrap());
+            headers.insert("x-ratelimit-reset", value.parse().unwrap());
+            assert_eq!(rate_limit_delay(&headers), None);
+            assert!(
+                !ResponseFeedback::parse(&headers, 429, Instant::now())
+                    .unwrap()
+                    .has_retry_timing
+            );
+        }
+        headers.insert(RETRY_AFTER, "2".parse().unwrap());
+        headers.insert("x-ratelimit-reset", "3".parse().unwrap());
+        assert_eq!(rate_limit_delay(&headers), Some(Duration::from_secs(3)));
+        assert!(
+            ResponseFeedback::parse(&headers, 429, Instant::now())
+                .unwrap()
+                .has_retry_timing
+        );
+    }
+
+    #[test]
+    fn it_deduplicates_windows_and_keeps_the_stricter_duplicate() {
+        let headers = quota_headers(
+            "20, 20;w=1, 20;w=1, 1800;w=60, 15;w=1, 100000;w=172800",
+            "19",
+            "1",
+        );
+        let feedback = ResponseFeedback::parse(&headers, 200, Instant::now()).unwrap();
+        assert_eq!(feedback.windows.len(), 3);
+        assert_eq!(feedback.windows[0].limit, 15);
+        assert_eq!(feedback.windows[2].limit, 100_000);
+        assert_eq!(feedback.windows[2].duration, Duration::from_hours(48));
+    }
+
+    #[test]
+    fn it_state_reserves_fallback_capacity_and_does_not_refund_failed_starts() {
+        let now = Instant::now();
+        let mut state = State {
+            in_flight_requests: 0,
+            completed_requests: 0,
+            windows: Vec::new(),
+            starts: VecDeque::new(),
+            unscoped_quota: None,
+            cooldown_until: None,
+            last_activity: now,
+        };
+        for _ in 0..10 {
+            assert_eq!(state.reserve(Instant::now()), None);
+        }
+        assert!(state.reserve(Instant::now()).is_some());
+        assert_eq!(state.starts.len(), 10);
+        state.release();
+        assert_eq!(state.starts.len(), 10);
+        assert_eq!(state.in_flight_requests, 9);
+    }
+
+    #[test]
+    fn it_state_applies_feedback_before_admitting_the_next_attempt() {
+        let now = Instant::now();
+        let mut state = State {
+            in_flight_requests: 0,
+            completed_requests: 0,
+            windows: Vec::new(),
+            starts: VecDeque::new(),
+            unscoped_quota: None,
+            cooldown_until: None,
+            last_activity: now,
+        };
+        assert_eq!(state.reserve(now), None);
+        let headers = quota_headers("2;w=60", "0", "60");
+        state.release();
+        state.observe(
+            ResponseFeedback::parse(&headers, 429, Instant::now()).unwrap(),
+            Instant::now(),
+            0,
+        );
+        assert!(state.reserve(Instant::now()).is_some());
+        assert_eq!(state.windows[0].limit, 2);
+        assert_eq!(
+            state.windows[0]
+                .remote
+                .as_ref()
+                .map(|quota| quota.remaining_requests),
+            Some(0)
+        );
+        assert!(state.cooldown_until.is_some());
+    }
+
+    #[tokio::test]
+    async fn it_coordinators_share_by_normalized_origin_and_auth_identity() {
+        let registry = StacRequestRegistry::new();
+        let credentials = super::super::StacProviderAuthentication {
+            endpoint: "https://auth.example/token/".to_owned(),
+            client_id: "client".to_owned(),
+            username: "user".to_owned(),
+            password: "secret-value-must-not-be-debugged".to_owned(),
+        };
+        let first = registry
+            .shared(
+                &Url::parse("https://STAC.example:443/api").unwrap(),
+                Some(&credentials),
+            )
+            .unwrap();
+        let same = registry
+            .shared(
+                &Url::parse("https://stac.example/other").unwrap(),
+                Some(&credentials),
+            )
+            .unwrap();
+        let anonymous = registry
+            .shared(&Url::parse("https://stac.example").unwrap(), None)
+            .unwrap();
+        assert!(Arc::ptr_eq(&first, &same));
+        assert!(!Arc::ptr_eq(&first, &anonymous));
+        assert!(!format!("{first:?}").contains("secret-value-must-not-be-debugged"));
+        let debug = format!("{registry:?}");
+        assert!(debug.contains("https://auth.example/token/"));
+        assert!(debug.contains("client_id"));
+        assert!(!debug.contains("secret-value-must-not-be-debugged"));
+        tokio::task::yield_now().await;
+    }
+
+    #[test]
+    fn it_rejects_unrepresentable_deadlines() {
+        let now = Instant::now();
+        assert_eq!(checked_deadline(now, Duration::ZERO).unwrap(), now);
+        assert_eq!(
+            checked_deadline(now, Duration::from_mins(1)).unwrap(),
+            now + Duration::from_mins(1)
+        );
+        assert!(matches!(
+            checked_deadline(now, Duration::MAX),
+            Err(StacClientError::InvalidRateLimitTiming)
+        ));
+    }
+
+    #[test]
+    fn it_rejects_unrepresentable_reset_and_retry_after_headers() {
+        let now = Instant::now();
+        for (header, status) in [
+            ("x-ratelimit-reset", 200),
+            ("x-ratelimit-reset", 429),
+            ("retry-after", 429),
+        ] {
+            let mut headers = HeaderMap::new();
+            headers.insert("x-ratelimit-remaining", "0".parse().unwrap());
+            headers.insert(header, u64::MAX.to_string().parse().unwrap());
+            assert!(matches!(
+                ResponseFeedback::parse(&headers, status, now),
+                Err(StacClientError::InvalidRateLimitTiming)
+            ));
+        }
+        let feedback = ResponseFeedback::parse(&HeaderMap::new(), 429, now).unwrap();
+        assert_eq!(feedback.cooldown_until, Some(now + DEFAULT_RETRY_DELAY));
+    }
+
+    #[tokio::test]
+    async fn it_execute_json_owns_http_and_decode_retries() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::{Value, json};
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/items"))
+                .times(4)
+                .respond_with(responders::cycle![
+                    responders::status_code(429),
+                    responders::status_code(500),
+                    responders::status_code(200).body("invalid json"),
+                    responders::json_encoded(json!({"complete": true})),
+                ]),
+        );
+        let registry = StacRequestRegistry::new();
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let request = client.get(server.url_str("/items"));
+        let result: Value = client
+            .execute_json(
+                request,
+                &RetryPolicy::new().max_retries(4).initial_delay_ms(1),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result, json!({"complete": true}));
+    }
+
+    #[tokio::test]
+    async fn it_routes_parallel_results_to_their_own_callers() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+        let server = Server::run();
+        for (path, body) in [("/one", r#"{"id":1}"#), ("/two", r#"{"id":2}"#)] {
+            server.expect(
+                Expectation::matching(request::method_path("GET", path))
+                    .times(1)
+                    .respond_with(responders::status_code(200).body(body)),
+            );
+        }
+        let registry = StacRequestRegistry::new();
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let mut tasks = tokio::task::JoinSet::new();
+        for path in ["/one", "/two"] {
+            let client = client.clone();
+            let url = server.url_str(path);
+            tasks.spawn(async move {
+                client
+                    .execute_json::<Value>(client.get(url), &RetryPolicy::new())
+                    .await
+                    .unwrap()
+            });
+        }
+        let mut values = Vec::new();
+        while let Some(value) = tasks.join_next().await {
+            values.push(value.unwrap());
+        }
+        assert!(values.contains(&serde_json::json!({"id": 1})));
+        assert!(values.contains(&serde_json::json!({"id": 2})));
+    }
+
+    #[tokio::test]
+    async fn it_cancels_an_inflight_attempt_and_allows_the_next_job() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+        let server = Server::run();
+        let starts = Arc::new(Mutex::new(0));
+        let response_starts = starts.clone();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/items"))
+                .times(2)
+                .respond_with(move || {
+                    let mut starts = response_starts.lock().unwrap();
+                    *starts += 1;
+                    let (delay, body) = if *starts == 1 {
+                        (
+                            Duration::from_secs(10),
+                            serde_json::json!({"discarded": true}),
+                        )
+                    } else {
+                        (Duration::ZERO, serde_json::json!({"ok": true}))
+                    };
+                    responders::delay_and_then(delay, responders::json_encoded(body))
+                }),
+        );
+        let registry = StacRequestRegistry::new();
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let first_client = client.clone();
+        let first_url = server.url_str("/items");
+        let first = tokio::spawn(async move {
+            first_client
+                .execute_json::<Value>(first_client.get(first_url), &RetryPolicy::new())
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while *starts.lock().unwrap() == 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the first request should reach the server before cancellation");
+        first.abort();
+        assert!(first.await.unwrap_err().is_cancelled());
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            client.execute_json::<Value>(client.get(server.url_str("/items")), &RetryPolicy::new()),
+        )
+        .await
+        .expect("the next caller should proceed after cancellation")
+        .unwrap();
+        assert_eq!(result, serde_json::json!({"ok": true}));
+    }
+
+    #[tokio::test]
+    async fn it_returns_terminal_http_errors() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/missing"))
+                .times(1)
+                .respond_with(responders::status_code(404)),
+        );
+        let registry = StacRequestRegistry::new();
+        let client =
+            StacClient::new(reqwest::Client::new(), &server.url_str("/"), registry).unwrap();
+        let error = client
+            .execute_json::<serde_json::Value>(
+                client.get(server.url_str("/missing")),
+                &RetryPolicy::new().stop_on_status(&[400, 404]),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.status(), Some(reqwest::StatusCode::NOT_FOUND));
+    }
+}

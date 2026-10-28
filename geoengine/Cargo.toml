@@ -105,6 +105,7 @@ convert_case = "0.12"
 criterion = { package = "codspeed-criterion-compat", version = "6.0", features = ["async_tokio"], default-features = false }
 crs-definitions = { version = "0.6.0", features = ["proj4"] }
 csv = "1.4"
+dashmap = "6.2"
 erased-serde = "0.4"
 fallible-iterator = "=0.2.0" # only for postgres-protocol
 flexi_logger = { version = "0.31", features = ["trc"] }

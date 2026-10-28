@@ -78,6 +78,10 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 name = "ci_operators"
 harness = false
 
+[[bench]]
+name = "no_data_tiles"
+harness = false
+
 
 [lints]
 workspace = true
