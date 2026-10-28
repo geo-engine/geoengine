@@ -41,8 +41,8 @@ const THROTTLING_THRESHOLD_DURATION: Duration = Duration::from_millis(THROTTLING
 const CACHE_TTL_SECS: f64 = 1800.0;
 
 // Affinity scores rank the idle workers for a request in three tiers:
-// 1. Hit (>= ~SCORE_DATASET_MATCH): the worker has the dataset open and reuses it, refined by
-//    band and spatial window.
+// 1. Hit ([SCORE_EXPIRED_MATCH, ~SCORE_DATASET_MATCH + bonuses]): the worker has the dataset open
+//    and reuses it, refined by band and spatial window and decaying with idle time.
 // 2. Fresh (SCORE_FRESH_WORKER_DEFAULT): the worker has never read anything, so using it
 //    evicts nothing.
 // 3. Eviction ([0, SCORE_EVICTION_MAX]): the worker has to close its dataset. The score grows
@@ -67,6 +67,10 @@ const SCORE_NEARBY_WINDOW_MAX: f64 = 50.0;
 
 /// Default baseline score given to completely fresh workers.
 const SCORE_FRESH_WORKER_DEFAULT: f64 = 0.5;
+
+/// Minimum score of a worker that has the requested dataset open, reached when it was idle for the
+/// TTL. Above `SCORE_FRESH_WORKER_DEFAULT`, as reusing the open dataset saves opening it again.
+const SCORE_EXPIRED_MATCH: f64 = 1.0;
 
 /// Maximum score of a worker that has to evict its open dataset. Grows with idle time, so the
 /// least recently used worker is evicted. Must stay below `SCORE_FRESH_WORKER_DEFAULT`.
@@ -146,17 +150,17 @@ impl WorkerAffinity {
     ) -> f64 {
         let idle_duration = now.saturating_duration_since(self.timestamp).as_secs_f64();
 
-        // Cache expired or another dataset: prefer the least recently used worker for eviction.
+        // Another dataset: prefer the least recently used worker for eviction.
         // A constant score would make the broker take the first candidate in `idle_workers`.
         // Released workers are pushed last and taken with `swap_remove`, so that is usually the
         // most recently used worker, whose dataset is the most likely to be requested again.
         // Instead, rank by idle time: a worker released just now scores 0.0, and a worker
         // idle for the full TTL scores `SCORE_EVICTION_MAX`.
-        if idle_duration > CACHE_TTL_SECS || self.dataset_hash != dataset_hash {
+        if self.dataset_hash != dataset_hash {
             return SCORE_EVICTION_MAX * (idle_duration / CACHE_TTL_SECS).min(1.0);
         }
 
-        let decay = 1.0 - (idle_duration / CACHE_TTL_SECS);
+        let decay = (1.0 - (idle_duration / CACHE_TTL_SECS)).max(0.0);
         let mut score = SCORE_DATASET_MATCH * decay;
 
         if self.band == band {
@@ -170,7 +174,8 @@ impl WorkerAffinity {
             }
         }
 
-        score
+        // the decay only orders hits among themselves; a hit always beats fresh and evicting workers
+        score.max(SCORE_EXPIRED_MATCH)
     }
 }
 
@@ -1218,7 +1223,12 @@ mod tests {
             .unwrap();
         let score = aff.calculate_score(42, 1, &w, Instant::now());
 
-        assert_approx_eq!(f64, score, SCORE_EVICTION_MAX);
+        assert_approx_eq!(f64, score, SCORE_EXPIRED_MATCH);
+        assert!(score > SCORE_FRESH_WORKER_DEFAULT);
+
+        // just before the TTL the decayed score would fall below a fresh worker's
+        let almost_expired = aff.timestamp + Duration::from_secs_f64(CACHE_TTL_SECS - 0.01);
+        assert!(aff.calculate_score(42, 1, &w, almost_expired) >= SCORE_EXPIRED_MATCH);
     }
 
     // --- BrokerState dispatch tests ---
@@ -1446,6 +1456,23 @@ mod tests {
             .expect("the longest idle worker should be evicted");
         assert_eq!(job.dataset_hash, 400);
         assert_eq!(state.stats.evictions, 1);
+    }
+
+    #[test]
+    fn it_prefers_open_dataset_after_ttl() {
+        let (mut w0, mut rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, CACHE_TTL_SECS as u64 + 60));
+        let (w1, _rx1) = dummy_worker(1);
+
+        let mut state = BrokerState::new(vec![w0, w1], 4, 4, SchedulingStrategy::GlobalMatrix);
+
+        let (req, _resp) = make_request(100, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        rx0.try_recv()
+            .expect("the worker with the open dataset should be reused");
+        assert_eq!(state.stats.affinity_hits, 1);
     }
 
     #[test]
