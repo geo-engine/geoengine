@@ -1,5 +1,16 @@
 import {A11yModule} from '@angular/cdk/a11y';
-import {ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, signal, viewChild} from '@angular/core';
+import {
+    ChangeDetectionStrategy,
+    Component,
+    ElementRef,
+    afterNextRender,
+    booleanAttribute,
+    computed,
+    inject,
+    input,
+    signal,
+    viewChild,
+} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
@@ -10,7 +21,7 @@ import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {isActive, Router, RouterModule} from '@angular/router';
 import {Layer, Time, UserService} from '@geoengine/common';
-import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
+import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, TMSId, WGS_84} from '@geoengine/core';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
@@ -64,6 +75,11 @@ export class MainComponent {
 
     readonly spatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     readonly currentTime = toSignal(this.projectService.getTimeStream());
+
+    // Temporary comparison controls, enabled by the router's `debug` query parameter.
+    readonly debug = input(false, {transform: booleanAttribute});
+    readonly frontendReprojection = signal(false);
+    readonly tileMatrixSet = computed<TMSId>(() => (this.debug() && this.frontendReprojection() ? 'Custom' : 'CustomWebMercator'));
 
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     readonly tileLoading = signal(false);
