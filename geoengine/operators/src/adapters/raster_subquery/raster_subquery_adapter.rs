@@ -72,16 +72,16 @@ impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
                 None::<TileInformationBandCrossProductIter>,
                 None::<TimeInterval>,
             ),
-            move |(mut time_stream, mut band_tile_iter, mut time)| {
+            move |(mut time_stream, mut tile_band_iter, mut time)| {
                 let descriptor_query = descriptor_query.clone();
                 let descriptor_bands = descriptor_bands.clone();
                 async move {
                     loop {
-                        if let Some(iter) = band_tile_iter.as_mut()
+                        if let Some(iter) = tile_band_iter.as_mut()
                             && let Some((tile, band)) = iter.next() {
                                 return Ok(Some((
-                                    (time.expect("time is always set before `band_tile_iter` is produced in the same loop iteration"), tile, band),
-                                    (time_stream, band_tile_iter, time),
+                                    (time.expect("time is always set before `tile_band_iter` is produced in the same loop iteration"), tile, band),
+                                    (time_stream, tile_band_iter, time),
                                 )));
                             }
 
@@ -94,7 +94,8 @@ impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
                             .tile_information_iterator_from_pixel_bounds(
                                 descriptor_query.spatial_bounds(),
                             );
-                        band_tile_iter = Some(TileInformationBandCrossProductIter::new(
+                        // order: time (outer loop), then tile, then band (inner)
+                        tile_band_iter = Some(TileInformationBandCrossProductIter::new(
                             tile_iter,
                             BandSelectionIter::new(descriptor_bands.clone()),
                         ));
@@ -120,6 +121,7 @@ impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
                 descriptors,
                 in_flight: FuturesOrdered::new(),
                 parallelism: query_ctx.subquery_parallelism(),
+                guaranteed_in_flight: false,
                 done: false,
             }
             .boxed(),
@@ -155,6 +157,9 @@ struct ParallelSubQueries<'a, P: Pixel> {
     descriptors: BoxStream<'a, Result<BoxFuture<'a, Result<RasterTile2D<P>>>>>,
     in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithHandout<P>>>>,
     parallelism: &'a SubQueryParallelism,
+    /// The guaranteed slot is reused as soon as its tile is yielded, not only once all
+    /// parallel sub-queries are done; otherwise N parallelism would run at N - 1.
+    guaranteed_in_flight: bool,
     done: bool,
 }
 
@@ -165,11 +170,16 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
         let this = self.get_mut();
 
         while !this.done {
-            let Some(handout) = this.parallelism.handout(this.in_flight.len()) else {
+            let Some(handout) = this.parallelism.handout(this.guaranteed_in_flight) else {
                 break;
             };
+            if matches!(handout, SubQueryHandout::Guaranteed) {
+                this.guaranteed_in_flight = true;
+            }
 
             match this.descriptors.poll_next_unpin(cx) {
+                // on an error the handout is returned before its tile is yielded, which is
+                // harmless: the stream ends with that error and starts no more sub-queries
                 Poll::Ready(Some(Ok(sub_query))) => this
                     .in_flight
                     .push_back(sub_query.map_ok(|tile| (tile, handout)).boxed()),
@@ -190,7 +200,12 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
                 this.in_flight = FuturesOrdered::new();
                 Poll::Ready(Some(Err(e)))
             }
-            Poll::Ready(Some(Ok((tile, _handout)))) => Poll::Ready(Some(Ok(tile))),
+            Poll::Ready(Some(Ok((tile, handout)))) => {
+                if matches!(handout, SubQueryHandout::Guaranteed) {
+                    this.guaranteed_in_flight = false;
+                }
+                Poll::Ready(Some(Ok(tile)))
+            }
             Poll::Ready(None) if !this.done => Poll::Pending,
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
@@ -607,6 +622,22 @@ mod tests {
             started <= 3,
             "{started} sub-queries started behind the slow head"
         );
+    }
+
+    #[tokio::test]
+    async fn it_keeps_full_parallelism_after_the_first_tile() {
+        let (processor, concurrency) = nested(1, 8, false);
+        let query_ctx = query_ctx(3);
+        let mut tiles = processor.raster_query(query(8), &query_ctx).await.unwrap();
+
+        tiles.next().await.unwrap().unwrap();
+        concurrency.max.store(0, Ordering::SeqCst);
+        while let Some(tile) = tiles.next().await {
+            tile.unwrap();
+        }
+
+        // the guaranteed slot is reused once its tile is yielded, so 3 still run at once
+        assert_eq!(concurrency.max.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]

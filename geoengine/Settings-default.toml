@@ -40,9 +40,9 @@ tile_shape_pixels_y = 512
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
-# Sub-queries of one query that may run at once (1 = sequential). A query always gets at least
-# one, even when all parallelism is in use.
-available_subquery_parallelism_per_query = 4
+# Sub-queries of one query that may run at once. 1 = sequential (default); e.g. 4 runs the
+# sub-queries of reprojection, downsampling etc. in parallel. A query always gets at least one.
+available_subquery_parallelism_per_query = 1
 
 [upload]
 path = "upload"
