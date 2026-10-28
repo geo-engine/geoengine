@@ -10,8 +10,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,
     engine::{
-        InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
-        QueryProcessorExt, TypedRasterOperator, TypedVectorOperator,
+        InitializedRasterOperator, QueryAbortTrigger, QueryContext, VectorOperator,
+        WorkflowOperatorPath,
     },
     util::{QUERY_TASK_CHANNEL_CAPACITY, spawn_stream},
 };
@@ -63,21 +63,6 @@ impl WebsocketStreamTask {
             byte_stream.map_err(Into::into).boxed(),
             abort_handle,
         ))
-    }
-
-    pub async fn new_raster<C: SessionContext>(
-        raster_operator: TypedRasterOperator,
-        query_rectangle: RasterQueryRectangle,
-        execution_ctx: C::ExecutionContext,
-        query_ctx: C::QueryContext,
-    ) -> Result<Self> {
-        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
-
-        let initialized_operator = raster_operator
-            .initialize(processing_graph_operator_path_root, &execution_ctx)
-            .await?;
-
-        Self::new_raster_initialized(initialized_operator.as_ref(), query_rectangle, query_ctx)
     }
 
     pub async fn new_vector<C: SessionContext>(

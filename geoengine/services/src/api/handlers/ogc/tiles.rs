@@ -2,44 +2,29 @@ use crate::{
     api::{
         handlers::ogc::{
             OgcApiResult,
-            error::{self, OgcApiError},
+            error::OgcApiError,
             tms_spec::{
                 CustomNativeTMS, CustomWebMercatorTMS, TileMatrixSetProvider,
                 TypedTileMatrixSetProvider, WebMercatorQuadTMS,
             },
             util::{
-                crs_from_spatial_reference_option, get_initialized_raster_operator, link_creator,
-                load_layer, parse_datetime_option, raster_processing_graph_metadata,
-                reproject_if_necessary,
+                crs_from_spatial_reference_option, link_creator, load_layer, parse_datetime_option,
+                raster_workflow_metadata,
             },
         },
         model::datatypes::{DataProviderId, LayerId},
     },
     config::{self},
     contexts::{ApplicationContext, SessionContext},
-    layers::layer::Layer,
-    processing_graphs::registry::ProcessingGraphRegistry,
-    projects::Symbology,
-    quota::ComputationId,
+    queries::{ogc_tile::render_tile, run_query},
     util::server::{CacheControlHeader, connection_closed},
 };
 use actix_web::{HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
-    error::BoxedResultExt,
-    operations::image::RasterColorizer,
-    primitives::{
-        AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval,
-    },
+    primitives::{AxisAlignedRectangle, TimeInstance, TimeInterval},
     raster::GridShape2D,
-    util::Identifier,
 };
-#[cfg(debug_assertions)]
-use geoengine_operators::engine::RasterResultDescriptor;
-use geoengine_operators::{
-    call_on_generic_raster_processor,
-    engine::{ExecutionContext, InitializedRasterOperator, TypedRasterQueryProcessor},
-    util::raster_stream_to_png::raster_stream_to_png_bytes,
-};
+use geoengine_operators::engine::ExecutionContext;
 use ogcapi_types::{
     common::{
         Crs, Datetime as OgcDatetime, IntervalDatetime,
@@ -267,16 +252,16 @@ pub struct TileQueryParams {
     pub datetime: Option<OgcDatetime>,
 }
 
-struct TileQuery {
-    data_connector_id: DataProviderId,
-    layer_id: LayerId,
+pub(crate) struct TileQuery {
+    pub(crate) data_connector_id: DataProviderId,
+    pub(crate) layer_id: LayerId,
 
-    time_interval: TimeInterval,
+    pub(crate) time_interval: TimeInterval,
 
-    tile_matrix_set_id: TileMatrixSetId,
-    tile_matrix: u8,
-    tile_row: u32,
-    tile_col: u32,
+    pub(crate) tile_matrix_set_id: TileMatrixSetId,
+    pub(crate) tile_matrix: u8,
+    pub(crate) tile_row: u32,
+    pub(crate) tile_col: u32,
 }
 
 impl TileQuery {
@@ -316,7 +301,7 @@ impl TileQuery {
         })
     }
 
-    fn check_inside_bounds(
+    pub(crate) fn check_inside_bounds(
         &self,
         expected_number_of_tiles_at_zoom_level: GridShape2D,
     ) -> OgcApiResult<()> {
@@ -406,81 +391,6 @@ pub async fn tile<C: ApplicationContext>(
     let query = TileQuery::from_params(path, query.into_inner())?;
 
     let ctx = app_ctx.session_context(session);
-    let execution_context = ctx.execution_context()?;
-
-    let mut layer: Layer =
-        load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone()).await?;
-    let mut initialized_operator =
-        get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context).await?;
-    let tiling_specification = execution_context.tiling_specification();
-
-    let required_origin_and_resolution =
-        TypedTileMatrixSetProvider::required_origin_and_resolution(
-            &query.tile_matrix_set_id,
-            initialized_operator.result_descriptor(),
-        )?;
-    reproject_if_necessary::<C::SessionContext>(
-        &mut layer,
-        &mut initialized_operator,
-        &execution_context,
-        TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id),
-        required_origin_and_resolution,
-    )
-    .await?;
-
-    let tms_spec = TypedTileMatrixSetProvider::resolve(
-        &query.tile_matrix_set_id,
-        initialized_operator.result_descriptor(),
-        tiling_specification,
-    )?;
-
-    let (expected_number_of_tiles_at_zoom_level, _) =
-        tms_spec.grid_shape_and_origin(query.tile_matrix);
-    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
-
-    #[cfg(debug_assertions)]
-    let original_result_descriptor = initialized_operator.result_descriptor().clone();
-
-    let spatial_resolution = tms_spec.spatial_resolution(query.tile_matrix);
-    if spatial_resolution
-        != initialized_operator
-            .result_descriptor()
-            .spatial_grid
-            .spatial_resolution()
-    {
-        initialized_operator = initialized_operator
-            .optimize_and_reinitialize(spatial_resolution, &execution_context)
-            .await
-            .boxed_context(error::InitializingProcessingGraph)?;
-    }
-
-    #[cfg(debug_assertions)]
-    assert_multiple_of_original_resolution(
-        &original_result_descriptor,
-        initialized_operator.result_descriptor(),
-    );
-
-    let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
-    let (tile_width, tile_height) = (
-        u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
-        u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
-    );
-
-    let query_rect = RasterQueryRectangle::new(
-        tms_spec.tile_grid_bbox(
-            &initialized_operator
-                .result_descriptor()
-                .tiling_grid_definition(tiling_specification),
-            query.tile_matrix,
-            query.tile_row,
-            query.tile_col,
-        )?,
-        query.time_interval,
-        band_selection(&layer),
-    );
-
-    let (processor, query_ctx, computation_id) =
-        create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
 
     let connection_closed_handler = connection_closed(
         &req,
@@ -491,20 +401,12 @@ pub async fn tile<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
-    let (image_bytes, cache_hint) = call_on_generic_raster_processor!(
-        processor,
-        p => raster_stream_to_png_bytes(
-            p,
-            query_rect,
-            query_ctx,
-            tile_width,
-            tile_height,
-            Some(query.time_interval),
-            layer.symbology.and_then(Symbology::into_raster_symbology).map(|symbology| symbology.raster_colorizer),
-            connection_closed_handler,
-        ).await
+    let (image_bytes, cache_hint, computation_id) = run_query(
+        &ctx,
+        connection_closed_handler,
+        render_tile::<C>(ctx.clone(), query),
     )
-    .map_err(crate::error::Error::from)?;
+    .await?;
 
     Ok(HttpResponse::Ok()
         .content_type(mime::IMAGE_PNG)
@@ -513,60 +415,12 @@ pub async fn tile<C: ApplicationContext>(
         .body(image_bytes))
 }
 
-#[cfg(debug_assertions)]
-fn assert_multiple_of_original_resolution(
-    original_result_descriptor: &RasterResultDescriptor,
-    new_result_descriptor: &RasterResultDescriptor,
-) {
-    let original_pixel_resolution = original_result_descriptor
-        .spatial_grid_descriptor()
-        .grid_shape();
-    let new_pixel_resolution = new_result_descriptor.spatial_grid_descriptor().grid_shape();
-
-    // debug_assert!(
-    //     original_pixel_resolution
-    //         .x()
-    //         .is_multiple_of(new_pixel_resolution.x()),
-    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
-    // );
-    // debug_assert!(
-    //     original_pixel_resolution
-    //         .y()
-    //         .is_multiple_of(new_pixel_resolution.y()),
-    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
-    // );
-
-    if !original_pixel_resolution
-        .x()
-        .is_multiple_of(new_pixel_resolution.x())
-        || !original_pixel_resolution
-            .y()
-            .is_multiple_of(new_pixel_resolution.y())
-    {
-        tracing::error!(
-            "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}"
-        );
-    }
-}
-
 fn ensure_matching_collection(layer_id: &LayerId, collection_id: LayerId) -> OgcApiResult<()> {
     if *layer_id != collection_id {
         return Err(OgcApiError::CollectionNotFound { collection_id });
     }
 
     Ok(())
-}
-
-fn band_selection(layer: &Layer) -> BandSelection {
-    layer
-        .symbology
-        .as_ref()
-        .and_then(Symbology::as_raster_symbology)
-        .map(|symbology| &symbology.raster_colorizer)
-        .map_or_else(
-            BandSelection::first, // matches to fallback linear gradient colorizer
-            RasterColorizer::band_selection,
-        )
 }
 
 fn query_time_from_datetime(datetime: Option<OgcDatetime>) -> OgcApiResult<TimeInterval> {
@@ -605,25 +459,6 @@ fn interval_end_to_time_instance(endpoint: &IntervalDatetime) -> TimeInstance {
         }
         IntervalDatetime::Open => TimeInstance::MAX,
     }
-}
-
-async fn create_query_processor_and_query_context<C: SessionContext>(
-    layer: &Layer,
-    initialized_operator: &dyn InitializedRasterOperator,
-    ctx: &C,
-) -> OgcApiResult<(TypedRasterQueryProcessor, C::QueryContext, ComputationId)> {
-    let processing_graph_id = ctx
-        .db()
-        .register_processing_graph(layer.processing_graph.clone())
-        .await?; // TODO: can we get this without re-registering it?
-    let computation_id = ComputationId::new();
-    let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
-
-    let query_processor = initialized_operator
-        .query_processor()
-        .boxed_context(error::InitializingProcessingGraph)?;
-
-    Ok((query_processor, query_ctx, computation_id))
 }
 
 #[cfg(test)]

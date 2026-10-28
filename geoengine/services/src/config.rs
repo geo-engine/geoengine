@@ -280,6 +280,26 @@ pub trait DefaultTime {
     fn default_time(&self) -> Option<TimeInterval>;
 }
 
+/// The default time of the config section `S`, else of [`Ogc`], else now.
+///
+/// # Panics
+/// Panics if a configured default time is invalid.
+pub fn default_time_from_config<S: ConfigElement + DefaultTime + for<'a> Deserialize<'a>>()
+-> TimeInterval {
+    get_config_element::<S>()
+        .ok()
+        .and_then(|section| section.default_time())
+        .or_else(|| {
+            get_config_element::<Ogc>()
+                .ok()
+                .and_then(|ogc| ogc.default_time.map(|time| time.time_interval()))
+        })
+        .unwrap_or_else(|| {
+            TimeInterval::new_instant(geoengine_datatypes::primitives::TimeInstance::now())
+                .expect("is a valid time interval")
+        })
+}
+
 #[derive(Debug, Deserialize)]
 pub struct TimeStartEnd {
     pub start: geoengine_datatypes::primitives::DateTime,
@@ -324,6 +344,14 @@ impl ConfigElement for Wcs {
     const KEY: &'static str = "wcs";
 }
 
+impl DefaultTime for Wcs {
+    fn default_time(&self) -> Option<TimeInterval> {
+        self.default_time
+            .as_ref()
+            .map(OgcDefaultTime::time_interval)
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct Wfs {
     pub default_time: Option<OgcDefaultTime>,
@@ -332,6 +360,14 @@ pub struct Wfs {
 
 impl ConfigElement for Wfs {
     const KEY: &'static str = "wfs";
+}
+
+impl DefaultTime for Wfs {
+    fn default_time(&self) -> Option<TimeInterval> {
+        self.default_time
+            .as_ref()
+            .map(OgcDefaultTime::time_interval)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -344,6 +380,14 @@ pub struct Wms {
 
 impl ConfigElement for Wms {
     const KEY: &'static str = "wms";
+}
+
+impl DefaultTime for Wms {
+    fn default_time(&self) -> Option<TimeInterval> {
+        self.default_time
+            .as_ref()
+            .map(OgcDefaultTime::time_interval)
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -409,7 +409,7 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
 /// this also covers the race where the fd is already re-used before this function is called:
 /// the monitor then sees the flag already flipped.
 #[cfg(target_os = "linux")]
-pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<'_, ()> {
+pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<'static, ()> {
     use futures::TryFutureExt;
     use nix::errno::Errno;
     use std::time::Instant;
@@ -477,7 +477,7 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFut
 pub fn connection_init(_connection: &dyn Any, _data: &mut Extensions) {}
 
 #[cfg(not(target_os = "linux"))]
-pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<()> {
+pub fn connection_closed(_req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<'static, ()> {
     if let Some(timeout) = timeout {
         Box::pin(tokio::time::sleep(timeout))
     } else {

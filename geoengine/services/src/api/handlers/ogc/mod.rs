@@ -9,13 +9,13 @@ use utoipa::OpenApi;
 
 mod common;
 mod cors;
-mod error;
+pub(crate) mod error;
 #[cfg(test)]
 mod test_util;
-mod tiles;
+pub(crate) mod tiles;
 mod tms;
-mod tms_spec;
-mod util;
+pub(crate) mod tms_spec;
+pub(crate) mod util;
 
 pub(crate) fn init_ogc_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -97,4 +97,4 @@ where
 )]
 pub struct OgcApiDoc;
 
-type OgcApiResult<T> = Result<T, OgcApiError>;
+pub(crate) type OgcApiResult<T> = Result<T, OgcApiError>;

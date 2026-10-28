@@ -7,30 +7,20 @@ use crate::{
             wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion},
         },
     },
-    config::{self, get_config_element},
+    config::{self},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
-    processing_graphs::{
-        processing_graph::ProcessingGraphId as ServicesProcessingGraphId,
-        registry::ProcessingGraphRegistry,
+    queries::{
+        raster_grid::{CoverageQuery, coverage_geotiff},
+        run_query,
     },
-    quota::ComputationId,
     util::server::{CacheControlHeader, connection_closed},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
-    primitives::{AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInterval},
-    raster::GridShape2D,
-    spatial_reference::SpatialReference,
-    util::Identifier,
+    primitives::AxisAlignedRectangle, raster::GridShape2D, spatial_reference::SpatialReference,
 };
-use geoengine_operators::{
-    call_on_generic_raster_processor_gdal_types,
-    engine::{ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath},
-    util::raster_stream_to_geotiff::{
-        GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
-    },
-};
+use geoengine_operators::engine::{InitializedRasterOperator, WorkflowOperatorPath};
 use serde::Deserialize;
 use snafu::ensure;
 use std::{str::FromStr, time::Duration};
@@ -385,112 +375,26 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
-    let request_spatial_ref: SpatialReference = request.spatial_ref().map(Into::into)?;
-    let request_resolution = request.spatial_resolution().transpose()?;
-    let request_partition = request.spatial_partition()?;
-    let request_time: TimeInterval = request
-        .time
-        .map_or_else(default_time_from_config, Into::into);
-    let request_no_data_value = request.nodatavalue;
+    let query = CoverageQuery {
+        workflow: identifier,
+        partition: request.spatial_partition()?,
+        crs: request.spatial_ref().map(Into::into)?,
+        resolution: request.spatial_resolution().transpose()?,
+        time: request
+            .time
+            .map_or_else(config::default_time_from_config::<config::Wcs>, Into::into),
+        no_data_value: request.nodatavalue,
+    };
 
     let ctx = app_ctx.session_context(session);
-
-    let processing_graph = ctx.db().load_processing_graph(&identifier).await?;
-
-    let operator = processing_graph.operator.get_raster()?;
-
-    let execution_context = ctx.execution_context()?;
-
-    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
-
-    let initialized = operator
-        .clone()
-        .initialize(processing_graph_operator_path_root, &execution_context)
-        .await?;
-
-    let tiling_spec = execution_context.tiling_specification();
-
-    let wrapped =
-        geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
-            operator,
-            initialized,
-        )
-        .wrap_with_projection_and_resample(
-            Some(request_partition.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
-            request_resolution,
-            request_spatial_ref,
-            &execution_context,
-        )
-        .await?;
-
-    let query_tiling_pixel_grid = wrapped
-        .result_descriptor
-        .spatial_grid_descriptor()
-        .tiling_grid_definition(tiling_spec)
-        .tiling_spatial_grid_definition()
-        .spatial_bounds_to_compatible_spatial_grid(request_partition);
-
-    let query_rect = RasterQueryRectangle::new(
-        query_tiling_pixel_grid.grid_bounds(),
-        request_time,
-        BandSelection::first(), // TODO: support multi bands in API and set the selection here
-    );
-
-    let processor = wrapped.initialized_operator.query_processor()?;
-
-    let computation_id = ComputationId::new();
-
-    let query_ctx = ctx.query_context(identifier, computation_id)?;
-
-    let (bytes, cache_hint) = call_on_generic_raster_processor_gdal_types!(processor, p =>
-        raster_stream_to_multiband_geotiff_bytes(
-            p,
-            query_rect,
-            query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: request_no_data_value,
-                spatial_reference: request_spatial_ref,
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::config::Gdal>()?.compression_num_threads,
-                as_cog: false,
-                force_big_tiff: false,
-            },
-            Some(get_config_element::<crate::config::Wcs>()?.tile_limit),
-            conn_closed,
-            execution_context.tiling_specification(),
-        )
-        .await)?
-    .map_err(error::Error::from)?;
+    let (bytes, cache_hint, computation_id) =
+        run_query(&ctx, conn_closed, coverage_geotiff(ctx.clone(), query)).await?;
 
     Ok(HttpResponse::Ok()
         .append_header(cache_hint.cache_control_header())
         .append_header(computation_id)
         .content_type("image/tiff")
         .body(bytes))
-}
-
-fn default_time_from_config() -> TimeInterval {
-    get_config_element::<config::Wcs>()
-        .ok()
-        .and_then(|wcs| wcs.default_time)
-        .map_or_else(
-            || {
-                get_config_element::<config::Ogc>()
-                    .ok()
-                    .and_then(|ogc| ogc.default_time)
-                    .map_or_else(
-                        || {
-                            TimeInterval::new_instant(
-                                geoengine_datatypes::primitives::TimeInstance::now(),
-                            )
-                            .expect("is a valid time interval")
-                        },
-                        |time| time.time_interval(),
-                    )
-            },
-            |time| time.time_interval(),
-        )
 }
 
 #[cfg(test)]
