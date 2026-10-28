@@ -118,14 +118,11 @@ class ColorizerTests(unittest.TestCase):
 
         result = str(ctx.exception)
 
+        # matplotlib >= 3.11 suggests a similar name instead of listing all supported values
         expected_start = "'some_map' is not a valid value for"
-        expected_contains = "; supported values are 'Accent',"
 
         assert result.startswith(expected_start), (
             f"The error should start with `{expected_start}`, but starts with `{result[: len(expected_start)]}`"
-        )
-        assert expected_contains in result, (
-            f"The error should contain `{expected_contains}`, but does not. Full error: {result}"
         )
 
     def test_defaults(self):
