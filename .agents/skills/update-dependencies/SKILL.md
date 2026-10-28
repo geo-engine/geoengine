@@ -23,8 +23,6 @@ If the user asks for a single project, do only its step, but still branch from t
 - Ask the user before every commit, push and PR.
 - Skip a project if nothing changes; the next branch then starts from the last one that exists.
 - Leave a major update out if a peer does not allow it yet (e.g. TypeScript newer than `@angular/build` accepts).
-- PRs are squash-merged.
-  After a lower PR is merged, rebase the next branch onto `main` with `git rebase --onto main <old-base-branch> <branch>` and change its PR base to `main`.
 - Before each commit, run `just ci <module>` and `just repo lint`.
 
 ## 2. backend (`build(backend)`)
