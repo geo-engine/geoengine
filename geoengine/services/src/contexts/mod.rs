@@ -24,6 +24,7 @@ use geoengine_datatypes::{
     machine_learning::MlModelName,
     primitives::{CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle},
     raster::TilingSpecification,
+    util::test::TestDefault,
 };
 use geoengine_operators::{
     cache::{
@@ -169,7 +170,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
-            subquery_parallelism: SubQueryParallelism::default(),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache: None,
             new_raster_cache: None,
             quota_tracking: None,

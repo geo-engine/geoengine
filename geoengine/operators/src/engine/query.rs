@@ -60,10 +60,6 @@ impl Drop for ParallelSubQueryPermit {
 }
 
 impl SubQueryParallelism {
-    /// Sequential, the behavior before sub-queries ran in parallel. Servers read
-    /// `[query_context] available_subquery_parallelism_per_query`; this is for tests and mocks.
-    pub const DEFAULT_AVAILABLE_PER_QUERY: usize = 1;
-
     /// Up to `available_per_query` sub-queries of the query run at once, counting the
     /// guaranteed one, however deep adapters nest.
     pub fn new(available_per_query: usize) -> Self {
@@ -92,9 +88,11 @@ impl SubQueryParallelism {
     }
 }
 
-impl Default for SubQueryParallelism {
-    fn default() -> Self {
-        Self::new(Self::DEFAULT_AVAILABLE_PER_QUERY)
+/// Sequential, the behavior before sub-queries ran in parallel. Servers read
+/// `[query_context] available_subquery_parallelism_per_query` instead.
+impl TestDefault for SubQueryParallelism {
+    fn test_default() -> Self {
+        Self::new(1)
     }
 }
 
@@ -295,7 +293,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
-            subquery_parallelism: SubQueryParallelism::default(),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -324,7 +322,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
-            subquery_parallelism: SubQueryParallelism::default(),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache,
             quota_checker,
             quota_tracking,
@@ -351,7 +349,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
-            subquery_parallelism: SubQueryParallelism::default(),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             gdal_process_pool,
             cache: None,
             quota_checker: None,
