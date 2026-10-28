@@ -19,8 +19,7 @@ import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {unByKey} from 'ol/Observable';
-import {equivalent, get as olGetProj} from 'ol/proj';
-import {calculateSourceResolution} from 'ol/reproj';
+import {get as olGetProj} from 'ol/proj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import TileGrid from 'ol/tilegrid/TileGrid';
 import {Observable, Subject, Subscription} from 'rxjs';
@@ -510,7 +509,7 @@ export class OlOgcApiMapTileLayerComponent
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
     readonly tmsId = input<TMSId>('Custom');
-    /** Minimum index in this source's OGC tile matrix set, not an OpenLayers view zoom. */
+    /** Minimum source matrix index. A nonzero limit requires the source and view to share a projection. */
     readonly minTileMatrixIndex = input(0);
     readonly zoomRequired = output<boolean>();
     private readonly mapService = inject(MapService);
@@ -607,45 +606,23 @@ export class OlOgcApiMapTileLayerComponent
         effect((onCleanup) => {
             const source = this.tileSource.value();
             const view = this.mapService.view();
-            const minTileMatrixIndex = this.minTileMatrixIndex();
+            const index = this.minTileMatrixIndex();
             this._mapLayer.setVisible(this.isVisible());
-            let wasBlocked: boolean | undefined;
-            const update = (): void => {
-                const resolution = view.getResolution();
-                const projection = source?.getProjection();
-                const ready = source?.getState() === 'ready';
-                // Translate the source matrix limit to OpenLayers' exclusive resolution limit.
-                // Use actual adjacent resolutions instead of assuming a factor of two.
-                const grid = source?.getTileGrid();
-                const minimum = grid?.getResolution(minTileMatrixIndex);
-                const previous = grid?.getResolution(minTileMatrixIndex - 1);
-                let maxResolution =
-                    minTileMatrixIndex === 0
-                        ? Infinity
-                        : ready && minimum !== undefined && previous !== undefined
-                          ? (previous + minimum) / 2
-                          : 0;
-                if (minTileMatrixIndex > 0 && projection && !equivalent(projection, view.getProjection())) {
-                    const center = view.getCenter();
-                    maxResolution =
-                        center && resolution !== undefined
-                            ? (maxResolution * resolution) / calculateSourceResolution(projection, view.getProjection(), center, resolution)
-                            : 0;
-                    if (!Number.isFinite(maxResolution)) maxResolution = 0;
-                }
-                this._mapLayer.setMaxResolution(maxResolution);
-                // Keep imagery gated while metadata loads, but only ask the user to
-                // zoom in once the actual source grid is known.
-                const blocked = minTileMatrixIndex > 0 && ready && (resolution === undefined || resolution >= maxResolution);
-                // Rendering and loading share the same restriction. Disabling cancels requests
-                // and retries while retaining cached imagery and metadata for zooming back in.
+            const updateVisibility = (): void => {
                 this.loader?.setEnabled(view.isDef() && this._mapLayer.isVisible(view));
-                if (blocked !== wasBlocked) this.zoomRequired.emit(blocked);
-                wasBlocked = blocked;
+                this.zoomRequired.emit(
+                    index > 0 && source?.getState() === 'ready' && (view.getResolution() ?? Infinity) >= this._mapLayer.getMaxResolution(),
+                );
             };
-            const viewListener = view.on(['change:resolution', 'change:center'], update);
-            const sourceListener = source?.on('change', update);
-            update();
+            const updateSource = (): void => {
+                // EOdyssey's source and view both use Web Mercator. OpenLayers applies this
+                // exclusive resolution limit directly; keep imagery blocked until the grid exists.
+                this._mapLayer.setMaxResolution(index === 0 ? Infinity : (source?.getTileGrid()?.getResolution(index) ?? 0));
+                updateVisibility();
+            };
+            updateSource();
+            const viewListener = view.on(['change:resolution', 'change:center'], updateVisibility);
+            const sourceListener = source?.on('change', updateSource);
             onCleanup(() => {
                 unByKey(viewListener);
                 if (sourceListener) unByKey(sourceListener);
