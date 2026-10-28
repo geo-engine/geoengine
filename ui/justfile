@@ -49,7 +49,7 @@ test ci="false" project="" include="" filter="": common::_clear
         {{ if filter == "" { "" } else { '--filter="' + filter + '"' } }}
 
 [group("update")]
-update-step1-angular: common::_clear && (lint "true" "--quiet" "gis")
+update-step1-angular: common::_clear install && (lint "true" "--quiet" "gis")
     #!/usr/bin/env bash
     LATEST_ANGULAR_VERSION=$(npx @angular/cli@latest version --json | jq -r '.cli.version')
     echo "Updating Angular to version $LATEST_ANGULAR_VERSION"

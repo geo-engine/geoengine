@@ -446,7 +446,7 @@ export class MapContainerComponent implements AfterContentInit, AfterViewInit, O
                 for (const feature of source.getFeatures() as Array<OlFeature<OlGeometry>>) {
                     if (feature.getId() === selection.feature) {
                         this.selectedFeature = feature;
-                        this.selectedFeatureOriginalStyle = feature.getStyle();
+                        this.selectedFeatureOriginalStyle = feature.getStyle() ?? undefined;
                         const style = (layer.symbology() as VectorSymbology).createHighlightStyle(feature);
                         feature.setStyle(style);
                         this.userSelect?.getFeatures().push(feature);

@@ -5,8 +5,6 @@ import {equivalent} from 'ol/proj';
 import CanvasTileLayerRenderer from 'ol/renderer/canvas/TileLayer';
 import ReprojTile from 'ol/reproj/Tile';
 import TileSource from 'ol/source/Tile';
-import LRUCache from 'ol/structs/LRUCache';
-import Tile from 'ol/Tile';
 import {Extent} from './map.service';
 import {transformExtentBetweenProjections} from './tile-loader';
 
@@ -53,7 +51,7 @@ class AbortableTileLayerRenderer<L extends TileLayer> extends CanvasTileLayerRen
         // ReprojTile treats the transient ERROR during cancellation as final. Discard its
         // cached result before notifying the source tile's listeners, so the next frame
         // constructs a new reprojection. Keep other tiles and the source cache intact.
-        const cache = this.getTileCache() as LRUCache<Tile>;
+        const cache = this.getTileCache();
         const keys: string[] = [];
         cache.forEach((cachedTile, key) => {
             if (
