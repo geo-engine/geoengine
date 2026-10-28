@@ -132,6 +132,9 @@ def plot_json(bbox: QueryRectangle,
 
 Query a processing graph and return the plot chart result as WrappedPlotOutput
 
+If `spatial_resolution` is set, raster inputs are read at the coarsest overview level that is not
+coarser than it, which is faster but less exact. Otherwise, they are read at their native resolution.
+
 #### plot\_chart
 
 ```python

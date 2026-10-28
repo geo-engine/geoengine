@@ -33,20 +33,18 @@ function asValidOutputFormat(format: string): ImageOutputFormat {
     <Spacer />
     <div id="features">
         <Features>
-            {
-                features.map((feature) => (
-                    <FeatureItem title={feature.data.title}>
-                        <Image
-                            class="shrink-0 mt-2 size-8 text-gray-800 dark:text-white"
-                            slot="icon"
-                            src={feature.data.icon}
-                            format={asValidOutputFormat(feature.data.icon.format)}
-                            alt={feature.data.title}
-                        />
-                        {feature.body}
-                    </FeatureItem>
-                ))
-            }
+            {features.map((feature) => (
+                <FeatureItem title={feature.data.title}>
+                    <Image
+                        class="shrink-0 mt-2 size-8 text-gray-800 dark:text-white"
+                        slot="icon"
+                        src={feature.data.icon}
+                        format={asValidOutputFormat(feature.data.icon.format)}
+                        alt={feature.data.title}
+                    />
+                    {feature.body}
+                </FeatureItem>
+            ))}
         </Features>
     </div>
     <Spacer />
@@ -60,26 +58,24 @@ function asValidOutputFormat(format: string): ImageOutputFormat {
     <Spacer />
     <div id="components">
         <Components>
-            {
-                components.map((component) => (
-                    <Component title={component.data.title} subtitle={component.data.subtitle}>
-                        <img
-                            class="max-h-32 max-w-32"
-                            slot="image"
-                            src={component.data.icon.src}
-                            width={component.data.icon.width}
-                            height={component.data.icon.height}
-                            alt={component.data.title}
-                        />
-                        {component.body}
-                        {component.data.links.map((link) => (
-                            <ComponentLink slot="link" href={link.url}>
-                                {link.title}
-                            </ComponentLink>
-                        ))}
-                    </Component>
-                ))
-            }
+            {components.map((component) => (
+                <Component title={component.data.title} subtitle={component.data.subtitle}>
+                    <img
+                        class="max-h-32 max-w-32"
+                        slot="image"
+                        src={component.data.icon.src}
+                        width={component.data.icon.width}
+                        height={component.data.icon.height}
+                        alt={component.data.title}
+                    />
+                    {component.body}
+                    {component.data.links.map((link) => (
+                        <ComponentLink slot="link" href={link.url}>
+                            {link.title}
+                        </ComponentLink>
+                    ))}
+                </Component>
+            ))}
         </Components>
     </div>
     <Spacer />

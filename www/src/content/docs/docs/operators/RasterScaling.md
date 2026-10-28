@@ -32,7 +32,7 @@ An example for Meteosat Second Generation properties is:
 | ----------------- | -------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | slope             | SlopeOffsetSelection | The slope (multiplication factor) applied to each pixel value. | `{"domain":"","key":"scale"}`<br>`{"value":0.1}`<br>`{"type":"metadataKey","domain":"","key":"scale"}` |
 | offset            | SlopeOffsetSelection | The offset (addition) applied to each pixel value.             | `{"domain":"","key":"scale"}`<br>`{"value":0.1}`<br>`{"type":"constant","value":1}`                    |
-| outputMeasurement | null or Measurement  |                                                                | `null`                                                                                                 |
+| outputMeasurement | Measurement or null  |                                                                | `null`                                                                                                 |
 | scalingMode       | ScalingMode          | Selects whether the values are scaled or unscaled.             | `"mulSlopeAddOffset"`                                                                                  |
 
 ## Sources
