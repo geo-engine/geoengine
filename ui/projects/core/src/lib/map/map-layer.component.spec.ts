@@ -237,6 +237,25 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests[1].aborted).toBe(false);
     });
 
+    it('cancels imagery when hidden and rejects queued tiles until shown again', async () => {
+        view.setResolution(1000);
+        const tile = source.getTile(4, 0, 0, 1, getProjection('EPSG:3857')!);
+        tile.load();
+        fixture.componentRef.setInput('isVisible', false);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(tileRequests[0].aborted).toBe(true);
+        await vi.waitFor(() => expect(tile.getState()).toBe(TileState.IDLE));
+        tile.load();
+        expect(tile.getState()).toBe(TileState.IDLE);
+        expect(tileRequests).toHaveLength(1);
+        fixture.componentRef.setInput('isVisible', true);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        tile.load();
+        expect(tileRequests).toHaveLength(2);
+    });
+
     it('tracks replacement views and ignores changes to the previous view', async () => {
         const replacement = new View({center: [1000, -1000], resolution: 1000});
         mapService.setView(replacement);

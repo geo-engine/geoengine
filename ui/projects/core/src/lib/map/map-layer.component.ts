@@ -23,7 +23,6 @@ import {equivalent, get as olGetProj} from 'ol/proj';
 import {calculateSourceResolution} from 'ol/reproj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import TileGrid from 'ol/tilegrid/TileGrid';
-import TileState from 'ol/TileState';
 import {Observable, Subject, Subscription} from 'rxjs';
 import {NotificationService} from '@geoengine/common';
 import {
@@ -549,6 +548,7 @@ export class OlOgcApiMapTileLayerComponent
             // the abort signal covers both a changed set of params and the destruction of the layer
             const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
+                acceptsTile: (tile): boolean => tile.getTileCoord()[0] >= this.minTileMatrixIndex(),
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
                 abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
                 onTileError: (tile): void => this.invalidateTileReprojection(tile),
@@ -581,24 +581,7 @@ export class OlOgcApiMapTileLayerComponent
                 },
                 wrapX: false, // wrapping does not work with our implementation
                 interpolate: false, // Stops blurry tiles when zooming in.
-                tileLoadFunction: (tile, url): void => {
-                    if (tile.getTileCoord()[0] < this.minTileMatrixIndex()) {
-                        // Never fetch coarser fallback/preload tiles either.
-                        tile.setState(TileState.EMPTY);
-                        return;
-                    }
-                    const view = this.mapService.view();
-                    if (!view.isDef() || !this._mapLayer.isVisible(view)) {
-                        // maxResolution gates rendering; the queue can still drain tiles
-                        // from an earlier frame after the view has zoomed out.
-                        // Leave it requestable when the user zooms back in.
-                        this.invalidateTileReprojection(tile as OlImageTile);
-                        tile.setState(TileState.ERROR);
-                        tile.setState(TileState.IDLE);
-                        return;
-                    }
-                    loader.load(tile, url);
-                },
+                tileLoadFunction: loader.load,
             });
 
             return source;
@@ -631,10 +614,17 @@ export class OlOgcApiMapTileLayerComponent
                 const resolution = view.getResolution();
                 const projection = source?.getProjection();
                 const ready = source?.getState() === 'ready';
-                // Adjacent matrix resolutions differ by two; their midpoint is
-                // the native, exclusive maxResolution cutoff.
+                // Translate the source matrix limit to OpenLayers' exclusive resolution limit.
+                // Use actual adjacent resolutions instead of assuming a factor of two.
+                const grid = source?.getTileGrid();
+                const minimum = grid?.getResolution(minTileMatrixIndex);
+                const previous = grid?.getResolution(minTileMatrixIndex - 1);
                 let maxResolution =
-                    minTileMatrixIndex === 0 ? Infinity : ready ? 1.5 * (source.getTileGrid()?.getResolution(minTileMatrixIndex) ?? 0) : 0;
+                    minTileMatrixIndex === 0
+                        ? Infinity
+                        : ready && minimum !== undefined && previous !== undefined
+                          ? (previous + minimum) / 2
+                          : 0;
                 if (minTileMatrixIndex > 0 && projection && !equivalent(projection, view.getProjection())) {
                     const center = view.getCenter();
                     maxResolution =
@@ -647,7 +637,9 @@ export class OlOgcApiMapTileLayerComponent
                 // Keep imagery gated while metadata loads, but only ask the user to
                 // zoom in once the actual source grid is known.
                 const blocked = minTileMatrixIndex > 0 && ready && (resolution === undefined || resolution >= maxResolution);
-                if (blocked && !wasBlocked) this.loader?.cancelPending('view is below minimum tile matrix index');
+                // Rendering and loading share the same restriction. Disabling cancels requests
+                // and retries while retaining cached imagery and metadata for zooming back in.
+                this.loader?.setEnabled(view.isDef() && this._mapLayer.isVisible(view));
                 if (blocked !== wasBlocked) this.zoomRequired.emit(blocked);
                 wasBlocked = blocked;
             };

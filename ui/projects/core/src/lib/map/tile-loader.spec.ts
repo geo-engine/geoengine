@@ -173,6 +173,53 @@ describe('TileLoader', () => {
         loader.abortAll();
     });
 
+    it('settles a waiting retry when disabled and allows a fresh visit after enabling', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+        const unsubscribe = vi.fn();
+        const onStateChange = vi.fn();
+        const {tile, load} = makeTile();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            abortWhen: (): Observable<string> => new Observable(() => unsubscribe),
+            onStateChange,
+        });
+        load.mockImplementation(() => loader.load(tile, 'https://example.com/tile'));
+        loader.load(tile, 'https://example.com/tile');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(onStateChange).toHaveBeenLastCalledWith('loading');
+        loader.setEnabled(false);
+        expect(onStateChange).toHaveBeenLastCalledWith('idle');
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(10000);
+        // A stale queue entry must also remain loadable without starting another request.
+        loader.load(tile, 'https://example.com/tile');
+        expect(tile.getState()).toBe(TileState.IDLE);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        loader.setEnabled(true);
+        loader.load(tile, 'https://example.com/tile');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        loader.abortAll();
+    });
+
+    it('excludes source tiles before fetching without starting loading state', () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const onStateChange = vi.fn();
+        const {tile} = makeTile();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            acceptsTile: (): boolean => false,
+            onStateChange,
+        });
+        loader.load(tile, 'https://example.com/tile');
+        expect(tile.getState()).toBe(TileState.EMPTY);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(onStateChange).not.toHaveBeenCalled();
+    });
+
     it('retries a transient failure after a delay that grows with every attempt', async () => {
         vi.useFakeTimers();
         const fetchMock = vi.fn().mockResolvedValue({ok: false, status: 503, blob: () => Promise.resolve(mockBlob('', ''))});
