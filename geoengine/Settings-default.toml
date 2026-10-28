@@ -43,10 +43,6 @@ chunk_byte_size = 1048576 # TODO: find reasonable default
 # Sub-queries of one query that may run at once (1 = sequential). A query always gets at least
 # one, even when all parallelism is in use.
 available_subquery_parallelism_per_query = 4
-# Sub-queries all queries together may run in parallel, on top of the one each query always
-# runs; when they are in use, queries run sequentially (roughly
-# `gdal_process_pool.max_active_processes`)
-available_subquery_parallelism_per_server = 16
 
 [upload]
 path = "upload"

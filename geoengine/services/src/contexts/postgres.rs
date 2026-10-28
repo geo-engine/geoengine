@@ -43,7 +43,6 @@ use geoengine_operators::{
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::Semaphore;
 use tokio_postgres::error::SqlState;
 use tracing::{info, instrument};
 
@@ -70,7 +69,6 @@ where
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
     available_subquery_parallelism_per_query: usize,
-    subquery_parallelism_per_server: Arc<Semaphore>,
     provider_registry: Arc<DataConnectorRegistry>,
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
@@ -154,7 +152,6 @@ where
             default_cache_ttl: CacheTtlSeconds::new(0),
             available_subquery_parallelism_per_query:
                 SubQueryParallelism::DEFAULT_AVAILABLE_PER_QUERY,
-            subquery_parallelism_per_server: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
@@ -232,7 +229,6 @@ where
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             available_subquery_parallelism_per_query:
                 SubQueryParallelism::DEFAULT_AVAILABLE_PER_QUERY,
-            subquery_parallelism_per_server: Arc::new(Semaphore::new(Semaphore::MAX_PERMITS)),
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
@@ -319,9 +315,6 @@ where
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             available_subquery_parallelism_per_query: query_context_config
                 .available_subquery_parallelism_per_query,
-            subquery_parallelism_per_server: Arc::new(Semaphore::new(
-                query_context_config.available_subquery_parallelism_per_server,
-            )),
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
@@ -521,10 +514,7 @@ where
             self.context.thread_pool.clone(),
             self.context.gdal_process_pool.clone(),
             self.context.default_cache_ttl,
-            SubQueryParallelism::new(
-                self.context.available_subquery_parallelism_per_query,
-                self.context.subquery_parallelism_per_server.clone(),
-            ),
+            SubQueryParallelism::new(self.context.available_subquery_parallelism_per_query),
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
             Some(self.context.quota.create_quota_tracking(

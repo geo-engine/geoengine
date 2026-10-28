@@ -191,7 +191,6 @@ impl ConfigElement for TilingSpecification {
 pub struct QueryContext {
     pub chunk_byte_size: usize,
     pub available_subquery_parallelism_per_query: usize,
-    pub available_subquery_parallelism_per_server: usize,
 }
 
 impl ConfigElement for QueryContext {
