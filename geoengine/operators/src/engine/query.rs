@@ -60,7 +60,9 @@ impl Drop for ParallelSubQueryPermit {
 }
 
 impl SubQueryParallelism {
-    pub const DEFAULT_AVAILABLE_PER_QUERY: usize = 4;
+    /// Sequential, the behavior before sub-queries ran in parallel. Servers read
+    /// `[query_context] available_subquery_parallelism_per_query`; this is for tests and mocks.
+    pub const DEFAULT_AVAILABLE_PER_QUERY: usize = 1;
 
     /// Up to `available_per_query` sub-queries of the query run at once, counting the
     /// guaranteed one, however deep adapters nest.
@@ -71,12 +73,13 @@ impl SubQueryParallelism {
         }
     }
 
-    /// The handout for an adapter's next sub-query while it has `running` sub-queries in
-    /// flight; `None` when all parallelism is in use.
+    /// The handout for an adapter's next sub-query; the guaranteed one whenever the adapter's
+    /// guaranteed sub-query is not in flight, else a parallel one or `None` when all
+    /// parallelism is in use.
     ///
     /// Never waits: waiting deadlocks when outer sub-queries hold all of the parallelism.
-    pub fn handout(&self, running: usize) -> Option<SubQueryHandout> {
-        if running == 0 {
+    pub fn handout(&self, guaranteed_in_flight: bool) -> Option<SubQueryHandout> {
+        if !guaranteed_in_flight {
             return Some(SubQueryHandout::Guaranteed);
         }
         // Relaxed: the counter guards no other data, it only bounds the number of sub-queries
@@ -480,22 +483,22 @@ mod tests {
     fn it_always_hands_out_the_guaranteed_subquery() {
         for parallelism in [SubQueryParallelism::new(0), SubQueryParallelism::new(1)] {
             assert!(matches!(
-                parallelism.handout(0),
+                parallelism.handout(false),
                 Some(SubQueryHandout::Guaranteed)
             ));
-            assert!(parallelism.handout(1).is_none());
+            assert!(parallelism.handout(true).is_none());
         }
     }
 
     #[test]
     fn it_hands_out_up_to_the_available_parallelism() {
         let parallelism = SubQueryParallelism::new(3);
-        let held = [parallelism.handout(1), parallelism.handout(2)];
+        let held = [parallelism.handout(true), parallelism.handout(true)];
         assert!(held.iter().all(|h| is_parallel(h.as_ref())));
         // the guaranteed one plus 2 parallel ones = 3
-        assert!(parallelism.handout(3).is_none());
+        assert!(parallelism.handout(true).is_none());
 
         drop(held);
-        assert!(is_parallel(parallelism.handout(1).as_ref()));
+        assert!(is_parallel(parallelism.handout(true).as_ref()));
     }
 }
