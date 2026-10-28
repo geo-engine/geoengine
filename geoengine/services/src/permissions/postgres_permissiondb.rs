@@ -78,7 +78,6 @@ pub trait TxPermissionDb {
     ) -> Result<bool, PermissionDbError>;
 
     /// Ensure `permission` for `resource` exists. Throws error if not allowed.
-    #[must_use]
     async fn ensure_permission_in_tx(
         &self,
         resource: ResourceId,

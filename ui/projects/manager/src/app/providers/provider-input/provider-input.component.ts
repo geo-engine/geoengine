@@ -2,7 +2,6 @@ import {Component, viewChild, output, input, effect, ChangeDetectionStrategy} fr
 import {FormsModule} from '@angular/forms';
 import {MatTab, MatTabChangeEvent, MatTabGroup} from '@angular/material/tabs';
 import {TypedDataProviderDefinition} from '@geoengine/api-client';
-import {ArunaComponent} from '../provider-editor/forms/aruna/aruna.component';
 import {WildLiveComponent} from '../provider-editor/forms/wildlive/wildlive.component';
 import {ProviderType} from '../provider-editor/provider-editor.component';
 import {ProviderJsonInputComponent} from '../provider-json-input/provider-json-input.component';
@@ -12,7 +11,7 @@ import {ProviderJsonInputComponent} from '../provider-json-input/provider-json-i
     templateUrl: './provider-input.component.html',
     styleUrl: './provider-input.component.scss',
     changeDetection: ChangeDetectionStrategy.OnPush,
-    imports: [ProviderJsonInputComponent, ArunaComponent, WildLiveComponent, MatTabGroup, MatTab, FormsModule],
+    imports: [ProviderJsonInputComponent, WildLiveComponent, MatTabGroup, MatTab, FormsModule],
 })
 export class ProviderInputComponent {
     readonly providerType = input<ProviderType>(ProviderType.OTHER);

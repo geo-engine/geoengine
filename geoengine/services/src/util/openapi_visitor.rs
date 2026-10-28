@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 
 use utoipa::openapi::{
-    Components, HttpMethod, OpenApi, PathItem, Ref, RefOr, Response, Schema,
-    path::Operation,
+    Components, Content, HttpMethod, OpenApi, PathItem, Ref, RefOr, Response, Schema,
+    path::{Operation, Parameter},
+    request_body::RequestBody,
     schema::{AdditionalProperties, ArrayItems},
 };
 
@@ -114,11 +115,116 @@ fn visit_response<T: OpenapiVisitor>(
         }
         RefOr::T(concrete) => {
             for content in concrete.content.values() {
-                let Some(content_schema) = &content.schema else {
-                    continue;
-                };
+                visit_content(
+                    content,
+                    components,
+                    visitor,
+                    source_location,
+                    already_visited,
+                );
+            }
+        }
+    }
+}
+
+/// Recursively walks through the given content object and calls corresponding events on the visitor.
+///
+/// # Panics
+///
+/// Panics if a schema has an unknown type.
+fn visit_content<T: OpenapiVisitor>(
+    content: &RefOr<Content>,
+    components: &Components,
+    visitor: &mut T,
+    source_location: &str,
+    already_visited: &mut HashSet<String>,
+) {
+    match content {
+        RefOr::Ref(reference) => {
+            visit_reference(
+                reference,
+                components,
+                visitor,
+                source_location,
+                already_visited,
+            );
+        }
+        RefOr::T(concrete) => {
+            if let Some(content_schema) = &concrete.schema {
                 visit_schema(
                     content_schema,
+                    components,
+                    visitor,
+                    source_location,
+                    already_visited,
+                );
+            }
+        }
+    }
+}
+
+/// Recursively walks through the given parameter object and calls corresponding events on the visitor.
+///
+/// # Panics
+///
+/// Panics if a schema has an unknown type.
+fn visit_parameter<T: OpenapiVisitor>(
+    parameter: &RefOr<Parameter>,
+    components: &Components,
+    visitor: &mut T,
+    source_location: &str,
+    already_visited: &mut HashSet<String>,
+) {
+    match parameter {
+        RefOr::Ref(reference) => {
+            visit_reference(
+                reference,
+                components,
+                visitor,
+                source_location,
+                already_visited,
+            );
+        }
+        RefOr::T(concrete) => {
+            if let Some(schema) = &concrete.schema {
+                visit_schema(
+                    schema,
+                    components,
+                    visitor,
+                    source_location,
+                    already_visited,
+                );
+            }
+        }
+    }
+}
+
+/// Recursively walks through the given request body object and calls corresponding events on the visitor.
+///
+/// # Panics
+///
+/// Panics if a schema has an unknown type.
+fn visit_request_body<T: OpenapiVisitor>(
+    request_body: &RefOr<RequestBody>,
+    components: &Components,
+    visitor: &mut T,
+    source_location: &str,
+    already_visited: &mut HashSet<String>,
+) {
+    match request_body {
+        RefOr::Ref(reference) => {
+            visit_reference(
+                reference,
+                components,
+                visitor,
+                source_location,
+                already_visited,
+            );
+        }
+        RefOr::T(concrete) => {
+            for content in concrete.content.values() {
+                visit_content(
+                    content,
                     components,
                     visitor,
                     source_location,
@@ -144,6 +250,9 @@ fn visit_reference<T: OpenapiVisitor>(
 ) {
     const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
     const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
+    const PARAMETER_REF_PREFIX: &str = "#/components/parameters/";
+    const REQUEST_BODY_REF_PREFIX: &str = "#/components/requestBodies/";
+    const MEDIA_TYPE_REF_PREFIX: &str = "#/components/mediaTypes/";
 
     let ref_location = reference.ref_location.as_str();
 
@@ -163,6 +272,27 @@ fn visit_reference<T: OpenapiVisitor>(
             None => visitor.resolve_failed(ref_location),
             Some(resolved) => {
                 visit_response(resolved, components, visitor, ref_location, already_visited);
+            }
+        }
+    } else if let Some(parameter_name) = ref_location.strip_prefix(PARAMETER_REF_PREFIX) {
+        match components.parameters.get(parameter_name) {
+            None => visitor.resolve_failed(ref_location),
+            Some(resolved) => {
+                visit_parameter(resolved, components, visitor, ref_location, already_visited);
+            }
+        }
+    } else if let Some(request_body_name) = ref_location.strip_prefix(REQUEST_BODY_REF_PREFIX) {
+        match components.request_bodies.get(request_body_name) {
+            None => visitor.resolve_failed(ref_location),
+            Some(resolved) => {
+                visit_request_body(resolved, components, visitor, ref_location, already_visited);
+            }
+        }
+    } else if let Some(media_type_name) = ref_location.strip_prefix(MEDIA_TYPE_REF_PREFIX) {
+        match components.media_types.get(media_type_name) {
+            None => visitor.resolve_failed(ref_location),
+            Some(resolved) => {
+                visit_content(resolved, components, visitor, ref_location, already_visited);
             }
         }
     } else {
@@ -186,26 +316,31 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
     for (source_location, path_item) in &api.paths.paths {
         if let Some(parameters) = &path_item.parameters {
             for parameter in parameters {
-                if let Some(schema) = parameter.schema.as_ref() {
-                    visit_schema(
-                        schema,
-                        components,
-                        visitor,
-                        source_location,
-                        &mut Default::default(),
-                    );
-                }
+                visit_parameter(
+                    parameter,
+                    components,
+                    visitor,
+                    source_location,
+                    &mut Default::default(),
+                );
             }
         }
 
         for (_, operation) in operations_from_path(path_item) {
             if let Some(request_body) = operation.request_body.as_ref() {
-                for content in request_body.content.values() {
-                    let Some(content_schema) = &content.schema else {
-                        continue;
-                    };
-                    visit_schema(
-                        content_schema,
+                visit_request_body(
+                    request_body,
+                    components,
+                    visitor,
+                    source_location,
+                    &mut Default::default(),
+                );
+            }
+
+            if let Some(parameters) = operation.parameters.as_ref() {
+                for parameter in parameters {
+                    visit_parameter(
+                        parameter,
                         components,
                         visitor,
                         source_location,
@@ -214,46 +349,14 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
                 }
             }
 
-            if let Some(parameters) = operation.parameters.as_ref() {
-                for parameter in parameters {
-                    if let Some(schema) = parameter.schema.as_ref() {
-                        visit_schema(
-                            schema,
-                            components,
-                            visitor,
-                            source_location,
-                            &mut Default::default(),
-                        );
-                    }
-                }
-            }
-
             for response in operation.responses.responses.values() {
-                match response {
-                    RefOr::Ref(reference) => {
-                        visit_reference(
-                            reference,
-                            components,
-                            visitor,
-                            source_location,
-                            &mut Default::default(),
-                        );
-                    }
-                    RefOr::T(concrete) => {
-                        for content in concrete.content.values() {
-                            let Some(content_schema) = &content.schema else {
-                                continue;
-                            };
-                            visit_schema(
-                                content_schema,
-                                components,
-                                visitor,
-                                source_location,
-                                &mut Default::default(),
-                            );
-                        }
-                    }
-                }
+                visit_response(
+                    response,
+                    components,
+                    visitor,
+                    source_location,
+                    &mut Default::default(),
+                );
             }
         }
     }

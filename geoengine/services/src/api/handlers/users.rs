@@ -571,7 +571,7 @@ pub struct RedirectUri {
     post,
     path = "/oidcInit",
     responses(
-        (status = 200, body = AuthCodeRequestURL,
+        (status = 200, description = "URL to start the OIDC login", body = AuthCodeRequestURL,
         example = json!({
             "url": "http://someissuer.com/authorize?client_id=someclient&redirect_uri=someuri&response_type=code&scope=somescope&state=somestate&nonce=somenonce&codechallenge=somechallenge&code_challenge_method=S256"
         })
@@ -614,7 +614,7 @@ pub(crate) async fn oidc_init<C: ApplicationContext>(
     path = "/oidcLogin",
     request_body = AuthCodeResponse,
     responses(
-        (status = 200, body = UserSession,
+        (status = 200, description = "The created session", body = UserSession,
         example = json!({
            "id": "208fa24e-7a92-4f57-a3fe-d1177d9f18ad",
            "user": {

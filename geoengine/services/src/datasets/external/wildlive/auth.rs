@@ -338,7 +338,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(!response.refresh_token.secret().is_empty());
+        assert_ne!(response.refresh_token.secret(), "");
         assert!(response.user.is_some());
     }
 }

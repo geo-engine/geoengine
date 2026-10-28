@@ -30,22 +30,19 @@ gdal-sys = { workspace = true }
 geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-expression = { path = "../expression" }
-itertools = { workspace = true }
 ipc-channel = { workspace = true }
+itertools = { workspace = true }
 libloading = { workspace = true }
-tracing = { workspace = true }
-tracing-appender = { workspace = true }
 lru = { workspace = true }
 lz4_flex = { workspace = true }
 ndarray = { workspace = true }
-num-traits = { workspace = true }
 num = { workspace = true }
+num-traits = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
-ouroboros = { workspace = true }
-ordered-float = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 ort = { workspace = true }
+ouroboros = { workspace = true }
 paste = { workspace = true }
 pin-project = { workspace = true }
 postgres-protocol = { workspace = true }
@@ -55,25 +52,28 @@ rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-serial_test = { workspace = true }
 snafu = { workspace = true }
+strum = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 tokio-postgres = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+typed_floats = { workspace = true }
 typetag = { workspace = true }
 uuid = { workspace = true }
-strum = { workspace = true }
 
 [dev-dependencies]
-async-stream = { workspace = true }
 approx = { workspace = true }
+async-stream = { workspace = true }
 criterion = { workspace = true }
 httptest = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
+serial_test = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
 
 [[bench]]
 name = "ci_operators"

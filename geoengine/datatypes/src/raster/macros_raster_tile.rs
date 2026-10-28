@@ -500,7 +500,7 @@ mod tests {
             TimeInterval::default(),
             [0, 0].into(),
             0,
-            [1.0, 1.0, 0.0, 1.0, 0.0, -1.0].into(),
+            [1.0, 1.0, 0.0, 1.0, 0.0, -1.0].try_into().unwrap(),
             Grid2D::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
                 .unwrap()
                 .into(),

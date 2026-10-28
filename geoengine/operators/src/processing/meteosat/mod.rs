@@ -39,6 +39,7 @@ fn new_satellite_key() -> RasterPropertiesKey {
 
 #[cfg(test)]
 mod test_util {
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use std::str::FromStr;
 
     use futures::StreamExt;
@@ -195,7 +196,7 @@ mod test_util {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+                        GeoTransform::new_unchecked(Coordinate2D::new(0., -3.), 1., -1.),
                         GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
                     ),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
@@ -243,8 +244,8 @@ mod test_util {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate,
-                    x_pixel_size,
-                    y_pixel_size,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(x_pixel_size),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(y_pixel_size),
                 },
                 width: 3712,
                 height: 3712,
@@ -288,7 +289,7 @@ mod test_util {
                     },
                 ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
+                    GeoTransform::new_unchecked(origin_coordinate, x_pixel_size, y_pixel_size),
                     GridShape2D::new_2d(3712, 3712).bounding_box(),
                 ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(

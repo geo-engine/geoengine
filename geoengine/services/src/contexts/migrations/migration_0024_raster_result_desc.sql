@@ -111,7 +111,7 @@ FROM cte
 WHERE datasets.id = cte.id;
 -- migrate gdal_metadata_lsit
 CREATE FUNCTION pg_temp.spatial_grid_def_from_params_array(
-    t_slices "GdalLoadingInfoTemporalSlice" []
+    t_slices "GdalLoadingInfoTemporalSlice"[]
 ) RETURNS "SpatialGridDefinition" AS $$
 DECLARE b_size_x double precision;
 b_size_y double precision;

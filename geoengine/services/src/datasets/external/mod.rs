@@ -1,4 +1,3 @@
-pub mod aruna;
 pub mod copernicus_dataspace;
 pub mod edr;
 pub mod gbif;

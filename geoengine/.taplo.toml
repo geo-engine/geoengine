@@ -1,0 +1,17 @@
+# Formatting of the Cargo manifests, checked by `just backend lint-toml`.
+# Dependencies are kept on one line each and sorted alphabetically.
+
+include = ["Cargo.toml", "*/Cargo.toml", "expression/deps-workspace/Cargo.toml"]
+
+[formatting]
+align_comments = false
+array_auto_collapse = false
+array_auto_expand = false
+column_width = 1000
+indent_string = "    "
+inline_table_expand = false
+reorder_keys = false
+
+[[rule]]
+keys = ["build-dependencies", "dependencies", "dev-dependencies", "target.*.dependencies", "workspace.dependencies"]
+formatting = { array_auto_collapse = true, reorder_keys = true }

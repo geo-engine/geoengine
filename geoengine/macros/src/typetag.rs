@@ -1,7 +1,7 @@
 use crate::{Result, util::parse_config_args};
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Field, FieldMutability, Ident, Lit, parse_quote, parse2, spanned::Spanned};
+use syn::{DeriveInput, Field, FieldModifiers, Ident, Lit, parse_quote, parse2, spanned::Spanned};
 
 const DEFAULT_TAG: &str = "type";
 
@@ -69,10 +69,11 @@ pub fn type_tag(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, sy
     let field = Field {
         attrs: vec![parse_quote! { #[schema(inline)] }],
         vis: parse_quote! { pub },
-        mutability: FieldMutability::None,
+        modifiers: FieldModifiers::default(),
         ident: Some(Ident::new_raw(&tag_field, fields.span())),
         colon_token: Default::default(),
         ty: parse_quote!(#newtype_name),
+        default: None,
     };
 
     // prepend as first field

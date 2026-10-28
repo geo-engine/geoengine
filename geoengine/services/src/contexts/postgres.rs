@@ -35,6 +35,7 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
     engine::ChunkByteSize,
+    machine_learning::onnx_util::OrtEnvironment,
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
@@ -70,6 +71,19 @@ where
     provider_registry: Arc<DataConnectorRegistry>,
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
+    ort_environment: OrtEnvironment,
+}
+
+/// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
+pub struct ContextSpec<Tls> {
+    pub config: Config,
+    pub tls: Tls,
+    pub exe_ctx_tiling_spec: TilingSpecification,
+    pub query_ctx_chunk_size: ChunkByteSize,
+    pub quota_config: Quota,
+    pub oidc_manager: OidcManager,
+    pub gdal_process_pool_config: crate::config::GdalProcessPool,
+    pub ort_environment: OrtEnvironment,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -80,13 +94,16 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     pub async fn new_with_context_spec(
-        config: Config,
-        tls: Tls,
-        exe_ctx_tiling_spec: TilingSpecification,
-        query_ctx_chunk_size: ChunkByteSize,
-        quota_config: Quota,
-        oidc_db: OidcManager,
-        gdal_process_pool_config: crate::config::GdalProcessPool,
+        ContextSpec {
+            config,
+            tls,
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
+            quota_config,
+            oidc_manager,
+            gdal_process_pool_config,
+            ort_environment,
+        }: ContextSpec<Tls>,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -121,7 +138,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_manager: oidc_db,
+            oidc_manager,
             quota,
             pool,
             volumes: Default::default(),
@@ -131,6 +148,7 @@ where
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
+            ort_environment,
         })
     }
 
@@ -142,6 +160,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
+        ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -201,6 +220,7 @@ where
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
+            ort_environment,
         })
     }
 
@@ -220,6 +240,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
+        ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -279,6 +300,7 @@ where
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
+            ort_environment,
         };
 
         if created_schema {
@@ -491,6 +513,7 @@ where
             self.context.gdal_process_pool.clone(),
             self.context.new_raster_cache.clone(),
             self.context.default_cache_ttl,
+            self.context.ort_environment.clone(),
         ))
     }
 
@@ -641,6 +664,7 @@ mod tests {
     };
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         collections::VectorDataType,
         dataset::{DataProviderId, LayerId},
@@ -1714,7 +1738,7 @@ mod tests {
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: TimeDescriptor::new_irregular(None),
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             ),
             bands: RasterBandDescriptors::new_single_band(),
@@ -1745,8 +1769,8 @@ mod tests {
             rasterband_channel: 0,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: Default::default(),
-                x_pixel_size: 0.0,
-                y_pixel_size: 0.0,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
             },
             width: 0,
             height: 0,

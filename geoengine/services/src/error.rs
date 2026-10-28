@@ -2,7 +2,6 @@ use crate::api::model::datatypes::{
     DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
-use crate::datasets::external::aruna::error::ArunaProviderError;
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::HttpResponse;
@@ -11,7 +10,6 @@ use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::RegularTimeDimension;
 use geoengine_datatypes::util::helpers::ge_report;
-use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::fmt;
 use std::path::PathBuf;
@@ -377,11 +375,6 @@ pub enum Error {
     },
 
     #[snafu(context(false))]
-    ArunaProvider {
-        source: ArunaProviderError,
-    },
-
-    #[snafu(context(false))]
     NetCdfCf4DProvider {
         source: NetCdfCf4DProviderError,
     },
@@ -496,9 +489,9 @@ pub enum Error {
         message: String,
     },
 
-    #[snafu(display("NotNan error: {}", source))]
-    InvalidNotNanFloatKey {
-        source: ordered_float::FloatIsNan,
+    #[snafu(display("Invalid number: {}", source))]
+    InvalidNumber {
+        source: typed_floats::InvalidNumber,
     },
 
     UnexpectedInvalidDbTypeConversion,
@@ -511,6 +504,14 @@ pub enum Error {
     UnexpectedDatabaseVersionDuringMigration {
         expected: String,
         found: String,
+    },
+
+    #[snafu(display(
+        "Aruna providers are no longer supported. Remove them before migrating. Existing Aruna providers (id, name): {}",
+        providers.join(", ")
+    ))]
+    ArunaProvidersExist {
+        providers: Vec<String>,
     },
 
     #[snafu(display("Raster band names must be unique. Found {duplicate_key} more than once."))]
@@ -700,9 +701,9 @@ impl From<tokio::task::JoinError> for Error {
     }
 }
 
-impl From<ordered_float::FloatIsNan> for Error {
-    fn from(source: FloatIsNan) -> Self {
-        Error::InvalidNotNanFloatKey { source }
+impl From<typed_floats::InvalidNumber> for Error {
+    fn from(source: typed_floats::InvalidNumber) -> Self {
+        Error::InvalidNumber { source }
     }
 }
 

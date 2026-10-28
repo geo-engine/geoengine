@@ -5,7 +5,6 @@ use crate::{
         external::{
             CopernicusDataspaceDataProviderDefinition, GdalRetries,
             SentinelS2L2ACogsProviderDefinition, StacApiRetries, WildliveDataConnectorDefinition,
-            aruna::ArunaDataProviderDefinition,
             edr::{EdrDataProviderDefinition, EdrVectorSpec},
             gbif::GbifDataProviderDefinition,
             gfbio_abcd::GfbioAbcdDataProviderDefinition,
@@ -926,7 +925,6 @@ impl TryFrom<CopernicusDataspaceDataProviderDefinitionDbType>
 #[postgres(name = "DataProviderDefinition")]
 #[allow(clippy::struct_field_names)] // same postfix because of postgres mapping
 pub struct TypedDataProviderDefinitionDbType {
-    aruna_data_provider_definition: Option<ArunaDataProviderDefinition>,
     dataset_layer_listing_provider_definition: Option<DatasetLayerListingProviderDefinition>,
     gbif_data_provider_definition: Option<GbifDataProviderDefinition>,
     gfbio_abcd_data_provider_definition: Option<GfbioAbcdDataProviderDefinition>,
@@ -945,27 +943,9 @@ pub struct TypedDataProviderDefinitionDbType {
 impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
     fn from(other: &TypedDataProviderDefinition) -> Self {
         match other {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(data_provider_definition) => {
-                Self {
-                    aruna_data_provider_definition: Some(data_provider_definition.clone()),
-                    dataset_layer_listing_provider_definition: None,
-                    gbif_data_provider_definition: None,
-                    gfbio_abcd_data_provider_definition: None,
-                    gfbio_collections_data_provider_definition: None,
-                    ebv_portal_data_provider_definition: None,
-                    net_cdf_cf_data_provider_definition: None,
-                    pangaea_data_provider_definition: None,
-                    edr_data_provider_definition: None,
-                    copernicus_dataspace_provider_definition: None,
-                    sentinel_s2_l2_a_cogs_provider_definition: None,
-                    stac_data_provider_definition: None,
-                    wildlive_data_connector_definition: None,
-                }
-            }
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: Some(data_provider_definition.clone()),
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -981,7 +961,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             },
             TypedDataProviderDefinition::GbifDataProviderDefinition(data_provider_definition) => {
                 Self {
-                    aruna_data_provider_definition: None,
                     dataset_layer_listing_provider_definition: None,
                     gbif_data_provider_definition: Some(data_provider_definition.clone()),
                     gfbio_abcd_data_provider_definition: None,
@@ -999,7 +978,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: Some(data_provider_definition.clone()),
@@ -1016,7 +994,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1033,7 +1010,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1050,7 +1026,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1067,7 +1042,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1083,7 +1057,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             },
             TypedDataProviderDefinition::EdrDataProviderDefinition(data_provider_definition) => {
                 Self {
-                    aruna_data_provider_definition: None,
                     dataset_layer_listing_provider_definition: None,
                     gbif_data_provider_definition: None,
                     gfbio_abcd_data_provider_definition: None,
@@ -1101,7 +1074,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1118,7 +1090,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1134,7 +1105,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             },
             TypedDataProviderDefinition::StacDataProviderDefinition(data_provider_definition) => {
                 Self {
-                    aruna_data_provider_definition: None,
                     dataset_layer_listing_provider_definition: None,
                     gbif_data_provider_definition: None,
                     gfbio_abcd_data_provider_definition: None,
@@ -1152,7 +1122,6 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
             TypedDataProviderDefinition::WildliveDataConnectorDefinition(
                 data_provider_definition,
             ) => Self {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1177,24 +1146,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
     fn try_from(result_descriptor: TypedDataProviderDefinitionDbType) -> Result<Self, Self::Error> {
         match result_descriptor {
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: Some(data_provider_definition),
-                dataset_layer_listing_provider_definition: None,
-                gbif_data_provider_definition: None,
-                gfbio_abcd_data_provider_definition: None,
-                gfbio_collections_data_provider_definition: None,
-                ebv_portal_data_provider_definition: None,
-                net_cdf_cf_data_provider_definition: None,
-                pangaea_data_provider_definition: None,
-                edr_data_provider_definition: None,
-                copernicus_dataspace_provider_definition: None,
-                sentinel_s2_l2_a_cogs_provider_definition: None,
-                stac_data_provider_definition: None,
-                wildlive_data_connector_definition: None,
-            } => Ok(TypedDataProviderDefinition::ArunaDataProviderDefinition(
-                data_provider_definition,
-            )),
-            TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: Some(data_provider_definition),
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1213,7 +1164,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: Some(data_provider_definition),
                 gfbio_abcd_data_provider_definition: None,
@@ -1230,7 +1180,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: Some(data_provider_definition),
@@ -1249,7 +1198,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1268,7 +1216,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1287,7 +1234,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1304,7 +1250,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1321,7 +1266,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1338,7 +1282,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1357,7 +1300,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1376,7 +1318,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 ),
             ),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1393,7 +1334,6 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 data_provider_definition,
             )),
             TypedDataProviderDefinitionDbType {
-                aruna_data_provider_definition: None,
                 dataset_layer_listing_provider_definition: None,
                 gbif_data_provider_definition: None,
                 gfbio_abcd_data_provider_definition: None,
@@ -1501,9 +1441,13 @@ delegate_from_to_sql!(DataPath, DataPathDbType);
 mod tests {
     use geoengine_datatypes::{
         dataset::DataProviderId,
-        primitives::{CacheTtlSeconds, Coordinate2D, SpatialPartition2D, TimeInterval},
-        util::Identifier,
+        primitives::{
+            CacheTtlSeconds, Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval,
+        },
+        raster::GeoTransform,
+        util::{Identifier, NonZeroFiniteF64},
     };
+    use geoengine_operators::source::GdalDatasetGeoTransform;
     use tokio_postgres::NoTls;
 
     use super::*;
@@ -1626,8 +1570,75 @@ mod tests {
                 ],
             )
             .await;
+
+            assert_sql_type(
+                &pool,
+                "GeoTransform",
+                [
+                    GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
+                    // upside-down
+                    GeoTransform::new_unchecked((0., 0.).into(), 1., 1.),
+                ],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "SpatialResolution",
+                [SpatialResolution::new_unchecked(0.5, 2.)],
+            )
+            .await;
+
+            assert_sql_type(
+                &pool,
+                "GdalDatasetGeoTransform",
+                [GdalDatasetGeoTransform {
+                    origin_coordinate: (1., 2.).into(),
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.25),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.25),
+                }],
+            )
+            .await;
         })
         .await;
+    }
+
+    #[ge_context::test]
+    async fn it_rejects_invalid_pixel_sizes_when_loading(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> crate::error::Result<()> {
+        let conn = app_ctx.pool.get().await?;
+
+        let row = conn
+            .query_one(
+                r#"SELECT ROW(ROW(0, 0)::"Coordinate2D", 0, -1)::"GeoTransform""#,
+                &[],
+            )
+            .await?;
+        assert!(row.try_get::<_, GeoTransform>(0).is_err());
+
+        let row = conn
+            .query_one(
+                r#"SELECT ROW(ROW(0, 0)::"Coordinate2D", 1, 'NaN')::"GdalDatasetGeoTransform""#,
+                &[],
+            )
+            .await?;
+        assert!(row.try_get::<_, GdalDatasetGeoTransform>(0).is_err());
+
+        let row = conn
+            .query_one(r#"SELECT ROW(-1, 1)::"SpatialResolution""#, &[])
+            .await?;
+        assert!(row.try_get::<_, SpatialResolution>(0).is_err());
+
+        let row = conn
+            .query_one(r#"SELECT ROW(1, 1)::"SpatialResolution""#, &[])
+            .await?;
+        assert_eq!(
+            row.try_get::<_, SpatialResolution>(0)?,
+            SpatialResolution::new_unchecked(1., 1.)
+        );
+
+        Ok(())
     }
 
     #[ge_context::test]

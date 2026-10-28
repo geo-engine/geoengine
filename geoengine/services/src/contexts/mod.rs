@@ -36,7 +36,7 @@ use geoengine_operators::{
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
         QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
     },
-    machine_learning::MlModelLoadingInfo,
+    machine_learning::{MlModelLoadingInfo, onnx_util::OrtEnvironment},
     meta::{
         quota::{QuotaCheck, QuotaChecker, QuotaTracking},
         wrapper::InitializedOperatorWrapper,
@@ -56,7 +56,7 @@ pub use migrations::{
     CurrentSchemaMigration, DatabaseVersion, Migration, MigrationResult, initialize_database,
     migrate_database,
 };
-pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
+pub use postgres::{ContextSpec, PostgresContext, PostgresDb, PostgresSessionContext};
 pub use session::{Session, SessionId};
 
 mod db_types;
@@ -262,6 +262,7 @@ where
     gdal_process_pool: Arc<GdalProcessPool>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
+    ort_environment: OrtEnvironment,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -275,6 +276,7 @@ where
         gdal_process_pool: Arc<GdalProcessPool>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         default_cache_ttl: CacheTtlSeconds,
+        ort_environment: OrtEnvironment,
     ) -> Self {
         Self {
             db,
@@ -283,6 +285,7 @@ where
             gdal_process_pool,
             new_raster_cache,
             default_cache_ttl,
+            ort_environment,
         }
     }
 }
@@ -425,6 +428,10 @@ where
             storage_path,
             metadata: ml_model.metadata,
         })
+    }
+
+    fn ort_environment(&self) -> &OrtEnvironment {
+        &self.ort_environment
     }
 }
 

@@ -767,6 +767,7 @@ mod tests {
     use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         primitives::{DateTime, TimeInterval},
         raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
@@ -829,7 +830,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeDescriptor::new_irregular(None),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GeoTransform::new_unchecked((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -842,8 +843,8 @@ mod tests {
                             rasterband_channel: 1,
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: (50., 55.).into(),
-                                x_pixel_size: 1.,
-                                y_pixel_size: -1.,
+                                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                             },
                             width: 5,
                             height: 5,
@@ -864,8 +865,8 @@ mod tests {
                             rasterband_channel: 1,
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: (50., 55.).into(),
-                                x_pixel_size: 1.,
-                                y_pixel_size: -1.,
+                                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                             },
                             width: 5,
                             height: 5,
@@ -1003,7 +1004,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeDescriptor::new_irregular(None),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GeoTransform::new_unchecked((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -1017,8 +1018,8 @@ mod tests {
                             rasterband_channel: 1,
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: (50., 55.).into(),
-                                x_pixel_size: 1.,
-                                y_pixel_size: -1.,
+                                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                             },
                             width: 5,
                             height: 5,
@@ -1040,8 +1041,8 @@ mod tests {
                             rasterband_channel: 1,
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: (50., 55.).into(),
-                                x_pixel_size: 1.,
-                                y_pixel_size: -1.,
+                                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                             },
                             width: 5,
                             height: 5,
@@ -1063,8 +1064,8 @@ mod tests {
                             rasterband_channel: 1,
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: (50., 55.).into(),
-                                x_pixel_size: 1.,
-                                y_pixel_size: -1.,
+                                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                             },
                             width: 5,
                             height: 5,

@@ -6,7 +6,7 @@ use crate::{
     delegate_from_to_sql,
     error::Error,
     operations::image::{Breakpoint, Colorizer, RasterColorizer, RgbParams, RgbaColor},
-    util::NotNanF64,
+    util::NonNanF64,
 };
 use postgres_types::{FromSql, ToSql};
 use std::collections::BTreeMap;
@@ -172,7 +172,7 @@ impl TryFrom<TypedGeometryDbType> for TypedGeometry {
 #[derive(Clone, Debug, Eq, PartialEq, FromSql, ToSql)]
 #[postgres(name = "Breakpoint")]
 pub struct BreakpointDbType {
-    pub value: NotNanF64,
+    pub value: NonNanF64,
     pub color: RgbaColor,
 }
 

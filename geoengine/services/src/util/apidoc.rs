@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use utoipa::{
     Modify,
-    openapi::{RefOr, Schema},
+    openapi::{
+        ObjectBuilder, OneOfBuilder, RefOr, Schema,
+        schema::{AdditionalProperties, ArrayItems},
+    },
 };
 
 pub struct OpenApiServerInfo;
@@ -142,6 +145,88 @@ impl DeriveDiscriminatorMapping {
     }
 }
 
+/// utoipa 6 documents an inlined field with a doc comment as
+/// `allOf: [<inlined schema>, {"type": "object", "description": <doc comment>}]`.
+/// This requires every value to be an object, which is wrong for non-object schemas, e.g., string enums.
+/// This modifier replaces such an `allOf` by `oneOf: [<inlined schema>]` with the description,
+/// which is what utoipa 5 generated. Keeping this shape keeps the inlined schema identical across fields,
+/// so the generated API clients share one model instead of one per description.
+///
+/// TODO: remove once utoipa no longer generates this (cf. <https://github.com/juhaku/utoipa/issues/1507>)
+pub struct CollapseInlinedFieldDescriptions;
+
+impl Modify for CollapseInlinedFieldDescriptions {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let Some(components) = openapi.components.as_mut() else {
+            return; // no components -> nothing to do
+        };
+
+        for schema in components.schemas.values_mut() {
+            Self::collapse(schema);
+        }
+    }
+}
+
+impl CollapseInlinedFieldDescriptions {
+    fn collapse(schema: &mut RefOr<Schema>) {
+        if let Some(collapsed) = Self::collapsed_all_of(schema) {
+            *schema = collapsed;
+        }
+
+        let RefOr::T(schema) = schema else {
+            return; // references are collapsed where they are defined
+        };
+
+        match schema {
+            Schema::Object(object) => {
+                for property in object.properties.values_mut() {
+                    Self::collapse(property);
+                }
+                if let Some(additional_properties) = object.additional_properties.as_mut()
+                    && let AdditionalProperties::RefOr(additional_properties) =
+                        additional_properties.as_mut()
+                {
+                    Self::collapse(additional_properties);
+                }
+            }
+            Schema::Array(array) => {
+                if let ArrayItems::RefOrSchema(items) = &mut array.items {
+                    Self::collapse(items);
+                }
+            }
+            Schema::OneOf(one_of) => one_of.items.iter_mut().for_each(Self::collapse),
+            Schema::AllOf(all_of) => all_of.items.iter_mut().for_each(Self::collapse),
+            Schema::AnyOf(any_of) => any_of.items.iter_mut().for_each(Self::collapse),
+            _ => {}
+        }
+    }
+
+    /// Returns a `oneOf` of the inlined schema with the description if `schema` is an `allOf` of
+    /// the inlined schema and an otherwise empty object that only holds the description.
+    fn collapsed_all_of(schema: &RefOr<Schema>) -> Option<RefOr<Schema>> {
+        let RefOr::T(Schema::AllOf(all_of)) = schema else {
+            return None;
+        };
+        let [inlined, RefOr::T(Schema::Object(description_object))] = all_of.items.as_slice()
+        else {
+            return None;
+        };
+
+        let mut empty_object = description_object.clone();
+        let description = empty_object.description.take()?;
+        if empty_object != ObjectBuilder::new().build() {
+            return None; // the object carries more than the description
+        }
+
+        Some(
+            OneOfBuilder::new()
+                .item(inlined.clone())
+                .description(Some(description))
+                .into(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -263,6 +348,107 @@ mod tests {
                     },
                 },
             })
+        );
+    }
+
+    #[test]
+    fn it_collapses_inlined_field_descriptions() {
+        #[allow(dead_code)]
+        #[derive(Serialize, ToSchema)]
+        #[serde(rename_all = "lowercase")]
+        enum Kind {
+            Map,
+            #[serde(untagged)]
+            Other(String),
+        }
+        #[allow(dead_code)]
+        #[derive(Serialize, ToSchema)]
+        struct Inner {
+            text: String,
+        }
+        #[allow(dead_code)]
+        #[derive(Serialize, ToSchema)]
+        struct Outer {
+            /// The kind
+            #[schema(inline)]
+            kind: Kind,
+            /// The inner object
+            #[schema(inline)]
+            inner: Inner,
+        }
+        #[allow(dead_code)]
+        #[derive(Serialize, ToSchema)]
+        struct Flattened {
+            #[serde(flatten)]
+            inner: Inner,
+            /// Not just a description
+            extra: String,
+        }
+
+        let mut openapi = OpenApiBuilder::new()
+            .components(Some(
+                ComponentsBuilder::new()
+                    .schema_from::<Outer>()
+                    .schema_from::<Flattened>()
+                    .into(),
+            ))
+            .build();
+        let flattened_before =
+            serde_json::to_value(&openapi.components.as_ref().unwrap().schemas["Flattened"])
+                .unwrap();
+        CollapseInlinedFieldDescriptions.modify(&mut openapi);
+        let schemas = openapi.components.unwrap().schemas;
+
+        assert_eq!(
+            serde_json::to_value(&schemas["Outer"]).unwrap(),
+            serde_json::json!({
+                "type": "object",
+                "required": ["kind", "inner"],
+                "properties": {
+                    "kind": {
+                        "oneOf": [
+                            {
+                                "oneOf": [
+                                    {
+                                        "type": "string",
+                                        "enum": ["map"],
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": ["other"],
+                                        "properties": {
+                                            "other": {
+                                                "type": "string",
+                                            },
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                        "description": "The kind",
+                    },
+                    "inner": {
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "required": ["text"],
+                                "properties": {
+                                    "text": {
+                                        "type": "string",
+                                    },
+                                },
+                            },
+                        ],
+                        "description": "The inner object",
+                    },
+                },
+            })
+        );
+
+        // a flattened struct with additional properties is not collapsed
+        assert_eq!(
+            serde_json::to_value(&schemas["Flattened"]).unwrap(),
+            flattened_before
         );
     }
 }

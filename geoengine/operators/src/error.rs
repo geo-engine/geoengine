@@ -11,7 +11,6 @@ use geoengine_datatypes::primitives::{FeatureDataType, TimeInterval};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use itertools::join;
-use ordered_float::FloatIsNan;
 use snafu::prelude::*;
 use std::ops::Range;
 use std::path::PathBuf;
@@ -140,9 +139,9 @@ pub enum Error {
         found: String,
     },
 
-    #[snafu(display("NotNan error: {}", source))]
-    InvalidNotNanFloatKey {
-        source: ordered_float::FloatIsNan,
+    #[snafu(display("Invalid number: {}", source))]
+    InvalidNumber {
+        source: typed_floats::InvalidNumber,
     },
 
     #[snafu(display("Column types do not match: {:?} - {:?}", left, right))]
@@ -304,12 +303,6 @@ pub enum Error {
 
     #[snafu(display("Input `{}` must be greater than zero at `{}`", name, scope))]
     InputMustBeGreaterThanZero {
-        scope: &'static str,
-        name: &'static str,
-    },
-
-    #[snafu(display("Input `{}` must be zero or positive at `{}`", name, scope))]
-    InputMustBeZeroOrPositive {
         scope: &'static str,
         name: &'static str,
     },
@@ -595,9 +588,9 @@ impl From<crate::util::statistics::StatisticsError> for Error {
     }
 }
 
-impl From<ordered_float::FloatIsNan> for Error {
-    fn from(source: FloatIsNan) -> Self {
-        Error::InvalidNotNanFloatKey { source }
+impl From<typed_floats::InvalidNumber> for Error {
+    fn from(source: typed_floats::InvalidNumber) -> Self {
+        Error::InvalidNumber { source }
     }
 }
 

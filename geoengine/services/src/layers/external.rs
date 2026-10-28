@@ -2,7 +2,6 @@ use super::listing::LayerCollectionProvider;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::dataset_listing_provider::DatasetLayerListingProviderDefinition;
 use crate::datasets::external::WildliveDataConnectorDefinition;
-use crate::datasets::external::aruna::ArunaDataProviderDefinition;
 use crate::datasets::external::edr::EdrDataProviderDefinition;
 use crate::datasets::external::gbif::GbifDataProviderDefinition;
 use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
@@ -235,7 +234,6 @@ impl DataProvider for SharedDataConnector {
 #[serde(tag = "type")] // TODO: rename_all = "camelCase"
 #[allow(clippy::enum_variant_names)] // TODO: think about better names
 pub enum TypedDataProviderDefinition {
-    ArunaDataProviderDefinition(ArunaDataProviderDefinition),
     CopernicusDataspaceDataProviderDefinition(CopernicusDataspaceDataProviderDefinition),
     DatasetLayerListingProviderDefinition(DatasetLayerListingProviderDefinition),
     EbvPortalDataProviderDefinition(EbvPortalDataProviderDefinition),
@@ -248,12 +246,6 @@ pub enum TypedDataProviderDefinition {
     SentinelS2L2ACogsProviderDefinition(SentinelS2L2ACogsProviderDefinition),
     StacDataProviderDefinition(StacDataProviderDefinition),
     WildliveDataConnectorDefinition(WildliveDataConnectorDefinition),
-}
-
-impl From<ArunaDataProviderDefinition> for TypedDataProviderDefinition {
-    fn from(def: ArunaDataProviderDefinition) -> Self {
-        Self::ArunaDataProviderDefinition(def)
-    }
 }
 
 impl From<GbifDataProviderDefinition> for TypedDataProviderDefinition {
@@ -325,7 +317,6 @@ impl From<StacDataProviderDefinition> for TypedDataProviderDefinition {
 impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition<D>> {
     fn from(typed: TypedDataProviderDefinition) -> Self {
         match typed {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
                 Box::new(def)
             }
@@ -351,7 +342,6 @@ impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderD
 impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderDefinition {
     fn as_ref(&self) -> &(dyn DataProviderDefinition<D> + 'static) {
         match self {
-            Self::ArunaDataProviderDefinition(def) => def,
             Self::DatasetLayerListingProviderDefinition(def) => def,
             Self::GbifDataProviderDefinition(def) => def,
             Self::GfbioAbcdDataProviderDefinition(def) => def,
@@ -372,7 +362,6 @@ impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderD
 impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
     async fn initialize(self: Box<Self>, db: D) -> Result<Box<dyn DataProvider>> {
         match *self {
-            Self::ArunaDataProviderDefinition(def) => Box::new(def).initialize(db).await,
             Self::DatasetLayerListingProviderDefinition(def) => Box::new(def).initialize(db).await,
             Self::GbifDataProviderDefinition(def) => Box::new(def).initialize(db).await,
             Self::GfbioAbcdDataProviderDefinition(def) => Box::new(def).initialize(db).await,
@@ -392,7 +381,6 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn type_name(&self) -> &'static str {
         match self {
-            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
             Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
@@ -422,7 +410,6 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn name(&self) -> String {
         match self {
-            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
             Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::name(def)
             }
@@ -448,7 +435,6 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn id(&self) -> DataProviderId {
         match self {
-            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
             Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::id(def)
             }
@@ -472,7 +458,6 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn priority(&self) -> i16 {
         match self {
-            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::priority(def),
             Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
@@ -510,9 +495,6 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
         Self: Sized,
     {
         match self {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other).await
-            }
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::update(def, other).await
             }

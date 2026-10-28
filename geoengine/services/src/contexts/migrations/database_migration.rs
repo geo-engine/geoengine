@@ -397,7 +397,7 @@ pub mod tests {
             .await
             .unwrap();
 
-        assert!(!projects.is_empty());
+        assert_ne!(projects, [] as [_; 0]);
 
         db.load_workflow(&WorkflowId::from_u128(
             0x38ddfc17_016e_4910_8adf_b1af36a8590c,

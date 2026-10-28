@@ -169,7 +169,7 @@ impl<'a> Iterator for RectangleIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.stack.pop_front().map(|node| {
             if let Some(ref link) = node.link {
-                for child_node in link.iter() {
+                for child_node in link {
                     self.stack.push_back(child_node);
                 }
             }
@@ -182,13 +182,17 @@ impl<'a> Iterator for RectangleIter<'a> {
 #[cfg(test)]
 mod test {
     use crate::processing::circle_merging_quadtree::circle_radius_model::LogScaledRadius;
+    use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 
     use super::*;
     use std::{cmp::Ordering, num::NonZeroUsize};
 
     #[test]
     fn insert_single_item() {
-        let circle_radius_model = LogScaledRadius::new(5.0, 1.0).unwrap();
+        let circle_radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(5.0),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
         let mut tree = CircleMergingQuadtree::new(
             BoundingBox2D::new_from_center(Coordinate2D::new(100.0, 100.0), 100.0, 100.0).unwrap(),
             circle_radius_model,
@@ -220,7 +224,10 @@ mod test {
         let points = vec![Coordinate2D::new(50.0, 50.0), Coordinate2D::new(50.0, 50.0)];
         let points_size = NonZeroUsize::new(points.len()).unwrap();
 
-        let circle_radius_model = LogScaledRadius::new(5.0, 1.0).unwrap();
+        let circle_radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(5.0),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
         let mut tree = CircleMergingQuadtree::new(
             BoundingBox2D::new_from_center(Coordinate2D::new(100.0, 100.0), 100.0, 100.0).unwrap(),
             circle_radius_model,
@@ -257,7 +264,10 @@ mod test {
         let points = vec![Coordinate2D::new(48.0, 48.0), Coordinate2D::new(50.0, 50.0)];
         let points_size = NonZeroUsize::new(points.len()).unwrap();
 
-        let circle_radius_model = LogScaledRadius::new(5.0, 1.0).unwrap();
+        let circle_radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(5.0),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
         let mut tree = CircleMergingQuadtree::new(
             BoundingBox2D::new_from_center(Coordinate2D::new(100.0, 100.0), 100.0, 100.0).unwrap(),
             circle_radius_model,
@@ -300,7 +310,10 @@ mod test {
         ];
         let points_size = points.len();
 
-        let circle_radius_model = LogScaledRadius::new(5.0, 1.0).unwrap();
+        let circle_radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(5.0),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
         let mut tree = CircleMergingQuadtree::new(
             BoundingBox2D::new_from_center(Coordinate2D::new(100.0, 100.0), 100.0, 100.0).unwrap(),
             circle_radius_model,
@@ -336,7 +349,10 @@ mod test {
     fn insert_two_items_no_merge() {
         let points = vec![Coordinate2D::new(50.0, 50.0), Coordinate2D::new(75.0, 75.0)];
 
-        let circle_radius_model = LogScaledRadius::new(5.0, 1.0).unwrap();
+        let circle_radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(5.0),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
         let mut tree = CircleMergingQuadtree::new(
             BoundingBox2D::new_from_center(Coordinate2D::new(100.0, 100.0), 100.0, 100.0).unwrap(),
             circle_radius_model,
@@ -394,7 +410,10 @@ mod test {
         let bounds =
             BoundingBox2D::new_from_center(Coordinate2D::new(100.0, 100.0), 100.0, 100.0).unwrap();
 
-        let circle_radius_model = LogScaledRadius::new(5.0, 1.0).unwrap();
+        let circle_radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(5.0),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
         let tree = CircleMergingQuadtree::new(bounds, circle_radius_model, 1);
 
         let mut iter = tree.iter_rectangles();
@@ -413,7 +432,10 @@ mod test {
             Coordinate2D::new(50.0, 50.0),
         ];
 
-        let circle_radius_model = LogScaledRadius::new(5.0, 1.0).unwrap();
+        let circle_radius_model = LogScaledRadius::new(
+            PositiveFiniteF64::new_unchecked(5.0),
+            NonNegativeFiniteF64::new_unchecked(1.0),
+        );
         let mut tree = CircleMergingQuadtree::new(bounds, circle_radius_model, 1);
 
         for point in &points {

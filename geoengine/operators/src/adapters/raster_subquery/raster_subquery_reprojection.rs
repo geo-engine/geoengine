@@ -437,7 +437,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
             spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                GeoTransform::new(Coordinate2D::new(0., 2.), 1., -1.),
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 2.), 1., -1.),
                 GridShape::new_2d(2, 4).bounding_box(),
             )),
             bands: RasterBandDescriptors::new_single_band(),

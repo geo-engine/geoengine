@@ -81,8 +81,6 @@ pub mod float {
 
 /// Serialize and deserialize float options with special treatment of NaN
 pub mod float_option {
-    use core::f64;
-
     use super::*;
 
     struct FloatOrStringOptionVisitor;

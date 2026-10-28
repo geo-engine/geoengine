@@ -84,7 +84,7 @@ CREATE TYPE "Provenance" AS (
     uri text
 );
 
-CREATE DOMAIN "RgbaColor" AS smallint [4] CHECK (
+CREATE DOMAIN "RgbaColor" AS smallint[4] CHECK (
     0 <= ALL(value) AND 255 >= ALL(value)
 );
 
@@ -426,7 +426,7 @@ CREATE TYPE "OgrSourceErrorSpec" AS ENUM (
 -- We store `Polygon`s as an array of rings that are closed postgres `path`s.
 -- We do not use an array of `polygon`s as it is the same as storing a path 
 -- plus a stored bbox that we don't want to compute and store (overhead).
-CREATE DOMAIN "Polygon" AS path [];
+CREATE DOMAIN "Polygon" AS path[];
 
 CREATE TYPE "TypedGeometry" AS (
     -- oneOf
@@ -488,7 +488,7 @@ CREATE TYPE "GdalMetadataMapping" AS (
     target_type "RasterPropertiesEntryType"
 );
 
-CREATE DOMAIN "StringPair" AS text [2];
+CREATE DOMAIN "StringPair" AS text[2];
 
 CREATE TYPE "GdalRetryOptions" AS (
     max_retries bigint
@@ -653,12 +653,12 @@ CREATE TABLE datasets (
     name "DatasetName" UNIQUE NOT NULL,
     display_name text NOT NULL,
     description text NOT NULL,
-    tags text [],
+    tags text[],
     source_operator text NOT NULL,
     result_descriptor "ResultDescriptor" NOT NULL,
     meta_data "MetaDataDefinition" NOT NULL,
     symbology "Symbology",
-    provenance "Provenance" [],
+    provenance "Provenance"[],
     data_path "DataPath" -- TODO: NOT NULL for GdalMultiBand?
 );
 
@@ -679,7 +679,7 @@ CREATE TYPE "FileUpload" AS (
 CREATE TABLE uploads (
     id uuid PRIMARY KEY,
     -- user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-    files "FileUpload" [] NOT NULL
+    files "FileUpload"[] NOT NULL
 );
 
 CREATE TYPE "PropertyType" AS (key text, value text);
@@ -688,7 +688,7 @@ CREATE TABLE layer_collections (
     id uuid PRIMARY KEY,
     name text NOT NULL,
     description text NOT NULL,
-    properties "PropertyType" [] NOT NULL
+    properties "PropertyType"[] NOT NULL
 );
 
 CREATE TABLE layers (
@@ -697,8 +697,8 @@ CREATE TABLE layers (
     description text NOT NULL,
     workflow_id uuid REFERENCES workflows (id) NOT NULL,
     symbology "Symbology",
-    properties "PropertyType" [] NOT NULL,
-    metadata "TextTextKeyValue" [] NOT NULL
+    properties "PropertyType"[] NOT NULL,
+    metadata "TextTextKeyValue"[] NOT NULL
 );
 
 CREATE TABLE collection_layers (
@@ -713,18 +713,6 @@ CREATE TABLE collection_children (
     parent uuid REFERENCES layer_collections (id) ON DELETE CASCADE NOT NULL,
     child uuid REFERENCES layer_collections (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (parent, child)
-);
-
-CREATE TYPE "ArunaDataProviderDefinition" AS (
-    id uuid,
-    "name" text,
-    api_url text,
-    project_id text,
-    api_token text,
-    filter_label text,
-    cache_ttl int,
-    description text,
-    priority smallint
 );
 
 CREATE TYPE "DatabaseConnectionConfig" AS (
@@ -939,7 +927,6 @@ CREATE TYPE "StacDataProviderDefinition" AS (
 
 CREATE TYPE "DataProviderDefinition" AS (
     -- one of
-    aruna_data_provider_definition "ArunaDataProviderDefinition",
     gbif_data_provider_definition "GbifDataProviderDefinition",
     gfbio_abcd_data_provider_definition "GfbioAbcdDataProviderDefinition",
     gfbio_collections_data_provider_definition
@@ -996,11 +983,11 @@ CREATE TABLE ebv_provider_overviews (
 CREATE TABLE ebv_provider_groups (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
-    name text [] NOT NULL,
+    name text[] NOT NULL,
     title text NOT NULL,
     description text NOT NULL,
     data_type "RasterDataType",
-    data_range float [2],
+    data_range float[2],
     unit text NOT NULL,
 
     -- TODO: check if we need it
@@ -1044,7 +1031,7 @@ CREATE TABLE ebv_provider_timestamps (
 CREATE TABLE ebv_provider_loading_infos (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
-    group_names text [] NOT NULL,
+    group_names text[] NOT NULL,
     entity_id bigint NOT NULL,
     meta_data "GdalMetaDataList" NOT NULL,
 

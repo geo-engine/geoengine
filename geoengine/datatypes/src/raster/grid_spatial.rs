@@ -14,6 +14,7 @@ use crate::{
 use float_cmp::{ApproxEq, approx_eq};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use typed_floats::tf64;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, ToSql, FromSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -94,7 +95,7 @@ impl SpatialGridDefinition {
     #[must_use]
     pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
         Self {
-            geo_transform: GeoTransform::new(
+            geo_transform: GeoTransform::new_typed(
                 new_origin,
                 self.geo_transform.x_pixel_size(),
                 self.geo_transform.y_pixel_size(),
@@ -135,8 +136,8 @@ impl SpatialGridDefinition {
             self.geo_transform.origin_coordinate,
         );
 
-        if dist.x.abs() > self.geo_transform().x_pixel_size().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
-            || dist.y.abs() > self.geo_transform().y_pixel_size().abs() * 0.00001
+        if dist.x.abs() > self.geo_transform().x_pixel_size().get().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
+            || dist.y.abs() > self.geo_transform().y_pixel_size().get().abs() * 0.00001
         {
             return None;
         }
@@ -153,8 +154,11 @@ impl SpatialGridDefinition {
     /// Note: if the new resolution is not a multiple of the old resolution the new grid might cover a larger spatial area then self.
     #[must_use]
     pub fn with_changed_resolution(&self, new_res: SpatialResolution) -> Self {
-        let geo_transform =
-            GeoTransform::new(self.geo_transform.origin_coordinate, new_res.x, -new_res.y);
+        let geo_transform = GeoTransform::new_typed(
+            self.geo_transform.origin_coordinate,
+            tf64::NonZeroNonNaNFinite::from(new_res.x()),
+            -tf64::NonZeroNonNaNFinite::from(new_res.y()),
+        );
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&self.spatial_partition());
         SpatialGridDefinition::new(geo_transform, grid_bounds)
     }
@@ -190,7 +194,7 @@ impl SpatialGridDefinition {
 
     #[must_use]
     pub fn flip_axis_y(&self) -> Self {
-        let geo_transform = GeoTransform::new(
+        let geo_transform = GeoTransform::new_typed(
             self.geo_transform.origin_coordinate,
             self.geo_transform.x_pixel_size(),
             -self.geo_transform.y_pixel_size(),
@@ -412,13 +416,13 @@ mod tests {
     #[test]
     fn shift_bounds_relative_by_pixel_offset() {
         let s = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0),
+            GeoTransform::new_with_coordinate_x_y_unchecked(0.0, 1.0, 0.0, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
         let shifted_s = s.shift_bounds_relative_by_pixel_offset(GridIdx2D::new([1, 1]));
         assert_eq!(
             shifted_s.geo_transform(),
-            GeoTransform::new_with_coordinate_x_y(-1., 1.0, 1., -1.0)
+            GeoTransform::new_with_coordinate_x_y_unchecked(-1., 1.0, 1., -1.0)
         );
         assert_eq!(shifted_s.grid_bounds().min_index(), GridIdx2D::new([-1, 1]));
         assert_eq!(shifted_s.grid_bounds().max_index(), GridIdx2D::new([1, 3]));
@@ -429,12 +433,12 @@ mod tests {
     #[test]
     fn merge() {
         let s = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0),
+            GeoTransform::new_with_coordinate_x_y_unchecked(0.0, 1.0, 0.0, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
 
         let s_2 = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(1.0, 1.0, -1.0, -1.0),
+            GeoTransform::new_with_coordinate_x_y_unchecked(1.0, 1.0, -1.0, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
 
@@ -464,12 +468,12 @@ mod tests {
     #[test]
     fn no_merge_origin() {
         let s = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0),
+            GeoTransform::new_with_coordinate_x_y_unchecked(0.0, 1.0, 0.0, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
 
         let s_2 = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(1.1, 1.0, -1.1, -1.0),
+            GeoTransform::new_with_coordinate_x_y_unchecked(1.1, 1.0, -1.1, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
 
@@ -479,12 +483,12 @@ mod tests {
     #[test]
     fn no_merge_pixel_size() {
         let s = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0),
+            GeoTransform::new_with_coordinate_x_y_unchecked(0.0, 1.0, 0.0, -1.0),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
 
         let s_2 = SpatialGridDefinition::new(
-            GeoTransform::new_with_coordinate_x_y(1.0, 1.1, -1.0, -1.1),
+            GeoTransform::new_with_coordinate_x_y_unchecked(1.0, 1.1, -1.0, -1.1),
             GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
         );
 
@@ -514,7 +518,7 @@ mod tests {
         // should thus roughly be like the original `res_4326`
 
         let spatial_grid_3857 = SpatialGridDefinition::new(
-            geotransform_3857.into(),
+            geotransform_3857.try_into().unwrap(),
             GridShape::new_2d(dataset_3857.raster_size().1, dataset_3857.raster_size().0)
                 .bounding_box(),
         );
@@ -528,14 +532,20 @@ mod tests {
             )
             .unwrap();
 
-        assert!(1. - (result_res.geo_transform().x_pixel_size() / res_4326.x).abs() < 0.02);
-        assert!(1. - (result_res.geo_transform().y_pixel_size() / res_4326.y).abs() < 0.02);
+        assert!(
+            1. - (result_res.geo_transform().x_pixel_size().get() / res_4326.x().get()).abs()
+                < 0.02
+        );
+        assert!(
+            1. - (result_res.geo_transform().y_pixel_size().get() / res_4326.y().get()).abs()
+                < 0.02
+        );
     }
 
     #[test]
     fn flip_axis_y() {
         let spatial_grid = SpatialGridDefinition::new(
-            GeoTransform::new(Coordinate2D::new(20.0, 20.0), 3., 2.),
+            GeoTransform::new_unchecked(Coordinate2D::new(20.0, 20.0), 3., 2.),
             GridBoundingBox2D::new_min_max(10, 25, 1, 2).unwrap(),
         );
 
@@ -543,7 +553,7 @@ mod tests {
 
         assert_eq!(
             fliped.geo_transform,
-            GeoTransform::new(Coordinate2D::new(20.0, 20.0), 3., -2.)
+            GeoTransform::new_unchecked(Coordinate2D::new(20.0, 20.0), 3., -2.)
         );
 
         assert_eq!(
@@ -555,37 +565,41 @@ mod tests {
     #[test]
     fn intersection_with_floating_point_discrepancies() {
         let a = SpatialGridDefinition {
-            geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+            geo_transform: GeoTransform::new_unchecked((-180.0, 90.).into(), 0.2, -0.2),
             grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
         };
 
         let b = SpatialGridDefinition {
-            geo_transform: GeoTransform::new((-45.0, 22.399_999_999_999_99).into(), 0.2, -0.2),
+            geo_transform: GeoTransform::new_unchecked(
+                (-45.0, 22.399_999_999_999_99).into(),
+                0.2,
+                -0.2,
+            ),
             grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
         };
 
         assert_eq!(
             a.intersection(&b),
             Some(SpatialGridDefinition {
-                geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+                geo_transform: GeoTransform::new_unchecked((-180.0, 90.).into(), 0.2, -0.2),
                 grid_bounds: GridBoundingBox2D::new([338, 675], [899, 1799]).unwrap(),
             })
         );
 
         let a = SpatialGridDefinition {
-            geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+            geo_transform: GeoTransform::new_unchecked((-180.0, 90.).into(), 0.2, -0.2),
             grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
         };
 
         let b = SpatialGridDefinition {
-            geo_transform: GeoTransform::new((-45.0, 90.0).into(), 0.2, -0.2),
+            geo_transform: GeoTransform::new_unchecked((-45.0, 90.0).into(), 0.2, -0.2),
             grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
         };
 
         assert_eq!(
             a.intersection(&b),
             Some(SpatialGridDefinition {
-                geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+                geo_transform: GeoTransform::new_unchecked((-180.0, 90.).into(), 0.2, -0.2),
                 grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1799]).unwrap(),
             })
         );
@@ -594,14 +608,18 @@ mod tests {
     #[test]
     fn move_origin_with_floating_point_discrepancies() {
         let tile = SpatialGridDefinition {
-            geo_transform: GeoTransform::new((0.0, 0.0).into(), 0.2, -0.2),
+            geo_transform: GeoTransform::new_unchecked((0.0, 0.0).into(), 0.2, -0.2),
             grid_bounds: GridBoundingBox2D::new([0, 512], [511, 1023]).unwrap(),
         };
 
         assert_eq!(
             tile.with_moved_origin_exact_grid((-45.0, 22.399_999_999_999_99).into()),
             Some(SpatialGridDefinition {
-                geo_transform: GeoTransform::new((-45.0, 22.400_000_000_000_002).into(), 0.2, -0.2), // TODO: 22.3999..9 vs 22.4 vs. 22.40000..01
+                geo_transform: GeoTransform::new_unchecked(
+                    (-45.0, 22.400_000_000_000_002).into(),
+                    0.2,
+                    -0.2
+                ), // TODO: 22.3999..9 vs 22.4 vs. 22.40000..01
                 grid_bounds: GridBoundingBox2D::new([112, 737], [623, 1248]).unwrap(),
             })
         );
@@ -610,12 +628,12 @@ mod tests {
     #[test]
     fn it_snaps_to_overview_levels() {
         let tile_dataset_intersection_grid = SpatialGridDefinition::new(
-            GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
+            GeoTransform::new_unchecked((-180.0, 90.0).into(), 0.2, -0.2),
             GridBoundingBox2D::new([1, 1], [3, 3]).unwrap(),
         );
 
         let dataset_grid = SpatialGridDefinition::new(
-            GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
+            GeoTransform::new_unchecked((-180.0, 90.0).into(), 0.2, -0.2),
             GridBoundingBox2D::new([0, 0], [8, 8]).unwrap(),
         );
 
@@ -625,7 +643,7 @@ mod tests {
         assert_eq!(
             snapped,
             Some(SpatialGridDefinition::new(
-                GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
+                GeoTransform::new_unchecked((-180.0, 90.0).into(), 0.2, -0.2),
                 GridBoundingBox2D::new([0, 0], [3, 3]).unwrap()
             ))
         );

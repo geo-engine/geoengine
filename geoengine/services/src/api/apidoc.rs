@@ -47,9 +47,8 @@ use crate::{
                 ml_models::MlModelNameResponse,
             },
             services::{
-                AddDataset, AddLayer, ArunaDataProviderDefinition,
-                CopernicusDataspaceDataProviderDefinition, CreateDataset, DataPath,
-                DatabaseConnectionConfig, Dataset, DatasetDefinition,
+                AddDataset, AddLayer, CopernicusDataspaceDataProviderDefinition, CreateDataset,
+                DataPath, DatabaseConnectionConfig, Dataset, DatasetDefinition,
                 DatasetLayerListingCollection, DatasetLayerListingProviderDefinition,
                 EbvPortalDataProviderDefinition, EdrDataProviderDefinition, EdrVectorSpec,
                 GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition,
@@ -94,7 +93,7 @@ use crate::{
         UserSession,
     },
     util::{
-        apidoc::{DeriveDiscriminatorMapping, OpenApiServerInfo},
+        apidoc::{CollapseInlinedFieldDescriptions, DeriveDiscriminatorMapping, OpenApiServerInfo},
         server::ServerInfo,
     },
 };
@@ -422,7 +421,6 @@ use utoipa::{
             GridIdx2D,
             GeoTransform,
             TypedDataProviderDefinition,
-            ArunaDataProviderDefinition,
             DatasetLayerListingProviderDefinition,
             GbifDataProviderDefinition,
             GfbioAbcdDataProviderDefinition,
@@ -459,7 +457,13 @@ use utoipa::{
         (path = "/processingGraphs", api = crate::api::model::processing_graphs::OperatorsApi),
         (path = "/ogc", api = crate::api::handlers::ogc::OgcApiDoc),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
+    modifiers(
+        &SecurityAddon,
+        &ApiDocInfo,
+        &OpenApiServerInfo,
+        &DeriveDiscriminatorMapping,
+        &CollapseInlinedFieldDescriptions
+    ),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;

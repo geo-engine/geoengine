@@ -159,9 +159,6 @@ pub enum AddDatasetTilesError {
         found: geoengine_datatypes::raster::GeoTransform,
         file_path: String,
     },
-    InvalidTileFileGeoTransform {
-        file_path: String,
-    },
 }
 
 impl ResponseError for AddDatasetTilesError {

@@ -333,6 +333,10 @@ impl ReplaceRawArrayCoords for MultiPointCollection {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::single_range_in_vec_init,
+    reason = "`column_range_filter` takes a slice of ranges"
+)]
 mod tests {
     use super::*;
 

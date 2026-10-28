@@ -97,11 +97,11 @@ where
 
             let accum = this.accum.take().expect("checked via `is_terminated`");
 
-            let time_does_not_match = match (&raster_tile, &mut this.time) {
+            let time_does_not_match = match (&raster_tile, &mut *this.time) {
                 (Ok(raster_tile), Some(time)) => raster_tile.time != *time,
                 (Ok(raster_tile), time_option) => {
                     // if there is no time, set it
-                    **time_option = Some(raster_tile.time);
+                    *time_option = Some(raster_tile.time);
                     false
                 }
                 (Err(_), _) => false,

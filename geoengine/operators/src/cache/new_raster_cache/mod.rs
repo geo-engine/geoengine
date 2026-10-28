@@ -735,7 +735,7 @@ impl StorageFormat for TypedCompressedRasterTile2D {
         .map_err(|source| CacheError::CouldNotRunDecompressionTask { source })?
     }
 
-    async fn byte_size(&self) -> Result<usize> {
+    fn byte_size(&self) -> impl std::future::Future<Output = Result<usize>> + Send {
         let size = match self {
             TypedCompressedRasterTile2D::I8(compressed) => compressed.byte_size(),
             TypedCompressedRasterTile2D::I16(compressed) => compressed.byte_size(),
@@ -748,11 +748,11 @@ impl StorageFormat for TypedCompressedRasterTile2D {
             TypedCompressedRasterTile2D::F32(compressed) => compressed.byte_size(),
             TypedCompressedRasterTile2D::F64(compressed) => compressed.byte_size(),
         };
-        Ok(size)
+        std::future::ready(Ok(size))
     }
 
-    async fn is_expired(&self) -> bool {
-        match self {
+    fn is_expired(&self) -> impl std::future::Future<Output = bool> + Send {
+        let expired = match self {
             TypedCompressedRasterTile2D::I8(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::I16(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::I32(compressed) => compressed.cache_hint.is_expired(),
@@ -763,7 +763,8 @@ impl StorageFormat for TypedCompressedRasterTile2D {
             TypedCompressedRasterTile2D::U64(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::F32(compressed) => compressed.cache_hint.is_expired(),
             TypedCompressedRasterTile2D::F64(compressed) => compressed.cache_hint.is_expired(),
-        }
+        };
+        std::future::ready(expired)
     }
 }
 
@@ -1575,7 +1576,7 @@ mod tests {
     ) {
         let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
         let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
-        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
+        let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.);
 
         let raster: MaskedGrid2D<u8> = Grid2D::new_filled(tile_size_in_pixels, fill_value).into();
 

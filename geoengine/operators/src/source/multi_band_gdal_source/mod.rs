@@ -187,11 +187,11 @@ where
         // However, there are spatial reference systems where the y-axis points downwards.
         // The standard "pixel-space" starts at the top-left corner of a `GeoTransform` and points down-right.
         // Therefore, the pixel size on the x-axis is always increasing
-        let pixel_size_x = grid_produced_by_source.geo_transform().x_pixel_size();
+        let pixel_size_x = grid_produced_by_source.geo_transform().x_pixel_size().get();
         debug_assert!(pixel_size_x.is_sign_positive());
         // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
         // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = grid_produced_by_source.geo_transform().y_pixel_size();
+        let pixel_size_y = grid_produced_by_source.geo_transform().y_pixel_size().get();
         debug_assert!(pixel_size_y.is_sign_negative());
 
         // The data origin is not neccessarily the origin of the tileing we want to use.
@@ -615,6 +615,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::util::NonZeroFiniteF64;
     use std::str::FromStr;
 
     use super::*;
@@ -668,7 +669,7 @@ mod tests {
         let dataset_upper_right_coord = (-180.0, 90.0).into();
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
-        let dataset_geo_transform = GeoTransform::new(
+        let dataset_geo_transform = GeoTransform::new_unchecked(
             dataset_upper_right_coord,
             dataset_x_pixel_size,
             dataset_y_pixel_size,
@@ -705,7 +706,7 @@ mod tests {
         let tile_size_in_pixels = [600, 600];
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
-        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
+        let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
             0.0,
             dataset_x_pixel_size,
             0.0,
@@ -743,7 +744,7 @@ mod tests {
         let tile_size_in_pixels = [600, 600];
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
-        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
+        let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
             0.0,
             dataset_x_pixel_size,
             0.0,
@@ -773,7 +774,7 @@ mod tests {
         let dataset_x_pixel_size = 0.1;
         let dataset_y_pixel_size = -0.1;
 
-        let central_geo_transform = GeoTransform::new_with_coordinate_x_y(
+        let central_geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(
             0.0,
             dataset_x_pixel_size,
             0.0,
@@ -833,8 +834,8 @@ mod tests {
             rasterband_channel: 1,
             geo_transform: GdalDatasetGeoTransform {
                 origin_coordinate: (-180., 90.).into(),
-                x_pixel_size: 0.1,
-                y_pixel_size: -0.1,
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
             },
             width: 3600,
             height: 1800,
@@ -991,7 +992,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 time,
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
+                    GeoTransform::new_unchecked((-180.0, 90.0).into(), 0.2, -0.2),
                     GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
                 ),
                 bands: vec![
@@ -1975,8 +1976,8 @@ mod tests {
 
         let geo_transform = GdalDatasetGeoTransform {
             origin_coordinate: (0.0, 4.0).into(),
-            x_pixel_size: 1.0,
-            y_pixel_size: -1.0,
+            x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+            y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
         };
 
         let dataset_params = GdalDatasetParameters {
@@ -2035,7 +2036,7 @@ mod tests {
 
         // Both files and tile share the same spatial grid
         let data_grid = SpatialGridDefinition::new(
-            GeoTransform::new((0.0, 4.0).into(), 1.0, -1.0),
+            GeoTransform::new_unchecked((0.0, 4.0).into(), 1.0, -1.0),
             GridBoundingBox2D::new([0, 0], [height as isize - 1, width as isize - 1]).unwrap(),
         );
 
@@ -2046,7 +2047,7 @@ mod tests {
         let tile_info = TileInformation::new(
             [0, 0].into(),
             GridShape2D::new([height, width]),
-            GeoTransform::new((0.0, 4.0).into(), 1.0, -1.0),
+            GeoTransform::new_unchecked((0.0, 4.0).into(), 1.0, -1.0),
         );
 
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());

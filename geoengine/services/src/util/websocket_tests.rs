@@ -56,7 +56,8 @@ pub async fn test_client() -> (
         .insert_header((header::UPGRADE, "websocket"))
         .insert_header((header::CONNECTION, "upgrade"))
         .insert_header((header::SEC_WEBSOCKET_VERSION, "13"))
-        .insert_header((header::SEC_WEBSOCKET_KEY, "dGhpcyBpcyBhIHRlc3Q="))
+        // a valid key is a base64-encoded 16-byte value; this one is the example from RFC 6455
+        .insert_header((header::SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ=="))
         .to_http_request();
 
     let (input_tx, input_rx) = mpsc::channel(1);

@@ -77,10 +77,10 @@ impl StacDataProvider {
             .to_ascii_lowercase()
             .replace(':', "");
         let data_type = format!("{:?}", dataset.data_type).to_ascii_lowercase();
-        let res_x = Self::format_resolution_component(dataset.resolution.x);
-        let res_y = Self::format_resolution_component(dataset.resolution.y);
+        let res_x = Self::format_resolution_component(dataset.resolution.x().get());
+        let res_y = Self::format_resolution_component(dataset.resolution.y().get());
 
-        if (dataset.resolution.x - dataset.resolution.y).abs() < 1e-9 {
+        if (dataset.resolution.x() - dataset.resolution.y()).abs() < 1e-9 {
             format!("{projection}_{data_type}_{res_x}")
         } else {
             format!("{projection}_{data_type}_{res_x}x{res_y}")
@@ -93,9 +93,10 @@ impl StacDataProvider {
     ) -> String {
         match dimension {
             GroupingDimension::DataType => format!("{:?}", dataset.data_type),
-            GroupingDimension::Resolution => {
-                Self::format_resolution_value(dataset.resolution.x, dataset.resolution.y)
-            }
+            GroupingDimension::Resolution => Self::format_resolution_value(
+                dataset.resolution.x().get(),
+                dataset.resolution.y().get(),
+            ),
             GroupingDimension::Projection => dataset.projection.to_string(),
         }
     }
@@ -106,9 +107,10 @@ impl StacDataProvider {
     ) -> String {
         match dimension {
             GroupingDimension::DataType => format!("{:?}", dataset.data_type).to_ascii_lowercase(),
-            GroupingDimension::Resolution => {
-                Self::format_resolution_value(dataset.resolution.x, dataset.resolution.y)
-            }
+            GroupingDimension::Resolution => Self::format_resolution_value(
+                dataset.resolution.x().get(),
+                dataset.resolution.y().get(),
+            ),
             GroupingDimension::Projection => dataset
                 .projection
                 .to_string()
@@ -525,7 +527,7 @@ mod tests {
                 resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                 projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                    GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
                         .unwrap(),
                 ),
@@ -563,7 +565,7 @@ mod tests {
                     resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                     projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                        GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                         GridBoundingBox2D::new(
                             GridIdx2D::new([0, 0]),
                             GridIdx2D::new([10979, 10979]),
@@ -579,7 +581,7 @@ mod tests {
                     resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                     projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32633),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                        GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                         GridBoundingBox2D::new(
                             GridIdx2D::new([0, 0]),
                             GridIdx2D::new([10979, 10979]),
@@ -595,7 +597,7 @@ mod tests {
                     resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                     projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                        GeoTransform::new_unchecked((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
                         GridBoundingBox2D::new(
                             GridIdx2D::new([0, 0]),
                             GridIdx2D::new([10979, 10979]),

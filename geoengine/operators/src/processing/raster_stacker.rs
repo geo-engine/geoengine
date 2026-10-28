@@ -1158,7 +1158,7 @@ mod tests {
             .await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(!result.is_empty());
+        assert_ne!(result, [] as [_; 0]);
 
         // query only first band
         let query_rect = RasterQueryRectangle::new(
@@ -1178,7 +1178,7 @@ mod tests {
             .await;
         let result_0 = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(!result_0.is_empty());
+        assert_ne!(result_0, [] as [_; 0]);
         assert!(result_0.iter().all(|t| t.band == 0));
 
         // query only second band
@@ -1199,7 +1199,7 @@ mod tests {
             .await;
         let result_1 = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(!result_1.is_empty());
+        assert_ne!(result_1, [] as [_; 0]);
         assert!(result_1.iter().all(|t| t.band == 1));
 
         assert_eq!(result_0.len(), result_1.len());

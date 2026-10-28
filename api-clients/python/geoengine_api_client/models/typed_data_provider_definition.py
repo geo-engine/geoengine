@@ -17,7 +17,6 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
-from geoengine_api_client.models.aruna_data_provider_definition import ArunaDataProviderDefinition
 from geoengine_api_client.models.copernicus_dataspace_data_provider_definition import CopernicusDataspaceDataProviderDefinition
 from geoengine_api_client.models.dataset_layer_listing_provider_definition import DatasetLayerListingProviderDefinition
 from geoengine_api_client.models.ebv_portal_data_provider_definition import EbvPortalDataProviderDefinition
@@ -34,40 +33,38 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-TYPEDDATAPROVIDERDEFINITION_ONE_OF_SCHEMAS = ["ArunaDataProviderDefinition", "CopernicusDataspaceDataProviderDefinition", "DatasetLayerListingProviderDefinition", "EbvPortalDataProviderDefinition", "EdrDataProviderDefinition", "GbifDataProviderDefinition", "GfbioAbcdDataProviderDefinition", "GfbioCollectionsDataProviderDefinition", "NetCdfCfDataProviderDefinition", "PangaeaDataProviderDefinition", "SentinelS2L2ACogsProviderDefinition", "StacDataProviderDefinition", "WildliveDataConnectorDefinition"]
+TYPEDDATAPROVIDERDEFINITION_ONE_OF_SCHEMAS = ["CopernicusDataspaceDataProviderDefinition", "DatasetLayerListingProviderDefinition", "EbvPortalDataProviderDefinition", "EdrDataProviderDefinition", "GbifDataProviderDefinition", "GfbioAbcdDataProviderDefinition", "GfbioCollectionsDataProviderDefinition", "NetCdfCfDataProviderDefinition", "PangaeaDataProviderDefinition", "SentinelS2L2ACogsProviderDefinition", "StacDataProviderDefinition", "WildliveDataConnectorDefinition"]
 
 class TypedDataProviderDefinition(BaseModel):
     """
     TypedDataProviderDefinition
     """
-    # data type: ArunaDataProviderDefinition
-    oneof_schema_1_validator: Optional[ArunaDataProviderDefinition] = None
     # data type: CopernicusDataspaceDataProviderDefinition
-    oneof_schema_2_validator: Optional[CopernicusDataspaceDataProviderDefinition] = None
+    oneof_schema_1_validator: Optional[CopernicusDataspaceDataProviderDefinition] = None
     # data type: DatasetLayerListingProviderDefinition
-    oneof_schema_3_validator: Optional[DatasetLayerListingProviderDefinition] = None
+    oneof_schema_2_validator: Optional[DatasetLayerListingProviderDefinition] = None
     # data type: EbvPortalDataProviderDefinition
-    oneof_schema_4_validator: Optional[EbvPortalDataProviderDefinition] = None
+    oneof_schema_3_validator: Optional[EbvPortalDataProviderDefinition] = None
     # data type: EdrDataProviderDefinition
-    oneof_schema_5_validator: Optional[EdrDataProviderDefinition] = None
+    oneof_schema_4_validator: Optional[EdrDataProviderDefinition] = None
     # data type: GbifDataProviderDefinition
-    oneof_schema_6_validator: Optional[GbifDataProviderDefinition] = None
+    oneof_schema_5_validator: Optional[GbifDataProviderDefinition] = None
     # data type: GfbioAbcdDataProviderDefinition
-    oneof_schema_7_validator: Optional[GfbioAbcdDataProviderDefinition] = None
+    oneof_schema_6_validator: Optional[GfbioAbcdDataProviderDefinition] = None
     # data type: GfbioCollectionsDataProviderDefinition
-    oneof_schema_8_validator: Optional[GfbioCollectionsDataProviderDefinition] = None
+    oneof_schema_7_validator: Optional[GfbioCollectionsDataProviderDefinition] = None
     # data type: NetCdfCfDataProviderDefinition
-    oneof_schema_9_validator: Optional[NetCdfCfDataProviderDefinition] = None
+    oneof_schema_8_validator: Optional[NetCdfCfDataProviderDefinition] = None
     # data type: PangaeaDataProviderDefinition
-    oneof_schema_10_validator: Optional[PangaeaDataProviderDefinition] = None
+    oneof_schema_9_validator: Optional[PangaeaDataProviderDefinition] = None
     # data type: SentinelS2L2ACogsProviderDefinition
-    oneof_schema_11_validator: Optional[SentinelS2L2ACogsProviderDefinition] = None
+    oneof_schema_10_validator: Optional[SentinelS2L2ACogsProviderDefinition] = None
     # data type: StacDataProviderDefinition
-    oneof_schema_12_validator: Optional[StacDataProviderDefinition] = None
+    oneof_schema_11_validator: Optional[StacDataProviderDefinition] = None
     # data type: WildliveDataConnectorDefinition
-    oneof_schema_13_validator: Optional[WildliveDataConnectorDefinition] = None
-    actual_instance: Optional[Union[ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition]] = None
-    one_of_schemas: Set[str] = { "ArunaDataProviderDefinition", "CopernicusDataspaceDataProviderDefinition", "DatasetLayerListingProviderDefinition", "EbvPortalDataProviderDefinition", "EdrDataProviderDefinition", "GbifDataProviderDefinition", "GfbioAbcdDataProviderDefinition", "GfbioCollectionsDataProviderDefinition", "NetCdfCfDataProviderDefinition", "PangaeaDataProviderDefinition", "SentinelS2L2ACogsProviderDefinition", "StacDataProviderDefinition", "WildliveDataConnectorDefinition" }
+    oneof_schema_12_validator: Optional[WildliveDataConnectorDefinition] = None
+    actual_instance: Optional[Union[CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition]] = None
+    one_of_schemas: Set[str] = { "CopernicusDataspaceDataProviderDefinition", "DatasetLayerListingProviderDefinition", "EbvPortalDataProviderDefinition", "EdrDataProviderDefinition", "GbifDataProviderDefinition", "GfbioAbcdDataProviderDefinition", "GfbioCollectionsDataProviderDefinition", "NetCdfCfDataProviderDefinition", "PangaeaDataProviderDefinition", "SentinelS2L2ACogsProviderDefinition", "StacDataProviderDefinition", "WildliveDataConnectorDefinition" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -93,11 +90,6 @@ class TypedDataProviderDefinition(BaseModel):
         instance = TypedDataProviderDefinition.model_construct()
         error_messages = []
         match = 0
-        # validate data type: ArunaDataProviderDefinition
-        if not isinstance(v, ArunaDataProviderDefinition):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `ArunaDataProviderDefinition`")
-        else:
-            match += 1
         # validate data type: CopernicusDataspaceDataProviderDefinition
         if not isinstance(v, CopernicusDataspaceDataProviderDefinition):
             error_messages.append(f"Error! Input type `{type(v)}` is not `CopernicusDataspaceDataProviderDefinition`")
@@ -160,10 +152,10 @@ class TypedDataProviderDefinition(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in TypedDataProviderDefinition with oneOf schemas: ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in TypedDataProviderDefinition with oneOf schemas: CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in TypedDataProviderDefinition with oneOf schemas: ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in TypedDataProviderDefinition with oneOf schemas: CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -182,11 +174,6 @@ class TypedDataProviderDefinition(BaseModel):
         _data_type = json.loads(json_str).get("type")
         if not _data_type:
             raise ValueError("Failed to lookup data type from the field `type` in the input.")
-
-        # check if data type is `ArunaDataProviderDefinition`
-        if _data_type == "Aruna":
-            instance.actual_instance = ArunaDataProviderDefinition.from_json(json_str)
-            return instance
 
         # check if data type is `CopernicusDataspaceDataProviderDefinition`
         if _data_type == "CopernicusDataspace":
@@ -248,12 +235,6 @@ class TypedDataProviderDefinition(BaseModel):
             instance.actual_instance = WildliveDataConnectorDefinition.from_json(json_str)
             return instance
 
-        # deserialize data into ArunaDataProviderDefinition
-        try:
-            instance.actual_instance = ArunaDataProviderDefinition.from_json(json_str)
-            match += 1
-        except (ValidationError, ValueError) as e:
-            error_messages.append(str(e))
         # deserialize data into CopernicusDataspaceDataProviderDefinition
         try:
             instance.actual_instance = CopernicusDataspaceDataProviderDefinition.from_json(json_str)
@@ -329,10 +310,10 @@ class TypedDataProviderDefinition(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into TypedDataProviderDefinition with oneOf schemas: ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into TypedDataProviderDefinition with oneOf schemas: CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into TypedDataProviderDefinition with oneOf schemas: ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into TypedDataProviderDefinition with oneOf schemas: CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -346,7 +327,7 @@ class TypedDataProviderDefinition(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], CopernicusDataspaceDataProviderDefinition, DatasetLayerListingProviderDefinition, EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition, GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition, NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition, SentinelS2L2ACogsProviderDefinition, StacDataProviderDefinition, WildliveDataConnectorDefinition]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

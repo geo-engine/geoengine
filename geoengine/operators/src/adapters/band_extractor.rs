@@ -30,7 +30,7 @@ where
     T: Pixel,
 {
     pub fn new(stream: S, selected_bands: Vec<u32>, num_bands_in_source: u32) -> Self {
-        debug_assert!(!selected_bands.is_empty());
+        debug_assert_ne!(selected_bands, [] as [u32; 0]);
         debug_assert!(num_bands_in_source > selected_bands.len() as u32);
         //check that selected bands are ascending
         debug_assert!(selected_bands.windows(2).all(|w| w[0] < w[1]));

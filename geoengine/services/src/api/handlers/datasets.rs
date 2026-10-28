@@ -200,7 +200,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     path = "/dataset/{dataset}/tiles",
     request_body = Vec<AddDatasetTile>,
     responses(
-        (status = 200),
+        (status = 200, description = "Tiles were added to the dataset"),
     ),
     params(
         ("dataset" = DatasetName, description = "Dataset Name"),
@@ -345,12 +345,9 @@ fn validate_tile(
     );
 
     // TODO: also check that the tiles bbox (from the tile definition, and not the actual gdal dataset of the tile's file) fits into the dataset's spatial grid?
-    let tile_geotransform = geoengine_datatypes::raster::GeoTransform::try_from(
+    let tile_geotransform = geoengine_datatypes::raster::GeoTransform::from(
         geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
-    )
-    .map_err(|_| AddDatasetTilesError::InvalidTileFileGeoTransform {
-        file_path: tile.params.file_path.to_string_lossy().to_string(),
-    })?;
+    );
     ensure!(
         dataset_descriptor
             .spatial_grid
@@ -775,7 +772,7 @@ pub fn add_tag(properties: &mut AddDataset, tag: String) {
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, body = DatasetNameResponse),
+        (status = 200, description = "Name of the created dataset", body = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -1495,7 +1492,7 @@ pub struct VolumeFileLayersResponse {
     get,
     path = "/dataset/volumes/{volume_name}/files/{file_name}/layers",
     responses(
-        (status = 200, body = VolumeFileLayersResponse,
+        (status = 200, description = "Layers of the volume file", body = VolumeFileLayersResponse,
              example = json!({"layers": ["layer1", "layer2"]}))
     ),
     params(
@@ -1550,7 +1547,7 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
     path = "/dataset", 
     request_body = CreateDataset,
     responses(
-        (status = 200, body = DatasetNameResponse),
+        (status = 200, description = "Name of the created dataset", body = DatasetNameResponse),
     ),
     security(
         ("session_token" = [])
@@ -1656,6 +1653,7 @@ async fn create_external_dataset<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::util::NonZeroFiniteF64;
 
     use super::*;
     use crate::{
@@ -4015,8 +4013,8 @@ mod tests {
                     rasterband_channel: 1,
                     geo_transform: geoengine_operators::source::GdalDatasetGeoTransform {
                         origin_coordinate: (-180., 90.).into(),
-                        x_pixel_size: 0.1,
-                        y_pixel_size: -0.1,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                     }
                     .into(),
                     width: 1800,
@@ -4047,8 +4045,8 @@ mod tests {
                     rasterband_channel: 1,
                     geo_transform: geoengine_operators::source::GdalDatasetGeoTransform {
                         origin_coordinate: (0., 90.).into(),
-                        x_pixel_size: 0.1,
-                        y_pixel_size: -0.1,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                     }
                     .into(),
                     width: 1800,
@@ -5414,8 +5412,8 @@ mod tests {
                             spatial_grid: SpatialGridDefinition {
                                 geo_transform: GeoTransform {
                                     origin_coordinate: Coordinate2D { x: 0., y: 0. },
-                                    x_pixel_size: 1.,
-                                    y_pixel_size: -1.,
+                                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                                 },
                                 grid_bounds: GridBoundingBox2D {
                                     top_left_idx: GridIdx2D { y_idx: 0, x_idx: 0 },
@@ -5470,8 +5468,8 @@ mod tests {
                 rasterband_channel: 0,
                 geo_transform: GeoTransform {
                     origin_coordinate: Coordinate2D { x: 0., y: 0. },
-                    x_pixel_size: 1.,
-                    y_pixel_size: -1.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                 },
                 width: 100,
                 height: 100,
@@ -5517,8 +5515,8 @@ mod tests {
                 spatial_grid: SpatialGridDefinition {
                     geo_transform: GeoTransform {
                         origin_coordinate: Coordinate2D { x: 0., y: 0. },
-                        x_pixel_size: 1.,
-                        y_pixel_size: -1.,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                     },
                     grid_bounds: GridBoundingBox2D {
                         top_left_idx: GridIdx2D { y_idx: 0, x_idx: 0 },
@@ -5560,8 +5558,8 @@ mod tests {
                 rasterband_channel: 0,
                 geo_transform: GeoTransform {
                     origin_coordinate: Coordinate2D { x: -50., y: 50. },
-                    x_pixel_size: 1.,
-                    y_pixel_size: -1.,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                 },
                 width: 50,
                 height: 50,
@@ -5607,8 +5605,8 @@ mod tests {
                 spatial_grid: SpatialGridDefinition {
                     geo_transform: GeoTransform {
                         origin_coordinate: Coordinate2D { x: 0., y: 0. },
-                        x_pixel_size: 1.,
-                        y_pixel_size: -1.,
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
                     },
                     grid_bounds: GridBoundingBox2D {
                         top_left_idx: GridIdx2D {

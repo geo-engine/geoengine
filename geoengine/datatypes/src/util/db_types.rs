@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 
 /// A macro for quickly implementing `FromSql` and `ToSql` for `$RustType` if there is a `From` and `Into`
@@ -157,52 +156,6 @@ impl From<(String, String)> for StringPair {
 
 impl From<StringPair> for (String, String) {
     fn from(value: StringPair) -> Self {
-        value.0
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NotNanF64(NotNan<f64>);
-
-impl ToSql for NotNanF64 {
-    fn to_sql(
-        &self,
-        ty: &postgres_types::Type,
-        w: &mut bytes::BytesMut,
-    ) -> Result<postgres_types::IsNull, Box<dyn std::error::Error + Sync + Send>> {
-        <f64 as ToSql>::to_sql(&self.0.into_inner(), ty, w)
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        <f64 as ToSql>::accepts(ty)
-    }
-
-    postgres_types::to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for NotNanF64 {
-    fn from_sql(
-        ty: &postgres_types::Type,
-        raw: &'a [u8],
-    ) -> Result<NotNanF64, Box<dyn std::error::Error + Sync + Send>> {
-        let value = <f64 as FromSql>::from_sql(ty, raw)?;
-
-        Ok(NotNanF64(value.try_into()?))
-    }
-
-    fn accepts(ty: &postgres_types::Type) -> bool {
-        <f64 as FromSql>::accepts(ty)
-    }
-}
-
-impl From<NotNan<f64>> for NotNanF64 {
-    fn from(value: NotNan<f64>) -> Self {
-        Self(value)
-    }
-}
-
-impl From<NotNanF64> for NotNan<f64> {
-    fn from(value: NotNanF64) -> Self {
         value.0
     }
 }

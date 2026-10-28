@@ -1,12 +1,16 @@
 #![allow(clippy::unwrap_used)] // okay in tests
 
+use geoengine_datatypes::util::NonZeroFiniteF64;
+
 use crate::{
     api::{
         handlers::{self},
         model::responses::ErrorResponse,
     },
     config::{Postgres, Quota, get_config_element},
-    contexts::{ApplicationContext, GeoEngineDb, PostgresContext, SessionContext, SessionId},
+    contexts::{
+        ApplicationContext, ContextSpec, GeoEngineDb, PostgresContext, SessionContext, SessionId,
+    },
     datasets::{
         AddDataset, DatasetIdAndName, DatasetName,
         listing::Provenance,
@@ -76,6 +80,7 @@ use geoengine_operators::{
             create_ndvi_meta_data, create_ndvi_meta_data_with_cache_ttl, create_ports_meta_data,
         },
         input::RasterOrVectorOperator,
+        test::test_ort_environment,
     },
 };
 use rand::Rng;
@@ -290,8 +295,8 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
                     origin_coordinate: Coordinate2D { x: -180., y: 90.},
-                    x_pixel_size: 0.1,
-                    y_pixel_size: -0.1,
+                    x_pixel_size: NonZeroFiniteF64::new_unchecked(0.1),
+                    y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.1),
                 },
                 width: 3600,
                 height: 1800,
@@ -308,7 +313,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
                 time: TimeDescriptor::new_irregular(Some(geoengine_datatypes::primitives::TimeInterval::default())),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
-                 GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
+                 GeoTransform::new_unchecked(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
                  GridBoundingBox2D::new_min_max(0,1799, 0, 1599).unwrap(),
                 ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
@@ -1526,15 +1531,16 @@ where
         std::panic::catch_unwind(move || {
             tokio::task::block_in_place(move || {
                 Handle::current().block_on(async move {
-                    let ctx = PostgresContext::new_with_context_spec(
-                        db_config.pg_config(),
-                        tokio_postgres::NoTls,
+                    let ctx = PostgresContext::new_with_context_spec(ContextSpec {
+                        config: db_config.pg_config(),
+                        tls: tokio_postgres::NoTls,
                         exe_ctx_tiling_spec,
                         query_ctx_chunk_size,
                         quota_config,
-                        oidc_db(),
+                        oidc_manager: oidc_db(),
                         gdal_process_pool_config,
-                    )
+                        ort_environment: test_ort_environment(),
+                    })
                     .await
                     .unwrap();
                     f(ctx, db_config.clone()).await

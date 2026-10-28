@@ -324,7 +324,7 @@ fn dataset_name_for_harvest(collection_name: &str, dataset: &StacProviderDataset
         })
         .collect();
 
-    let resolution_str = format!("{}", dataset.resolution.x);
+    let resolution_str = format!("{}", dataset.resolution.x());
     let clean_resolution: String = resolution_str
         .chars()
         .map(|c| {
@@ -573,7 +573,7 @@ async fn create_harvest_layer_collections(
             "EPSG:{} {:?} {}m",
             dataset.projection.code(),
             dataset.data_type,
-            dataset.resolution.x
+            dataset.resolution.x()
         );
 
         if child_layer_exists(api_config, &temp_collection_id, &layer_name).await? {
@@ -1288,8 +1288,8 @@ fn try_create_tile_for_band(
 
     let geo_transform = common::geo_transform_from_fields(&asset.additional_fields)?;
 
-    if (geo_transform.x_pixel_size().abs() - dataset.resolution.x).abs() > 1e-9
-        || (geo_transform.y_pixel_size().abs() - dataset.resolution.y).abs() > 1e-9
+    if (geo_transform.x_pixel_size().get().abs() - dataset.resolution.x().get()).abs() > 1e-9
+        || (geo_transform.y_pixel_size().get().abs() - dataset.resolution.y().get()).abs() > 1e-9
     {
         return None;
     }
@@ -1456,7 +1456,7 @@ mod tests {
                 1,
             );
             futures::pin_mut!(pages);
-            assert!(!pages.next().await.unwrap().unwrap().items.is_empty());
+            assert_ne!(pages.next().await.unwrap().unwrap().items, [] as [_; 0]);
             assert!(pages.next().await.is_none());
         }
     }
@@ -1497,7 +1497,7 @@ mod tests {
 
     #[test]
     fn test_spatial_partition_from_non_square_shape() {
-        let geo_transform = GeoTransform::new((100.0, 200.0).into(), 10.0, -10.0);
+        let geo_transform = GeoTransform::new_unchecked((100.0, 200.0).into(), 10.0, -10.0);
 
         let partition =
             spatial_partition_from_shape(&geo_transform, 2, 3).expect("positive raster dimensions");
@@ -1518,7 +1518,7 @@ mod tests {
             resolution: SpatialResolution::new_unchecked(10.0, 10.0),
             projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new((0.0, 0.0).into(), 10.0, -10.0),
+                GeoTransform::new_unchecked((0.0, 0.0).into(), 10.0, -10.0),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
             ),
             bands: vec![],
@@ -1741,7 +1741,7 @@ mod tests {
                 resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                 projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
                 spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((0.0, 0.0).into(), 10.0, -10.0),
+                    GeoTransform::new_unchecked((0.0, 0.0).into(), 10.0, -10.0),
                     GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
                 ),
                 bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
@@ -1816,7 +1816,7 @@ mod tests {
 
         assert!(approx_eq!(
             f64,
-            tile.params.geo_transform.x_pixel_size,
+            tile.params.geo_transform.x_pixel_size.get(),
             10.0
         ));
         assert!(approx_eq!(
@@ -1885,7 +1885,7 @@ mod tests {
             resolution: SpatialResolution::new_unchecked(10.0, 10.0),
             projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new((0.0, 0.0).into(), 10.0, -10.0),
+                GeoTransform::new_unchecked((0.0, 0.0).into(), 10.0, -10.0),
                 GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([0, 0])).unwrap(),
             ),
             bands: vec![],

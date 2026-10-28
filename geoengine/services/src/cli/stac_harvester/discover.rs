@@ -7,9 +7,8 @@ use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, BoundingBox2D, SpatialResolution},
     raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
-    util::Identifier,
+    util::{Identifier, NonZeroFiniteF64, PositiveFiniteF64},
 };
-use ordered_float::OrderedFloat;
 use tracing::{info, warn};
 
 use crate::api::model::{
@@ -407,7 +406,7 @@ fn process_sample_assets(
             }
 
             let resolution = geo_transform
-                .map(|gt| gt.x_pixel_size().abs())
+                .map(|gt| gt.x_pixel_size().get().abs())
                 .or_else(|| {
                     asset
                         .additional_fields
@@ -420,10 +419,9 @@ fn process_sample_assets(
                         .get("gsd")
                         .and_then(serde_json::Value::as_f64)
                 });
-            let Some(resolution) = resolution else {
+            let Some(Ok(resolution)) = resolution.map(PositiveFiniteF64::try_from) else {
                 continue;
             };
-            let resolution: OrderedFloat<f64> = resolution.into();
 
             let dataset_key = DatasetKey {
                 epsg,
@@ -557,9 +555,9 @@ fn build_datasets(
             name: dataset_name,
             description: format!("Auto-discovered from STAC collection '{stac_collection}'"),
             data_type: dataset_key.data_type,
-            resolution: SpatialResolution::new_unchecked(
-                dataset_key.resolution.into_inner(),
-                dataset_key.resolution.into_inner(),
+            resolution: SpatialResolution::new_typed(
+                dataset_key.resolution,
+                dataset_key.resolution,
             ),
             projection: info.srs,
             spatial_grid,
@@ -583,10 +581,10 @@ fn build_dataset_spatial_grid(
             dataset_key
         );
         GeoOpSpatialGridDescriptor::source_from_parts(
-            GeoTransform::new(
+            GeoTransform::new_typed(
                 (0.0, 0.0).into(),
-                dataset_key.resolution.into_inner(),
-                -dataset_key.resolution.into_inner(),
+                NonZeroFiniteF64::from(dataset_key.resolution),
+                -NonZeroFiniteF64::from(dataset_key.resolution),
             ),
             zero_size_grid(),
         )
@@ -652,8 +650,8 @@ fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox
 
     let ox = gt.origin_coordinate.x;
     let oy = gt.origin_coordinate.y;
-    let ps_x = gt.x_pixel_size();
-    let ps_y = gt.y_pixel_size();
+    let ps_x = gt.x_pixel_size().get();
+    let ps_y = gt.y_pixel_size().get();
 
     // `grid_to_spatial_bounds` interprets the box's min index as the upper-left
     // (top) pixel and the max index as the last pixel, so the box spans
@@ -700,14 +698,14 @@ fn projection_grid_bounds(gt: GeoTransform, epsg: u32) -> Option<GridBoundingBox
 struct DatasetKey {
     epsg: u32,
     data_type: RasterDataType,
-    resolution: OrderedFloat<f64>,
+    resolution: PositiveFiniteF64,
 }
 
 /// Partial dataset key without EPSG (used during collection scanning).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct PartialDatasetKey {
     data_type: RasterDataType,
-    resolution: OrderedFloat<f64>,
+    resolution: PositiveFiniteF64,
 }
 
 // ---------------------------------------------------------------------------
@@ -774,7 +772,7 @@ fn scan_collection_item_asset_v1_0_0(
 
         let geo_transform = common::geo_transform_from_fields(&asset.additional_fields)
             .ok_or_else(|| "Missing proj:transform".to_string())?;
-        let resolution: OrderedFloat<f64> = geo_transform.x_pixel_size().into();
+        let resolution: PositiveFiniteF64 = geo_transform.x_pixel_size().abs().into();
 
         let band_name = if let Some(ref eo_bands_vec) = eo_bands {
             common::v1_0_0_band_name(
@@ -827,7 +825,7 @@ fn scan_collection_item_asset_v1_1_0(
         .and_then(serde_json::Value::as_f64)
         .or_else(|| {
             common::geo_transform_from_fields(&asset.additional_fields)
-                .map(|gt| gt.x_pixel_size().abs())
+                .map(|gt| gt.x_pixel_size().get().abs())
         })
         .or_else(|| {
             collection_summaries
@@ -837,11 +835,13 @@ fn scan_collection_item_asset_v1_1_0(
                 .and_then(serde_json::Value::as_f64)
         })
         .ok_or_else(|| "Missing attribute `gsd` or `proj:transform`".to_string())?;
+    let resolution = PositiveFiniteF64::try_from(resolution)
+        .map_err(|e| format!("Invalid resolution {resolution}: {e}"))?;
 
     let entry = dataset_bands
         .entry(PartialDatasetKey {
             data_type: raster_data_type,
-            resolution: resolution.into(),
+            resolution,
         })
         .or_default();
     for band_name in asset_info.band_names {
@@ -983,7 +983,8 @@ mod tests {
 
     #[test]
     fn full_projection_grid_covers_projection_area_of_use() {
-        let geo_transform = GeoTransform::new_with_coordinate_x_y(363_600., 30., 4_105_800., -30.);
+        let geo_transform =
+            GeoTransform::new_with_coordinate_x_y_unchecked(363_600., 30., 4_105_800., -30.);
         let extent: BoundingBox2D = SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632)
             .area_of_use_projected()
             .expect("EPSG:32632 should have a projected area of use");
@@ -1028,7 +1029,7 @@ mod tests {
         // subregion, slightly outside it so the grid extends in both directions.
         let (ox, oy) = (166_000.0, 9_330_000.0);
         let ps = 100.0;
-        let gt = GeoTransform::new_with_coordinate_x_y(ox, ps, oy, -ps);
+        let gt = GeoTransform::new_with_coordinate_x_y_unchecked(ox, ps, oy, -ps);
 
         let bounds = projection_grid_bounds(gt, 32632)
             .expect("grid bounds should be computable for EPSG:32632");
@@ -1077,7 +1078,7 @@ mod tests {
         // the globe, so the grid must extend west, east and south of it.
         let (ox, oy) = (0.0, 60.0);
         let ps = 1.0;
-        let gt = GeoTransform::new_with_coordinate_x_y(ox, ps, oy, -ps);
+        let gt = GeoTransform::new_with_coordinate_x_y_unchecked(ox, ps, oy, -ps);
 
         let bounds = projection_grid_bounds(gt, 4326)
             .expect("grid bounds should be computable for EPSG:4326");
@@ -1353,7 +1354,7 @@ mod tests {
             false,
             "sentinel-2-l2a",
         );
-        assert!(!datasets.is_empty());
+        assert_ne!(datasets, [] as [_; 0]);
         assert!(datasets.iter().all(|dataset| {
             dataset.spatial_grid.geo_transform().origin_coordinate == (0.0, 0.0).into()
         }));
@@ -1361,7 +1362,7 @@ mod tests {
 
     #[test]
     fn test_missing_shape_preserves_known_grid_origin() {
-        let geo_transform = GeoTransform::new((123.0, 456.0).into(), 10.0, -10.0);
+        let geo_transform = GeoTransform::new_unchecked((123.0, 456.0).into(), 10.0, -10.0);
         let info = DiscoveredDatasetInfo {
             geo_transform: Some(geo_transform),
             proj_shape: None,
@@ -1371,7 +1372,7 @@ mod tests {
         let dataset_key = DatasetKey {
             epsg: 32_632,
             data_type: RasterDataType::U8,
-            resolution: OrderedFloat(10.0),
+            resolution: PositiveFiniteF64::new_unchecked(10.0),
         };
 
         let spatial_grid = build_dataset_spatial_grid(&info, &dataset_key, false);
@@ -1383,12 +1384,12 @@ mod tests {
     fn test_build_datasets_dedupes_duplicate_resolved_band_names() {
         let partial_key = PartialDatasetKey {
             data_type: RasterDataType::U8,
-            resolution: OrderedFloat(10.0),
+            resolution: PositiveFiniteF64::new_unchecked(10.0),
         };
         let dataset_key = DatasetKey {
             epsg: 32_632,
             data_type: RasterDataType::U8,
-            resolution: OrderedFloat(10.0),
+            resolution: PositiveFiniteF64::new_unchecked(10.0),
         };
 
         // Collection-level scan reports the true-color asset as one dataset
@@ -1416,7 +1417,7 @@ mod tests {
         discovered_datasets.insert(
             dataset_key,
             DiscoveredDatasetInfo {
-                geo_transform: Some(GeoTransform::new((0.0, 0.0).into(), 10.0, -10.0)),
+                geo_transform: Some(GeoTransform::new_unchecked((0.0, 0.0).into(), 10.0, -10.0)),
                 proj_shape: Some((100, 100)),
                 srs: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32_632),
                 asset_count: 1,

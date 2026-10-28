@@ -16,9 +16,7 @@ use crate::{
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
-    primitives::{
-        AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
-    },
+    primitives::{AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInterval},
     raster::GridShape2D,
     spatial_reference::SpatialReference,
     util::Identifier,
@@ -280,10 +278,9 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 
     let [raster_size_0, raster_size_1] = spatial_ref_axis_order.xy_to_native_order(shape_array);
 
-    let SpatialResolution {
-        x: pixel_size_x,
-        y: pixel_size_y,
-    } = spatial_grid_descriptor.spatial_resolution();
+    let spatial_resolution = spatial_grid_descriptor.spatial_resolution();
+    let pixel_size_x = spatial_resolution.x();
+    let pixel_size_y = spatial_resolution.y();
 
     let band_0 = &result_descriptor.bands[0];
 

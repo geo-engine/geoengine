@@ -1,10 +1,9 @@
-use super::{MachineLearningError, error::Ort};
 use crate::machine_learning::{
-    MlModelLoadingInfo, MlModelMetadata,
+    MachineLearningError, MlModelLoadingInfo, MlModelMetadata,
     error::{
         InvalidInputPixelShape, InvalidInputTensorShape, InvalidOutputPixelShape,
         InvalidOutputType, MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
-        MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
+        MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, Ort, UnsupportedInOutMapping,
         UnsupportedNumberOfOutputAttributes,
     },
 };
@@ -12,13 +11,45 @@ use geoengine_datatypes::{
     machine_learning::MlTensorShape3D,
     raster::{GridShape2D, GridSize, RasterDataType},
 };
-use ort::session::Session;
+use ort::{environment::Environment, session::Session};
 use snafu::{ResultExt, ensure};
+use std::sync::Arc;
+use tokio::sync::OnceCell;
+
+/// The ONNX Runtime environment of an application, created on first use.
+///
+/// ONNX Runtime allows only one environment per process.
+/// Create one `OrtEnvironment` per application and clone it into everything that creates sessions.
+/// Creating it lazily avoids initializing ONNX Runtime (and its log output) if no model is used.
+#[derive(Clone, Debug, Default)]
+pub struct OrtEnvironment(Arc<OnceCell<Environment>>);
+
+impl OrtEnvironment {
+    /// Returns the environment and creates it on first use.
+    pub async fn get(&self) -> Result<&Environment, MachineLearningError> {
+        self.0
+            .get_or_try_init(|| async { create_ort_environment() })
+            .await
+    }
+}
+
+impl From<Environment> for OrtEnvironment {
+    fn from(environment: Environment) -> Self {
+        Self(Arc::new(OnceCell::new_with(Some(environment))))
+    }
+}
+
+/// Creates an ONNX Runtime environment.
+/// Prefer [`OrtEnvironment`], since ONNX Runtime allows only one environment per process.
+pub fn create_ort_environment() -> Result<Environment, MachineLearningError> {
+    ort::init().build().context(Ort)
+}
 
 pub fn load_onnx_model_from_loading_info(
+    ort_environment: &Environment,
     ml_model_loading_info: &MlModelLoadingInfo,
 ) -> Result<Session, MachineLearningError> {
-    ort::session::Session::builder()
+    Session::builder(ort_environment)
         .context(Ort)?
         .commit_from_file(&ml_model_loading_info.storage_path)
         .context(Ort)

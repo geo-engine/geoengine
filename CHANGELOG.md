@@ -2,7 +2,90 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.9.4] - 2026-08-11
+## [0.10.0] - 2026-10-21
+
+### 🚀 Features
+
+- *(backend)* Implement CORS support for OGC API responses ([#1267](https://github.com/geo-engine/geoengine/pull/1267))
+- *(backend)* New raster cache ([#1289](https://github.com/geo-engine/geoengine/pull/1289))
+- *(backend)* Compute plots on coarser overviews if a resolution is requested ([#1336](https://github.com/geo-engine/geoengine/pull/1336))
+- *(python)* Add datasets and layers may replace existing ones ([#1255](https://github.com/geo-engine/geoengine/pull/1255))
+- *(python)* Add missing operators and multi-tile datasets ([#1276](https://github.com/geo-engine/geoengine/pull/1276))
+- *(ui)* Add functionality to download current map view as an image ([#1269](https://github.com/geo-engine/geoengine/pull/1269))
+- *(ui)* Drawing and measuring of lines and boxes in the EDV ([#1272](https://github.com/geo-engine/geoengine/pull/1272))
+- *(ui)* Histogram in edv ([#1274](https://github.com/geo-engine/geoengine/pull/1274))
+- *(ui)* Add About component and integrate into routing ([#1293](https://github.com/geo-engine/geoengine/pull/1293))
+- *(ui)* Add fullscreen histogram dialog ([#1292](https://github.com/geo-engine/geoengine/pull/1292))
+- *(ui)* Add raster legend view component and integrate into edv ([#1310](https://github.com/geo-engine/geoengine/pull/1310))
+- *(ui)* Enhance raster legend with RGB channel support and improved styling ([#1331](https://github.com/geo-engine/geoengine/pull/1331))
+- *(ui)* Edv global layers ([#1304](https://github.com/geo-engine/geoengine/pull/1304))
+- *(www)* Favicon plugin ([#1259](https://github.com/geo-engine/geoengine/pull/1259))
+- Unify stac harvester and stac provider functionality ([#1224](https://github.com/geo-engine/geoengine/pull/1224))
+- Add remaining operators to OpenAPI spec ([#1278](https://github.com/geo-engine/geoengine/pull/1278))
+- Add authentication to stac provider ([#1261](https://github.com/geo-engine/geoengine/pull/1261))
+- Alternatives for area-of-use and projection ([#1200](https://github.com/geo-engine/geoengine/pull/1200))
+- Convert operators operator spec to API operator spec ([#1306](https://github.com/geo-engine/geoengine/pull/1306))
+- Make cache ttl configurable in settings and provider def ([#1299](https://github.com/geo-engine/geoengine/pull/1299))
+- Rebrand Enhanced Data Viewer to EOdyssey ([#1324](https://github.com/geo-engine/geoengine/pull/1324))
+- Rename workflow to processing graph in API ([#1325](https://github.com/geo-engine/geoengine/pull/1325))
+- Per-band raster plots within the query rectangle and symbology histogram fixes ([#1333](https://github.com/geo-engine/geoengine/pull/1333))
+- Stac requests on a grid ([#1323](https://github.com/geo-engine/geoengine/pull/1323))
+- Remove aruna provider ([#1335](https://github.com/geo-engine/geoengine/pull/1335))
+
+
+### 🐛 Bug Fixes
+
+- *(backend)* Error not panic on DB datset deserialization ([#1254](https://github.com/geo-engine/geoengine/pull/1254))
+- *(backend)* Make new raster cache safe to merge ([#1290](https://github.com/geo-engine/geoengine/pull/1290))
+- *(backend)* Preserve STAC no-data metadata ([#1329](https://github.com/geo-engine/geoengine/pull/1329))
+- *(backend)* Preserve data beneath no-data pixels in raster mosaics ([#1330](https://github.com/geo-engine/geoengine/pull/1330))
+- *(backend)* Aggregate all bands over time in raster vector join ([#1338](https://github.com/geo-engine/geoengine/pull/1338))
+- *(backend)* Validate pixel sizes and spatial resolutions with typed floats ([#1349](https://github.com/geo-engine/geoengine/pull/1349))
+- *(ui)* Make manager wildlive oidc redirect hashless ([#1257](https://github.com/geo-engine/geoengine/pull/1257))
+- *(ui)* Propagate query aborts to obsolete tile requests ([#1280](https://github.com/geo-engine/geoengine/pull/1280))
+- Honor explicit nodata value override ([#1250](https://github.com/geo-engine/geoengine/pull/1250))
+- Update Wildlive dataset structure and add new search query ([#1258](https://github.com/geo-engine/geoengine/pull/1258))
+- Query bounds do not intersect the STAC coordinate domain ([#1294](https://github.com/geo-engine/geoengine/pull/1294))
+- Remove mock dataset ([#1348](https://github.com/geo-engine/geoengine/pull/1348))
+- Container names ([#1350](https://github.com/geo-engine/geoengine/pull/1350))
+
+
+### 💼 Other
+
+- *(ui)* Update ui dependencies ([#1253](https://github.com/geo-engine/geoengine/pull/1253))
+- *(ui)* Run lint in typescript-eslint single-run mode ([#1332](https://github.com/geo-engine/geoengine/pull/1332))
+- *(ui)* Treat lint warnings as errors in all apps except common and core ([#1340](https://github.com/geo-engine/geoengine/pull/1340))
+- *(ui)* Clean up eslint config, use projectService and add import order, eqeqeq and switch rules ([#1346](https://github.com/geo-engine/geoengine/pull/1346))
+- *(www)* Update astro & dependencies ([#1256](https://github.com/geo-engine/geoengine/pull/1256))
+- Enhance linting commands to support automatic fixes across all justfiles ([#1317](https://github.com/geo-engine/geoengine/pull/1317))
+- Group dependabot updates and use allowed conventional commit scopes ([#1351](https://github.com/geo-engine/geoengine/pull/1351))
+
+
+### 🚜 Refactor
+
+- *(ui)* Fix lint warnings in core and common specs and flexbox directives ([#1341](https://github.com/geo-engine/geoengine/pull/1341))
+- *(ui)* Fix all lint warnings in common and treat them as errors there ([#1344](https://github.com/geo-engine/geoengine/pull/1344))
+- *(ui)* Fix most lint warnings in core and set two more rules to error ([#1345](https://github.com/geo-engine/geoengine/pull/1345))
+- *(ui)* Fix the last lint warnings in core and treat all warnings as errors ([#1347](https://github.com/geo-engine/geoengine/pull/1347))
+
+
+### 📚 Documentation
+
+- Add AGENTS.md files for project-specific guidance and update CONTRIBUTING.md and README.md to reference them ([#1314](https://github.com/geo-engine/geoengine/pull/1314))
+- Add guidance on raster tile order processing in AGENTS.md ([#1322](https://github.com/geo-engine/geoengine/pull/1322))
+
+
+### 🧪 Testing
+
+- *(backend)* Restrict WMS cache-control test to smaller bounds ([#1339](https://github.com/geo-engine/geoengine/pull/1339))
+
+
+### ⚙️ Miscellaneous Tasks
+
+- Enforce strict Clippy lints by denying warnings ([#1244](https://github.com/geo-engine/geoengine/pull/1244))
+- Adjust to ubuntu 26 and gdal 3.12 ([#1334](https://github.com/geo-engine/geoengine/pull/1334))
+
+## [0.9.4] - 2026-08-12
 
 ### 🚀 Features
 
@@ -44,7 +127,6 @@ All notable changes to this project will be documented in this file.
 ### 💼 Other
 
 - Update to rust 1.97 ([#1211](https://github.com/geo-engine/geoengine/pull/1211))
-- Version 0.9.3 ([#1228](https://github.com/geo-engine/geoengine/pull/1228))
 
 
 ### ⚙️ Miscellaneous Tasks
@@ -62,11 +144,6 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug Fixes
 
 - Still serve preline in production build ([#1183](https://github.com/geo-engine/geoengine/pull/1183))
-
-
-### 💼 Other
-
-- Version 0.9.2 ([#1191](https://github.com/geo-engine/geoengine/pull/1191))
 
 
 ### 🚜 Refactor
@@ -379,14 +456,7 @@ All notable changes to this project will be documented in this file.
 - Validate openapi.json ([#1088](https://github.com/geo-engine/geoengine/pull/1088))
 - Limit scope of GITHUB_TOKEN in actions ([#1089](https://github.com/geo-engine/geoengine/pull/1089))
 
-## [d_20210827] - 2021-08-27
-
-### 💼 Other
-
-- Wrong cell width for grid merging
-- --features pro
-
-## [d_20210707] - 2021-07-02
+## [0.7.0] - 2022-03-15
 
 ### 💼 Other
 
@@ -404,6 +474,8 @@ All notable changes to this project will be documented in this file.
 - Update todo for end_time
 - Nodata as None
 - Use less one-char-variables
+- Wrong cell width for grid merging
+- --features pro
 
 
 ### 🧪 Testing

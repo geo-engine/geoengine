@@ -3,6 +3,7 @@ use super::{
     datasets::{CaptureFeature, ProjectFeature, StationFeature},
     error,
 };
+use async_trait::async_trait;
 use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
 use chrono::{NaiveDate, Utc};
 use geoengine_datatypes::{dataset::DataProviderId, error::BoxedResultExt};
@@ -10,7 +11,6 @@ use tokio_postgres::{
     Socket, Transaction,
     tls::{MakeTlsConnect, TlsConnect},
 };
-use tonic::async_trait;
 use wkt::to_wkt::ToWkt;
 
 pub trait DatasetInDb {
