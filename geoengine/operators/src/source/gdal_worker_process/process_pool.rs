@@ -40,7 +40,17 @@ const THROTTLING_THRESHOLD_DURATION: Duration = Duration::from_millis(THROTTLING
 /// Set to 30 minutes (1800s) to prioritize heavy S3 / cloud storage network connection caches.
 const CACHE_TTL_SECS: f64 = 1800.0;
 
+// Affinity scores rank the idle workers for a request in three tiers:
+// 1. Hit (>= ~SCORE_DATASET_MATCH): the worker has the dataset open and reuses it, refined by
+//    band and spatial window.
+// 2. Fresh (SCORE_FRESH_WORKER_DEFAULT): the worker has never read anything, so using it
+//    evicts nothing.
+// 3. Eviction ([0, SCORE_EVICTION_MAX]): the worker has to close its dataset. The score grows
+//    with idle time, so the least recently used dataset is closed.
+// Each worker holds only one open dataset, so idle workers act as an LRU cache of open datasets.
+
 /// Baseline numeric floor used when initiating the maximum-score matrix search.
+/// Below every valid score (min. 0.0), so any idle worker is chosen if one exists.
 const SCORE_INITIAL_FLOOR: f64 = -1.0;
 
 /// Base affinity score bonus awarded when a worker already has the requested dataset open.
@@ -136,7 +146,12 @@ impl WorkerAffinity {
     ) -> f64 {
         let idle_duration = now.saturating_duration_since(self.timestamp).as_secs_f64();
 
-        // Cache expired or another dataset: prefer the least recently used worker for eviction
+        // Cache expired or another dataset: prefer the least recently used worker for eviction.
+        // A constant score would make the broker take the first candidate in `idle_workers`.
+        // Released workers are pushed last and taken with `swap_remove`, so that is usually the
+        // most recently used worker, whose dataset is the most likely to be requested again.
+        // Instead, rank by idle time: a worker released just now scores 0.0, and a worker
+        // idle for the full TTL scores `SCORE_EVICTION_MAX`.
         if idle_duration > CACHE_TTL_SECS || self.dataset_hash != dataset_hash {
             return SCORE_EVICTION_MAX * (idle_duration / CACHE_TTL_SECS).min(1.0);
         }
@@ -203,6 +218,8 @@ struct DatasetSlot {
 
 impl DatasetSlot {
     /// Removes canceled requests from the front of the queue and returns how many were removed.
+    /// Canceled requests further back are skipped by `peek_first_valid` and removed once they
+    /// reach the front, so the queue is never scanned as a whole.
     #[inline]
     pub fn clean_canceled_front(&mut self) -> u64 {
         let mut removed = 0;
@@ -226,6 +243,8 @@ impl DatasetSlot {
 struct QueuedRequest {
     dataset_hash: u64,
     request: IpcChannelMessage,
+    /// Closed once the leader task drops its receiver because all callers gave up (see
+    /// `await_read_or_abandon`). The broker then drops the request instead of reading it.
     respond_to: oneshot::Sender<ReadResult>,
 }
 
@@ -579,6 +598,7 @@ impl GdalProcessPool {
 
 // Encapsulates all state variables and synchronous routing logic inside the broker.
 struct BrokerState {
+    /// Unordered: `swap_remove` reorders it, so recency comes from `WorkerAffinity::timestamp`.
     idle_workers: Vec<usize>,
     workers: Vec<WorkerProcess>,
     dataset_registry: FastHashMap<u64, DatasetSlot>,
@@ -876,6 +896,14 @@ fn remove_in_flight(map: &mut FastHashMap<u64, InFlightTile>, tile_key: u64, tx:
 
 /// Waits for the broker's result. Returns `None` if all callers gave up first: dropping
 /// `oneshot_rx` then lets the broker discard the request if it is still queued.
+///
+/// Every caller, including the one that spawned the leader, holds a receiver of `tx`. A caller
+/// gives up when its future is dropped, e.g. when the client aborts the tile request after a
+/// pan. If the leader kept `oneshot_rx` until the read finished, the broker would never see a
+/// closed request and would read every abandoned tile before the visible ones.
+///
+/// Abandoning only helps while the request is queued. If a worker already reads it, the read
+/// runs to completion and its result is discarded.
 async fn await_read_or_abandon(
     pool: &GdalProcessPool,
     tile_key: u64,
@@ -892,7 +920,10 @@ async fn await_read_or_abandon(
                 let Ok(mut lock) = pool.in_flight_tiles.lock() else {
                     break (&mut oneshot_rx).await;
                 };
-                // a follower may have subscribed between `closed()` and taking the lock
+                // A follower may have subscribed between `closed()` and taking the lock. Followers
+                // only subscribe under this lock, so the count is stable here: if it is 0, removing
+                // the entry guarantees that later callers start a new leader instead of joining
+                // this abandoned one. Otherwise, keep waiting for the result.
                 if tx.receiver_count() == 0 {
                     remove_in_flight(&mut lock, tile_key, tx);
                     tracing::trace!("All callers gave up on fetch: {tile_key}");
