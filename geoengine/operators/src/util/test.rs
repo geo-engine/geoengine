@@ -1,6 +1,7 @@
 use super::Result;
+use crate::engine::TypedRasterOperator;
 use crate::{
-    engine::{ExecutionContext, QueryContext, RasterOperator, WorkflowOperatorPath},
+    engine::{ExecutionContext, QueryContext, WorkflowOperatorPath},
     machine_learning::onnx_util::{OrtEnvironment, create_ort_environment},
     util::gdal::gdal_open_dataset,
 };
@@ -33,7 +34,7 @@ pub fn test_ort_environment() -> OrtEnvironment {
 pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryContext>(
     exe_ctx: &E,
     query_ctx: &Q,
-    operator: Box<dyn RasterOperator>,
+    operator: TypedRasterOperator,
     query_rectangle: RasterQueryRectangle,
 ) -> Result<Vec<RasterTile2D<u8>>> {
     let initialized_operator = operator
@@ -67,7 +68,7 @@ pub async fn assert_eq_raster_operator_res_and_list_of_tiles_u8<
 >(
     exe_ctx: &E,
     query_ctx: &Q,
-    operator: Box<dyn RasterOperator>,
+    operator: TypedRasterOperator,
     query_rectangle: RasterQueryRectangle,
     compare_cache_hint: bool,
     list_of_tiles: &[RasterTile2D<u8>],
@@ -87,8 +88,8 @@ pub async fn assert_eq_raster_operator_res_and_list_of_tiles_u8<
 pub async fn assert_eq_two_raster_operator_res_u8<E: ExecutionContext, Q: QueryContext>(
     exe_ctx: &E,
     query_ctx: &Q,
-    operator_a: Box<dyn RasterOperator>,
-    operator_b: Box<dyn RasterOperator>,
+    operator_a: TypedRasterOperator,
+    operator_b: TypedRasterOperator,
     query_rectangle: RasterQueryRectangle,
     compare_cache_hint: bool,
 ) {

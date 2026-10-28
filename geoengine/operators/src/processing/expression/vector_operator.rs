@@ -2,6 +2,7 @@ use super::{
     AsExpressionGeo, FromExpressionGeo, VectorExpressionError, canonicalize_name,
     error::vector as error, get_expression_dependencies,
 };
+use crate::engine::TypedVectorOperator;
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
@@ -116,7 +117,6 @@ struct InitializedVectorExpression {
     output_column: OutputColumn,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for VectorExpression {
     async fn _initialize(
@@ -468,14 +468,14 @@ impl InitializedVectorOperator for InitializedVectorExpression {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(VectorExpression {
             params: self.params.clone(),
             sources: SingleVectorSource {
                 vector: self.features.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -751,7 +751,7 @@ mod tests {
                 geometry_column_name: "geom".to_string(),
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         };
 
@@ -798,7 +798,7 @@ mod tests {
         )
         .unwrap();
 
-        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).typed();
 
         let exe_ctx = MockExecutionContext::test_default();
 
@@ -812,7 +812,7 @@ mod tests {
             },
             sources: point_source.into(),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -887,7 +887,7 @@ mod tests {
         )
         .unwrap();
 
-        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).typed();
         let exe_ctx = MockExecutionContext::test_default();
 
         let operator = VectorExpression {
@@ -900,7 +900,7 @@ mod tests {
             },
             sources: point_source.into(),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -984,7 +984,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let result = compute_result::<MultiPolygonCollection>(
             VectorExpression {
@@ -1066,7 +1066,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let result = compute_result::<MultiPointCollection>(
             VectorExpression {
@@ -1172,7 +1172,7 @@ mod tests {
                     geometry_column_name: "geom".to_string(),
                 },
                 sources: MockFeatureCollectionSource::single(points.clone())
-                    .boxed()
+                    .typed()
                     .into(),
             },
             VectorQueryRectangle::new(
@@ -1210,7 +1210,7 @@ mod tests {
         <Box<dyn VectorQueryProcessor<VectorType = C>> as TryFrom<TypedVectorQueryProcessor>>::Error: std::fmt::Debug,
 {
         let operator = operator
-            .boxed()
+            .typed()
             .initialize(
                 WorkflowOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),

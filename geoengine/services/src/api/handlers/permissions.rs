@@ -408,7 +408,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let (ogr_dataset_id, ogr_dataset_name) =
             add_ports_to_datasets(&app_ctx, false, false).await;
@@ -419,7 +419,7 @@ mod tests {
                 attribute_projection: None,
             },
         }
-        .boxed();
+        .typed();
 
         let user_ctx = app_ctx.session_context(user_session.clone());
 

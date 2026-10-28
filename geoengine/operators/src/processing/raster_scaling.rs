@@ -2,7 +2,7 @@ use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, Operator, OperatorName, QueryProcessor, RasterBandDescriptor,
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    TypedRasterOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -85,7 +85,6 @@ pub struct InitializedRasterScalingOperator {
     scaling_mode: ScalingMode,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for RasterScaling {
     async fn _initialize(
@@ -176,7 +175,7 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(RasterScaling {
             params: RasterScalingParams {
                 slope: self.slope.clone(),
@@ -188,7 +187,7 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -382,7 +381,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let scaling_mode = ScalingMode::MulSlopeAddOffset;
 
@@ -397,7 +396,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let initialized_op = op
             .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
@@ -494,7 +493,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let scaling_mode = ScalingMode::SubOffsetDivSlope;
 
@@ -511,7 +510,7 @@ mod tests {
             params,
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let initialized_op = op
             .initialize(WorkflowOperatorPath::initialize_root(), &ctx)

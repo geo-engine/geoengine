@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -62,7 +62,6 @@ pub struct InitializedReflectance {
     params: ReflectanceParams,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Reflectance {
     async fn _initialize(
@@ -183,14 +182,14 @@ impl InitializedRasterOperator for InitializedReflectance {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(Reflectance {
             params: self.params,
             sources: SingleRasterSource {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -394,10 +393,10 @@ mod tests {
 
                 let src = test_util::create_mock_source::<f32>(props, cc, m);
 
-                RasterOperator::boxed(Reflectance {
+                RasterOperator::typed(Reflectance {
                     params,
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -421,10 +420,10 @@ mod tests {
     //
     //     let result = test_util::process(
     //         move || {
-    //             RasterOperator::boxed(Reflectance {
+    //             RasterOperator::typed(Reflectance {
     //                 params: ReflectanceParams::default(),
     //                 sources: SingleRasterSource {
-    //                     raster: RasterOperator::boxed(rad),
+    //                     raster: RasterOperator::typed(rad),
     //                 },
     //             })
     //         },

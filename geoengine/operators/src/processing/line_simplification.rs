@@ -1,3 +1,4 @@
+use crate::engine::TypedVectorOperator;
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
@@ -36,7 +37,6 @@ impl OperatorName for LineSimplification {
     const TYPE_NAME: &'static str = "LineSimplification";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for LineSimplification {
     async fn _initialize(
@@ -174,7 +174,7 @@ impl InitializedVectorOperator for InitializedLineSimplification {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(LineSimplification {
             params: LineSimplificationParams {
                 algorithm: self.algorithm,
@@ -184,7 +184,7 @@ impl InitializedVectorOperator for InitializedLineSimplification {
                 vector: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -372,10 +372,10 @@ mod tests {
                 algorithm: LineSimplificationAlgorithm::DouglasPeucker,
             },
             sources: MockFeatureCollectionSource::<MultiPolygon>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         }
-        .boxed();
+        .typed();
 
         let serialized = serde_json::to_value(&operator).unwrap();
 
@@ -400,7 +400,7 @@ mod tests {
             })
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_value(serialized).unwrap();
+        let _operator: TypedVectorOperator = serde_json::from_value(serialized).unwrap();
     }
 
     #[tokio::test]
@@ -415,10 +415,10 @@ mod tests {
                 sources: MockFeatureCollectionSource::<MultiPolygon>::single(
                     MultiPolygonCollection::empty()
                 )
-                .boxed()
+                .typed()
                 .into(),
             }
-            .boxed()
+            .typed()
             .initialize(
                 WorkflowOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default()
@@ -437,10 +437,10 @@ mod tests {
                 sources: MockFeatureCollectionSource::<MultiPolygon>::single(
                     MultiPolygonCollection::empty()
                 )
-                .boxed()
+                .typed()
                 .into(),
             }
-            .boxed()
+            .typed()
             .initialize(
                 WorkflowOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default()
@@ -459,10 +459,10 @@ mod tests {
                 sources: MockFeatureCollectionSource::<MultiPoint>::single(
                     MultiPointCollection::empty()
                 )
-                .boxed()
+                .typed()
                 .into(),
             }
-            .boxed()
+            .typed()
             .initialize(
                 WorkflowOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default()
@@ -495,7 +495,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).typed();
 
         let simplification = LineSimplification {
             params: LineSimplificationParams {
@@ -504,7 +504,7 @@ mod tests {
             },
             sources: source.into(),
         }
-        .boxed();
+        .typed();
 
         let initialized = simplification
             .initialize(
@@ -615,10 +615,10 @@ mod tests {
                     attribute_filters: None,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();

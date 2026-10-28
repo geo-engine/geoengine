@@ -1,4 +1,4 @@
-use crate::engine::{CanonicOperatorName, OperatorData, QueryContext};
+use crate::engine::{CanonicOperatorName, OperatorData, QueryContext, TypedVectorOperator};
 use crate::optimization::OptimizationError;
 use crate::{
     engine::{
@@ -102,7 +102,6 @@ impl OperatorData for MockPointSource {
     fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for MockPointSource {
     async fn _initialize(
@@ -175,14 +174,14 @@ impl InitializedVectorOperator for InitializedMockPointSource {
     fn optimize(
         &self,
         _target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(MockPointSource {
             params: MockPointSourceParams {
                 points: self.points.clone(),
                 spatial_bounds: self.spatial_bounds.clone(),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -203,12 +202,12 @@ mod tests {
         let mps = MockPointSource {
             params: MockPointSourceParams::new(points),
         }
-        .boxed();
+        .typed();
         let serialized = serde_json::to_string(&mps).unwrap();
         let expect = "{\"type\":\"MockPointSource\",\"params\":{\"points\":[{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0},{\"x\":1.0,\"y\":2.0}],\"spatialBounds\":{\"type\":\"none\"}}}";
         assert_eq!(serialized, expect);
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_str(&serialized).unwrap();
+        let _operator: TypedVectorOperator = serde_json::from_str(&serialized).unwrap();
     }
 
     #[tokio::test]
@@ -219,7 +218,7 @@ mod tests {
         let mps = MockPointSource {
             params: MockPointSourceParams::new(points),
         }
-        .boxed();
+        .typed();
         let initialized = mps
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await

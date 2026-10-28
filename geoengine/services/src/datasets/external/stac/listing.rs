@@ -482,7 +482,7 @@ impl LayerCollectionProvider for StacDataProvider {
                             name: id.to_string(),
                         }),
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: None,

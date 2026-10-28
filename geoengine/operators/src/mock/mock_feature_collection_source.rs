@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::engine::{CanonicOperatorName, QueryContext};
+use crate::engine::{CanonicOperatorName, QueryContext, TypedVectorOperator};
 use crate::engine::{
     ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
@@ -149,9 +149,7 @@ pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geomet
     collections: Vec<FeatureCollection<G>>,
 }
 
-// TODO: use single implementation once
-//      "deserialization of generic impls is not supported yet; use #[typetag::serialize] to generate serialization only"
-//  is solved
+// Each geometry type has its own variant in `TypedVectorOperator`.
 // TODO: implementation is done with `paste!`, but we can use `core::concat_idents` once its stable
 
 macro_rules! impl_mock_feature_collection_source {
@@ -168,7 +166,6 @@ macro_rules! impl_mock_feature_collection_source {
     ($geometry:ty, $output:ident, $newtype:ident) => {
         type $newtype = MockFeatureCollectionSource<$geometry>;
 
-        #[typetag::serde]
         #[async_trait]
         impl VectorOperator for $newtype {
             async fn _initialize(
@@ -245,11 +242,11 @@ macro_rules! impl_mock_feature_collection_source {
             fn optimize(
                 &self,
                 _target_resolution: SpatialResolution,
-            ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+            ) -> Result<TypedVectorOperator, OptimizationError> {
                 Ok(MockFeatureCollectionSource {
                     params: self.params.clone(),
                 }
-                .boxed())
+                .typed())
             }
         }
     };
@@ -291,7 +288,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource::single(collection).boxed();
+        let source = MockFeatureCollectionSource::single(collection).typed();
 
         let serialized = serde_json::to_value(&source).unwrap();
 
@@ -395,7 +392,7 @@ mod tests {
             })
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_value(serialized).unwrap();
+        let _operator: TypedVectorOperator = serde_json::from_value(serialized).unwrap();
     }
 
     #[tokio::test]
@@ -414,7 +411,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).typed();
 
         let source = source
             .initialize(

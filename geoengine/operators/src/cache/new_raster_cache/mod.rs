@@ -3,7 +3,7 @@ use crate::cache::cache_tiles::CompressedRasterTileExt;
 use crate::cache::error::CacheError;
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, QueryContext,
-    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    QueryProcessor, RasterQueryProcessor, RasterResultDescriptor, TypedRasterOperator,
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
@@ -936,7 +936,7 @@ where
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.source.optimize(resolution)
     }
 }
@@ -1158,8 +1158,8 @@ supported_raster_data_type_impl!(
 mod tests {
     use super::*;
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
-        TimeDescriptor,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterOperator,
+        SpatialGridDescriptor, TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{Coordinate2D, TimeInstance};
@@ -1569,7 +1569,7 @@ mod tests {
     fn mock_source_with_fill_value(
         fill_value: u8,
     ) -> (
-        Box<dyn RasterOperator>,
+        TypedRasterOperator,
         RasterTile2D<u8>,
         GridBoundingBox2D,
         TilingSpecification,
@@ -1609,7 +1609,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         (
             source,

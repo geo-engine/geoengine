@@ -1,6 +1,7 @@
 mod dataset_iterator;
 
 use self::dataset_iterator::OgrDatasetIterator;
+use crate::engine::TypedVectorOperator;
 use crate::{
     adapters::FeatureCollectionStreamExt,
     engine::{
@@ -350,7 +351,6 @@ pub struct InitializedOgrSource {
     default_cache_ttl: CacheTtlSeconds,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for OgrSource {
     async fn _initialize(
@@ -504,12 +504,12 @@ impl InitializedVectorOperator for InitializedOgrSource {
     fn optimize(
         &self,
         _resolution: geoengine_datatypes::primitives::SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, crate::optimization::OptimizationError> {
+    ) -> Result<TypedVectorOperator, crate::optimization::OptimizationError> {
         // we do not optimize vector inputs, but it would be possible to, e.g., sample or simplify features here based on the resolution
         Ok(OgrSource {
             params: self.params.clone(),
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -2455,7 +2455,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -2554,7 +2554,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -2656,7 +2656,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -2809,7 +2809,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -2983,7 +2983,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -4396,7 +4396,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -4639,7 +4639,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -4725,7 +4725,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -4841,7 +4841,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -4964,7 +4964,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -5085,7 +5085,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -5206,7 +5206,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -5323,7 +5323,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -5453,7 +5453,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -5569,7 +5569,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();

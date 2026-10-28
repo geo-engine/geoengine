@@ -1,4 +1,4 @@
-use crate::engine::{InitializedRasterOperator, RasterBandDescriptors, RasterOperator};
+use crate::engine::{InitializedRasterOperator, RasterBandDescriptors, TypedRasterOperator};
 use crate::error::Error;
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -59,7 +59,7 @@ pub(super) fn select_bands(
 pub(super) fn optimize_raster_plot_source(
     source: &dyn InitializedRasterOperator,
     target_resolution: SpatialResolution,
-) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+) -> Result<TypedRasterOperator, OptimizationError> {
     let native_resolution = source.result_descriptor().spatial_grid.spatial_resolution();
 
     // stops if the resolution would overflow

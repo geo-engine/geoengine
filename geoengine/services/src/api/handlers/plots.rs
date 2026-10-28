@@ -19,9 +19,10 @@ use geoengine_datatypes::{
     spatial_reference::{DefaultCoordinateProjector, SpatialReference},
     util::Identifier,
 };
+use geoengine_operators::engine::TypedPlotOperator;
 use geoengine_operators::{
     engine::{
-        ExecutionContext, InitializedPlotOperator, PlotOperator, QueryContext, ResultDescriptor,
+        ExecutionContext, InitializedPlotOperator, QueryContext, ResultDescriptor,
         TypedPlotQueryProcessor, WorkflowOperatorPath,
     },
     util::abortable_query_execution,
@@ -272,7 +273,7 @@ async fn optimize_for_request_resolution(
         )
     };
 
-    let optimized: Result<Box<dyn PlotOperator>, String> = match resolution {
+    let optimized: Result<TypedPlotOperator, String> = match resolution {
         Ok(resolution) => initialized
             .optimize(resolution)
             .map_err(|error| error.to_string()),

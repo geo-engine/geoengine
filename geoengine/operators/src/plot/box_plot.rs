@@ -2,8 +2,8 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    WorkflowOperatorPath,
+    TypedPlotOperator, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
 use crate::optimization::OptimizationError;
@@ -48,7 +48,6 @@ pub struct BoxPlotParams {
     pub column_names: Vec<String>,
 }
 
-#[typetag::serde]
 #[async_trait]
 #[allow(clippy::too_many_lines)]
 impl PlotOperator for BoxPlot {
@@ -190,7 +189,7 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(BoxPlot {
             params: BoxPlotParams {
                 column_names: self.columns.clone(),
@@ -199,7 +198,7 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
                 source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -225,7 +224,7 @@ impl InitializedPlotOperator
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(BoxPlot {
             params: BoxPlotParams {
                 column_names: self.columns.iter().map(|band| band.name.clone()).collect(),
@@ -237,7 +236,7 @@ impl InitializedPlotOperator
                 )?),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -507,7 +506,8 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor, VectorOperator,
+        RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor, TypedRasterOperator,
+        VectorOperator,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
 
@@ -520,7 +520,7 @@ mod tests {
                 column_names: vec!["foobar".to_string()],
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         };
 
@@ -554,7 +554,7 @@ mod tests {
                 column_names: vec![],
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         };
 
@@ -602,7 +602,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -614,7 +614,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -667,7 +667,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -679,7 +679,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -718,7 +718,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -730,7 +730,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
@@ -747,7 +747,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -759,7 +759,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
@@ -776,7 +776,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -788,7 +788,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -827,7 +827,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -839,7 +839,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -880,7 +880,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -892,7 +892,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -967,14 +967,14 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1037,14 +1037,14 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1108,14 +1108,14 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1177,12 +1177,12 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1257,12 +1257,12 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1330,12 +1330,12 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1365,7 +1365,7 @@ mod tests {
     }
 
     /// A raster source with `num_bands` bands that each contain the same 4x2 tile with no-data values
-    fn multi_band_raster_source(num_bands: u32) -> Box<dyn RasterOperator> {
+    fn multi_band_raster_source(num_bands: u32) -> TypedRasterOperator {
         let tile_size_in_pixels = GridShape2D::new_2d(4, 2);
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
@@ -1408,11 +1408,11 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
     }
 
     async fn raster_box_plot(
-        source: Box<dyn RasterOperator>,
+        source: TypedRasterOperator,
         column_names: Vec<String>,
         bbox: BoundingBox2D,
     ) -> Result<PlotData> {
@@ -1424,7 +1424,7 @@ mod tests {
             params: BoxPlotParams { column_names },
             sources: source.into(),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await?
         .query_processor()?

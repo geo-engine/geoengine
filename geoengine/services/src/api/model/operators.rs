@@ -254,9 +254,9 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "operator")]
 pub enum LegacyTypedOperator {
-    Vector(Box<dyn geoengine_operators::engine::VectorOperator>),
-    Raster(Box<dyn geoengine_operators::engine::RasterOperator>),
-    Plot(Box<dyn geoengine_operators::engine::PlotOperator>),
+    Vector(geoengine_operators::engine::TypedVectorOperator),
+    Raster(geoengine_operators::engine::TypedRasterOperator),
+    Plot(geoengine_operators::engine::TypedPlotOperator),
 }
 
 impl PartialSchema for LegacyTypedOperator {

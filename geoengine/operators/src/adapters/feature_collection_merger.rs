@@ -166,7 +166,7 @@ mod tests {
         };
 
         let source = source
-            .boxed()
+            .typed()
             .initialize(
                 WorkflowOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
@@ -245,7 +245,7 @@ mod tests {
     #[tokio::test]
     async fn empty() {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
-            .boxed()
+            .typed()
             .initialize(
                 WorkflowOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),

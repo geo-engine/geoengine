@@ -12,6 +12,8 @@ use geoengine_datatypes::{
     primitives::{BoundingBox2D, ColumnSelection, DateTime, VectorQueryRectangle},
 };
 use geoengine_datatypes::{primitives::TimeInterval, util::test::TestDefault};
+use geoengine_operators::engine::TypedRasterOperator;
+use geoengine_operators::engine::TypedVectorOperator;
 use geoengine_operators::{
     engine::{
         ExecutionContext, MockExecutionContext, QueryContext, SingleVectorMultipleRasterSources,
@@ -32,7 +34,7 @@ use std::hint::black_box;
 async fn raster_vector_join(
     exec_ctx: &dyn ExecutionContext,
     query_ctx: &dyn QueryContext,
-    operator: Box<dyn VectorOperator>,
+    operator: TypedVectorOperator,
 ) -> Vec<MultiPointCollection> {
     let processor = operator
         .initialize(WorkflowOperatorPath::initialize_root(), exec_ctx)
@@ -82,19 +84,19 @@ fn raster_vector_join_benchmark(c: &mut Criterion) {
             temporal_aggregation_ignore_no_data: true,
         },
         sources: SingleVectorMultipleRasterSources {
-            vector: Box::new(OgrSource {
+            vector: TypedVectorOperator::from(OgrSource {
                 params: OgrSourceParameters {
                     data: ports_dataset,
                     attribute_projection: None,
                     attribute_filters: None,
                 },
             }),
-            rasters: vec![Box::new(GdalSource {
+            rasters: vec![TypedRasterOperator::from(GdalSource {
                 params: GdalSourceParameters::new(ndvi_dataset),
             })],
         },
     }
-    .boxed();
+    .typed();
 
     c.bench_function("raster_vector_join", |b| {
         b.to_async(&runtime)

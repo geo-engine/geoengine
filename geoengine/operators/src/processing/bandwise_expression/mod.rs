@@ -4,7 +4,7 @@ use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    TypedRasterOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 
 use crate::optimization::OptimizationError;
@@ -40,7 +40,6 @@ impl OperatorName for BandwiseExpression {
     const TYPE_NAME: &'static str = "BandwiseExpression";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for BandwiseExpression {
     async fn _initialize(
@@ -144,14 +143,14 @@ impl InitializedRasterOperator for InitializedBandwiseExpression {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(BandwiseExpression {
             params: self.params.clone(),
             sources: SingleRasterSource {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -421,7 +420,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -429,7 +428,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -439,7 +438,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2],
             },
         }
-        .boxed();
+        .typed();
 
         let expression = BandwiseExpression {
             params: BandwiseExpressionParams {
@@ -449,7 +448,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: stacker },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {

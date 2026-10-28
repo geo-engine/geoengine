@@ -10,7 +10,6 @@ use crate::api::model::processing_graphs::{
     RasterTypeConversion, RasterTypeConversionParameters, Rasterization, RasterizationParameters,
     Reflectance, ReflectanceParameters, RenameBands, Temperature, TemperatureParameters,
     TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
-    back_conversion::downcast_runtime_operator,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
         AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum,
@@ -26,9 +25,8 @@ use crate::api::model::processing_graphs::{
         TimeShiftParametersRelative,
     },
 };
-use geoengine_datatypes::util::AsAny;
 use geoengine_operators::{
-    engine::{OperatorName, RasterOperator as OperatorsRasterOperator},
+    engine::TypedRasterOperator as OperatorsTypedRasterOperator,
     machine_learning::onnx::Onnx as OperatorsOnnx,
     processing::{
         AggregateFunctionParams, BandDistance as OperatorsBandDistance,
@@ -46,8 +44,8 @@ use geoengine_operators::{
         RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
         Rasterization as OperatorsRasterization, Reflectance as OperatorsReflectance,
-        Reprojection as OperatorsReprojection, ScalingMode as OperatorsScalingMode,
-        SlopeOffsetSelection as OperatorsSlopeOffsetSelection, Temperature as OperatorsTemperature,
+        ScalingMode as OperatorsScalingMode, SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
+        Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeShift as OperatorsTimeShift, TimeShiftParams as OperatorsTimeShiftParams,
     },
@@ -57,57 +55,46 @@ use geoengine_operators::{
 };
 
 macro_rules! convert {
-    ($type_name:expr, $operator:expr, $($runtime:ty => $variant:ident),+ $(,)?) => {{
-        match $type_name {
+    ($operator:expr, $($variant:ident),+ $(,)?) => {{
+        match $operator {
             $(
-                <$runtime>::TYPE_NAME => {
-                    let op = downcast_runtime_raster_operator::<$runtime>($operator, $type_name)?;
-                    return Ok(RasterOperator::$variant(op.try_into()?));
-                }
+                OperatorsTypedRasterOperator::$variant(op) => Ok(RasterOperator::$variant(op.as_ref().try_into()?)),
             )+
-            _ => anyhow::bail!(
+            operator => anyhow::bail!(
                 "cannot convert runtime raster operator {type_name} to ProcessingGraph",
-                type_name = $type_name
+                type_name = operator.type_name()
             ),
         }
     }};
 }
 
-/// Converts a `&dyn RasterOperator` raster operator from `operators` into an API raster operator.
+/// Converts a raster operator from `operators` into an API raster operator.
 pub fn raster_operator_from_runtime(
-    operator: &dyn OperatorsRasterOperator,
+    operator: &OperatorsTypedRasterOperator,
 ) -> anyhow::Result<RasterOperator> {
-    let type_name = operator.typetag_name();
-
-    convert!(type_name, operator,
-        OperatorsBandFilter => BandFilter,
-        OperatorsBandNeighborhoodAggregate => BandNeighborhoodAggregate,
-        OperatorsBandwiseExpression => BandwiseExpression,
-        OperatorsDownsampling => Downsampling,
-        OperatorsExpression => Expression,
-        OperatorsGdalSource => GdalSource,
-        OperatorsInterpolation => Interpolation,
-        OperatorsMultiBandGdalSource => MultiBandGdalSource,
-        OperatorsNeighborhoodAggregate => NeighborhoodAggregate,
-        OperatorsOnnx => Onnx,
-        OperatorsRadiance => Radiance,
-        OperatorsRasterScaling => RasterScaling,
-        OperatorsRasterStacker => RasterStacker,
-        OperatorsRasterTypeConversion => RasterTypeConversion,
-        OperatorsRasterization => Rasterization,
-        OperatorsReprojection => Reprojection,
-        OperatorsReflectance => Reflectance,
-        OperatorsTemperature => Temperature,
-        OperatorsTemporalRasterAggregation => TemporalRasterAggregation,
-        OperatorsTimeShift => TimeShift,
-    );
-}
-
-fn downcast_runtime_raster_operator<'a, T: 'static>(
-    operator: &'a dyn AsAny,
-    type_name: &'a str,
-) -> anyhow::Result<&'a T> {
-    downcast_runtime_operator::<T>("raster", operator, type_name)
+    convert!(
+        operator,
+        BandFilter,
+        BandNeighborhoodAggregate,
+        BandwiseExpression,
+        Downsampling,
+        Expression,
+        GdalSource,
+        Interpolation,
+        MultiBandGdalSource,
+        NeighborhoodAggregate,
+        Onnx,
+        Radiance,
+        RasterScaling,
+        RasterStacker,
+        RasterTypeConversion,
+        Rasterization,
+        Reprojection,
+        Reflectance,
+        Temperature,
+        TemporalRasterAggregation,
+        TimeShift,
+    )
 }
 
 impl TryFrom<&OperatorsGdalSource> for GdalSource {
@@ -151,7 +138,7 @@ impl TryFrom<&OperatorsExpression> for Expression {
                 map_no_data: value.params.map_no_data,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -222,7 +209,7 @@ impl TryFrom<&OperatorsTemporalRasterAggregation> for TemporalRasterAggregation 
                 output_type: value.params.output_type.map(Into::into),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -244,7 +231,7 @@ impl TryFrom<&OperatorsRasterStacker> for RasterStacker {
                         .sources
                         .rasters
                         .iter()
-                        .map(|raster| raster_operator_from_runtime(raster.as_ref()))
+                        .map(raster_operator_from_runtime)
                         .collect::<anyhow::Result<Vec<_>>>()?,
                 }
                 .into(),
@@ -262,7 +249,7 @@ impl TryFrom<&OperatorsRasterTypeConversion> for RasterTypeConversion {
                 output_data_type: value.params.output_data_type.into(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -301,7 +288,7 @@ impl TryFrom<&OperatorsInterpolation> for Interpolation {
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -339,7 +326,7 @@ impl TryFrom<&OperatorsDownsampling> for Downsampling {
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -363,7 +350,7 @@ impl TryFrom<&OperatorsBandFilter> for BandFilter {
                 },
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -404,7 +391,7 @@ impl TryFrom<&OperatorsBandNeighborhoodAggregate> for BandNeighborhoodAggregate 
                 },
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -423,7 +410,7 @@ impl TryFrom<&OperatorsBandwiseExpression> for BandwiseExpression {
                 map_no_data: value.params.map_no_data,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -467,7 +454,7 @@ impl TryFrom<&OperatorsNeighborhoodAggregate> for NeighborhoodAggregate {
                 },
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -484,7 +471,7 @@ impl TryFrom<&OperatorsOnnx> for Onnx {
                 model: value.params.model.clone().into(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -499,7 +486,7 @@ impl TryFrom<&OperatorsRadiance> for Radiance {
             r#type: Default::default(),
             params: RadianceParameters {},
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -568,7 +555,7 @@ impl TryFrom<&OperatorsRasterScaling> for RasterScaling {
                 },
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -591,7 +578,7 @@ impl TryFrom<&OperatorsRasterization> for Rasterization {
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
                 vector: crate::api::model::processing_graphs::back_conversion::vector::vector_operator_from_runtime(
-                    value.sources.vector.as_ref(),
+                    &value.sources.vector,
                 )?,
             }
             .into(),
@@ -611,7 +598,7 @@ impl TryFrom<&OperatorsReflectance> for Reflectance {
                 force_satellite: value.params.force_satellite,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -628,7 +615,7 @@ impl TryFrom<&OperatorsTemperature> for Temperature {
                 force_satellite: value.params.force_satellite,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             }
             .into(),
         })
@@ -660,12 +647,12 @@ impl TryFrom<&OperatorsTimeShift> for TimeShift {
                 source: match &value.sources.source {
                     geoengine_operators::util::input::RasterOrVectorOperator::Raster(raster) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
-                            raster_operator_from_runtime(raster.as_ref())?,
+                            raster_operator_from_runtime(raster)?,
                         )
                     }
                     geoengine_operators::util::input::RasterOrVectorOperator::Vector(vector) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
-                            crate::api::model::processing_graphs::back_conversion::vector::vector_operator_from_runtime(vector.as_ref())?,
+                            crate::api::model::processing_graphs::back_conversion::vector::vector_operator_from_runtime(vector)?,
                         )
                     }
                 },
@@ -684,6 +671,7 @@ mod tests {
         primitives::{Coordinate2D, SpatialResolution, TimeGranularity, TimeStep},
         raster::RenameBands as RuntimeRenameBands,
     };
+    use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
     use geoengine_operators::{
         engine::{
             MultipleRasterSources, SingleRasterOrVectorSource, SingleRasterSource,
@@ -735,14 +723,14 @@ mod tests {
         },
     };
 
-    fn raster_source() -> Box<dyn OperatorsRasterOperator> {
-        Box::new(OperatorsGdalSource {
+    fn raster_source() -> OperatorsTypedRasterOperator {
+        TypedRasterOperator::from(OperatorsGdalSource {
             params: OperatorsGdalSourceParameters::new(NamedData::with_system_name("test-raster")),
         })
     }
 
-    fn multi_band_raster_source() -> Box<dyn OperatorsRasterOperator> {
-        Box::new(OperatorsMultiBandGdalSource {
+    fn multi_band_raster_source() -> OperatorsTypedRasterOperator {
+        TypedRasterOperator::from(OperatorsMultiBandGdalSource {
             params: OperatorsMultiBandGdalSourceParameters::new(NamedData::with_system_name(
                 "test-raster-multi",
             )),
@@ -755,11 +743,11 @@ mod tests {
         reason = "This test has to handle many different raster operator types."
     )]
     fn it_converts_runtime_raster_operators_to_processing_graph() {
-        type RasterOperatorCase = (Box<dyn OperatorsRasterOperator>, fn(RasterOperator) -> bool);
+        type RasterOperatorCase = (OperatorsTypedRasterOperator, fn(RasterOperator) -> bool);
 
         let cases: Vec<RasterOperatorCase> = vec![
             (
-                Box::new(OperatorsExpression {
+                TypedRasterOperator::from(OperatorsExpression {
                     params: OperatorsExpressionParams {
                         expression: "A + B".to_string(),
                         output_type: geoengine_datatypes::raster::RasterDataType::F32,
@@ -773,7 +761,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Expression(_)),
             ),
             (
-                Box::new(OperatorsReprojection {
+                TypedRasterOperator::from(OperatorsReprojection {
                     params: OperatorsReprojectionParams {
                         target_spatial_reference:
                             geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326(),
@@ -788,7 +776,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Reprojection(_)),
             ),
             (
-                Box::new(OperatorsTemporalRasterAggregation {
+                TypedRasterOperator::from(OperatorsTemporalRasterAggregation {
                     params: OperatorsTemporalRasterAggregationParams {
                         aggregation: geoengine_operators::processing::Aggregation::Mean {
                             ignore_no_data: false,
@@ -805,7 +793,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::TemporalRasterAggregation(_)),
             ),
             (
-                Box::new(OperatorsRasterStacker {
+                TypedRasterOperator::from(OperatorsRasterStacker {
                     params: OperatorsRasterStackerParams {
                         rename_bands: RuntimeRenameBands::Default,
                     },
@@ -816,7 +804,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::RasterStacker(_)),
             ),
             (
-                Box::new(OperatorsRasterTypeConversion {
+                TypedRasterOperator::from(OperatorsRasterTypeConversion {
                     params: OperatorsRasterTypeConversionParams {
                         output_data_type: geoengine_datatypes::raster::RasterDataType::U8,
                     },
@@ -827,7 +815,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::RasterTypeConversion(_)),
             ),
             (
-                Box::new(OperatorsInterpolation {
+                TypedRasterOperator::from(OperatorsInterpolation {
                     params: OperatorsInterpolationParams {
                         interpolation: OperatorsInterpolationMethod::NearestNeighbor,
                         output_resolution: OperatorsInterpolationResolution::Fraction(
@@ -842,7 +830,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Interpolation(_)),
             ),
             (
-                Box::new(OperatorsDownsampling {
+                TypedRasterOperator::from(OperatorsDownsampling {
                     params: OperatorsDownsamplingParams {
                         sampling_method: OperatorsDownsamplingMethod::NearestNeighbor,
                         output_resolution: OperatorsDownsamplingResolution::Fraction(
@@ -857,7 +845,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Downsampling(_)),
             ),
             (
-                Box::new(OperatorsBandFilter {
+                TypedRasterOperator::from(OperatorsBandFilter {
                     params: OperatorsBandFilterParams {
                         bands: geoengine_operators::processing::BandsByNameOrIndex::Index(vec![0]),
                     },
@@ -868,7 +856,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::BandFilter(_)),
             ),
             (
-                Box::new(OperatorsBandNeighborhoodAggregate {
+                TypedRasterOperator::from(OperatorsBandNeighborhoodAggregate {
                     params: OperatorsBandNeighborhoodAggregateParameters {
                         aggregate: OperatorsBandNeighborhoodAggregateMethod::Average {
                             window_size: 3,
@@ -881,7 +869,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::BandNeighborhoodAggregate(_)),
             ),
             (
-                Box::new(OperatorsBandwiseExpression {
+                TypedRasterOperator::from(OperatorsBandwiseExpression {
                     params: OperatorsBandwiseExpressionParams {
                         expression: "x * 2.0".to_string(),
                         output_type: geoengine_datatypes::raster::RasterDataType::F64,
@@ -894,7 +882,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::BandwiseExpression(_)),
             ),
             (
-                Box::new(OperatorsNeighborhoodAggregate {
+                TypedRasterOperator::from(OperatorsNeighborhoodAggregate {
                     params: OperatorsNeighborhoodAggregateParams {
                         neighborhood: NeighborhoodParams::Rectangle { dimensions: [3, 3] },
                         aggregate_function: AggregateFunctionParams::Sum,
@@ -906,7 +894,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::NeighborhoodAggregate(_)),
             ),
             (
-                Box::new(OperatorsOnnx {
+                TypedRasterOperator::from(OperatorsOnnx {
                     params: OperatorsOnnxParameters {
                         model: MlModelName::try_new(None::<&str>, "test-model").unwrap(),
                     },
@@ -917,7 +905,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Onnx(_)),
             ),
             (
-                Box::new(OperatorsRadiance {
+                TypedRasterOperator::from(OperatorsRadiance {
                     params: OperatorsRadianceParameters {},
                     sources: SingleRasterSource {
                         raster: raster_source(),
@@ -926,7 +914,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Radiance(_)),
             ),
             (
-                Box::new(OperatorsRasterScaling {
+                TypedRasterOperator::from(OperatorsRasterScaling {
                     params: OperatorsRasterScalingParams {
                         slope: OperatorsSlopeOffsetSelection::Constant { value: 1.0 },
                         offset: OperatorsSlopeOffsetSelection::Constant { value: 0.0 },
@@ -940,26 +928,28 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::RasterScaling(_)),
             ),
             (
-                Box::new(OperatorsRasterization {
+                TypedRasterOperator::from(OperatorsRasterization {
                     params: OperatorsRasterizationParams {
                         spatial_resolution: SpatialResolution::new_unchecked(10.0, 10.0),
                         origin_coordinate: Coordinate2D::new(0.0, 0.0),
                         density_params: None,
                     },
                     sources: SingleVectorSource {
-                        vector: Box::new(geoengine_operators::mock::MockPointSource {
-                            params: geoengine_operators::mock::MockPointSourceParams {
-                                points: vec![(1.0, 2.0).into()],
-                                spatial_bounds:
-                                    geoengine_operators::mock::SpatialBoundsDerive::None,
+                        vector: TypedVectorOperator::from(
+                            geoengine_operators::mock::MockPointSource {
+                                params: geoengine_operators::mock::MockPointSourceParams {
+                                    points: vec![(1.0, 2.0).into()],
+                                    spatial_bounds:
+                                        geoengine_operators::mock::SpatialBoundsDerive::None,
+                                },
                             },
-                        }),
+                        ),
                     },
                 }),
                 |graph| matches!(graph, RasterOperator::Rasterization(_)),
             ),
             (
-                Box::new(OperatorsReflectance {
+                TypedRasterOperator::from(OperatorsReflectance {
                     params: OperatorsReflectanceParams {
                         solar_correction: true,
                         force_hrv: false,
@@ -972,7 +962,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Reflectance(_)),
             ),
             (
-                Box::new(OperatorsTemperature {
+                TypedRasterOperator::from(OperatorsTemperature {
                     params: OperatorsTemperatureParams {
                         force_satellite: None,
                     },
@@ -983,7 +973,7 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Temperature(_)),
             ),
             (
-                Box::new(OperatorsTimeShift {
+                TypedRasterOperator::from(OperatorsTimeShift {
                     params: OperatorsTimeShiftParams::Relative {
                         granularity: geoengine_datatypes::primitives::TimeGranularity::Months,
                         value: -1,
@@ -999,16 +989,16 @@ mod tests {
         ];
 
         for (operator, assert_variant) in cases {
-            let converted = raster_operator_from_runtime(operator.as_ref()).unwrap_or_else(|err| {
+            let converted = raster_operator_from_runtime(&operator).unwrap_or_else(|err| {
                 panic!(
                     "runtime raster conversion failed for {}: {err}",
-                    operator.typetag_name()
+                    operator.type_name()
                 )
             });
             assert!(
                 assert_variant(converted),
                 "runtime raster conversion failed for {}",
-                operator.typetag_name()
+                operator.type_name()
             );
         }
     }

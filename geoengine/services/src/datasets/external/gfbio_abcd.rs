@@ -367,7 +367,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
                             attribute_filters: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: None, // TODO

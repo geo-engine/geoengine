@@ -1324,6 +1324,7 @@ async fn delete_provider<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
+    use geoengine_operators::engine::TypedRasterOperator;
 
     use super::*;
     use crate::{
@@ -2638,7 +2639,7 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed();
+            .typed();
 
             let workflow = if time_shift_millis == 0 {
                 Workflow {
@@ -2646,15 +2647,17 @@ mod tests {
                 }
             } else {
                 Workflow {
-                    operator: OperatorsTypedOperator::Raster(Box::new(TimeShift {
-                        params: TimeShiftParams::Relative {
-                            granularity: TimeGranularity::Millis,
-                            value: time_shift_millis,
+                    operator: OperatorsTypedOperator::Raster(TypedRasterOperator::from(
+                        TimeShift {
+                            params: TimeShiftParams::Relative {
+                                granularity: TimeGranularity::Millis,
+                                value: time_shift_millis,
+                            },
+                            sources: OperatorsSingleRasterOrVectorSource {
+                                source: raster_source.into(),
+                            },
                         },
-                        sources: OperatorsSingleRasterOrVectorSource {
-                            source: raster_source.into(),
-                        },
-                    })),
+                    )),
                 }
             };
 
@@ -2802,7 +2805,7 @@ mod tests {
             workflow_operator,
             OperatorsGdalSource::try_from(dataset_operator)
                 .unwrap()
-                .boxed(),
+                .typed(),
             mock_source.query_rectangle,
             false,
         )

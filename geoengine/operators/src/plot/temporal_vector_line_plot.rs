@@ -1,7 +1,7 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource,
+    PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource, TypedPlotOperator,
     TypedPlotQueryProcessor, VectorColumnInfo, VectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
@@ -45,7 +45,6 @@ pub struct FeatureAttributeValuesOverTimeParams {
     pub value_column: String,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl PlotOperator for FeatureAttributeValuesOverTime {
     async fn _initialize(
@@ -143,14 +142,14 @@ impl InitializedPlotOperator for InitializedFeatureAttributeValuesOverTime {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(FeatureAttributeValuesOverTime {
             params: self.state.clone(),
             sources: SingleVectorSource {
                 vector: self.vector_source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -339,7 +338,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let exe_ctc = MockExecutionContext::test_default();
 
@@ -352,7 +351,7 @@ mod tests {
         };
 
         let operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
@@ -486,7 +485,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let exe_ctc = MockExecutionContext::test_default();
 
@@ -499,7 +498,7 @@ mod tests {
         };
 
         let operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
@@ -621,7 +620,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::test_default();
 
@@ -634,7 +633,7 @@ mod tests {
         };
 
         let operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();

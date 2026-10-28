@@ -7,8 +7,8 @@ use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorData, OperatorName, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorData, OperatorName, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::optimization::OptimizationError;
@@ -40,8 +40,8 @@ pub struct VectorJoinParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VectorJoinSources {
-    pub left: Box<dyn VectorOperator>,
-    pub right: Box<dyn VectorOperator>,
+    pub left: TypedVectorOperator,
+    pub right: TypedVectorOperator,
 }
 
 impl OperatorData for VectorJoinSources {
@@ -90,7 +90,6 @@ pub enum VectorJoinType {
     },
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for VectorJoin {
     async fn _initialize(
@@ -300,7 +299,7 @@ impl InitializedVectorOperator for InitializedVectorJoin {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(VectorJoin {
             params: VectorJoinParams {
                 join_type: self.state.join_type.clone(),
@@ -310,7 +309,7 @@ impl InitializedVectorOperator for InitializedVectorJoin {
                 right: self.right.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -366,7 +365,7 @@ mod tests {
                     )
                     .unwrap(),
                 )
-                .boxed(),
+                .typed(),
                 right: MockFeatureCollectionSource::single(
                     DataCollection::from_slices(
                         &[] as &[NoGeometry],
@@ -375,12 +374,12 @@ mod tests {
                     )
                     .unwrap(),
                 )
-                .boxed(),
+                .typed(),
             },
         };
 
         operator
-            .boxed()
+            .typed()
             .initialize(
                 WorkflowOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
@@ -408,7 +407,7 @@ mod tests {
                     )
                     .unwrap(),
                 )
-                .boxed(),
+                .typed(),
                 right: MockFeatureCollectionSource::single(
                     DataCollection::from_slices(
                         &[] as &[NoGeometry],
@@ -417,13 +416,13 @@ mod tests {
                     )
                     .unwrap(),
                 )
-                .boxed(),
+                .typed(),
             },
         };
 
         assert!(matches!(
             operator
-                .boxed()
+                .typed()
                 .initialize(WorkflowOperatorPath::initialize_root(), &MockExecutionContext::test_default())
                 .await,
             Err(error::Error::ColumnDoesNotExist { column }) if column == "foo"

@@ -1,7 +1,7 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorName, QueryContext, QueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::optimization::OptimizationError;
@@ -37,7 +37,6 @@ impl OperatorName for ColumnRangeFilter {
     const TYPE_NAME: &'static str = "ColumnRangeFilter";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for ColumnRangeFilter {
     async fn _initialize(
@@ -101,14 +100,14 @@ impl InitializedVectorOperator for InitializedColumnRangeFilter {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(ColumnRangeFilter {
             params: self.state.clone(),
             sources: SingleVectorSource {
                 vector: self.vector_source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -232,10 +231,10 @@ mod tests {
                 keep_nulls: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         }
-        .boxed();
+        .typed();
 
         let serialized = serde_json::to_value(&filter).unwrap();
 
@@ -263,7 +262,7 @@ mod tests {
             })
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_value(serialized).unwrap();
+        let _operator: TypedVectorOperator = serde_json::from_value(serialized).unwrap();
     }
 
     #[tokio::test]
@@ -284,7 +283,7 @@ mod tests {
         )
         .unwrap();
 
-        let source = MockFeatureCollectionSource::single(collection.clone()).boxed();
+        let source = MockFeatureCollectionSource::single(collection.clone()).typed();
 
         let filter = ColumnRangeFilter {
             params: ColumnRangeFilterParams {
@@ -294,7 +293,7 @@ mod tests {
             },
             sources: source.into(),
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::test_default();
 

@@ -27,6 +27,7 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, Pixel},
     util::test::TestDefault,
 };
+use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
 use geoengine_operators::{
     engine::{
         BoxRasterQueryProcessor, ChunkByteSize, ExecutionContext, InitializedRasterOperator,
@@ -107,10 +108,10 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                     raster: GdalSource {
                         params: GdalSourceParameters::new(ndvi_id.clone()),
                     }
-                    .boxed(),
+                    .typed(),
                 },
             }
-            .boxed(),
+            .typed(),
             query_rectangle: RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-1800, -900], [1799, 899]).unwrap(),
                 TimeInterval::default(),
@@ -135,16 +136,16 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                             attribute_filters: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                     rasters: vec![
                         GdalSource {
                             params: GdalSourceParameters::new(ndvi_id),
                         }
-                        .boxed(),
+                        .typed(),
                     ],
                 },
             }
-            .boxed(),
+            .typed(),
             query_rectangle: VectorQueryRectangle::new(
                 BoundingBox2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
                 TimeInterval::default(),
@@ -417,12 +418,12 @@ impl Write for PollNextForwarder {
 enum Benchmark {
     Raster {
         name: String,
-        operator: Box<dyn RasterOperator>,
+        operator: TypedRasterOperator,
         query_rectangle: RasterQueryRectangle,
     },
     Vector {
         name: String,
-        operator: Box<dyn VectorOperator>,
+        operator: TypedVectorOperator,
         query_rectangle: VectorQueryRectangle,
     },
 }

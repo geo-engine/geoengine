@@ -1,3 +1,4 @@
+use crate::engine::TypedRasterOperator;
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryContext, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
@@ -319,7 +320,6 @@ impl OperatorName for MultiBandGdalSource {
     const TYPE_NAME: &'static str = "MultiBandGdalSource";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for MultiBandGdalSource {
     async fn _initialize(
@@ -578,7 +578,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
         // TODO: handle cases where the original workflow explicitly loads overviews in the source
@@ -609,7 +609,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 overview_level: Some(next_best_overview_level),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -1080,7 +1080,7 @@ mod tests {
         let operator = MultiBandGdalSource {
             params: GdalSourceParameters::new(dataset_name),
         }
-        .boxed();
+        .typed();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
@@ -1184,7 +1184,7 @@ mod tests {
         let operator = MultiBandGdalSource {
             params: GdalSourceParameters::new(dataset_name),
         }
-        .boxed();
+        .typed();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
@@ -1314,7 +1314,7 @@ mod tests {
         let operator = MultiBandGdalSource {
             params: GdalSourceParameters::new(dataset_name),
         }
-        .boxed();
+        .typed();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
@@ -1494,7 +1494,7 @@ mod tests {
         let operator = MultiBandGdalSource {
             params: GdalSourceParameters::new(dataset_name),
         }
-        .boxed();
+        .typed();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
@@ -1727,7 +1727,7 @@ mod tests {
         let operator = MultiBandGdalSource {
             params: GdalSourceParameters::new(dataset_name),
         }
-        .boxed();
+        .typed();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
@@ -1832,7 +1832,7 @@ mod tests {
         let operator = MultiBandGdalSource {
             params: GdalSourceParameters::new_with_overview_level(dataset_name, 2),
         }
-        .boxed();
+        .typed();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 

@@ -876,7 +876,7 @@ mod tests {
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             })
             .await
@@ -894,10 +894,10 @@ mod tests {
                     sources: MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
-                    .boxed()
+                    .typed()
                     .into(),
                 }
-                .boxed()
+                .typed()
                 .into(),
             })
             .await
@@ -1122,7 +1122,7 @@ mod tests {
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 
@@ -1927,7 +1927,7 @@ mod tests {
                         spatial_bounds: SpatialBoundsDerive::None,
                     },
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 
@@ -2125,7 +2125,7 @@ mod tests {
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 
@@ -2484,7 +2484,7 @@ mod tests {
                         spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
                     },
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 
@@ -3004,7 +3004,7 @@ mod tests {
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 
@@ -3187,7 +3187,7 @@ mod tests {
                         spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
                     },
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 
@@ -3723,7 +3723,7 @@ mod tests {
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: None,
@@ -3922,7 +3922,7 @@ mod tests {
                                     3
                                 ]),
                             }
-                            .boxed(),
+                            .typed(),
                         ),
                     },
                     symbology: None,
@@ -3992,7 +3992,7 @@ mod tests {
                                     3
                                 ]),
                             }
-                            .boxed(),
+                            .typed(),
                         ),
                     },
                     symbology: None,
@@ -4017,7 +4017,7 @@ mod tests {
                                     3
                                 ]),
                             }
-                            .boxed(),
+                            .typed(),
                         ),
                     },
                     symbology: None,

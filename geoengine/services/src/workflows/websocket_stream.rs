@@ -7,11 +7,12 @@ use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, VectorQueryRectangle},
     raster::arrow_conversion::raster_tile_2d_to_arrow_ipc_file,
 };
+use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
 use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,
     engine::{
         InitializedRasterOperator, QueryAbortTrigger, QueryContext, QueryProcessorExt,
-        RasterOperator, VectorOperator, WorkflowOperatorPath,
+        WorkflowOperatorPath,
     },
 };
 use tokio::{
@@ -62,7 +63,7 @@ impl WebsocketStreamTask {
     }
 
     pub async fn new_raster<C: SessionContext>(
-        raster_operator: Box<dyn RasterOperator>,
+        raster_operator: TypedRasterOperator,
         query_rectangle: RasterQueryRectangle,
         execution_ctx: C::ExecutionContext,
         query_ctx: C::QueryContext,
@@ -77,7 +78,7 @@ impl WebsocketStreamTask {
     }
 
     pub async fn new_vector<C: SessionContext>(
-        vector_operator: Box<dyn VectorOperator>,
+        vector_operator: TypedVectorOperator,
         query_rectangle: VectorQueryRectangle,
         execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,

@@ -243,7 +243,7 @@ async fn add_dataset_to_collection(
                         overview_level: None,
                     },
                 }
-                .boxed(),
+                .typed(),
             ),
         },
         symbology: None, // TODO: add symbology

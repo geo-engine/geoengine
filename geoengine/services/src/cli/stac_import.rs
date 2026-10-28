@@ -1216,7 +1216,7 @@ impl StacImporter {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: None,

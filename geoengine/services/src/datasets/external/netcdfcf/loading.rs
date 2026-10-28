@@ -150,7 +150,7 @@ pub fn create_layer(
                 GdalSource {
                     params: GdalSourceParameters::new(data_id),
                 }
-                .boxed(),
+                .typed(),
             ),
         },
         symbology: Some(Symbology::Raster(RasterSymbology {

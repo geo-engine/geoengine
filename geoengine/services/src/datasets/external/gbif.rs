@@ -800,7 +800,7 @@ impl LayerCollectionProvider for GbifDataProvider {
                             attribute_filters: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: None,
@@ -3653,7 +3653,7 @@ mod tests {
                                 attribute_filters: None,
                             },
                         }
-                        .boxed(),
+                        .typed(),
                     ),
                 },
                 symbology: None,

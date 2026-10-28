@@ -1,8 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
 use crate::optimization::OptimizationError;
@@ -54,7 +54,6 @@ pub struct InitializedTemperature {
     params: TemperatureParams,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Temperature {
     async fn _initialize(
@@ -197,14 +196,14 @@ impl InitializedRasterOperator for InitializedTemperature {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(Temperature {
             params: self.params.clone(),
             sources: SingleRasterSource {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -367,7 +366,7 @@ mod tests {
     //
     //     let result = test_util::process(
     //         move || {
-    //             RasterOperator::boxed(Temperature {
+    //             RasterOperator::typed(Temperature {
     //                 params: TemperatureParams::default(),
     //                 sources: SingleRasterSource {
     //                     raster: src.boxed(),
@@ -395,10 +394,10 @@ mod tests {
                     None,
                 );
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -424,10 +423,10 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -466,12 +465,12 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams {
                         force_satellite: Some(4),
                     },
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -518,10 +517,10 @@ mod tests {
                     None,
                 );
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -556,12 +555,12 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams {
                         force_satellite: Some(13),
                     },
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -582,10 +581,10 @@ mod tests {
                 let props = test_util::create_properties(Some(4), None, Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -606,10 +605,10 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(42), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -630,10 +629,10 @@ mod tests {
                 let props = test_util::create_properties(None, Some(1), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -654,10 +653,10 @@ mod tests {
                 let props = test_util::create_properties(Some(1), Some(1), Some(0.0), Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -678,10 +677,10 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(1), Some(0.0), None);
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -702,10 +701,10 @@ mod tests {
                 let props = test_util::create_properties(Some(4), Some(1), None, Some(1.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -727,10 +726,10 @@ mod tests {
                 let src =
                     test_util::create_mock_source::<u8>(props, None, Some(Measurement::Unitless));
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -758,10 +757,10 @@ mod tests {
                     })),
                 );
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -791,10 +790,10 @@ mod tests {
                     })),
                 );
 
-                RasterOperator::boxed(Temperature {
+                RasterOperator::typed(Temperature {
                     params: TemperatureParams::default(),
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },

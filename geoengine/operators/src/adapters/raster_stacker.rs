@@ -579,7 +579,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -587,7 +587,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -718,7 +718,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -973,7 +973,7 @@ mod tests {
                 result_descriptor: result_descriptor_1.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -981,7 +981,7 @@ mod tests {
                 result_descriptor: result_descriptor_2,
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -1270,7 +1270,7 @@ mod tests {
                 result_descriptor: result_descriptor_1.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1278,7 +1278,7 @@ mod tests {
                 result_descriptor: result_descriptor_2,
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -1908,7 +1908,7 @@ mod tests {
                 result_descriptor: result_descriptor_1.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1916,7 +1916,7 @@ mod tests {
                 result_descriptor: result_descriptor_2,
             },
         }
-        .boxed();
+        .typed();
 
         let mrs3 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1924,7 +1924,7 @@ mod tests {
                 result_descriptor: result_descriptor_3,
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {

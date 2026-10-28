@@ -6,7 +6,7 @@ use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
     QueryProcessor, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
@@ -40,7 +40,6 @@ impl OperatorName for RasterStacker {
     const TYPE_NAME: &'static str = "RasterStacker";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for RasterStacker {
     async fn _initialize(
@@ -280,7 +279,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(RasterStacker {
             params: RasterStackerParams {
                 rename_bands: self.rename_bands.clone(),
@@ -293,7 +292,7 @@ impl InitializedRasterOperator for InitializedRasterStacker {
                     .collect::<Result<Vec<_>, _>>()?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -574,7 +573,7 @@ mod tests {
                 result_descriptor: result_descriptor1.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -582,7 +581,7 @@ mod tests {
                 result_descriptor: result_descriptor1,
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -592,7 +591,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2],
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -841,7 +840,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -849,7 +848,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -859,7 +858,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2],
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -1029,7 +1028,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1037,7 +1036,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -1047,7 +1046,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2],
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -1110,10 +1109,10 @@ mod tests {
                         overview_level: None,
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let operator = RasterStacker {
             params: RasterStackerParams {
@@ -1124,12 +1123,12 @@ mod tests {
                     GdalSource {
                         params: GdalSourceParameters::new(ndvi_id),
                     }
-                    .boxed(),
+                    .typed(),
                     expression,
                 ],
             },
         }
-        .boxed();
+        .typed();
 
         let operator = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

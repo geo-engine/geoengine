@@ -60,6 +60,7 @@ impl<T> OptimizableOperator for T where T: InitializedRasterOperator {}
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::TypedRasterOperator;
     use geoengine_datatypes::{
         collections::VectorDataType,
         dataset::{DataId, DatasetId, NamedData},
@@ -111,7 +112,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let gdal_initialized = gdal
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -197,7 +198,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let expression = Expression {
             params: ExpressionParams {
@@ -208,7 +209,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: gdal },
         }
-        .boxed();
+        .typed();
 
         let expression_initialized = expression
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -332,10 +333,10 @@ mod tests {
                         overview_level: None,
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let workflow_initialized = workflow
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -402,7 +403,7 @@ mod tests {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                     Interpolation {
                         params: InterpolationParams {
                             interpolation: InterpolationMethod::NearestNeighbor,
@@ -418,14 +419,14 @@ mod tests {
                                     overview_level: None,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ],
             },
         }
-        .boxed();
+        .typed();
 
         let workflow_initialized = workflow
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -524,7 +525,7 @@ mod tests {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                     Interpolation {
                         params: InterpolationParams {
                             interpolation: InterpolationMethod::NearestNeighbor,
@@ -540,14 +541,14 @@ mod tests {
                                     overview_level: None,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ],
             },
         }
-        .boxed();
+        .typed();
 
         let workflow_initialized = workflow
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -646,7 +647,7 @@ mod tests {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                     Downsampling {
                         params: DownsamplingParams {
                             sampling_method: DownsamplingMethod::NearestNeighbor,
@@ -662,14 +663,14 @@ mod tests {
                                     overview_level: None,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ],
             },
         }
-        .boxed();
+        .typed();
 
         let workflow_initialized = workflow
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -755,7 +756,7 @@ mod tests {
 
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
-        let workflow: Box<dyn RasterOperator> = Box::new(Reprojection {
+        let workflow: TypedRasterOperator = TypedRasterOperator::from(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -771,7 +772,7 @@ mod tests {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
         });
@@ -850,7 +851,7 @@ mod tests {
         );
 
         // check that the reprojection was necessary
-        let workflow: Box<dyn RasterOperator> = Box::new(Reprojection {
+        let workflow: TypedRasterOperator = TypedRasterOperator::from(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -866,7 +867,7 @@ mod tests {
                             overview_level: Some(2),
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
         });
@@ -938,7 +939,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed();
+        .typed();
 
         let gdal_source = GdalSource {
             params: GdalSourceParameters {
@@ -946,7 +947,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let gdal_source2 = GdalSource {
             params: GdalSourceParameters {
@@ -954,7 +955,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let raster_vector_join = RasterVectorJoin {
             params: RasterVectorJoinParams {
@@ -969,9 +970,9 @@ mod tests {
                 rasters: vec![gdal_source, gdal_source2],
             },
         }
-        .boxed();
+        .typed();
 
-        let vector_reprojection = VectorOperator::boxed(Reprojection {
+        let vector_reprojection = VectorOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -1145,7 +1146,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed();
+        .typed();
 
         let rasterization = Rasterization {
             params: RasterizationParams {
@@ -1155,7 +1156,7 @@ mod tests {
             },
             sources: SingleVectorSource { vector: source },
         }
-        .boxed();
+        .typed();
 
         let rasterization_initialized = rasterization
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1271,7 +1272,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed();
+        .typed();
 
         let gdal_source = GdalSource {
             params: GdalSourceParameters {
@@ -1279,7 +1280,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let gdal_source2 = GdalSource {
             params: GdalSourceParameters {
@@ -1287,7 +1288,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let raster_vector_join = RasterVectorJoin {
             params: RasterVectorJoinParams {
@@ -1302,7 +1303,7 @@ mod tests {
                 rasters: vec![gdal_source, gdal_source2],
             },
         }
-        .boxed();
+        .typed();
 
         let raster_vector_join_initialized = raster_vector_join
             .clone()
@@ -1486,10 +1487,10 @@ mod tests {
                                             overview_level: None,
                                         },
                                     }
-                                    .boxed(),
+                                    .typed(),
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                             Rasterization {
                                 params: RasterizationParams {
                                     spatial_resolution: SpatialResolution::new_unchecked(0.3, 0.3),
@@ -1534,10 +1535,10 @@ mod tests {
                                                             overview_level: None,
                                                         },
                                                     }
-                                                    .boxed(),
+                                                    .typed(),
                                                 },
                                             }
-                                            .boxed()],
+                                            .typed()],
                                                     vector: OgrSource {
                                                         params: OgrSourceParameters {
                                                             data: ports_name,
@@ -1545,23 +1546,23 @@ mod tests {
                                                             attribute_filters: None,
                                                         },
                                                     }
-                                                    .boxed(),
+                                                    .typed(),
                                                 },
                                             }
-                                            .boxed(),
+                                            .typed(),
                                         },
                                     }
-                                    .boxed(),
+                                    .typed(),
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         ],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let workflow_initialized = workflow
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1731,7 +1732,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let expression = Histogram {
             params: HistogramParams {
@@ -1747,7 +1748,7 @@ mod tests {
                 source: RasterOrVectorOperator::Raster(gdal),
             },
         }
-        .boxed();
+        .typed();
 
         let expression_initialized = expression
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1818,11 +1819,11 @@ mod tests {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();

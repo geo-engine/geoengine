@@ -6,6 +6,7 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, RasterDataType, RasterTile2D, RenameBands},
     util::test::TestDefault,
 };
+use geoengine_operators::engine::TypedRasterOperator;
 use geoengine_operators::{
     engine::{
         MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
@@ -26,7 +27,7 @@ struct OutputRow {
     std_dev: f64,
 }
 
-fn aggregation_on_source(raster: Box<dyn RasterOperator>) -> Box<dyn RasterOperator> {
+fn aggregation_on_source(raster: TypedRasterOperator) -> TypedRasterOperator {
     TemporalRasterAggregation {
         params: TemporalRasterAggregationParameters {
             aggregation: Aggregation::Sum {
@@ -41,17 +42,17 @@ fn aggregation_on_source(raster: Box<dyn RasterOperator>) -> Box<dyn RasterOpera
         },
         sources: SingleRasterSource { raster },
     }
-    .boxed()
+    .typed()
 }
 
-fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOperator> {
+fn ndvi_source(execution_context: &mut MockExecutionContext) -> TypedRasterOperator {
     let ndvi_id = add_ndvi_dataset(execution_context);
 
     let gdal_operator = GdalSource {
         params: GdalSourceParameters::new(ndvi_id),
     };
 
-    gdal_operator.boxed()
+    gdal_operator.typed()
 }
 
 async fn one_band_at_a_time(runs: usize, bands: u32) {
@@ -125,7 +126,7 @@ async fn all_bands_at_once(runs: usize, bands: u32) {
                 .collect(),
         },
     }
-    .boxed();
+    .typed();
 
     let aggregation = aggregation_on_source(stacker);
 

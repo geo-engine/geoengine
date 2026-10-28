@@ -2,7 +2,7 @@ use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedPlotOperator,
     InitializedRasterOperator, InitializedSources, Operator, OperatorName, PlotOperator,
     PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterSource,
-    TypedPlotQueryProcessor, WorkflowOperatorPath,
+    TypedPlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
 use crate::optimization::OptimizationError;
@@ -66,7 +66,6 @@ pub enum MeanRasterPixelValuesOverTimePosition {
     End,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl PlotOperator for MeanRasterPixelValuesOverTime {
     async fn _initialize(
@@ -135,14 +134,14 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(MeanRasterPixelValuesOverTime {
             params: self.state.clone(),
             sources: SingleRasterSource {
                 raster: optimize_raster_plot_source(self.raster.as_ref(), target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -351,6 +350,7 @@ impl MeanCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::TypedRasterOperator;
 
     use crate::{
         engine::{
@@ -394,7 +394,7 @@ mod tests {
                 raster: GdalSource {
                     params: GdalSourceParameters::new(NamedData::with_system_name("test")),
                 }
-                .boxed(),
+                .typed(),
             },
         };
 
@@ -416,7 +416,7 @@ mod tests {
         })
         .to_string();
 
-        serde_json::from_str::<Box<dyn PlotOperator>>(&serialized).unwrap();
+        serde_json::from_str::<TypedPlotOperator>(&serialized).unwrap();
 
         let deserialized: MeanRasterPixelValuesOverTime =
             serde_json::from_str(&serialized).unwrap();
@@ -453,7 +453,7 @@ mod tests {
         };
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -541,7 +541,7 @@ mod tests {
         };
 
         let processor = temporal_raster_mean_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -577,7 +577,7 @@ mod tests {
     fn generate_mock_raster_source(
         time_intervals: Vec<TimeInterval>,
         values_vec: Vec<Vec<u8>>,
-    ) -> Box<dyn RasterOperator> {
+    ) -> TypedRasterOperator {
         assert_eq!(time_intervals.len(), values_vec.len());
         assert!(values_vec.iter().all(|v| v.len() == 6));
 
@@ -620,7 +620,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
     }
 
     #[tokio::test]
@@ -667,7 +667,7 @@ mod tests {
         };
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -712,7 +712,7 @@ mod tests {
     fn generate_mock_multiband_raster_source(
         time_interval: TimeInterval,
         measurements: [Measurement; 2],
-    ) -> Box<dyn RasterOperator> {
+    ) -> TypedRasterOperator {
         let tiles = [vec![1, 2, 3, 4, 5, 6], vec![7, 8, 9, 10, 11, 12]]
             .into_iter()
             .enumerate()
@@ -754,7 +754,7 @@ mod tests {
                 },
             },
         }
-        .boxed()
+        .typed()
     }
 
     async fn query_multiband_plot(
@@ -781,7 +781,7 @@ mod tests {
                 raster: generate_mock_multiband_raster_source(time_interval, measurements),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await?
         .query_processor()?

@@ -2,9 +2,9 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
     Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource, TypedRasterOperator,
+    TypedRasterQueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -165,7 +165,6 @@ pub enum TimeShiftError {
     FeatureCollectionTimeModification { source: Box<dyn ErrorSource> },
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for TimeShift {
     async fn _initialize(
@@ -251,7 +250,6 @@ impl VectorOperator for TimeShift {
     span_fn!(TimeShift);
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for TimeShift {
     async fn _initialize(
@@ -402,8 +400,8 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
-        Ok(Box::new(TimeShift {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
+        Ok(VectorOperator::typed(TimeShift {
             params: self.params.clone(),
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
@@ -446,8 +444,8 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
-        Ok(Box::new(TimeShift {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
+        Ok(RasterOperator::typed(TimeShift {
             params: self.params.clone(),
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
@@ -631,7 +629,7 @@ mod tests {
                             "test-raster",
                         )),
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             params: TimeShiftParams::Absolute {
@@ -680,7 +678,7 @@ mod tests {
                             "test-raster",
                         )),
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             params: TimeShiftParams::Relative {
@@ -748,7 +746,7 @@ mod tests {
 
         let time_shift = TimeShift {
             sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Vector(source.boxed()),
+                source: RasterOrVectorOperator::Vector(source.typed()),
             },
             params: TimeShiftParams::Absolute {
                 time_interval: TimeInterval::new(
@@ -759,7 +757,7 @@ mod tests {
             },
         };
 
-        let query_processor = VectorOperator::boxed(time_shift)
+        let query_processor = VectorOperator::typed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -841,7 +839,7 @@ mod tests {
 
         let time_shift = TimeShift {
             sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Vector(source.boxed()),
+                source: RasterOrVectorOperator::Vector(source.typed()),
             },
             params: TimeShiftParams::Relative {
                 granularity: TimeGranularity::Years,
@@ -849,7 +847,7 @@ mod tests {
             },
         };
 
-        let query_processor = VectorOperator::boxed(time_shift)
+        let query_processor = VectorOperator::typed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1019,7 +1017,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let time_shift = TimeShift {
             sources: SingleRasterOrVectorSource {
@@ -1037,7 +1035,7 @@ mod tests {
 
         let query_context = execution_context.mock_query_context_test_default();
 
-        let query_processor = RasterOperator::boxed(time_shift)
+        let query_processor = RasterOperator::typed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1201,7 +1199,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let time_shift = TimeShift {
             sources: SingleRasterOrVectorSource {
@@ -1216,7 +1214,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_context = execution_context.mock_query_context_test_default();
 
-        let query_processor = RasterOperator::boxed(time_shift)
+        let query_processor = RasterOperator::typed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1271,9 +1269,9 @@ mod tests {
         let ndvi_source = GdalSource {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
-        .boxed();
+        .typed();
 
-        let shifted_ndvi_source = RasterOperator::boxed(TimeShift {
+        let shifted_ndvi_source = RasterOperator::typed(TimeShift {
             params: TimeShiftParams::Relative {
                 granularity: TimeGranularity::Months,
                 value: -1,
@@ -1299,10 +1297,10 @@ mod tests {
                         rasters: vec![ndvi_source, shifted_ndvi_source],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let query_processor = expression
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1350,9 +1348,9 @@ mod tests {
         let ndvi_source = GdalSource {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
-        .boxed();
+        .typed();
 
-        let shifted_ndvi_source = RasterOperator::boxed(TimeShift {
+        let shifted_ndvi_source = RasterOperator::typed(TimeShift {
             params: TimeShiftParams::Absolute {
                 time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 5, 1, 0, 0, 0))
                     .unwrap(),

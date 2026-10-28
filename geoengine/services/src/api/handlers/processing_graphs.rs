@@ -1074,7 +1074,7 @@ mod tests {
                 )
                 .unwrap(),
             )
-            .boxed()
+            .typed()
             .into(),
         };
 
@@ -1152,7 +1152,7 @@ mod tests {
                     },
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
@@ -1550,7 +1550,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let workflow = Workflow {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
@@ -1632,7 +1632,7 @@ mod tests {
                 overview_level: None,
             },
         }
-        .boxed();
+        .typed();
 
         let query_rectangle = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-512, -1, 0, 511).unwrap(),

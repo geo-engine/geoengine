@@ -547,7 +547,7 @@ async fn wfs_get_feature<C: ApplicationContext>(
                 source: RasterOrVectorOperator::Vector(operator),
             },
         }
-        .boxed();
+        .typed();
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
@@ -939,7 +939,7 @@ x;y
                         time: CsvTimeSpecification::None,
                     },
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 
@@ -1064,7 +1064,7 @@ x;y
                         time: CsvTimeSpecification::None,
                     },
                 }
-                .boxed(),
+                .typed(),
             ),
         };
 

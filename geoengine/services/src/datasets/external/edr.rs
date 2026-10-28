@@ -1012,7 +1012,7 @@ impl LayerCollectionProvider for EdrDataProvider {
                         ),
                     ),
                 }
-                .boxed(),
+                .typed(),
             )
         } else {
             TypedOperator::Vector(
@@ -1026,7 +1026,7 @@ impl LayerCollectionProvider for EdrDataProvider {
                         attribute_filters: None,
                     },
                 }
-                .boxed(),
+                .typed(),
             )
         };
 

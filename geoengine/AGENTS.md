@@ -56,6 +56,9 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
 - **`datatypes`**: primitives (time intervals, bounding boxes, spatial references), feature collections (Arrow-backed), raster tiles/grids, plots.
 - **`operators`**: the processing engine.
   `engine/` defines the operator lifecycle: serializable operator definitions (`RasterOperator`/`VectorOperator`/`PlotOperator`, combined in `TypedOperator`) are initialized against an `ExecutionContext` (which yields result descriptors) and then produce query processors that return async streams of tiles or feature chunks.
+  Operators implement the `RasterOperator`/`VectorOperator`/`PlotOperator` traits and are listed in the enums `TypedRasterOperator`/`TypedVectorOperator`/`TypedPlotOperator` (`engine/typed_operators.rs`), which handle (de)serialization.
+  A new operator needs a variant there; `.typed()` converts an operator into its enum.
+  Variant names are the serialized `type` tags, which are persisted and hashed into processing graph ids, so never rename them.
   Implementations live in `source/` (GDAL, OGR, CSV), `processing/`, `plot/` and `adapters/` (stream combinators).
   There is also `cache/` and `machine_learning/` (ONNX via `ort`).
   GDAL reads must run out-of-process through the `gdalsource-process` binary (`src/bin/`), managed by a process pool (`[gdal_process_pool]` settings).

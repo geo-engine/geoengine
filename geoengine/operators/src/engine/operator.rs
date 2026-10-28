@@ -1,7 +1,5 @@
-use geoengine_datatypes::util::AsAny;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use tracing::debug;
 
 use crate::util::Result;
 use crate::{error, optimization::OptimizationError};
@@ -9,9 +7,9 @@ use async_trait::async_trait;
 use geoengine_datatypes::{dataset::NamedData, primitives::SpatialResolution, util::ByteSize};
 
 use super::{
-    CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, CreateSpan,
-    ExecutionContext, PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    CreateSpan, ExecutionContext, PlotResultDescriptor, RasterResultDescriptor, TypedPlotOperator,
+    TypedPlotQueryProcessor, TypedRasterOperator, TypedVectorOperator, VectorResultDescriptor,
+    WorkflowOperatorPath,
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
 };
 
@@ -27,11 +25,8 @@ pub trait OperatorData {
 }
 
 /// Common methods for `RasterOperator`s
-#[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait RasterOperator:
-    CloneableRasterOperator + OperatorData + Send + Sync + std::fmt::Debug + AsAny + 'static
-{
+pub trait RasterOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static {
     /// Internal initialization logic of the operator
     async fn _initialize(
         self: Box<Self>,
@@ -49,30 +44,26 @@ pub trait RasterOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
-        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
         #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         let op = self._initialize(path.clone(), context).await?;
 
         Ok(context.wrap_initialized_raster_operator(op, span))
     }
 
-    /// Wrap a box around a `RasterOperator`
-    fn boxed(self) -> Box<dyn RasterOperator>
+    /// Convert the operator into a `TypedRasterOperator`
+    fn typed(self) -> TypedRasterOperator
     where
-        Self: Sized + 'static,
+        Self: Sized + Into<TypedRasterOperator>,
     {
-        Box::new(self)
+        self.into()
     }
 
     fn span(&self) -> CreateSpan;
 }
 
 /// Common methods for `VectorOperator`s
-#[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait VectorOperator:
-    CloneableVectorOperator + OperatorData + Send + Sync + std::fmt::Debug + AsAny + 'static
-{
+pub trait VectorOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static {
     async fn _initialize(
         self: Box<Self>,
         path: WorkflowOperatorPath,
@@ -86,28 +77,24 @@ pub trait VectorOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let span = self.span();
-        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
         let op = self._initialize(path.clone(), context).await?;
         Ok(context.wrap_initialized_vector_operator(op, span))
     }
 
-    /// Wrap a box around a `VectorOperator`
-    fn boxed(self) -> Box<dyn VectorOperator>
+    /// Convert the operator into a `TypedVectorOperator`
+    fn typed(self) -> TypedVectorOperator
     where
-        Self: Sized + 'static,
+        Self: Sized + Into<TypedVectorOperator>,
     {
-        Box::new(self)
+        self.into()
     }
 
     fn span(&self) -> CreateSpan;
 }
 
 /// Common methods for `PlotOperator`s
-#[typetag::serde(tag = "type")]
 #[async_trait]
-pub trait PlotOperator:
-    CloneablePlotOperator + OperatorData + Send + Sync + std::fmt::Debug + AsAny + 'static
-{
+pub trait PlotOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static {
     async fn _initialize(
         self: Box<Self>,
         path: WorkflowOperatorPath,
@@ -120,18 +107,17 @@ pub trait PlotOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
-        debug!("Initialize {}, path: {}", self.typetag_name(), &path);
         #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         let op = self._initialize(path.clone(), context).await?;
         Ok(context.wrap_initialized_plot_operator(op, span))
     }
 
-    /// Wrap a box around a `PlotOperator`
-    fn boxed(self) -> Box<dyn PlotOperator>
+    /// Convert the operator into a `TypedPlotOperator`
+    fn typed(self) -> TypedPlotOperator
     where
-        Self: Sized + 'static,
+        Self: Sized + Into<TypedPlotOperator>,
     {
-        Box::new(self)
+        self.into()
     }
 
     fn span(&self) -> CreateSpan;
@@ -172,7 +158,7 @@ pub trait InitializedRasterOperator: Send + Sync {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError>;
+    ) -> Result<TypedRasterOperator, OptimizationError>;
 
     /// optimize the operator graph and reinitialize it
     async fn optimize_and_reinitialize(
@@ -223,7 +209,7 @@ pub trait InitializedVectorOperator: Send + Sync {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError>;
+    ) -> Result<TypedVectorOperator, OptimizationError>;
 }
 
 /// A canonic name for an operator and its sources
@@ -290,7 +276,7 @@ pub trait InitializedPlotOperator: Send + Sync {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError>;
+    ) -> Result<TypedPlotOperator, OptimizationError>;
 }
 
 impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
@@ -321,7 +307,7 @@ impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.as_ref().optimize(resolution)
     }
 }
@@ -354,7 +340,7 @@ impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         self.as_ref().optimize(resolution)
     }
 }
@@ -375,7 +361,7 @@ impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         self.as_ref().optimize(resolution)
     }
 }
@@ -384,13 +370,13 @@ impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "operator")]
 pub enum TypedOperator {
-    Vector(Box<dyn VectorOperator>),
-    Raster(Box<dyn RasterOperator>),
-    Plot(Box<dyn PlotOperator>),
+    Vector(TypedVectorOperator),
+    Raster(TypedRasterOperator),
+    Plot(TypedPlotOperator),
 }
 
 impl TypedOperator {
-    pub fn get_vector(self) -> Result<Box<dyn VectorOperator>> {
+    pub fn get_vector(self) -> Result<TypedVectorOperator> {
         if let TypedOperator::Vector(o) = self {
             return Ok(o);
         }
@@ -400,7 +386,7 @@ impl TypedOperator {
         })
     }
 
-    pub fn get_raster(self) -> Result<Box<dyn RasterOperator>> {
+    pub fn get_raster(self) -> Result<TypedRasterOperator> {
         if let TypedOperator::Raster(o) = self {
             return Ok(o);
         }
@@ -410,7 +396,7 @@ impl TypedOperator {
         })
     }
 
-    pub fn get_plot(self) -> Result<Box<dyn PlotOperator>> {
+    pub fn get_plot(self) -> Result<TypedPlotOperator> {
         if let TypedOperator::Plot(o) = self {
             return Ok(o);
         }
@@ -429,20 +415,20 @@ impl TypedOperator {
     }
 }
 
-impl From<Box<dyn VectorOperator>> for TypedOperator {
-    fn from(operator: Box<dyn VectorOperator>) -> Self {
+impl From<TypedVectorOperator> for TypedOperator {
+    fn from(operator: TypedVectorOperator) -> Self {
         Self::Vector(operator)
     }
 }
 
-impl From<Box<dyn RasterOperator>> for TypedOperator {
-    fn from(operator: Box<dyn RasterOperator>) -> Self {
+impl From<TypedRasterOperator> for TypedOperator {
+    fn from(operator: TypedRasterOperator) -> Self {
         Self::Raster(operator)
     }
 }
 
-impl From<Box<dyn PlotOperator>> for TypedOperator {
-    fn from(operator: Box<dyn PlotOperator>) -> Self {
+impl From<TypedPlotOperator> for TypedOperator {
+    fn from(operator: TypedPlotOperator) -> Self {
         Self::Plot(operator)
     }
 }
@@ -485,5 +471,79 @@ mod tests {
 
         let op = CanonicOperatorName::new_unchecked(&json!({"foo": {"bar": [1,2,3]}}));
         assert_eq!(op.byte_size(), 47);
+    }
+
+    /// The serialized form is persisted and hashed for processing graph ids, so it must stay stable.
+    #[test]
+    fn it_keeps_the_serialization_format_stable() {
+        let operators = [
+            json!({
+                "type": "Raster",
+                "operator": {
+                    "type": "Expression",
+                    "params": {
+                        "expression": "A + 1",
+                        "outputType": "U8",
+                        "outputBand": null,
+                        "mapNoData": false
+                    },
+                    "sources": {
+                        "raster": {
+                            "type": "GdalSource",
+                            "params": { "data": "ns:raster" }
+                        }
+                    }
+                }
+            }),
+            json!({
+                "type": "Vector",
+                "operator": {
+                    "type": "Reprojection",
+                    "params": { "targetSpatialReference": "EPSG:3857" },
+                    "sources": {
+                        "source": {
+                            "type": "MockPointSource",
+                            "params": { "points": [{ "x": 1.0, "y": 2.0 }] }
+                        }
+                    }
+                }
+            }),
+            json!({
+                "type": "Plot",
+                "operator": {
+                    "type": "Statistics",
+                    "params": { "columnNames": ["a"] },
+                    "sources": {
+                        "source": {
+                            "type": "Reprojection",
+                            "params": { "targetSpatialReference": "EPSG:4326" },
+                            "sources": {
+                                "source": {
+                                    "type": "GdalSource",
+                                    "params": { "data": "raster" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }),
+        ];
+
+        let serialized = operators
+            .into_iter()
+            .map(|json| {
+                let operator: TypedOperator = serde_json::from_value(json).unwrap();
+                serde_json::to_string(&operator).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            serialized,
+            [
+                r#"{"type":"Raster","operator":{"type":"Expression","params":{"expression":"A + 1","outputType":"U8","outputBand":null,"mapNoData":false},"sources":{"raster":{"type":"GdalSource","params":{"data":"ns:raster"}}}}}"#,
+                r#"{"type":"Vector","operator":{"type":"Reprojection","params":{"targetSpatialReference":"EPSG:3857","deriveOutSpec":"projectionBounds"},"sources":{"source":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0}],"spatialBounds":{"type":"none"}}}}}}"#,
+                r#"{"type":"Plot","operator":{"type":"Statistics","params":{"columnNames":["a"],"percentiles":[]},"sources":{"source":{"type":"Reprojection","params":{"targetSpatialReference":"EPSG:4326","deriveOutSpec":"projectionBounds"},"sources":{"source":{"type":"GdalSource","params":{"data":"raster"}}}}}}}"#,
+            ]
+        );
     }
 }

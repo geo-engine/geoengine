@@ -103,8 +103,7 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     fn optimize(
         &self,
         resolution: geoengine_datatypes::primitives::SpatialResolution,
-    ) -> Result<Box<dyn crate::engine::RasterOperator>, crate::optimization::OptimizationError>
-    {
+    ) -> Result<crate::engine::TypedRasterOperator, crate::optimization::OptimizationError> {
         self.source.optimize(resolution)
     }
 }
@@ -166,8 +165,7 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
     fn optimize(
         &self,
         resolution: geoengine_datatypes::primitives::SpatialResolution,
-    ) -> Result<Box<dyn crate::engine::VectorOperator>, crate::optimization::OptimizationError>
-    {
+    ) -> Result<crate::engine::TypedVectorOperator, crate::optimization::OptimizationError> {
         self.source.optimize(resolution)
     }
 }
@@ -499,7 +497,7 @@ mod tests {
         let operator = GdalSource {
             params: GdalSourceParameters::new(ndvi_id.clone()),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -577,7 +575,7 @@ mod tests {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                     Expression {
                         params: ExpressionParams {
                             expression: "2 * A".to_string(),
@@ -592,14 +590,14 @@ mod tests {
                                     overview_level: None,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ],
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -693,12 +691,12 @@ mod tests {
                 rename_bands: RenameBands::Rename(vec!["band_0".to_string(), "band_1".to_string()]),
             },
             sources: MultipleRasterSources {
-                rasters: vec![source_operator_a.boxed(), source_operator_b.boxed()],
+                rasters: vec![source_operator_a.typed(), source_operator_b.typed()],
             },
         };
 
         let operator = stacked_operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();

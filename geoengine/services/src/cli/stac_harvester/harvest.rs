@@ -591,7 +591,7 @@ async fn create_harvest_layer_collections(
                             name: dataset_name.clone(),
                         }),
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: None,

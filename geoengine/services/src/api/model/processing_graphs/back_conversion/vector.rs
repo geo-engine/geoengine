@@ -9,7 +9,6 @@ use crate::api::model::{
         TimeProjectionParameters, VectorExpression, VectorExpressionParameters, VectorJoin,
         VectorJoinParameters, VectorJoinSources, VectorOperator, VisualPointClustering,
         VisualPointClusteringParameters,
-        back_conversion::downcast_runtime_operator,
         parameters::OutputColumn as ApiOutputColumn,
         processing::{
             AttributeAggregateDef, AttributeAggregateType, VectorJoinType,
@@ -20,8 +19,8 @@ use crate::api::model::{
 use geoengine_datatypes::collections::GeoVectorDataType;
 use geoengine_operators::{
     engine::{
-        OperatorName, RasterOperator as OperatorsRasterOperator,
-        VectorOperator as OperatorsVectorOperator,
+        TypedRasterOperator as OperatorsTypedRasterOperator,
+        TypedVectorOperator as OperatorsTypedVectorOperator,
     },
     mock::MockPointSource as OperatorsMockPointSource,
     processing::{
@@ -41,51 +40,41 @@ use geoengine_operators::{
 };
 
 macro_rules! convert {
-    ($type_name:expr, $operator:expr, $($runtime:ty => $variant:ident),+ $(,)?) => {{
-        match $type_name {
+    ($operator:expr, $($variant:ident),+ $(,)?) => {{
+        match $operator {
             $(
-                <$runtime>::TYPE_NAME => {
-                    let op = downcast_runtime_vector_operator::<$runtime>($operator, $type_name)?;
-                    return Ok(VectorOperator::$variant($variant::try_from(op)?));
-                }
+                OperatorsTypedVectorOperator::$variant(op) => Ok(VectorOperator::$variant(op.as_ref().try_into()?)),
             )+
-            _ => anyhow::bail!(
+            operator => anyhow::bail!(
                 "cannot convert runtime vector operator {type_name} to ProcessingGraph",
-                type_name = $type_name
+                type_name = operator.type_name()
             ),
         }
     }};
 }
 
-/// Converts a `&dyn VectorOperator` vector operator from `operators` into an API vector operator.
+/// Converts a vector operator from `operators` into an API vector operator.
 pub fn vector_operator_from_runtime(
-    operator: &dyn OperatorsVectorOperator,
+    operator: &OperatorsTypedVectorOperator,
 ) -> anyhow::Result<VectorOperator> {
-    let type_name = operator.typetag_name();
-    convert!(type_name, operator,
-        OperatorsColumnRangeFilter => ColumnRangeFilter,
-        OperatorsLineSimplification => LineSimplification,
-        OperatorsMockPointSource => MockPointSource,
-        OperatorsOgrSource => OgrSource,
-        OperatorsPointInPolygonFilter => PointInPolygonFilter,
-        OperatorsRasterVectorJoin => RasterVectorJoin,
-        OperatorsReprojection => Reprojection,
-        OperatorsTimeProjection => TimeProjection,
-        OperatorsVectorExpression => VectorExpression,
-        OperatorsVectorJoin => VectorJoin,
-        OperatorsVisualPointClustering => VisualPointClustering,
-    );
-}
-
-fn downcast_runtime_vector_operator<'a, T: 'static>(
-    operator: &'a dyn geoengine_datatypes::util::AsAny,
-    type_name: &'a str,
-) -> anyhow::Result<&'a T> {
-    downcast_runtime_operator::<T>("vector", operator, type_name)
+    convert!(
+        operator,
+        ColumnRangeFilter,
+        LineSimplification,
+        MockPointSource,
+        OgrSource,
+        PointInPolygonFilter,
+        RasterVectorJoin,
+        Reprojection,
+        TimeProjection,
+        VectorExpression,
+        VectorJoin,
+        VisualPointClustering,
+    )
 }
 
 fn raster_operator_from_runtime(
-    operator: &dyn OperatorsRasterOperator,
+    operator: &OperatorsTypedRasterOperator,
 ) -> anyhow::Result<crate::api::model::processing_graphs::RasterOperator> {
     crate::api::model::processing_graphs::back_conversion::raster::raster_operator_from_runtime(
         operator,
@@ -110,7 +99,7 @@ impl TryFrom<&OperatorsColumnRangeFilter> for ColumnRangeFilter {
                 keep_nulls: value.params.keep_nulls,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             }
             .into(),
         })
@@ -135,7 +124,7 @@ impl TryFrom<&OperatorsLineSimplification> for LineSimplification {
                 epsilon: value.params.epsilon,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             }
             .into(),
         })
@@ -194,10 +183,8 @@ impl TryFrom<&OperatorsPointInPolygonFilter> for PointInPolygonFilter {
             r#type: Default::default(),
             params: PointInPolygonFilterParameters {},
             sources: PointInPolygonFilterSource {
-                points: Box::new(vector_operator_from_runtime(value.sources.points.as_ref())?),
-                polygons: Box::new(vector_operator_from_runtime(
-                    value.sources.polygons.as_ref(),
-                )?),
+                points: Box::new(vector_operator_from_runtime(&value.sources.points)?),
+                polygons: Box::new(vector_operator_from_runtime(&value.sources.polygons)?),
             },
         })
     }
@@ -217,12 +204,12 @@ impl TryFrom<&OperatorsRasterVectorJoin> for RasterVectorJoin {
                 temporal_aggregation_ignore_no_data: value.params.temporal_aggregation_ignore_no_data,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorMultipleRasterSources {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
                 rasters: value
                     .sources
                     .rasters
                     .iter()
-                    .map(|raster| raster_operator_from_runtime(raster.as_ref()))
+                    .map(raster_operator_from_runtime)
                     .collect::<Result<Vec<_>, _>>()?,
             }
             .into(),
@@ -251,14 +238,14 @@ impl TryFrom<&OperatorsReprojection> for Reprojection {
                 RasterOrVectorOperator::Raster(raster) => {
                     crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorSource {
                         source: crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
-                            raster_operator_from_runtime(raster.as_ref())?,
+                            raster_operator_from_runtime(raster)?,
                         ),
                     }
                 }
                 RasterOrVectorOperator::Vector(vector) => {
                     crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorSource {
                         source: crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
-                            vector_operator_from_runtime(vector.as_ref())?,
+                            vector_operator_from_runtime(vector)?,
                         ),
                     }
                 }
@@ -279,7 +266,7 @@ impl TryFrom<&OperatorsTimeProjection> for TimeProjection {
                 step_reference: value.params.step_reference.map(Into::into),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             }
             .into(),
         })
@@ -311,7 +298,7 @@ impl TryFrom<&OperatorsVectorExpression> for VectorExpression {
                 output_measurement: value.params.output_measurement.clone().into(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             }
             .into(),
         })
@@ -339,8 +326,8 @@ impl TryFrom<&OperatorsVectorJoin> for VectorJoin {
                 },
             },
             sources: Box::new(VectorJoinSources {
-                left: Box::new(vector_operator_from_runtime(value.sources.left.as_ref())?),
-                right: Box::new(vector_operator_from_runtime(value.sources.right.as_ref())?),
+                left: Box::new(vector_operator_from_runtime(&value.sources.left)?),
+                right: Box::new(vector_operator_from_runtime(&value.sources.right)?),
             }),
         })
     }
@@ -385,7 +372,7 @@ impl TryFrom<&OperatorsVisualPointClustering> for VisualPointClustering {
                     .collect(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             }
             .into(),
         })
@@ -397,11 +384,10 @@ mod tests {
     use super::*;
     use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
     use geoengine_datatypes::{dataset::NamedData, primitives::Measurement};
+    use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
     use geoengine_operators::{
         engine::{
-            RasterOperator as OperatorsRasterOperator, SingleRasterOrVectorSource,
-            SingleVectorMultipleRasterSources, SingleVectorSource,
-            VectorOperator as OperatorsVectorOperator,
+            SingleRasterOrVectorSource, SingleVectorMultipleRasterSources, SingleVectorSource,
         },
         mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
         processing::{
@@ -422,14 +408,14 @@ mod tests {
         },
     };
 
-    fn raster_source() -> Box<dyn OperatorsRasterOperator> {
-        Box::new(OperatorsGdalSource {
+    fn raster_source() -> OperatorsTypedRasterOperator {
+        TypedRasterOperator::from(OperatorsGdalSource {
             params: OperatorsGdalSourceParameters::new(NamedData::with_system_name("test-raster")),
         })
     }
 
-    fn vector_source() -> Box<dyn geoengine_operators::engine::VectorOperator> {
-        Box::new(MockPointSource {
+    fn vector_source() -> geoengine_operators::engine::TypedVectorOperator {
+        TypedVectorOperator::from(MockPointSource {
             params: MockPointSourceParams {
                 points: vec![(1., 2.).into()],
                 spatial_bounds: SpatialBoundsDerive::None,
@@ -440,9 +426,9 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines, clippy::type_complexity)]
     fn it_converts_runtime_vector_operators_to_processing_graph() {
-        let cases: Vec<(Box<dyn OperatorsVectorOperator>, fn(VectorOperator) -> bool)> = vec![
+        let cases: Vec<(OperatorsTypedVectorOperator, fn(VectorOperator) -> bool)> = vec![
             (
-                Box::new(OperatorsColumnRangeFilter {
+                TypedVectorOperator::from(OperatorsColumnRangeFilter {
                     params: ColumnRangeFilterParams {
                         column: "value".to_string(),
                         ranges: vec![geoengine_operators::util::input::StringOrNumberRange::Float(
@@ -455,7 +441,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::ColumnRangeFilter(_)),
             ),
             (
-                Box::new(OperatorsLineSimplification {
+                TypedVectorOperator::from(OperatorsLineSimplification {
                     params: LineSimplificationParams {
                         algorithm: LineSimplificationAlgorithm::DouglasPeucker,
                         epsilon: 1.0,
@@ -465,7 +451,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::LineSimplification(_)),
             ),
             (
-                Box::new(MockPointSource {
+                TypedVectorOperator::from(MockPointSource {
                     params: MockPointSourceParams {
                         points: vec![(3., 4.).into()],
                         spatial_bounds: SpatialBoundsDerive::None,
@@ -474,7 +460,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::MockPointSource(_)),
             ),
             (
-                Box::new(geoengine_operators::source::OgrSource {
+                TypedVectorOperator::from(geoengine_operators::source::OgrSource {
                     params: geoengine_operators::source::OgrSourceParameters {
                         data: NamedData::with_system_name("test-vector"),
                         attribute_projection: Some(vec!["value".to_string()]),
@@ -484,7 +470,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::OgrSource(_)),
             ),
             (
-                Box::new(OperatorsPointInPolygonFilter {
+                TypedVectorOperator::from(OperatorsPointInPolygonFilter {
                     params: PointInPolygonFilterParams {},
                     sources: PointInPolygonFilterSource {
                         points: vector_source(),
@@ -494,7 +480,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::PointInPolygonFilter(_)),
             ),
             (
-                Box::new(OperatorsRasterVectorJoin {
+                TypedVectorOperator::from(OperatorsRasterVectorJoin {
                     params: RasterVectorJoinParams {
                         names: geoengine_operators::processing::ColumnNames::Default,
                         feature_aggregation: geoengine_operators::processing::FeatureAggregationMethod::First,
@@ -510,7 +496,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::RasterVectorJoin(_)),
             ),
             (
-                Box::new(OperatorsReprojection {
+                TypedVectorOperator::from(OperatorsReprojection {
                     params: ReprojectionParams {
                         target_spatial_reference: geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326(),
                         derive_out_spec: geoengine_operators::processing::DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -522,7 +508,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::Reprojection(_)),
             ),
             (
-                Box::new(OperatorsTimeProjection {
+                TypedVectorOperator::from(OperatorsTimeProjection {
                     params: TimeProjectionParams {
                         step: geoengine_datatypes::primitives::TimeStep::new(
                             geoengine_datatypes::primitives::TimeGranularity::Months,
@@ -536,7 +522,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::TimeProjection(_)),
             ),
             (
-                Box::new(OperatorsVectorExpression {
+                TypedVectorOperator::from(OperatorsVectorExpression {
                     params: VectorExpressionParams {
                         input_columns: vec!["value".to_string()],
                         expression: "value".to_string(),
@@ -551,7 +537,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::VectorExpression(_)),
             ),
             (
-                Box::new(OperatorsVectorJoin {
+                TypedVectorOperator::from(OperatorsVectorJoin {
                     params: VectorJoinParams {
                         join_type: VectorJoinType::EquiGeoToData {
                             left_column: "id".to_string(),
@@ -567,7 +553,7 @@ mod tests {
                 |graph| matches!(graph, VectorOperator::VectorJoin(_)),
             ),
             (
-                Box::new(OperatorsVisualPointClustering {
+                TypedVectorOperator::from(OperatorsVisualPointClustering {
                     params: VisualPointClusteringParams {
                         min_radius_px: PositiveFiniteF64::new_unchecked(8.0),
                         delta_px: NonNegativeFiniteF64::new_unchecked(1.0),
@@ -590,12 +576,12 @@ mod tests {
         ];
 
         for (operator, assert_variant) in cases {
-            let converted = vector_operator_from_runtime(operator.as_ref())
-                .expect("vector conversion should work");
+            let converted =
+                vector_operator_from_runtime(&operator).expect("vector conversion should work");
             assert!(
                 assert_variant(converted),
                 "runtime vector conversion failed for {}",
-                operator.typetag_name()
+                operator.type_name()
             );
         }
     }

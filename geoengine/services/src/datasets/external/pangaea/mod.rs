@@ -530,7 +530,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed();
+        .typed();
 
         let initialized_op = src
             .initialize(WorkflowOperatorPath::initialize_root(), &context)
@@ -593,7 +593,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed();
+        .typed();
 
         let initialized_op = src
             .initialize(WorkflowOperatorPath::initialize_root(), &context)
@@ -668,7 +668,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed();
+        .typed();
 
         let initialized_op = src
             .initialize(WorkflowOperatorPath::initialize_root(), &context)
@@ -739,7 +739,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed();
+        .typed();
 
         let initialized_op = src
             .initialize(WorkflowOperatorPath::initialize_root(), &context)

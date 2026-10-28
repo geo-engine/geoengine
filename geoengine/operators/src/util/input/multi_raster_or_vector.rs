@@ -1,4 +1,5 @@
-use crate::engine::{OperatorData, RasterOperator, VectorOperator};
+use crate::engine::OperatorData;
+use crate::engine::{TypedRasterOperator, TypedVectorOperator};
 use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 
@@ -6,8 +7,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MultiRasterOrVectorOperator {
-    Raster(Vec<Box<dyn RasterOperator>>),
-    Vector(Box<dyn VectorOperator>),
+    Raster(Vec<TypedRasterOperator>),
+    Vector(TypedVectorOperator),
 }
 
 impl MultiRasterOrVectorOperator {
@@ -26,20 +27,20 @@ impl MultiRasterOrVectorOperator {
     }
 }
 
-impl From<Box<dyn RasterOperator>> for MultiRasterOrVectorOperator {
-    fn from(operator: Box<dyn RasterOperator>) -> Self {
+impl From<TypedRasterOperator> for MultiRasterOrVectorOperator {
+    fn from(operator: TypedRasterOperator) -> Self {
         Self::Raster(vec![operator])
     }
 }
 
-impl From<Vec<Box<dyn RasterOperator>>> for MultiRasterOrVectorOperator {
-    fn from(operators: Vec<Box<dyn RasterOperator>>) -> Self {
+impl From<Vec<TypedRasterOperator>> for MultiRasterOrVectorOperator {
+    fn from(operators: Vec<TypedRasterOperator>) -> Self {
         Self::Raster(operators)
     }
 }
 
-impl From<Box<dyn VectorOperator>> for MultiRasterOrVectorOperator {
-    fn from(operator: Box<dyn VectorOperator>) -> Self {
+impl From<TypedVectorOperator> for MultiRasterOrVectorOperator {
+    fn from(operator: TypedVectorOperator) -> Self {
         Self::Vector(operator)
     }
 }
@@ -59,6 +60,7 @@ impl OperatorData for MultiRasterOrVectorOperator {
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::RasterOperator;
     use crate::source::{GdalSource, GdalSourceParameters};
     use geoengine_datatypes::dataset::NamedData;
 
@@ -70,7 +72,7 @@ mod tests {
             GdalSource {
                 params: GdalSourceParameters::new(NamedData::with_namespaced_name("foo", "bar")),
             }
-            .boxed(),
+            .typed(),
         ]);
 
         assert_eq!(

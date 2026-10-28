@@ -7,7 +7,8 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
@@ -70,7 +71,6 @@ impl OperatorName for Interpolation {
     const TYPE_NAME: &'static str = "Interpolation";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Interpolation {
     async fn _initialize(
@@ -227,7 +227,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
         let out_descriptor = self.result_descriptor();
@@ -268,7 +268,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
                         raster: optimzed_source,
                     },
                 }
-                .boxed());
+                .typed());
             }
             return Ok(optimzed_source);
         }
@@ -298,7 +298,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
                     raster: optimzed_source,
                 },
             }
-            .boxed());
+            .typed());
         }
 
         // target resolution is still finer than what the source produces
@@ -314,7 +314,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
                 raster: optimzed_source,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -735,7 +735,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -805,7 +805,7 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn make_raster(cache_hint: CacheHint) -> Box<dyn RasterOperator> {
+    fn make_raster(cache_hint: CacheHint) -> TypedRasterOperator {
         // test raster:
         // [0, 10)
         // || 1 | 2 || 3 | 4 ||
@@ -1108,7 +1108,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
     }
 
     #[tokio::test]
@@ -1129,7 +1129,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -1180,10 +1180,10 @@ mod tests {
                         ],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 

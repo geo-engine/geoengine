@@ -1,4 +1,4 @@
-use crate::engine::{OperatorData, RasterOperator, TypedOperator, VectorOperator};
+use crate::engine::{OperatorData, TypedOperator, TypedRasterOperator, TypedVectorOperator};
 use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 
@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RasterOrVectorOperator {
-    Raster(Box<dyn RasterOperator>),
-    Vector(Box<dyn VectorOperator>),
+    Raster(TypedRasterOperator),
+    Vector(TypedVectorOperator),
 }
 
 impl RasterOrVectorOperator {
@@ -35,14 +35,14 @@ impl From<RasterOrVectorOperator> for TypedOperator {
     }
 }
 
-impl From<Box<dyn RasterOperator>> for RasterOrVectorOperator {
-    fn from(operator: Box<dyn RasterOperator>) -> Self {
+impl From<TypedRasterOperator> for RasterOrVectorOperator {
+    fn from(operator: TypedRasterOperator) -> Self {
         Self::Raster(operator)
     }
 }
 
-impl From<Box<dyn VectorOperator>> for RasterOrVectorOperator {
-    fn from(operator: Box<dyn VectorOperator>) -> Self {
+impl From<TypedVectorOperator> for RasterOrVectorOperator {
+    fn from(operator: TypedVectorOperator) -> Self {
         Self::Vector(operator)
     }
 }
@@ -58,6 +58,7 @@ impl OperatorData for RasterOrVectorOperator {
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::RasterOperator;
     use crate::source::{GdalSource, GdalSourceParameters};
     use geoengine_datatypes::dataset::NamedData;
 
@@ -69,7 +70,7 @@ mod tests {
             GdalSource {
                 params: GdalSourceParameters::new(NamedData::with_namespaced_name("foo", "bar")),
             }
-            .boxed(),
+            .typed(),
         );
 
         assert_eq!(
