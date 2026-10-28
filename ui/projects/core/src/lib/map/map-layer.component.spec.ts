@@ -48,6 +48,19 @@ describe('OGC map tile minimum matrix index', () => {
     let pendingMetadata: Array<() => void>;
     const zoomRequired = vi.fn();
 
+    function publishViewport(currentView: View): void {
+        mapService.setViewportSize({extent: [0, -512000, 512000, 0], resolution: currentView.getResolution() ?? Infinity});
+    }
+
+    async function setResolution(resolution: number, currentView: View = view): Promise<void> {
+        currentView.setResolution(resolution);
+        if (currentView === mapService.view()) publishViewport(currentView);
+        if (!fixture.componentRef.hostView.destroyed) {
+            fixture.detectChanges();
+            await fixture.whenStable();
+        }
+    }
+
     function createLayer(): void {
         fixture = TestBed.createComponent(OlOgcApiMapTileLayerComponent);
         for (const [key, value] of Object.entries({
@@ -131,6 +144,7 @@ describe('OGC map tile minimum matrix index', () => {
         mapService = TestBed.inject(MapService);
         view = new View({center: [1000, -1000], resolution: 2000});
         mapService.setView(view);
+        publishViewport(view);
         createLayer();
         await fixture.whenStable();
         source = fixture.componentInstance.mapLayer.getSource() as OGCMapTile;
@@ -149,7 +163,7 @@ describe('OGC map tile minimum matrix index', () => {
     ])('waits for metadata before deciding whether resolution $resolution requires zooming in', async ({resolution, blocked}) => {
         fixture.destroy();
         zoomRequired.mockReset();
-        view.setResolution(resolution);
+        await setResolution(resolution);
         deferMetadata = true;
         createLayer();
         await fixture.whenStable();
@@ -166,7 +180,7 @@ describe('OGC map tile minimum matrix index', () => {
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(!blocked);
         expect(tileRequests).toHaveLength(0);
 
-        view.setResolution(blocked ? 999 : 2000);
+        await setResolution(blocked ? 999 : 2000);
         expect(zoomRequired).toHaveBeenLastCalledWith(!blocked);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(blocked);
     });
@@ -179,13 +193,13 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests).toHaveLength(0);
     });
 
-    it('uses the source matrix resolution as the exclusive cutoff and excludes coarser source tiles', () => {
-        view.setResolution(1000.01);
+    it('uses the source matrix resolution as the exclusive cutoff and excludes coarser source tiles', async () => {
+        await setResolution(1000.01);
         expect(zoomRequired).toHaveBeenLastCalledWith(true);
-        view.setResolution(1000);
+        await setResolution(1000);
         expect(zoomRequired).toHaveBeenLastCalledWith(true);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
-        view.setResolution(999.99);
+        await setResolution(999.99);
         expect(zoomRequired).toHaveBeenLastCalledWith(false);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
         const tile = source.getTile(3, 0, 0, 1, getProjection('EPSG:3857')!);
@@ -194,8 +208,8 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests).toHaveLength(0);
     });
 
-    it('keeps native preloading within the minimum matrix', () => {
-        view.setResolution(999.99);
+    it('keeps native preloading within the minimum matrix', async () => {
+        await setResolution(999.99);
         const {queue, tilesByZ} = enqueueTiles(4, 1);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
         expect(tilesByZ[3]).toBeUndefined();
@@ -205,11 +219,11 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests).toHaveLength(1);
     });
 
-    it('blocks an earlier frame queue after the view crosses maxResolution', () => {
-        view.setResolution(999);
+    it('blocks an earlier frame queue after the view crosses maxResolution', async () => {
+        await setResolution(999);
         const {queue, tilesByZ} = enqueueTiles(4);
         expect(queue.getCount()).toBeGreaterThan(0);
-        view.setResolution(2000);
+        await setResolution(2000);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
 
         // The queued frame's wantedTiles still includes these tiles even though
@@ -222,23 +236,32 @@ describe('OGC map tile minimum matrix index', () => {
         for (const tile of tilesByZ[4]) expect(tile.getState()).toBe(TileState.IDLE);
     });
 
+    it('rejects queued tiles during zoom-out before the viewport stream updates', async () => {
+        await setResolution(999);
+        const {queue, tilesByZ} = enqueueTiles(4);
+        view.setResolution(2000);
+        queue.loadMoreTiles(16, 16);
+        expect(tileRequests).toHaveLength(0);
+        for (const tile of tilesByZ[4]) expect(tile.getState()).toBe(TileState.IDLE);
+    });
+
     it('cancels in-flight imagery on zoom-out and resumes the same tile on zoom-in', async () => {
-        view.setResolution(999);
+        await setResolution(999);
         const tile = source.getTile(4, 0, 0, 1, getProjection('EPSG:3857')!);
         tile.load();
         expect(tileRequests).toHaveLength(1);
-        view.setResolution(2000);
+        await setResolution(2000);
         expect(tileRequests[0].aborted).toBe(true);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
         await vi.waitFor(() => expect(tile.getState()).toBe(TileState.IDLE));
-        view.setResolution(999);
+        await setResolution(999);
         tile.load();
         expect(tileRequests).toHaveLength(2);
         expect(tileRequests[1].aborted).toBe(false);
     });
 
     it('cancels imagery when hidden and rejects queued tiles until shown again', async () => {
-        view.setResolution(999);
+        await setResolution(999);
         const tile = source.getTile(4, 0, 0, 1, getProjection('EPSG:3857')!);
         tile.load();
         fixture.componentRef.setInput('isVisible', false);
@@ -259,21 +282,22 @@ describe('OGC map tile minimum matrix index', () => {
     it('tracks replacement views and ignores changes to the previous view', async () => {
         const replacement = new View({center: [1000, -1000], resolution: 999});
         mapService.setView(replacement);
+        publishViewport(replacement);
         fixture.detectChanges();
         await fixture.whenStable();
         expect(zoomRequired).toHaveBeenLastCalledWith(false);
-        view.setResolution(4000);
+        await setResolution(4000);
         expect(zoomRequired).toHaveBeenLastCalledWith(false);
-        replacement.setResolution(2000);
+        await setResolution(2000, replacement);
         expect(zoomRequired).toHaveBeenLastCalledWith(true);
     });
 
-    it('sets the resolution limit once for the grid rather than recalculating on view changes', () => {
+    it('sets the resolution limit once for the grid rather than recalculating on view changes', async () => {
         const getResolution = vi.spyOn(source.getTileGrid()!, 'getResolution');
         expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(resolutions[4]);
-        view.setResolution(999);
+        await setResolution(999);
         view.setCenter([5000, -5000]);
-        view.setResolution(2000);
+        await setResolution(2000);
         expect(getResolution).not.toHaveBeenCalled();
         expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(resolutions[4]);
     });
@@ -281,15 +305,16 @@ describe('OGC map tile minimum matrix index', () => {
     it('waits for a defined view and removes zoom listeners on destruction', async () => {
         const replacement = new View();
         mapService.setView(replacement);
+        publishViewport(replacement);
         fixture.detectChanges();
         await fixture.whenStable();
         expect(zoomRequired).toHaveBeenLastCalledWith(true);
         replacement.setCenter([1000, -1000]);
-        replacement.setResolution(999);
+        await setResolution(999, replacement);
         expect(zoomRequired).toHaveBeenLastCalledWith(false);
         fixture.destroy();
         const calls = zoomRequired.mock.calls.length;
-        replacement.setResolution(4000);
+        await setResolution(4000, replacement);
         expect(zoomRequired).toHaveBeenCalledTimes(calls);
     });
 

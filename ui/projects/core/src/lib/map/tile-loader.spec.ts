@@ -204,6 +204,32 @@ describe('TileLoader', () => {
         loader.abortAll();
     });
 
+    it('settles a retry rejected by live visibility before a viewport update', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue(unavailableResponse);
+        vi.stubGlobal('fetch', fetchMock);
+        let visible = true;
+        const unsubscribe = vi.fn();
+        const onStateChange = vi.fn();
+        const {tile, load} = makeTile();
+        const loader = new TileLoader({
+            authHeaders: (): Record<string, string> => authHeaders,
+            canLoad: (): boolean => visible,
+            abortWhen: (): Observable<string> => new Observable(() => unsubscribe),
+            onStateChange,
+        });
+        load.mockImplementation(() => loader.load(tile, 'https://example.com/tile'));
+        loader.load(tile, 'https://example.com/tile');
+        await vi.advanceTimersByTimeAsync(0);
+        visible = false;
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(tile.getState()).toBe(TileState.IDLE);
+        expect(onStateChange).toHaveBeenLastCalledWith('idle');
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+        loader.abortAll();
+    });
+
     it('excludes source tiles before fetching without starting loading state', () => {
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);

@@ -13,7 +13,9 @@ import {
     input,
     output,
     resource,
+    signal,
 } from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
 import type {EventsKey} from 'ol/events';
 import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
@@ -514,6 +516,8 @@ export class OlOgcApiMapTileLayerComponent
     readonly zoomRequired = output<boolean>();
     private readonly mapService = inject(MapService);
     private readonly destroyRef = inject(DestroyRef);
+    private readonly viewport = toSignal(this.mapService.getViewportSizeStream(), {requireSync: true});
+    private readonly sourceMaxResolution = signal<number | undefined>(undefined);
 
     // Show tile debug info instead of the actual layer. This is useful for debugging tile loading issues.
     readonly debug = input(false);
@@ -533,7 +537,8 @@ export class OlOgcApiMapTileLayerComponent
             time: this.time(), // no way to just update `context` field in OGCMapTile…
             minTileMatrixIndex: this.minTileMatrixIndex(),
         }),
-        loader: async ({abortSignal}): Promise<OGCMapTile> => {
+        loader: async ({abortSignal, params}): Promise<OGCMapTile> => {
+            this.sourceMaxResolution.set(undefined);
             // `source` is assigned after the await below, so the closures that read it must only
             // run once the source exists. Hoisting avoids a temporal-dead-zone reference.
             // eslint-disable-next-line prefer-const -- assigned after the await; `const` would move it before the closures that need it
@@ -547,7 +552,11 @@ export class OlOgcApiMapTileLayerComponent
             // the abort signal covers both a changed set of params and the destruction of the layer
             const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
-                acceptsTile: (tile): boolean => tile.getTileCoord()[0] >= this.minTileMatrixIndex(),
+                acceptsTile: (tile): boolean => tile.getTileCoord()[0] >= params.minTileMatrixIndex,
+                canLoad: (): boolean => {
+                    const view = this.mapService.view();
+                    return view.isDef() && this._mapLayer.isVisible(view);
+                },
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
                 abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
                 onTileError: (tile): void => this.invalidateTileReprojection(tile),
@@ -583,6 +592,14 @@ export class OlOgcApiMapTileLayerComponent
                 tileLoadFunction: loader.load,
             });
 
+            source.once('change', () => {
+                // The grid is assigned before OGCMapTile emits its first successful change.
+                const grid = source.getTileGrid();
+                if (abortSignal.aborted || !grid) return;
+                const index = params.minTileMatrixIndex;
+                this.sourceMaxResolution.set(index === 0 ? Infinity : (grid.getResolution(index) ?? 0));
+            });
+
             return source;
         },
     });
@@ -603,30 +620,13 @@ export class OlOgcApiMapTileLayerComponent
             this._mapLayer.setSource(this.source);
         });
 
-        effect((onCleanup) => {
-            const source = this.tileSource.value();
-            const view = this.mapService.view();
-            const index = this.minTileMatrixIndex();
+        effect(() => {
+            const maxResolution = this.sourceMaxResolution();
+            const blocked = maxResolution !== undefined && this.viewport().resolution >= maxResolution;
+            this._mapLayer.setMaxResolution(maxResolution ?? 0);
             this._mapLayer.setVisible(this.isVisible());
-            const updateVisibility = (): void => {
-                this.loader?.setEnabled(view.isDef() && this._mapLayer.isVisible(view));
-                this.zoomRequired.emit(
-                    index > 0 && source?.getState() === 'ready' && (view.getResolution() ?? Infinity) >= this._mapLayer.getMaxResolution(),
-                );
-            };
-            const updateSource = (): void => {
-                // EOdyssey's source and view both use Web Mercator. OpenLayers applies this
-                // exclusive resolution limit directly; keep imagery blocked until the grid exists.
-                this._mapLayer.setMaxResolution(index === 0 ? Infinity : (source?.getTileGrid()?.getResolution(index) ?? 0));
-                updateVisibility();
-            };
-            updateSource();
-            const viewListener = view.on(['change:resolution', 'change:center'], updateVisibility);
-            const sourceListener = source?.on('change', updateSource);
-            onCleanup(() => {
-                unByKey(viewListener);
-                if (sourceListener) unByKey(sourceListener);
-            });
+            this.loader?.setEnabled(maxResolution !== undefined && this.isVisible() && !blocked);
+            this.zoomRequired.emit(blocked);
         });
 
         effect(() => {
@@ -642,18 +642,18 @@ export class OlOgcApiMapTileLayerComponent
      * source can read on its own. OpenLayers reads it without authentication headers, so it has
      * to be served as an object URL. The same applies to the tiling scheme it links to.
      */
-    private async tmsUrl(loader: TileLoader, signal: AbortSignal): Promise<string> {
+    private async tmsUrl(loader: TileLoader, abortSignal: AbortSignal): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();
         const tms = this.tmsId();
 
         const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 
-        return loader.jsonUrl(tmsUrl, signal, async (metadata) => {
+        return loader.jsonUrl(tmsUrl, abortSignal, async (metadata) => {
             const links = (metadata as {links?: Array<{rel: string; href: string}>}).links ?? [];
             for (const link of links) {
                 if (link.rel === 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme') {
-                    link.href = await loader.jsonUrl(link.href, signal);
+                    link.href = await loader.jsonUrl(link.href, abortSignal);
                 }
             }
         });

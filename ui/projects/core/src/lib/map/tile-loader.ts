@@ -68,6 +68,9 @@ export interface TileDiagnostic {
 }
 
 interface TileLoaderOptions {
+    /** Checks live visibility before a queued request or retry starts, including during animations. */
+    readonly canLoad?: () => boolean;
+
     /** Permanently excludes source tiles, including fallback and preload tiles, before fetching. */
     readonly acceptsTile?: (tile: ImageTile) => boolean;
 
@@ -271,7 +274,7 @@ export class TileLoader {
             if (this.outstanding.has(tile)) this.settle(tile, false);
             return;
         }
-        if (!this.enabled) {
+        if (!this.enabled || this.options.canLoad?.() === false) {
             this.cancelRetry(tile);
             this.options.onTileError?.(tile);
             tile.setState(TileState.ERROR);
