@@ -91,6 +91,7 @@ Codex, OpenCode and GitHub Copilot read them from there.
 Claude Code only reads `.claude/skills/`, which is a symlink to `.agents/skills/`, so a new skill only needs to be added to `.agents/skills/`.
 
 - `new-migration`: add a database migration to the backend.
+- `update-dependencies`: update the dependencies of all projects as a stack of PRs, one per project.
 
 ## Testing new features
 

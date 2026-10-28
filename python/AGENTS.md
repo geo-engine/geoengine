@@ -13,9 +13,6 @@ Inside this directory, drop the module prefix from the `just` recipes below (`ju
 - Test: `just python test [filter]`, where filter is passed to `pytest -k`.
   Tests in `tests/ge_test.py` **build the Rust server with cargo and launch a real Geo Engine instance**, so they need the backend toolchain and Postgres.
 - Build: `just python build`
-- Update: `just python update-step1-dependencies [--dry-run]` raises the upper bounds in `pyproject.toml` to admit the latest PyPI releases (lower bounds stay).
-  Then `just python update-step2-aftermath` reinstalls `.venv` and runs `lint --fix`.
-  Run `just python test` afterwards.
 
 ## Conventions
 
