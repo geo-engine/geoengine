@@ -24,6 +24,9 @@ Inside this directory, drop the module prefix (`just test` instead of `just back
   Per crate: `just backend test-services <filter>`, `test-operators`, `test-datatypes`, `test-macros` (lib tests only; `test-services <filter> --all` includes integration tests).
   - Doctests: `just backend test-doc`.
   - Single test, e.g.: `cargo test -p geoengine-operators --lib -- processing::expression::tests::it_works --nocapture`
+  - GDAL reads in tests run in the `gdalsource-process` binary.
+    `just backend test`, `test-operators` and `test-services` build it before running the tests.
+    Plain `cargo test` does not, so run `cargo build --bin gdalsource-process` first; a stale binary makes GDAL tests fail in misleading ways.
 - Expression deps sync check: `cargo test --package geoengine-expression --test check-expression-deps`
 - After API-visible changes: `just backend generate-openapi-spec`, then `just api-clients build` (see root `AGENTS.md`).
 
