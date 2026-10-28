@@ -19,8 +19,8 @@ an error is returned.
 | --------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
 | aggregation     | Aggregation            | Aggregation method for values within each time window.<br><br>Encountering NO DATA makes the aggregation result NO DATA unless<br>`ignoreNoData` is `true` for the selected aggregation variant. | `{"type":"mean","ignoreNoData":true}` |
 | window          | TimeStep               | Window size and granularity for the output time series.                                                                                                                                          | `{"granularity":"months","step":1}`   |
-| windowReference | null or TimeInstance   |                                                                                                                                                                                                  |                                       |
-| outputType      | null or RasterDataType |                                                                                                                                                                                                  |                                       |
+| windowReference | TimeInstance or null   |                                                                                                                                                                                                  |                                       |
+| outputType      | RasterDataType or null |                                                                                                                                                                                                  |                                       |
 
 ## Sources
 

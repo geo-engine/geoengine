@@ -28,7 +28,7 @@ InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })
 | --------------------- | ----------------------- | ------------------------- | --------------------------------- |
 | interpolation         | InterpolationMethod     | Interpolation method.     | `"nearestNeighbor"`               |
 | outputResolution      | InterpolationResolution | Target output resolution. | `{"type":"fraction","x":2,"y":2}` |
-| outputOriginReference | null or Coordinate2D    |                           |                                   |
+| outputOriginReference | Coordinate2D or null    |                           |                                   |
 
 ## Sources
 
