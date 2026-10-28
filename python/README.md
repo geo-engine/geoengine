@@ -205,9 +205,9 @@ from datetime import datetime
 
 ge.initialize("https://nightly.peter.geoengine.io/api")
 
-time = datetime.strptime('2014-04-01T12:00:00.000Z', "%Y-%m-%dT%H:%M:%S.%f%z")
+time = datetime.strptime("2014-04-01T12:00:00.000Z", "%Y-%m-%dT%H:%M:%S.%f%z")
 
-processing_graph = ge.processing_graph_by_id('4cdf1ffe-cb67-5de2-a1f3-3357ae0112bd')
+processing_graph = ge.processing_graph_by_id("4cdf1ffe-cb67-5de2-a1f3-3357ae0112bd")
 
 print(processing_graph.get_result_descriptor())
 

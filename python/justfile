@@ -105,6 +105,95 @@ format-code: common::_clear _venv-is-installed
     {{ PYTHON }} -m ruff format
     {{ PYTHON }} -m ruff check --fix
 
+# Raise the upper bounds of the dependencies in `pyproject.toml` so that they admit the latest releases on PyPI.
+[arg("dry-run", long="dry-run", value="true", help="Only print the changes, do not write them.")]
+[group("update")]
+[script(".venv/bin/python3")]
+update-step1-dependencies dry-run="false": common::_clear _venv-is-installed
+    import json
+    import tomllib
+    import urllib.request
+
+    from packaging.requirements import Requirement
+    from packaging.version import InvalidVersion, Version
+
+    PYPROJECT = "pyproject.toml"
+    DRY_RUN = "{{ dry-run }}" == "true"
+
+
+    def latest_version(name: str) -> Version:
+        """The latest stable release on PyPI that has files that are not yanked."""
+        with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/json", timeout=30) as response:
+            releases = json.load(response)["releases"]
+        versions = []
+        for version, files in releases.items():
+            try:
+                parsed = Version(version)
+            except InvalidVersion:
+                continue  # legacy version strings
+            if not parsed.is_prerelease and any(not file["yanked"] for file in files):
+                versions.append(parsed)
+        return max(versions)
+
+
+    def raised_bound(upper: str, latest: Version) -> str:
+        """Raise `upper` above `latest`, keeping the granularity of `upper` (e.g. `3.11` → `3.13`, `2.0` → `3.0`)."""
+        parts = [int(p) for p in upper.split(".")]
+        significant = max((i for i, p in enumerate(parts) if p != 0), default=0)
+        new = list(latest.release[: significant + 1])
+        new += [0] * (significant + 1 - len(new))
+        new[-1] += 1
+        new += [0] * (len(parts) - len(new))
+        return ".".join(str(p) for p in new)
+
+
+    with open(PYPROJECT, "rb") as f:
+        project = tomllib.load(f)["project"]
+
+    requirements = list(project["dependencies"])
+    for group in project.get("optional-dependencies", {}).values():
+        requirements.extend(group)
+
+    with open(PYPROJECT, encoding="utf-8") as f:
+        content = f.read()
+
+    changes = 0
+    for requirement in requirements:
+        parsed = Requirement(requirement)
+        uppers = [s for s in parsed.specifier if s.operator == "<"]
+        if len(uppers) != 1:
+            continue  # no upper bound or pinned (`==`)
+        upper = uppers[0].version
+        latest = latest_version(parsed.name)
+        if latest < Version(upper):
+            continue
+
+        new_upper = raised_bound(upper, latest)
+        # replace only the upper bound, keeping spacing and the other specifiers of the requirement
+        upper_start = requirement.index("<", requirement.index(parsed.name) + len(parsed.name))
+        while requirement[upper_start + 1] == "=":
+            upper_start = requirement.index("<", upper_start + 1)
+        upper_end = requirement.index(upper, upper_start) + len(upper)
+        new_requirement = requirement[:upper_start] + requirement[upper_start:upper_end].replace(upper, new_upper) + requirement[upper_end:]
+        content = content.replace(f'"{requirement}"', f'"{new_requirement}"').replace(f"'{requirement}'", f"'{new_requirement}'")
+
+        major = " [major]" if Version(str(latest.major)) >= Version(upper) else ""
+        print(f"{parsed.name}: <{upper} → <{new_upper} (latest {latest}){major}")
+        changes += 1
+
+    if changes == 0:
+        print("All upper bounds already admit the latest releases.")
+    elif DRY_RUN:
+        print(f"{changes} upper bound(s) would be raised (dry run, nothing written).")
+    else:
+        with open(PYPROJECT, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"Raised {changes} upper bound(s) in {PYPROJECT}. Run `just python update-step2-aftermath` next.")
+
+# Reinstall the virtual environment with the updated dependencies and fix lint issues from new tool versions.
+[group("update")]
+update-step2-aftermath: common::_clear install && (lint "true")
+
 # Publish the Python client to PyPI. Usage: `just python publish`. Use the `--dry-run` flag to publish to TestPyPI instead.
 [arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
 [group('publish')]

@@ -24,6 +24,7 @@ uv.lock
 
 # Downloaded files
 examples/raster_download.tif
+/raster_download.tif
 examples/download
 examples/test
 examples/export_data/test
