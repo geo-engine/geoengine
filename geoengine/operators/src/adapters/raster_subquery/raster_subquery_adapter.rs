@@ -13,7 +13,8 @@ use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
 use geoengine_datatypes::raster::{
-    GridOrEmpty, TileInformationBandCrossProductIter, TilingStrategy,
+    GridBoundingBox2D, GridIntersection, GridOrEmpty, TileInformationBandCrossProductIter,
+    TilingSpecification, TilingStrategy,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D, TileInformation};
 use rayon::ThreadPool;
@@ -118,6 +119,8 @@ where
     query_ctx: &'a dyn QueryContext,
     /// The `QueryRectangle` the adapter is queried with
     query_rect_to_answer: RasterQueryRectangle,
+    /// The pixel bounds of the source data. Sub-queries outside of it produce empty tiles without querying the source.
+    source_data_bounds: GridBoundingBox2D,
 
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
@@ -158,10 +161,19 @@ where
             .tile_information_iterator_from_pixel_bounds(query_rect_to_answer.spatial_bounds());
         let band_iter = BandSelectionIter::new(query_rect_to_answer.attributes().clone());
         let band_tile_iter = TileInformationBandCrossProductIter::new(tile_iter, band_iter);
+        let source_data_bounds = source_processor
+            .raster_result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(TilingSpecification::new(
+                tiling_strategy.tile_size_in_pixels,
+            ))
+            .tiling_spatial_grid_definition()
+            .grid_bounds();
 
         Self {
             current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!
             query_rect_to_answer,
+            source_data_bounds,
             band_tile_iter,
             query_ctx,
             source_processor,
@@ -294,7 +306,12 @@ where
                 time,
                 band,
             ) {
-                Ok(Some(raster_query_rect)) => {
+                Ok(Some(raster_query_rect))
+                    if raster_query_rect
+                        .spatial_bounds()
+                        .intersection(this.source_data_bounds)
+                        .is_some() =>
+                {
                     let tile_query_stream_fut = this
                         .source_processor
                         .raster_query(raster_query_rect.clone(), *this.query_ctx);
@@ -316,7 +333,8 @@ where
                         time,
                     });
                 }
-                Ok(None) => this.state.set(StateInner::ReturnResult {
+                // no query or no source data => produce an empty tile
+                Ok(Some(_) | None) => this.state.set(StateInner::ReturnResult {
                     result: None,
                     band,
                     tile,
