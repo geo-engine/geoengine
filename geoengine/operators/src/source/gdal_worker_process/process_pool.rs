@@ -238,6 +238,15 @@ impl DatasetSlot {
     pub fn peek_first_valid(&self) -> Option<&QueuedRequest> {
         self.queue.iter().find(|req| !req.respond_to.is_closed())
     }
+
+    /// Takes the first request a caller still waits for, counting the canceled ones removed on
+    /// the way. Returns `None` if all callers gave up, which can happen after `peek_first_valid`
+    /// found a request, as callers cancel concurrently.
+    #[inline]
+    pub fn pop_next_valid(&mut self, cancelled_dropped: &mut u64) -> Option<QueuedRequest> {
+        *cancelled_dropped += self.clean_canceled_front();
+        self.queue.pop_front()
+    }
 }
 
 struct QueuedRequest {
@@ -790,22 +799,22 @@ impl BrokerState {
             }
 
             // Perform atomic dispatch operation
-            let worker_id = self.idle_workers.swap_remove(best_w_matrix_idx);
-            let worker = self
-                .workers
-                .get_mut(worker_id)
-                .expect("Selected worker ID missing from registry - invariant broken");
             let slot = self
                 .dataset_registry
                 .get_mut(&best_dataset_hash)
                 .expect("Selected dataset missing from registry - invariant broken");
 
-            self.stats.cancelled_dropped += slot.clean_canceled_front();
+            // Take the request before the worker: its callers may have given up since the scan
+            let Some(req) = slot.pop_next_valid(&mut self.stats.cancelled_dropped) else {
+                self.active_datasets.remove(best_dataset_active_idx);
+                continue;
+            };
 
-            let req = slot
-                .queue
-                .pop_front()
-                .expect("Selected request missing from dataset slot - invariant broken");
+            let worker_id = self.idle_workers.swap_remove(best_w_matrix_idx);
+            let worker = self
+                .workers
+                .get_mut(worker_id)
+                .expect("Selected worker ID missing from registry - invariant broken");
 
             self.global_active_count += 1;
             slot.active_count += 1;
@@ -1541,6 +1550,38 @@ mod tests {
         assert!(rx0.try_recv().is_err(), "no job for a cancelled request");
         assert_eq!(state.stats.cancelled_dropped, 1);
         assert_eq!(state.global_active_count, 0);
+    }
+
+    /// Callers can cancel between the scan (`peek_first_valid`) and the dispatch, so taking the
+    /// request must not assume that one is left.
+    #[test]
+    fn it_pops_only_requests_with_waiting_callers() {
+        let w = window([0, 0], [255, 255]);
+        let mut slot = DatasetSlot {
+            active_count: 0,
+            queue: VecDeque::new(),
+        };
+        let (cancelled_a, resp_a) = make_request(100, 1, w);
+        let (cancelled_b, resp_b) = make_request(100, 1, w);
+        slot.queue.push_back(*cancelled_a);
+        slot.queue.push_back(*cancelled_b);
+        drop((resp_a, resp_b));
+
+        let mut dropped = 0;
+        assert!(slot.pop_next_valid(&mut dropped).is_none());
+        assert_eq!(dropped, 2);
+
+        let (cancelled, resp_cancelled) = make_request(100, 1, w);
+        let (waiting, _resp_waiting) = make_request(100, 2, w);
+        slot.queue.push_back(*cancelled);
+        slot.queue.push_back(*waiting);
+        drop(resp_cancelled);
+
+        let req = slot
+            .pop_next_valid(&mut dropped)
+            .expect("the request with a waiting caller");
+        assert_eq!(req.request.0.dataset_params.rasterband_channel, 2);
+        assert_eq!(dropped, 3);
     }
 
     #[tokio::test]
