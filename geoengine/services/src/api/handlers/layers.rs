@@ -1329,8 +1329,8 @@ mod tests {
     use crate::{
         api::model::{
             processing_graphs::{
-                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
-                SpatialBoundsDerive, TypedOperator, VectorOperator,
+                MockPointSource, MockPointSourceParameters, SpatialBoundsDerive, TypedOperator,
+                VectorOperator,
             },
             responses::ErrorResponse,
             services::CopernicusDataspaceDataProviderDefinition,
@@ -1376,7 +1376,6 @@ mod tests {
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{TimeShift, TimeShiftParams},
-        source::GdalSource as OperatorsGdalSource,
         util::test::assert_eq_two_raster_operator_res_u8,
     };
 
@@ -2763,7 +2762,7 @@ mod tests {
                 .as_ref()
                 .clone()
         } else {
-            panic!("Task must be completed");
+            panic!("Task must be completed, but is {status:?}");
         }
     }
 
@@ -2787,22 +2786,18 @@ mod tests {
         let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
 
         // query the newly created dataset
-        let dataset_operator = GdalSource {
-            r#type: Default::default(),
-            params: GdalSourceParameters {
-                data: response.dataset.into(),
-                overview_level: None,
-            },
-        };
 
         assert_eq_two_raster_operator_res_u8(
             &ctx.execution_context().unwrap(),
             &ctx.query_context(WorkflowId::new(), ComputationId::new())
                 .unwrap(),
             workflow_operator,
-            OperatorsGdalSource::try_from(dataset_operator)
-                .unwrap()
-                .boxed(),
+            geoengine_operators::source::MultiBandGdalSource {
+                params: geoengine_operators::source::MultiBandGdalSourceParameters::new(
+                    response.dataset.into(),
+                ),
+            }
+            .boxed(),
             mock_source.query_rectangle,
             false,
         )

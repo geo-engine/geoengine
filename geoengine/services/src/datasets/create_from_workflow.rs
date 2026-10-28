@@ -1,12 +1,12 @@
+use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::datatypes::RasterToDatasetQueryRectangle;
 use crate::api::model::services::{AddDataset, DataPath};
 use crate::contexts::SessionContext;
 use crate::datasets::listing::DatasetProvider;
-use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
+use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::datasets::{DatasetIdAndName, DatasetName};
 use crate::quota::ComputationId;
-use crate::tasks::TaskContext;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{
@@ -15,21 +15,23 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::error::ErrorSource;
-use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
+use geoengine_datatypes::primitives::{BandSelection, CacheTtlSeconds, TimeInterval};
+use geoengine_datatypes::raster::{BoundedGrid, GridShape2D, GridSize, SpatialGridDefinition};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
-use geoengine_operators::call_on_generic_raster_processor_gdal_types;
+use geoengine_operators::call_on_generic_raster_processor;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, TimeDescriptor,
-    WorkflowOperatorPath,
+    ExecutionContext, InitializedRasterOperator, OperatorName, RasterResultDescriptor,
+    TimeDescriptor, WorkflowOperatorPath,
 };
+use geoengine_operators::source::gdal_worker_process::WorkerConfig;
 use geoengine_operators::source::{
-    GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
+    FileNotFoundHandling, GdalDatasetParameters, GdalMultiBand, MultiBandGdalSource,
 };
-use geoengine_operators::util::raster_stream_to_geotiff::{
-    GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, ToGeoTiffProgress,
-    ToGeoTiffProgressConsumer, raster_stream_to_geotiff,
+use geoengine_operators::util::gdal_writer_process::{
+    GdalWriterOptions, WrittenRaster, raster_stream_to_files,
 };
+use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::path::PathBuf;
@@ -85,19 +87,6 @@ pub struct RasterDatasetFromWorkflowResult {
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
-pub struct ToGeoTiffTaskContext<TC: TaskContext> {
-    context: TC,
-}
-
-#[async_trait]
-impl<TC: TaskContext> ToGeoTiffProgressConsumer for ToGeoTiffTaskContext<TC> {
-    async fn consume_progress(&self, status: ToGeoTiffProgress) {
-        self.context
-            .set_completion(status.percent_done(), Box::new(status.to_string()))
-            .await;
-    }
-}
-
 pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub source_name: String,
 
@@ -110,10 +99,7 @@ pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
 }
 
 impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
-    async fn process(
-        &self,
-        to_geo_tiff_task_context: ToGeoTiffTaskContext<C::TaskContext>,
-    ) -> error::Result<RasterDatasetFromWorkflowResult> {
+    async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
         let workflow = self.ctx.db().load_workflow(&self.workflow_id).await?;
         let exe_ctx = self.ctx.execution_context()?;
 
@@ -164,35 +150,34 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
-        let tile_limit = None; // TODO: set a reasonable limit or make configurable?
 
         let processor = initialized_operator.query_processor()?;
 
-        // build the geotiff
-        let res =
-            call_on_generic_raster_processor_gdal_types!(processor, p => raster_stream_to_geotiff(
+        let worker_config: WorkerConfig =
+            crate::config::get_config_element::<crate::config::GdalProcessPool>()?
+                .worker
+                .into();
+
+        let written = call_on_generic_raster_processor!(processor, p => raster_stream_to_files(
             &self.file_path,
             p,
             query_rect.clone(),
             query_ctx,
-            GdalGeoTiffDatasetMetadata {
-                no_data_value: Default::default(), // TODO: decide how to handle the no data here
-                spatial_reference: request_spatial_ref,
-            },
-            GdalGeoTiffOptions {
-                compression_num_threads: self.compression_num_threads,
+            request_spatial_ref,
+            GdalWriterOptions {
                 as_cog: self.info.as_cog,
-                force_big_tiff: false,
+                compression_num_threads: self.compression_num_threads,
             },
-            tile_limit,
+            &worker_config,
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
-            to_geo_tiff_task_context,
-        ).await)?
-            .map_err(crate::error::Error::from)?;
+        ).await)
+        .map_err(crate::error::Error::from)?;
+
         // create the dataset
         let dataset = create_dataset(
             &self.info,
-            res,
+            written,
+            &self.file_path,
             result_descriptor,
             &query_rect,
             self.ctx.as_ref(),
@@ -212,9 +197,9 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
     async fn run(
         &self,
-        ctx: C::TaskContext,
+        _ctx: C::TaskContext,
     ) -> error::Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
-        let response = self.process(ToGeoTiffTaskContext { context: ctx }).await;
+        let response = self.process().await;
 
         response
             .map(TaskStatusInfo::boxed)
@@ -296,26 +281,28 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     Ok(task_id)
 }
 
+/// The file `dataset.json` next to the files of a dataset created from a workflow.
+/// It holds the bodies of `POST /dataset` (as `definition`) and `POST /dataset/{name}/tiles` (as `tiles`)
+/// with paths relative to the folder, so an admin can import a copy of the folder into a volume.
+pub const DATASET_MANIFEST_FILE_NAME: &str = "dataset.json";
+
+#[allow(clippy::too_many_lines)]
 async fn create_dataset<C: SessionContext>(
     info: &RasterDatasetFromWorkflowParams,
-    mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
+    written: WrittenRaster,
+    out_dir: &std::path::Path,
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: &geoengine_datatypes::primitives::RasterQueryRectangle,
     ctx: &C,
     data_path: DataPath,
 ) -> error::Result<DatasetIdAndName> {
-    ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
+    ensure!(
+        !written.files.is_empty(),
+        error::EmptyDatasetCannotBeImported
+    );
 
-    let first_start = slice_info
-        .first()
-        .expect("slice_info should have at least one element")
-        .time
-        .start();
-    let last_end = slice_info
-        .last()
-        .expect("slice_info should have at least one element")
-        .time
-        .end();
+    let first_start = written.files[0].0.start();
+    let last_end = written.files[written.files.len() - 1].0.end();
     let result_time_interval = TimeInterval::new(first_start, last_end)?;
 
     let exe_ctx = ctx.execution_context()?;
@@ -346,49 +333,82 @@ async fn create_dataset<C: SessionContext>(
         spatial_grid: dataset_spatial_grid,
         bands: origin_result_descriptor.bands.clone(),
     };
-    //TODO: Recognize MetaDataDefinition::GdalMetaDataRegular
-    let meta_data = if slice_info.len() == 1 {
-        let loading_info_slice = slice_info.pop().expect("slice_info has len one");
-        let time = Some(loading_info_slice.time);
-        let params = loading_info_slice
-            .params
-            .expect("datasets with exactly one timestep should have data");
-        let cache_ttl = loading_info_slice.cache_ttl;
-        MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
-            time,
-            params,
-            result_descriptor,
-            cache_ttl,
-        })
-    } else {
-        MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
-            result_descriptor,
-            params: slice_info,
-        })
+
+    let meta_data = MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+        result_descriptor,
+        // persistent datasets are constant
+        cache_ttl: Some(CacheTtlSeconds::max()),
+    });
+
+    let properties = AddDataset {
+        name: info.name.clone(),
+        display_name: info.display_name.clone(),
+        description: info.description.clone().unwrap_or_default(),
+        source_operator: MultiBandGdalSource::TYPE_NAME.to_owned(),
+        symbology: None,  // TODO add symbology?
+        provenance: None, // TODO add provenance that references the workflow
+        tags: Some(vec!["workflow".to_owned()]),
     };
 
-    let dataset_definition = DatasetDefinition {
-        properties: AddDataset {
-            name: info.name.clone(),
-            display_name: info.display_name.clone(),
-            description: info.description.clone().unwrap_or_default(),
-            source_operator: "GdalSource".to_owned(),
-            symbology: None,  // TODO add symbology?
-            provenance: None, // TODO add provenance that references the workflow
-            tags: Some(vec!["workflow".to_owned()]),
+    // the file's geo transform has its origin at the file's upper left corner, so use 0-based bounds
+    let file_shape = GridShape2D::new_2d(
+        written.grid_bounds.axis_size_y(),
+        written.grid_bounds.axis_size_x(),
+    );
+    let spatial_partition =
+        SpatialGridDefinition::new(written.geo_transform.into(), file_shape.bounding_box())
+            .spatial_partition();
+
+    let mut tiles = Vec::new();
+    for (time, paths) in &written.files {
+        for (band, path) in paths.iter().enumerate() {
+            let file_path = path
+                .strip_prefix(out_dir)
+                .map_err(|_| error::Error::PathIsNotAFile)?
+                .to_owned();
+            tiles.push(AddDatasetTile {
+                time: (*time).into(),
+                spatial_partition: spatial_partition.into(),
+                band: band as u32,
+                z_index: 0,
+                params: GdalDatasetParameters {
+                    file_path,
+                    rasterband_channel: 1,
+                    geo_transform: written.geo_transform,
+                    width: written.grid_bounds.axis_size_x(),
+                    height: written.grid_bounds.axis_size_y(),
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: None, // the files have internal masks
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
+                    retry: None,
+                }
+                .into(),
+            });
         }
-        .into(),
-        meta_data,
-    };
+    }
+
+    let manifest = serde_json::json!({
+        "definition": crate::api::model::services::DatasetDefinition {
+            properties: properties.clone(),
+            meta_data: meta_data.clone().into(),
+        },
+        "tiles": tiles,
+    });
+    fs::write(
+        out_dir.join(DATASET_MANIFEST_FILE_NAME),
+        serde_json::to_vec_pretty(&manifest).context(crate::error::SerdeJson)?,
+    )
+    .await
+    .context(crate::error::Io)?;
 
     let db = ctx.db();
     let result = db
-        .add_dataset(
-            dataset_definition.properties,
-            dataset_definition.meta_data,
-            Some(data_path),
-        )
+        .add_dataset(properties.into(), meta_data, Some(data_path))
         .await?;
+    db.add_dataset_tiles(result.id, tiles).await?;
 
     Ok(result)
 }
