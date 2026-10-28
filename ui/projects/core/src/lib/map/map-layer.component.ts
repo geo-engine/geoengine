@@ -537,6 +537,7 @@ export class OlOgcApiMapTileLayerComponent
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
             minTileMatrixIndex: this.minTileMatrixIndex(),
+            tmsId: this.tmsId(),
         }),
         loader: async ({abortSignal, params}): Promise<OGCMapTile> => {
             this.sourceMaxResolution.set(undefined);
