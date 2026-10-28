@@ -2,9 +2,9 @@ use crate::cache::cache_tiles::CompressedRasterTile2D;
 use crate::cache::cache_tiles::CompressedRasterTileExt;
 use crate::cache::error::CacheError;
 use crate::engine::{
-    BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, QueryContext,
-    QueryProcessor, RasterQueryProcessor, RasterResultDescriptor, TypedRasterOperator,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator,
+    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterQueryProcessor,
+    RasterResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -929,7 +929,7 @@ where
         self.source.name()
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.source.path()
     }
 
@@ -1626,7 +1626,7 @@ mod tests {
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let initialized_source = source
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
         let cached_op = RasterCacheOperator::wrap_operator(initialized_source);
@@ -1696,7 +1696,7 @@ mod tests {
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let initialized_source = source
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
         let cached_op = RasterCacheOperator::wrap_operator(initialized_source);

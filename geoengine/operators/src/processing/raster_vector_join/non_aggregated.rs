@@ -431,9 +431,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, QueryProcessor, RasterBandDescriptor,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
-        TimeDescriptor, VectorColumnInfo, VectorOperator, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, ProcessingGraphOperatorPath, QueryProcessor,
+        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SpatialGridDescriptor, TimeDescriptor, VectorColumnInfo, VectorOperator,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -453,6 +453,7 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn both_instant() {
         let time_instant =
             TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap();
@@ -483,7 +484,10 @@ mod tests {
         .typed();
 
         let points = points
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -492,7 +496,10 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -563,6 +570,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn points_instant() {
         let points = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -589,7 +597,10 @@ mod tests {
         .typed();
 
         let points = points
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -598,7 +609,10 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -707,7 +721,10 @@ mod tests {
         .typed();
 
         let points = points
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -716,7 +733,10 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -824,7 +844,10 @@ mod tests {
         .typed();
 
         let points = points
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -833,7 +856,10 @@ mod tests {
             .unwrap();
 
         let rasters = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1011,7 +1037,10 @@ mod tests {
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let raster = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1032,7 +1061,10 @@ mod tests {
         let points = MockFeatureCollectionSource::single(points).typed();
 
         let points = points
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1230,7 +1262,10 @@ mod tests {
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let raster = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1255,7 +1290,10 @@ mod tests {
         let polygons = MockFeatureCollectionSource::single(polygons).typed();
 
         let points = polygons
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1549,7 +1587,10 @@ mod tests {
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let raster = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1574,7 +1615,10 @@ mod tests {
         let polygons = MockFeatureCollectionSource::single(polygons).typed();
 
         let points = polygons
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()

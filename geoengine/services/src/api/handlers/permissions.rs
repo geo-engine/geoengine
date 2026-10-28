@@ -364,7 +364,7 @@ mod tests {
         util::Identifier,
     };
     use geoengine_operators::{
-        engine::{RasterOperator as _, VectorOperator as _, WorkflowOperatorPath},
+        engine::{ProcessingGraphOperatorPath, RasterOperator as _, VectorOperator as _},
         machine_learning::{
             MlModelInputNoDataHandling, MlModelMetadata, MlModelOutputNoDataHandling,
         },
@@ -425,11 +425,11 @@ mod tests {
 
         let exe_ctx = user_ctx.execution_context().unwrap();
 
-        // check that workflow can only be intitialized after adding permissions
+        // check that processing graph can only be intitialized after adding permissions
 
         assert!(
             gdal.clone()
-                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                 .await
                 .is_err()
         );
@@ -445,14 +445,14 @@ mod tests {
             .unwrap();
 
         assert!(
-            gdal.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            gdal.initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                 .await
                 .is_ok()
         );
 
         assert!(
             ogr.clone()
-                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                 .await
                 .is_err()
         );
@@ -468,7 +468,7 @@ mod tests {
             .unwrap();
 
         assert!(
-            ogr.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            ogr.initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                 .await
                 .is_ok()
         );
@@ -674,7 +674,7 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {

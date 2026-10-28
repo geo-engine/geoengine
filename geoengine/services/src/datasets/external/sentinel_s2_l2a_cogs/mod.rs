@@ -237,7 +237,7 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         name: format!("Sentinel S2 L2A COGS {}:{} ({})", zone, band.long_name(), band.name()),
                         description: String::new(),
-                        workflow: ProcessingGraph {
+                        processing_graph: ProcessingGraph {
                             operator: source_operator_from_dataset(
                                 GdalSource::TYPE_NAME,
                                 &NamedData {
@@ -372,7 +372,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             },
             name: dataset.listing.name.clone(),
             description: dataset.listing.description.clone(),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters::new(NamedData {
@@ -931,8 +931,8 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            ChunkByteSize, ExecutionContext, MockExecutionContext, RasterOperator,
-            WorkflowOperatorPath,
+            ChunkByteSize, ExecutionContext, MockExecutionContext, ProcessingGraphOperatorPath,
+            RasterOperator,
         },
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
@@ -1086,7 +1086,7 @@ mod tests {
             params: GdalSourceParameters::new(name),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe)
         .await
         .unwrap();
 
@@ -1461,7 +1461,10 @@ mod tests {
             params: GdalSourceParameters::new(name),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap()
         .query_processor()

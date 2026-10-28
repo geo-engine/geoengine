@@ -1,7 +1,6 @@
 mod tester;
 mod wrapper;
 
-use crate::engine::TypedVectorOperator;
 use std::cmp::min;
 use std::sync::Arc;
 
@@ -17,8 +16,8 @@ use snafu::ensure;
 use crate::adapters::FeatureCollectionChunkMerger;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, TypedVectorOperator,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::engine::{OperatorData, QueryProcessor};
 use crate::error::{self, Error};
@@ -69,7 +68,7 @@ struct InitializedPointInPolygonFilterSource {
 impl InitializedSources<InitializedPointInPolygonFilterSource> for PointInPolygonFilterSource {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedPointInPolygonFilterSource> {
         let points_path = path.clone_and_append(0);
@@ -86,7 +85,7 @@ impl InitializedSources<InitializedPointInPolygonFilterSource> for PointInPolygo
 impl VectorOperator for PointInPolygonFilter {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -143,7 +142,7 @@ impl VectorOperator for PointInPolygonFilter {
 
 pub struct InitializedPointInPolygonFilter {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     points: Box<dyn InitializedVectorOperator>,
     polygons: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
@@ -199,7 +198,7 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
         PointInPolygonFilter::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -542,7 +541,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -598,7 +597,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -665,7 +664,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -753,7 +752,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
@@ -838,7 +837,7 @@ mod tests {
         }
         .typed()
         .initialize(
-            WorkflowOperatorPath::initialize_root(),
+            ProcessingGraphOperatorPath::initialize_root(),
             &MockExecutionContext::test_default(),
         )
         .await
@@ -912,7 +911,7 @@ mod tests {
         }
         .typed()
         .initialize(
-            WorkflowOperatorPath::initialize_root(),
+            ProcessingGraphOperatorPath::initialize_root(),
             &MockExecutionContext::test_default(),
         )
         .await;

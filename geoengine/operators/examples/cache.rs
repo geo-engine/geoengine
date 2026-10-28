@@ -9,8 +9,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     cache::{cache_operator::InitializedCacheOperator, shared_cache::SharedCache},
     engine::{
-        ChunkByteSize, InitializedRasterOperator, MockExecutionContext, QueryProcessor,
-        RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+        ChunkByteSize, InitializedRasterOperator, MockExecutionContext,
+        ProcessingGraphOperatorPath, QueryProcessor, RasterOperator, SingleRasterSource,
     },
     processing::{
         AggregateFunctionParams, NeighborhoodAggregate, NeighborhoodAggregateParams,
@@ -22,7 +22,7 @@ use geoengine_operators::{
 };
 use std::sync::Arc;
 
-/// This benchmarks runs a workflow twice to see the impact of the cache
+/// This benchmarks runs a processing graph twice to see the impact of the cache
 /// Run it with `cargo bench --bench cache --features pro`
 #[tokio::main]
 async fn main() {
@@ -45,7 +45,7 @@ async fn main() {
         },
     }
     .typed()
-    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+    .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
     .await
     .unwrap();
 

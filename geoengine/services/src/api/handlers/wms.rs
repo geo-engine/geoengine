@@ -34,7 +34,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{ExecutionContext, WorkflowOperatorPath},
+    engine::{ExecutionContext, ProcessingGraphOperatorPath},
     util::raster_stream_to_png::{default_colorizer_gradient, raster_stream_to_png_bytes},
 };
 use reqwest::Url;
@@ -216,26 +216,26 @@ where
 }
 
 async fn wms_get_capabilities<C>(
-    workflow_id: ServicesProcessingGraphId,
+    processing_graph_id: ServicesProcessingGraphId,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
 where
     C: ApplicationContext,
 {
-    let wms_url = wms_url(workflow_id)?;
+    let wms_url = wms_url(processing_graph_id)?;
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
+    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
 
     let exe_ctx = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
-    let operator = workflow
+    let operator = processing_graph
         .operator
         .get_raster()?
-        .initialize(workflow_operator_path_root, &exe_ctx)
+        .initialize(processing_graph_operator_path_root, &exe_ctx)
         .await?;
 
     let result_descriptor = operator.result_descriptor();
@@ -279,8 +279,8 @@ where
             <Format>JSON</Format>
         </Exception>
         <Layer queryable="1">
-            <Name>{workflow}</Name>
-            <Title>Processing Graph {workflow}</Title>
+            <Name>{processing_graph}</Name>
+            <Title>Processing Graph {processing_graph}</Title>
             <CRS>{srs_authority}:{srs_code}</CRS>
             <EX_GeographicBoundingBox>
                 <westBoundLongitude>-180</westBoundLongitude>
@@ -293,7 +293,7 @@ where
     </Capability>
 </WMS_Capabilities>"#,
         wms_url = wms_url,
-        workflow = workflow_id,
+        processing_graph = processing_graph_id,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code()
     );
@@ -303,29 +303,29 @@ where
         .body(response))
 }
 
-fn wms_url(workflow: ServicesProcessingGraphId) -> Result<Url> {
+fn wms_url(processing_graph: ServicesProcessingGraphId) -> Result<Url> {
     let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
-    ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
+    ogc_endpoint_url(&base, OgcProtocol::Wms, processing_graph)
 }
 
 #[allow(clippy::too_many_lines)]
 async fn wms_get_map<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: ServicesProcessingGraphId,
+    processing_graph: ServicesProcessingGraphId,
     request: GetMap,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
     async fn compute_result<C: ApplicationContext>(
         req: HttpRequest,
-        workflow: ServicesProcessingGraphId,
+        processing_graph: ServicesProcessingGraphId,
         request: &GetMap,
         app_ctx: web::Data<C>,
         session: C::Session,
     ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
-        let endpoint = workflow;
+        let endpoint = processing_graph;
         let layer = ServicesProcessingGraphId::from_str(&request.layers)?;
 
         ensure!(
@@ -360,20 +360,20 @@ async fn wms_get_map<C: ApplicationContext>(
 
         let tiling_spec = ctx.execution_context()?.tiling_specification();
 
-        let workflow_id = ServicesProcessingGraphId::from_str(&request.layers)?;
-        let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
+        let processing_graph_id = ServicesProcessingGraphId::from_str(&request.layers)?;
+        let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
 
-        let operator = workflow.operator.get_raster()?;
+        let operator = processing_graph.operator.get_raster()?;
 
         let execution_context = ctx.execution_context()?;
 
         let computation_id = ComputationId::new();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         // Use the datasets crs as default spatial reference if none is requested
@@ -481,7 +481,7 @@ async fn wms_get_map<C: ApplicationContext>(
 
         debug!("WMS query rect: {:?}", query_rect);
 
-        let query_ctx = ctx.query_context(workflow_id, computation_id)?;
+        let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
         // The raster to png code already resamples when the tiles are filled. We should add resample for lower resolutions
         let result = call_on_generic_raster_processor!(
@@ -494,7 +494,7 @@ async fn wms_get_map<C: ApplicationContext>(
         result.map(|(image_bytes, cache_hint)| (image_bytes, cache_hint, computation_id))
     }
 
-    match compute_result(req, workflow, &request, app_ctx, session).await {
+    match compute_result(req, processing_graph, &request, app_ctx, session).await {
         Ok((image_bytes, cache_hint, computation_id)) => Ok(HttpResponse::Ok()
             .content_type(mime::IMAGE_PNG)
             .append_header(cache_hint.cache_control_header())
@@ -576,9 +576,10 @@ mod tests {
     use crate::ge_context;
     use crate::users::UserAuth;
     use crate::util::tests::{
-        admin_login, check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
-        send_test_request,
+        admin_login, check_allowed_http_methods, read_body_string,
+        register_ndvi_processing_graph_helper,
+        register_ndvi_processing_graph_helper_with_cache_ttl,
+        register_ne2_multiband_processing_graph, send_test_request,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -665,7 +666,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::with_uri(&format!(
             "/wms/{id}?request=GetCapabilities&service=WMS"
@@ -772,7 +773,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::with_uri(path.unwrap_or(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())))
                 .method(method)
@@ -813,7 +814,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=335&height=168&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
@@ -840,7 +841,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS={id}&CRS=EPSG:4326&STYLES=&WIDTH=600&HEIGHT=600&BBOX=20,-10,80,50&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
@@ -887,7 +888,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -951,7 +952,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
+        let (_, id) = register_ne2_multiband_processing_graph(&app_ctx).await;
 
         let raster_colorizer = RasterColorizer::MultiBand(MultiBandRasterColorizer {
             r#type: Default::default(),
@@ -1020,7 +1021,7 @@ mod tests {
 
         let session_id = ctx.session().id();
 
-        let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
+        let (_, id) = register_ne2_multiband_processing_graph(&app_ctx).await;
 
         let raster_colorizer = RasterColorizer::MultiBand(MultiBandRasterColorizer {
             r#type: Default::default(),
@@ -1088,7 +1089,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1149,7 +1150,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1221,7 +1222,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -1288,7 +1289,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=500&height=500&crs=EPSG:4326&bbox=-10.0,0.0,40.0,50.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
@@ -1312,8 +1313,11 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) =
-            register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;
+        let (_, id) = register_ndvi_processing_graph_helper_with_cache_ttl(
+            &app_ctx,
+            CacheTtlSeconds::new(60),
+        )
+        .await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=360&height=180&crs=EPSG:4326&bbox=-9.0,-18.0,9.0,18.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;

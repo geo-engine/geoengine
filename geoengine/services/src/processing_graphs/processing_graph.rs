@@ -8,11 +8,11 @@ identifier!(ProcessingGraphId);
 
 impl ProcessingGraphId {
     #[allow(clippy::missing_panics_doc)]
-    pub fn from_hash(workflow: &ProcessingGraph) -> Self {
+    pub fn from_hash(processing_graph: &ProcessingGraph) -> Self {
         Self(Uuid::new_v5(
             &Uuid::NAMESPACE_OID,
-            serde_json::to_string(workflow)
-                .expect("It is always possible to create a workflow id from a workflow.")
+            serde_json::to_string(processing_graph)
+                .expect("It is always possible to create a processing graph id from a processing graph.")
                 .as_bytes(),
         ))
     }

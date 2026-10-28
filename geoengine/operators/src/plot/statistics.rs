@@ -1,9 +1,9 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
-    TypedPlotOperator, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, WorkflowOperatorPath,
+    PlotResultDescriptor, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+    SingleRasterOrVectorSource, TypedPlotOperator, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error;
 use crate::error::Error;
@@ -61,7 +61,7 @@ pub struct StatisticsParams {
 impl PlotOperator for Statistics {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -651,10 +651,10 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, RasterOperator, RasterResultDescriptor,
-        SpatialGridDescriptor, TimeDescriptor, TypedRasterOperator,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
+        TypedRasterOperator, VectorOperator,
     };
-    use crate::engine::{RasterBandDescriptor, RasterBandDescriptors, VectorOperator};
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, NoGeometry, TimeInterval,
@@ -770,7 +770,10 @@ mod tests {
             sources: source.into(),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await?;
 
         let processor = statistics.query_processor()?.json_vega().unwrap();
@@ -803,7 +806,10 @@ mod tests {
             sources: multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]).into(),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap()
         .query_processor()
@@ -1083,7 +1089,10 @@ mod tests {
 
         let statistics = statistics
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -1183,7 +1192,10 @@ mod tests {
 
         let statistics = statistics
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -1274,7 +1286,10 @@ mod tests {
 
         let statistics = statistics
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -1370,7 +1385,10 @@ mod tests {
 
         let statistics = statistics
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -1464,7 +1482,10 @@ mod tests {
 
         let statistics = statistics
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 

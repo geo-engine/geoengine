@@ -20,31 +20,11 @@ use geoengine_operators::{
 };
 use typed_floats::tf64::NonNaN;
 
-macro_rules! convert {
-    ($operator:expr, $($variant:ident),+ $(,)?) => {{
-        match $operator {
-            $(
-                OperatorsTypedPlotOperator::$variant(op) => Ok(PlotOperator::$variant(op.as_ref().try_into()?)),
-            )+
-        }
-    }};
-}
-
 /// Converts a plot operator from `operators` into an API plot operator.
 pub fn plot_operator_from_runtime(
     operator: &OperatorsTypedPlotOperator,
 ) -> anyhow::Result<PlotOperator> {
-    convert!(
-        operator,
-        BoxPlot,
-        ClassHistogram,
-        FeatureAttributeValuesOverTime,
-        Histogram,
-        MeanRasterPixelValuesOverTime,
-        PieChart,
-        ScatterPlot,
-        Statistics,
-    )
+    PlotOperator::try_from(operator)
 }
 
 fn raster_operator_from_runtime(

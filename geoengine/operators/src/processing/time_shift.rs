@@ -1,10 +1,11 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource, TypedRasterOperator,
-    TypedRasterQueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    SingleRasterOrVectorSource, TypedRasterOperator, TypedRasterQueryProcessor,
+    TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -169,7 +170,7 @@ pub enum TimeShiftError {
 impl VectorOperator for TimeShift {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -254,7 +255,7 @@ impl VectorOperator for TimeShift {
 impl RasterOperator for TimeShift {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -350,7 +351,7 @@ fn shift_result_descriptor<R: ResultDescriptor, S: TimeShiftOperation>(
 
 pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     params: TimeShiftParams,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
@@ -359,7 +360,7 @@ pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
 
 pub struct InitializedRasterTimeShift<Shift: TimeShiftOperation> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     params: TimeShiftParams,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
@@ -393,7 +394,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
         TimeShift::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -437,7 +438,7 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
         TimeShift::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -758,7 +759,10 @@ mod tests {
         };
 
         let query_processor = VectorOperator::typed(time_shift)
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -848,7 +852,10 @@ mod tests {
         };
 
         let query_processor = VectorOperator::typed(time_shift)
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1036,7 +1043,10 @@ mod tests {
         let query_context = execution_context.mock_query_context_test_default();
 
         let query_processor = RasterOperator::typed(time_shift)
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1215,7 +1225,10 @@ mod tests {
         let query_context = execution_context.mock_query_context_test_default();
 
         let query_processor = RasterOperator::typed(time_shift)
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1303,7 +1316,10 @@ mod tests {
         .typed();
 
         let query_processor = expression
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1361,7 +1377,10 @@ mod tests {
         });
 
         let query_processor = shifted_ndvi_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()

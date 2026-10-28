@@ -522,7 +522,7 @@ pub enum Error {
     BandNeighborhoodAggregate {
         source: BandNeighborhoodAggregateError,
     },
-    #[snafu(display("Error during workflow optimization: {source}"))]
+    #[snafu(display("Error during processing graph optimization: {source}"))]
     Optimization {
         source: OptimizationError,
     },

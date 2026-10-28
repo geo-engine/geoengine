@@ -3,7 +3,7 @@ use crate::{
     api::{
         handlers::{
             ogc::{OgcApiResult, error::OgcApiError},
-            processing_graphs::workflow_metadata,
+            processing_graphs::processing_graph_metadata,
         },
         model::{
             datatypes::{DataProviderId, LayerId},
@@ -24,8 +24,8 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
 use geoengine_operators::engine::{
-    InitializedRasterOperator, RasterOperator as _, RasterResultDescriptor, TypedResultDescriptor,
-    WorkflowOperatorPath,
+    InitializedRasterOperator, ProcessingGraphOperatorPath, RasterOperator as _,
+    RasterResultDescriptor, TypedResultDescriptor,
 };
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
 use serde::{Deserialize, de::Error as _};
@@ -84,11 +84,12 @@ where
     OgcBbox::from_str(&s).map(Some).map_err(D::Error::custom)
 }
 
-pub async fn raster_workflow_metadata<C: SessionContext>(
+pub async fn raster_processing_graph_metadata<C: SessionContext>(
     processing_graph: ProcessingGraph,
     execution_context: C::ExecutionContext,
 ) -> OgcApiResult<RasterResultDescriptor> {
-    let result_descriptor = workflow_metadata::<C>(processing_graph, execution_context).await?;
+    let result_descriptor =
+        processing_graph_metadata::<C>(processing_graph, execution_context).await?;
     match result_descriptor.into() {
         TypedResultDescriptor::Raster(descriptor) => Ok(descriptor),
         TypedResultDescriptor::Vector(_) => Err(OgcApiError::ExpectedRaster {
@@ -179,7 +180,7 @@ pub async fn get_initialized_raster_operator<C: SessionContext>(
     layer: &Layer,
     execution_context: &C::ExecutionContext,
 ) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
-    let operator = match &layer.workflow.operator {
+    let operator = match &layer.processing_graph.operator {
         geoengine_operators::engine::TypedOperator::Raster(operator) => operator.clone(),
         geoengine_operators::engine::TypedOperator::Vector(_) => {
             return Err(OgcApiError::ExpectedRaster {
@@ -194,7 +195,10 @@ pub async fn get_initialized_raster_operator<C: SessionContext>(
     };
 
     operator
-        .initialize(WorkflowOperatorPath::initialize_root(), execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            execution_context,
+        )
         .await
         .boxed_context(error::InitializingProcessingGraph)
 }
@@ -325,11 +329,15 @@ pub async fn reproject_if_necessary<C: SessionContext>(
     }
 
     if let Some(target_srs) = required_srs {
-        processing_graph_with_reprojection(&mut layer.workflow, target_srs)?;
+        processing_graph_with_reprojection(&mut layer.processing_graph, target_srs)?;
     }
 
     if let Some(target) = required_origin_and_resolution {
-        processing_graph_with_resampling(&mut layer.workflow, target.origin, target.resolution)?;
+        processing_graph_with_resampling(
+            &mut layer.processing_graph,
+            target.origin,
+            target.resolution,
+        )?;
     }
 
     *initialized_operator = get_initialized_raster_operator::<C>(layer, execution_context).await?;

@@ -306,8 +306,8 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        InitializedVectorOperator, MetaData, MockExecutionContext, QueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
+        InitializedVectorOperator, MetaData, MockExecutionContext, ProcessingGraphOperatorPath,
+        QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::{
@@ -533,7 +533,7 @@ mod tests {
         .typed();
 
         let initialized_op = src
-            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &context)
             .await
             .unwrap();
         let proc = initialized_op.query_processor().unwrap();
@@ -596,7 +596,7 @@ mod tests {
         .typed();
 
         let initialized_op = src
-            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &context)
             .await
             .unwrap();
 
@@ -671,7 +671,7 @@ mod tests {
         .typed();
 
         let initialized_op = src
-            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &context)
             .await
             .unwrap();
 
@@ -742,7 +742,7 @@ mod tests {
         .typed();
 
         let initialized_op = src
-            .initialize(WorkflowOperatorPath::initialize_root(), &context)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &context)
             .await
             .unwrap();
 

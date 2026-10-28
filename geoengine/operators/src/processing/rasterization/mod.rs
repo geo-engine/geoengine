@@ -1,10 +1,10 @@
 use crate::engine::TypedVectorQueryProcessor::MultiPoint;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, SingleVectorSource, SpatialGridDescriptor, TypedRasterOperator,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    InitializedVectorOperator, Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext,
+    QueryProcessor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, ResultDescriptor, SingleVectorSource, SpatialGridDescriptor,
+    TypedRasterOperator, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error;
 use crate::optimization::{OptimizableOperator, OptimizationError};
@@ -60,7 +60,7 @@ pub struct RasterizationParams {
 impl RasterOperator for Rasterization {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> util::Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -131,7 +131,7 @@ impl RasterOperator for Rasterization {
 
 pub struct InitializedGridRasterization {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
@@ -161,7 +161,7 @@ impl InitializedRasterOperator for InitializedGridRasterization {
         Rasterization::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -202,7 +202,7 @@ impl InitializedRasterOperator for InitializedGridRasterization {
 
 pub struct InitializedDensityRasterization {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
@@ -214,7 +214,7 @@ pub struct InitializedDensityRasterization {
 impl InitializedDensityRasterization {
     fn new(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         source: Box<dyn InitializedVectorOperator>,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
@@ -277,7 +277,7 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
         Rasterization::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -656,8 +656,9 @@ fn gaussian_inverse(x: f64, stddev: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use crate::engine::{
-        InitializedRasterOperator, MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterOperator, SingleVectorSource, VectorOperator, WorkflowOperatorPath,
+        InitializedRasterOperator, MockExecutionContext, MockQueryContext,
+        ProcessingGraphOperatorPath, QueryProcessor, RasterOperator, SingleVectorSource,
+        VectorOperator,
     };
     use crate::mock::{MockPointSource, MockPointSourceParams};
     use crate::processing::rasterization::{
@@ -726,7 +727,10 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap();
 
@@ -786,7 +790,10 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap();
 
@@ -844,7 +851,10 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap();
 
@@ -909,6 +919,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn density_radius_overlap() {
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
@@ -938,7 +949,10 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap();
 

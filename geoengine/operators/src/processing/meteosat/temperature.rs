@@ -1,8 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryProcessor, RasterBandDescriptor,
+    RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::error::Error;
 use crate::optimization::OptimizationError;
@@ -48,7 +48,7 @@ impl OperatorName for Temperature {
 
 pub struct InitializedTemperature {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     params: TemperatureParams,
@@ -58,7 +58,7 @@ pub struct InitializedTemperature {
 impl RasterOperator for Temperature {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -189,7 +189,7 @@ impl InitializedRasterOperator for InitializedTemperature {
         Temperature::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 

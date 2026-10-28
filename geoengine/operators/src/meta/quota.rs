@@ -1,4 +1,4 @@
-use crate::{engine::WorkflowOperatorPath, util::Result};
+use crate::{engine::ProcessingGraphOperatorPath, util::Result};
 use async_trait::async_trait;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
@@ -7,10 +7,10 @@ use uuid::Uuid;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComputationUnit {
     pub user: Uuid,
-    pub workflow: Uuid,
+    pub processing_graph: Uuid,
     pub computation: Uuid,
     pub operator_name: &'static str,
-    pub operator_path: WorkflowOperatorPath,
+    pub operator_path: ProcessingGraphOperatorPath,
     pub data: Option<String>,
 }
 
@@ -32,7 +32,7 @@ impl From<ComputationUnit> for QuotaMessage {
 pub struct QuotaTracking {
     quota_sender: UnboundedSender<QuotaMessage>,
     user: Uuid,
-    workflow: Uuid,
+    processing_graph: Uuid,
     computation: Uuid,
 }
 
@@ -40,13 +40,13 @@ impl QuotaTracking {
     pub fn new(
         quota_sender: UnboundedSender<QuotaMessage>,
         user: Uuid,
-        workflow: Uuid,
+        processing_graph: Uuid,
         computation: Uuid,
     ) -> Self {
         Self {
             quota_sender,
             user,
-            workflow,
+            processing_graph,
             computation,
         }
     }
@@ -54,14 +54,14 @@ impl QuotaTracking {
     pub fn work_unit_done(
         &self,
         operator_name: &'static str,
-        operator_path: WorkflowOperatorPath,
+        operator_path: ProcessingGraphOperatorPath,
         data: Option<String>,
     ) {
         let _ = self
             .quota_sender
             .send(QuotaMessage::ComputationUnit(ComputationUnit {
                 user: self.user,
-                workflow: self.workflow,
+                processing_graph: self.processing_graph,
                 computation: self.computation,
                 operator_name,
                 operator_path,

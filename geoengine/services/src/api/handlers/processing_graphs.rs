@@ -12,9 +12,9 @@ use crate::{
     config::get_config_element,
     contexts::{ApplicationContext, SessionContext},
     datasets::{
-        RasterDatasetFromWorkflowParams,
+        RasterDatasetFromProcessingGraphParams,
         listing::{DatasetProvider, Provenance, ProvenanceOutput},
-        schedule_raster_dataset_from_workflow_task,
+        schedule_raster_dataset_from_processing_graph_task,
     },
     error::Result,
     layers::storage::LayerProviderDb,
@@ -30,7 +30,7 @@ use crate::{
     quota::ComputationId,
     util::{
         parsing::{parse_band_selection, parse_spatial_partition},
-        workflows::validate_workflow,
+        processing_graphs::validate_processing_graph,
     },
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
@@ -45,7 +45,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_typed_operator,
-    engine::{ExecutionContext, OperatorData, WorkflowOperatorPath},
+    engine::{ExecutionContext, OperatorData, ProcessingGraphOperatorPath},
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
@@ -151,14 +151,18 @@ async fn register_processing_graph_handler<C: ApplicationContext>(
 ) -> Result<web::Json<IdResponse<ProcessingGraphId>>> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow: ServicesProcessingGraph = processing_graph
+    let processing_graph: ServicesProcessingGraph = processing_graph
         .into_inner()
         .try_into()
         .context(crate::error::Api)?;
 
-    validate_workflow(&workflow, &ctx.execution_context()?).await?;
+    validate_processing_graph(&processing_graph, &ctx.execution_context()?).await?;
 
-    let id: ProcessingGraphId = ctx.db().register_processing_graph(workflow).await?.into();
+    let id: ProcessingGraphId = ctx
+        .db()
+        .register_processing_graph(processing_graph)
+        .await?
+        .into();
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -217,7 +221,7 @@ async fn get_processing_graph_metadata_handler<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx
+    let processing_graph = ctx
         .db()
         .load_processing_graph(&id.into_inner().into())
         .await?;
@@ -225,23 +229,23 @@ async fn get_processing_graph_metadata_handler<C: ApplicationContext>(
     let execution_context = ctx.execution_context()?;
 
     let result_descriptor =
-        workflow_metadata::<C::SessionContext>(workflow, execution_context).await?;
+        processing_graph_metadata::<C::SessionContext>(processing_graph, execution_context).await?;
 
     Ok(web::Json(result_descriptor))
 }
 
-pub(crate) async fn workflow_metadata<C: SessionContext>(
-    workflow: ServicesProcessingGraph,
+pub(crate) async fn processing_graph_metadata<C: SessionContext>(
+    processing_graph: ServicesProcessingGraph,
     execution_context: C::ExecutionContext,
 ) -> Result<crate::api::model::operators::TypedResultDescriptor> {
     // TODO: use cache here
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
     let result_descriptor: geoengine_operators::engine::TypedResultDescriptor = call_on_typed_operator!(
-        workflow.operator,
+        processing_graph.operator,
         operator => {
             let operator = operator
-                .initialize(workflow_operator_path_root, &execution_context).await
+                .initialize(processing_graph_operator_path_root, &execution_context).await
                 ?;
 
             #[allow(clippy::clone_on_copy)]
@@ -276,12 +280,12 @@ async fn get_processing_graph_provenance_handler<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow: ServicesProcessingGraph = ctx
+    let processing_graph: ServicesProcessingGraph = ctx
         .db()
         .load_processing_graph(&id.into_inner().into())
         .await?;
 
-    let provenance = workflow_provenance(&workflow, &ctx).await?;
+    let provenance = processing_graph_provenance(&processing_graph, &ctx).await?;
 
     Ok(web::Json(provenance))
 }
@@ -301,14 +305,14 @@ impl ProvenanceEntry {
     }
 }
 
-pub(crate) async fn workflow_provenance<C: SessionContext>(
-    workflow: &ServicesProcessingGraph,
+pub(crate) async fn processing_graph_provenance<C: SessionContext>(
+    processing_graph: &ServicesProcessingGraph,
     ctx: &C,
 ) -> Result<Vec<ProvenanceEntry>> {
     let db = ctx.db();
     let execution_ctx = ctx.execution_context()?;
 
-    let data_names = workflow.operator.data_names();
+    let data_names = processing_graph.operator.data_names();
     let mut datasets = Vec::<DataId>::with_capacity(data_names.len());
     for data_name in data_names {
         let data_id = execution_ctx.resolve_named_data(&data_name).await?;
@@ -372,14 +376,18 @@ async fn get_processing_graph_all_metadata_zip_handler<C: ApplicationContext>(
 
     let id = id.into_inner();
 
-    let workflow = ctx.db().load_processing_graph(&id.into()).await?;
+    let processing_graph = ctx.db().load_processing_graph(&id.into()).await?;
 
     let (metadata, provenance) = futures::try_join!(
-        workflow_metadata::<C::SessionContext>(workflow.clone(), ctx.execution_context()?),
-        workflow_provenance(&workflow, &ctx),
+        processing_graph_metadata::<C::SessionContext>(
+            processing_graph.clone(),
+            ctx.execution_context()?
+        ),
+        processing_graph_provenance(&processing_graph, &ctx),
     )?;
 
-    let processing_graph = ProcessingGraph::try_from(&workflow).context(crate::error::Api)?;
+    let processing_graph =
+        ProcessingGraph::try_from(&processing_graph).context(crate::error::Api)?;
 
     let output = crate::util::spawn_blocking(move || {
         let mut output = Vec::new();
@@ -490,11 +498,11 @@ async fn dataset_from_processing_graph_handler<C: ApplicationContext>(
     let compression_num_threads =
         get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
-    let info_inner = RasterDatasetFromWorkflowParams::from_request_and_result_descriptor(
+    let info_inner = RasterDatasetFromProcessingGraphParams::from_request_and_result_descriptor(
         info.into_inner().into(),
     );
 
-    let task_id = schedule_raster_dataset_from_workflow_task(
+    let task_id = schedule_raster_dataset_from_processing_graph_task(
         format!("processing graph {id}"),
         id.into(),
         ctx,
@@ -564,20 +572,20 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow_id: ServicesProcessingGraphId = id.into_inner().into();
-    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
+    let processing_graph_id: ServicesProcessingGraphId = id.into_inner().into();
+    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
 
-    let operator = workflow
+    let operator = processing_graph
         .operator
         .get_raster()
         .boxed_context(error::ProcessingGraphMustBeOfTypeRaster)?;
 
     let execution_context = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
     let initialized_operator = operator
-        .initialize(workflow_operator_path_root, &execution_context)
+        .initialize(processing_graph_operator_path_root, &execution_context)
         .await?;
 
     let query = query.into_inner();
@@ -599,7 +607,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let query_ctx = ctx.query_context(workflow_id, ComputationId::new())?;
+    let query_ctx = ctx.query_context(processing_graph_id, ComputationId::new())?;
 
     let mut stream_task = WebsocketStreamTask::new_raster_initialized::<_>(
         initialized_operator,
@@ -690,10 +698,10 @@ async fn vector_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow_id: ServicesProcessingGraphId = id.into_inner().into();
-    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
+    let processing_graph_id: ServicesProcessingGraphId = id.into_inner().into();
+    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
 
-    let operator = workflow
+    let operator = processing_graph
         .operator
         .get_vector()
         .boxed_context(error::ProcessingGraphMustBeOfTypeVector)?;
@@ -714,7 +722,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
-        ctx.query_context(workflow_id, ComputationId::new())?,
+        ctx.query_context(processing_graph_id, ComputationId::new())?,
     )
     .await?;
 
@@ -788,7 +796,7 @@ mod tests {
             responses::ErrorResponse,
         },
         contexts::{PostgresContext, Session},
-        datasets::{DatasetName, RasterDatasetFromWorkflowResult, storage::DatasetStore},
+        datasets::{DatasetName, RasterDatasetFromProcessingGraphResult, storage::DatasetStore},
         ge_context,
         processing_graphs::registry::ProcessingGraphRegistry,
         tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
@@ -797,7 +805,7 @@ mod tests {
             tests::{
                 TestDataUploads, add_ndvi_to_datasets, add_ports_to_datasets, admin_login,
                 check_allowed_http_methods, check_allowed_http_methods2, read_body_string,
-                register_ndvi_workflow_helper, send_test_request,
+                register_ndvi_processing_graph_helper, send_test_request,
             },
             websocket_tests,
         },
@@ -842,7 +850,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: crate::api::model::processing_graphs::MockPointSourceParameters {
@@ -859,13 +867,13 @@ mod tests {
             .unwrap(),
         };
 
-        // insert workflow
+        // insert processing graph
         let req = test::TestRequest::default()
             .method(method)
             .uri("/processingGraphs")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(&workflow);
+            .set_json(&processing_graph);
         send_test_request(req, app_ctx).await
     }
 
@@ -889,7 +897,7 @@ mod tests {
 
     #[ge_context::test]
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: crate::api::model::processing_graphs::MockPointSourceParameters {
@@ -910,11 +918,11 @@ mod tests {
             .unwrap(),
         };
 
-        // insert workflow
+        // insert processing graph
         let req = test::TestRequest::post()
             .uri("/processingGraphs")
             .append_header((header::CONTENT_LENGTH, 0))
-            .set_json(&workflow);
+            .set_json(&processing_graph);
         let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
@@ -932,7 +940,7 @@ mod tests {
 
         let session_id = session.id();
 
-        // insert workflow
+        // insert processing graph
         let req = test::TestRequest::post()
             .uri("/processingGraphs")
             .append_header((header::CONTENT_LENGTH, 0))
@@ -956,14 +964,14 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = json!({});
+        let processing_graph = json!({});
 
-        // insert workflow
+        // insert processing graph
         let req = test::TestRequest::post()
             .uri("/processingGraphs")
             .append_header((header::CONTENT_LENGTH, 0))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(&workflow);
+            .set_json(&processing_graph);
         let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
@@ -984,7 +992,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (workflow, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (processing_graph, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = test::TestRequest::default()
             .method(method)
@@ -1004,17 +1012,17 @@ mod tests {
             .await
             .unwrap();
 
-        (workflow, res)
+        (processing_graph, res)
     }
 
     #[ge_context::test]
     async fn load(app_ctx: PostgresContext<NoTls>) {
-        let (workflow, res) = load_test_helper(app_ctx, Method::GET).await;
+        let (processing_graph, res) = load_test_helper(app_ctx, Method::GET).await;
 
         assert_eq!(res.status(), 200);
         assert_eq!(
             read_body_string(res).await,
-            serde_json::to_string(&workflow).unwrap()
+            serde_json::to_string(&processing_graph).unwrap()
         );
     }
 
@@ -1030,7 +1038,7 @@ mod tests {
 
     #[ge_context::test]
     async fn load_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = test::TestRequest::get().uri(&format!("/processingGraphs/{id}"));
         let res = send_test_request(req, app_ctx).await;
@@ -1067,7 +1075,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: MockFeatureCollectionSource::single(
                 MultiPointCollection::from_data(
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
@@ -1089,7 +1097,7 @@ mod tests {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -1141,7 +1149,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: geoengine_operators::mock::MockRasterSource::<u8> {
                 params: MockRasterSourceParams::<u8> {
                     data: vec![],
@@ -1171,7 +1179,7 @@ mod tests {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -1238,7 +1246,7 @@ mod tests {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
@@ -1254,7 +1262,7 @@ mod tests {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -1277,7 +1285,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -1302,7 +1310,7 @@ mod tests {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -1337,7 +1345,7 @@ mod tests {
         let session_id = session.id();
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1351,7 +1359,7 @@ mod tests {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -1385,12 +1393,12 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_does_not_register_invalid_workflow(app_ctx: PostgresContext<NoTls>) {
+    async fn it_does_not_register_invalid_processing_graph(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
         let session_id = ctx.session().id();
 
-        let workflow = json!({
+        let processing_graph = json!({
           "type": "Vector",
           "operator": {
             "type": "Reprojection",
@@ -1412,7 +1420,7 @@ mod tests {
             .uri("/processingGraphs")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
-            .set_payload(workflow.to_string());
+            .set_payload(processing_graph.to_string());
         let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 400);
@@ -1447,7 +1455,7 @@ mod tests {
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1459,11 +1467,17 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
+        let processing_graph_id = ctx
+            .db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
-        // create dataset from workflow
+        // create dataset from processing graph
         let req = test::TestRequest::get()
-            .uri(&format!("/processingGraphs/{workflow_id}/allMetadata/zip"))
+            .uri(&format!(
+                "/processingGraphs/{processing_graph_id}/allMetadata/zip"
+            ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx.clone()).await;
 
@@ -1557,15 +1571,15 @@ mod tests {
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
-    fn dataset_from_workflow_task_success_tiling_spec() -> TilingSpecification {
+    fn dataset_from_processing_graph_task_success_tiling_spec() -> TilingSpecification {
         TilingSpecification {
             tile_size_in_pixels: GridShape::new([512, 512]),
         }
     }
 
-    #[ge_context::test(tiling_spec = "dataset_from_workflow_task_success_tiling_spec")]
+    #[ge_context::test(tiling_spec = "dataset_from_processing_graph_task_success_tiling_spec")]
     #[allow(clippy::too_many_lines)]
-    async fn dataset_from_workflow_task_success(app_ctx: PostgresContext<NoTls>) {
+    async fn dataset_from_processing_graph_task_success(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1581,7 +1595,7 @@ mod tests {
         }
         .typed();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1593,11 +1607,17 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
+        let processing_graph_id = ctx
+            .db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
-        // create dataset from workflow
+        // create dataset from processing graph
         let req = test::TestRequest::post()
-            .uri(&format!("/datasetFromProcessingGraph/{workflow_id}"))
+            .uri(&format!(
+                "/datasetFromProcessingGraph/{processing_graph_id}"
+            ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
             .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .set_payload(
@@ -1641,7 +1661,7 @@ mod tests {
 
         let response = if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
-                .downcast::<RasterDatasetFromWorkflowResult>()
+                .downcast::<RasterDatasetFromProcessingGraphResult>()
                 .unwrap()
                 .as_ref()
                 .clone()
@@ -1671,7 +1691,7 @@ mod tests {
 
         assert_eq_two_raster_operator_res_u8(
             &ctx.execution_context().unwrap(),
-            &ctx.query_context(workflow_id, ComputationId::new())
+            &ctx.query_context(processing_graph_id, ComputationId::new())
                 .unwrap(),
             operator_a,
             operator_b,
@@ -1689,7 +1709,7 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1701,7 +1721,11 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
+        let processing_graph_id = ctx
+            .db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
         let (req, payload, mut input_tx, send_next_msg_trigger) =
             websocket_tests::test_client().await;
@@ -1719,7 +1743,7 @@ mod tests {
                 let response = raster_stream_websocket(
                     web::Data::new(app_ctx.clone()),
                     session.clone(),
-                    web::Path::from(ProcessingGraphId::from(workflow_id)),
+                    web::Path::from(ProcessingGraphId::from(processing_graph_id)),
                     web::Query(RasterStreamWebsocketQuery {
                         spatial_bounds: SpatialPartition2D::new(
                             (-180., 90.).into(),
@@ -1768,7 +1792,7 @@ mod tests {
 
         let (_, dataset) = add_ports_to_datasets(&app_ctx, true, true).await;
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::OgrSource(
                 crate::api::model::processing_graphs::OgrSource {
                     r#type: Default::default(),
@@ -1783,7 +1807,11 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
+        let processing_graph_id = ctx
+            .db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
         let (req, payload, mut input_tx, send_next_msg_trigger) =
             websocket_tests::test_client().await;
@@ -1801,7 +1829,7 @@ mod tests {
                 let response = vector_stream_websocket(
                     web::Data::new(app_ctx.clone()),
                     session.clone(),
-                    web::Path::from(ProcessingGraphId::from(workflow_id)),
+                    web::Path::from(ProcessingGraphId::from(processing_graph_id)),
                     web::Query(VectorStreamWebsocketQuery {
                         spatial_bounds: BoundingBox2D::new(
                             (-180., -90.).into(),

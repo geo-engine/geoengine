@@ -1,12 +1,12 @@
 use std::fmt::{Display, Formatter};
 
-/// A path to an operator within an operator graph (workflow).
+/// A path to an operator within an operator graph (processing graph).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct WorkflowOperatorPath {
+pub struct ProcessingGraphOperatorPath {
     id: Vec<u8>,
 }
 
-impl WorkflowOperatorPath {
+impl ProcessingGraphOperatorPath {
     /// Creates a new root path.    
     pub fn initialize_root() -> Self {
         Self { id: Vec::new() }
@@ -44,19 +44,19 @@ impl WorkflowOperatorPath {
     }
 }
 
-impl AsRef<[u8]> for WorkflowOperatorPath {
+impl AsRef<[u8]> for ProcessingGraphOperatorPath {
     fn as_ref(&self) -> &[u8] {
         &self.id
     }
 }
 
-impl From<&[u8]> for WorkflowOperatorPath {
+impl From<&[u8]> for ProcessingGraphOperatorPath {
     fn from(id: &[u8]) -> Self {
         Self { id: id.to_vec() }
     }
 }
 
-impl Display for WorkflowOperatorPath {
+impl Display for ProcessingGraphOperatorPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let sep = ", ";
 
@@ -79,7 +79,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let path = WorkflowOperatorPath::initialize_root();
+        let path = ProcessingGraphOperatorPath::initialize_root();
         assert_eq!(path.to_string(), "[]");
 
         let path = path.clone_and_append(1);

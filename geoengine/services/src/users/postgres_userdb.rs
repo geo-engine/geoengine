@@ -794,7 +794,7 @@ where
 
         // collect the log into separate vectors to pass them as parameters to the query
         let mut users = Vec::new();
-        let mut workflows = Vec::new();
+        let mut processing_graphs = Vec::new();
         let mut computations = Vec::new();
         let mut operators_names = Vec::new();
         let mut operator_paths = Vec::new();
@@ -802,7 +802,7 @@ where
 
         for unit in log {
             users.push(unit.user);
-            workflows.push(unit.workflow);
+            processing_graphs.push(unit.processing_graph);
             computations.push(unit.computation);
             operators_names.push(unit.operator_name);
             operator_paths.push(unit.operator_path.to_string());
@@ -818,7 +818,7 @@ where
             query,
             &[
                 &users,
-                &workflows,
+                &processing_graphs,
                 &computations,
                 &operators_names,
                 &operator_paths,
@@ -867,7 +867,7 @@ where
             .iter()
             .map(|row| ComputationQuota {
                 computation_id: row.get(0),
-                workflow_id: row.get(1),
+                processing_graph_id: row.get(1),
                 timestamp: row.get(2),
                 count: row.get::<_, i64>(3) as u64,
             })

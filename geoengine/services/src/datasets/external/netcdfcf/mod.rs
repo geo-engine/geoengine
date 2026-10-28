@@ -1653,7 +1653,7 @@ mod tests {
     };
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::{
-        engine::{PlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath},
+        engine::{PlotOperator, ProcessingGraphOperatorPath, TypedPlotQueryProcessor},
         plot::{
             MeanRasterPixelValuesOverTime, MeanRasterPixelValuesOverTimeParams,
             MeanRasterPixelValuesOverTimePosition,
@@ -2386,7 +2386,10 @@ mod tests {
         let execution_context = ctx.execution_context().unwrap();
 
         let initialized_operator = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -2558,8 +2561,8 @@ mod tests {
             layer_after_overviews.description
         );
         pretty_assertions::assert_eq!(
-            layer_before_overviews.workflow,
-            layer_after_overviews.workflow
+            layer_before_overviews.processing_graph,
+            layer_after_overviews.processing_graph
         );
         pretty_assertions::assert_eq!(
             layer_before_overviews.properties,

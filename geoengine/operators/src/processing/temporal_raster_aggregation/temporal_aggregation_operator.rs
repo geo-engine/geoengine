@@ -11,8 +11,9 @@ use super::first_last_subquery::{
 use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
 use crate::adapters::SimpleRasterStackerAdapter;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
-    RasterOperator, SingleRasterSource, TimeDescriptor, TypedRasterOperator, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedSources, Operator,
+    ProcessingGraphOperatorPath, QueryProcessor, RasterOperator, SingleRasterSource,
+    TimeDescriptor, TypedRasterOperator,
 };
 use crate::optimization::OptimizationError;
 use crate::processing::temporal_raster_aggregation::aggregators::PercentileEstimateAggregator;
@@ -89,7 +90,7 @@ impl OperatorName for TemporalRasterAggregation {
 impl RasterOperator for TemporalRasterAggregation {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         ensure!(self.params.window.step > 0, error::WindowSizeMustNotBeZero);
@@ -147,7 +148,7 @@ impl RasterOperator for TemporalRasterAggregation {
 
 pub struct InitializedTemporalRasterAggregation {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     aggregation_type: Aggregation,
     window: TimeStep,
     window_reference: TimeInstance,
@@ -202,7 +203,7 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
         TemporalRasterAggregation::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -624,7 +625,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -752,7 +753,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -880,7 +881,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1008,7 +1009,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1144,7 +1145,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1229,7 +1230,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1336,7 +1337,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1444,7 +1445,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1552,7 +1553,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1660,7 +1661,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1768,7 +1769,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1877,7 +1878,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2004,7 +2005,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2112,7 +2113,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2232,7 +2233,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2372,7 +2373,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2499,7 +2500,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2607,7 +2608,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -2715,7 +2716,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -3016,7 +3017,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -3196,7 +3197,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -3272,7 +3273,7 @@ mod tests {
         let trigger = query_ctx.abort_trigger().unwrap();
 
         let query_processor = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()

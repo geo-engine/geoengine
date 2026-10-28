@@ -223,9 +223,9 @@ impl TemporalBounded for STRectangle {
 // TODO: split into Raster and VectorLayer like in frontend?
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ProjectLayer {
-    // TODO: check that workflow/operator output type fits to the type of LayerInfo
+    // TODO: check that processing graph/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
-    pub workflow: ProcessingGraphId,
+    pub processing_graph: ProcessingGraphId,
     pub name: String,
     pub visibility: LayerVisibility,
     pub symbology: Symbology,
@@ -433,7 +433,7 @@ impl Default for LayerVisibility {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Plot {
-    pub workflow: ProcessingGraphId,
+    pub processing_graph: ProcessingGraphId,
     pub name: String,
 }
 

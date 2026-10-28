@@ -102,7 +102,7 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
     // TODO: assign computation id inside SessionContext or let it be provided from outside?
     fn query_context(
         &self,
-        workflow: ProcessingGraphId,
+        processing_graph: ProcessingGraphId,
         computation: ComputationId,
     ) -> Result<Self::QueryContext>;
 
@@ -625,7 +625,7 @@ pub struct QuotaCheckerImpl<U: UserDb> {
 #[async_trait]
 impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
     async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
-        // TODO: cache the result, s.th. other operators in the same workflow can re-use it
+        // TODO: cache the result, s.th. other operators in the same processing graph can re-use it
         let quota_check_enabled = crate::config::get_config_element::<crate::config::Quota>()
             .map_err(
                 |e| geoengine_operators::error::Error::CreatingProcessorFailed {

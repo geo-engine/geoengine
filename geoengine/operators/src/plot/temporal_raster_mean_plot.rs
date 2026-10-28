@@ -1,8 +1,8 @@
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedPlotOperator,
     InitializedRasterOperator, InitializedSources, Operator, OperatorName, PlotOperator,
-    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterSource,
-    TypedPlotOperator, TypedPlotQueryProcessor, WorkflowOperatorPath,
+    PlotQueryProcessor, PlotResultDescriptor, ProcessingGraphOperatorPath, QueryContext,
+    QueryProcessor, SingleRasterSource, TypedPlotOperator, TypedPlotQueryProcessor,
 };
 use crate::error::Error;
 use crate::optimization::OptimizationError;
@@ -70,7 +70,7 @@ pub enum MeanRasterPixelValuesOverTimePosition {
 impl PlotOperator for MeanRasterPixelValuesOverTime {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -350,12 +350,12 @@ impl MeanCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::TypedRasterOperator;
 
     use crate::{
         engine::{
             ChunkByteSize, MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors,
             RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
+            TypedRasterOperator,
         },
         source::GdalSource,
     };
@@ -454,7 +454,10 @@ mod tests {
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -542,7 +545,10 @@ mod tests {
 
         let processor = temporal_raster_mean_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -668,7 +674,10 @@ mod tests {
 
         let temporal_raster_mean_plot = temporal_raster_mean_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -782,7 +791,10 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await?
         .query_processor()?
         .json_vega()

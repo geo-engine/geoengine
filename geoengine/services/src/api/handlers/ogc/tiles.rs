@@ -9,7 +9,7 @@ use crate::{
             },
             util::{
                 crs_from_spatial_reference_option, get_initialized_raster_operator, link_creator,
-                load_layer, parse_datetime_option, raster_workflow_metadata,
+                load_layer, parse_datetime_option, raster_processing_graph_metadata,
                 reproject_if_necessary,
             },
         },
@@ -86,8 +86,8 @@ pub async fn collection_tilesets<C: ApplicationContext>(
 
     let layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
 
-    let descriptor = raster_workflow_metadata::<C::SessionContext>(
-        layer.workflow.clone(),
+    let descriptor = raster_processing_graph_metadata::<C::SessionContext>(
+        layer.processing_graph.clone(),
         ctx.execution_context()?,
     )
     .await?;
@@ -189,9 +189,11 @@ pub async fn collection_tileset<C: ApplicationContext>(
     let execution_context = ctx.execution_context()?;
     let tiling_specification = execution_context.tiling_specification();
     let layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
-    let descriptor =
-        raster_workflow_metadata::<C::SessionContext>(layer.workflow, ctx.execution_context()?)
-            .await?;
+    let descriptor = raster_processing_graph_metadata::<C::SessionContext>(
+        layer.processing_graph,
+        ctx.execution_context()?,
+    )
+    .await?;
 
     // Resolve the appropriate TMS provider to get correct CRS
     let provider = TypedTileMatrixSetProvider::resolve(
@@ -612,7 +614,7 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
 ) -> OgcApiResult<(TypedRasterQueryProcessor, C::QueryContext, ComputationId)> {
     let processing_graph_id = ctx
         .db()
-        .register_processing_graph(layer.workflow.clone())
+        .register_processing_graph(layer.processing_graph.clone())
         .await?; // TODO: can we get this without re-registering it?
     let computation_id = ComputationId::new();
     let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;

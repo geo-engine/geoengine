@@ -5,8 +5,8 @@ use crate::adapters::FeatureCollectionChunkMerger;
 use crate::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterQueryProcessor,
+    RasterResultDescriptor, ResultDescriptor, TypedRasterQueryProcessor,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -96,7 +96,7 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
         self.source.name()
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.source.path()
     }
 
@@ -158,7 +158,7 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
         self.source.name()
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.source.path()
     }
 
@@ -473,8 +473,8 @@ mod tests {
 
     use crate::{
         engine::{
-            ChunkByteSize, MockExecutionContext, MultipleRasterSources, RasterOperator,
-            SingleRasterSource, WorkflowOperatorPath,
+            ChunkByteSize, MockExecutionContext, MultipleRasterSources,
+            ProcessingGraphOperatorPath, RasterOperator, SingleRasterSource,
         },
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
@@ -498,7 +498,7 @@ mod tests {
             params: GdalSourceParameters::new(ndvi_id.clone()),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -598,7 +598,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -697,7 +697,7 @@ mod tests {
 
         let operator = stacked_operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

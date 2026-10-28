@@ -2,7 +2,7 @@
   "id": "b75db46e-2b9a-4a86-b33f-bc06a73cd711",
   "name": "Ports in Germany",
   "description": "Natural Earth Ports point filtered with Germany polygon",
-  "workflow": {
+  "processingGraph": {
     "type": "Vector",
     "operator": {
       "type": "PointInPolygonFilter",

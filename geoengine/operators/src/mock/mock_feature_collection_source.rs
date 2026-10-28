@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::engine::{CanonicOperatorName, QueryContext, TypedVectorOperator};
 use crate::engine::{
-    ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName, ResultDescriptor,
-    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedVectorOperator, OperatorData, OperatorName,
+    ProcessingGraphOperatorPath, QueryContext, ResultDescriptor, SourceOperator,
+    TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -143,7 +143,7 @@ where
 
 pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry + ArrowTyped> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     params: MockFeatureCollectionSourceParams<G>,
     result_descriptor: R,
     collections: Vec<FeatureCollection<G>>,
@@ -170,7 +170,7 @@ macro_rules! impl_mock_feature_collection_source {
         impl VectorOperator for $newtype {
             async fn _initialize(
                 self: Box<Self>,
-                path: WorkflowOperatorPath,
+                path: ProcessingGraphOperatorPath,
                 _context: &dyn ExecutionContext,
             ) -> Result<Box<dyn InitializedVectorOperator>> {
                 let columns = self.params.collections[0]
@@ -235,7 +235,7 @@ macro_rules! impl_mock_feature_collection_source {
             fn name(&self) -> &'static str {
                 MockFeatureCollectionSource::<$geometry>::TYPE_NAME
             }
-            fn path(&self) -> WorkflowOperatorPath {
+            fn path(&self) -> ProcessingGraphOperatorPath {
                 self.path.clone()
             }
 
@@ -415,7 +415,7 @@ mod tests {
 
         let source = source
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
             )
             .await

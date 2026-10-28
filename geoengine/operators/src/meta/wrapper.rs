@@ -1,9 +1,9 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    TypedRasterOperator, TypedRasterQueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterQueryProcessor,
+    RasterResultDescriptor, ResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
+    TypedVectorOperator, TypedVectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -156,7 +156,7 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
         self.source.name()
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.source.path()
     }
 
@@ -202,7 +202,7 @@ impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn Initialize
         self.source.name()
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.source.path()
     }
 
@@ -221,7 +221,7 @@ where
 {
     processor: Q,
     span: CreateSpan,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     operator_name: &'static str,
     data: Option<String>,
     query_count: AtomicUsize,
@@ -234,7 +234,7 @@ where
     pub fn new(
         processor: Q,
         span: CreateSpan,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         operator_name: &'static str,
         data: Option<String>,
     ) -> Self {

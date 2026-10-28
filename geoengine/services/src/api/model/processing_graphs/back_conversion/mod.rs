@@ -9,10 +9,10 @@ use crate::{
 use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
 
 /// Converts a [`ServicesProcessingGraph`] into an API processing graph represented by an `ApiTypedOperator`.
-pub fn workflow_to_processing_graph(
-    workflow: &ServicesProcessingGraph,
+pub fn services_processing_graph_to_api(
+    processing_graph: &ServicesProcessingGraph,
 ) -> anyhow::Result<ApiTypedOperator> {
-    match &workflow.operator {
+    match &processing_graph.operator {
         OperatorsTypedOperator::Raster(raster_operator) => Ok(ApiTypedOperator::Raster(
             raster::raster_operator_from_runtime(raster_operator)?,
         )),

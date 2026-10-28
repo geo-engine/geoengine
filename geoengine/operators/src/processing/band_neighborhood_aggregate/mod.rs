@@ -5,9 +5,9 @@ use std::task::{Context, Poll};
 use crate::adapters::RasterStreamExt;
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-    InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor, SingleRasterSource,
-    TypedRasterOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    InitializedSources, Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 
 use crate::optimization::OptimizationError;
@@ -90,7 +90,7 @@ pub enum BandNeighborhoodAggregateError {
 impl RasterOperator for BandNeighborhoodAggregate {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -155,7 +155,7 @@ impl RasterOperator for BandNeighborhoodAggregate {
 
 pub struct InitializedBandNeighborhoodAggregate {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     aggregate: NeighborhoodAggregate,
@@ -185,7 +185,7 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
         BandNeighborhoodAggregate::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -1257,7 +1257,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1409,7 +1409,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

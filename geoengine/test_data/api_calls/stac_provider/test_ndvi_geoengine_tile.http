@@ -21,7 +21,7 @@ Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
 
-< ndvi-workflow.json
+< ndvi-processing-graph.json
 
 ###
 

@@ -30,10 +30,10 @@ pub mod retry;
 pub mod sentinel_2_utm_zones;
 pub mod server;
 // TODO: refactor to be gated by `#[cfg(test)]`
+pub mod processing_graphs;
 pub mod tests;
 #[cfg(test)]
 pub mod websocket_tests;
-pub mod workflows;
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>
 pub fn from_str<'de, D, S>(deserializer: D) -> Result<S, D::Error>

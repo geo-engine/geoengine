@@ -33,8 +33,9 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        QueryContext, QueryProcessor, ResultDescriptor, SingleRasterOrVectorSource,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
+        ProcessingGraphOperatorPath, QueryContext, QueryProcessor, ResultDescriptor,
+        SingleRasterOrVectorSource, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor,
     },
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
     util::{abortable_query_execution, input::RasterOrVectorOperator},
@@ -337,7 +338,7 @@ where
 
 #[allow(clippy::too_many_lines)] // long xml body
 async fn wfs_get_capabilities<C>(
-    workflow_id: ServicesProcessingGraphId,
+    processing_graph_id: ServicesProcessingGraphId,
     // TODO: react on capabilities
     _request: GetCapabilities,
     app_ctx: web::Data<C>,
@@ -346,19 +347,19 @@ async fn wfs_get_capabilities<C>(
 where
     C: ApplicationContext,
 {
-    let wfs_url = wfs_url(workflow_id)?;
+    let wfs_url = wfs_url(processing_graph_id)?;
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
+    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
 
     let exe_ctx = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
-    let operator = workflow
+    let operator = processing_graph
         .operator
         .get_vector()?
-        .initialize(workflow_operator_path_root, &exe_ctx)
+        .initialize(processing_graph_operator_path_root, &exe_ctx)
         .await?;
 
     let result_descriptor = operator.result_descriptor();
@@ -443,8 +444,8 @@ where
     </ows:OperationsMetadata>
     <FeatureTypeList>
         <FeatureType>
-            <Name>{workflow}</Name>
-            <Title>Processing Graph {workflow}</Title>
+            <Name>{processing_graph}</Name>
+            <Title>Processing Graph {processing_graph}</Title>
             <DefaultCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</DefaultCRS>
             <ows:WGS84BoundingBox>
                 <ows:LowerCorner>-90 -180</ows:LowerCorner>
@@ -454,7 +455,7 @@ where
     </FeatureTypeList>
 </wfs:WFS_Capabilities>"#,
         wfs_url = wfs_url,
-        workflow = workflow_id,
+        processing_graph = processing_graph_id,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
     );
@@ -464,11 +465,11 @@ where
         .body(response))
 }
 
-fn wfs_url(workflow: ServicesProcessingGraphId) -> Result<Url> {
+fn wfs_url(processing_graph: ServicesProcessingGraphId) -> Result<Url> {
     let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
-    ogc_endpoint_url(&base, OgcProtocol::Wfs, workflow)
+    ogc_endpoint_url(&base, OgcProtocol::Wfs, processing_graph)
 }
 
 async fn wfs_get_feature<C: ApplicationContext>(
@@ -508,22 +509,24 @@ async fn wfs_get_feature<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow: ServicesProcessingGraph = ctx.db().load_processing_graph(&type_names).await?;
+    let processing_graph: ServicesProcessingGraph =
+        ctx.db().load_processing_graph(&type_names).await?;
 
-    let operator = workflow.operator.get_vector()?;
+    let operator = processing_graph.operator.get_vector()?;
 
     let execution_context = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
     let initialized = operator
         .clone()
-        .initialize(workflow_operator_path_root, &execution_context)
+        .initialize(processing_graph_operator_path_root, &execution_context)
         .await?;
 
-    // handle request and workflow crs matching
-    let workflow_spatial_ref: Option<SpatialReference> =
+    // handle request and processing graph crs matching
+    let processing_graph_spatial_ref: Option<SpatialReference> =
         initialized.result_descriptor().spatial_reference().into();
-    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+    let processing_graph_spatial_ref =
+        processing_graph_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     // TODO: use a default spatial reference if it is not set?
     let request_spatial_ref: SpatialReference = request
@@ -531,11 +534,11 @@ async fn wfs_get_feature<C: ApplicationContext>(
         .ok_or(error::Error::InvalidSpatialReference)?;
 
     // perform reprojection if necessary
-    let initialized = if request_spatial_ref == workflow_spatial_ref {
+    let initialized = if request_spatial_ref == processing_graph_spatial_ref {
         initialized
     } else {
         tracing::debug!(
-            "WFS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
+            "WFS query srs: {request_spatial_ref}, processing graph srs: {processing_graph_spatial_ref} --> injecting reprojection"
         );
 
         let reprojection_params = ReprojectionParams {
@@ -544,7 +547,7 @@ async fn wfs_get_feature<C: ApplicationContext>(
         };
 
         // create the reprojection operator in order to get the canonic operator name
-        let reprojected_workflow = Reprojection {
+        let reprojected_processing_graph = Reprojection {
             params: reprojection_params,
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Vector(operator),
@@ -552,19 +555,19 @@ async fn wfs_get_feature<C: ApplicationContext>(
         }
         .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
-        // TODO: avoid re-initialization and re-use unprojected workflow.
+        // TODO: avoid re-initialization and re-use unprojected processing graph.
         // In order to check whether we need to inject a reprojection, we first need to initialize the
-        // original workflow. Then we can check the result projection. Previously, we then just wrapped
-        // the initialized workflow with an initialized reprojection. IMHO this is wrong because
-        // initialization propagates the workflow path down the children and appends a new segment for
-        // each level. So we can't re-use an already initialized workflow, because all the workflow path/
-        // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+        // original processing graph. Then we can check the result projection. Previously, we then just wrapped
+        // the initialized processing graph with an initialized reprojection. IMHO this is wrong because
+        // initialization propagates the processing graph path down the children and appends a new segment for
+        // each level. So we can't re-use an already initialized processing graph, because all the processing graph path/
+        // operator names will be wrong. That's why I now build a new processing graph with a reprojection and
         // perform a full initialization. I only added the TODO because we did some optimization here
-        // which broke at some point when the workflow operator paths were introduced but no one noticed.
-        let ivp = reprojected_workflow
-            .initialize(workflow_operator_path_root, &execution_context)
+        // which broke at some point when the processing graph operator paths were introduced but no one noticed.
+        let ivp = reprojected_processing_graph
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         Box::new(ivp)
@@ -861,7 +864,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
@@ -873,10 +876,14 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
+        let processing_graph_id = ctx
+            .db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
         let req = test::TestRequest::with_uri(&format!(
-            "/wfs/{workflow_id}?request=GetCapabilities&service=WFS"
+            "/wfs/{processing_graph_id}?request=GetCapabilities&service=WFS"
         ))
         .method(method)
         .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -929,7 +936,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: OperatorsTypedOperator::Vector(
                 CsvSource {
                     params: CsvSourceParameters {
@@ -948,7 +955,7 @@ x;y
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -1058,7 +1065,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = ServicesProcessingGraph {
+        let processing_graph = ServicesProcessingGraph {
             operator: OperatorsTypedOperator::Vector(
                 CsvSource {
                     params: CsvSourceParameters {
@@ -1075,19 +1082,23 @@ x;y
             ),
         };
 
-        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
+        let processing_graph_id = ctx
+            .db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
         let params = &[
             ("request", "GetFeature"),
             ("service", "WFS"),
             ("version", "2.0.0"),
-            ("typeNames", &workflow_id.to_string()),
+            ("typeNames", &processing_graph_id.to_string()),
             ("bbox", "-90,-180,90,180"),
             ("srsName", "EPSG:4326"),
         ];
         let req = test::TestRequest::with_uri(&format!(
             "/wfs/{}?{}",
-            workflow_id,
+            processing_graph_id,
             serde_urlencoded::to_string(params).unwrap()
         ))
         .method(method)
@@ -1217,7 +1228,7 @@ x;y
         )
         .await;
 
-        let workflow = serde_json::json!({
+        let processing_graph = serde_json::json!({
             "type": "Vector",
             "operator": {
                 "type": "RasterVectorJoin",
@@ -1250,17 +1261,21 @@ x;y
             }
         });
 
-        let json = serde_json::to_string(&workflow).unwrap();
+        let json = serde_json::to_string(&processing_graph).unwrap();
 
-        let workflow = serde_json::from_str(&json).unwrap();
+        let processing_graph = serde_json::from_str(&json).unwrap();
 
-        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
+        let processing_graph_id = ctx
+            .db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
         let params = &[
             ("request", "GetFeature"),
             ("service", "WFS"),
             ("version", "2.0.0"),
-            ("typeNames", &workflow_id.to_string()),
+            ("typeNames", &processing_graph_id.to_string()),
             ("bbox", "-90,-180,90,180"),
             ("srsName", "EPSG:4326"),
             ("time", "2014-04-01T12:00:00.000Z/2014-04-01T12:00:00.000Z"),
@@ -1268,7 +1283,7 @@ x;y
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wfs/{}?{}",
-                workflow_id,
+                processing_graph_id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));

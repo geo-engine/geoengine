@@ -1,13 +1,16 @@
-use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, QueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
-};
 use crate::error;
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use crate::util::input::StringOrNumberRange;
-use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
+use crate::{
+    adapters::FeatureCollectionChunkMerger,
+    engine::{
+        CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
+        Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+        SingleVectorSource, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor,
+    },
+};
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
@@ -41,7 +44,7 @@ impl OperatorName for ColumnRangeFilter {
 impl VectorOperator for ColumnRangeFilter {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -67,7 +70,7 @@ impl VectorOperator for ColumnRangeFilter {
 
 pub struct InitializedColumnRangeFilter {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     state: ColumnRangeFilterParams,
@@ -93,7 +96,7 @@ impl InitializedVectorOperator for InitializedColumnRangeFilter {
         ColumnRangeFilter::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -298,7 +301,7 @@ mod tests {
         let exe_ctx = MockExecutionContext::test_default();
 
         let initialized = filter
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

@@ -909,8 +909,8 @@ mod tests {
     use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::SpatialGridDescriptor;
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, RasterBandDescriptor, RasterResultDescriptor,
-        WorkflowOperatorPath,
+        MetaData, MetaDataProvider, ProcessingGraphOperatorPath, RasterBandDescriptor,
+        RasterResultDescriptor,
     };
     use geoengine_operators::source::{
         MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
@@ -1687,7 +1687,7 @@ mod tests {
 
     #[crate::ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn ndvi_stac_workflow(app_ctx: PostgresContext<NoTls>) {
+    async fn ndvi_stac_processing_graph(app_ctx: PostgresContext<NoTls>) {
         let server = Server::run();
         server.expect(
             Expectation::matching(request::method_path(
@@ -1710,7 +1710,7 @@ mod tests {
         let provider_def = crate::datasets::external::stac::StacDataProviderDefinition {
             name: "Sentinel 2 L2A from STAC".to_owned(),
             id: provider_id,
-            description: "Test STAC provider for NDVI workflow".to_owned(),
+            description: "Test STAC provider for NDVI processing graph".to_owned(),
             priority: Some(50),
             api_url: server.url_str("/"),
             collection_name: "sentinel-2-l2a".to_owned(),
@@ -1819,32 +1819,36 @@ mod tests {
             .await
             .unwrap();
 
-        let ndvi_workflow_json =
-            include_str!("../../../../../test_data/api_calls/stac_provider/ndvi-workflow.json");
+        let ndvi_processing_graph_json = include_str!(
+            "../../../../../test_data/api_calls/stac_provider/ndvi-processing-graph.json"
+        );
 
-        let workflow_json_with_provider = ndvi_workflow_json.replace(
+        let processing_graph_json_with_provider = ndvi_processing_graph_json.replace(
             "_:b274275c-373d-4a3f-8b45-9b48e9614329",
             &format!("_:{provider_id}"),
         );
 
-        let workflow: crate::processing_graphs::processing_graph::ProcessingGraph =
-            serde_json::from_str(&workflow_json_with_provider)
-                .expect("workflow JSON should deserialize");
+        let processing_graph: crate::processing_graphs::processing_graph::ProcessingGraph =
+            serde_json::from_str(&processing_graph_json_with_provider)
+                .expect("processing graph JSON should deserialize");
 
-        let operator = workflow
+        let operator = processing_graph
             .operator
             .get_raster()
-            .expect("workflow operator should be raster");
+            .expect("processing graph operator should be raster");
 
         let execution_ctx = admin_ctx.execution_context().expect("execution context");
 
         let initialized = operator
             .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_ctx)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_ctx,
+            )
             .await
             .expect("operator should initialize");
 
-        // Verify the operator initialized successfully - this tests that the workflow
+        // Verify the operator initialized successfully - this tests that the processing graph
         // can be created and initialized with the STAC provider data
         let _result_descriptor = initialized.result_descriptor();
         // If we get here, the operator initialized successfully

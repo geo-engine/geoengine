@@ -374,8 +374,8 @@ mod tests {
     use crate::{
         adapters::RasterSubQueryAdapter,
         engine::{
-            MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-            SpatialGridDescriptor, TimeDescriptor, WorkflowOperatorPath,
+            MockExecutionContext, ProcessingGraphOperatorPath, RasterBandDescriptors,
+            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -467,7 +467,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let op = mrs1
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -555,7 +555,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap()
         .query_processor()

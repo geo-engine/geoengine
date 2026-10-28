@@ -885,7 +885,8 @@ mod tests {
         mock_token_response, mock_valid_provider_discovery,
     };
     use crate::util::tests::{
-        admin_login, create_project_helper2, create_session_helper, register_ndvi_workflow_helper,
+        admin_login, create_project_helper2, create_session_helper,
+        register_ndvi_processing_graph_helper,
     };
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use actix_http::header::CONTENT_TYPE;
@@ -895,7 +896,7 @@ mod tests {
     use core::time::Duration;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_operators::engine::WorkflowOperatorPath;
+    use geoengine_operators::engine::ProcessingGraphOperatorPath;
     use geoengine_operators::meta::quota::ComputationUnit;
     use httptest::matchers::request;
     use httptest::responders::status_code;
@@ -1913,7 +1914,7 @@ mod tests {
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -2168,15 +2169,15 @@ mod tests {
         let admin_session = admin_login(&app_ctx).await;
         let admin_db = app_ctx.session_context(admin_session.clone()).db();
 
-        let workflow_id = Uuid::new_v4();
+        let processing_graph_id = Uuid::new_v4();
 
         admin_db
             .log_quota_used(vec![ComputationUnit {
                 user: session.user.id.0,
-                workflow: workflow_id,
+                processing_graph: processing_graph_id,
                 computation: Uuid::new_v4(),
                 operator_name: "Foo",
-                operator_path: WorkflowOperatorPath::initialize_root(),
+                operator_path: ProcessingGraphOperatorPath::initialize_root(),
                 data: None,
             }])
             .await
@@ -2230,17 +2231,17 @@ mod tests {
         let admin_session = admin_login(&app_ctx).await;
         let admin_db = app_ctx.session_context(admin_session.clone()).db();
 
-        let workflow_id = Uuid::new_v4();
+        let processing_graph_id = Uuid::new_v4();
         let computation_id = Uuid::new_v4();
         let computation_id2 = Uuid::new_v4();
 
         admin_db
             .log_quota_used(vec![ComputationUnit {
                 user: session.user.id.0,
-                workflow: workflow_id,
+                processing_graph: processing_graph_id,
                 computation: computation_id,
                 operator_name: "GdalSource",
-                operator_path: WorkflowOperatorPath::initialize_root(),
+                operator_path: ProcessingGraphOperatorPath::initialize_root(),
                 data: Some("foo".to_string()),
             }])
             .await
@@ -2249,10 +2250,10 @@ mod tests {
         admin_db
             .log_quota_used(vec![ComputationUnit {
                 user: session.user.id.0,
-                workflow: workflow_id,
+                processing_graph: processing_graph_id,
                 computation: computation_id,
                 operator_name: "GdalSource",
-                operator_path: WorkflowOperatorPath::initialize_root(),
+                operator_path: ProcessingGraphOperatorPath::initialize_root(),
                 data: Some("foo".to_string()),
             }])
             .await
@@ -2261,10 +2262,10 @@ mod tests {
         admin_db
             .log_quota_used(vec![ComputationUnit {
                 user: session.user.id.0,
-                workflow: workflow_id,
+                processing_graph: processing_graph_id,
                 computation: computation_id,
                 operator_name: "OgrSource",
-                operator_path: WorkflowOperatorPath::initialize_root(),
+                operator_path: ProcessingGraphOperatorPath::initialize_root(),
                 data: Some("bar".to_string()),
             }])
             .await
@@ -2273,10 +2274,10 @@ mod tests {
         admin_db
             .log_quota_used(vec![ComputationUnit {
                 user: session.user.id.0,
-                workflow: workflow_id,
+                processing_graph: processing_graph_id,
                 computation: computation_id2,
                 operator_name: "GdalSource",
-                operator_path: WorkflowOperatorPath::initialize_root(),
+                operator_path: ProcessingGraphOperatorPath::initialize_root(),
                 data: Some("foo".to_string()),
             }])
             .await

@@ -74,8 +74,8 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        let workflow_id = self
-            .register_processing_graph_in_tx(layer.workflow, &transaction)
+        let processing_graph_id = self
+            .register_processing_graph_in_tx(layer.processing_graph, &transaction)
             .await?;
 
         transaction.execute(
@@ -89,7 +89,7 @@ where
                     &layer.symbology,
                     &layer.properties,
                     &HashMapTextTextDbType::from(&layer.metadata),
-                    &workflow_id,
+                    &processing_graph_id,
                     &layer_id,
                 ],
             )
@@ -757,7 +757,8 @@ where
             },
             name: row.get(0),
             description: row.get(1),
-            workflow: serde_json::from_value(row.get(2)).context(crate::error::SerdeJson)?,
+            processing_graph: serde_json::from_value(row.get(2))
+                .context(crate::error::SerdeJson)?,
             symbology: row.get(3),
             properties: row.get(4),
             metadata: row.get::<_, HashMapTextTextDbType>(5).into(),
@@ -1141,7 +1142,7 @@ async fn _remove_layers_without_parent_collection(
 }
 
 pub async fn insert_layer<W: TxProcessingGraphRegistry>(
-    workflow_registry: &W,
+    processing_graph_registry: &W,
     trans: &Transaction<'_>,
     id: &LayerId,
     layer: AddLayer,
@@ -1156,8 +1157,8 @@ pub async fn insert_layer<W: TxProcessingGraphRegistry>(
             found: collection.0.clone(),
         })?;
 
-    let workflow_id = workflow_registry
-        .register_processing_graph_in_tx(layer.workflow, trans)
+    let processing_graph_id = processing_graph_registry
+        .register_processing_graph_in_tx(layer.processing_graph, trans)
         .await?;
 
     let stmt = trans
@@ -1175,7 +1176,7 @@ pub async fn insert_layer<W: TxProcessingGraphRegistry>(
                 &layer_id,
                 &layer.name,
                 &layer.description,
-                &workflow_id,
+                &processing_graph_id,
                 &layer.symbology,
                 &layer.properties,
                 &HashMapTextTextDbType::from(&layer.metadata),

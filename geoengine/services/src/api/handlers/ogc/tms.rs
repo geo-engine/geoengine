@@ -175,7 +175,7 @@ mod tests {
         api::handlers::ogc::{
             test_util::{session_and_3857_layer_id, session_and_4326_layer_id},
             tms_spec::calculate_number_of_zoom_levels,
-            util::raster_workflow_metadata,
+            util::raster_processing_graph_metadata,
         },
         contexts::{
             ApplicationContext, ExecutionContextImpl, PostgresContext, PostgresDb, SessionContext,
@@ -352,13 +352,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
-        let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow,
-                execution_context,
-            )
-            .await
-            .unwrap();
+        let descriptor = raster_processing_graph_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.processing_graph, execution_context)
+        .await
+        .unwrap();
 
         let req = TestRequest::get()
             .uri(&format!(
@@ -480,13 +478,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
-        let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow,
-                execution_context,
-            )
-            .await
-            .unwrap();
+        let descriptor = raster_processing_graph_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.processing_graph, execution_context)
+        .await
+        .unwrap();
 
         let req = TestRequest::get()
             .uri(&format!(

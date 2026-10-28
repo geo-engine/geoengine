@@ -1,8 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedVectorOperator, MetaData, OperatorData,
-    OperatorName, QueryContext, ResultDescriptor, SourceOperator, TypedVectorOperator,
-    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-    WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, ResultDescriptor, SourceOperator,
+    TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -121,7 +121,7 @@ impl OperatorName for MockDatasetDataSource {
 impl VectorOperator for MockDatasetDataSource {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let data_id = context.resolve_named_data(&self.params.data).await?;
@@ -148,7 +148,7 @@ impl OperatorData for MockDatasetDataSource {
 
 struct InitializedMockDatasetDataSource<R: ResultDescriptor, Q> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     data: NamedData,
     result_descriptor: R,
     loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R, Q>>,
@@ -179,7 +179,7 @@ impl InitializedVectorOperator
         MockDatasetDataSource::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -228,7 +228,10 @@ mod tests {
         }
         .typed();
         let initialized = mps
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 

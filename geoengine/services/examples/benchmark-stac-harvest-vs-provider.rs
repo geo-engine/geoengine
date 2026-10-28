@@ -44,7 +44,7 @@ struct BenchRecord {
     run: u32,
     scenario: &'static str,
     import_ms: u128,
-    workflow_registration_ms: u128,
+    processing_graph_registration_ms: u128,
     loading_info_ms: u128,
     wms_ms: u128,
     http_status: u16,
@@ -163,7 +163,7 @@ async fn main() -> Result<()> {
         File::create(&csv_file).with_context(|| format!("creating {}", csv_file.display()))?;
     writeln!(
         csv_writer,
-        "run,scenario,import_ms,workflow_registration_ms,wms_ms,loading_info_ms,http_status"
+        "run,scenario,import_ms,processing_graph_registration_ms,wms_ms,loading_info_ms,http_status"
     )?;
 
     let gdal_access_file = config.out_dir.join("gdal_file_accesses.csv");
@@ -271,16 +271,17 @@ async fn run_harvest_benchmark(
     run_stac_import(config, root_dir)?;
     let import_ms = import_start.elapsed().as_millis();
 
-    let workflow_registration_start = Instant::now();
-    let workflow_id = register_harvest_workflow(&api).await?;
-    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
+    let processing_graph_registration_start = Instant::now();
+    let processing_graph_id = register_harvest_processing_graph(&api).await?;
+    let processing_graph_registration_ms =
+        processing_graph_registration_start.elapsed().as_millis();
 
     let style = build_wms_style(8, 1051.0, 16015.0)?;
 
     let wms_start = Instant::now();
     let response = apis::ogcwms_api::wms_handler(
         &api,
-        &workflow_id.to_string(),
+        &processing_graph_id.to_string(),
         models::WmsRequest::GetMap,
         Some(BBOX),
         None,
@@ -291,7 +292,7 @@ async fn run_harvest_benchmark(
         Some(IMAGE_HEIGHT),
         None,
         None,
-        Some(&workflow_id.to_string()),
+        Some(&processing_graph_id.to_string()),
         None,
         Some(models::WmsService::Wms),
         None,
@@ -320,7 +321,7 @@ async fn run_harvest_benchmark(
         run,
         scenario: "harvest",
         import_ms,
-        workflow_registration_ms,
+        processing_graph_registration_ms,
         loading_info_ms,
         wms_ms,
         http_status: status.as_u16(),
@@ -343,30 +344,31 @@ async fn run_provider_benchmark(
     let token = anonymous_token(&api).await?;
     api.bearer_access_token = Some(token.to_string());
 
-    let workflow_registration_start = Instant::now();
+    let processing_graph_registration_start = Instant::now();
 
     let provider_definition = build_provider_definition(config, root_dir)?;
     let provider_id = register_stac_provider_fallback(&api, provider_definition).await?;
 
-    let workflow = apis::layers_api::layer_to_processing_graph_id_handler(
+    let processing_graph = apis::layers_api::layer_to_processing_graph_id_handler(
         &api,
         &provider_id.to_string(),
         "dataset/2",
     )
     .await
     .map_err(map_api_error("provider layer_to_processing_graph_id"))?;
-    let workflow_id = workflow.id;
+    let processing_graph_id = processing_graph.id;
 
-    trigger_workflow_metadata_fallback(&api, workflow_id).await?;
+    trigger_processing_graph_metadata_fallback(&api, processing_graph_id).await?;
 
-    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
+    let processing_graph_registration_ms =
+        processing_graph_registration_start.elapsed().as_millis();
 
     let style = build_wms_style(9, 1051.0, 16015.0)?;
 
     let wms_start = Instant::now();
     let response = apis::ogcwms_api::wms_handler(
         &api,
-        &workflow_id.to_string(),
+        &processing_graph_id.to_string(),
         models::WmsRequest::GetMap,
         Some(BBOX),
         None,
@@ -377,7 +379,7 @@ async fn run_provider_benchmark(
         Some(IMAGE_HEIGHT),
         None,
         None,
-        Some(&workflow_id.to_string()),
+        Some(&processing_graph_id.to_string()),
         None,
         Some(models::WmsService::Wms),
         None,
@@ -406,7 +408,7 @@ async fn run_provider_benchmark(
         run,
         scenario: "provider",
         import_ms: 0,
-        workflow_registration_ms,
+        processing_graph_registration_ms,
         loading_info_ms,
         wms_ms,
         http_status: status.as_u16(),
@@ -495,12 +497,15 @@ fn strip_ansi_escape_sequences(input: &str) -> String {
     out
 }
 
-async fn trigger_workflow_metadata_fallback(api: &Configuration, workflow_id: Uuid) -> Result<()> {
+async fn trigger_processing_graph_metadata_fallback(
+    api: &Configuration,
+    processing_graph_id: Uuid,
+) -> Result<()> {
     let response = api
         .client
         .get(format!(
             "{}/processingGraphs/{}/metadata",
-            api.base_path, workflow_id
+            api.base_path, processing_graph_id
         ))
         .bearer_auth(
             api.bearer_access_token
@@ -509,19 +514,20 @@ async fn trigger_workflow_metadata_fallback(api: &Configuration, workflow_id: Uu
         )
         .send()
         .await
-        .context("querying workflow metadata")?;
+        .context("querying processing graph metadata")?;
 
     let status = response.status();
     let body = response
         .text()
         .await
-        .context("reading workflow metadata response")?;
+        .context("reading processing graph metadata response")?;
 
     if !status.is_success() {
         bail!("provider metadata failed: status={status} body={body}");
     }
 
-    let _: Value = serde_json::from_str(&body).context("decoding workflow metadata JSON")?;
+    let _: Value =
+        serde_json::from_str(&body).context("decoding processing graph metadata JSON")?;
 
     Ok(())
 }
@@ -540,7 +546,7 @@ async fn anonymous_token(api: &Configuration) -> Result<Uuid> {
     Ok(session.id)
 }
 
-async fn register_harvest_workflow(api: &Configuration) -> Result<Uuid> {
+async fn register_harvest_processing_graph(api: &Configuration) -> Result<Uuid> {
     let params = models::GdalSourceParameters::new("sentinel-2-l2a_EPSG32632_U16_60".to_owned());
     let source = models::MultiBandGdalSource::new(
         models::multi_band_gdal_source::Type::MultiBandGdalSource,
@@ -551,11 +557,11 @@ async fn register_harvest_workflow(api: &Configuration) -> Result<Uuid> {
         raster_operator,
         models::typed_raster_operator::Type::Raster,
     );
-    let workflow = models::ProcessingGraph::TypedRasterOperator(Box::new(typed_raster));
+    let processing_graph = models::ProcessingGraph::TypedRasterOperator(Box::new(typed_raster));
 
-    let id = apis::processing_graphs_api::register_processing_graph_handler(api, workflow)
+    let id = apis::processing_graphs_api::register_processing_graph_handler(api, processing_graph)
         .await
-        .map_err(map_api_error("register harvest workflow"))?;
+        .map_err(map_api_error("register harvest processing graph"))?;
 
     Ok(id.id)
 }
@@ -582,7 +588,7 @@ fn build_wms_style(band: u32, min: f64, max: f64) -> Result<String> {
     ))
 }
 
-fn build_ndvi_workflow_operator(
+fn build_ndvi_processing_graph_operator(
     root_dir: &Path,
     data_scl_20: Value,
     data_nir_red_10: Value,
@@ -590,16 +596,16 @@ fn build_ndvi_workflow_operator(
     let blueprint_path = root_dir.join("test_data/api_calls/nsiscloud/workflow.json");
     let blueprint_text = fs::read_to_string(&blueprint_path)
         .with_context(|| format!("reading {}", blueprint_path.display()))?;
-    let mut workflow: Value =
-        serde_json::from_str(&blueprint_text).context("parsing NDVI workflow blueprint JSON")?;
-    let has_operator_wrapper = workflow.get("operator").is_some();
+    let mut processing_graph: Value = serde_json::from_str(&blueprint_text)
+        .context("parsing NDVI processing graph blueprint JSON")?;
+    let has_operator_wrapper = processing_graph.get("operator").is_some();
 
     let op = if has_operator_wrapper {
-        workflow
+        processing_graph
             .get_mut("operator")
-            .ok_or_else(|| anyhow!("NDVI workflow blueprint is missing 'operator' field"))?
+            .ok_or_else(|| anyhow!("NDVI processing graph blueprint is missing 'operator' field"))?
     } else {
-        &mut workflow
+        &mut processing_graph
     };
 
     op["sources"]["raster"]["sources"]["raster"]["sources"]["rasters"][0]["sources"]["raster"]["sources"]
@@ -608,13 +614,13 @@ fn build_ndvi_workflow_operator(
         ["data"] = data_nir_red_10;
 
     if has_operator_wrapper {
-        Ok(workflow)
+        Ok(processing_graph)
     } else {
-        Ok(serde_json::json!({"type": "Raster", "operator": workflow}))
+        Ok(serde_json::json!({"type": "Raster", "operator": processing_graph}))
     }
 }
 
-async fn register_workflow_raw(api: &Configuration, typed_operator: Value) -> Result<Uuid> {
+async fn register_processing_graph_raw(api: &Configuration, typed_operator: Value) -> Result<Uuid> {
     let response = api
         .client
         .post(format!("{}/processingGraphs", api.base_path))
@@ -626,20 +632,20 @@ async fn register_workflow_raw(api: &Configuration, typed_operator: Value) -> Re
         .json(&typed_operator)
         .send()
         .await
-        .context("registering workflow")?;
+        .context("registering processing graph")?;
 
     let status = response.status();
     let body = response
         .text()
         .await
-        .context("reading workflow registration response")?;
+        .context("reading processing graph registration response")?;
 
     if !status.is_success() {
-        bail!("workflow registration failed: status={status} body={body}");
+        bail!("processing graph registration failed: status={status} body={body}");
     }
 
     let id_response: models::IdResponse =
-        serde_json::from_str(&body).context("decoding workflow registration response")?;
+        serde_json::from_str(&body).context("decoding processing graph registration response")?;
 
     Ok(id_response.id)
 }
@@ -665,20 +671,22 @@ async fn run_ndvi_harvest_benchmark(
     run_stac_import(config, root_dir)?;
     let import_ms = import_start.elapsed().as_millis();
 
-    let workflow_registration_start = Instant::now();
+    let processing_graph_registration_start = Instant::now();
     let data_scl_20 = Value::String("sentinel-2-l2a_EPSG32632_U8_20".to_owned());
     let data_nir_red_10 = Value::String("sentinel-2-l2a_EPSG32632_U16_10".to_owned());
-    let typed_operator = build_ndvi_workflow_operator(root_dir, data_scl_20, data_nir_red_10)?;
-    let workflow_id = register_workflow_raw(&api, typed_operator).await?;
-    trigger_workflow_metadata_fallback(&api, workflow_id).await?;
-    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
+    let typed_operator =
+        build_ndvi_processing_graph_operator(root_dir, data_scl_20, data_nir_red_10)?;
+    let processing_graph_id = register_processing_graph_raw(&api, typed_operator).await?;
+    trigger_processing_graph_metadata_fallback(&api, processing_graph_id).await?;
+    let processing_graph_registration_ms =
+        processing_graph_registration_start.elapsed().as_millis();
 
     let style = build_wms_style(0, -0.1, 0.8)?;
 
     let wms_start = Instant::now();
     let response = apis::ogcwms_api::wms_handler(
         &api,
-        &workflow_id.to_string(),
+        &processing_graph_id.to_string(),
         models::WmsRequest::GetMap,
         Some(BBOX),
         None,
@@ -689,7 +697,7 @@ async fn run_ndvi_harvest_benchmark(
         Some(IMAGE_HEIGHT),
         None,
         None,
-        Some(&workflow_id.to_string()),
+        Some(&processing_graph_id.to_string()),
         None,
         Some(models::WmsService::Wms),
         None,
@@ -721,7 +729,7 @@ async fn run_ndvi_harvest_benchmark(
         run,
         scenario: "ndvi-harvest",
         import_ms,
-        workflow_registration_ms,
+        processing_graph_registration_ms,
         loading_info_ms,
         wms_ms,
         http_status: status.as_u16(),
@@ -743,7 +751,7 @@ async fn run_ndvi_provider_benchmark(
     let token = anonymous_token(&api).await?;
     api.bearer_access_token = Some(token.to_string());
 
-    let workflow_registration_start = Instant::now();
+    let processing_graph_registration_start = Instant::now();
 
     let provider_definition = build_provider_definition(config, root_dir)?;
     let scl_dataset_idx = provider_dataset_index(&provider_definition, "U8", 20.0)?;
@@ -753,18 +761,20 @@ async fn run_ndvi_provider_benchmark(
 
     let data_scl_20 = Value::String(format!("_:{provider_id}:`dataset/{scl_dataset_idx}`"));
     let data_nir_red_10 = Value::String(format!("_:{provider_id}:`dataset/{nir_red_dataset_idx}`"));
-    let typed_operator = build_ndvi_workflow_operator(root_dir, data_scl_20, data_nir_red_10)?;
-    let workflow_id = register_workflow_raw(&api, typed_operator).await?;
-    trigger_workflow_metadata_fallback(&api, workflow_id).await?;
+    let typed_operator =
+        build_ndvi_processing_graph_operator(root_dir, data_scl_20, data_nir_red_10)?;
+    let processing_graph_id = register_processing_graph_raw(&api, typed_operator).await?;
+    trigger_processing_graph_metadata_fallback(&api, processing_graph_id).await?;
 
-    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
+    let processing_graph_registration_ms =
+        processing_graph_registration_start.elapsed().as_millis();
 
     let style = build_wms_style(0, -0.1, 0.8)?;
 
     let wms_start = Instant::now();
     let response = apis::ogcwms_api::wms_handler(
         &api,
-        &workflow_id.to_string(),
+        &processing_graph_id.to_string(),
         models::WmsRequest::GetMap,
         Some(BBOX),
         None,
@@ -775,7 +785,7 @@ async fn run_ndvi_provider_benchmark(
         Some(IMAGE_HEIGHT),
         None,
         None,
-        Some(&workflow_id.to_string()),
+        Some(&processing_graph_id.to_string()),
         None,
         Some(models::WmsService::Wms),
         None,
@@ -807,7 +817,7 @@ async fn run_ndvi_provider_benchmark(
         run,
         scenario: "ndvi-provider",
         import_ms: 0,
-        workflow_registration_ms,
+        processing_graph_registration_ms,
         loading_info_ms,
         wms_ms,
         http_status: status.as_u16(),
@@ -944,7 +954,7 @@ fn write_record(writer: &mut File, record: &BenchRecord) -> Result<()> {
         record.run,
         record.scenario,
         record.import_ms,
-        record.workflow_registration_ms,
+        record.processing_graph_registration_ms,
         record.wms_ms,
         record.loading_info_ms,
         record.http_status
@@ -1002,7 +1012,7 @@ fn print_summary(records: &[BenchRecord]) {
     struct Agg {
         count: u32,
         import_ms: u128,
-        workflow_registration_ms: u128,
+        processing_graph_registration_ms: u128,
         loading_info_ms: u128,
         wms_ms: u128,
     }
@@ -1013,7 +1023,7 @@ fn print_summary(records: &[BenchRecord]) {
         let agg = by_scenario.entry(record.scenario).or_default();
         agg.count += 1;
         agg.import_ms += record.import_ms;
-        agg.workflow_registration_ms += record.workflow_registration_ms;
+        agg.processing_graph_registration_ms += record.processing_graph_registration_ms;
         agg.loading_info_ms += record.loading_info_ms;
         agg.wms_ms += record.wms_ms;
     }
@@ -1025,10 +1035,10 @@ fn print_summary(records: &[BenchRecord]) {
 
         let count = f64::from(agg.count);
         println!(
-            "{name}: runs={} avg_import_ms={:.2} avg_workflow_registration_ms={:.2} avg_wms_ms={:.2} avg_loading_info_ms={:.2}",
+            "{name}: runs={} avg_import_ms={:.2} avg_processing_graph_registration_ms={:.2} avg_wms_ms={:.2} avg_loading_info_ms={:.2}",
             agg.count,
             agg.import_ms as f64 / count,
-            agg.workflow_registration_ms as f64 / count,
+            agg.processing_graph_registration_ms as f64 / count,
             agg.wms_ms as f64 / count,
             agg.loading_info_ms as f64 / count
         );

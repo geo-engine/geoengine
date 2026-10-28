@@ -1526,7 +1526,7 @@ const fn default_as_cog() -> bool {
     true
 }
 
-impl From<RasterDatasetFromProcessingGraph> for crate::datasets::RasterDatasetFromWorkflow {
+impl From<RasterDatasetFromProcessingGraph> for crate::datasets::RasterDatasetFromProcessingGraph {
     fn from(value: RasterDatasetFromProcessingGraph) -> Self {
         Self {
             name: value.name,
@@ -1615,7 +1615,7 @@ impl TryFrom<Layer> for crate::layers::layer::Layer {
             id: value.id,
             name: value.name,
             description: value.description,
-            workflow: value.processing_graph.try_into().context(error::Api)?,
+            processing_graph: value.processing_graph.try_into().context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
@@ -1631,7 +1631,8 @@ impl TryFrom<crate::layers::layer::Layer> for Layer {
             id: value.id,
             name: value.name,
             description: value.description,
-            processing_graph: ProcessingGraph::try_from(&value.workflow).context(error::Api)?,
+            processing_graph: ProcessingGraph::try_from(&value.processing_graph)
+                .context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
@@ -1646,7 +1647,7 @@ impl TryFrom<AddLayer> for crate::layers::layer::AddLayer {
         Ok(Self {
             name: value.name,
             description: value.description,
-            workflow: value.processing_graph.try_into().context(error::Api)?,
+            processing_graph: value.processing_graph.try_into().context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
@@ -1661,7 +1662,7 @@ impl TryFrom<UpdateLayer> for crate::layers::layer::UpdateLayer {
         Ok(Self {
             name: value.name,
             description: value.description,
-            workflow: value.processing_graph.try_into().context(error::Api)?,
+            processing_graph: value.processing_graph.try_into().context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,
@@ -1677,7 +1678,7 @@ impl TryFrom<LayerDefinition> for crate::layers::layer::LayerDefinition {
             id: value.id.into(),
             name: value.name,
             description: value.description,
-            workflow: value.processing_graph.try_into().context(error::Api)?,
+            processing_graph: value.processing_graph.try_into().context(error::Api)?,
             symbology: value.symbology,
             properties: value.properties,
             metadata: value.metadata,

@@ -1,10 +1,9 @@
-use crate::engine::TypedVectorOperator;
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
-        Operator, OperatorName, QueryContext, QueryProcessor, SingleVectorSource,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath,
+        Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+        SingleVectorSource, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor,
     },
     optimization::OptimizationError,
     util::Result,
@@ -41,7 +40,7 @@ impl OperatorName for LineSimplification {
 impl VectorOperator for LineSimplification {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         if self.params.epsilon <= 0.0 || !self.params.epsilon.is_finite() {
@@ -94,7 +93,7 @@ pub enum LineSimplificationAlgorithm {
 
 pub struct InitializedLineSimplification {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
     algorithm: LineSimplificationAlgorithm,
@@ -167,7 +166,7 @@ impl InitializedVectorOperator for InitializedLineSimplification {
         LineSimplification::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -420,7 +419,7 @@ mod tests {
             }
             .typed()
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default()
             )
             .await
@@ -442,7 +441,7 @@ mod tests {
             }
             .typed()
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default()
             )
             .await
@@ -464,7 +463,7 @@ mod tests {
             }
             .typed()
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default()
             )
             .await
@@ -508,7 +507,7 @@ mod tests {
 
         let initialized = simplification
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
             )
             .await
@@ -619,7 +618,7 @@ mod tests {
             .into(),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

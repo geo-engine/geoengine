@@ -7,7 +7,7 @@ use async_trait::async_trait;
 pub trait TxProcessingGraphRegistry: Send + Sync {
     async fn register_processing_graph_in_tx(
         &self,
-        workflow: ProcessingGraph,
+        processing_graph: ProcessingGraph,
         tx: &tokio_postgres::Transaction<'_>,
     ) -> Result<ProcessingGraphId>;
 }
@@ -16,7 +16,7 @@ pub trait TxProcessingGraphRegistry: Send + Sync {
 pub trait ProcessingGraphRegistry: Send + Sync {
     async fn register_processing_graph(
         &self,
-        workflow: ProcessingGraph,
+        processing_graph: ProcessingGraph,
     ) -> Result<ProcessingGraphId>;
     async fn load_processing_graph(&self, id: &ProcessingGraphId) -> Result<ProcessingGraph>;
 }

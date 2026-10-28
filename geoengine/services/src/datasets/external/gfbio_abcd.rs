@@ -355,7 +355,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             },
             name: row.get(0),
             description: row.try_get(1).unwrap_or_else(|_| String::new()),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {

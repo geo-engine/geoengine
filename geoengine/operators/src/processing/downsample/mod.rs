@@ -3,9 +3,9 @@ use crate::adapters::{
 };
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::util::Result;
@@ -79,7 +79,7 @@ impl OperatorName for Downsampling {
 impl RasterOperator for Downsampling {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -102,7 +102,7 @@ impl RasterOperator for Downsampling {
 
 pub struct InitializedDownsampling<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     output_result_descriptor: RasterResultDescriptor,
     raster_source: O,
     sampling_method: DownsamplingMethod,
@@ -112,7 +112,7 @@ pub struct InitializedDownsampling<O: InitializedRasterOperator> {
 impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
     pub fn new_with_source_and_params(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         raster_source: O,
         params: DownsamplingParams,
         tiling_specification: TilingSpecification,
@@ -215,7 +215,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
         Downsampling::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -770,7 +770,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context(ChunkByteSize::test_default());
 
         let op = downsampler
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1014,7 +1014,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context(ChunkByteSize::test_default());
 
         let op = downsampler
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

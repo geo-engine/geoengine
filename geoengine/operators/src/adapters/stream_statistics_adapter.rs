@@ -1,4 +1,4 @@
-use crate::{engine::WorkflowOperatorPath, meta::quota::QuotaTracking};
+use crate::{engine::ProcessingGraphOperatorPath, meta::quota::QuotaTracking};
 use futures::{Stream, ready};
 use pin_project::pin_project;
 use std::{
@@ -15,7 +15,7 @@ pub struct StreamStatisticsAdapter<S> {
     element_count: u64,
     span: Span,
     quota: QuotaTracking,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     operator_name: &'static str,
     /// If the wrapped stream is a source, pass the value of the `data` parameter to the quota tracking
     data: Option<String>,
@@ -26,7 +26,7 @@ impl<S> StreamStatisticsAdapter<S> {
         stream: S,
         span: Span,
         quota: QuotaTracking,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         operator_name: &'static str,
         data: Option<String>,
     ) -> StreamStatisticsAdapter<S> {
@@ -123,14 +123,14 @@ mod tests {
         let v_stream = futures::stream::iter(v);
         let (tx, mut rx) = unbounded_channel::<QuotaMessage>();
         let user = Uuid::new_v4();
-        let workflow = Uuid::new_v4();
+        let processing_graph = Uuid::new_v4();
         let computation = Uuid::new_v4();
-        let quota = QuotaTracking::new(tx, user, workflow, computation);
+        let quota = QuotaTracking::new(tx, user, processing_graph, computation);
         let mut v_stat_stream = StreamStatisticsAdapter::new(
             v_stream,
             span!(Level::TRACE, "test"),
             quota,
-            WorkflowOperatorPath::initialize_root(),
+            ProcessingGraphOperatorPath::initialize_root(),
             "test",
             None,
         );
@@ -157,10 +157,10 @@ mod tests {
             rx.recv().await.unwrap(),
             ComputationUnit {
                 user,
-                workflow,
+                processing_graph,
                 computation,
                 operator_name: "test",
-                operator_path: WorkflowOperatorPath::initialize_root(),
+                operator_path: ProcessingGraphOperatorPath::initialize_root(),
                 data: None,
             }
             .into()

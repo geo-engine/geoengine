@@ -463,8 +463,9 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor, WorkflowOperatorPath,
+            MockExecutionContext, ProcessingGraphOperatorPath, RasterBandDescriptor,
+            RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+            TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -595,7 +596,7 @@ mod tests {
         };
 
         let qp1 = mrs1
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -604,7 +605,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -726,7 +727,7 @@ mod tests {
         };
 
         let qp1 = mrs1
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -989,7 +990,7 @@ mod tests {
         };
 
         let qp1 = mrs1
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -998,7 +999,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1286,7 +1287,7 @@ mod tests {
         };
 
         let qp1 = mrs1
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1295,7 +1296,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1932,7 +1933,7 @@ mod tests {
         };
 
         let qp1 = mrs1
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1941,7 +1942,7 @@ mod tests {
             .unwrap();
 
         let qp2 = mrs2
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -1950,7 +1951,7 @@ mod tests {
             .unwrap();
 
         let qp3 = mrs3
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()

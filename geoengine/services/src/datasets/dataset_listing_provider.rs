@@ -277,7 +277,7 @@ where
             },
             name: dataset.display_name,
             description: dataset.description,
-            workflow: ProcessingGraph { operator },
+            processing_graph: ProcessingGraph { operator },
             symbology: dataset.symbology,
             properties: vec![],
             metadata: HashMap::new(),
@@ -524,9 +524,9 @@ mod tests {
                     tags: vec!["upload".to_string()],
                 },
                 DatasetLayerListingCollection {
-                    name: "Workflows".to_string(),
-                    description: "Datasets created from workflows.".to_string(),
-                    tags: vec!["workflow".to_string()],
+                    name: "Processing graphs".to_string(),
+                    description: "Datasets created from processing graphs.".to_string(),
+                    tags: vec!["processing graph".to_string()],
                 },
                 DatasetLayerListingCollection {
                     name: "All Datasets".to_string(),
@@ -644,9 +644,9 @@ mod tests {
                     tags: vec!["upload".to_string()],
                 },
                 DatasetLayerListingCollection {
-                    name: "Workflows".to_string(),
-                    description: "Datasets created from workflows.".to_string(),
-                    tags: vec!["workflow".to_string()],
+                    name: "Processing graphs".to_string(),
+                    description: "Datasets created from processing graphs.".to_string(),
+                    tags: vec!["processing graph".to_string()],
                 },
                 DatasetLayerListingCollection {
                     name: "All Datasets".to_string(),

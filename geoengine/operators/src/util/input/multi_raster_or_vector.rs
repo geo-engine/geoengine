@@ -1,5 +1,4 @@
-use crate::engine::OperatorData;
-use crate::engine::{TypedRasterOperator, TypedVectorOperator};
+use crate::engine::{OperatorData, TypedRasterOperator, TypedVectorOperator};
 use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 
@@ -88,7 +87,7 @@ mod tests {
 
     #[test]
     fn it_deserializes_raster_ops() {
-        let workflow = serde_json::json!([{
+        let processing_graph = serde_json::json!([{
             "type": "GdalSource",
             "params": {
                 "data": "foo:bar"
@@ -97,7 +96,7 @@ mod tests {
         .to_string();
 
         let raster_or_vector_operator: MultiRasterOrVectorOperator =
-            serde_json::from_str(&workflow).unwrap();
+            serde_json::from_str(&processing_graph).unwrap();
 
         assert!(raster_or_vector_operator.is_raster());
         assert!(!raster_or_vector_operator.is_vector());
@@ -105,7 +104,7 @@ mod tests {
 
     #[test]
     fn it_deserializes_vector_ops() {
-        let workflow = serde_json::json!({
+        let processing_graph = serde_json::json!({
             "type": "OgrSource",
             "params": {
                 "data": "foo:bar",
@@ -115,7 +114,7 @@ mod tests {
         .to_string();
 
         let raster_or_vector_operator: MultiRasterOrVectorOperator =
-            serde_json::from_str(&workflow).unwrap();
+            serde_json::from_str(&processing_graph).unwrap();
 
         assert!(raster_or_vector_operator.is_vector());
         assert!(!raster_or_vector_operator.is_raster());

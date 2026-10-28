@@ -1,8 +1,8 @@
 use crate::engine::{
-    BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, OperatorData,
-    OperatorName, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, SourceOperator, TypedRasterOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, CreateSpan, InitializedRasterOperator,
+    OperatorData, OperatorName, ProcessingGraphOperatorPath, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, SourceOperator,
+    TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
@@ -285,80 +285,65 @@ impl<T: Pixel> OperatorData for MockRasterSource<T> {
     fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
-/// Implement a mock raster source for a specific pixel type.
 /// Each pixel type has its own variant in [`crate::engine::TypedRasterOperator`].
-///
-/// TODO: implementation is done with `paste!`, but we can use `core::concat_idents` once its stable
-macro_rules! impl_mock_raster_source {
-    ($pixel_type:ty) => {
-        paste::paste! {
-            impl_mock_raster_source!(
-                $pixel_type,
-                [<MockRasterSource$pixel_type>]
+#[async_trait]
+impl<T: Pixel + Serialize> RasterOperator for MockRasterSource<T>
+where
+    TypedRasterQueryProcessor: From<BoxRasterQueryProcessor<T>>,
+    MockRasterSource<T>: Into<TypedRasterOperator>,
+{
+    async fn _initialize(
+        self: Box<Self>,
+        path: ProcessingGraphOperatorPath,
+        context: &dyn crate::engine::ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let name = CanonicOperatorName::from(&self);
+
+        let data = self.params.data;
+        let tiling_specification = context.tiling_specification();
+
+        if let Some(tile_shape) =
+            first_tile_shape_not_matching_tiling_spec(&data, tiling_specification)
+        {
+            return Err(
+                MockRasterSourceError::TileSizeDiffersFromTilingSpecification {
+                    tiling_specification_yx: tiling_specification.grid_shape(),
+                    tile_size_yx: tile_shape,
+                }
+                .into(),
             );
         }
-    };
 
-    ($pixel_type:ty, $newtype:ident) => {
-        type $newtype = MockRasterSource<$pixel_type>;
-
-        #[async_trait]
-        impl RasterOperator for $newtype {
-            async fn _initialize(
-                self: Box<Self>,
-                path: WorkflowOperatorPath,
-                context: &dyn crate::engine::ExecutionContext,
-            ) -> Result<Box<dyn InitializedRasterOperator>> {
-                let name = CanonicOperatorName::from(&self);
-
-                let data = self.params.data;
-                let tiling_specification = context.tiling_specification();
-
-                if let Some(tile_shape) =
-                    first_tile_shape_not_matching_tiling_spec(&data, tiling_specification)
-                {
-                    return Err(
-                        MockRasterSourceError::TileSizeDiffersFromTilingSpecification {
-                            tiling_specification_yx: tiling_specification.grid_shape(),
-                            tile_size_yx: tile_shape,
-                        }
-                        .into(),
-                    );
-                };
-
-                Ok(InitializedMockRasterSource {
-                    name,
-                    path,
-                    result_descriptor: self.params.result_descriptor,
-                    data,
-                    tiling_specification,
-                }
-                .boxed())
-            }
-
-            span_fn!($newtype);
+        Ok(InitializedMockRasterSource {
+            name,
+            path,
+            result_descriptor: self.params.result_descriptor,
+            data,
+            tiling_specification,
         }
+        .boxed())
+    }
 
-        impl OperatorName for $newtype {
-            const TYPE_NAME: &'static str = "MockRasterSource";
+    // `span_fn!` cannot be used in generic impls, since the span metadata is static
+    fn span(&self) -> CreateSpan {
+        |path, query_counter| {
+            tracing::span!(
+                tracing::Level::TRACE,
+                "MockRasterSource",
+                path = %path,
+                query_counter = %query_counter,
+            )
         }
-    };
+    }
 }
 
-impl_mock_raster_source!(u8);
-impl_mock_raster_source!(u16);
-impl_mock_raster_source!(u32);
-impl_mock_raster_source!(u64);
-impl_mock_raster_source!(i8);
-impl_mock_raster_source!(i16);
-impl_mock_raster_source!(i32);
-impl_mock_raster_source!(i64);
-impl_mock_raster_source!(f32);
-impl_mock_raster_source!(f64);
+impl<T: Pixel> OperatorName for MockRasterSource<T> {
+    const TYPE_NAME: &'static str = "MockRasterSource";
+}
 
 pub struct InitializedMockRasterSource<T: Pixel> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     data: Vec<RasterTile2D<T>>,
     tiling_specification: TilingSpecification,
@@ -367,7 +352,7 @@ pub struct InitializedMockRasterSource<T: Pixel> {
 impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T>
 where
     TypedRasterQueryProcessor: From<BoxRasterQueryProcessor<T>>,
-    SourceOperator<MockRasterSourceParams<T>>: RasterOperator + Into<TypedRasterOperator>,
+    MockRasterSource<T>: Into<TypedRasterOperator>,
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
@@ -394,7 +379,7 @@ where
         MockRasterSource::<u8>::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -404,13 +389,13 @@ where
     ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
-        let source = MockRasterSource {
+        let source: TypedRasterOperator = MockRasterSource {
             params: MockRasterSourceParams {
                 data: self.data.clone(),
                 result_descriptor: self.result_descriptor.clone(),
             },
         }
-        .typed();
+        .into();
 
         if target_resolution > self.result_descriptor.spatial_grid.spatial_resolution() {
             return Ok(Downsampling {
@@ -568,7 +553,10 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let initialized = deserialized
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -651,7 +639,10 @@ mod tests {
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let query_processor = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -779,7 +770,10 @@ mod tests {
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let query_processor = raster_source
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()

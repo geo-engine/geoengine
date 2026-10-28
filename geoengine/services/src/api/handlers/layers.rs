@@ -12,7 +12,9 @@ use crate::{
     },
     config::get_config_element,
     contexts::{ApplicationContext, SessionContext},
-    datasets::{RasterDatasetFromWorkflowParams, schedule_raster_dataset_from_workflow_task},
+    datasets::{
+        RasterDatasetFromProcessingGraphParams, schedule_raster_dataset_from_processing_graph_task,
+    },
     error::{Error::NotImplemented, Result},
     layers::{
         layer::{
@@ -28,7 +30,7 @@ use crate::{
     processing_graphs::registry::ProcessingGraphRegistry,
     util::{
         extractors::{ValidatedJson, ValidatedQuery},
-        workflows::validate_workflow,
+        processing_graphs::validate_processing_graph,
     },
 };
 use actix_web::{FromRequest, HttpResponse, Responder, web};
@@ -755,8 +757,10 @@ async fn layer_to_processing_graph_id_handler<C: ApplicationContext>(
     };
 
     let db = app_ctx.session_context(session).db();
-    let processing_graph_id: ProcessingGraphId =
-        db.register_processing_graph(layer.workflow).await?.into();
+    let processing_graph_id: ProcessingGraphId = db
+        .register_processing_graph(layer.processing_graph)
+        .await?
+        .into();
 
     Ok(web::Json(IdResponse::from(processing_graph_id)))
 }
@@ -803,9 +807,11 @@ async fn layer_to_dataset<C: ApplicationContext>(
         }
     };
 
-    let workflow_id = db.register_processing_graph(layer.workflow.clone()).await?;
+    let processing_graph_id = db
+        .register_processing_graph(layer.processing_graph.clone())
+        .await?;
 
-    let from_workflow = RasterDatasetFromWorkflowParams {
+    let from_processing_graph = RasterDatasetFromProcessingGraphParams {
         name: None,
         display_name: layer.name,
         description: Some(layer.description),
@@ -816,11 +822,11 @@ async fn layer_to_dataset<C: ApplicationContext>(
     let compression_num_threads =
         get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
-    let task_id = schedule_raster_dataset_from_workflow_task(
+    let task_id = schedule_raster_dataset_from_processing_graph_task(
         format!("layer {item}"),
-        workflow_id,
+        processing_graph_id,
         ctx,
-        from_workflow,
+        from_processing_graph,
         compression_num_threads,
     )
     .await?;
@@ -855,7 +861,7 @@ async fn add_layer<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    validate_workflow(&add_layer.workflow, &ctx.execution_context()?).await?;
+    validate_processing_graph(&add_layer.processing_graph, &ctx.execution_context()?).await?;
 
     let id = ctx.db().add_layer(add_layer, &collection).await?.into();
 
@@ -889,7 +895,7 @@ async fn update_layer<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    validate_workflow(&request.workflow, &ctx.execution_context()?).await?;
+    validate_processing_graph(&request.processing_graph, &ctx.execution_context()?).await?;
 
     ctx.db().update_layer(&layer, request).await?;
 
@@ -1325,7 +1331,6 @@ async fn delete_provider<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
-    use geoengine_operators::engine::TypedRasterOperator;
 
     use super::*;
     use crate::{
@@ -1339,7 +1344,7 @@ mod tests {
         },
         contexts::{PostgresContext, Session, SessionId},
         datasets::{
-            RasterDatasetFromWorkflowResult,
+            RasterDatasetFromProcessingGraphResult,
             dataset_listing_provider::{
                 DatasetLayerListingCollection, DatasetLayerListingProviderDefinition,
             },
@@ -1378,6 +1383,7 @@ mod tests {
             RasterBandDescriptors, RasterOperator as _, RasterResultDescriptor,
             SingleRasterOrVectorSource as OperatorsSingleRasterOrVectorSource,
             SpatialGridDescriptor, TimeDescriptor, TypedOperator as OperatorsTypedOperator,
+            TypedRasterOperator,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{TimeShift, TimeShiftParams},
@@ -1455,7 +1461,7 @@ mod tests {
                 ServicesAddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: ServicesProcessingGraph {
+                    processing_graph: ServicesProcessingGraph {
                         operator: TypedOperator::Vector(VectorOperator::MockPointSource(
                             MockPointSource {
                                 r#type: Default::default(),
@@ -1587,7 +1593,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: ServicesProcessingGraph {
+            processing_graph: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1614,7 +1620,7 @@ mod tests {
         let update_layer = ServicesUpdateLayer {
             name: "Foo new".to_string(),
             description: "Bar new".to_string(),
-            workflow: ServicesProcessingGraph {
+            processing_graph: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1636,7 +1642,7 @@ mod tests {
             .set_json(serde_json::json!({
                 "name": update_layer.name,
                 "description": update_layer.description,
-                "processingGraph": update_layer.workflow,
+                "processingGraph": update_layer.processing_graph,
                 "symbology": update_layer.symbology,
                 "metadata": update_layer.metadata,
                 "properties": update_layer.properties,
@@ -1649,14 +1655,14 @@ mod tests {
 
         assert_eq!(result.name, update_layer.name);
         assert_eq!(result.description, update_layer.description);
-        assert_eq!(result.workflow, update_layer.workflow);
+        assert_eq!(result.processing_graph, update_layer.processing_graph);
         assert_eq!(result.symbology, update_layer.symbology);
         assert_eq!(result.metadata, update_layer.metadata);
         assert_eq!(result.properties, update_layer.properties);
     }
 
     #[ge_context::test]
-    async fn it_checks_for_workflow_validity(app_ctx: PostgresContext<NoTls>) {
+    async fn it_checks_for_processing_graph_validity(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1664,7 +1670,7 @@ mod tests {
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
-        let invalid_workflow_layer = serde_json::json!({
+        let invalid_processing_graph_layer = serde_json::json!({
             "name": "Foo",
             "description": "Bar",
             "processingGraph":{
@@ -1680,7 +1686,7 @@ mod tests {
         let req = TestRequest::post()
             .uri(&format!("/layerDb/collections/{collection_id}/layers"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(invalid_workflow_layer.clone());
+            .set_json(invalid_processing_graph_layer.clone());
 
         let response = send_test_request(req, app_ctx.clone()).await;
 
@@ -1696,7 +1702,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: ServicesProcessingGraph {
+            processing_graph: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1723,7 +1729,7 @@ mod tests {
         let req = TestRequest::put()
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(invalid_workflow_layer);
+            .set_json(invalid_processing_graph_layer);
         let response = send_test_request(req, app_ctx.clone()).await;
 
         ErrorResponse::assert(
@@ -1746,7 +1752,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: ServicesProcessingGraph {
+            processing_graph: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1864,7 +1870,7 @@ mod tests {
                 ServicesAddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: ServicesProcessingGraph {
+                    processing_graph: ServicesProcessingGraph {
                         operator: TypedOperator::Vector(VectorOperator::MockPointSource(
                             MockPointSource {
                                 r#type: Default::default(),
@@ -2060,9 +2066,9 @@ mod tests {
                     tags: vec!["upload".to_string()],
                 },
                 DatasetLayerListingCollection {
-                    name: "Workflows".to_string(),
-                    description: "Datasets created from workflows.".to_string(),
-                    tags: vec!["workflow".to_string()],
+                    name: "Processing graphs".to_string(),
+                    description: "Datasets created from processing graphs.".to_string(),
+                    tags: vec!["processing graph".to_string()],
                 },
                 DatasetLayerListingCollection {
                     name: "All Datasets".to_string(),
@@ -2340,9 +2346,9 @@ mod tests {
                     tags: vec!["upload".to_string()],
                 },
                 DatasetLayerListingCollection {
-                    name: "Workflows".to_string(),
-                    description: "Datasets created from workflows.".to_string(),
-                    tags: vec!["workflow".to_string()],
+                    name: "Processing graphs".to_string(),
+                    description: "Datasets created from processing graphs.".to_string(),
+                    tags: vec!["processing graph".to_string()],
                 },
             ],
         };
@@ -2586,8 +2592,8 @@ mod tests {
         );
     }
 
-    struct MockRasterWorkflowLayerDescription {
-        workflow: ServicesProcessingGraph,
+    struct MockRasterProcessingGraphLayerDescription {
+        processing_graph: ServicesProcessingGraph,
         tiling_specification: TilingSpecification,
         query_rectangle: RasterQueryRectangle,
         collection_name: String,
@@ -2596,7 +2602,7 @@ mod tests {
         layer_description: String,
     }
 
-    impl MockRasterWorkflowLayerDescription {
+    impl MockRasterProcessingGraphLayerDescription {
         fn new(has_time: bool, time_shift_millis: i32) -> Self {
             let data: Vec<RasterTile2D<u8>> = vec![
                 RasterTile2D {
@@ -2645,7 +2651,7 @@ mod tests {
             }
             .typed();
 
-            let workflow = if time_shift_millis == 0 {
+            let processing_graph = if time_shift_millis == 0 {
                 ServicesProcessingGraph {
                     operator: raster_source.into(),
                 }
@@ -2678,8 +2684,8 @@ mod tests {
                 BandSelection::first(),
             );
 
-            MockRasterWorkflowLayerDescription {
-                workflow,
+            MockRasterProcessingGraphLayerDescription {
+                processing_graph,
                 tiling_specification,
                 query_rectangle,
                 collection_name: "Test Collection Name".to_string(),
@@ -2714,7 +2720,7 @@ mod tests {
                     ServicesAddLayer {
                         name: self.layer_name.clone(),
                         description: self.layer_description.clone(),
-                        workflow: self.workflow.clone(),
+                        processing_graph: self.processing_graph.clone(),
                         symbology: None,
                         metadata: Default::default(),
                         properties: Default::default(),
@@ -2736,7 +2742,7 @@ mod tests {
         let layer_id = layer.id.layer_id;
         let provider_id = layer.id.provider_id;
 
-        // create dataset from workflow
+        // create dataset from processing graph
         let req = TestRequest::post()
             .uri(&format!("/layers/{provider_id}/{layer_id}/dataset"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
@@ -2748,7 +2754,7 @@ mod tests {
         ctx: PostgresContext<NoTls>,
         layer: Layer,
         session: UserSession,
-    ) -> RasterDatasetFromWorkflowResult {
+    ) -> RasterDatasetFromProcessingGraphResult {
         let res = send_dataset_creation_test_request(ctx.clone(), layer, session.id()).await;
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
@@ -2765,7 +2771,7 @@ mod tests {
 
         if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
-                .downcast::<RasterDatasetFromWorkflowResult>()
+                .downcast::<RasterDatasetFromProcessingGraphResult>()
                 .unwrap()
                 .as_ref()
                 .clone()
@@ -2776,7 +2782,7 @@ mod tests {
 
     async fn raster_layer_to_dataset_success(
         app_ctx: PostgresContext<NoTls>,
-        mock_source: MockRasterWorkflowLayerDescription,
+        mock_source: MockRasterProcessingGraphLayerDescription,
     ) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
@@ -2791,7 +2797,7 @@ mod tests {
         };
 
         // query the layer
-        let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
+        let processing_graph_operator = mock_source.processing_graph.operator.get_raster().unwrap();
 
         // query the newly created dataset
         let dataset_operator = GdalSource {
@@ -2806,7 +2812,7 @@ mod tests {
             &ctx.execution_context().unwrap(),
             &ctx.query_context(ServicesProcessingGraphId::new(), ComputationId::new())
                 .unwrap(),
-            workflow_operator,
+            processing_graph_operator,
             OperatorsGdalSource::try_from(dataset_operator)
                 .unwrap()
                 .typed(),
@@ -2817,18 +2823,18 @@ mod tests {
     }
 
     fn test_raster_layer_to_dataset_success_tiling_spec() -> TilingSpecification {
-        let mock_source = MockRasterWorkflowLayerDescription::new(true, 0);
+        let mock_source = MockRasterProcessingGraphLayerDescription::new(true, 0);
         mock_source.tiling_specification
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_success_tiling_spec")]
     async fn test_raster_layer_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
-        let mock_source = MockRasterWorkflowLayerDescription::new(true, 0);
+        let mock_source = MockRasterProcessingGraphLayerDescription::new(true, 0);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
 
     fn test_raster_layer_with_timeshift_to_dataset_success_tiling_spec() -> TilingSpecification {
-        let mock_source = MockRasterWorkflowLayerDescription::new(true, 1_000);
+        let mock_source = MockRasterProcessingGraphLayerDescription::new(true, 1_000);
         mock_source.tiling_specification
     }
 
@@ -2836,19 +2842,19 @@ mod tests {
         tiling_spec = "test_raster_layer_with_timeshift_to_dataset_success_tiling_spec"
     )]
     async fn test_raster_layer_with_timeshift_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
-        let mock_source: MockRasterWorkflowLayerDescription =
-            MockRasterWorkflowLayerDescription::new(true, 1_000);
+        let mock_source: MockRasterProcessingGraphLayerDescription =
+            MockRasterProcessingGraphLayerDescription::new(true, 1_000);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
 
     fn test_raster_layer_to_dataset_no_time_interval_tiling_spec() -> TilingSpecification {
-        let mock_source = MockRasterWorkflowLayerDescription::new(true, 0);
+        let mock_source = MockRasterProcessingGraphLayerDescription::new(true, 0);
         mock_source.tiling_specification
     }
 
     #[ge_context::test(tiling_spec = "test_raster_layer_to_dataset_no_time_interval_tiling_spec")]
     async fn test_raster_layer_to_dataset_no_time_interval(app_ctx: PostgresContext<NoTls>) {
-        let mock_source = MockRasterWorkflowLayerDescription::new(false, 0);
+        let mock_source = MockRasterProcessingGraphLayerDescription::new(false, 0);
 
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());

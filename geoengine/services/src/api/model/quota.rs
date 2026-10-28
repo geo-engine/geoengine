@@ -17,7 +17,7 @@ impl From<crate::quota::ComputationQuota> for ComputationQuota {
         Self {
             timestamp: value.timestamp,
             computation_id: value.computation_id,
-            processing_graph_id: value.workflow_id.into(),
+            processing_graph_id: value.processing_graph_id.into(),
             count: value.count,
         }
     }

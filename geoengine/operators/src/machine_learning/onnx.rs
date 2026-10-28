@@ -1,10 +1,9 @@
-use crate::engine::TypedRasterOperator;
 use crate::{
     engine::{
         BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-        InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor,
-        RasterBandDescriptor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+        InitializedSources, Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext,
+        QueryProcessor, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
     },
     error,
     machine_learning::{
@@ -62,7 +61,7 @@ impl OperatorName for Onnx {
 impl RasterOperator for Onnx {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -125,7 +124,7 @@ impl RasterOperator for Onnx {
 
 pub struct InitializedOnnx {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     model_name: MlModelName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
@@ -167,7 +166,7 @@ impl InitializedRasterOperator for InitializedOnnx {
         Onnx::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -529,9 +528,9 @@ mod tests {
     use crate::util::test::test_ort_environment;
     use crate::{
         engine::{
-            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor,
-            WorkflowOperatorPath,
+            MockExecutionContext, MultipleRasterSources, ProcessingGraphOperatorPath,
+            RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SingleRasterSource,
+            SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -800,7 +799,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1029,7 +1028,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1189,7 +1188,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

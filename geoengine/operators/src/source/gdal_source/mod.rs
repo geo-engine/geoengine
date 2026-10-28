@@ -1,15 +1,13 @@
 use super::gdal_worker_process::{GdalDatasetParameters, GdalPoolDispatcher, GridAndProperties};
-use crate::engine::{
-    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
-    SpatialGridDescriptor, TypedRasterOperator, WorkflowOperatorPath,
-};
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_source::reader::GdalPoolReader;
 use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::{
     engine::{
-        InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        SourceOperator, TypedRasterQueryProcessor,
+        CanonicOperatorName, InitializedRasterOperator, MetaData, OperatorData, OperatorName,
+        ProcessingGraphOperatorPath, QueryProcessor, RasterOperator, RasterQueryProcessor,
+        RasterResultDescriptor, SourceOperator, SpatialGridDescriptor, TypedRasterOperator,
+        TypedRasterQueryProcessor,
     },
     util::Result,
 };
@@ -509,7 +507,7 @@ where
 impl RasterOperator for GdalSource {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let data_id = context.resolve_named_data(&self.params.data).await?;
@@ -557,7 +555,7 @@ impl RasterOperator for GdalSource {
 #[derive(Clone)]
 pub struct InitializedGdalSourceOperator {
     pub name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     pub meta_data: GdalMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
@@ -571,7 +569,7 @@ pub struct InitializedGdalSourceOperator {
 impl InitializedGdalSourceOperator {
     pub fn initialize_original_resolution(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         data_name: NamedData,
         meta_data: GdalMetaData,
         result_descriptor: RasterResultDescriptor,
@@ -600,7 +598,7 @@ impl InitializedGdalSourceOperator {
     #[allow(clippy::too_many_arguments)]
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         data_name: NamedData,
         meta_data: GdalMetaData,
         result_descriptor: RasterResultDescriptor,
@@ -759,7 +757,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         GdalSource::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -773,7 +771,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
-        // TODO: handle cases where the original workflow explicitly loads overviews in the source
+        // TODO: handle cases where the original processing graph explicitly loads overviews in the source
         ensure!(
             self.overview_level == 0,
             SourcesMustNotUseOverviews {
@@ -839,7 +837,7 @@ mod tests {
         .typed();
 
         let o = op
-            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
             .await
             .unwrap();
 

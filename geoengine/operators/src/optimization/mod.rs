@@ -60,7 +60,6 @@ impl<T> OptimizableOperator for T where T: InitializedRasterOperator {}
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::TypedRasterOperator;
     use geoengine_datatypes::{
         collections::VectorDataType,
         dataset::{DataId, DatasetId, NamedData},
@@ -73,10 +72,10 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MultipleRasterSources, PlotOperator, RasterOperator,
-            SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
-            SingleVectorSource, StaticMetaData, VectorOperator, VectorResultDescriptor,
-            WorkflowOperatorPath,
+            MockExecutionContext, MultipleRasterSources, PlotOperator, ProcessingGraphOperatorPath,
+            RasterOperator, SingleRasterOrVectorSource, SingleRasterSource,
+            SingleVectorMultipleRasterSources, SingleVectorSource, StaticMetaData,
+            TypedRasterOperator, VectorOperator, VectorResultDescriptor,
         },
         plot::{Histogram, HistogramBounds, HistogramBuckets, HistogramParams},
         processing::{
@@ -115,7 +114,7 @@ mod tests {
         .typed();
 
         let gdal_initialized = gdal
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -173,7 +172,7 @@ mod tests {
         );
 
         let gdal_optimized_initialized = gdal_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -212,7 +211,7 @@ mod tests {
         .typed();
 
         let expression_initialized = expression
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -299,7 +298,7 @@ mod tests {
         );
 
         let expression_optimized_initialized = expression_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -318,7 +317,7 @@ mod tests {
 
         let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
 
-        let workflow = Interpolation {
+        let processing_graph = Interpolation {
             params: InterpolationParams {
                 interpolation: InterpolationMethod::NearestNeighbor,
                 output_resolution: InterpolationResolution::Resolution(
@@ -338,24 +337,24 @@ mod tests {
         }
         .typed();
 
-        let workflow_initialized = workflow
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let processing_graph_initialized = processing_graph
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
         assert_eq!(
-            workflow_initialized
+            processing_graph_initialized
                 .result_descriptor()
                 .spatial_grid
                 .spatial_resolution(),
             SpatialResolution::new(0.15, 0.15).unwrap()
         );
 
-        let workflow_optimized = workflow_initialized
+        let processing_graph_optimized = processing_graph_initialized
             .optimize(SpatialResolution::new(0.3, 0.3).unwrap())
             .unwrap();
 
-        let json = serde_json::to_value(&workflow_optimized).unwrap();
+        let json = serde_json::to_value(&processing_graph_optimized).unwrap();
 
         assert_eq!(
             json,
@@ -369,8 +368,8 @@ mod tests {
             )
         );
 
-        let gdal_optimized_initialized = workflow_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let gdal_optimized_initialized = processing_graph_optimized
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -391,7 +390,7 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
         let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
 
-        let workflow = RasterStacker {
+        let processing_graph = RasterStacker {
             params: RasterStackerParams {
                 rename_bands: RenameBands::Default,
             },
@@ -428,24 +427,24 @@ mod tests {
         }
         .typed();
 
-        let workflow_initialized = workflow
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let processing_graph_initialized = processing_graph
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
         assert_eq!(
-            workflow_initialized
+            processing_graph_initialized
                 .result_descriptor()
                 .spatial_grid
                 .spatial_resolution(),
             SpatialResolution::new(0.1, 0.1).unwrap()
         );
 
-        let workflow_optimized = workflow_initialized
+        let processing_graph_optimized = processing_graph_initialized
             .optimize(SpatialResolution::new(0.2, 0.2).unwrap())
             .unwrap();
 
-        let json = serde_json::to_value(&workflow_optimized).unwrap();
+        let json = serde_json::to_value(&processing_graph_optimized).unwrap();
 
         assert_eq!(
             json,
@@ -491,8 +490,8 @@ mod tests {
             })
         );
 
-        let gdal_optimized_initialized = workflow_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let gdal_optimized_initialized = processing_graph_optimized
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -513,7 +512,7 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
         let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
 
-        let workflow = RasterStacker {
+        let processing_graph = RasterStacker {
             params: RasterStackerParams {
                 rename_bands: RenameBands::Default,
             },
@@ -550,24 +549,24 @@ mod tests {
         }
         .typed();
 
-        let workflow_initialized = workflow
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let processing_graph_initialized = processing_graph
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
         assert_eq!(
-            workflow_initialized
+            processing_graph_initialized
                 .result_descriptor()
                 .spatial_grid
                 .spatial_resolution(),
             SpatialResolution::new(0.1, 0.1).unwrap()
         );
 
-        let workflow_optimized = workflow_initialized
+        let processing_graph_optimized = processing_graph_initialized
             .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
             .unwrap();
 
-        let json = serde_json::to_value(&workflow_optimized).unwrap();
+        let json = serde_json::to_value(&processing_graph_optimized).unwrap();
 
         assert_eq!(
             json,
@@ -613,8 +612,8 @@ mod tests {
             })
         );
 
-        let gdal_optimized_initialized = workflow_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let gdal_optimized_initialized = processing_graph_optimized
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -635,7 +634,7 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
         let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
 
-        let workflow = RasterStacker {
+        let processing_graph = RasterStacker {
             params: RasterStackerParams {
                 rename_bands: RenameBands::Default,
             },
@@ -672,24 +671,24 @@ mod tests {
         }
         .typed();
 
-        let workflow_initialized = workflow
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let processing_graph_initialized = processing_graph
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
         assert_eq!(
-            workflow_initialized
+            processing_graph_initialized
                 .result_descriptor()
                 .spatial_grid
                 .spatial_resolution(),
             SpatialResolution::new(0.3, 0.3).unwrap()
         );
 
-        let workflow_optimized = workflow_initialized
+        let processing_graph_optimized = processing_graph_initialized
             .optimize(SpatialResolution::new(0.6, 0.6).unwrap())
             .unwrap();
 
-        let json = serde_json::to_value(&workflow_optimized).unwrap();
+        let json = serde_json::to_value(&processing_graph_optimized).unwrap();
 
         assert_eq!(
             json,
@@ -735,8 +734,8 @@ mod tests {
             })
         );
 
-        let gdal_optimized_initialized = workflow_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let gdal_optimized_initialized = processing_graph_optimized
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -756,7 +755,7 @@ mod tests {
 
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
-        let workflow: TypedRasterOperator = TypedRasterOperator::from(Reprojection {
+        let processing_graph: TypedRasterOperator = TypedRasterOperator::from(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -777,15 +776,15 @@ mod tests {
             },
         });
 
-        let workflow_initialized = workflow
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let processing_graph_initialized = processing_graph
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
         let expected_resolution = 14_255.015_508_816_849;
 
         assert_eq!(
-            workflow_initialized
+            processing_graph_initialized
                 .result_descriptor()
                 .spatial_grid
                 .spatial_resolution(),
@@ -794,11 +793,11 @@ mod tests {
 
         let optimize_resolution = expected_resolution * 2.0;
 
-        let workflow_optimized = workflow_initialized
+        let processing_graph_optimized = processing_graph_initialized
             .optimize(SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap())
             .unwrap();
 
-        let json = serde_json::to_value(&workflow_optimized).unwrap();
+        let json = serde_json::to_value(&processing_graph_optimized).unwrap();
 
         // require an interpolation in addition to the reprojection
         // TODO: should we instead load the source in higher resolution and downsample?
@@ -837,8 +836,8 @@ mod tests {
             })
         );
 
-        let gdal_optimized_initialized = workflow_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let gdal_optimized_initialized = processing_graph_optimized
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -851,7 +850,7 @@ mod tests {
         );
 
         // check that the reprojection was necessary
-        let workflow: TypedRasterOperator = TypedRasterOperator::from(Reprojection {
+        let processing_graph: TypedRasterOperator = TypedRasterOperator::from(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -872,13 +871,13 @@ mod tests {
             },
         });
 
-        let workflow_initialized = workflow
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let processing_graph_initialized = processing_graph
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
         assert!(
-            workflow_initialized
+            processing_graph_initialized
                 .result_descriptor()
                 .spatial_grid
                 .spatial_resolution()
@@ -987,7 +986,7 @@ mod tests {
 
         let vector_reprojection_initialized = vector_reprojection
             .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1042,7 +1041,7 @@ mod tests {
 
         assert!(
             vector_reprojection_optimized
-                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                 .await
                 .is_ok()
         );
@@ -1159,7 +1158,7 @@ mod tests {
         .typed();
 
         let rasterization_initialized = rasterization
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1206,7 +1205,7 @@ mod tests {
         );
 
         let expression_optimized_initialized = rasterization_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1307,7 +1306,7 @@ mod tests {
 
         let raster_vector_join_initialized = raster_vector_join
             .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1361,7 +1360,7 @@ mod tests {
 
         assert!(
             raster_vector_join_optimized
-                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                 .await
                 .is_ok()
         );
@@ -1418,7 +1417,7 @@ mod tests {
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_optimizes_complex_workflow() {
+    async fn it_optimizes_complex_processing_graph() {
         let mut exe_ctx = MockExecutionContext::test_default();
 
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
@@ -1462,7 +1461,7 @@ mod tests {
             }),
         );
 
-        let workflow = Expression {
+        let processing_graph = Expression {
             params: ExpressionParams {
                 expression: "A + B".to_string(),
                 output_type: RasterDataType::F64,
@@ -1564,24 +1563,24 @@ mod tests {
         }
         .typed();
 
-        let workflow_initialized = workflow
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let processing_graph_initialized = processing_graph
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
         assert_eq!(
-            workflow_initialized
+            processing_graph_initialized
                 .result_descriptor()
                 .spatial_grid
                 .spatial_resolution(),
             SpatialResolution::new(0.3, 0.3).unwrap()
         );
 
-        let workflow_optimized = workflow_initialized
+        let processing_graph_optimized = processing_graph_initialized
             .optimize(SpatialResolution::new(0.6, 0.6).unwrap())
             .unwrap();
 
-        let json = serde_json::to_value(&workflow_optimized).unwrap();
+        let json = serde_json::to_value(&processing_graph_optimized).unwrap();
 
         assert_eq!(
             json,
@@ -1706,8 +1705,8 @@ mod tests {
             })
         );
 
-        let gdal_optimized_initialized = workflow_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        let gdal_optimized_initialized = processing_graph_optimized
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1751,7 +1750,7 @@ mod tests {
         .typed();
 
         let expression_initialized = expression
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1790,7 +1789,7 @@ mod tests {
         );
 
         expression_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
     }
@@ -1824,7 +1823,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1850,7 +1849,7 @@ mod tests {
             );
 
             histogram_optimized
-                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                 .await
                 .unwrap();
         }

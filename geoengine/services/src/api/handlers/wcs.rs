@@ -26,7 +26,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor_gdal_types,
-    engine::{ExecutionContext, InitializedRasterOperator, WorkflowOperatorPath},
+    engine::{ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath},
     util::raster_stream_to_geotiff::{
         GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
     },
@@ -98,11 +98,11 @@ impl IntoParams for WcsQueryParams {
     }
 }
 
-fn wcs_url(workflow: ServicesProcessingGraphId) -> Result<Url> {
+fn wcs_url(processing_graph: ServicesProcessingGraphId) -> Result<Url> {
     let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
-    ogc_endpoint_url(&base, OgcProtocol::Wcs, workflow)
+    ogc_endpoint_url(&base, OgcProtocol::Wcs, processing_graph)
 }
 
 /// OGC WCS endpoint
@@ -131,15 +131,17 @@ async fn wcs_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let workflow: ServicesProcessingGraphId = processing_graph.into_inner().into();
+    let processing_graph: ServicesProcessingGraphId = processing_graph.into_inner().into();
 
     match request.into_inner() {
-        WcsQueryParams::GetCapabilities(r) => wcs_get_capabilities::<C>(workflow, r, session).await,
+        WcsQueryParams::GetCapabilities(r) => {
+            wcs_get_capabilities::<C>(processing_graph, r, session).await
+        }
         WcsQueryParams::DescribeCoverage(r) => {
-            wcs_describe_coverage::<C>(workflow, r, app_ctx, session).await
+            wcs_describe_coverage::<C>(processing_graph, r, app_ctx, session).await
         }
         WcsQueryParams::GetCoverage(r) => {
-            wcs_get_coverage::<C>(req, workflow, r, app_ctx, session).await
+            wcs_get_coverage::<C>(req, processing_graph, r, app_ctx, session).await
         }
     }
 }
@@ -149,17 +151,17 @@ async fn wcs_handler<C: ApplicationContext>(
     clippy::no_effect_underscore_binding // need `_session` to quire authentication
 )]
 async fn wcs_get_capabilities<C: ApplicationContext>(
-    workflow: ServicesProcessingGraphId,
+    processing_graph: ServicesProcessingGraphId,
     request: GetCapabilities,
     _session: C::Session,
 ) -> Result<HttpResponse> {
     info!("{request:?}");
 
-    // TODO: workflow bounding box
+    // TODO: processing graph bounding box
     // TODO: host schema file(?)
     // TODO: load ServiceIdentification and ServiceProvider from config
 
-    let wcs_url = wcs_url(workflow)?;
+    let wcs_url = wcs_url(processing_graph)?;
     let mock = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
     <wcs:Capabilities version="1.1.1"
@@ -204,12 +206,12 @@ async fn wcs_get_capabilities<C: ApplicationContext>(
             </ows:OperationsMetadata>
             <wcs:Contents>
                 <wcs:CoverageSummary>
-                    <ows:Title>Processing Graph {workflow}</ows:Title>
+                    <ows:Title>Processing Graph {processing_graph}</ows:Title>
                     <ows:WGS84BoundingBox>
                         <ows:LowerCorner>-180.0 -90.0</ows:LowerCorner>
                         <ows:UpperCorner>180.0 90.0</ows:UpperCorner>
                     </ows:WGS84BoundingBox>
-                    <wcs:Identifier>{workflow}</wcs:Identifier>
+                    <wcs:Identifier>{processing_graph}</wcs:Identifier>
                 </wcs:CoverageSummary>
             </wcs:Contents>
     </wcs:Capabilities>"#
@@ -220,12 +222,12 @@ async fn wcs_get_capabilities<C: ApplicationContext>(
 
 #[allow(clippy::too_many_lines)]
 async fn wcs_describe_coverage<C: ApplicationContext>(
-    workflow: ServicesProcessingGraphId,
+    processing_graph: ServicesProcessingGraphId,
     request: DescribeCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = workflow;
+    let endpoint = processing_graph;
 
     info!("{request:?}");
 
@@ -245,16 +247,16 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_processing_graph(&identifiers).await?;
+    let processing_graph = ctx.db().load_processing_graph(&identifiers).await?;
 
     let exe_ctx = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
-    let operator = workflow
+    let operator = processing_graph
         .operator
         .get_raster()?
-        .initialize(workflow_operator_path_root, &exe_ctx)
+        .initialize(processing_graph_operator_path_root, &exe_ctx)
         .await?;
 
     let result_descriptor = operator.result_descriptor();
@@ -296,8 +298,8 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
         xmlns:gml="http://www.opengis.net/gml"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 {wcs_url}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
-            <ows:Title>Processing Graph {workflow_id}</ows:Title>
-            <wcs:Identifier>{workflow_id}</wcs:Identifier>
+            <ows:Title>Processing Graph {processing_graph_id}</ows:Title>
+            <wcs:Identifier>{processing_graph_id}</wcs:Identifier>
             <wcs:Domain>
                 <wcs:SpatialDomain>
                     <ows:BoundingBox crs="urn:ogc:def:crs:{srs_authority}::{srs_code}" dimensions="2">
@@ -332,7 +334,7 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
         </wcs:CoverageDescription>
     </wcs:CoverageDescriptions>"#,
         wcs_url = wcs_url,
-        workflow_id = identifiers,
+        processing_graph_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
         origin_x = bounds.upper_left().x,
@@ -352,12 +354,12 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 #[allow(clippy::too_many_lines)]
 async fn wcs_get_coverage<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: ServicesProcessingGraphId,
+    processing_graph: ServicesProcessingGraphId,
     request: GetCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = workflow;
+    let endpoint = processing_graph;
 
     info!("{request:?}");
 
@@ -393,17 +395,17 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_processing_graph(&identifier).await?;
+    let processing_graph = ctx.db().load_processing_graph(&identifier).await?;
 
-    let operator = workflow.operator.get_raster()?;
+    let operator = processing_graph.operator.get_raster()?;
 
     let execution_context = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
     let initialized = operator
         .clone()
-        .initialize(workflow_operator_path_root, &execution_context)
+        .initialize(processing_graph_operator_path_root, &execution_context)
         .await?;
 
     let tiling_spec = execution_context.tiling_specification();
@@ -497,7 +499,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::users::UserAuth;
-    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::util::tests::register_ndvi_processing_graph_helper;
     use crate::util::tests::{read_body_string, send_test_request};
     use actix_web::http::header;
     use actix_web::test;
@@ -519,7 +521,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, processing_graph_id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -530,7 +532,7 @@ mod tests {
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                workflow_id,
+                processing_graph_id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -547,7 +549,7 @@ mod tests {
             xmlns:ogc="http://www.opengis.net/ogc"
             xmlns:ows="http://www.opengis.net/ows/1.1"
             xmlns:gml="http://www.opengis.net/gml"
-            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsGetCapabilities.xsd" updateSequence="152">
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{processing_graph_id}/schemas/wcs/1.1.1/wcsGetCapabilities.xsd" updateSequence="152">
             <ows:ServiceIdentification>
                 <ows:Title>Web Coverage Service</ows:Title>
                 <ows:ServiceType>WCS</ows:ServiceType>
@@ -562,33 +564,33 @@ mod tests {
                 <ows:Operation name="GetCapabilities">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://127.0.0.1:3030/api/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/api/wcs/{processing_graph_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
                 <ows:Operation name="DescribeCoverage">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://127.0.0.1:3030/api/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/api/wcs/{processing_graph_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
                 <ows:Operation name="GetCoverage">
                     <ows:DCP>
                         <ows:HTTP>
-                                <ows:Get xlink:href="http://127.0.0.1:3030/api/wcs/{workflow_id}?"/>
+                                <ows:Get xlink:href="http://127.0.0.1:3030/api/wcs/{processing_graph_id}?"/>
                         </ows:HTTP>
                     </ows:DCP>
                 </ows:Operation>
             </ows:OperationsMetadata>
             <wcs:Contents>
                 <wcs:CoverageSummary>
-                    <ows:Title>Processing Graph {workflow_id}</ows:Title>
+                    <ows:Title>Processing Graph {processing_graph_id}</ows:Title>
                     <ows:WGS84BoundingBox>
                         <ows:LowerCorner>-180.0 -90.0</ows:LowerCorner>
                         <ows:UpperCorner>180.0 90.0</ows:UpperCorner>
                     </ows:WGS84BoundingBox>
-                    <wcs:Identifier>{workflow_id}</wcs:Identifier>
+                    <wcs:Identifier>{processing_graph_id}</wcs:Identifier>
                 </wcs:CoverageSummary>
             </wcs:Contents>
     </wcs:Capabilities>"#
@@ -603,19 +605,19 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, processing_graph_id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
             ("request", "DescribeCoverage"),
             ("version", "1.1.1"),
-            ("identifiers", &workflow_id.to_string()),
+            ("identifiers", &processing_graph_id.to_string()),
         ];
 
         let req = test::TestRequest::get()
             .uri(&format!(
                 "/wcs/{}?{}",
-                workflow_id,
+                processing_graph_id,
                 serde_urlencoded::to_string(params).unwrap()
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
@@ -631,10 +633,10 @@ mod tests {
         xmlns:ogc="http://www.opengis.net/ogc"
         xmlns:ows="http://www.opengis.net/ows/1.1"
         xmlns:gml="http://www.opengis.net/gml"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{processing_graph_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
-            <ows:Title>Processing Graph {workflow_id}</ows:Title>
-            <wcs:Identifier>{workflow_id}</wcs:Identifier>
+            <ows:Title>Processing Graph {processing_graph_id}</ows:Title>
+            <wcs:Identifier>{processing_graph_id}</wcs:Identifier>
             <wcs:Domain>
                 <wcs:SpatialDomain>
                     <ows:BoundingBox crs="urn:ogc:def:crs:EPSG::4326" dimensions="2">
@@ -683,7 +685,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),
@@ -725,7 +727,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let params = &[
             ("service", "WCS"),

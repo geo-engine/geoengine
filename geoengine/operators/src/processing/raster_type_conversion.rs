@@ -1,8 +1,8 @@
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-    InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    InitializedSources, Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -31,7 +31,7 @@ impl OperatorName for RasterTypeConversion {
 
 pub struct InitializedRasterTypeConversionOperator {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
 }
@@ -40,7 +40,7 @@ pub struct InitializedRasterTypeConversionOperator {
 impl RasterOperator for RasterTypeConversion {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -100,7 +100,7 @@ impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {
         RasterTypeConversion::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -271,7 +271,7 @@ mod tests {
         .typed();
 
         let initialized_op = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
             .await
             .unwrap();
 

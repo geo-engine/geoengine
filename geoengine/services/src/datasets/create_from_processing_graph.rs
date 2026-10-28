@@ -20,8 +20,8 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, TimeDescriptor,
-    WorkflowOperatorPath,
+    ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath,
+    RasterResultDescriptor, TimeDescriptor,
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
@@ -37,10 +37,10 @@ use std::sync::Arc;
 use tokio::fs;
 use utoipa::ToSchema;
 
-/// parameter for the dataset from workflow task
+/// parameter for the dataset from processing graph task
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RasterDatasetFromWorkflow {
+pub struct RasterDatasetFromProcessingGraph {
     pub name: Option<DatasetName>,
     pub display_name: String,
     pub description: Option<String>,
@@ -49,7 +49,7 @@ pub struct RasterDatasetFromWorkflow {
     pub as_cog: bool,
 }
 
-pub struct RasterDatasetFromWorkflowParams {
+pub struct RasterDatasetFromProcessingGraphParams {
     pub name: Option<DatasetName>,
     pub display_name: String,
     pub description: Option<String>,
@@ -57,8 +57,8 @@ pub struct RasterDatasetFromWorkflowParams {
     pub as_cog: bool,
 }
 
-impl RasterDatasetFromWorkflowParams {
-    pub fn from_request_and_result_descriptor(request: RasterDatasetFromWorkflow) -> Self {
+impl RasterDatasetFromProcessingGraphParams {
+    pub fn from_request_and_result_descriptor(request: RasterDatasetFromProcessingGraph) -> Self {
         Self {
             name: request.name,
             display_name: request.display_name,
@@ -69,21 +69,21 @@ impl RasterDatasetFromWorkflowParams {
     }
 }
 
-/// By default, we set [`RasterDatasetFromWorkflow::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
+/// By default, we set [`RasterDatasetFromProcessingGraph::as_cog`] to true to produce cloud-optmized `GeoTiff`s.
 #[inline]
 const fn default_as_cog() -> bool {
     true
 }
 
-/// response of the dataset from workflow handler
+/// response of the dataset from processing graph handler
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
-pub struct RasterDatasetFromWorkflowResult {
+pub struct RasterDatasetFromProcessingGraphResult {
     pub dataset: DatasetName,
     pub upload: UploadId,
     pub computation_id: ComputationId,
 }
 
-impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
+impl TaskStatusInfo for RasterDatasetFromProcessingGraphResult {}
 
 pub struct ToGeoTiffTaskContext<TC: TaskContext> {
     context: TC,
@@ -98,35 +98,35 @@ impl<TC: TaskContext> ToGeoTiffProgressConsumer for ToGeoTiffTaskContext<TC> {
     }
 }
 
-pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
+pub struct RasterDatasetFromProcessingGraphTask<C: SessionContext> {
     pub source_name: String,
 
-    pub workflow_id: ProcessingGraphId,
+    pub processing_graph_id: ProcessingGraphId,
     pub ctx: Arc<C>,
-    pub info: RasterDatasetFromWorkflowParams,
+    pub info: RasterDatasetFromProcessingGraphParams,
     pub upload: UploadId,
     pub file_path: PathBuf,
     pub compression_num_threads: GdalCompressionNumThreads,
 }
 
-impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext> RasterDatasetFromProcessingGraphTask<C> {
     async fn process(
         &self,
         to_geo_tiff_task_context: ToGeoTiffTaskContext<C::TaskContext>,
-    ) -> error::Result<RasterDatasetFromWorkflowResult> {
-        let workflow = self
+    ) -> error::Result<RasterDatasetFromProcessingGraphResult> {
+        let processing_graph = self
             .ctx
             .db()
-            .load_processing_graph(&self.workflow_id)
+            .load_processing_graph(&self.processing_graph_id)
             .await?;
         let exe_ctx = self.ctx.execution_context()?;
 
-        let initialized_operator = workflow
+        let initialized_operator = processing_graph
             .clone()
             .operator
             .get_raster()
             .expect("must be raster here")
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await?;
 
         let tiling_spec = exe_ctx.tiling_specification();
@@ -164,7 +164,9 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         };
 
         let computation_id = ComputationId::new();
-        let query_ctx = self.ctx.query_context(self.workflow_id, computation_id)?;
+        let query_ctx = self
+            .ctx
+            .query_context(self.processing_graph_id, computation_id)?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -204,7 +206,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         )
         .await?;
 
-        Ok(RasterDatasetFromWorkflowResult {
+        Ok(RasterDatasetFromProcessingGraphResult {
             dataset: dataset.name,
             upload: self.upload,
             computation_id,
@@ -213,7 +215,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 }
 
 #[async_trait::async_trait]
-impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
+impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromProcessingGraphTask<C> {
     async fn run(
         &self,
         ctx: C::TaskContext,
@@ -255,11 +257,11 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
     }
 }
 
-pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
+pub async fn schedule_raster_dataset_from_processing_graph_task<C: SessionContext>(
     source_name: String,
-    workflow_id: ProcessingGraphId,
+    processing_graph_id: ProcessingGraphId,
     ctx: Arc<C>,
-    info: RasterDatasetFromWorkflowParams,
+    info: RasterDatasetFromProcessingGraphParams,
     compression_num_threads: GdalCompressionNumThreads,
 ) -> error::Result<TaskId> {
     if let Some(dataset_name) = &info.name {
@@ -284,9 +286,9 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
         .context(crate::error::Io)?;
     let file_path = upload_path.clone();
 
-    let task = RasterDatasetFromWorkflowTask {
+    let task = RasterDatasetFromProcessingGraphTask {
         source_name,
-        workflow_id,
+        processing_graph_id,
         ctx: ctx.clone(),
         info,
         upload,
@@ -301,7 +303,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
 }
 
 async fn create_dataset<C: SessionContext>(
-    info: &RasterDatasetFromWorkflowParams,
+    info: &RasterDatasetFromProcessingGraphParams,
     mut slice_info: Vec<GdalLoadingInfoTemporalSlice>,
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: &geoengine_datatypes::primitives::RasterQueryRectangle,
@@ -378,7 +380,7 @@ async fn create_dataset<C: SessionContext>(
             description: info.description.clone().unwrap_or_default(),
             source_operator: "GdalSource".to_owned(),
             symbology: None,  // TODO add symbology?
-            provenance: None, // TODO add provenance that references the workflow
+            provenance: None, // TODO add provenance that references the processing graph
             tags: Some(vec!["workflow".to_owned()]),
         }
         .into(),

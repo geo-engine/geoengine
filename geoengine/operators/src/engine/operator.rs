@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use geoengine_datatypes::{dataset::NamedData, primitives::SpatialResolution, util::ByteSize};
 
 use super::{
-    CreateSpan, ExecutionContext, PlotResultDescriptor, RasterResultDescriptor, TypedPlotOperator,
-    TypedPlotQueryProcessor, TypedRasterOperator, TypedVectorOperator, VectorResultDescriptor,
-    WorkflowOperatorPath,
+    CreateSpan, ExecutionContext, PlotResultDescriptor, ProcessingGraphOperatorPath,
+    RasterResultDescriptor, TypedPlotOperator, TypedPlotQueryProcessor, TypedRasterOperator,
+    TypedVectorOperator, VectorResultDescriptor,
     query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
 };
 
@@ -30,7 +30,7 @@ pub trait RasterOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static
     /// Internal initialization logic of the operator
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>>;
 
@@ -40,7 +40,7 @@ pub trait RasterOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static
     /// execution context. Instead, `_initialize` should be implemented.
     async fn initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
@@ -66,14 +66,14 @@ pub trait RasterOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static
 pub trait VectorOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>>;
 
     #[allow(clippy::used_underscore_items)]
     async fn initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let span = self.span();
@@ -97,13 +97,13 @@ pub trait VectorOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static
 pub trait PlotOperator: OperatorData + Send + Sync + std::fmt::Debug + 'static {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>>;
 
     async fn initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
@@ -146,8 +146,8 @@ pub trait InitializedRasterOperator: Send + Sync {
     /// Get the unique name of the operator
     fn name(&self) -> &'static str;
 
-    // Get the path of the operator in the workflow
-    fn path(&self) -> WorkflowOperatorPath;
+    // Get the path of the operator in the processing graph
+    fn path(&self) -> ProcessingGraphOperatorPath;
 
     /// Return the name of the data loaded by the operator (if any)
     fn data(&self) -> Option<String> {
@@ -170,7 +170,7 @@ pub trait InitializedRasterOperator: Send + Sync {
             .optimize(resolution)
             .context(crate::error::Optimization)?;
         optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
             .await
     }
 }
@@ -197,8 +197,8 @@ pub trait InitializedVectorOperator: Send + Sync {
     /// Get the unique name of the operator
     fn name(&self) -> &'static str;
 
-    // Get the path of the operator in the workflow
-    fn path(&self) -> WorkflowOperatorPath;
+    // Get the path of the operator in the processing graph
+    fn path(&self) -> ProcessingGraphOperatorPath;
 
     /// Return the name of the data loaded by the operator (if any)
     fn data(&self) -> Option<String> {
@@ -296,7 +296,7 @@ impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
         self.as_ref().name()
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.as_ref().path()
     }
 
@@ -329,7 +329,7 @@ impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
         self.as_ref().name()
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.as_ref().path()
     }
 

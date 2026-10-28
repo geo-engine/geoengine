@@ -11,8 +11,8 @@ use crate::{
 use super::{
     ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
     MultipleRasterOrSingleVectorSource, MultipleRasterSources, MultipleVectorSources,
-    SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
-    SingleVectorSource, WorkflowOperatorPath,
+    ProcessingGraphOperatorPath, SingleRasterOrVectorSource, SingleRasterSource,
+    SingleVectorMultipleRasterSources, SingleVectorSource,
 };
 
 #[async_trait]
@@ -20,28 +20,28 @@ pub trait InitializedSources<Initialized, E = Error> {
     /// Initialize the source operator(s) with a path
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Initialized, E>;
 }
 
 pub struct InitializedSingleRasterSource<R: InitializedRasterOperator> {
     pub raster: R,
-    pub path: WorkflowOperatorPath,
+    pub path: ProcessingGraphOperatorPath,
 }
 
 pub struct InitializedSingleVectorSource<V: InitializedVectorOperator> {
     pub vector: V,
-    pub path: WorkflowOperatorPath,
+    pub path: ProcessingGraphOperatorPath,
 }
 
 pub struct InitializedMultipleRasterSources<R: InitializedRasterOperator> {
-    pub path: WorkflowOperatorPath,
+    pub path: ProcessingGraphOperatorPath,
     pub rasters: Vec<R>,
 }
 
 pub struct InitializedMultipleVectorSources<V: InitializedVectorOperator> {
-    pub path: WorkflowOperatorPath,
+    pub path: ProcessingGraphOperatorPath,
     pub vectors: Vec<V>,
 }
 
@@ -49,7 +49,7 @@ pub struct InitializedSingleVectorMultipleRasterSources<
     V: InitializedVectorOperator,
     R: InitializedRasterOperator,
 > {
-    pub path: WorkflowOperatorPath,
+    pub path: ProcessingGraphOperatorPath,
     pub vector: V,
     pub rasters: Vec<R>,
 }
@@ -84,7 +84,7 @@ pub struct InitializedSingleRasterOrVectorSource<
     R: InitializedRasterOperator,
     V: InitializedVectorOperator,
 > {
-    pub path: WorkflowOperatorPath,
+    pub path: ProcessingGraphOperatorPath,
     pub source: InitializedSingleRasterOrVectorOperator<R, V>,
 }
 
@@ -118,7 +118,7 @@ pub struct InitializedMultiRasterOrVectorSource<
     R: InitializedRasterOperator,
     V: InitializedVectorOperator,
 > {
-    pub path: WorkflowOperatorPath,
+    pub path: ProcessingGraphOperatorPath,
     pub source: InitializedMultiRasterOrVectorOperator<R, V>,
 }
 
@@ -128,7 +128,7 @@ impl InitializedSources<InitializedSingleRasterSource<Box<dyn InitializedRasterO
 {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedSingleRasterSource<Box<dyn InitializedRasterOperator>>> {
         let op_path = path.clone_and_append(0);
@@ -147,7 +147,7 @@ impl InitializedSources<InitializedSingleVectorSource<Box<dyn InitializedVectorO
 {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedSingleVectorSource<Box<dyn InitializedVectorOperator>>> {
         let op_path = path.clone_and_append(0);
@@ -166,7 +166,7 @@ impl InitializedSources<InitializedMultipleRasterSources<Box<dyn InitializedRast
 {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedMultipleRasterSources<Box<dyn InitializedRasterOperator>>> {
         let rasters = futures::future::try_join_all(
@@ -187,7 +187,7 @@ impl InitializedSources<InitializedMultipleVectorSources<Box<dyn InitializedVect
 {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedMultipleVectorSources<Box<dyn InitializedVectorOperator>>> {
         let vectors = futures::future::try_join_all(
@@ -213,7 +213,7 @@ impl
 {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<
         InitializedSingleVectorMultipleRasterSources<
@@ -251,7 +251,7 @@ impl
 {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<
         InitializedSingleRasterOrVectorSource<
@@ -287,7 +287,7 @@ impl
 {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<
         InitializedMultiRasterOrVectorSource<

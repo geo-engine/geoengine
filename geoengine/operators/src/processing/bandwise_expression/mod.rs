@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-    InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor, SingleRasterSource,
-    TypedRasterOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    InitializedSources, Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 
 use crate::optimization::OptimizationError;
@@ -44,7 +44,7 @@ impl OperatorName for BandwiseExpression {
 impl RasterOperator for BandwiseExpression {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -88,7 +88,7 @@ impl RasterOperator for BandwiseExpression {
 pub struct InitializedBandwiseExpression {
     name: CanonicOperatorName,
     params: BandwiseExpressionParams,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     expression: ExpressionAst,
@@ -136,7 +136,7 @@ impl InitializedRasterOperator for InitializedBandwiseExpression {
         BandwiseExpression::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -464,7 +464,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = expression
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

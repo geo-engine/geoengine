@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, SingleVectorSource, TypedVectorOperator, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, SingleVectorSource,
+    TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+    VectorResultDescriptor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -63,7 +64,7 @@ pub enum TimeProjectionError {
 impl VectorOperator for TimeProjection {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(self.params.step.step > 0, error::WindowSizeMustNotBeZero);
@@ -117,7 +118,7 @@ fn rewrite_result_descriptor(
 
 pub struct InitializedVectorTimeProjection {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
     step: TimeStep,
@@ -150,7 +151,7 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
         TimeProjection::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -479,7 +480,10 @@ mod tests {
 
         let query_processor = time_projection
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -583,7 +587,10 @@ mod tests {
 
         let query_processor = time_projection
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()

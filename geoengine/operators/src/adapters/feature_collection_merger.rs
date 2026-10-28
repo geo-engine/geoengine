@@ -140,8 +140,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
-        WorkflowOperatorPath,
+        MockExecutionContext, ProcessingGraphOperatorPath, QueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
@@ -168,7 +168,7 @@ mod tests {
         let source = source
             .typed()
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
             )
             .await
@@ -247,7 +247,7 @@ mod tests {
         let source = MockFeatureCollectionSource::single(DataCollection::empty())
             .typed()
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
             )
             .await
