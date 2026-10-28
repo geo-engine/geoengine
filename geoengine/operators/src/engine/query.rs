@@ -1,6 +1,9 @@
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     task::{Context, Poll},
 };
 
@@ -19,7 +22,6 @@ use geoengine_datatypes::{
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 /// Defines the size in bytes of a vector data chunk
@@ -29,19 +31,15 @@ pub struct ChunkByteSize(usize);
 /// The parallelism available to the sub-queries of a query.
 ///
 /// An adapter asks for a [`SubQueryHandout`] before each sub-query:
-/// - its first running sub-query is always handed out ([`SubQueryHandout::Guaranteed`]) and
-///   takes nothing from any pool, which guarantees progress and avoids deadlocks;
-/// - every further one ([`SubQueryHandout::Parallel`]) needs a free permit from the query's
-///   pool AND from the server's pool, and is refused instead of waiting.
+/// - its first running sub-query is always handed out ([`SubQueryHandout::Guaranteed`]),
+///   which guarantees progress and avoids deadlocks;
+/// - every further one ([`SubQueryHandout::Parallel`]) takes one from the query's counter
+///   and is refused instead of waiting when none is left.
 ///
-/// The query's pool is shared by all adapters of the query, so nested adapters add up
-/// instead of multiplying their fanout. The server's pool is shared by all queries, so an
-/// idle server gives a single query its full parallelism and a busy one runs queries
-/// sequentially: parallelism within a query adds no throughput once the GDAL pool and the
-/// thread pool are saturated.
+/// The counter is shared by all adapters of the query, so nested adapters add up instead of
+/// multiplying their fanout. It is a lock-free atomic, no semaphore.
 pub struct SubQueryParallelism {
-    per_query: Arc<Semaphore>,
-    per_server: Arc<Semaphore>,
+    available: Arc<AtomicUsize>,
 }
 
 /// Permission to run one more sub-query, held until its tile is yielded.
@@ -52,53 +50,48 @@ pub enum SubQueryHandout {
     Parallel(ParallelSubQueryPermit),
 }
 
-/// Returns its permits to the query's and the server's pool when dropped.
-pub struct ParallelSubQueryPermit {
-    _per_query: OwnedSemaphorePermit,
-    _per_server: OwnedSemaphorePermit,
+/// Gives its sub-query back to the query's counter when dropped.
+pub struct ParallelSubQueryPermit(Arc<AtomicUsize>);
+
+impl Drop for ParallelSubQueryPermit {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 impl SubQueryParallelism {
     pub const DEFAULT_AVAILABLE_PER_QUERY: usize = 4;
 
     /// Up to `available_per_query` sub-queries of the query run at once, counting the
-    /// guaranteed one, however deep adapters nest; fewer while `per_server` has no permits.
-    pub fn new(available_per_query: usize, per_server: Arc<Semaphore>) -> Self {
+    /// guaranteed one, however deep adapters nest.
+    pub fn new(available_per_query: usize) -> Self {
         Self {
-            // the guaranteed sub-query takes no permit, so the pool holds the rest
-            per_query: Arc::new(Semaphore::new(available_per_query.saturating_sub(1))),
-            per_server,
+            // the guaranteed sub-query takes nothing, so the counter holds the rest
+            available: Arc::new(AtomicUsize::new(available_per_query.saturating_sub(1))),
         }
-    }
-
-    /// Like [`Self::new`], with a server pool no other query uses.
-    pub fn fixed(available_per_query: usize) -> Self {
-        Self::new(
-            available_per_query,
-            Arc::new(Semaphore::new(available_per_query.saturating_sub(1))),
-        )
     }
 
     /// The handout for an adapter's next sub-query while it has `running` sub-queries in
     /// flight; `None` when all parallelism is in use.
     ///
-    /// Never waits: waiting on a permit deadlocks when outer sub-queries hold all of them.
+    /// Never waits: waiting deadlocks when outer sub-queries hold all of the parallelism.
     pub fn handout(&self, running: usize) -> Option<SubQueryHandout> {
         if running == 0 {
             return Some(SubQueryHandout::Guaranteed);
         }
-        let per_query = self.per_query.clone().try_acquire_owned().ok()?;
-        let per_server = self.per_server.clone().try_acquire_owned().ok()?;
-        Some(SubQueryHandout::Parallel(ParallelSubQueryPermit {
-            _per_query: per_query,
-            _per_server: per_server,
-        }))
+        // Relaxed: the counter guards no other data, it only bounds the number of sub-queries
+        self.available
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+            .ok()?;
+        Some(SubQueryHandout::Parallel(ParallelSubQueryPermit(
+            self.available.clone(),
+        )))
     }
 }
 
 impl Default for SubQueryParallelism {
     fn default() -> Self {
-        Self::fixed(Self::DEFAULT_AVAILABLE_PER_QUERY)
+        Self::new(Self::DEFAULT_AVAILABLE_PER_QUERY)
     }
 }
 
@@ -498,11 +491,7 @@ mod tests {
 
     #[test]
     fn it_always_hands_out_the_guaranteed_subquery() {
-        for parallelism in [
-            SubQueryParallelism::fixed(0),
-            SubQueryParallelism::fixed(1),
-            SubQueryParallelism::new(4, Arc::new(Semaphore::new(0))),
-        ] {
+        for parallelism in [SubQueryParallelism::new(0), SubQueryParallelism::new(1)] {
             assert!(matches!(
                 parallelism.handout(0),
                 Some(SubQueryHandout::Guaranteed)
@@ -513,7 +502,7 @@ mod tests {
 
     #[test]
     fn it_hands_out_up_to_the_available_parallelism() {
-        let parallelism = SubQueryParallelism::fixed(3);
+        let parallelism = SubQueryParallelism::new(3);
         let held = [parallelism.handout(1), parallelism.handout(2)];
         assert!(held.iter().all(|h| is_parallel(h.as_ref())));
         // the guaranteed one plus 2 parallel ones = 3
@@ -521,24 +510,5 @@ mod tests {
 
         drop(held);
         assert!(is_parallel(parallelism.handout(1).as_ref()));
-    }
-
-    #[test]
-    fn it_shares_the_server_pool_between_queries() {
-        let per_server = Arc::new(Semaphore::new(2));
-        let busy = SubQueryParallelism::new(4, per_server.clone());
-        let other = SubQueryParallelism::new(4, per_server.clone());
-
-        let held = [busy.handout(1), busy.handout(2)];
-        assert!(other.handout(1).is_none(), "server pool is used up");
-        // the per-query permit taken before the server refused is returned
-        assert_eq!(other.per_query.available_permits(), 3);
-        assert!(matches!(
-            other.handout(0),
-            Some(SubQueryHandout::Guaranteed)
-        ));
-
-        drop(held);
-        assert!(is_parallel(other.handout(1).as_ref()));
     }
 }

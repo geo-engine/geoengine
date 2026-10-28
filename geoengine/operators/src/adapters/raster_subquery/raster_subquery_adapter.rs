@@ -550,7 +550,7 @@ mod tests {
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let mut query_ctx = exe_ctx.mock_query_context_test_default();
-        query_ctx.subquery_parallelism = SubQueryParallelism::fixed(parallelism);
+        query_ctx.subquery_parallelism = SubQueryParallelism::new(parallelism);
         query_ctx
     }
 

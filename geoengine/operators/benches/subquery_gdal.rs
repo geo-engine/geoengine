@@ -121,7 +121,7 @@ fn subquery_gdal_benchmark(c: &mut Criterion) {
         for factor in [1, 2, 4, 8, 16] {
             let (processor, mut query_context, query) =
                 setup(&runtime, chained, gdal_process_pool.clone());
-            query_context.subquery_parallelism = SubQueryParallelism::fixed(factor);
+            query_context.subquery_parallelism = SubQueryParallelism::new(factor);
             c.bench_function(&format!("{name}_fanout_{factor}"), |b| {
                 b.to_async(&runtime)
                     .iter(|| run(&processor, &query_context, query.clone()));
