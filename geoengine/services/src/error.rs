@@ -3,7 +3,9 @@ use crate::api::model::datatypes::{
 };
 use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
-use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
+use crate::{
+    layers::listing::LayerCollectionId, processing_graphs::processing_graph::ProcessingGraphId,
+};
 use actix_web::HttpResponse;
 use actix_web::http::StatusCode;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
@@ -334,8 +336,8 @@ pub enum Error {
         identifier
     ))]
     WCSEndpointIdentifierMissmatch {
-        endpoint: WorkflowId,
-        identifier: WorkflowId,
+        endpoint: ProcessingGraphId,
+        identifier: ProcessingGraphId,
     },
     #[snafu(display(
         "WCS request endpoint {} must match identifiers {}",
@@ -343,13 +345,13 @@ pub enum Error {
         identifiers
     ))]
     WCSEndpointIdentifiersMissmatch {
-        endpoint: WorkflowId,
-        identifiers: WorkflowId,
+        endpoint: ProcessingGraphId,
+        identifiers: ProcessingGraphId,
     },
     #[snafu(display("WMS request endpoint {} must match layer {}", endpoint, layer))]
     WMSEndpointLayerMissmatch {
-        endpoint: WorkflowId,
-        layer: WorkflowId,
+        endpoint: ProcessingGraphId,
+        layer: ProcessingGraphId,
     },
     #[snafu(display(
         "WFS request endpoint {} must match type_names {}",
@@ -357,8 +359,8 @@ pub enum Error {
         type_names
     ))]
     WFSEndpointTypeNamesMissmatch {
-        endpoint: WorkflowId,
-        type_names: WorkflowId,
+        endpoint: ProcessingGraphId,
+        type_names: ProcessingGraphId,
     },
     #[snafu(display(
         "WMS unsupported image size: {}x{}, max is {}x{}",

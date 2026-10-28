@@ -16,7 +16,7 @@ use crate::{
         listing::LayerCollectionProvider,
         storage::{INTERNAL_PROVIDER_ID, LayerProviderDb},
     },
-    workflows::workflow::Workflow,
+    processing_graphs::processing_graph::ProcessingGraph,
 };
 use geoengine_datatypes::{
     error::BoxedResultExt,
@@ -85,7 +85,7 @@ where
 }
 
 pub async fn raster_workflow_metadata<C: SessionContext>(
-    processing_graph: Workflow,
+    processing_graph: ProcessingGraph,
     execution_context: C::ExecutionContext,
 ) -> OgcApiResult<RasterResultDescriptor> {
     let result_descriptor = workflow_metadata::<C>(processing_graph, execution_context).await?;
@@ -203,7 +203,7 @@ pub async fn get_initialized_raster_operator<C: SessionContext>(
 ///
 /// Modifies the processing graph in place.
 pub fn processing_graph_with_reprojection(
-    processing_graph: &mut Workflow,
+    processing_graph: &mut ProcessingGraph,
     target_spatial_reference: SpatialReference,
 ) -> OgcApiResult<()> {
     const DERIVE_OUT_SPEC: DeriveOutRasterSpecsSource = DeriveOutRasterSpecsSource::DataBounds;
@@ -242,7 +242,7 @@ pub fn processing_graph_with_reprojection(
 ///
 /// Modifies the processing graph in place.
 pub fn processing_graph_with_resampling(
-    processing_graph: &mut Workflow,
+    processing_graph: &mut ProcessingGraph,
     target_origin: Coordinate2D,
     target_resolution: SpatialResolution,
 ) -> OgcApiResult<()> {

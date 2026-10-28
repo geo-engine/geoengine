@@ -10,12 +10,15 @@ use crate::{
     config::{self, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Result},
+    processing_graphs::{
+        processing_graph::{
+            ProcessingGraph as ServicesProcessingGraph,
+            ProcessingGraphId as ServicesProcessingGraphId,
+        },
+        registry::ProcessingGraphRegistry,
+    },
     quota::ComputationId,
     util::server::{CacheControlHeader, connection_closed},
-    workflows::{
-        registry::WorkflowRegistry,
-        workflow::{Workflow, WorkflowId},
-    },
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use futures::future::BoxFuture;
@@ -334,7 +337,7 @@ where
 
 #[allow(clippy::too_many_lines)] // long xml body
 async fn wfs_get_capabilities<C>(
-    workflow_id: WorkflowId,
+    workflow_id: ServicesProcessingGraphId,
     // TODO: react on capabilities
     _request: GetCapabilities,
     app_ctx: web::Data<C>,
@@ -347,7 +350,7 @@ where
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context()?;
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -461,7 +464,7 @@ where
         .body(response))
 }
 
-fn wfs_url(workflow: WorkflowId) -> Result<Url> {
+fn wfs_url(workflow: ServicesProcessingGraphId) -> Result<Url> {
     let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
@@ -470,13 +473,13 @@ fn wfs_url(workflow: WorkflowId) -> Result<Url> {
 
 async fn wfs_get_feature<C: ApplicationContext>(
     req: HttpRequest,
-    endpoint: WorkflowId,
+    endpoint: ServicesProcessingGraphId,
     request: GetFeature,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
     let type_names = match request.type_names.namespace.as_deref() {
-        None => WorkflowId::from_str(&request.type_names.feature_type)?,
+        None => ServicesProcessingGraphId::from_str(&request.type_names.feature_type)?,
         Some(_) => {
             return Err(error::Error::InvalidNamespace);
         }
@@ -505,7 +508,7 @@ async fn wfs_get_feature<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow: Workflow = ctx.db().load_workflow(&type_names).await?;
+    let workflow: ServicesProcessingGraph = ctx.db().load_processing_graph(&type_names).await?;
 
     let operator = workflow.operator.get_vector()?;
 
@@ -730,12 +733,12 @@ mod tests {
         contexts::{PostgresContext, Session},
         datasets::DatasetIdAndName,
         ge_context,
+        processing_graphs::processing_graph::ProcessingGraph as ServicesProcessingGraph,
         users::UserAuth,
         util::tests::{
             add_pro_file_definition_to_datasets_as_admin, check_allowed_http_methods,
             read_body_string, send_test_request,
         },
-        workflows::workflow::Workflow,
     };
     use actix_web::{
         dev::ServiceResponse,
@@ -858,7 +861,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
@@ -870,7 +873,7 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
         let req = test::TestRequest::with_uri(&format!(
             "/wfs/{workflow_id}?request=GetCapabilities&service=WFS"
@@ -926,7 +929,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: OperatorsTypedOperator::Vector(
                 CsvSource {
                     params: CsvSourceParameters {
@@ -943,7 +946,11 @@ x;y
             ),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let req = test::TestRequest::with_uri(&format!("/wfs/{id}?request=GetFeature&service=WFS&version=2.0.0&typeNames={id}&bbox=-90,-180,90,180&srsName=EPSG:4326", id = id.to_string())).method(method).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         send_test_request(req, app_ctx).await
@@ -1051,7 +1058,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: OperatorsTypedOperator::Vector(
                 CsvSource {
                     params: CsvSourceParameters {
@@ -1068,7 +1075,7 @@ x;y
             ),
         };
 
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),
@@ -1247,7 +1254,7 @@ x;y
 
         let workflow = serde_json::from_str(&json).unwrap();
 
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
         let params = &[
             ("request", "GetFeature"),

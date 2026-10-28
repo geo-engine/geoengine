@@ -12,11 +12,11 @@ use crate::{
     },
     machine_learning::MlModelDb,
     permissions::PermissionDb,
+    processing_graphs::{processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry},
     projects::ProjectDb,
     quota::ComputationId,
     tasks::{TaskContext, TaskManager},
     users::{OidcManager, RoleDb, UserAuth, UserDb},
-    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -102,7 +102,7 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
     // TODO: assign computation id inside SessionContext or let it be provided from outside?
     fn query_context(
         &self,
-        workflow: WorkflowId,
+        workflow: ProcessingGraphId,
         computation: ComputationId,
     ) -> Result<Self::QueryContext>;
 
@@ -130,7 +130,7 @@ pub trait GeoEngineDb:
     + ProjectDb
     + RoleDb
     + UserDb
-    + WorkflowRegistry
+    + ProcessingGraphRegistry
 {
 }
 

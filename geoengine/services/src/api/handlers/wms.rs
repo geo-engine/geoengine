@@ -16,9 +16,12 @@ use crate::{
     config::{self, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
+    processing_graphs::{
+        processing_graph::ProcessingGraphId as ServicesProcessingGraphId,
+        registry::ProcessingGraphRegistry,
+    },
     quota::ComputationId,
     util::server::{CacheControlHeader, connection_closed, not_implemented_handler},
-    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
@@ -213,7 +216,7 @@ where
 }
 
 async fn wms_get_capabilities<C>(
-    workflow_id: WorkflowId,
+    workflow_id: ServicesProcessingGraphId,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
@@ -224,7 +227,7 @@ where
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
 
     let exe_ctx = ctx.execution_context()?;
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -300,7 +303,7 @@ where
         .body(response))
 }
 
-fn wms_url(workflow: WorkflowId) -> Result<Url> {
+fn wms_url(workflow: ServicesProcessingGraphId) -> Result<Url> {
     let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
@@ -310,20 +313,20 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
 #[allow(clippy::too_many_lines)]
 async fn wms_get_map<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: WorkflowId,
+    workflow: ServicesProcessingGraphId,
     request: GetMap,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
     async fn compute_result<C: ApplicationContext>(
         req: HttpRequest,
-        workflow: WorkflowId,
+        workflow: ServicesProcessingGraphId,
         request: &GetMap,
         app_ctx: web::Data<C>,
         session: C::Session,
     ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
         let endpoint = workflow;
-        let layer = WorkflowId::from_str(&request.layers)?;
+        let layer = ServicesProcessingGraphId::from_str(&request.layers)?;
 
         ensure!(
             endpoint == layer,
@@ -357,8 +360,8 @@ async fn wms_get_map<C: ApplicationContext>(
 
         let tiling_spec = ctx.execution_context()?.tiling_specification();
 
-        let workflow_id = WorkflowId::from_str(&request.layers)?;
-        let workflow = ctx.db().load_workflow(&workflow_id).await?;
+        let workflow_id = ServicesProcessingGraphId::from_str(&request.layers)?;
+        let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
 
         let operator = workflow.operator.get_raster()?;
 
@@ -736,7 +739,7 @@ mod tests {
                 .unwrap(),
                 BandSelection::first(),
             ),
-            ctx.query_context(WorkflowId::new(), ComputationId::new())
+            ctx.query_context(ServicesProcessingGraphId::new(), ComputationId::new())
                 .unwrap(),
             360,
             180,

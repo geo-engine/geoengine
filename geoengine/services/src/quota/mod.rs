@@ -1,8 +1,8 @@
 use crate::{
     config::QuotaTrackingMode,
     identifier,
+    processing_graphs::processing_graph::ProcessingGraphId,
     users::{UserDb, UserId, UserSession},
-    workflows::workflow::WorkflowId,
 };
 use geoengine_datatypes::{
     primitives::DateTime,
@@ -37,7 +37,7 @@ impl QuotaTrackingFactory {
     pub fn create_quota_tracking(
         &self,
         session: &UserSession,
-        workflow: WorkflowId,
+        workflow: ProcessingGraphId,
         computation: ComputationId,
     ) -> QuotaTracking {
         QuotaTracking::new(
@@ -105,7 +105,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                 let flush_buffer = match message {
                     QuotaMessage::ComputationUnit(computation) => {
                         tracing::trace!(
-                            "Quota received. User: {}, Workflow: {}, Computation: {}",
+                            "Quota received. User: {}, Processing graph: {}, Computation: {}",
                             computation.user,
                             computation.workflow,
                             computation.computation
@@ -196,7 +196,7 @@ pub struct OperatorQuota {
 pub struct ComputationQuota {
     pub timestamp: DateTime,
     pub computation_id: ComputationId,
-    pub workflow_id: WorkflowId,
+    pub workflow_id: ProcessingGraphId,
     pub count: u64,
 }
 
@@ -259,7 +259,7 @@ mod tests {
         );
 
         let tracking =
-            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
+            quota.create_quota_tracking(&session, ProcessingGraphId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();
@@ -312,7 +312,7 @@ mod tests {
         );
 
         let tracking =
-            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
+            quota.create_quota_tracking(&session, ProcessingGraphId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();
@@ -368,7 +368,7 @@ mod tests {
         );
 
         let tracking =
-            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
+            quota.create_quota_tracking(&session, ProcessingGraphId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();

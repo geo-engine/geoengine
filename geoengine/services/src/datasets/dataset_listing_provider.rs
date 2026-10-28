@@ -31,8 +31,8 @@ use crate::{
             SearchParameters, SearchType, SearchTypes,
         },
     },
+    processing_graphs::processing_graph::ProcessingGraph,
     util::operators::source_operator_from_dataset,
-    workflows::workflow::Workflow,
 };
 
 use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
@@ -277,7 +277,7 @@ where
             },
             name: dataset.display_name,
             description: dataset.description,
-            workflow: Workflow { operator },
+            workflow: ProcessingGraph { operator },
             symbology: dataset.symbology,
             properties: vec![],
             metadata: HashMap::new(),

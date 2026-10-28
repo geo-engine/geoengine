@@ -15,7 +15,7 @@ pub mod tasks;
 pub mod users;
 #[macro_use]
 pub mod util;
-pub mod workflows;
+pub mod processing_graphs;
 
 pub use geoengine_datatypes::test_data;
 

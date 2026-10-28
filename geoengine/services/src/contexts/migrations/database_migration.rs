@@ -199,10 +199,12 @@ pub mod tests {
             migrations::{CurrentSchemaMigration, all_migrations},
         },
         permissions::RoleId,
+        processing_graphs::{
+            processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry,
+        },
         projects::{ProjectDb, ProjectListOptions},
         users::{UserId, UserInfo, UserSession},
         util::postgres::DatabaseConnectionConfig,
-        workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
     };
     use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
     use geoengine_datatypes::{primitives::DateTime, test_data};
@@ -399,7 +401,7 @@ pub mod tests {
 
         assert_ne!(projects, [] as [_; 0]);
 
-        db.load_workflow(&WorkflowId::from_u128(
+        db.load_processing_graph(&ProcessingGraphId::from_u128(
             0x38ddfc17_016e_4910_8adf_b1af36a8590c,
         ))
         .await

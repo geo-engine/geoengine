@@ -4,6 +4,7 @@ use crate::contexts::PostgresDb;
 use crate::error::Result;
 use crate::permissions::Permission;
 use crate::permissions::TxPermissionDb;
+use crate::processing_graphs::processing_graph::ProcessingGraphId;
 use crate::projects::LoadVersion;
 use crate::projects::Plot;
 use crate::projects::ProjectLayer;
@@ -16,7 +17,6 @@ use crate::projects::{
 };
 use crate::users::UserId;
 use crate::util::Identifier;
-use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use bb8_postgres::tokio_postgres::Transaction;
 use bb8_postgres::{
@@ -299,7 +299,7 @@ where
             .prepare(
                 "
         SELECT  
-            name, workflow_id, symbology, visibility
+            name, processing_graph_id, symbology, visibility
         FROM project_version_layers
         WHERE project_version_id = $1
         ORDER BY layer_index ASC",
@@ -315,7 +315,7 @@ where
         let mut layers = vec![];
         for row in rows {
             layers.push(ProjectLayer {
-                workflow: WorkflowId(row.get(1)),
+                workflow: ProcessingGraphId(row.get(1)),
                 name: row.get(0),
                 symbology: row.get(2),
                 visibility: row.get(3),
@@ -419,7 +419,7 @@ pub async fn load_plots(
         .prepare(
             "
                 SELECT  
-                    name, workflow_id
+                    name, processing_graph_id
                 FROM project_version_plots
                 WHERE project_version_id = $1
                 ORDER BY plot_index ASC
@@ -436,7 +436,7 @@ pub async fn load_plots(
     let plots = rows
         .into_iter()
         .map(|row| Plot {
-            workflow: WorkflowId(row.get(1)),
+            workflow: ProcessingGraphId(row.get(1)),
             name: row.get(0),
         })
         .collect();
@@ -459,7 +459,7 @@ pub async fn update_plots(
                         project_version_id,
                         plot_index,
                         name,
-                        workflow_id)
+                        processing_graph_id)
                     VALUES ($1, $2, $3, $4, $5);
                     ",
             )
@@ -620,7 +620,7 @@ pub async fn update_project(
                 project_version_id,
                 layer_index,
                 name,
-                workflow_id,
+                processing_graph_id,
                 symbology,
                 visibility)
             VALUES ($1, $2, $3, $4, $5, $6, $7);",

@@ -25,6 +25,7 @@ use geoengine_services::{
     contexts::{ApplicationContext, PostgresContext, SessionContext},
     datasets::{DatasetName, storage::DatasetStore},
     permissions::{Permission, PermissionDb, Role},
+    processing_graphs::processing_graph::ProcessingGraphId,
     quota::ComputationId,
     test_data,
     users::{UserAuth, UserSession},
@@ -32,7 +33,6 @@ use geoengine_services::{
         Identifier,
         tests::{add_ndvi_to_datasets2, with_temp_context},
     },
-    workflows::workflow::WorkflowId,
 };
 use std::{env, str::FromStr};
 use tokio_postgres::NoTls;
@@ -52,7 +52,7 @@ async fn bench_gdal_source() {
 
         let exe_ctx = ctx.execution_context().unwrap();
         let query_ctx = ctx
-            .query_context(WorkflowId::new(), ComputationId::new())
+            .query_context(ProcessingGraphId::new(), ComputationId::new())
             .unwrap();
 
         let (_, dataset) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
@@ -116,7 +116,7 @@ async fn bench_multi_band_gdal_source() {
 
         let exe_ctx = ctx.execution_context().unwrap();
         let query_ctx = ctx
-            .query_context(WorkflowId::new(), ComputationId::new())
+            .query_context(ProcessingGraphId::new(), ComputationId::new())
             .unwrap();
 
         let dataset = add_ndvi_multi_tile_dataset(&app_ctx).await;

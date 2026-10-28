@@ -1827,7 +1827,7 @@ mod tests {
             &format!("_:{provider_id}"),
         );
 
-        let workflow: crate::workflows::workflow::Workflow =
+        let workflow: crate::processing_graphs::processing_graph::ProcessingGraph =
             serde_json::from_str(&workflow_json_with_provider)
                 .expect("workflow JSON should deserialize");
 

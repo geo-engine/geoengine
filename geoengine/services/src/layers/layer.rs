@@ -1,7 +1,7 @@
 use super::listing::LayerCollectionId;
 use crate::config::{LayerService, get_config_element};
+use crate::processing_graphs::processing_graph::ProcessingGraph;
 use crate::projects::Symbology;
-use crate::workflows::workflow::Workflow;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ pub struct Layer {
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
-    pub workflow: Workflow,
+    pub workflow: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -61,7 +61,7 @@ pub struct AddLayer {
     pub name: String,
     // #[schema(example = "Example layer description")]
     pub description: String,
-    pub workflow: Workflow,
+    pub workflow: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -78,7 +78,7 @@ pub struct UpdateLayer {
     pub name: String,
     // #[schema(example = "Example layer description")]
     pub description: String,
-    pub workflow: Workflow,
+    pub workflow: ProcessingGraph,
     #[serde(default)]
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
@@ -94,7 +94,7 @@ pub struct LayerDefinition {
     pub id: LayerId,
     pub name: String,
     pub description: String,
-    pub workflow: Workflow,
+    pub workflow: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]

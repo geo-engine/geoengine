@@ -22,7 +22,7 @@ use crate::{
         storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
     },
     permissions::{Permission, Role},
-    workflows::workflow::Workflow,
+    processing_graphs::processing_graph::ProcessingGraph,
 };
 use anyhow::Context;
 use chrono::{NaiveDate, TimeZone};
@@ -231,7 +231,7 @@ async fn add_dataset_to_collection(
     let add_layer = AddLayer {
         name: layer_name.to_string(),
         description: String::new(),
-        workflow: Workflow {
+        workflow: ProcessingGraph {
             operator: TypedOperator::Raster(
                 MultiBandGdalSource {
                     params: MultiBandGdalSourceParameters {

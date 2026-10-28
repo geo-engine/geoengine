@@ -1621,10 +1621,10 @@ mod tests {
     use crate::ge_context;
     use crate::layers::layer::LayerListing;
     use crate::layers::storage::LayerProviderDb;
+    use crate::processing_graphs::processing_graph::ProcessingGraphId;
     use crate::quota::ComputationId;
     use crate::tasks::util::NopTaskContext;
     use crate::util::tests::add_land_cover_to_datasets;
-    use crate::workflows::workflow::WorkflowId;
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::primitives::{
@@ -2397,7 +2397,7 @@ mod tests {
         };
 
         let query_context = ctx
-            .query_context(WorkflowId::new(), ComputationId::new())
+            .query_context(ProcessingGraphId::new(), ComputationId::new())
             .unwrap();
 
         let result = processor

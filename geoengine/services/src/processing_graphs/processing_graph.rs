@@ -4,11 +4,11 @@ use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-identifier!(WorkflowId);
+identifier!(ProcessingGraphId);
 
-impl WorkflowId {
+impl ProcessingGraphId {
     #[allow(clippy::missing_panics_doc)]
-    pub fn from_hash(workflow: &Workflow) -> Self {
+    pub fn from_hash(workflow: &ProcessingGraph) -> Self {
         Self(Uuid::new_v5(
             &Uuid::NAMESPACE_OID,
             serde_json::to_string(workflow)
@@ -19,12 +19,12 @@ impl WorkflowId {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Workflow {
+pub struct ProcessingGraph {
     #[serde(flatten)]
     pub operator: OperatorsTypedOperator,
 }
 
-impl PartialEq for Workflow {
+impl PartialEq for ProcessingGraph {
     fn eq(&self, other: &Self) -> bool {
         match (serde_json::to_string(self), serde_json::to_string(other)) {
             (Ok(a), Ok(b)) => a == b,

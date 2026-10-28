@@ -10,8 +10,8 @@ use crate::{
         },
         listing::LayerCollectionId,
     },
+    processing_graphs::processing_graph::ProcessingGraph,
     projects::{RasterSymbology, Symbology},
-    workflows::workflow::Workflow,
 };
 use geoengine_datatypes::{
     dataset::{DataProviderId, LayerId, NamedData},
@@ -145,7 +145,7 @@ pub fn create_layer(
         id: provider_layer_id,
         name: netcdf_entity.name.clone(),
         description: netcdf_entity.name,
-        workflow: Workflow {
+        workflow: ProcessingGraph {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters::new(data_id),

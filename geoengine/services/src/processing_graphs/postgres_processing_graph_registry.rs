@@ -1,8 +1,8 @@
 use crate::contexts::PostgresDb;
 use crate::error::Result;
-use crate::workflows::registry::TxWorkflowRegistry;
-use crate::workflows::workflow::{Workflow, WorkflowId};
-use crate::{error, workflows::registry::WorkflowRegistry};
+use crate::processing_graphs::processing_graph::{ProcessingGraph, ProcessingGraphId};
+use crate::processing_graphs::registry::TxProcessingGraphRegistry;
+use crate::{error, processing_graphs::registry::ProcessingGraphRegistry};
 use async_trait::async_trait;
 use bb8_postgres::{
     tokio_postgres::Socket, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
@@ -10,22 +10,22 @@ use bb8_postgres::{
 use snafu::ResultExt;
 
 #[async_trait]
-impl<Tls> TxWorkflowRegistry for PostgresDb<Tls>
+impl<Tls> TxProcessingGraphRegistry for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn register_workflow_in_tx(
+    async fn register_processing_graph_in_tx(
         &self,
-        workflow: Workflow,
+        workflow: ProcessingGraph,
         tx: &tokio_postgres::Transaction<'_>,
-    ) -> Result<WorkflowId> {
-        let workflow_id = WorkflowId::from_hash(&workflow);
+    ) -> Result<ProcessingGraphId> {
+        let workflow_id = ProcessingGraphId::from_hash(&workflow);
 
         tx.execute(
-            "INSERT INTO workflows (id, workflow) VALUES ($1, $2) 
+            "INSERT INTO processing_graphs (id, processing_graph) VALUES ($1, $2) 
             ON CONFLICT DO NOTHING;",
             &[
                 &workflow_id,
@@ -39,29 +39,32 @@ where
 }
 
 #[async_trait]
-impl<Tls> WorkflowRegistry for PostgresDb<Tls>
+impl<Tls> ProcessingGraphRegistry for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    async fn register_workflow(&self, workflow: Workflow) -> Result<WorkflowId> {
+    async fn register_processing_graph(
+        &self,
+        workflow: ProcessingGraph,
+    ) -> Result<ProcessingGraphId> {
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.transaction().await?;
 
-        let id = self.register_workflow_in_tx(workflow, &tx).await?;
+        let id = self.register_processing_graph_in_tx(workflow, &tx).await?;
 
         tx.commit().await?;
 
         Ok(id)
     }
 
-    async fn load_workflow(&self, id: &WorkflowId) -> Result<Workflow> {
+    async fn load_processing_graph(&self, id: &ProcessingGraphId) -> Result<ProcessingGraph> {
         // TODO: add authorization beyond the fact that you can only access workflows if you happen to know the id.
         let conn = self.conn_pool.get().await?;
         let stmt = conn
-            .prepare("SELECT workflow FROM workflows WHERE id = $1")
+            .prepare("SELECT processing_graph FROM processing_graphs WHERE id = $1")
             .await?;
 
         let row = conn.query(&stmt, &[&id]).await?;

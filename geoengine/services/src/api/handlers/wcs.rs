@@ -10,9 +10,12 @@ use crate::{
     config::{self, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
+    processing_graphs::{
+        processing_graph::ProcessingGraphId as ServicesProcessingGraphId,
+        registry::ProcessingGraphRegistry,
+    },
     quota::ComputationId,
     util::server::{CacheControlHeader, connection_closed},
-    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
@@ -95,7 +98,7 @@ impl IntoParams for WcsQueryParams {
     }
 }
 
-fn wcs_url(workflow: WorkflowId) -> Result<Url> {
+fn wcs_url(workflow: ServicesProcessingGraphId) -> Result<Url> {
     let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
@@ -128,7 +131,7 @@ async fn wcs_handler<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let workflow: WorkflowId = processing_graph.into_inner().into();
+    let workflow: ServicesProcessingGraphId = processing_graph.into_inner().into();
 
     match request.into_inner() {
         WcsQueryParams::GetCapabilities(r) => wcs_get_capabilities::<C>(workflow, r, session).await,
@@ -146,7 +149,7 @@ async fn wcs_handler<C: ApplicationContext>(
     clippy::no_effect_underscore_binding // need `_session` to quire authentication
 )]
 async fn wcs_get_capabilities<C: ApplicationContext>(
-    workflow: WorkflowId,
+    workflow: ServicesProcessingGraphId,
     request: GetCapabilities,
     _session: C::Session,
 ) -> Result<HttpResponse> {
@@ -217,7 +220,7 @@ async fn wcs_get_capabilities<C: ApplicationContext>(
 
 #[allow(clippy::too_many_lines)]
 async fn wcs_describe_coverage<C: ApplicationContext>(
-    workflow: WorkflowId,
+    workflow: ServicesProcessingGraphId,
     request: DescribeCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
@@ -226,7 +229,7 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 
     info!("{request:?}");
 
-    let identifiers = WorkflowId::from_str(&request.identifiers)?;
+    let identifiers = ServicesProcessingGraphId::from_str(&request.identifiers)?;
 
     ensure!(
         endpoint == identifiers,
@@ -242,7 +245,7 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&identifiers).await?;
+    let workflow = ctx.db().load_processing_graph(&identifiers).await?;
 
     let exe_ctx = ctx.execution_context()?;
 
@@ -349,7 +352,7 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 #[allow(clippy::too_many_lines)]
 async fn wcs_get_coverage<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: WorkflowId,
+    workflow: ServicesProcessingGraphId,
     request: GetCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
@@ -358,7 +361,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
     info!("{request:?}");
 
-    let identifier = WorkflowId::from_str(&request.identifier)?;
+    let identifier = ServicesProcessingGraphId::from_str(&request.identifier)?;
 
     ensure!(
         endpoint == identifier,
@@ -390,7 +393,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&identifier).await?;
+    let workflow = ctx.db().load_processing_graph(&identifier).await?;
 
     let operator = workflow.operator.get_raster()?;
 

@@ -13,8 +13,8 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
 };
+use crate::processing_graphs::processing_graph::ProcessingGraph;
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::Pool;
@@ -686,7 +686,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                     },
                     name: layer.name,
                     description: String::new(),
-                    workflow: Workflow {
+                    workflow: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {

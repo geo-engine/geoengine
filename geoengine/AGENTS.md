@@ -78,7 +78,7 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
     Exposing a new operator means adding it on both sides.
     The doc comments on these types become the operator pages on the website (generated from `openapi.json`, see `www/AGENTS.md`).
   - `contexts/`: `PostgresContext`/session handling and `migrations/`.
-  - `datasets/` (internal datasets, uploads, `external/` data providers), `layers/` (layer collections, provider registry), `workflows/`, `projects/`, `permissions/`, `users/` (incl. OIDC), `quota/`, `tasks/`, `machine_learning/`.
+  - `datasets/` (internal datasets, uploads, `external/` data providers), `layers/` (layer collections, provider registry), `processing_graphs/`, `projects/`, `permissions/`, `users/` (incl. OIDC), `quota/`, `tasks/`, `machine_learning/`.
 - **`macros`** (`geoengine-macros`): `#[ge_context::test]` spins up a DB-backed app/context for service tests, with options like `user = "admin"`, `test_execution = "serial"`, `tiling_spec = …`.
   Also `#[api_operator]` and `#[type_tag]` for OpenAPI-friendly tagged types.
 - **`crs-constants`**: zero-dependency static CRS metadata (EPSG bounds), generated from PROJ's EPSG database.

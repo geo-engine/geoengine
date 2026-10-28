@@ -16,8 +16,8 @@ use crate::{
     },
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
+    processing_graphs::registry::ProcessingGraphRegistry,
     quota::ComputationId,
-    workflows::registry::WorkflowRegistry,
 };
 use actix_web::{HttpResponse, web};
 use chrono::{DateTime, Utc};
@@ -360,7 +360,10 @@ pub async fn collection<C: ApplicationContext>(
     let ctx = app_ctx.session_context(session);
     let layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
 
-    let processing_graph_id = ctx.db().register_workflow(layer.workflow.clone()).await?;
+    let processing_graph_id = ctx
+        .db()
+        .register_processing_graph(layer.workflow.clone())
+        .await?;
 
     let query_context = ctx.query_context(processing_graph_id, ComputationId::new())?;
 

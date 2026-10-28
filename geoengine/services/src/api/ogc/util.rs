@@ -17,7 +17,7 @@ use super::wcs::request::WcsBoundingbox;
 use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result, UnableToParseQueryString, UnableToSerializeQueryString};
-use crate::workflows::workflow::WorkflowId;
+use crate::processing_graphs::processing_graph::ProcessingGraphId;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
 pub struct OgcBoundingBox {
@@ -267,7 +267,11 @@ impl OgcProtocol {
     }
 }
 
-pub fn ogc_endpoint_url(base: &Url, protocol: OgcProtocol, workflow: WorkflowId) -> Result<Url> {
+pub fn ogc_endpoint_url(
+    base: &Url,
+    protocol: OgcProtocol,
+    workflow: ProcessingGraphId,
+) -> Result<Url> {
     ensure!(base.path().ends_with('/'), error::BaseUrlMustEndWithSlash);
 
     base.join(protocol.url_path())?
@@ -543,7 +547,7 @@ mod tests {
             ogc_endpoint_url(
                 &Url::parse("http://example.com/").unwrap(),
                 OgcProtocol::Wms,
-                WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
+                ProcessingGraphId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
             )
             .unwrap(),
             Url::parse("http://example.com/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap()
@@ -553,7 +557,7 @@ mod tests {
             ogc_endpoint_url(
                 &Url::parse("http://example.com/a/").unwrap(),
                 OgcProtocol::Wms,
-                WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
+                ProcessingGraphId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
             )
             .unwrap(),
             Url::parse("http://example.com/a/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap()
@@ -563,7 +567,7 @@ mod tests {
             ogc_endpoint_url(
                 &Url::parse("http://example.com/a/sub/folder/").unwrap(),
                 OgcProtocol::Wms,
-                WorkflowId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
+                ProcessingGraphId::from_str("b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd").unwrap(),
             )
             .unwrap(),
             Url::parse("http://example.com/a/sub/folder/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd")

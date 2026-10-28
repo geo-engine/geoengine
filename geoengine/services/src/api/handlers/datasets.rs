@@ -1682,6 +1682,10 @@ mod tests {
         },
         error::Result,
         ge_context,
+        processing_graphs::{
+            processing_graph::{ProcessingGraph, ProcessingGraphId},
+            registry::ProcessingGraphRegistry,
+        },
         projects::{PointSymbology, RasterSymbology, Symbology},
         quota::ComputationId,
         test_data,
@@ -1689,10 +1693,6 @@ mod tests {
         util::tests::{
             MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
             admin_login, read_body_json, read_body_string, send_test_request,
-        },
-        workflows::{
-            registry::WorkflowRegistry,
-            workflow::{Workflow, WorkflowId},
         },
     };
     use actix_web;
@@ -2053,7 +2053,8 @@ mod tests {
         .await?;
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
-        let query_ctx = session_context.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx =
+            session_context.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let query = query_processor
             .query(
@@ -3704,7 +3705,7 @@ mod tests {
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
                     r#type: Default::default(),
@@ -3718,7 +3719,11 @@ mod tests {
             .unwrap(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let colorizer = geoengine_datatypes::operations::image::Colorizer::linear_gradient(
             vec![
@@ -3894,7 +3899,7 @@ mod tests {
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
                     r#type: Default::default(),
@@ -3908,7 +3913,11 @@ mod tests {
             .unwrap(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let colorizer = geoengine_datatypes::operations::image::Colorizer::linear_gradient(
             vec![
@@ -4150,7 +4159,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4248,7 +4257,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4355,7 +4364,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4488,7 +4497,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4719,7 +4728,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -4947,7 +4956,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -5045,7 +5054,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let tiling_spec = execution_context.tiling_specification();
 
@@ -5661,7 +5670,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let processor = processor.get_u16().unwrap();
 
@@ -5755,7 +5764,7 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let query_ctx = ctx.query_context(WorkflowId::new(), ComputationId::new())?;
+        let query_ctx = ctx.query_context(ProcessingGraphId::new(), ComputationId::new())?;
 
         let times = processor
             .get_u16()

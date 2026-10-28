@@ -18,7 +18,7 @@ use crate::error::Error::{
 };
 use crate::layers::external::DataProviderDefinition;
 use crate::permissions::{Permission, RoleId, TxPermissionDb};
-use crate::workflows::registry::TxWorkflowRegistry;
+use crate::processing_graphs::registry::TxProcessingGraphRegistry;
 use crate::{
     error::Result,
     layers::{
@@ -75,13 +75,13 @@ where
             .boxed_context(crate::error::PermissionDb)?;
 
         let workflow_id = self
-            .register_workflow_in_tx(layer.workflow, &transaction)
+            .register_processing_graph_in_tx(layer.workflow, &transaction)
             .await?;
 
         transaction.execute(
                 "
                 UPDATE layers
-                SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5, workflow_id = $6
+                SET name = $1, description = $2, symbology = $3, properties = $4, metadata = $5, processing_graph_id = $6
                 WHERE id = $7;",
                 &[
                     &layer.name,
@@ -732,12 +732,12 @@ where
             SELECT 
                 l.name,
                 l.description,
-                w.workflow,
+                w.processing_graph,
                 l.symbology,
                 l.properties,
                 l.metadata
             FROM 
-                layers l JOIN workflows w ON (l.workflow_id = w.id)
+                layers l JOIN processing_graphs w ON (l.processing_graph_id = w.id)
             WHERE 
                 l.id = $1;",
             )
@@ -1140,7 +1140,7 @@ async fn _remove_layers_without_parent_collection(
     Ok(())
 }
 
-pub async fn insert_layer<W: TxWorkflowRegistry>(
+pub async fn insert_layer<W: TxProcessingGraphRegistry>(
     workflow_registry: &W,
     trans: &Transaction<'_>,
     id: &LayerId,
@@ -1157,13 +1157,13 @@ pub async fn insert_layer<W: TxWorkflowRegistry>(
         })?;
 
     let workflow_id = workflow_registry
-        .register_workflow_in_tx(layer.workflow, trans)
+        .register_processing_graph_in_tx(layer.workflow, trans)
         .await?;
 
     let stmt = trans
         .prepare(
             "
-            INSERT INTO layers (id, name, description, workflow_id, symbology, properties, metadata)
+            INSERT INTO layers (id, name, description, processing_graph_id, symbology, properties, metadata)
             VALUES ($1, $2, $3, $4, $5, $6, $7);",
         )
         .await?;
