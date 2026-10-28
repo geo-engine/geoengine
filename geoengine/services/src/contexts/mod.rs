@@ -43,8 +43,8 @@ use geoengine_operators::{
     },
     mock::MockDatasetDataSourceLoadingInfo,
     source::{
-        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-        OgrSourceDataset,
+        GdalLoadingInfo, MdLoadingInfo, MdLoadingInfoQueryRectangle, MultiBandGdalLoadingInfo,
+        MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
         gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     },
 };
@@ -304,7 +304,8 @@ where
             MultiBandGdalLoadingInfo,
             RasterResultDescriptor,
             MultiBandGdalLoadingInfoQueryRectangle,
-        > + LayerProviderDb
+        > + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>
+        + LayerProviderDb
         + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -614,6 +615,35 @@ where
                     .meta_data(data_id)
                     .await
             }
+        }
+    }
+}
+
+#[async_trait]
+impl<D> MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>
+    for ExecutionContextImpl<D>
+where
+    D: DatasetDb
+        + LayerProviderDb
+        + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>,
+{
+    async fn meta_data(
+        &self,
+        data_id: &DataId,
+    ) -> Result<
+        Box<dyn MetaData<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        match data_id {
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
+            // MD datasets are only supported as internal datasets for now
+            DataId::External(_) => Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         }
     }
 }
