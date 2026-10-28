@@ -45,6 +45,7 @@ chrono = { workspace = true }
 clap = { workspace = true }
 config = { workspace = true }
 convert_case = { workspace = true }
+dashmap = { workspace = true }
 erased-serde = { workspace = true }
 flexi_logger = { workspace = true }
 float-cmp = { workspace = true }

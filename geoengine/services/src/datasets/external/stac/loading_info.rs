@@ -7,7 +7,7 @@ use super::{
 use crate::error::Result;
 use crate::util::format_stac_wgs84_bbox;
 use crate::util::join_base_url_and_path;
-use crate::util::retry::{RetryPolicy, retry_http};
+use crate::util::retry::RetryPolicy;
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
 use geoengine_datatypes::dataset::DataId;
@@ -82,22 +82,15 @@ async fn query_stac_item_collection(
 
             let request_started = std::time::Instant::now();
 
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    let request = client.get(query_url.clone()).await?.query(query_params);
-                    let response = request.send().await?;
-                    response.error_for_status()?.json().await
-                },
-                &format!("Fetch STAC items from {query_url}"),
-                &request_policy,
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await
-            .map_err(|e| {
-                geoengine_operators::error::Error::QueryingProcessorFailed {
-                    source: Box::new(e),
-                }
-            })?;
+            let request = client.get(query_url.clone()).query(query_params);
+            let item_collection: stac::ItemCollection = client
+                .execute_json(request, &request_policy)
+                .await
+                .map_err(
+                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?;
 
             debug!(
                 "STAC response received in {:?} s",
@@ -120,22 +113,15 @@ async fn query_stac_item_collection(
 
             let request_started = std::time::Instant::now();
 
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    let request = client.get(next_url.clone()).await?;
-                    let response = request.send().await?;
-                    response.error_for_status()?.json().await
-                },
-                &format!("Fetch next STAC page from {next_url}"),
-                &request_policy,
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await
-            .map_err(|e| {
-                geoengine_operators::error::Error::QueryingProcessorFailed {
-                    source: Box::new(e),
-                }
-            })?;
+            let request = client.get(next_url.clone());
+            let item_collection: stac::ItemCollection = client
+                .execute_json(request, &request_policy)
+                .await
+                .map_err(
+                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                        source: Box::new(e),
+                    },
+                )?;
 
             debug!(
                 "STAC response received in {:?} s",
@@ -1274,7 +1260,12 @@ mod tests {
                 time_dimension: definition.time_dimension,
                 dataset,
                 page_limit: definition.page_limit,
-                client: StacClient::new(reqwest::Client::new()),
+                client: StacClient::new(
+                    reqwest::Client::new(),
+                    &server.url_str("/"),
+                    crate::datasets::external::stac::StacRequestRegistry::new(),
+                )
+                .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
@@ -1327,7 +1318,12 @@ mod tests {
             time_dimension: definition.time_dimension,
             dataset: definition.datasets[0].clone(),
             page_limit: definition.page_limit,
-            client: StacClient::new(reqwest::Client::new()),
+            client: StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
+            )
+            .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
@@ -1493,20 +1489,22 @@ mod tests {
             .respond_with(responders::json_encoded(stac_items_response())),
         );
 
-        let client = StacClient::new(reqwest::Client::new())
-            .with_authentication(
-                Some(
-                    crate::datasets::external::stac::StacProviderAuthentication {
-                        endpoint: server.url_str("/token"),
-                        client_id: "my-client-id".to_owned(),
-                        username: "test-user".to_owned(),
-                        password: "test-password".to_owned(),
-                    },
-                ),
-                &server.url_str("/"),
-            )
-            .await
-            .expect("initial password grant should succeed");
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            crate::datasets::external::stac::StacRequestRegistry::new(),
+        )
+        .unwrap()
+        .with_authentication(Some(
+            crate::datasets::external::stac::StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                client_id: "my-client-id".to_owned(),
+                username: "test-user".to_owned(),
+                password: "test-password".to_owned(),
+            },
+        ))
+        .await
+        .expect("initial password grant should succeed");
 
         let initial_query = StacQueryState::FirstPage {
             query_url: Url::parse(&server.url_str("/initial-items")).unwrap(),
@@ -1519,14 +1517,15 @@ mod tests {
         let next_page_query = StacQueryState::NextPage {
             next_url: Url::parse(&server.url_str("/next-items")).unwrap(),
         };
-        query_stac_item_collection(&client, &next_page_query)
+        let cloned_client = client.clone();
+        query_stac_item_collection(&cloned_client, &next_page_query)
             .await
             .expect("authenticated STAC pagination request should succeed");
 
+        let authentication = client.authentication.as_ref().unwrap();
         tokio::time::timeout(Duration::from_secs(4), async {
             loop {
-                if client.authentication.as_ref().unwrap().access_token().await == "access-token-3"
-                {
+                if authentication.access_token().await == "access-token-3" {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(25)).await;
@@ -1539,7 +1538,7 @@ mod tests {
             query_url: Url::parse(&server.url_str("/refreshed-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&client, &refreshed_query)
+        query_stac_item_collection(&cloned_client, &refreshed_query)
             .await
             .expect("refreshed authenticated STAC request should succeed");
     }
@@ -1988,6 +1987,20 @@ mod grid_request_tests {
     }
 
     fn provider(server: &Server, cache_bytes: usize, grid: StacGrid) -> StacDataProvider {
+        provider_with_registry(
+            server,
+            cache_bytes,
+            grid,
+            crate::datasets::external::stac::StacRequestRegistry::new(),
+        )
+    }
+
+    fn provider_with_registry(
+        server: &Server,
+        cache_bytes: usize,
+        grid: StacGrid,
+        request_registry: crate::datasets::external::stac::StacRequestRegistry,
+    ) -> StacDataProvider {
         let dataset = StacProviderDataset {
             name: "test".to_owned(),
             description: String::new(),
@@ -2003,27 +2016,30 @@ mod grid_request_tests {
                 band_name: None,
             })],
         };
-        let mut provider = StacDataProvider::from_definition(StacDataProviderDefinition {
-            id: DataProviderId::new(),
-            name: "test".to_owned(),
-            description: String::new(),
-            api_url: server.url_str("/"),
-            collection_name: "test".to_owned(),
-            s3_config: None,
-            authentication: None,
-            time_dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(
-                TimeStep {
-                    granularity: TimeGranularity::Days,
-                    step: 1,
-                },
-            )),
-            datasets: vec![dataset],
-            priority: None,
-            page_limit: 100,
-            query_timeout_secs: 5,
-            cache_ttl_secs: None,
-            stac_grid: Some(grid),
-        })
+        let mut provider = StacDataProvider::from_definition_with_request_registry(
+            StacDataProviderDefinition {
+                id: DataProviderId::new(),
+                name: "test".to_owned(),
+                description: String::new(),
+                api_url: server.url_str("/"),
+                collection_name: "test".to_owned(),
+                s3_config: None,
+                authentication: None,
+                time_dimension: TimeDimension::Regular(
+                    RegularTimeDimension::new_with_epoch_origin(TimeStep {
+                        granularity: TimeGranularity::Days,
+                        step: 1,
+                    }),
+                ),
+                datasets: vec![dataset],
+                priority: None,
+                page_limit: 100,
+                query_timeout_secs: 5,
+                cache_ttl_secs: None,
+                stac_grid: Some(grid),
+            },
+            request_registry,
+        )
         .unwrap();
         provider.query_cache = Arc::new(StacQueryCache::new(cache_bytes, Duration::from_mins(1)));
         provider
@@ -2365,6 +2381,20 @@ mod grid_request_tests {
                 target_number_of_cells: 64_800,
             },
         );
+        // Discover the server's quota before checking concurrent dispatch.
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/quota-discovery"))
+                .times(1)
+                .respond_with(responders::status_code(200).body("null")),
+        );
+        provider
+            .client
+            .execute_json::<Value>(
+                provider.client.get(server.url_str("/quota-discovery")),
+                &crate::util::retry::RetryPolicy::new(),
+            )
+            .await
+            .unwrap();
         let meta = metadata(&provider, 0).await;
         let first = tokio::spawn(async move {
             meta.loading_info(query(bounds(0.1, 0.4), interval(3)))
@@ -2686,7 +2716,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn rate_limited_cell_uses_existing_retries_shared_by_waiters() {
+    async fn it_shares_rate_limit_retries_between_cell_waiters() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let server = Server::run();
         let starts = Arc::new(Mutex::new(Vec::new()));
@@ -2726,6 +2756,125 @@ mod grid_request_tests {
             .unwrap();
         assert_file(&neighbor, 0., "retried");
         assert_file(&first.await.unwrap().unwrap(), 0., "retried");
+    }
+
+    #[tokio::test]
+    async fn it_returns_exhausted_rate_limit_retries_without_exponential_backoff() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/always-limited"))
+                .times(crate::util::retry::DEFAULT_MAX_RETRIES as usize)
+                .respond_with(responders::status_code(429).append_header("x-ratelimit-reset", "1")),
+        );
+        let client = super::StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            crate::datasets::external::stac::StacRequestRegistry::new(),
+        )
+        .unwrap();
+        let state = super::StacQueryState::NextPage {
+            next_url: server.url_str("/always-limited").parse().unwrap(),
+        };
+        let result = tokio::time::timeout(
+            Duration::from_secs(12),
+            super::query_stac_item_collection(&client, &state),
+        )
+        .await
+        .expect("ten rate-limit attempts should finish with fixed cooldowns");
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn it_coalesces_queued_paginated_cells_across_provider_quota_and_cancellation() {
+        for cache_bytes in [0, 1024 * 1024] {
+            let server = Server::run();
+            let starts = Arc::new(Mutex::new(Vec::new()));
+            server.expect(
+                Expectation::matching(request::method_path("GET", "/collections/other/items"))
+                    .times(1)
+                    .respond_with(
+                        responders::status_code(200)
+                            .append_header("x-ratelimit-limit", "10, 10;w=1, 60;w=60")
+                            .append_header("x-ratelimit-remaining", "0")
+                            .append_header("x-ratelimit-reset", "1")
+                            .body("null"),
+                    ),
+            );
+            let first_starts = starts.clone();
+            let next = server.url_str("/next");
+            server.expect(
+                Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                    .times(1)
+                    .respond_with(move || {
+                        first_starts.lock().unwrap().push(Instant::now());
+                        responders::json_encoded(collection(
+                            &[item("first", 0.)],
+                            Some(next.clone()),
+                        ))
+                    }),
+            );
+            let next_starts = starts.clone();
+            server.expect(
+                Expectation::matching(request::method_path("GET", "/next"))
+                    .times(1)
+                    .respond_with(move || {
+                        next_starts.lock().unwrap().push(Instant::now());
+                        responders::delay_and_then(
+                            Duration::from_millis(50),
+                            responders::json_encoded(collection(&[item("second", 0.)], None)),
+                        )
+                    }),
+            );
+            let grid = StacGrid {
+                target_number_of_cells: 64_800,
+            };
+            let request_registry = crate::datasets::external::stac::StacRequestRegistry::new();
+            let mut other_provider =
+                provider_with_registry(&server, cache_bytes, grid, request_registry.clone());
+            other_provider.collection_name = "other".to_owned();
+            let query_provider =
+                provider_with_registry(&server, cache_bytes, grid, request_registry);
+            let exhausted = Instant::now();
+            other_provider
+                .client
+                .execute_json::<Value>(
+                    other_provider
+                        .client
+                        .get(server.url_str("/collections/other/items")),
+                    &crate::util::retry::RetryPolicy::new(),
+                )
+                .await
+                .unwrap();
+
+            let initiating_meta = metadata(&query_provider, 0).await;
+            let initiating = tokio::spawn(async move {
+                initiating_meta
+                    .loading_info(query(bounds(0.1, 0.4), interval(3)))
+                    .await
+            });
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            let follower_meta = metadata(&query_provider, 0).await;
+            let follower = tokio::spawn(async move {
+                follower_meta
+                    .loading_info(query(bounds(0.6, 0.9), interval(3)))
+                    .await
+            });
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            initiating.abort();
+            assert!(
+                starts.lock().unwrap().is_empty(),
+                "another collection exhausted the shared quota"
+            );
+            let complete = tokio::time::timeout(Duration::from_secs(3), follower)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            assert_eq!(complete.tile_files(interval(3), tile(0.), 0).len(), 2);
+            let starts = starts.lock().unwrap();
+            assert_eq!(starts.len(), 2, "one shared search fetches both pages once");
+            assert!(starts[0].duration_since(exhausted) >= Duration::from_secs(1));
+        }
     }
 
     #[tokio::test]

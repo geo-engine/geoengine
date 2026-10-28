@@ -1,6 +1,5 @@
 use super::StacProviderAuthentication;
 use crate::error::Result;
-use reqwest::RequestBuilder;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::num::NonZeroU64;
@@ -78,11 +77,6 @@ impl StacAuthentication {
 
     pub(super) async fn access_token(&self) -> String {
         self.tokens.read().await.access_token.clone()
-    }
-
-    pub async fn authorize(&self, request: RequestBuilder) -> RequestBuilder {
-        let access_token = self.access_token().await;
-        request.bearer_auth(access_token)
     }
 }
 
