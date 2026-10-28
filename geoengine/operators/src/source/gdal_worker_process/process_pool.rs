@@ -297,11 +297,16 @@ type SharedResult = Option<
 >;
 
 /// Sender of an in-flight read. Followers `subscribe()` to it while holding the `in_flight_tiles`
-/// lock, so its receiver count only changes under that lock.
+/// lock, so its receiver count only changes under that lock. The map holds the sender, not a
+/// receiver: a stored receiver would keep the count at one or more, so the leader could not
+/// notice that all callers gave up.
 type InFlightTile = Arc<tokio::sync::watch::Sender<SharedResult>>;
 
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
+    /// Reads in progress by tile, to deduplicate them. Used by the callers' tasks on any runtime
+    /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
+    /// held only briefly and never across an `.await`.
     in_flight_tiles: Mutex<FastHashMap<u64, InFlightTile>>,
 }
 
