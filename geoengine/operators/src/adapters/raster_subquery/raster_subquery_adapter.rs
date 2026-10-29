@@ -431,6 +431,7 @@ mod tests {
                 ctx,
                 IdentitySubQuery {
                     slow_head: self.slow_head,
+                    own_tile_only: false,
                 },
                 time_stream,
             )
@@ -484,6 +485,8 @@ mod tests {
     struct IdentitySubQuery {
         /// building the accumulator of tile [0, 0], the first output tile, takes 50 ms
         slow_head: bool,
+        /// each output tile reads only its own pixels instead of the whole extent
+        own_tile_only: bool,
     }
 
     fn identity_fold(accu: IdentityAccu, _: RasterTile2D<u8>) -> Ready<Result<IdentityAccu>> {
@@ -521,13 +524,17 @@ mod tests {
         /// sub-queries and per-level fanout would multiply.
         fn tile_query_rectangle(
             &self,
-            _tile: TileInformation,
+            tile: TileInformation,
             query_rect: RasterQueryRectangle,
             time: TimeInterval,
             band_idx: u32,
         ) -> Result<Option<RasterQueryRectangle>> {
             Ok(Some(RasterQueryRectangle::new(
-                query_rect.spatial_bounds(),
+                if self.own_tile_only {
+                    tile.global_pixel_bounds()
+                } else {
+                    query_rect.spatial_bounds()
+                },
                 time,
                 band_idx.into(),
             )))
@@ -644,5 +651,52 @@ mod tests {
     async fn it_does_not_deadlock_with_little_parallelism() {
         let result = tokio::time::timeout(Duration::from_secs(10), run_nested(3, 2)).await;
         assert_eq!(result.expect("nested adapters deadlocked").0.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn it_does_not_query_the_source_outside_of_its_data_bounds() {
+        let concurrency = Arc::new(Concurrency::default());
+        let source = CountingLeaf {
+            descriptor: descriptor(4),
+            concurrency: concurrency.clone(),
+        };
+        let query_ctx = query_ctx(1);
+        let tiling_strategy = descriptor(8)
+            .tiling_grid_definition(query_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
+        let time_stream = source
+            .time_query(query(8).time_interval(), &query_ctx)
+            .await
+            .unwrap();
+
+        let tiles: Vec<_> = RasterSubQueryAdapter::new(
+            &source,
+            query(8),
+            tiling_strategy,
+            &query_ctx,
+            IdentitySubQuery {
+                slow_head: false,
+                own_tile_only: true,
+            },
+            time_stream,
+        )
+        .map(|tile| tile.unwrap())
+        .collect()
+        .await;
+
+        // 16 tiles of 2×2 pixels, of which the 4 inside the 4×4 source data are queried
+        assert_eq!(tiles.len(), 16);
+        assert_eq!(concurrency.started.load(Ordering::SeqCst), 4);
+        // the others are empty and cacheable, unlike the source's `no_cache` tiles
+        for tile in &tiles {
+            let outside = tile.tile_position.x() >= 2 || tile.tile_position.y() >= 2;
+            assert_eq!(
+                tile.cache_hint.may_cache(),
+                outside,
+                "{:?}",
+                tile.tile_position
+            );
+            assert!(tile.is_empty());
+        }
     }
 }
