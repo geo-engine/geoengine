@@ -8,7 +8,8 @@ use crate::adapters::SimpleRasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -126,7 +127,6 @@ pub enum NeighborhoodAggregateError {
     MatrixNotRectangular,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for NeighborhoodAggregate {
     async fn _initialize(
@@ -225,14 +225,14 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(NeighborhoodAggregate {
             params: self.params.clone(),
             sources: SingleRasterSource {
                 raster: self.raster_source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -380,10 +380,10 @@ mod tests {
                 raster: GdalSource {
                     params: GdalSourceParameters::new(NamedData::with_system_name("matrix-input")),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let serialized = serde_json::to_value(&operator).unwrap();
 
@@ -427,10 +427,10 @@ mod tests {
                 raster: GdalSource {
                     params: GdalSourceParameters::new(NamedData::with_system_name("matrix-input")),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let serialized = serde_json::to_value(&operator).unwrap();
 
@@ -489,7 +489,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -619,7 +619,7 @@ mod tests {
         assert!(result.tiles_equal_ignoring_cache_hint(&raster_tiles));
     }
 
-    fn make_raster() -> Box<dyn RasterOperator> {
+    fn make_raster() -> TypedRasterOperator {
         // test raster:
         // [0, 10)
         // ||  1 |   2 |  3 ||  4 |  5 |  6 ||
@@ -709,7 +709,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
     }
 
     #[tokio::test]
@@ -732,10 +732,10 @@ mod tests {
                 raster: GdalSource {
                     params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -802,10 +802,10 @@ mod tests {
                 raster: GdalSource {
                     params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
@@ -880,10 +880,10 @@ mod tests {
                         rasters: vec![make_raster(), make_raster(), make_raster()],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();

@@ -1,3 +1,4 @@
+use crate::engine::TypedVectorOperator;
 use crate::engine::{
     CanonicOperatorName, InitializedVectorOperator, OperatorData, OperatorName, QueryContext,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
@@ -112,7 +113,6 @@ impl OperatorData for CsvSourceParameters {
     fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for CsvSource {
     async fn _initialize(
@@ -176,11 +176,11 @@ impl InitializedVectorOperator for InitializedCsvSource {
     fn optimize(
         &self,
         _target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(CsvSource {
             params: self.state.clone(),
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -667,7 +667,7 @@ x;y
             time: CsvTimeSpecification::None,
         };
 
-        let operator = CsvSource { params }.boxed();
+        let operator = CsvSource { params }.typed();
 
         let operator_json = serde_json::to_value(&operator).unwrap();
 
@@ -688,6 +688,6 @@ x;y
             })
         );
 
-        let _operator: Box<dyn VectorOperator> = serde_json::from_value(operator_json).unwrap();
+        let _operator: TypedVectorOperator = serde_json::from_value(operator_json).unwrap();
     }
 }

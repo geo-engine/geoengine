@@ -1,3 +1,4 @@
+use crate::engine::TypedRasterOperator;
 use crate::{
     engine::{
         BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
@@ -57,7 +58,6 @@ impl OperatorName for Onnx {
     const TYPE_NAME: &'static str = "Onnx";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Onnx {
     async fn _initialize(
@@ -174,7 +174,7 @@ impl InitializedRasterOperator for InitializedOnnx {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(Onnx {
             params: OnnxParams {
                 model: self.model_name.clone(),
@@ -183,7 +183,7 @@ impl InitializedRasterOperator for InitializedOnnx {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -729,7 +729,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -749,7 +749,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -759,7 +759,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2],
             },
         }
-        .boxed();
+        .typed();
 
         // load a very simple model that checks whether the first band is greater than the second band
         let model_name = MlModelName {
@@ -771,7 +771,7 @@ mod tests {
             params: OnnxParams::new(model_name.clone()),
             sources: SingleRasterSource { raster: stacker },
         }
-        .boxed();
+        .typed();
 
         let ml_model_loading_info = MlModelLoadingInfo {
             storage_path: test_data!("ml/onnx/test_classification.onnx").to_owned(),
@@ -938,7 +938,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -958,7 +958,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let mrs3 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -978,7 +978,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -988,7 +988,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2, mrs3],
             },
         }
-        .boxed();
+        .typed();
 
         // load a very simple model that performs regression to predict the sum of the three bands
         let model_name = MlModelName {
@@ -1000,7 +1000,7 @@ mod tests {
             params: OnnxParams::new(model_name.clone()),
             sources: SingleRasterSource { raster: stacker },
         }
-        .boxed();
+        .typed();
 
         let ml_model_loading_info = MlModelLoadingInfo {
             storage_path: test_data!("ml/onnx/test_regression.onnx").to_owned(),
@@ -1130,7 +1130,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1138,7 +1138,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -1148,7 +1148,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2],
             },
         }
-        .boxed();
+        .typed();
 
         // load a very simple model that checks whether the first band is greater than the second band
         let model_name = MlModelName {
@@ -1160,7 +1160,7 @@ mod tests {
             params: OnnxParams::new(model_name.clone()),
             sources: SingleRasterSource { raster: stacker },
         }
-        .boxed();
+        .typed();
 
         let ml_model_loading_info = MlModelLoadingInfo {
             storage_path: test_data!("ml/onnx/test_a_plus_b.onnx").to_owned(),

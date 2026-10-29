@@ -747,7 +747,7 @@ mod tests {
             source_parameters::{SingleRasterOrVectorOperator, SingleRasterOrVectorSource},
         },
     };
-    use geoengine_operators::engine::PlotOperator as OperatorsPlotOperatorTrait;
+    use geoengine_operators::engine::TypedPlotOperator as OperatorsTypedPlotOperator;
     use typed_floats::tf64::NonNaN;
 
     // ---------------------------------------------------------------------------
@@ -934,7 +934,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::Histogram(histogram);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("histogram with OgrSource must convert to operator");
     }
@@ -1039,7 +1039,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::Statistics(statistics);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("statistics with GdalSource must convert to operator");
     }
@@ -1099,7 +1099,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::BoxPlot(box_plot);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("box plot with MockPointSource must convert to operator");
     }
@@ -1126,7 +1126,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::ClassHistogram(class_histogram);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("class histogram with OgrSource must convert to operator");
     }
@@ -1151,7 +1151,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::FeatureAttributeValuesOverTime(feature_plot);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("feature attribute over time must convert to operator");
     }
@@ -1177,7 +1177,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::MeanRasterPixelValuesOverTime(mean_raster);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("mean raster pixel values over time must convert to operator");
     }
@@ -1204,7 +1204,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::PieChart(pie_chart);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("pie chart with OgrSource must convert to operator");
     }
@@ -1229,7 +1229,7 @@ mod tests {
         };
 
         let plot_operator = PlotOperator::ScatterPlot(scatter_plot);
-        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+        OperatorsTypedPlotOperator::try_from(plot_operator)
             .map(|_| ())
             .expect("scatter plot with MockPointSource must convert to operator");
     }

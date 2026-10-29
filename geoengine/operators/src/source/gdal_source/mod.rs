@@ -1,7 +1,7 @@
 use super::gdal_worker_process::{GdalDatasetParameters, GdalPoolDispatcher, GridAndProperties};
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
-    SpatialGridDescriptor, WorkflowOperatorPath,
+    SpatialGridDescriptor, TypedRasterOperator, WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_source::reader::GdalPoolReader;
@@ -505,7 +505,6 @@ where
         .try_buffered(8) // TODO: make this configurable
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for GdalSource {
     async fn _initialize(
@@ -771,7 +770,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
         // TODO: handle cases where the original workflow explicitly loads overviews in the source
@@ -802,7 +801,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                 overview_level: Some(next_best_overview_level),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -837,7 +836,7 @@ mod tests {
         let op = GdalSource {
             params: GdalSourceParameters::new(name.clone()),
         }
-        .boxed();
+        .typed();
 
         let o = op
             .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)

@@ -2929,6 +2929,7 @@ mod tests {
         },
     };
     use float_cmp::approx_eq;
+    use geoengine_operators::engine::OperatorData;
     use serde_json::json;
 
     #[test]

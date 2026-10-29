@@ -456,7 +456,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -554,7 +554,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap()

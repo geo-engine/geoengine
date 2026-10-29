@@ -24,6 +24,9 @@ Inside this directory, drop the module prefix (`just test` instead of `just back
   Per crate: `just backend test-services <filter>`, `test-operators`, `test-datatypes`, `test-macros` (lib tests only; `test-services <filter> --all` includes integration tests).
   - Doctests: `just backend test-doc`.
   - Single test, e.g.: `cargo test -p geoengine-operators --lib -- processing::expression::tests::it_works --nocapture`
+  - GDAL reads in tests run in the `gdalsource-process` binary.
+    `just backend test`, `test-operators` and `test-services` build it before running the tests.
+    Plain `cargo test` does not, so run `cargo build --bin gdalsource-process` first; a stale binary makes GDAL tests fail in misleading ways.
 - Expression deps sync check: `cargo test --package geoengine-expression --test check-expression-deps`
 - After API-visible changes: `just backend generate-openapi-spec`, then `just api-clients build` (see root `AGENTS.md`).
 
@@ -56,6 +59,9 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
 - **`datatypes`**: primitives (time intervals, bounding boxes, spatial references), feature collections (Arrow-backed), raster tiles/grids, plots.
 - **`operators`**: the processing engine.
   `engine/` defines the operator lifecycle: serializable operator definitions (`RasterOperator`/`VectorOperator`/`PlotOperator`, combined in `TypedOperator`) are initialized against an `ExecutionContext` (which yields result descriptors) and then produce query processors that return async streams of tiles or feature chunks.
+  Operators implement the `RasterOperator`/`VectorOperator`/`PlotOperator` traits and are listed in the enums `TypedRasterOperator`/`TypedVectorOperator`/`TypedPlotOperator` (`engine/typed_operators.rs`), which handle (de)serialization.
+  A new operator needs a variant there; `.typed()` converts an operator into its enum.
+  Variant names are the serialized `type` tags, which are persisted and hashed into processing graph ids, so never rename them.
   Implementations live in `source/` (GDAL, OGR, CSV), `processing/`, `plot/` and `adapters/` (stream combinators).
   There is also `cache/` and `machine_learning/` (ONNX via `ort`).
   GDAL reads must run out-of-process through the `gdalsource-process` binary (`src/bin/`), managed by a process pool (`[gdal_process_pool]` settings).

@@ -5,10 +5,10 @@ use crate::api::model::processing_graphs::{
     HistogramBucketsSquareRootChoiceRule, HistogramParameters, MeanRasterPixelValuesOverTime,
     MeanRasterPixelValuesOverTimeParameters, MeanRasterPixelValuesOverTimePosition, PieChart,
     PieChartParameters, PlotOperator, ScatterPlot, ScatterPlotParameters, Statistics,
-    StatisticsParameters, back_conversion::downcast_runtime_operator, plots::PieChartCountType,
+    StatisticsParameters, plots::PieChartCountType,
 };
 use geoengine_operators::{
-    engine::{OperatorName, PlotOperator as OperatorsPlotOperator},
+    engine::{OperatorName, TypedPlotOperator as OperatorsTypedPlotOperator},
     plot::{
         BoxPlot as OperatorsBoxPlot, ClassHistogram as OperatorsClassHistogram,
         FeatureAttributeValuesOverTime as OperatorsFeatureAttributeValuesOverTime,
@@ -21,48 +21,34 @@ use geoengine_operators::{
 use typed_floats::tf64::NonNaN;
 
 macro_rules! convert {
-    ($type_name:expr, $operator:expr, $($runtime:ty => $variant:ident),+ $(,)?) => {{
-        match $type_name {
+    ($operator:expr, $($variant:ident),+ $(,)?) => {{
+        match $operator {
             $(
-                <$runtime>::TYPE_NAME => {
-                    let op = downcast_runtime_plot_operator::<$runtime>($operator, $type_name)?;
-                    return Ok(PlotOperator::$variant($variant::try_from(op)?));
-                }
+                OperatorsTypedPlotOperator::$variant(op) => Ok(PlotOperator::$variant(op.as_ref().try_into()?)),
             )+
-            _ => anyhow::bail!(
-                "cannot convert runtime plot operator {type_name} to ProcessingGraph; no matching API type yet",
-                type_name = $type_name
-            ),
         }
     }};
 }
 
-/// Converts a `&dyn PlotOperator` plot operator from `operators` into an API plot operator.
+/// Converts a plot operator from `operators` into an API plot operator.
 pub fn plot_operator_from_runtime(
-    operator: &dyn OperatorsPlotOperator,
+    operator: &OperatorsTypedPlotOperator,
 ) -> anyhow::Result<PlotOperator> {
-    let type_name = operator.typetag_name();
-    convert!(type_name, operator,
-        OperatorsBoxPlot => BoxPlot,
-        OperatorsClassHistogram => ClassHistogram,
-        OperatorsFeatureAttributeValuesOverTime => FeatureAttributeValuesOverTime,
-        OperatorsHistogram => Histogram,
-        OperatorsMeanRasterPixelValuesOverTime => MeanRasterPixelValuesOverTime,
-        OperatorsPieChart => PieChart,
-        OperatorsScatterPlot => ScatterPlot,
-        OperatorsStatistics => Statistics,
-    );
-}
-
-fn downcast_runtime_plot_operator<'a, T: 'static>(
-    operator: &'a dyn geoengine_datatypes::util::AsAny,
-    type_name: &'a str,
-) -> anyhow::Result<&'a T> {
-    downcast_runtime_operator::<T>("plot", operator, type_name)
+    convert!(
+        operator,
+        BoxPlot,
+        ClassHistogram,
+        FeatureAttributeValuesOverTime,
+        Histogram,
+        MeanRasterPixelValuesOverTime,
+        PieChart,
+        ScatterPlot,
+        Statistics,
+    )
 }
 
 fn raster_operator_from_runtime(
-    operator: &dyn geoengine_operators::engine::RasterOperator,
+    operator: &geoengine_operators::engine::TypedRasterOperator,
 ) -> anyhow::Result<crate::api::model::processing_graphs::RasterOperator> {
     crate::api::model::processing_graphs::back_conversion::raster::raster_operator_from_runtime(
         operator,
@@ -70,7 +56,7 @@ fn raster_operator_from_runtime(
 }
 
 fn vector_operator_from_runtime(
-    operator: &dyn geoengine_operators::engine::VectorOperator,
+    operator: &geoengine_operators::engine::TypedVectorOperator,
 ) -> anyhow::Result<crate::api::model::processing_graphs::VectorOperator> {
     crate::api::model::processing_graphs::back_conversion::vector::vector_operator_from_runtime(
         operator,
@@ -90,12 +76,12 @@ impl TryFrom<&OperatorsBoxPlot> for BoxPlot {
                 source: match &value.sources.source {
                     geoengine_operators::util::input::RasterOrVectorOperator::Raster(raster) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
-                            raster_operator_from_runtime(raster.as_ref())?,
+                            raster_operator_from_runtime(raster)?,
                         )
                     }
                     geoengine_operators::util::input::RasterOrVectorOperator::Vector(vector) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
-                            vector_operator_from_runtime(vector.as_ref())?,
+                            vector_operator_from_runtime(vector)?,
                         )
                     }
                 },
@@ -117,12 +103,12 @@ impl TryFrom<&OperatorsClassHistogram> for ClassHistogram {
                 source: match &value.sources.source {
                     geoengine_operators::util::input::RasterOrVectorOperator::Raster(raster) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
-                            raster_operator_from_runtime(raster.as_ref())?,
+                            raster_operator_from_runtime(raster)?,
                         )
                     }
                     geoengine_operators::util::input::RasterOrVectorOperator::Vector(vector) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
-                            vector_operator_from_runtime(vector.as_ref())?,
+                            vector_operator_from_runtime(vector)?,
                         )
                     }
                 },
@@ -142,7 +128,7 @@ impl TryFrom<&OperatorsFeatureAttributeValuesOverTime> for FeatureAttributeValue
                 value_column: value.params.value_column.clone(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             },
         })
     }
@@ -163,10 +149,10 @@ impl TryFrom<&OperatorsHistogram> for Histogram {
                     geoengine_operators::plot::HistogramBounds::Values { min, max } => {
                         HistogramBounds::Values(HistogramBoundsValues {
                             min: NonNaN::new(*min).map_err(|_| {
-                                anyhow::anyhow!("histogram min bound for {} must be finite", value.typetag_name())
+                                anyhow::anyhow!("histogram min bound for {} must be finite", OperatorsHistogram::TYPE_NAME)
                             })?,
                             max: NonNaN::new(*max).map_err(|_| {
-                                anyhow::anyhow!("histogram max bound for {} must be finite", value.typetag_name())
+                                anyhow::anyhow!("histogram max bound for {} must be finite", OperatorsHistogram::TYPE_NAME)
                             })?,
                         })
                     }
@@ -191,12 +177,12 @@ impl TryFrom<&OperatorsHistogram> for Histogram {
                 source: match &value.sources.source {
                     geoengine_operators::util::input::RasterOrVectorOperator::Raster(raster) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
-                            raster_operator_from_runtime(raster.as_ref())?,
+                            raster_operator_from_runtime(raster)?,
                         )
                     }
                     geoengine_operators::util::input::RasterOrVectorOperator::Vector(vector) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
-                            vector_operator_from_runtime(vector.as_ref())?,
+                            vector_operator_from_runtime(vector)?,
                         )
                     }
                 },
@@ -227,7 +213,7 @@ impl TryFrom<&OperatorsMeanRasterPixelValuesOverTime> for MeanRasterPixelValuesO
                 attributes: value.params.band_names.clone().try_into()?,
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
-                raster: raster_operator_from_runtime(value.sources.raster.as_ref())?,
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
             },
         })
     }
@@ -249,7 +235,7 @@ impl TryFrom<&OperatorsPieChart> for PieChart {
                 }
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             },
         })
     }
@@ -266,7 +252,7 @@ impl TryFrom<&OperatorsScatterPlot> for ScatterPlot {
                 column_y: value.params.column_y.clone(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
-                vector: vector_operator_from_runtime(value.sources.vector.as_ref())?,
+                vector: vector_operator_from_runtime(&value.sources.vector)?,
             },
         })
     }
@@ -286,12 +272,12 @@ impl TryFrom<&OperatorsStatistics> for Statistics {
                 source: match &value.sources.source {
                     geoengine_operators::util::input::RasterOrVectorOperator::Raster(raster) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Raster(
-                            raster_operator_from_runtime(raster.as_ref())?,
+                            raster_operator_from_runtime(raster)?,
                         )
                     }
                     geoengine_operators::util::input::RasterOrVectorOperator::Vector(vector) => {
                         crate::api::model::processing_graphs::source_parameters::SingleRasterOrVectorOperator::Vector(
-                            vector_operator_from_runtime(vector.as_ref())?,
+                            vector_operator_from_runtime(vector)?,
                         )
                     }
                 },
@@ -306,8 +292,8 @@ mod tests {
     use geoengine_datatypes::dataset::NamedData;
     use geoengine_operators::{
         engine::{
-            PlotOperator as OperatorsPlotOperator, SingleRasterOrVectorSource, SingleRasterSource,
-            SingleVectorSource,
+            SingleRasterOrVectorSource, SingleRasterSource, SingleVectorSource, TypedPlotOperator,
+            TypedRasterOperator, TypedVectorOperator,
         },
         mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
         plot::{
@@ -328,14 +314,14 @@ mod tests {
         util::input::RasterOrVectorOperator,
     };
 
-    fn raster_source() -> Box<dyn geoengine_operators::engine::RasterOperator> {
-        Box::new(OperatorsGdalSource {
+    fn raster_source() -> geoengine_operators::engine::TypedRasterOperator {
+        TypedRasterOperator::from(OperatorsGdalSource {
             params: OperatorsGdalSourceParameters::new(NamedData::with_system_name("test-raster")),
         })
     }
 
-    fn vector_source() -> Box<dyn geoengine_operators::engine::VectorOperator> {
-        Box::new(MockPointSource {
+    fn vector_source() -> geoengine_operators::engine::TypedVectorOperator {
+        TypedVectorOperator::from(MockPointSource {
             params: MockPointSourceParams {
                 points: vec![(1., 2.).into()],
                 spatial_bounds: SpatialBoundsDerive::None,
@@ -349,11 +335,11 @@ mod tests {
         reason = "Test contains many cases for different plot operators"
     )]
     fn it_converts_runtime_plot_operators_to_processing_graph() {
-        type PlotOperatorCase = (Box<dyn OperatorsPlotOperator>, fn(PlotOperator) -> bool);
+        type PlotOperatorCase = (OperatorsTypedPlotOperator, fn(PlotOperator) -> bool);
 
         let cases: Vec<PlotOperatorCase> = vec![
             (
-                Box::new(OperatorsBoxPlot {
+                TypedPlotOperator::from(OperatorsBoxPlot {
                     params: BoxPlotParams {
                         column_names: vec![],
                     },
@@ -364,7 +350,7 @@ mod tests {
                 |graph| matches!(graph, PlotOperator::BoxPlot(_)),
             ),
             (
-                Box::new(OperatorsClassHistogram {
+                TypedPlotOperator::from(OperatorsClassHistogram {
                     params: ClassHistogramParams { column_name: None },
                     sources: SingleRasterOrVectorSource {
                         source: RasterOrVectorOperator::Raster(raster_source()),
@@ -373,7 +359,7 @@ mod tests {
                 |graph| matches!(graph, PlotOperator::ClassHistogram(_)),
             ),
             (
-                Box::new(OperatorsFeatureAttributeValuesOverTime {
+                TypedPlotOperator::from(OperatorsFeatureAttributeValuesOverTime {
                     params: FeatureAttributeValuesOverTimeParams {
                         id_column: "id".to_string(),
                         value_column: "value".to_string(),
@@ -385,7 +371,7 @@ mod tests {
                 |graph| matches!(graph, PlotOperator::FeatureAttributeValuesOverTime(_)),
             ),
             (
-                Box::new(OperatorsHistogram {
+                TypedPlotOperator::from(OperatorsHistogram {
                     params: HistogramParams {
                         attribute_name: "value".to_string(),
                         bounds: HistogramBounds::Data(Default::default()),
@@ -399,7 +385,7 @@ mod tests {
                 |graph| matches!(graph, PlotOperator::Histogram(_)),
             ),
             (
-                Box::new(OperatorsMeanRasterPixelValuesOverTime {
+                TypedPlotOperator::from(OperatorsMeanRasterPixelValuesOverTime {
                     params: MeanRasterPixelValuesOverTimeParams {
                         time_position: MeanRasterPixelValuesOverTimePosition::Start,
                         area: true,
@@ -412,7 +398,7 @@ mod tests {
                 |graph| matches!(graph, PlotOperator::MeanRasterPixelValuesOverTime(_)),
             ),
             (
-                Box::new(OperatorsPieChart {
+                TypedPlotOperator::from(OperatorsPieChart {
                     params: PieChartParams::Count {
                         column_name: "type".to_string(),
                         donut: false,
@@ -424,7 +410,7 @@ mod tests {
                 |graph| matches!(graph, PlotOperator::PieChart(_)),
             ),
             (
-                Box::new(OperatorsScatterPlot {
+                TypedPlotOperator::from(OperatorsScatterPlot {
                     params: ScatterPlotParams {
                         column_x: "x".to_string(),
                         column_y: "y".to_string(),
@@ -436,7 +422,7 @@ mod tests {
                 |graph| matches!(graph, PlotOperator::ScatterPlot(_)),
             ),
             (
-                Box::new(OperatorsStatistics {
+                TypedPlotOperator::from(OperatorsStatistics {
                     params: StatisticsParams {
                         column_names: vec![],
                         percentiles: vec![],
@@ -450,11 +436,11 @@ mod tests {
         ];
 
         for (operator, assert_variant) in cases {
-            let converted = plot_operator_from_runtime(operator.as_ref()).unwrap();
+            let converted = plot_operator_from_runtime(&operator).unwrap();
             assert!(
                 assert_variant(converted),
                 "runtime plot conversion failed for {}",
-                operator.typetag_name()
+                operator.type_name()
             );
         }
     }

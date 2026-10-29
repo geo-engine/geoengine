@@ -1,7 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedVectorOperator, MetaData, OperatorData,
-    OperatorName, QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorName, QueryContext, ResultDescriptor, SourceOperator, TypedVectorOperator,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -116,7 +117,6 @@ impl OperatorName for MockDatasetDataSource {
     const TYPE_NAME: &'static str = "MockDatasetDataSource";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for MockDatasetDataSource {
     async fn _initialize(
@@ -186,13 +186,13 @@ impl InitializedVectorOperator
     fn optimize(
         &self,
         _target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(MockDatasetDataSource {
             params: MockDatasetDataSourceParams {
                 data: self.data.clone(),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -226,7 +226,7 @@ mod tests {
                 data: NamedData::with_system_name("points"),
             },
         }
-        .boxed();
+        .typed();
         let initialized = mps
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await

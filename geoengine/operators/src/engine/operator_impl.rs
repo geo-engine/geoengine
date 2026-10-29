@@ -1,9 +1,10 @@
+use crate::engine::{TypedRasterOperator, TypedVectorOperator};
 use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 
 use crate::util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator};
 
-use super::{OperatorData, RasterOperator, VectorOperator};
+use super::OperatorData;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -21,13 +22,13 @@ pub struct SourceOperator<Params> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleRasterSource {
-    pub raster: Box<dyn RasterOperator>,
+    pub raster: TypedRasterOperator,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleVectorSource {
-    pub vector: Box<dyn VectorOperator>,
+    pub vector: TypedVectorOperator,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,80 +78,80 @@ impl MultipleRasterOrSingleVectorSource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MultipleRasterSources {
-    pub rasters: Vec<Box<dyn RasterOperator>>,
+    pub rasters: Vec<TypedRasterOperator>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MultipleVectorSources {
-    pub vectors: Vec<Box<dyn VectorOperator>>,
+    pub vectors: Vec<TypedVectorOperator>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleVectorMultipleRasterSources {
-    pub vector: Box<dyn VectorOperator>,
-    pub rasters: Vec<Box<dyn RasterOperator>>,
+    pub vector: TypedVectorOperator,
+    pub rasters: Vec<TypedRasterOperator>,
 }
 
-impl From<Box<dyn VectorOperator>> for SingleVectorSource {
-    fn from(vector: Box<dyn VectorOperator>) -> Self {
+impl From<TypedVectorOperator> for SingleVectorSource {
+    fn from(vector: TypedVectorOperator) -> Self {
         Self { vector }
     }
 }
 
-impl From<Box<dyn RasterOperator>> for SingleRasterSource {
-    fn from(raster: Box<dyn RasterOperator>) -> Self {
+impl From<TypedRasterOperator> for SingleRasterSource {
+    fn from(raster: TypedRasterOperator) -> Self {
         Self { raster }
     }
 }
 
-impl From<Vec<Box<dyn RasterOperator>>> for MultipleRasterSources {
-    fn from(rasters: Vec<Box<dyn RasterOperator>>) -> Self {
+impl From<Vec<TypedRasterOperator>> for MultipleRasterSources {
+    fn from(rasters: Vec<TypedRasterOperator>) -> Self {
         Self { rasters }
     }
 }
 
-impl From<Vec<Box<dyn VectorOperator>>> for MultipleVectorSources {
-    fn from(vectors: Vec<Box<dyn VectorOperator>>) -> Self {
+impl From<Vec<TypedVectorOperator>> for MultipleVectorSources {
+    fn from(vectors: Vec<TypedVectorOperator>) -> Self {
         Self { vectors }
     }
 }
 
-impl From<Box<dyn VectorOperator>> for SingleRasterOrVectorSource {
-    fn from(vector: Box<dyn VectorOperator>) -> Self {
+impl From<TypedVectorOperator> for SingleRasterOrVectorSource {
+    fn from(vector: TypedVectorOperator) -> Self {
         Self {
             source: RasterOrVectorOperator::Vector(vector),
         }
     }
 }
 
-impl From<Box<dyn RasterOperator>> for SingleRasterOrVectorSource {
-    fn from(raster: Box<dyn RasterOperator>) -> Self {
+impl From<TypedRasterOperator> for SingleRasterOrVectorSource {
+    fn from(raster: TypedRasterOperator) -> Self {
         Self {
             source: RasterOrVectorOperator::Raster(raster),
         }
     }
 }
 
-impl From<Box<dyn VectorOperator>> for MultipleRasterOrSingleVectorSource {
-    fn from(vector: Box<dyn VectorOperator>) -> Self {
+impl From<TypedVectorOperator> for MultipleRasterOrSingleVectorSource {
+    fn from(vector: TypedVectorOperator) -> Self {
         Self {
             source: MultiRasterOrVectorOperator::Vector(vector),
         }
     }
 }
 
-impl From<Box<dyn RasterOperator>> for MultipleRasterOrSingleVectorSource {
-    fn from(raster: Box<dyn RasterOperator>) -> Self {
+impl From<TypedRasterOperator> for MultipleRasterOrSingleVectorSource {
+    fn from(raster: TypedRasterOperator) -> Self {
         Self {
             source: MultiRasterOrVectorOperator::Raster(vec![raster]),
         }
     }
 }
 
-impl From<Vec<Box<dyn RasterOperator>>> for MultipleRasterOrSingleVectorSource {
-    fn from(raster: Vec<Box<dyn RasterOperator>>) -> Self {
+impl From<Vec<TypedRasterOperator>> for MultipleRasterOrSingleVectorSource {
+    fn from(raster: Vec<TypedRasterOperator>) -> Self {
         Self {
             source: MultiRasterOrVectorOperator::Raster(raster),
         }

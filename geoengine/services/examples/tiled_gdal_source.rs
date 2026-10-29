@@ -60,7 +60,7 @@ async fn bench_gdal_source() {
         let operator = GdalSource {
             params: GdalSourceParameters::new(dataset),
         }
-        .boxed();
+        .typed();
 
         let processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -124,7 +124,7 @@ async fn bench_multi_band_gdal_source() {
         let operator = MultiBandGdalSource {
             params: MultiBandGdalSourceParameters::new(dataset.into()),
         }
-        .boxed();
+        .typed();
 
         let processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

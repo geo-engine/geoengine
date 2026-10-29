@@ -26,6 +26,7 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, RasterDataType, TilingSpecification},
     util::test::TestDefault,
 };
+use geoengine_operators::engine::TypedRasterOperator;
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
@@ -50,14 +51,14 @@ use std::{path::Path, time::Instant};
 const NDVI_RUNS: usize = 20;
 const DEFAULT_COG_RUNS: usize = 5;
 
-fn source(data: NamedData) -> Box<dyn RasterOperator> {
+fn source(data: NamedData) -> TypedRasterOperator {
     GdalSource {
         params: GdalSourceParameters::new(data),
     }
-    .boxed()
+    .typed()
 }
 
-fn downsampling(raster: Box<dyn RasterOperator>, factor: f64) -> Box<dyn RasterOperator> {
+fn downsampling(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperator {
     Downsampling {
         params: DownsamplingParams {
             sampling_method: DownsamplingMethod::NearestNeighbor,
@@ -69,10 +70,10 @@ fn downsampling(raster: Box<dyn RasterOperator>, factor: f64) -> Box<dyn RasterO
         },
         sources: SingleRasterSource { raster },
     }
-    .boxed()
+    .typed()
 }
 
-fn expression(raster: Box<dyn RasterOperator>, expression: &str) -> Box<dyn RasterOperator> {
+fn expression(raster: TypedRasterOperator, expression: &str) -> TypedRasterOperator {
     Expression {
         params: ExpressionParams {
             expression: expression.to_string(),
@@ -82,13 +83,13 @@ fn expression(raster: Box<dyn RasterOperator>, expression: &str) -> Box<dyn Rast
         },
         sources: SingleRasterSource { raster },
     }
-    .boxed()
+    .typed()
 }
 
 /// One benchmark case: a workflow and the query area in units of the data extent.
 struct Case {
     name: &'static str,
-    operator: Box<dyn RasterOperator>,
+    operator: TypedRasterOperator,
     /// 1 queries the data extent, 3 queries a 3×3 area with the data in the center.
     extent_factor: isize,
     time: TimeInterval,

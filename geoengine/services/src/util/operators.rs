@@ -22,25 +22,25 @@ pub fn source_operator_from_dataset(
                     attribute_filters: None,
                 },
             }
-            .boxed(),
+            .typed(),
         ),
         GdalSource::TYPE_NAME => TypedOperator::Raster(
             GdalSource {
                 params: GdalSourceParameters::new(name.clone()),
             }
-            .boxed(),
+            .typed(),
         ),
         MockDatasetDataSource::TYPE_NAME => TypedOperator::Vector(
             MockDatasetDataSource {
                 params: MockDatasetDataSourceParams { data: name.clone() },
             }
-            .boxed(),
+            .typed(),
         ),
         MultiBandGdalSource::TYPE_NAME => TypedOperator::Raster(
             MultiBandGdalSource {
                 params: MultiBandGdalSourceParameters::new(name.clone()),
             }
-            .boxed(),
+            .typed(),
         ),
         s => {
             return Err(crate::error::Error::UnknownOperator {

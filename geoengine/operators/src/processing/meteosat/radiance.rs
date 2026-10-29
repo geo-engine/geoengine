@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -57,7 +57,6 @@ pub struct InitializedRadiance {
     source: Box<dyn InitializedRasterOperator>,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Radiance {
     async fn _initialize(
@@ -199,14 +198,14 @@ impl InitializedRasterOperator for InitializedRadiance {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(Radiance {
             params: RadianceParams {},
             sources: SingleRasterSource {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -320,7 +319,7 @@ mod tests {
     //
     //     let result = test_util::process(
     //         move || {
-    //             RasterOperator::boxed(Radiance {
+    //             RasterOperator::typed(Radiance {
     //                 params: RadianceParams {},
     //                 sources: SingleRasterSource {
     //                     raster: src.boxed(),
@@ -347,9 +346,9 @@ mod tests {
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), Some(2.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
-                RasterOperator::boxed(Radiance {
+                RasterOperator::typed(Radiance {
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                     params: RadianceParams {},
                 })
@@ -389,9 +388,9 @@ mod tests {
                     Some(EmptyGrid2D::new([3, 2].into()).into()),
                     None,
                 );
-                RasterOperator::boxed(Radiance {
+                RasterOperator::typed(Radiance {
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                     params: RadianceParams {},
                 })
@@ -419,9 +418,9 @@ mod tests {
             || {
                 let props = test_util::create_properties(None, None, None, Some(2.0));
                 let src = test_util::create_mock_source::<u8>(props, None, None);
-                RasterOperator::boxed(Radiance {
+                RasterOperator::typed(Radiance {
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                     params: RadianceParams {},
                 })
@@ -447,9 +446,9 @@ mod tests {
             || {
                 let props = test_util::create_properties(None, None, Some(11.0), None);
                 let src = test_util::create_mock_source::<u8>(props, None, None);
-                RasterOperator::boxed(Radiance {
+                RasterOperator::typed(Radiance {
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                     params: RadianceParams {},
                 })
@@ -477,10 +476,10 @@ mod tests {
                 let src =
                     test_util::create_mock_source::<u8>(props, None, Some(Measurement::Unitless));
 
-                RasterOperator::boxed(Radiance {
+                RasterOperator::typed(Radiance {
                     params: RadianceParams {},
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -512,10 +511,10 @@ mod tests {
                     })),
                 );
 
-                RasterOperator::boxed(Radiance {
+                RasterOperator::typed(Radiance {
                     params: RadianceParams {},
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },
@@ -548,10 +547,10 @@ mod tests {
                     })),
                 );
 
-                RasterOperator::boxed(Radiance {
+                RasterOperator::typed(Radiance {
                     params: RadianceParams {},
                     sources: SingleRasterSource {
-                        raster: src.boxed(),
+                        raster: src.typed(),
                     },
                 })
             },

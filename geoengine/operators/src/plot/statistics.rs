@@ -2,8 +2,8 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    WorkflowOperatorPath,
+    TypedPlotOperator, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::error::Error;
@@ -56,7 +56,6 @@ pub struct StatisticsParams {
     pub percentiles: Vec<NonNaN>,
 }
 
-#[typetag::serde]
 #[async_trait]
 #[allow(clippy::too_many_lines)]
 impl PlotOperator for Statistics {
@@ -236,14 +235,14 @@ impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVector
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(Statistics {
             params: self.optimized_params(self.columns.clone()),
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -272,7 +271,7 @@ impl InitializedPlotOperator
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(Statistics {
             params: self
                 .optimized_params(self.columns.iter().map(|band| band.name.clone()).collect()),
@@ -283,7 +282,7 @@ impl InitializedPlotOperator
                 )?),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -653,7 +652,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterOperator, RasterResultDescriptor,
-        SpatialGridDescriptor, TimeDescriptor,
+        SpatialGridDescriptor, TimeDescriptor, TypedRasterOperator,
     };
     use crate::engine::{RasterBandDescriptor, RasterBandDescriptors, VectorOperator};
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
@@ -679,7 +678,7 @@ mod tests {
                     result_descriptor: multi_band_result_descriptor(1),
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
@@ -729,7 +728,7 @@ mod tests {
     }
 
     /// A raster source with one 3x2 tile at tile position [0, 0] per band, filled with `band_values`.
-    fn multi_band_raster_source(band_values: Vec<Vec<u8>>) -> Box<dyn RasterOperator> {
+    fn multi_band_raster_source(band_values: Vec<Vec<u8>>) -> TypedRasterOperator {
         let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
 
         MockRasterSource {
@@ -754,11 +753,11 @@ mod tests {
                     .collect(),
             },
         }
-        .boxed()
+        .typed()
     }
 
     async fn raster_statistics(
-        source: Box<dyn RasterOperator>,
+        source: TypedRasterOperator,
         params: StatisticsParams,
         bbox: BoundingBox2D,
     ) -> Result<serde_json::Value> {
@@ -770,7 +769,7 @@ mod tests {
             params,
             sources: source.into(),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await?;
 
@@ -803,7 +802,7 @@ mod tests {
             },
             sources: multi_band_raster_source(vec![vec![1, 2, 3, 4, 5, 6]]).into(),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap()
@@ -1070,7 +1069,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1083,7 +1082,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let statistics = statistics
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -1170,7 +1169,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1183,7 +1182,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let statistics = statistics
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -1261,7 +1260,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1274,7 +1273,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let statistics = statistics
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -1357,7 +1356,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1370,7 +1369,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let statistics = statistics
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -1451,7 +1450,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1464,7 +1463,7 @@ mod tests {
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
         let statistics = statistics
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();

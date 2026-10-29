@@ -1,3 +1,4 @@
+use crate::engine::TypedRasterOperator;
 use crate::engine::{
     ExecutionContext, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
     ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
@@ -17,14 +18,14 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use snafu::ResultExt;
 
 pub struct WrapWithProjectionAndResample {
-    pub operator: Box<dyn RasterOperator>,
+    pub operator: TypedRasterOperator,
     pub initialized_operator: Box<dyn InitializedRasterOperator>,
     pub result_descriptor: RasterResultDescriptor,
 }
 
 impl WrapWithProjectionAndResample {
     pub fn new_create_result_descriptor(
-        operator: Box<dyn RasterOperator>,
+        operator: TypedRasterOperator,
         initialized: Box<dyn InitializedRasterOperator>,
     ) -> Self {
         let result_descriptor = initialized.result_descriptor().clone();
@@ -32,7 +33,7 @@ impl WrapWithProjectionAndResample {
     }
 
     pub fn new(
-        operator: Box<dyn RasterOperator>,
+        operator: TypedRasterOperator,
         initialized: Box<dyn InitializedRasterOperator>,
         result_descriptor: RasterResultDescriptor,
     ) -> Self {
@@ -75,7 +76,7 @@ impl WrapWithProjectionAndResample {
                     source: RasterOrVectorOperator::Raster(self.operator),
                 },
             }
-            .boxed();
+            .typed();
 
             let irp = reprojected_workflow
                 .clone()
@@ -202,7 +203,7 @@ impl WrapWithProjectionAndResample {
             params: downsample_params,
             sources: optimized_operator.into(),
         }
-        .boxed();
+        .typed();
 
         let ido = dop
             .clone()
@@ -236,7 +237,7 @@ impl WrapWithProjectionAndResample {
             params: interpolation_params.clone(),
             sources: self.operator.into(),
         }
-        .boxed();
+        .typed();
 
         let iip = iop
             .clone()

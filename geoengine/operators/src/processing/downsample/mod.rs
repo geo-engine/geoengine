@@ -4,7 +4,8 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::util::Result;
@@ -74,7 +75,6 @@ impl OperatorName for Downsampling {
     const TYPE_NAME: &'static str = "Downsampling";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Downsampling {
     async fn _initialize(
@@ -222,7 +222,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
         let out_descriptor = self.result_descriptor();
@@ -263,7 +263,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
                         raster: optimzed_source,
                     },
                 }
-                .boxed());
+                .typed());
             }
             return Ok(optimzed_source);
         }
@@ -286,7 +286,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
                 raster: optimzed_source,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -744,7 +744,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let downsampler = Downsampling {
             params: DownsamplingParams {
@@ -759,7 +759,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs1 },
         }
-        .boxed();
+        .typed();
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
@@ -988,7 +988,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let downsampler = Downsampling {
             params: DownsamplingParams {
@@ -1003,7 +1003,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs1 },
         }
-        .boxed();
+        .typed();
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 2, 0, 2).unwrap(),

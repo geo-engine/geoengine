@@ -62,7 +62,7 @@ mod test_util {
 
     use crate::engine::{
         MockExecutionContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
+        RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor, TypedRasterOperator,
         WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
@@ -86,7 +86,7 @@ mod test_util {
         ctx: &MockExecutionContext,
     ) -> Result<RasterTile2D<f32>>
     where
-        T: FnOnce() -> Box<dyn RasterOperator>,
+        T: FnOnce() -> TypedRasterOperator,
     {
         // let input = make_raster(props, custom_data, measurement);
 

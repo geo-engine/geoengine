@@ -7,6 +7,7 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, RasterDataType, RasterTile2D},
     util::test::TestDefault,
 };
+use geoengine_operators::engine::TypedRasterOperator;
 use geoengine_operators::{
     engine::{
         MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
@@ -24,10 +25,7 @@ struct OutputRow {
     expression_std_dev: f64,
 }
 
-fn expression_on_sources(
-    a: Box<dyn RasterOperator>,
-    b: Box<dyn RasterOperator>,
-) -> Box<dyn RasterOperator> {
+fn expression_on_sources(a: TypedRasterOperator, b: TypedRasterOperator) -> TypedRasterOperator {
     Expression {
         params: ExpressionParams {
             expression: "(A - B) / (A + B)".to_string(),
@@ -44,20 +42,20 @@ fn expression_on_sources(
                     rasters: vec![a, b],
                 },
             }
-            .boxed(),
+            .typed(),
         },
     }
-    .boxed()
+    .typed()
 }
 
-fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOperator> {
+fn ndvi_source(execution_context: &mut MockExecutionContext) -> TypedRasterOperator {
     let ndvi_id = add_ndvi_dataset(execution_context);
 
     let gdal_operator = GdalSource {
         params: GdalSourceParameters::new(ndvi_id),
     };
 
-    gdal_operator.boxed()
+    gdal_operator.typed()
 }
 
 #[tokio::main]

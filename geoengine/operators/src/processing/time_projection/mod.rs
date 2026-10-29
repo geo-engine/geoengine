@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorName, QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorName, QueryContext, SingleVectorSource, TypedVectorOperator, TypedVectorQueryProcessor,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -59,7 +59,6 @@ pub enum TimeProjectionError {
     },
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for TimeProjection {
     async fn _initialize(
@@ -158,7 +157,7 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(TimeProjection {
             params: TimeProjectionParams {
                 step: self.step,
@@ -168,7 +167,7 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
                 vector: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -467,7 +466,7 @@ mod tests {
 
         let time_projection = TimeProjection {
             sources: SingleVectorSource {
-                vector: source.boxed(),
+                vector: source.typed(),
             },
             params: TimeProjectionParams {
                 step: TimeStep {
@@ -479,7 +478,7 @@ mod tests {
         };
 
         let query_processor = time_projection
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -571,7 +570,7 @@ mod tests {
 
         let time_projection = TimeProjection {
             sources: SingleVectorSource {
-                vector: source.boxed(),
+                vector: source.typed(),
             },
             params: TimeProjectionParams {
                 step: TimeStep {
@@ -583,7 +582,7 @@ mod tests {
         };
 
         let query_processor = time_projection
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()

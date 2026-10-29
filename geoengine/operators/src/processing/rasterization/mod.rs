@@ -3,8 +3,8 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
     RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, SingleVectorSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, WorkflowOperatorPath,
+    ResultDescriptor, SingleVectorSource, SpatialGridDescriptor, TypedRasterOperator,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::optimization::{OptimizableOperator, OptimizationError};
@@ -56,7 +56,6 @@ pub struct RasterizationParams {
     pub density_params: Option<DensityParams>,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Rasterization {
     async fn _initialize(
@@ -169,7 +168,7 @@ impl InitializedRasterOperator for InitializedGridRasterization {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
         let rasterization_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
@@ -197,7 +196,7 @@ impl InitializedRasterOperator for InitializedGridRasterization {
                 vector: self.source.optimize(target_resolution)?, // TODO: use `rasterization_resolution` here instead?
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -285,7 +284,7 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
         let rasterization_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
@@ -316,7 +315,7 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
                 vector: self.source.optimize(target_resolution)?, // TODO: use `rasterization_resolution` here instead?
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -723,10 +722,10 @@ mod tests {
                         ),
                     ),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
@@ -783,10 +782,10 @@ mod tests {
                         ),
                     ),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
@@ -841,10 +840,10 @@ mod tests {
                         ),
                     ),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();
@@ -935,10 +934,10 @@ mod tests {
                         ),
                     ),
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap();

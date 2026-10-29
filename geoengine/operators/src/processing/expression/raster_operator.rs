@@ -2,6 +2,7 @@ use super::{
     RasterExpressionError, get_expression_dependencies,
     raster_query_processor::{ExpressionInput, ExpressionQueryProcessor},
 };
+use crate::engine::TypedRasterOperator;
 use crate::{
     engine::{
         CanonicOperatorName, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
@@ -57,7 +58,6 @@ fn index_to_parameter(index: usize) -> String {
     parameter.to_string()
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Expression {
     async fn _initialize(
@@ -224,7 +224,7 @@ impl InitializedRasterOperator for InitializedExpression {
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(resolution)?;
 
         Ok(Expression {
@@ -238,7 +238,7 @@ impl InitializedRasterOperator for InitializedExpression {
                 raster: self.source.optimize(resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -329,7 +329,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: raster_a },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
@@ -385,7 +385,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: raster_a },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
@@ -449,10 +449,10 @@ mod tests {
                         rasters: vec![raster_a, raster_b],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
@@ -519,10 +519,10 @@ mod tests {
                         rasters: vec![raster_a, raster_b],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
@@ -590,10 +590,10 @@ mod tests {
                         rasters: vec![raster_a, raster_b, raster_c],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
@@ -674,10 +674,10 @@ mod tests {
                         ],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
@@ -746,10 +746,10 @@ mod tests {
                         rasters: vec![make_raster(None)],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
@@ -815,10 +815,10 @@ mod tests {
                         rasters: vec![raster_a],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
@@ -850,14 +850,14 @@ mod tests {
         );
     }
 
-    fn make_raster(no_data_value: Option<i8>) -> Box<dyn RasterOperator> {
+    fn make_raster(no_data_value: Option<i8>) -> TypedRasterOperator {
         make_raster_with_cache_hint(no_data_value, CacheHint::no_cache())
     }
 
     fn make_raster_with_cache_hint(
         no_data_value: Option<i8>,
         cache_hint: CacheHint,
-    ) -> Box<dyn RasterOperator> {
+    ) -> TypedRasterOperator {
         let raster = Grid2D::<i8>::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap();
 
         let real_raster = if let Some(no_data_value) = no_data_value {
@@ -895,7 +895,7 @@ mod tests {
                 },
             },
         }
-        .boxed()
+        .typed()
     }
 
     #[tokio::test]
@@ -927,10 +927,10 @@ mod tests {
                         rasters: vec![raster_a],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
@@ -993,10 +993,10 @@ mod tests {
                         rasters: vec![raster_a, raster_b],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
@@ -1061,10 +1061,10 @@ mod tests {
                         rasters: vec![raster_a, raster_b, raster_c],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();

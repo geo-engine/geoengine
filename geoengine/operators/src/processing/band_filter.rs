@@ -1,7 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -58,7 +59,6 @@ pub enum BandFilterError {
     BandsCannotBeMappedToInput,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for BandFilter {
     async fn _initialize(
@@ -179,7 +179,7 @@ impl InitializedRasterOperator for InitializedBandFilter {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(BandFilter {
             params: BandFilterParams {
                 bands: self.bands.clone(),
@@ -188,7 +188,7 @@ impl InitializedRasterOperator for InitializedBandFilter {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -375,9 +375,9 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
-        let band_filter: Box<dyn RasterOperator> = BandFilter {
+        let band_filter: TypedRasterOperator = BandFilter {
             params: BandFilterParams {
                 bands: BandsByNameOrIndex::Name(vec!["red".to_string(), "blue".to_string()]),
             },
@@ -385,7 +385,7 @@ mod tests {
                 raster: mock_source,
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
             geoengine_datatypes::raster::TilingSpecification::new(tile_size_in_pixels),
@@ -501,9 +501,9 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
-        let band_filter: Box<dyn RasterOperator> = BandFilter {
+        let band_filter: TypedRasterOperator = BandFilter {
             params: BandFilterParams {
                 bands: BandsByNameOrIndex::Index(vec![1, 2]),
             },
@@ -511,7 +511,7 @@ mod tests {
                 raster: mock_source,
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
             geoengine_datatypes::raster::TilingSpecification::new(tile_size_in_pixels),

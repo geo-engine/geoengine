@@ -1,8 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, TypedPlotQueryProcessor, TypedVectorQueryProcessor,
-    WorkflowOperatorPath,
+    PlotResultDescriptor, QueryContext, TypedPlotOperator, TypedPlotQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
@@ -49,7 +49,6 @@ pub enum PieChartParams {
     // TODO: another useful method would be `Sum` which sums up all values of a column A for a group column B
 }
 
-#[typetag::serde]
 #[async_trait]
 impl PlotOperator for PieChart {
     async fn _initialize(
@@ -162,7 +161,7 @@ impl InitializedPlotOperator for InitializedCountPieChart<Box<dyn InitializedVec
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(PieChart {
             params: PieChartParams::Count {
                 column_name: self.column_name.clone(),
@@ -172,7 +171,7 @@ impl InitializedPlotOperator for InitializedCountPieChart<Box<dyn InitializedVec
                 vector: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -340,7 +339,7 @@ mod tests {
                 donut: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         };
 
@@ -398,7 +397,7 @@ mod tests {
             ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
-        .boxed();
+        .typed();
 
         let pie_chart = PieChart {
             params: PieChartParams::Count {
@@ -411,7 +410,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = pie_chart
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -475,7 +474,7 @@ mod tests {
             ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
-        .boxed();
+        .typed();
 
         let pie_chart = PieChart {
             params: PieChartParams::Count {
@@ -488,7 +487,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = pie_chart
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -628,12 +627,12 @@ mod tests {
                     attribute_filters: None,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let query_processor = pie_chart
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -675,12 +674,12 @@ mod tests {
                     }]),
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let query_processor = pie_chart
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -748,7 +747,7 @@ mod tests {
             ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
-        .boxed();
+        .typed();
 
         let pie_chart = PieChart {
             params: PieChartParams::Count {
@@ -761,7 +760,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = pie_chart
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -813,7 +812,7 @@ mod tests {
             ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
-        .boxed();
+        .typed();
 
         let pie_chart = PieChart {
             params: PieChartParams::Count {
@@ -826,7 +825,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = pie_chart
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()

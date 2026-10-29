@@ -381,10 +381,10 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                                     attribute_filters: None,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         },
                     }
-                    .boxed()
+                    .typed()
                     .into(),
                 },
                 symbology: Some(Symbology::Point(PointSymbology {
@@ -440,7 +440,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                             attribute_filters: None,
                         },
                     }
-                    .boxed()
+                    .typed()
                     .into(),
                 },
                 symbology: None,
@@ -470,7 +470,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                                 attribute_filters: None,
                             },
                         }
-                        .boxed()
+                        .typed()
                         .into(),
                     },
                     symbology: None,
@@ -501,7 +501,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                                 attribute_filters: None,
                             },
                         }
-                        .boxed()
+                        .typed()
                         .into(),
                     },
                     symbology: None,
@@ -1242,7 +1242,7 @@ mod tests {
                             attribute_filters: None,
                         },
                     }
-                    .boxed()
+                    .typed()
                     .into(),
                 },
                 symbology: None,
@@ -1281,10 +1281,10 @@ mod tests {
                                     attribute_filters: None,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         },
                     }
-                    .boxed()
+                    .typed()
                     .into(),
                 },
                 symbology: Some(Symbology::Point(PointSymbology {
@@ -1615,7 +1615,7 @@ mod tests {
                             attribute_filters: None,
                         },
                     }
-                    .boxed()
+                    .typed()
                     .into(),
                 },
                 symbology: None,

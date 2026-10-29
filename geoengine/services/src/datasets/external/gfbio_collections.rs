@@ -698,7 +698,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                                     attribute_projection: None,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         ),
                     },
                     symbology: None,

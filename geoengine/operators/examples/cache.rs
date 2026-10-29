@@ -41,10 +41,10 @@ async fn main() {
             raster: GdalSource {
                 params: GdalSourceParameters::new(ndvi_id),
             }
-            .boxed(),
+            .typed(),
         },
     }
-    .boxed()
+    .typed()
     .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
     .await
     .unwrap();

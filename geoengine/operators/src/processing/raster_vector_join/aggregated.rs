@@ -375,7 +375,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -476,7 +476,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -576,7 +576,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -714,7 +714,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -874,7 +874,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -1128,7 +1128,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -1156,7 +1156,7 @@ mod tests {
         )
         .unwrap();
 
-        let polygons = MockFeatureCollectionSource::single(polygons).boxed();
+        let polygons = MockFeatureCollectionSource::single(polygons).typed();
 
         let points = polygons
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)

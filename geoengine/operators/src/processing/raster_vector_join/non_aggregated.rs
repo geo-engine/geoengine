@@ -473,14 +473,14 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
-        .boxed();
+        .typed();
 
         let points = points
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -579,14 +579,14 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
-        .boxed();
+        .typed();
 
         let points = points
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -697,14 +697,14 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
-        .boxed();
+        .typed();
 
         let points = points
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -814,14 +814,14 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
-        .boxed();
+        .typed();
 
         let points = points
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1005,7 +1005,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -1029,7 +1029,7 @@ mod tests {
         )
         .unwrap();
 
-        let points = MockFeatureCollectionSource::single(points).boxed();
+        let points = MockFeatureCollectionSource::single(points).typed();
 
         let points = points
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1224,7 +1224,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -1252,7 +1252,7 @@ mod tests {
         )
         .unwrap();
 
-        let polygons = MockFeatureCollectionSource::single(polygons).boxed();
+        let polygons = MockFeatureCollectionSource::single(polygons).typed();
 
         let points = polygons
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1543,7 +1543,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -1571,7 +1571,7 @@ mod tests {
         )
         .unwrap();
 
-        let polygons = MockFeatureCollectionSource::single(polygons).boxed();
+        let polygons = MockFeatureCollectionSource::single(polygons).typed();
 
         let points = polygons
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)

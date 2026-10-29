@@ -18,8 +18,8 @@ use snafu::ensure;
 use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedVectorOperator, Operator, QueryContext,
-    QueryProcessor, SingleVectorSource, TypedVectorQueryProcessor, VectorColumnInfo,
-    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    QueryProcessor, SingleVectorSource, TypedVectorOperator, TypedVectorQueryProcessor,
+    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::engine::{InitializedSources, OperatorName, WorkflowOperatorPath};
 use crate::error::{self, Error};
@@ -60,7 +60,6 @@ impl OperatorName for VisualPointClustering {
     const TYPE_NAME: &'static str = "VisualPointClustering";
 }
 
-#[typetag::serde]
 #[async_trait]
 #[allow(clippy::too_many_lines)]
 impl VectorOperator for VisualPointClustering {
@@ -250,14 +249,14 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(VisualPointClustering {
             params: self.params.clone(),
             sources: SingleVectorSource {
                 vector: self.vector_source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -547,14 +546,14 @@ mod tests {
                 column_aggregates: Default::default(),
             },
             sources: SingleVectorSource {
-                vector: MockFeatureCollectionSource::single(input).boxed(),
+                vector: MockFeatureCollectionSource::single(input).typed(),
             },
         };
 
         let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -631,14 +630,14 @@ mod tests {
                 .collect(),
             },
             sources: SingleVectorSource {
-                vector: MockFeatureCollectionSource::single(input).boxed(),
+                vector: MockFeatureCollectionSource::single(input).typed(),
             },
         };
 
         let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -716,14 +715,14 @@ mod tests {
                 .collect(),
             },
             sources: SingleVectorSource {
-                vector: MockFeatureCollectionSource::single(input).boxed(),
+                vector: MockFeatureCollectionSource::single(input).typed(),
             },
         };
 
         let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -809,14 +808,14 @@ mod tests {
                 .collect(),
             },
             sources: SingleVectorSource {
-                vector: MockFeatureCollectionSource::single(input).boxed(),
+                vector: MockFeatureCollectionSource::single(input).typed(),
             },
         };
 
         let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
@@ -917,14 +916,14 @@ mod tests {
                 .collect(),
             },
             sources: SingleVectorSource {
-                vector: MockFeatureCollectionSource::single(input).boxed(),
+                vector: MockFeatureCollectionSource::single(input).typed(),
             },
         };
 
         let execution_context = MockExecutionContext::test_default();
 
         let initialized_operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();

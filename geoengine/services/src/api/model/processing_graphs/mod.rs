@@ -1,7 +1,10 @@
 use geoengine_operators::{
     engine::{
         PlotOperator as OperatorsPlotOperator, RasterOperator as OperatorsRasterOperator,
-        TypedOperator as OperatorsTypedOperator, VectorOperator as OperatorsVectorOperator,
+        TypedOperator as OperatorsTypedOperator, TypedPlotOperator as OperatorsTypedPlotOperator,
+        TypedRasterOperator as OperatorsTypedRasterOperator,
+        TypedVectorOperator as OperatorsTypedVectorOperator,
+        VectorOperator as OperatorsVectorOperator,
     },
     machine_learning::onnx::Onnx as OperatorsOnnx,
     mock::MockPointSource as OperatorsMockPointSource,
@@ -230,154 +233,154 @@ pub enum PlotOperator {
     Statistics(Statistics),
 }
 
-impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
+impl TryFrom<RasterOperator> for OperatorsTypedRasterOperator {
     type Error = anyhow::Error;
     fn try_from(operator: RasterOperator) -> Result<Self, Self::Error> {
         match operator {
             RasterOperator::BandFilter(band_filter) => {
-                OperatorsBandFilter::try_from(band_filter).map(OperatorsRasterOperator::boxed)
+                OperatorsBandFilter::try_from(band_filter).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::BandNeighborhoodAggregate(op) => {
-                OperatorsBandNeighborhoodAggregate::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsBandNeighborhoodAggregate::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::BandwiseExpression(op) => {
-                OperatorsBandwiseExpression::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsBandwiseExpression::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Downsampling(downsampling) => {
-                OperatorsDownsampling::try_from(downsampling).map(OperatorsRasterOperator::boxed)
+                OperatorsDownsampling::try_from(downsampling).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Expression(expression) => {
-                OperatorsExpression::try_from(expression).map(OperatorsRasterOperator::boxed)
+                OperatorsExpression::try_from(expression).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::GdalSource(gdal_source) => {
-                OperatorsGdalSource::try_from(gdal_source).map(OperatorsRasterOperator::boxed)
+                OperatorsGdalSource::try_from(gdal_source).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Interpolation(interpolation) => {
-                OperatorsInterpolation::try_from(interpolation).map(OperatorsRasterOperator::boxed)
+                OperatorsInterpolation::try_from(interpolation).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::MultiBandGdalSource(gdal_source) => {
                 OperatorsMultiBandGdalSource::try_from(gdal_source)
-                    .map(OperatorsRasterOperator::boxed)
+                    .map(OperatorsRasterOperator::typed)
             }
             RasterOperator::NeighborhoodAggregate(op) => {
-                OperatorsNeighborhoodAggregate::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsNeighborhoodAggregate::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Onnx(op) => {
-                OperatorsOnnx::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsOnnx::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::RasterScaling(op) => {
-                OperatorsRasterScaling::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsRasterScaling::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::RasterStacker(raster_stacker) => {
-                OperatorsRasterStacker::try_from(raster_stacker).map(OperatorsRasterOperator::boxed)
+                OperatorsRasterStacker::try_from(raster_stacker).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::RasterTypeConversion(type_conversion) => {
                 OperatorsRasterTypeConversion::try_from(type_conversion)
-                    .map(OperatorsRasterOperator::boxed)
+                    .map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Rasterization(op) => {
-                OperatorsRasterization::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsRasterization::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Reprojection(reprojection) => {
-                OperatorsReprojection::try_from(reprojection).map(OperatorsRasterOperator::boxed)
+                OperatorsReprojection::try_from(reprojection).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Reflectance(op) => {
-                OperatorsReflectance::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsReflectance::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Radiance(op) => {
-                OperatorsRadiance::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsRadiance::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::TemporalRasterAggregation(aggregation) => {
                 OperatorsTemporalRasterAggregation::try_from(aggregation)
-                    .map(OperatorsRasterOperator::boxed)
+                    .map(OperatorsRasterOperator::typed)
             }
             RasterOperator::Temperature(op) => {
-                OperatorsTemperature::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsTemperature::try_from(op).map(OperatorsRasterOperator::typed)
             }
             RasterOperator::TimeShift(op) => {
-                OperatorsTimeShift::try_from(op).map(OperatorsRasterOperator::boxed)
+                OperatorsTimeShift::try_from(op).map(OperatorsRasterOperator::typed)
             }
         }
     }
 }
 
-impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
+impl TryFrom<VectorOperator> for OperatorsTypedVectorOperator {
     type Error = anyhow::Error;
     fn try_from(operator: VectorOperator) -> Result<Self, Self::Error> {
         match operator {
             VectorOperator::ColumnRangeFilter(op) => {
-                OperatorsColumnRangeFilter::try_from(op).map(OperatorsVectorOperator::boxed)
+                OperatorsColumnRangeFilter::try_from(op).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::LineSimplification(op) => {
-                OperatorsLineSimplification::try_from(op).map(OperatorsVectorOperator::boxed)
+                OperatorsLineSimplification::try_from(op).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::MockPointSource(mock_point_source) => {
                 OperatorsMockPointSource::try_from(mock_point_source)
-                    .map(OperatorsVectorOperator::boxed)
+                    .map(OperatorsVectorOperator::typed)
             }
             VectorOperator::OgrSource(ogr_source) => {
-                OperatorsOgrSource::try_from(ogr_source).map(OperatorsVectorOperator::boxed)
+                OperatorsOgrSource::try_from(ogr_source).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::PointInPolygonFilter(op) => {
-                OperatorsPointInPolygonFilter::try_from(op).map(OperatorsVectorOperator::boxed)
+                OperatorsPointInPolygonFilter::try_from(op).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::RasterVectorJoin(rvj) => {
-                OperatorsRasterVectorJoin::try_from(rvj).map(OperatorsVectorOperator::boxed)
+                OperatorsRasterVectorJoin::try_from(rvj).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::Reprojection(reprojection) => {
-                OperatorsReprojection::try_from(reprojection).map(OperatorsVectorOperator::boxed)
+                OperatorsReprojection::try_from(reprojection).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::TimeProjection(op) => {
-                OperatorsTimeProjection::try_from(op).map(OperatorsVectorOperator::boxed)
+                OperatorsTimeProjection::try_from(op).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::TimeShift(op) => {
-                OperatorsTimeShift::try_from(op).map(OperatorsVectorOperator::boxed)
+                OperatorsTimeShift::try_from(op).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::VectorExpression(vector_expression) => {
                 OperatorsVectorExpression::try_from(vector_expression)
-                    .map(OperatorsVectorOperator::boxed)
+                    .map(OperatorsVectorOperator::typed)
             }
             VectorOperator::VectorJoin(op) => {
-                OperatorsVectorJoin::try_from(op).map(OperatorsVectorOperator::boxed)
+                OperatorsVectorJoin::try_from(op).map(OperatorsVectorOperator::typed)
             }
             VectorOperator::VisualPointClustering(op) => {
-                OperatorsVisualPointClustering::try_from(op).map(OperatorsVectorOperator::boxed)
+                OperatorsVisualPointClustering::try_from(op).map(OperatorsVectorOperator::typed)
             }
         }
     }
 }
 
-impl TryFrom<PlotOperator> for Box<dyn OperatorsPlotOperator> {
+impl TryFrom<PlotOperator> for OperatorsTypedPlotOperator {
     type Error = anyhow::Error;
     fn try_from(operator: PlotOperator) -> Result<Self, Self::Error> {
         match operator {
             PlotOperator::BoxPlot(box_plot) => {
-                OperatorsBoxPlot::try_from(box_plot).map(OperatorsPlotOperator::boxed)
+                OperatorsBoxPlot::try_from(box_plot).map(OperatorsPlotOperator::typed)
             }
             PlotOperator::ClassHistogram(class_histogram) => {
-                OperatorsClassHistogram::try_from(class_histogram).map(OperatorsPlotOperator::boxed)
+                OperatorsClassHistogram::try_from(class_histogram).map(OperatorsPlotOperator::typed)
             }
             PlotOperator::FeatureAttributeValuesOverTime(feature_attribute_values_over_time) => {
                 OperatorsFeatureAttributeValuesOverTime::try_from(
                     feature_attribute_values_over_time,
                 )
-                .map(OperatorsPlotOperator::boxed)
+                .map(OperatorsPlotOperator::typed)
             }
             PlotOperator::Histogram(histogram) => {
-                OperatorsHistogram::try_from(histogram).map(OperatorsPlotOperator::boxed)
+                OperatorsHistogram::try_from(histogram).map(OperatorsPlotOperator::typed)
             }
             PlotOperator::MeanRasterPixelValuesOverTime(mean_raster_pixel_values_over_time) => {
                 OperatorsMeanRasterPixelValuesOverTime::try_from(mean_raster_pixel_values_over_time)
-                    .map(OperatorsPlotOperator::boxed)
+                    .map(OperatorsPlotOperator::typed)
             }
             PlotOperator::PieChart(pie_chart) => {
-                OperatorsPieChart::try_from(pie_chart).map(OperatorsPlotOperator::boxed)
+                OperatorsPieChart::try_from(pie_chart).map(OperatorsPlotOperator::typed)
             }
             PlotOperator::ScatterPlot(scatter_plot) => {
-                OperatorsScatterPlot::try_from(scatter_plot).map(OperatorsPlotOperator::boxed)
+                OperatorsScatterPlot::try_from(scatter_plot).map(OperatorsPlotOperator::typed)
             }
             PlotOperator::Statistics(statistics) => {
-                OperatorsStatistics::try_from(statistics).map(OperatorsPlotOperator::boxed)
+                OperatorsStatistics::try_from(statistics).map(OperatorsPlotOperator::typed)
             }
         }
     }
@@ -510,6 +513,7 @@ mod tests {
     use super::*;
     use crate::api::model::datatypes::Coordinate2D;
     use crate::workflows::workflow::Workflow;
+    use geoengine_operators::engine::TypedVectorOperator;
 
     #[test]
     fn it_serializes_processing_graphs() {
@@ -555,7 +559,7 @@ mod tests {
     #[test]
     fn it_converts_workflow_to_processing_graph_for_mock_point_source() {
         let workflow = Workflow {
-            operator: OperatorsTypedOperator::Vector(Box::new(
+            operator: OperatorsTypedOperator::Vector(TypedVectorOperator::from(
                 geoengine_operators::mock::MockPointSource {
                     params: geoengine_operators::mock::MockPointSourceParams {
                         points: vec![(1., 2.).into()],

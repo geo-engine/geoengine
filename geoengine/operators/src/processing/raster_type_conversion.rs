@@ -1,8 +1,8 @@
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -36,7 +36,6 @@ pub struct InitializedRasterTypeConversionOperator {
     source: Box<dyn InitializedRasterOperator>,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for RasterTypeConversion {
     async fn _initialize(
@@ -108,7 +107,7 @@ impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(RasterTypeConversion {
             params: RasterTypeConversionParams {
                 output_data_type: self.result_descriptor.data_type,
@@ -117,7 +116,7 @@ impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -261,7 +260,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let op = RasterTypeConversion {
             params: RasterTypeConversionParams {
@@ -269,7 +268,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let initialized_op = op
             .initialize(WorkflowOperatorPath::initialize_root(), &ctx)

@@ -381,7 +381,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
                             name: id.to_string(),
                         }),
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: dataset.listing.symbology.clone(),
@@ -1085,7 +1085,7 @@ mod tests {
         let op = GdalSource {
             params: GdalSourceParameters::new(name),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
         .await
         .unwrap();
@@ -1460,7 +1460,7 @@ mod tests {
         let gdal_source = GdalSource {
             params: GdalSourceParameters::new(name),
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
         .await
         .unwrap()

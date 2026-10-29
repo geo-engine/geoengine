@@ -2357,9 +2357,9 @@ mod tests {
                                                 overview_level: None,
                                             },
                                         }
-                                        .boxed(),
+                                        .typed(),
                                     }
-                                }.boxed(),
+                                }.typed(),
                                 RasterTypeConversion {
                                     params: RasterTypeConversionParams {
                                         output_data_type: RasterDataType::I16,
@@ -2371,16 +2371,16 @@ mod tests {
                                                     land_cover_dataset_name.to_string(),
                                                 )
                                             ),
-                                        }.boxed(),
+                                        }.typed(),
                                     }
-                                }.boxed(),
+                                }.typed(),
                             ],
                          }
-                    }.boxed()
+                    }.typed()
                 }
-            }.boxed().into(),
+            }.typed().into(),
         }
-        .boxed();
+        .typed();
 
         // let execution_context = MockExecutionContext::test_default();
         let execution_context = ctx.execution_context().unwrap();

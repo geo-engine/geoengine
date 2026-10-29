@@ -157,7 +157,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
             GdalSource {
                 params: GdalSourceParameters::new(dataset),
             }
-            .boxed(),
+            .typed(),
         ),
     };
 
@@ -388,25 +388,25 @@ pub async fn register_ne2_multiband_workflow(
                                 overview_level: None,
                             },
                         }
-                        .boxed(),
+                        .typed(),
                         GdalSource {
                             params: GdalSourceParameters {
                                 data: green.name.into(),
                                 overview_level: None,
                             },
                         }
-                        .boxed(),
+                        .typed(),
                         GdalSource {
                             params: GdalSourceParameters {
                                 data: red.name.into(),
                                 overview_level: None,
                             },
                         }
-                        .boxed(),
+                        .typed(),
                     ],
                 },
             }
-            .boxed(),
+            .typed(),
         ),
     };
 
@@ -517,7 +517,7 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
                     overview_level: None,
                 },
             }
-            .boxed(),
+            .typed(),
         ),
         "MultiBandGdalSource" => TypedOperator::Raster(
             MultiBandGdalSource {
@@ -526,7 +526,7 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
                     overview_level: None,
                 },
             }
-            .boxed(),
+            .typed(),
         ),
         _ => {
             panic!("Only GdalSource and MultiBandGdalSource are supported in this helper function")
@@ -1030,7 +1030,7 @@ pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: Some(Symbology::Raster(RasterSymbology {
@@ -1371,11 +1371,11 @@ pub async fn add_ndvi_3857_to_layers<C: ApplicationContext<Session = UserSession
                                         overview_level: None,
                                     },
                                 }
-                                .boxed(),
+                                .typed(),
                             ),
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: Some(Symbology::Raster(RasterSymbology {

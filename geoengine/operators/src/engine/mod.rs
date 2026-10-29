@@ -1,7 +1,6 @@
 pub use clonable_operator::{
     CloneableInitializedPlotOperator, CloneableInitializedRasterOperator,
-    CloneableInitializedVectorOperator, CloneablePlotOperator, CloneableRasterOperator,
-    CloneableVectorOperator,
+    CloneableInitializedVectorOperator,
 };
 pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
@@ -36,6 +35,7 @@ pub use result_descriptor::{
     TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
 };
 use tracing::Span;
+pub use typed_operators::{TypedPlotOperator, TypedRasterOperator, TypedVectorOperator};
 pub use workflow_path::WorkflowOperatorPath;
 mod clonable_operator;
 mod execution_context;
@@ -43,6 +43,7 @@ mod initialized_sources;
 mod operator;
 mod operator_impl;
 mod query;
+mod typed_operators;
 mod workflow_path;
 
 #[macro_use]

@@ -1,6 +1,7 @@
 mod tester;
 mod wrapper;
 
+use crate::engine::TypedVectorOperator;
 use std::cmp::min;
 use std::sync::Arc;
 
@@ -48,8 +49,8 @@ pub struct PointInPolygonFilterParams {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PointInPolygonFilterSource {
-    pub points: Box<dyn VectorOperator>,
-    pub polygons: Box<dyn VectorOperator>,
+    pub points: TypedVectorOperator,
+    pub polygons: TypedVectorOperator,
 }
 
 impl OperatorData for PointInPolygonFilterSource {
@@ -81,7 +82,6 @@ impl InitializedSources<InitializedPointInPolygonFilterSource> for PointInPolygo
     }
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for PointInPolygonFilter {
     async fn _initialize(
@@ -184,7 +184,7 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
@@ -192,7 +192,7 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
                 polygons: self.polygons.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 
     fn name(&self) -> &'static str {
@@ -515,7 +515,7 @@ mod tests {
             CacheHint::no_cache(),
         )?;
 
-        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).typed();
 
         let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
 
@@ -532,7 +532,7 @@ mod tests {
                 Default::default(),
                 CacheHint::no_cache(),
             )?)
-            .boxed();
+            .typed();
 
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
@@ -541,7 +541,7 @@ mod tests {
                 polygons: polygon_source,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -577,7 +577,7 @@ mod tests {
             CacheHint::no_cache(),
         )?;
 
-        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).typed();
 
         let polygon_source =
             MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
@@ -586,7 +586,7 @@ mod tests {
                 Default::default(),
                 CacheHint::no_cache(),
             )?)
-            .boxed();
+            .typed();
 
         let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
 
@@ -597,7 +597,7 @@ mod tests {
                 polygons: polygon_source,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -636,7 +636,7 @@ mod tests {
             CacheHint::no_cache(),
         )?;
 
-        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).typed();
 
         let polygon = MultiPolygon::new(vec![vec![vec![
             (0.0, 0.0).into(),
@@ -653,7 +653,7 @@ mod tests {
                 Default::default(),
                 CacheHint::no_cache(),
             )?)
-            .boxed();
+            .typed();
 
         let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
 
@@ -664,7 +664,7 @@ mod tests {
                 polygons: polygon_source,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -710,7 +710,7 @@ mod tests {
         )?;
 
         let point_source =
-            MockFeatureCollectionSource::multiple(vec![points1.clone(), points2.clone()]).boxed();
+            MockFeatureCollectionSource::multiple(vec![points1.clone(), points2.clone()]).typed();
 
         let polygon1 = MultiPolygon::new(vec![vec![vec![
             (0.0, 0.0).into(),
@@ -741,7 +741,7 @@ mod tests {
                 CacheHint::no_cache(),
             )?,
         ])
-        .boxed();
+        .typed();
 
         let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
 
@@ -752,7 +752,7 @@ mod tests {
                 polygons: polygon_source,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
@@ -832,11 +832,11 @@ mod tests {
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
-                points: MockFeatureCollectionSource::single(point_collection).boxed(),
-                polygons: MockFeatureCollectionSource::single(polygon_collection).boxed(),
+                points: MockFeatureCollectionSource::single(point_collection).typed(),
+                polygons: MockFeatureCollectionSource::single(polygon_collection).typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(
             WorkflowOperatorPath::initialize_root(),
             &MockExecutionContext::test_default(),
@@ -902,15 +902,15 @@ mod tests {
                     vec![point_collection],
                     SpatialReference::epsg_4326(),
                 )
-                .boxed(),
+                .typed(),
                 polygons: MockFeatureCollectionSource::with_collections_and_sref(
                     vec![polygon_collection],
                     SpatialReference::from_str("EPSG:3857").unwrap(),
                 )
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed()
+        .typed()
         .initialize(
             WorkflowOperatorPath::initialize_root(),
             &MockExecutionContext::test_default(),

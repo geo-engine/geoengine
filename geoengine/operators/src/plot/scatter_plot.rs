@@ -8,7 +8,7 @@ use geoengine_datatypes::plots::{Histogram2D, HistogramDimension, Plot, PlotData
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource,
+    PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource, TypedPlotOperator,
     TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
@@ -50,7 +50,6 @@ pub struct ScatterPlotParams {
     pub column_y: String,
 }
 
-#[typetag::serde]
 #[async_trait]
 impl PlotOperator for ScatterPlot {
     async fn _initialize(
@@ -136,7 +135,7 @@ impl InitializedPlotOperator for InitializedScatterPlot<Box<dyn InitializedVecto
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(ScatterPlot {
             params: ScatterPlotParams {
                 column_x: self.column_x.clone(),
@@ -146,7 +145,7 @@ impl InitializedPlotOperator for InitializedScatterPlot<Box<dyn InitializedVecto
                 vector: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -322,7 +321,7 @@ mod tests {
                 column_y: "bar".to_owned(),
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         };
 
@@ -372,7 +371,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -385,7 +384,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -449,7 +448,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -462,7 +461,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -502,7 +501,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -515,7 +514,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
@@ -535,7 +534,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -548,7 +547,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
@@ -568,7 +567,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -581,7 +580,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
@@ -601,7 +600,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -614,7 +613,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let init = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await;
 
@@ -634,7 +633,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -647,7 +646,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -687,7 +686,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -700,7 +699,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -742,7 +741,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -755,7 +754,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -822,7 +821,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -835,7 +834,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = box_plot
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()

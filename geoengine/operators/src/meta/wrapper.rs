@@ -1,8 +1,8 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+    QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    TypedRasterOperator, TypedRasterQueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
@@ -163,7 +163,7 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.source.optimize(resolution)
     }
 }
@@ -209,7 +209,7 @@ impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn Initialize
     fn optimize(
         &self,
         resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         self.source.optimize(resolution)
     }
 }

@@ -3,6 +3,7 @@ mod aggregator;
 mod non_aggregated;
 mod util;
 
+use crate::engine::TypedVectorOperator;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
     Operator, OperatorName, SingleVectorMultipleRasterSources, TypedRasterQueryProcessor,
@@ -101,7 +102,6 @@ pub enum TemporalAggregationMethod {
 }
 
 #[allow(clippy::too_many_lines)]
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for RasterVectorJoin {
     async fn _initialize(
@@ -354,7 +354,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
     fn optimize(
         &self,
         target_resolution: geoengine_datatypes::primitives::SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, crate::optimization::OptimizationError> {
+    ) -> Result<TypedVectorOperator, crate::optimization::OptimizationError> {
         Ok(RasterVectorJoin {
             params: self.state.clone(),
             sources: SingleVectorMultipleRasterSources {
@@ -376,7 +376,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                     .collect::<Result<Vec<_>, crate::optimization::OptimizationError>>()?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -415,7 +415,7 @@ mod tests {
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, QueryProcessor, RasterBandDescriptor,
         RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
-        TimeDescriptor,
+        TimeDescriptor, TypedRasterOperator,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -444,7 +444,7 @@ mod tests {
                 temporal_aggregation_ignore_no_data: false,
             },
             sources: SingleVectorMultipleRasterSources {
-                vector: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![]).boxed(),
+                vector: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![]).typed(),
                 rasters: vec![],
             },
         };
@@ -478,12 +478,12 @@ mod tests {
         assert_eq!(deserialized.params, raster_vector_join.params);
     }
 
-    fn ndvi_source(name: NamedData) -> Box<dyn RasterOperator> {
+    fn ndvi_source(name: NamedData) -> TypedRasterOperator {
         let gdal_source = GdalSource {
             params: GdalSourceParameters::new(name),
         };
 
-        gdal_source.boxed()
+        gdal_source.typed()
     }
 
     #[tokio::test]
@@ -510,7 +510,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
@@ -530,7 +530,7 @@ mod tests {
         };
 
         let operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
@@ -587,7 +587,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
@@ -607,7 +607,7 @@ mod tests {
         };
 
         let operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
@@ -667,7 +667,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
@@ -687,7 +687,7 @@ mod tests {
         };
 
         let operator = operator
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
@@ -740,7 +740,7 @@ mod tests {
             ],
             SpatialReference::from_str("EPSG:3857").unwrap(),
         )
-        .boxed();
+        .typed();
 
         let mut exe_ctc = MockExecutionContext::test_default();
         let ndvi_id = add_ndvi_dataset(&mut exe_ctc);
@@ -758,7 +758,7 @@ mod tests {
                 rasters: vec![ndvi_source(ndvi_id.clone())],
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
         .await;
 
@@ -792,7 +792,7 @@ mod tests {
             ],
             SpatialReference::from_str("EPSG:4326").unwrap(),
         )
-        .boxed();
+        .typed();
 
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
@@ -815,7 +815,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let raster_source2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -837,7 +837,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let exe_ctc = MockExecutionContext::test_default();
 
@@ -854,7 +854,7 @@ mod tests {
                 rasters: vec![raster_source, raster_source2],
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
         .await
         .unwrap();

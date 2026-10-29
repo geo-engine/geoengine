@@ -22,9 +22,9 @@ use rand::{Rng, RngExt, SeedableRng};
 use std::time::Instant;
 
 async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num_threads: usize) {
-    let point_source = MockFeatureCollectionSource::single(points).boxed();
+    let point_source = MockFeatureCollectionSource::single(points).typed();
 
-    let polygon_source = MockFeatureCollectionSource::single(polygons).boxed();
+    let polygon_source = MockFeatureCollectionSource::single(polygons).typed();
 
     let exe_ctx = MockExecutionContext::test_default();
 
@@ -35,7 +35,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
             polygons: polygon_source,
         },
     }
-    .boxed()
+    .typed()
     .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
     .await
     .unwrap();

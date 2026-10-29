@@ -315,7 +315,7 @@ impl CopernicusDataspaceDataProvider {
                             overview_level: None,
                         },
                     }
-                    .boxed(),
+                    .typed(),
                 ),
             },
             symbology: Some(crate::projects::Symbology::Raster(RasterSymbology {

@@ -12,7 +12,7 @@ use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
 use crate::adapters::SimpleRasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
-    RasterOperator, SingleRasterSource, TimeDescriptor, WorkflowOperatorPath,
+    RasterOperator, SingleRasterSource, TimeDescriptor, TypedRasterOperator, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::processing::temporal_raster_aggregation::aggregators::PercentileEstimateAggregator;
@@ -38,8 +38,6 @@ use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tracing::debug;
-
-use typetag;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,7 +85,6 @@ impl OperatorName for TemporalRasterAggregation {
     const TYPE_NAME: &'static str = "TemporalRasterAggregation";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for TemporalRasterAggregation {
     async fn _initialize(
@@ -212,7 +209,7 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: self.aggregation_type,
@@ -224,7 +221,7 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -600,7 +597,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -616,7 +613,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -728,7 +725,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -744,7 +741,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -856,7 +853,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -872,7 +869,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -984,7 +981,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1000,7 +997,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1120,7 +1117,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1136,7 +1133,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1205,7 +1202,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1221,7 +1218,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1313,7 +1310,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Last {
@@ -1328,7 +1325,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1420,7 +1417,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1436,7 +1433,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1528,7 +1525,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1544,7 +1541,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1636,7 +1633,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1652,7 +1649,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1744,7 +1741,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1760,7 +1757,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1853,7 +1850,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1869,7 +1866,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -1980,7 +1977,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -1996,7 +1993,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -2088,7 +2085,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -2104,7 +2101,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -2197,7 +2194,7 @@ mod tests {
                 result_descriptor: result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -2221,10 +2218,10 @@ mod tests {
                     },
                     sources: SingleRasterSource { raster: mrs },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -2348,7 +2345,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -2364,7 +2361,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -2475,7 +2472,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -2491,7 +2488,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -2583,7 +2580,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -2599,7 +2596,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -2691,7 +2688,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -2707,7 +2704,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_rect = RasterQueryRectangle::new(
@@ -2993,21 +2990,21 @@ mod tests {
                                     result_descriptor: result_descriptor.clone(),
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                             MockRasterSource {
                                 params: MockRasterSourceParams {
                                     data: data.clone(),
                                     result_descriptor,
                                 },
                             }
-                            .boxed(),
+                            .typed(),
                         ],
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -3169,7 +3166,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
@@ -3186,7 +3183,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -3259,10 +3256,10 @@ mod tests {
                         result_descriptor,
                     },
                 }
-                .boxed(),
+                .typed(),
             },
         }
-        .boxed();
+        .typed();
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));

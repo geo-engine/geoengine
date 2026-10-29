@@ -435,12 +435,12 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let left = MockFeatureCollectionSource::single(left)
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();
         let right = MockFeatureCollectionSource::single(right)
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap();

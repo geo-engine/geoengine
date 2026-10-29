@@ -7,7 +7,7 @@ use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    TypedRasterOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 
 use crate::optimization::OptimizationError;
@@ -86,7 +86,6 @@ pub enum BandNeighborhoodAggregateError {
     WindowSizeTooLarge { window_size: u32 },
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for BandNeighborhoodAggregate {
     async fn _initialize(
@@ -193,7 +192,7 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(BandNeighborhoodAggregate {
             params: BandNeighborhoodAggregateParams {
                 aggregate: self.aggregate.clone(),
@@ -202,7 +201,7 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -1232,9 +1231,9 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
-        let band_neighborhood_aggregate: Box<dyn RasterOperator> = BandNeighborhoodAggregate {
+        let band_neighborhood_aggregate: TypedRasterOperator = BandNeighborhoodAggregate {
             params: BandNeighborhoodAggregateParams {
                 aggregate: NeighborhoodAggregate::FirstDerivative {
                     band_distance: BandDistance::EquallySpaced { distance: 1.0 },
@@ -1242,7 +1241,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs1 },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -1384,9 +1383,9 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
-        let band_neighborhood_aggregate: Box<dyn RasterOperator> = BandNeighborhoodAggregate {
+        let band_neighborhood_aggregate: TypedRasterOperator = BandNeighborhoodAggregate {
             params: BandNeighborhoodAggregateParams {
                 aggregate: NeighborhoodAggregate::FirstDerivative {
                     band_distance: BandDistance::EquallySpaced { distance: 1.0 },
@@ -1394,7 +1393,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs1 },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {

@@ -1,3 +1,4 @@
+use crate::engine::{TypedRasterOperator, TypedVectorOperator};
 use std::marker::PhantomData;
 
 use super::map_query::MapQueryProcessor;
@@ -232,7 +233,6 @@ fn compute_output_spatial_grid(
     Ok(out_spatial_grid)
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for Reprojection {
     async fn _initialize(
@@ -344,16 +344,16 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         self.source
             .optimize(target_resolution)
             .map(|optimized_source| {
-                Box::new(Reprojection {
+                VectorOperator::typed(Reprojection {
                     params: self.params,
                     sources: SingleRasterOrVectorSource {
                         source: RasterOrVectorOperator::Vector(optimized_source),
                     },
-                }) as Box<dyn VectorOperator>
+                })
             })
     }
 }
@@ -442,7 +442,6 @@ where
     }
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for Reprojection {
     async fn _initialize(
@@ -628,7 +627,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         // adjust input resolution relative to change in target resolution
         // idea: optimization of reprojection snaps from one overview level to another, so do the same in the source
         // if the result does not match, we need to interpolate or resample the result to match the target resolution
@@ -689,7 +688,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
             "output_spatial_resolution: {output_spatial_resolution:?}, target_resolution: {target_resolution:?}"
         );
 
-        let optimized_reprojection = Box::new(Reprojection {
+        let optimized_reprojection = RasterOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: self.target_srs,
                 derive_out_spec: self.params.derive_out_spec,
@@ -718,7 +717,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                     raster: optimized_reprojection,
                 },
             }
-            .boxed());
+            .typed());
         }
 
         // reprojected raster is too fine, we need to downsample
@@ -732,7 +731,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
                 raster: optimized_reprojection,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -912,14 +911,14 @@ mod tests {
         ])
         .unwrap();
 
-        let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let point_source = MockFeatureCollectionSource::single(points.clone()).typed();
 
         let target_spatial_reference =
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let exe_ctx = MockExecutionContext::test_default();
 
-        let initialized_operator = VectorOperator::boxed(Reprojection {
+        let initialized_operator = VectorOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference,
                 derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -988,14 +987,14 @@ mod tests {
         ]])
         .unwrap()];
 
-        let lines_source = MockFeatureCollectionSource::single(lines.clone()).boxed();
+        let lines_source = MockFeatureCollectionSource::single(lines.clone()).typed();
 
         let target_spatial_reference =
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let exe_ctx = MockExecutionContext::test_default();
 
-        let initialized_operator = VectorOperator::boxed(Reprojection {
+        let initialized_operator = VectorOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference,
                 derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -1071,14 +1070,14 @@ mod tests {
         ]]])
         .unwrap()];
 
-        let polygon_source = MockFeatureCollectionSource::single(polygons.clone()).boxed();
+        let polygon_source = MockFeatureCollectionSource::single(polygons.clone()).typed();
 
         let target_spatial_reference =
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
 
         let exe_ctx = MockExecutionContext::test_default();
 
-        let initialized_operator = VectorOperator::boxed(Reprojection {
+        let initialized_operator = VectorOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference,
                 derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -1243,9 +1242,9 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
-        let initialized_operator = RasterOperator::boxed(Reprojection {
+        let initialized_operator = RasterOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: projection, // This test will do a identity reprojection
                 derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -1296,14 +1295,14 @@ mod tests {
         let gdal_op = GdalSource {
             params: GdalSourceParameters::new(id.clone()),
         }
-        .boxed();
+        .typed();
 
         let projection = SpatialReference::new(
             geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
             3857,
         );
 
-        let initialized_operator = RasterOperator::boxed(Reprojection {
+        let initialized_operator = RasterOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: projection,
                 derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -1514,9 +1513,9 @@ mod tests {
         let gdal_op = GdalSource {
             params: GdalSourceParameters::new(name),
         }
-        .boxed();
+        .typed();
 
-        let initialized_operator = RasterOperator::boxed(Reprojection {
+        let initialized_operator = RasterOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
                 derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
@@ -1622,9 +1621,9 @@ mod tests {
         let gdal_op = GdalSource {
             params: GdalSourceParameters::new(name),
         }
-        .boxed();
+        .typed();
 
-        let initialized_operator = RasterOperator::boxed(Reprojection {
+        let initialized_operator = RasterOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
                 derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -1684,9 +1683,9 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
-        let initialized_operator = VectorOperator::boxed(Reprojection {
+        let initialized_operator = VectorOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -1766,9 +1765,9 @@ mod tests {
             ],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
         )
-        .boxed();
+        .typed();
 
-        let initialized_operator = VectorOperator::boxed(Reprojection {
+        let initialized_operator = VectorOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -1850,9 +1849,9 @@ mod tests {
             ],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
         )
-        .boxed();
+        .typed();
 
-        let initialized_operator = VectorOperator::boxed(Reprojection {
+        let initialized_operator = VectorOperator::typed(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,

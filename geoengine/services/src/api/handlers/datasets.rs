@@ -2015,7 +2015,7 @@ mod tests {
                 attribute_filters: None,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
         .await
         .map_err(Into::into)
@@ -4144,7 +4144,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4242,7 +4242,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4349,7 +4349,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4482,7 +4482,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4713,7 +4713,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -4941,7 +4941,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -5039,7 +5039,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -5655,7 +5655,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
@@ -5749,7 +5749,7 @@ mod tests {
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
-            .boxed()
+            .typed()
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 

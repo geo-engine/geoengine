@@ -2,8 +2,8 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
     PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    WorkflowOperatorPath,
+    TypedPlotOperator, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::error::Error;
@@ -84,7 +84,6 @@ pub enum HistogramBounds {
     // TODO: use bounds in measurement if they are available
 }
 
-#[typetag::serde]
 #[async_trait]
 impl PlotOperator for Histogram {
     async fn _initialize(
@@ -247,7 +246,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(Histogram {
             params: self.params.clone(),
             sources: SingleRasterOrVectorSource {
@@ -257,7 +256,7 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
                 )?),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -290,14 +289,14 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+    ) -> Result<TypedPlotOperator, OptimizationError> {
         Ok(Histogram {
             params: self.params.clone(),
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -714,7 +713,7 @@ mod tests {
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterOperator,
         RasterResultDescriptor, SpatialGridDescriptor, StaticMetaData, TimeDescriptor,
-        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        TypedRasterOperator, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -753,7 +752,7 @@ mod tests {
                 interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         };
 
@@ -801,7 +800,7 @@ mod tests {
                 interactive: false,
             },
             sources: MockFeatureCollectionSource::<MultiPoint>::multiple(vec![])
-                .boxed()
+                .typed()
                 .into(),
         };
 
@@ -849,14 +848,14 @@ mod tests {
 
         assert!(
             histogram
-                .boxed()
+                .typed()
                 .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
                 .await
                 .is_err()
         );
     }
 
-    fn mock_raster_source() -> Box<dyn RasterOperator> {
+    fn mock_raster_source() -> TypedRasterOperator {
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -884,7 +883,7 @@ mod tests {
                 },
             },
         }
-        .boxed()
+        .typed()
     }
 
     #[tokio::test]
@@ -906,7 +905,7 @@ mod tests {
         };
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -959,7 +958,7 @@ mod tests {
         };
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1033,7 +1032,7 @@ mod tests {
             };
 
             let query_processor = histogram
-                .boxed()
+                .typed()
                 .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
                 .await
                 .unwrap()
@@ -1073,7 +1072,7 @@ mod tests {
             )
             .unwrap(),
         ])
-        .boxed();
+        .typed();
 
         let histogram = Histogram {
             params: HistogramParams {
@@ -1088,7 +1087,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1140,7 +1139,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let histogram = Histogram {
             params: HistogramParams {
@@ -1157,7 +1156,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1301,7 +1300,7 @@ mod tests {
         );
 
         if let Err(Error::InvalidOperatorSpec { reason }) = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
         {
@@ -1351,12 +1350,12 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1397,7 +1396,7 @@ mod tests {
             )
             .unwrap(),
         )
-        .boxed();
+        .typed();
 
         let histogram = Histogram {
             params: HistogramParams {
@@ -1414,7 +1413,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1463,7 +1462,7 @@ mod tests {
             .into_iter()
             .collect(),
         )
-        .boxed();
+        .typed();
 
         let histogram = Histogram {
             params: HistogramParams {
@@ -1480,7 +1479,7 @@ mod tests {
         let execution_context = MockExecutionContext::test_default();
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()
@@ -1558,12 +1557,12 @@ mod tests {
                     result_descriptor,
                 },
             }
-            .boxed()
+            .typed()
             .into(),
         };
 
         let query_processor = histogram
-            .boxed()
+            .typed()
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
             .await
             .unwrap()

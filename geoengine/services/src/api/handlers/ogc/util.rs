@@ -222,7 +222,7 @@ pub fn processing_graph_with_reprojection(
                         ),
                     },
                 }
-                .boxed(),
+                .typed(),
             )
         }
         geoengine_operators::engine::TypedOperator::Vector(_) => {
@@ -266,7 +266,7 @@ pub fn processing_graph_with_resampling(
                         raster: operator.clone(),
                     },
                 }
-                .boxed(),
+                .typed(),
             )
         }
         geoengine_operators::engine::TypedOperator::Vector(_) => {

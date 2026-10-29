@@ -1,7 +1,8 @@
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, OperatorData,
     OperatorName, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    SingleRasterSource, SourceOperator, TypedRasterOperator, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
@@ -284,32 +285,10 @@ impl<T: Pixel> OperatorData for MockRasterSource<T> {
     fn data_names_collect(&self, _data_names: &mut Vec<NamedData>) {}
 }
 
-/// Implement a mock raster source with typetag for a specific generic type
-///
-/// TODO: use single implementation once
-///      "deserialization of generic impls is not supported yet; use `#[typetag::serialize]` to generate serialization only"
-///      is solved
+/// Implement a mock raster source for a specific pixel type.
+/// Each pixel type has its own variant in [`crate::engine::TypedRasterOperator`].
 ///
 /// TODO: implementation is done with `paste!`, but we can use `core::concat_idents` once its stable
-///
-/// ```ignore
-/// #[typetag::serde]
-/// #[async_trait]
-/// impl<T: Pixel> RasterOperator for MockRasterSource<T> {
-///     async fn initialize(
-///         self: Box<Self>,
-///         _path: WorkflowOperatorPath,
-///         _context: &dyn crate::engine::ExecutionContext,
-///     ) -> Result<Box<dyn InitializedRasterOperator>> {
-///         Ok(InitializedMockRasterSource {
-///             result_descriptor: self.params.result_descriptor,
-///             data: self.params.data,
-///         }
-///         .boxed())
-///     }
-/// }
-/// ```
-///
 macro_rules! impl_mock_raster_source {
     ($pixel_type:ty) => {
         paste::paste! {
@@ -323,7 +302,6 @@ macro_rules! impl_mock_raster_source {
     ($pixel_type:ty, $newtype:ident) => {
         type $newtype = MockRasterSource<$pixel_type>;
 
-        #[typetag::serde]
         #[async_trait]
         impl RasterOperator for $newtype {
             async fn _initialize(
@@ -389,7 +367,7 @@ pub struct InitializedMockRasterSource<T: Pixel> {
 impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T>
 where
     TypedRasterQueryProcessor: From<BoxRasterQueryProcessor<T>>,
-    SourceOperator<MockRasterSourceParams<T>>: RasterOperator,
+    SourceOperator<MockRasterSourceParams<T>>: RasterOperator + Into<TypedRasterOperator>,
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
@@ -423,7 +401,7 @@ where
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
         let source = MockRasterSource {
@@ -432,7 +410,7 @@ where
                 result_descriptor: self.result_descriptor.clone(),
             },
         }
-        .boxed();
+        .typed();
 
         if target_resolution > self.result_descriptor.spatial_grid.spatial_resolution() {
             return Ok(Downsampling {
@@ -443,7 +421,7 @@ where
                 },
                 sources: SingleRasterSource { raster: source },
             }
-            .boxed());
+            .typed());
         }
 
         Ok(source)
@@ -501,7 +479,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let serialized = serde_json::to_value(&mrs).unwrap();
 
@@ -580,7 +558,7 @@ mod tests {
         });
         assert_eq!(serialized, spec);
 
-        let deserialized: Box<dyn RasterOperator> = serde_json::from_value(serialized).unwrap();
+        let deserialized: TypedRasterOperator = serde_json::from_value(serialized).unwrap();
 
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
@@ -667,7 +645,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
@@ -795,7 +773,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
