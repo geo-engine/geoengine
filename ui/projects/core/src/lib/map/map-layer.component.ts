@@ -597,6 +597,8 @@ export class OlOgcApiMapTileLayerComponent
                 const grid = source.getTileGrid();
                 if (abortSignal.aborted || !grid) return;
                 const index = params.minTileMatrixIndex;
+                // Deliberately use the matrix resolution as an exclusive cutoff. This can require
+                // one extra view zoom level; do not widen it to the nearest-matrix midpoint.
                 this.sourceMaxResolution.set(index === 0 ? Infinity : (grid.getResolution(index) ?? 0));
             });
 
