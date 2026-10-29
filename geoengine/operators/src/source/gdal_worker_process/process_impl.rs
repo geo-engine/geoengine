@@ -341,6 +341,14 @@ impl GdalDatasetHolder {
     pub fn contains(&self, params: &GdalDatasetParameters) -> bool {
         Self::is_hit(self.params.as_ref(), params)
     }
+
+    /// Close the retained dataset before clearing GDAL's process-wide remote file caches.
+    pub fn clear_caches(&mut self) {
+        // Closing the dataset releases raster blocks and per-file VSI caches.
+        drop(self.clear());
+        // SAFETY: this worker processes commands sequentially, with no open dataset remaining.
+        unsafe { gdal_sys::VSICurlClearCache() };
+    }
 }
 
 pub struct GdalHandling;
@@ -726,7 +734,7 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
             IpcChannelMessage, IpcChannelMessagePayload, IpcProcessGdalErrorKind,
-            IpcProcessRasterResult,
+            IpcProcessRasterResult, WorkerRequest, WorkerResponse,
         },
     };
     use super::*;
@@ -1016,22 +1024,20 @@ mod tests {
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
 
-        let (_child_guard, sender, receiver) = spawn_ipc_server_process::<
-            IpcChannelMessage,
-            IpcProcessRasterResult,
-        >(&WorkerConfig::default())
-        .unwrap();
+        let (_child_guard, sender, receiver) =
+            spawn_ipc_server_process::<WorkerRequest, WorkerResponse>(&WorkerConfig::default())
+                .unwrap();
 
-        sender.send(msg).unwrap();
+        sender.send(WorkerRequest::Read(Box::new(msg))).unwrap();
         let rx_result = receiver
             .recv()
             .inspect_err(|e| panic!("IPC receive: {e:?}"))
             .unwrap();
 
-        let payload = match rx_result {
-            Ok(r) => r,
-            Err(e) => panic!("Error receiving from IPC process: {e:?}"),
+        let WorkerResponse::Raster(result) = rx_result else {
+            panic!("Expected raster response");
         };
+        let payload = result.unwrap();
 
         let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
 

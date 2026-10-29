@@ -24,7 +24,7 @@ pub enum ClearHandlerError {
 }
 
 
-/// Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for GDAL reads to finish and replacement workers to start before returning. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
+/// Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for every GDAL worker to close its dataset and clear its remote file caches. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
 pub async fn clear_handler(configuration: &configuration::Configuration, ) -> Result<(), Error<ClearHandlerError>> {
 
     let uri_str = format!("{}/cache/clear", configuration.base_path);

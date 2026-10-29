@@ -14,7 +14,10 @@ use crate::source::gdal_worker_process::process_common::GdalIpcBytePayload;
 
 use super::{
     GdalProcessPoolAccess,
-    process_common::{GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult},
+    process_common::{
+        GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult, WorkerRequest,
+        WorkerResponse,
+    },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
 
@@ -102,6 +105,11 @@ pub enum SchedulingStrategy {
     GlobalMatrix,
 }
 
+enum WorkerCommand {
+    Read(Box<WorkerJob>),
+    ClearCaches(oneshot::Sender<Result<(), GdalProcessPoolError>>),
+}
+
 struct WorkerJob {
     request: IpcChannelMessage,
     respond_to: oneshot::Sender<ReadResult>,
@@ -157,7 +165,7 @@ impl WorkerAffinity {
 
 struct WorkerProcess {
     _id: usize,
-    job_tx: mpsc::UnboundedSender<WorkerJob>,
+    job_tx: mpsc::UnboundedSender<WorkerCommand>,
     child_guard: ChildProcessGuard,
     // A single, unified state representing what the GDAL process last worked on.
     affinity: Option<WorkerAffinity>,
@@ -232,7 +240,7 @@ enum BrokerCommand {
     WorkerReplaced {
         worker_id: usize,
         child_guard: ChildProcessGuard,
-        job_tx: mpsc::UnboundedSender<WorkerJob>,
+        job_tx: mpsc::UnboundedSender<WorkerCommand>,
     },
 }
 
@@ -249,8 +257,8 @@ pub struct GdalProcessPool {
 }
 
 impl GdalProcessPool {
-    /// Drain scheduled reads and replace every worker to discard GDAL's process-local caches.
-    /// Returns only once replacement workers are ready. Concurrent queries may refill caches.
+    /// Ask every worker to close its dataset and clear remote file caches.
+    /// Returns after every worker acknowledges clearance. Concurrent queries may refill caches.
     pub async fn clear_caches(&self) -> Result<(), GdalProcessPoolError> {
         let (tx, rx) = oneshot::channel();
         self.broker_tx
@@ -401,15 +409,14 @@ impl GdalProcessPool {
         (
             ChildProcessGuard,
             std::thread::JoinHandle<()>,
-            mpsc::UnboundedSender<WorkerJob>,
+            mpsc::UnboundedSender<WorkerCommand>,
         ),
         GdalProcessPoolError,
     > {
         let mut config = worker_config.clone();
         config.logging.worker_id = worker_id;
 
-        let (guard, tx, rx) =
-            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>(&config)?;
+        let (guard, tx, rx) = spawn_ipc_server_process::<WorkerRequest, WorkerResponse>(&config)?;
 
         let (job_tx, mut job_rx) = mpsc::unbounded_channel();
 
@@ -425,12 +432,27 @@ impl GdalProcessPool {
 
     fn worker_companion_loop(
         worker_id: usize,
-        sender: &IpcSender<IpcChannelMessage>,
-        receiver: &IpcReceiver<IpcProcessRasterResult>,
-        job_rx: &mut mpsc::UnboundedReceiver<WorkerJob>,
+        sender: &IpcSender<WorkerRequest>,
+        receiver: &IpcReceiver<WorkerResponse>,
+        job_rx: &mut mpsc::UnboundedReceiver<WorkerCommand>,
         broker_tx: &mpsc::Sender<BrokerCommand>,
     ) {
-        while let Some(job) = job_rx.blocking_recv() {
+        while let Some(command) = job_rx.blocking_recv() {
+            let job = match command {
+                WorkerCommand::Read(job) => job,
+                WorkerCommand::ClearCaches(reply) => {
+                    let result = sender
+                        .send(WorkerRequest::ClearCaches)
+                        .map_err(GdalProcessPoolError::from)
+                        .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
+                        .and_then(|response| match response {
+                            WorkerResponse::CachesCleared => Ok(()),
+                            WorkerResponse::Raster(_) => Err(GdalProcessPoolError::WorkerPanic),
+                        });
+                    let _ = reply.send(result);
+                    continue;
+                }
+            };
             let window = job.request.0.read_advise.read_window_bounds;
             let band = job.request.0.dataset_params.rasterband_channel;
             let dataset_hash = job.dataset_hash;
@@ -447,9 +469,13 @@ impl GdalProcessPool {
             let companion_span = Some(tracing::Span::current());
 
             let res = sender
-                .send(job.request)
+                .send(WorkerRequest::Read(Box::new(job.request)))
                 .map_err(GdalProcessPoolError::from)
-                .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from));
+                .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
+                .and_then(|response| match response {
+                    WorkerResponse::Raster(result) => Ok(result),
+                    WorkerResponse::CachesCleared => Err(GdalProcessPoolError::WorkerPanic),
+                });
 
             let is_dead = res.is_err();
             let _ = job.respond_to.send(ReadResult {
@@ -488,7 +514,6 @@ impl GdalProcessPool {
             max_active_processes,
             Self::STRATEGY,
         );
-        let mut pending_clears = Vec::new();
 
         while let Some(first_cmd) = rx.recv().await {
             let start_tick = Instant::now();
@@ -503,7 +528,27 @@ impl GdalProcessPool {
 
             for cmd in batch {
                 match cmd {
-                    BrokerCommand::ClearCaches(reply) => pending_clears.push(reply),
+                    BrokerCommand::ClearCaches(reply) => {
+                        let mut acknowledgements = Vec::with_capacity(state.workers.len());
+                        for worker in &mut state.workers {
+                            let (tx, rx) = oneshot::channel();
+                            // Each companion queues this after its current read and before later reads.
+                            let _ = worker.job_tx.send(WorkerCommand::ClearCaches(tx));
+                            worker.affinity = None;
+                            acknowledgements.push(rx);
+                        }
+                        tokio::spawn(async move {
+                            let mut result = Ok(());
+                            for ack in acknowledgements {
+                                if let Err(error) =
+                                    ack.await.unwrap_or(Err(GdalProcessPoolError::WorkerPanic))
+                                {
+                                    result = Err(error);
+                                }
+                            }
+                            let _ = reply.send(result);
+                        });
+                    }
                     BrokerCommand::Read(req) => {
                         state.enqueue_request(req);
                     }
@@ -580,63 +625,6 @@ impl GdalProcessPool {
             }
 
             state.try_dispatch();
-
-            if !pending_clears.is_empty()
-                && state.global_active_count == 0
-                && state.idle_workers.len() == state.workers.len()
-                && state
-                    .dataset_registry
-                    .values()
-                    .all(|slot| slot.queue.is_empty())
-            {
-                let count = state.workers.len();
-                let tx = broker_tx.clone();
-                let config = worker_config.clone();
-                // Build the complete replacement first, preserving the existing pool on failure.
-                let replacements = tokio::task::spawn_blocking(move || {
-                    (0..count)
-                        .map(|id| {
-                            let (child_guard, _handle, job_tx) =
-                                Self::create_worker_with_id(id, tx.clone(), &config)?;
-                            Ok(WorkerProcess {
-                                _id: id,
-                                child_guard,
-                                job_tx,
-                                affinity: None,
-                            })
-                        })
-                        .collect::<Result<Vec<_>, GdalProcessPoolError>>()
-                })
-                .await
-                .map_err(|_| GdalProcessPoolError::WorkerPanic)
-                .and_then(|result| result);
-                match replacements {
-                    Ok(workers) => {
-                        let previous = std::mem::replace(&mut state.workers, workers);
-                        // Child guards kill and wait for each process on drop.
-                        let shutdown = tokio::task::spawn_blocking(move || drop(previous)).await;
-                        state.dataset_registry.clear();
-                        state.active_datasets.clear();
-                        for reply in pending_clears.drain(..) {
-                            let _ = reply.send(
-                                shutdown
-                                    .as_ref()
-                                    .copied()
-                                    .map_err(|_| GdalProcessPoolError::WorkerPanic),
-                            );
-                        }
-                    }
-                    Err(error) => {
-                        tracing::error!(
-                            ?error,
-                            "Failed to replace GDAL workers while clearing caches"
-                        );
-                        for reply in pending_clears.drain(..) {
-                            let _ = reply.send(Err(error.clone()));
-                        }
-                    }
-                }
-            }
 
             let elapsed = start_tick.elapsed();
             if elapsed > THROTTLING_THRESHOLD_DURATION {
@@ -854,11 +842,11 @@ impl BrokerState {
                 )
                 .entered();
 
-                let _ = worker.job_tx.send(WorkerJob {
+                let _ = worker.job_tx.send(WorkerCommand::Read(Box::new(WorkerJob {
                     request: req.request,
                     respond_to: req.respond_to,
                     dataset_hash: req.dataset_hash,
-                });
+                })));
             }
 
             slot.clean_canceled_front();
@@ -1177,9 +1165,16 @@ mod tests {
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
 
+    fn read_job(command: WorkerCommand) -> WorkerJob {
+        match command {
+            WorkerCommand::Read(job) => *job,
+            WorkerCommand::ClearCaches(_) => panic!("Expected read command"),
+        }
+    }
+
     /// Spawns an immediately-exited process wrapped in `ChildProcessGuard`.
     /// The `mpsc::unbounded_channel()` receiver captures dispatched `WorkerJob`s.
-    fn dummy_worker(id: usize) -> (WorkerProcess, mpsc::UnboundedReceiver<WorkerJob>) {
+    fn dummy_worker(id: usize) -> (WorkerProcess, mpsc::UnboundedReceiver<WorkerCommand>) {
         let child = std::process::Command::new("true")
             .spawn()
             .expect("failed to spawn dummy process");
@@ -1215,7 +1210,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_clears_open_datasets_and_reads_with_ready_workers() {
+    async fn it_clears_open_datasets_without_restarting_workers() {
         use crate::source::gdal_worker_process::process_common::GdalDataGridVariant;
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("data.tif");
@@ -1264,7 +1259,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_waits_for_reads_before_replacing_all_workers() {
+    async fn it_sends_clear_to_every_worker_and_waits_for_acknowledgements() {
         let (worker0, mut jobs0) = dummy_worker(0);
         let (worker1, mut jobs1) = dummy_worker(1);
         let (tx, rx) = mpsc::channel(16);
@@ -1278,30 +1273,90 @@ mod tests {
         ));
         let (request, _response) = make_request(0, 1, window([0, 0], [255, 255]));
         tx.send(BrokerCommand::Read(request)).await.unwrap();
-        let job = jobs0.recv().await.unwrap();
+        let _active_read = read_job(jobs0.recv().await.unwrap());
         let (reply, mut cleared) = oneshot::channel();
         tx.send(BrokerCommand::ClearCaches(reply)).await.unwrap();
-        assert!(
-            tokio::time::timeout(Duration::from_millis(50), &mut cleared)
-                .await
-                .is_err()
-        );
-        tx.send(BrokerCommand::ReturnWorker {
-            worker_id: 0,
-            dataset_hash: job.dataset_hash,
-            band: 1,
-            window: window([0, 0], [255, 255]),
-        })
-        .await
-        .unwrap();
-        tokio::time::timeout(Duration::from_secs(10), cleared)
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        assert!(jobs0.recv().await.is_none());
-        assert!(jobs1.recv().await.is_none());
+        let WorkerCommand::ClearCaches(ack0) = jobs0.recv().await.unwrap() else {
+            panic!("Expected clearance after active read");
+        };
+        let WorkerCommand::ClearCaches(ack1) = jobs1.recv().await.unwrap() else {
+            panic!("Expected clearance for idle worker");
+        };
+        ack0.send(Ok(())).unwrap();
+        assert!(matches!(
+            cleared.try_recv(),
+            Err(oneshot::error::TryRecvError::Empty)
+        ));
+        ack1.send(Ok(())).unwrap();
+        cleared.await.unwrap().unwrap();
+        // Both existing companion channels remain open; no workers were replaced.
+        assert!(matches!(
+            jobs0.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+        assert!(matches!(
+            jobs1.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
         broker.abort();
+    }
+
+    #[tokio::test]
+    async fn it_clears_remote_file_caches_without_restarting_workers() {
+        use httptest::{Expectation, Server, matchers::request, responders::status_code};
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("data.tif");
+        {
+            let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+            let mut dataset = driver
+                .create_with_band_type::<u8, _>(&path, 1, 1, 1)
+                .unwrap();
+            dataset
+                .set_geo_transform(&[0., 1., 0., 0., 0., -1.])
+                .unwrap();
+            dataset.rasterband(1).unwrap().fill(1., None).unwrap();
+            dataset.flush_cache().unwrap();
+        }
+        let bytes = std::fs::read(path).unwrap();
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("HEAD", "/data.tif"))
+                .times(2)
+                .respond_with(
+                    status_code(200).insert_header("Content-Length", bytes.len().to_string()),
+                ),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/data.tif"))
+                .times(2)
+                .respond_with(status_code(200).body(bytes)),
+        );
+        let pool = GdalProcessPool::new(1, 1, 1, WorkerConfig::default());
+        for iteration in 0..3 {
+            if iteration == 2 {
+                pool.clear_caches().await.unwrap();
+            }
+            let (mut request, response) = make_request(0, 1, window([0, 0], [0, 0]));
+            let params = &mut request.request.0.dataset_params;
+            params.file_path = server.url_str("/data.tif").into();
+            params.width = 1;
+            params.height = 1;
+            params.no_data_value = None;
+            params.gdal_config_options = Some(vec![
+                ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
+                ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".into(), ".tif".into()),
+            ]);
+            request.request.0.read_advise.gdal_read_widow =
+                GdalReadWindow::new([0, 0].into(), [1, 1].into());
+            pool.broker_tx
+                .send(BrokerCommand::Read(request))
+                .await
+                .unwrap();
+            let bytes = response.await.unwrap().result.unwrap().unwrap();
+            let payload: GdalIpcPayload<u8> = (&bytes).try_into().unwrap();
+            assert!(matches!(payload.data_variant,
+                super::super::process_common::GdalDataGridVariant::AllValid { data } if data == vec![1]));
+        }
     }
 
     fn make_request(
@@ -1349,7 +1404,7 @@ mod tests {
         assert_eq!(state.global_active_count, 1);
         assert!(state.idle_workers.len() < 2);
 
-        let job = rx0.try_recv().expect("worker 0 should have received a job");
+        let job = read_job(rx0.try_recv().expect("worker 0 should have received a job"));
         assert_eq!(job.dataset_hash, 100);
     }
 
@@ -1362,7 +1417,7 @@ mod tests {
 
         state.enqueue_request(req);
         state.try_dispatch();
-        let job = rx0.try_recv().unwrap();
+        let job = read_job(rx0.try_recv().unwrap());
 
         assert_eq!(state.idle_workers.len(), 0);
         assert_eq!(state.global_active_count, 1);
@@ -1389,12 +1444,12 @@ mod tests {
         state.enqueue_request(req_b);
 
         state.try_dispatch();
-        let first = rx0.try_recv().unwrap().dataset_hash;
+        let first = read_job(rx0.try_recv().unwrap()).dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
         state.release_worker(0, first, 1, window([0, 0], [255, 255]));
         state.try_dispatch();
-        let second = rx0.try_recv().unwrap().dataset_hash;
+        let second = read_job(rx0.try_recv().unwrap()).dataset_hash;
 
         assert_ne!(first, second);
         assert_eq!(state.global_active_count, 1);
@@ -1415,9 +1470,10 @@ mod tests {
         state.enqueue_request(req);
         state.try_dispatch();
 
-        let job = rx0
-            .try_recv()
-            .expect("worker 0 should have received the job (affinity match)");
+        let job = read_job(
+            rx0.try_recv()
+                .expect("worker 0 should have received the job (affinity match)"),
+        );
         assert_eq!(job.dataset_hash, 100);
     }
 

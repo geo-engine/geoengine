@@ -79,6 +79,20 @@ pub struct IpcChannelMessagePayload {
 
 pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
 
+/// Commands executed sequentially by each GDAL worker.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum WorkerRequest {
+    Read(Box<IpcChannelMessage>),
+    ClearCaches,
+}
+
+/// Acknowledgement or raster result returned by a GDAL worker.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum WorkerResponse {
+    Raster(IpcProcessRasterResult),
+    CachesCleared,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GdalIpcBytePayload {
     pub dimensions: GridBoundingBox2D,

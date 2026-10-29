@@ -54,7 +54,7 @@ export class CacheApi extends runtime.BaseAPI {
     }
 
     /**
-     * Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for GDAL reads to finish and replacement workers to start before returning. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive\'s persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
+     * Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for every GDAL worker to close its dataset and clear its remote file caches. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive\'s persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
      * Clear operator results, STAC query metadata and GDAL worker caches.
      */
     async clearHandlerRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
@@ -65,7 +65,7 @@ export class CacheApi extends runtime.BaseAPI {
     }
 
     /**
-     * Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for GDAL reads to finish and replacement workers to start before returning. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive\'s persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
+     * Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for every GDAL worker to close its dataset and clear its remote file caches. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive\'s persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
      * Clear operator results, STAC query metadata and GDAL worker caches.
      */
     async clearHandler(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {

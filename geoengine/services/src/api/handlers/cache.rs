@@ -14,7 +14,7 @@ where
 /// Clear operator results, STAC query metadata and GDAL worker caches.
 ///
 /// Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes.
-/// Waits for GDAL reads to finish and replacement workers to start before returning.
+/// Waits for every GDAL worker to close its dataset and clear its remote file caches.
 /// Run without concurrent queries for comparable fresh-access measurements: concurrent work
 /// can repopulate caches during clearance. Does not clear Wildlive's persistent database cache,
 /// operating-system caches, or caches in clients, proxies and upstream services.
@@ -23,7 +23,7 @@ where
     post,
     path = "/cache/clear",
     responses(
-        (status = 204, description = "Caches cleared; GDAL workers are ready."),
+        (status = 204, description = "Caches cleared; all GDAL workers have acknowledged clearance."),
         (status = 401, response = UnauthorizedAdminResponse),
         (status = 500, description = "Cache clearance failed; some caches may already have been cleared.")
     ),

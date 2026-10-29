@@ -52,7 +52,7 @@ class CacheApi:
     ) -> None:
         """Clear operator results, STAC query metadata and GDAL worker caches.
 
-        Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for GDAL reads to finish and replacement workers to start before returning. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
+        Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for every GDAL worker to close its dataset and clear its remote file caches. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
 
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -117,7 +117,7 @@ class CacheApi:
     ) -> ApiResponse[None]:
         """Clear operator results, STAC query metadata and GDAL worker caches.
 
-        Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for GDAL reads to finish and replacement workers to start before returning. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
+        Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for every GDAL worker to close its dataset and clear its remote file caches. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
 
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
@@ -182,7 +182,7 @@ class CacheApi:
     ) -> RESTResponseType:
         """Clear operator results, STAC query metadata and GDAL worker caches.
 
-        Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for GDAL reads to finish and replacement workers to start before returning. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
+        Requires an administrator. Caching remains enabled, with unchanged capacities and lifetimes. Waits for every GDAL worker to close its dataset and clear its remote file caches. Run without concurrent queries for comparable fresh-access measurements: concurrent work can repopulate caches during clearance. Does not clear Wildlive's persistent database cache, operating-system caches, or caches in clients, proxies and upstream services.
 
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request

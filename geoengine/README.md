@@ -37,21 +37,6 @@ Cf. [Settings-default.toml](Settings-default.toml) for all available configurati
 The OpenAPI specification for the public API is available at the repository
 root: [openapi.json](../openapi.json).
 
-## Measuring fresh dataset access
-
-Administrators can send `POST /api/cache/clear` with their session bearer token
-between measured queries. The endpoint returns `204 No Content` after clearing
-both operator result caches and cached STAC query results, and replacing all GDAL
-workers. Replacement workers are ready before the response is returned. Cache
-configuration is preserved, so tiles can still be reused within the next query.
-
-Complete the previous query before clearing and run without concurrent queries,
-which could repopulate caches during clearance. Time the dataset query separately
-from the clearance request. Provider instances remain initialized. Wildlive's
-persistent database cache, operating-system caches and caches in clients, proxies
-or upstream services are outside this endpoint's scope. Benchmark clients must
-bypass HTTP response caching.
-
 ## Development Notes
 
 - Use `RUST_LOG` to control runtime logging verbosity (e.g. `RUST_LOG=debug`).
