@@ -149,29 +149,69 @@ where
     }
 }
 
-/// Runs `f` with this thread's projector from `from` to `to`, which is only created when the pair changes.
+/// Runs `f` with this thread's projector from `from` to `to`, which is only created when the
+/// thread has not used the pair recently.
 fn with_projector<R>(
     from: SpatialReference,
     to: SpatialReference,
     f: impl FnOnce(&DefaultCoordinateProjector) -> R,
 ) -> Result<R> {
+    /// Enough for chained reprojections and concurrent queries with a few CRS pairs.
+    const PROJECTORS_PER_THREAD: usize = 4;
+
     thread_local! {
-        static PROJECTOR: RefCell<Option<DefaultCoordinateProjector>> = const { RefCell::new(None) };
+        static PROJECTORS: RefCell<VecDeque<DefaultCoordinateProjector>> = const { RefCell::new(VecDeque::new()) };
     }
 
-    PROJECTOR.with_borrow_mut(|projector| {
-        if !projector
-            .as_ref()
-            .is_some_and(|p| p.source_srs() == from && p.target_srs() == to)
-        {
-            *projector = Some(DefaultCoordinateProjector::from_known_srs(from, to)?);
+    PROJECTORS.with_borrow_mut(|projectors| {
+        let position = projectors
+            .iter()
+            .position(|p| p.source_srs() == from && p.target_srs() == to);
+        let projector = match position {
+            Some(position) => projectors.remove(position).expect("the position exists"),
+            None => DefaultCoordinateProjector::from_known_srs(from, to)?,
+        };
+        if projectors.len() == PROJECTORS_PER_THREAD {
+            projectors.pop_back();
         }
-        Ok(f(projector.as_ref().expect("the projector was set above")))
+        // the most recently used projector comes first
+        projectors.push_front(projector);
+        Ok(f(projectors
+            .front()
+            .expect("the projector was pushed above")))
     })
 }
 
 /// Marks an output pixel without a source pixel.
 const NO_PIXEL: [i32; 2] = [i32::MIN, i32::MIN];
+
+/// The global pixel index `[y, x]` of `coordinate` in `geo_transform`, or [`NO_PIXEL`].
+fn input_pixel_index(geo_transform: &GeoTransform, coordinate: Coordinate2D) -> [i32; 2] {
+    // a failed projection may return non-finite coordinates instead of an error
+    if !(coordinate.x.is_finite() && coordinate.y.is_finite()) {
+        return NO_PIXEL;
+    }
+    let [y, x] = geo_transform.coordinate_to_grid_idx_2d(coordinate).0;
+    match (i32::try_from(y), i32::try_from(x)) {
+        (Ok(y), Ok(x)) => [y, x],
+        _ => NO_PIXEL,
+    }
+}
+
+/// The bounds of the indices of one output row, `None` if it has none.
+fn index_bounds_of_row(row: &[[i32; 2]]) -> Option<GridBoundingBox2D> {
+    let [min_y, min_x, max_y, max_x] =
+        row.iter()
+            .filter(|index| **index != NO_PIXEL)
+            .fold(None, |bounds, &[y, x]| {
+                let [min_y, min_x, max_y, max_x] = bounds.unwrap_or([y, x, y, x]);
+                Some([min_y.min(y), min_x.min(x), max_y.max(y), max_x.max(x)])
+            })?;
+    Some(GridBoundingBox2D::new_unchecked(
+        [min_y as isize, min_x as isize],
+        [max_y as isize, max_x as isize],
+    ))
+}
 
 /// The global input pixel index `[y, x]` of each output pixel of one tile.
 #[derive(Debug)]
@@ -252,17 +292,7 @@ fn input_pixel_indices_parallel(
     let [ul_y, ul_x] = tile_info.global_upper_left_pixel_idx().0;
     let valid_out_area = spec.valid_out_area.as_bbox();
 
-    let to_index = |c: Coordinate2D| -> [i32; 2] {
-        // a failed projection may return non-finite coordinates instead of an error
-        if !(c.x.is_finite() && c.y.is_finite()) {
-            return NO_PIXEL;
-        }
-        let [y, x] = spec.in_geo_transform.coordinate_to_grid_idx_2d(c).0;
-        match (i32::try_from(y), i32::try_from(x)) {
-            (Ok(y), Ok(x)) => [y, x],
-            _ => NO_PIXEL,
-        }
-    };
+    let to_index = |c: Coordinate2D| input_pixel_index(&spec.in_geo_transform, c);
 
     let mut indices = vec![NO_PIXEL; tile_info.tile_size_in_pixels.number_of_elements()];
 
@@ -320,20 +350,7 @@ fn input_pixel_indices_parallel(
             })
     })?;
 
-    let row_bounds = indices
-        .chunks(width)
-        .map(|row| {
-            row.iter()
-                .filter(|index| **index != NO_PIXEL)
-                .map(|&[y, x]| {
-                    GridBoundingBox2D::new_unchecked(
-                        [y as isize, x as isize],
-                        [y as isize, x as isize],
-                    )
-                })
-                .reduce(|a, b| a.extended(&b))
-        })
-        .collect();
+    let row_bounds = pool.install(|| indices.par_chunks(width).map(index_bounds_of_row).collect());
 
     tracing::trace!(
         "input_pixel_indices_parallel {:?}, parallelism: threads={} par_chunk_split={} par_chunk_size={} took {} (ns) ",
@@ -502,7 +519,7 @@ mod tests {
         primitives::{BandSelection, TimeStep},
         raster::{
             BoundedGrid, GeoTransform, Grid, GridBoundingBox2D, GridShape, GridShape2D,
-            RasterDataType, SpatialGridDefinition, TilingSpecification,
+            RasterDataType, SpatialGridDefinition, TilingSpecification, TilingStrategy,
         },
         util::test::{TestDefault, assert_eq_two_list_of_tiles_u8},
     };
@@ -847,5 +864,128 @@ mod tests {
         .await;
 
         assert_eq_two_list_of_tiles_u8(&data, &res, false);
+    }
+
+    #[test]
+    fn it_maps_unusable_coordinates_to_no_pixel() {
+        let geo_transform = GeoTransform::test_default();
+        let index = |x, y| input_pixel_index(&geo_transform, Coordinate2D::new(x, y));
+
+        assert_eq!(index(0.5, -0.5), [0, 0]);
+        assert_eq!(index(f64::NAN, 0.5), NO_PIXEL);
+        assert_eq!(index(0.5, f64::INFINITY), NO_PIXEL);
+        assert_eq!(index(1e300, 0.5), NO_PIXEL);
+    }
+
+    #[test]
+    fn it_bounds_the_indices_of_a_row() {
+        assert_eq!(index_bounds_of_row(&[NO_PIXEL, NO_PIXEL]), None);
+        assert_eq!(
+            index_bounds_of_row(&[[3, 7], NO_PIXEL, [1, 9], [2, 4]]),
+            Some(GridBoundingBox2D::new_unchecked([1, 4], [3, 9]))
+        );
+    }
+
+    /// An output tile whose pixels map into an input tile that the queried pixels alone do not touch.
+    #[tokio::test]
+    async fn it_computes_whole_tiles_for_partial_queries() {
+        let tile = |x: isize, values: Vec<u8>| RasterTile2D {
+            time: TimeInterval::new_unchecked(0, 5),
+            tile_position: [-1, x].into(),
+            band: 0,
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([2, 2].into(), values).unwrap().into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::no_cache(),
+        };
+        let data = vec![tile(0, vec![1, 2, 3, 4]), tile(1, vec![5, 6, 7, 8])];
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 2.), 1., -1.),
+                GridShape::new_2d(2, 4).bounding_box(),
+            )),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let tiling_spec = TilingSpecification::new(GridShape2D::new([2, 2]));
+        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
+
+        // the output grid is shifted by one pixel, so output column c reads input column c + 1
+        let out_geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(1., 0.), 1., -1.);
+        let out_spatial_grid = SpatialGridDefinition::new(
+            out_geo_transform,
+            GridBoundingBox2D::new([-2, 0], [-1, 2]).unwrap(),
+        );
+        let out_tiling_strat =
+            TilingStrategy::new(tiling_spec.tile_size_in_pixels, out_geo_transform);
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec);
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
+
+        let qp = MockRasterSource {
+            params: MockRasterSourceParams {
+                data,
+                result_descriptor,
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+
+        // only the first column of the output tile, which reads only from the first input tile
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 0]).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            BandSelection::first(),
+        );
+
+        let state_gen = TileReprojectionSubQuery {
+            in_srs: SpatialReference::epsg_4326(),
+            out_srs: SpatialReference::epsg_4326(),
+            fold_fn: fold_by_coordinate_lookup_future,
+            index_cache: Default::default(),
+            state: TileReprojectionSubqueryGridInfo {
+                in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+                out_spatial_grid,
+            },
+            _phantom_data: PhantomData,
+        };
+
+        let time_stream = qp
+            .time_query(query_rect.time_interval(), &query_ctx)
+            .await
+            .unwrap();
+
+        let res = RasterSubQueryAdapter::new(
+            &qp,
+            query_rect,
+            out_tiling_strat,
+            &query_ctx,
+            state_gen,
+            time_stream,
+        )
+        .map(Result::unwrap)
+        .collect::<Vec<_>>()
+        .await;
+
+        let expected = RasterTile2D {
+            time: TimeInterval::new_unchecked(0, 5),
+            tile_position: [-1, 0].into(),
+            band: 0,
+            global_geo_transform: out_geo_transform,
+            grid_array: Grid::new([2, 2].into(), vec![2, 5, 4, 7]).unwrap().into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::no_cache(),
+        };
+        assert_eq_two_list_of_tiles_u8(&[expected], &res, false);
     }
 }
