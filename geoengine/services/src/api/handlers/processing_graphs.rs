@@ -18,16 +18,19 @@ use crate::{
     },
     error::Result,
     layers::storage::LayerProviderDb,
+    processing_graphs::{
+        WebsocketStreamTask, handle_websocket_message,
+        processing_graph::{
+            ProcessingGraph as ServicesProcessingGraph,
+            ProcessingGraphId as ServicesProcessingGraphId,
+        },
+        registry::ProcessingGraphRegistry,
+        send_websocket_message,
+    },
     quota::ComputationId,
     util::{
         parsing::{parse_band_selection, parse_spatial_partition},
         workflows::validate_workflow,
-    },
-    workflows::{
-        WebsocketStreamTask, handle_websocket_message,
-        registry::WorkflowRegistry,
-        send_websocket_message,
-        workflow::{Workflow, WorkflowId},
     },
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
@@ -148,14 +151,14 @@ async fn register_processing_graph_handler<C: ApplicationContext>(
 ) -> Result<web::Json<IdResponse<ProcessingGraphId>>> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow: Workflow = processing_graph
+    let workflow: ServicesProcessingGraph = processing_graph
         .into_inner()
         .try_into()
         .context(crate::error::Api)?;
 
     validate_workflow(&workflow, &ctx.execution_context()?).await?;
 
-    let id: ProcessingGraphId = ctx.db().register_workflow(workflow).await?.into();
+    let id: ProcessingGraphId = ctx.db().register_processing_graph(workflow).await?.into();
     Ok(web::Json(IdResponse::from(id)))
 }
 
@@ -184,7 +187,7 @@ async fn load_processing_graph_handler<C: ApplicationContext>(
     let wf = app_ctx
         .session_context(session)
         .db()
-        .load_workflow(&id.into_inner().into())
+        .load_processing_graph(&id.into_inner().into())
         .await?;
     let processing_graph = ProcessingGraph::try_from(&wf).context(crate::error::Api)?;
     Ok(web::Json(processing_graph))
@@ -214,7 +217,10 @@ async fn get_processing_graph_metadata_handler<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&id.into_inner().into()).await?;
+    let workflow = ctx
+        .db()
+        .load_processing_graph(&id.into_inner().into())
+        .await?;
 
     let execution_context = ctx.execution_context()?;
 
@@ -225,7 +231,7 @@ async fn get_processing_graph_metadata_handler<C: ApplicationContext>(
 }
 
 pub(crate) async fn workflow_metadata<C: SessionContext>(
-    workflow: Workflow,
+    workflow: ServicesProcessingGraph,
     execution_context: C::ExecutionContext,
 ) -> Result<crate::api::model::operators::TypedResultDescriptor> {
     // TODO: use cache here
@@ -270,7 +276,10 @@ async fn get_processing_graph_provenance_handler<C: ApplicationContext>(
 ) -> Result<impl Responder> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow: Workflow = ctx.db().load_workflow(&id.into_inner().into()).await?;
+    let workflow: ServicesProcessingGraph = ctx
+        .db()
+        .load_processing_graph(&id.into_inner().into())
+        .await?;
 
     let provenance = workflow_provenance(&workflow, &ctx).await?;
 
@@ -293,7 +302,7 @@ impl ProvenanceEntry {
 }
 
 pub(crate) async fn workflow_provenance<C: SessionContext>(
-    workflow: &Workflow,
+    workflow: &ServicesProcessingGraph,
     ctx: &C,
 ) -> Result<Vec<ProvenanceEntry>> {
     let db = ctx.db();
@@ -363,7 +372,7 @@ async fn get_processing_graph_all_metadata_zip_handler<C: ApplicationContext>(
 
     let id = id.into_inner();
 
-    let workflow = ctx.db().load_workflow(&id.into()).await?;
+    let workflow = ctx.db().load_processing_graph(&id.into()).await?;
 
     let (metadata, provenance) = futures::try_join!(
         workflow_metadata::<C::SessionContext>(workflow.clone(), ctx.execution_context()?),
@@ -555,8 +564,8 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow_id: WorkflowId = id.into_inner().into();
-    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+    let workflow_id: ServicesProcessingGraphId = id.into_inner().into();
+    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
 
     let operator = workflow
         .operator
@@ -681,8 +690,8 @@ async fn vector_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow_id: WorkflowId = id.into_inner().into();
-    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+    let workflow_id: ServicesProcessingGraphId = id.into_inner().into();
+    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
 
     let operator = workflow
         .operator
@@ -781,6 +790,7 @@ mod tests {
         contexts::{PostgresContext, Session},
         datasets::{DatasetName, RasterDatasetFromWorkflowResult, storage::DatasetStore},
         ge_context,
+        processing_graphs::registry::ProcessingGraphRegistry,
         tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
         users::UserAuth,
         util::{
@@ -791,7 +801,6 @@ mod tests {
             },
             websocket_tests,
         },
-        workflows::registry::WorkflowRegistry,
     };
     use actix_web::{
         dev::ServiceResponse,
@@ -833,7 +842,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: crate::api::model::processing_graphs::MockPointSourceParameters {
@@ -880,7 +889,7 @@ mod tests {
 
     #[ge_context::test]
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: crate::api::model::processing_graphs::MockPointSourceParameters {
@@ -969,7 +978,7 @@ mod tests {
     async fn load_test_helper(
         app_ctx: PostgresContext<NoTls>,
         method: Method,
-    ) -> (Workflow, ServiceResponse) {
+    ) -> (ServicesProcessingGraph, ServiceResponse) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
@@ -1058,7 +1067,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: MockFeatureCollectionSource::single(
                 MultiPointCollection::from_data(
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
@@ -1078,7 +1087,11 @@ mod tests {
             .into(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let req = test::TestRequest::default()
             .method(method)
@@ -1128,7 +1141,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: geoengine_operators::mock::MockRasterSource::<u8> {
                 params: MockRasterSourceParams::<u8> {
                     data: vec![],
@@ -1156,7 +1169,11 @@ mod tests {
             .into(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let req = test::TestRequest::get()
             .uri(&format!("/processingGraphs/{id}/metadata"))
@@ -1221,7 +1238,7 @@ mod tests {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
@@ -1235,7 +1252,11 @@ mod tests {
             .unwrap(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let req = test::TestRequest::get().uri(&format!("/processingGraphs/{id}/metadata"));
         let res = send_test_request(req, app_ctx).await;
@@ -1256,7 +1277,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -1279,7 +1300,11 @@ mod tests {
             .unwrap(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let req = test::TestRequest::get()
             .uri(&format!("/processingGraphs/{id}/metadata"))
@@ -1312,7 +1337,7 @@ mod tests {
         let session_id = session.id();
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1324,7 +1349,11 @@ mod tests {
             .unwrap(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let req = test::TestRequest::get()
             .uri(&format!("/processingGraphs/{id}/provenance"))
@@ -1418,7 +1447,7 @@ mod tests {
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1430,7 +1459,7 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::get()
@@ -1552,7 +1581,7 @@ mod tests {
         }
         .typed();
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1564,7 +1593,7 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::post()
@@ -1660,7 +1689,7 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::GdalSource(GdalSource {
                 r#type: Default::default(),
                 params: GdalSourceParameters {
@@ -1672,7 +1701,7 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
         let (req, payload, mut input_tx, send_next_msg_trigger) =
             websocket_tests::test_client().await;
@@ -1739,7 +1768,7 @@ mod tests {
 
         let (_, dataset) = add_ports_to_datasets(&app_ctx, true, true).await;
 
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: TypedOperator::Vector(VectorOperator::OgrSource(
                 crate::api::model::processing_graphs::OgrSource {
                     r#type: Default::default(),
@@ -1754,7 +1783,7 @@ mod tests {
             .unwrap(),
         };
 
-        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+        let workflow_id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
         let (req, payload, mut input_tx, send_next_msg_trigger) =
             websocket_tests::test_client().await;

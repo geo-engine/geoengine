@@ -93,18 +93,20 @@ pub use crate::api::model::processing_graphs::{
     },
 };
 use crate::identifier;
-use crate::workflows::workflow::{Workflow, WorkflowId};
+use crate::processing_graphs::processing_graph::{
+    ProcessingGraph as ServicesProcessingGraph, ProcessingGraphId as ServicesProcessingGraphId,
+};
 
 // Identifier for registered processing graphs
 identifier!(ProcessingGraphId);
 
-impl From<WorkflowId> for ProcessingGraphId {
-    fn from(value: WorkflowId) -> Self {
+impl From<ServicesProcessingGraphId> for ProcessingGraphId {
+    fn from(value: ServicesProcessingGraphId) -> Self {
         Self(value.0)
     }
 }
 
-impl From<ProcessingGraphId> for WorkflowId {
+impl From<ProcessingGraphId> for ServicesProcessingGraphId {
     fn from(value: ProcessingGraphId) -> Self {
         Self(value.0)
     }
@@ -124,7 +126,7 @@ pub enum ProcessingGraph {
     Plot(PlotOperator),
 }
 
-impl TryFrom<ProcessingGraph> for Workflow {
+impl TryFrom<ProcessingGraph> for ServicesProcessingGraph {
     type Error = anyhow::Error;
 
     fn try_from(value: ProcessingGraph) -> Result<Self, Self::Error> {
@@ -141,10 +143,10 @@ impl TryFrom<ProcessingGraph> for Workflow {
     }
 }
 
-impl TryFrom<&Workflow> for ProcessingGraph {
+impl TryFrom<&ServicesProcessingGraph> for ProcessingGraph {
     type Error = anyhow::Error;
 
-    fn try_from(value: &Workflow) -> Result<Self, Self::Error> {
+    fn try_from(value: &ServicesProcessingGraph) -> Result<Self, Self::Error> {
         Ok(
             match back_conversion::workflow_to_processing_graph(value)? {
                 TypedOperator::Vector(operator) => ProcessingGraph::Vector(operator),
@@ -512,7 +514,7 @@ pub struct OperatorsApi;
 mod tests {
     use super::*;
     use crate::api::model::datatypes::Coordinate2D;
-    use crate::workflows::workflow::Workflow;
+    use crate::processing_graphs::processing_graph::ProcessingGraph as ServicesProcessingGraph;
     use geoengine_operators::engine::TypedVectorOperator;
 
     #[test]
@@ -558,7 +560,7 @@ mod tests {
 
     #[test]
     fn it_converts_workflow_to_processing_graph_for_mock_point_source() {
-        let workflow = Workflow {
+        let workflow = ServicesProcessingGraph {
             operator: OperatorsTypedOperator::Vector(TypedVectorOperator::from(
                 geoengine_operators::mock::MockPointSource {
                     params: geoengine_operators::mock::MockPointSourceParams {

@@ -57,7 +57,7 @@ use crate::{
         storage::{INTERNAL_LAYER_DB_ROOT_COLLECTION_ID, INTERNAL_PROVIDER_ID},
     },
     permissions::{Permission, Role},
-    workflows::workflow::Workflow,
+    processing_graphs::processing_graph::ProcessingGraph,
 };
 use geoengine_datatypes::dataset::NamedData;
 
@@ -1204,7 +1204,7 @@ impl StacImporter {
         let add_layer = AddLayer {
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     MultiBandGdalSource {
                         params: MultiBandGdalSourceParameters {

@@ -25,11 +25,11 @@ use crate::{
         },
         storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions},
     },
+    processing_graphs::registry::ProcessingGraphRegistry,
     util::{
         extractors::{ValidatedJson, ValidatedQuery},
         workflows::validate_workflow,
     },
-    workflows::registry::WorkflowRegistry,
 };
 use actix_web::{FromRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::dataset::DataProviderId;
@@ -755,7 +755,8 @@ async fn layer_to_processing_graph_id_handler<C: ApplicationContext>(
     };
 
     let db = app_ctx.session_context(session).db();
-    let processing_graph_id: ProcessingGraphId = db.register_workflow(layer.workflow).await?.into();
+    let processing_graph_id: ProcessingGraphId =
+        db.register_processing_graph(layer.workflow).await?.into();
 
     Ok(web::Json(IdResponse::from(processing_graph_id)))
 }
@@ -802,7 +803,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
         }
     };
 
-    let workflow_id = db.register_workflow(layer.workflow.clone()).await?;
+    let workflow_id = db.register_processing_graph(layer.workflow.clone()).await?;
 
     let from_workflow = RasterDatasetFromWorkflowParams {
         name: None,
@@ -1345,11 +1346,14 @@ mod tests {
         },
         ge_context,
         layers::{layer::Layer, storage::INTERNAL_PROVIDER_ID},
+        processing_graphs::processing_graph::{
+            ProcessingGraph as ServicesProcessingGraph,
+            ProcessingGraphId as ServicesProcessingGraphId,
+        },
         quota::ComputationId,
         tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
         users::{UserAuth, UserSession},
         util::tests::{TestDataUploads, admin_login, read_body_string, send_test_request},
-        workflows::workflow::{Workflow, WorkflowId},
     };
     use actix_web::{
         dev::ServiceResponse,
@@ -1451,7 +1455,7 @@ mod tests {
                 ServicesAddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow {
+                    workflow: ServicesProcessingGraph {
                         operator: TypedOperator::Vector(VectorOperator::MockPointSource(
                             MockPointSource {
                                 r#type: Default::default(),
@@ -1583,7 +1587,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow {
+            workflow: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1610,7 +1614,7 @@ mod tests {
         let update_layer = ServicesUpdateLayer {
             name: "Foo new".to_string(),
             description: "Bar new".to_string(),
-            workflow: Workflow {
+            workflow: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1692,7 +1696,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow {
+            workflow: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1742,7 +1746,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow {
+            workflow: ServicesProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {
@@ -1860,7 +1864,7 @@ mod tests {
                 ServicesAddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow {
+                    workflow: ServicesProcessingGraph {
                         operator: TypedOperator::Vector(VectorOperator::MockPointSource(
                             MockPointSource {
                                 r#type: Default::default(),
@@ -2583,7 +2587,7 @@ mod tests {
     }
 
     struct MockRasterWorkflowLayerDescription {
-        workflow: Workflow,
+        workflow: ServicesProcessingGraph,
         tiling_specification: TilingSpecification,
         query_rectangle: RasterQueryRectangle,
         collection_name: String,
@@ -2642,11 +2646,11 @@ mod tests {
             .typed();
 
             let workflow = if time_shift_millis == 0 {
-                Workflow {
+                ServicesProcessingGraph {
                     operator: raster_source.into(),
                 }
             } else {
-                Workflow {
+                ServicesProcessingGraph {
                     operator: OperatorsTypedOperator::Raster(TypedRasterOperator::from(
                         TimeShift {
                             params: TimeShiftParams::Relative {
@@ -2800,7 +2804,7 @@ mod tests {
 
         assert_eq_two_raster_operator_res_u8(
             &ctx.execution_context().unwrap(),
-            &ctx.query_context(WorkflowId::new(), ComputationId::new())
+            &ctx.query_context(ServicesProcessingGraphId::new(), ComputationId::new())
                 .unwrap(),
             workflow_operator,
             OperatorsGdalSource::try_from(dataset_operator)

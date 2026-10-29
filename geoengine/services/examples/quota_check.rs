@@ -14,9 +14,9 @@ use geoengine_services::{
     },
     config::{Quota, QuotaTrackingMode, get_config_element},
     contexts::{ApplicationContext, SessionContext},
+    processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
     users::{UserAuth, UserDb},
     util::tests::{add_ndvi_to_datasets2, send_test_request, with_temp_context},
-    workflows::{registry::WorkflowRegistry, workflow::Workflow},
 };
 use std::time::Instant;
 
@@ -40,7 +40,7 @@ async fn bench() {
 
         let (_, dataset) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::TemporalRasterAggregation(
                 TemporalRasterAggregation {
                     r#type: Default::default(),
@@ -72,7 +72,11 @@ async fn bench() {
             .unwrap(),
         };
 
-        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+        let id = ctx
+            .db()
+            .register_processing_graph(workflow.clone())
+            .await
+            .unwrap();
 
         let colorizer = Colorizer::linear_gradient(
             vec![

@@ -11,9 +11,9 @@ use crate::{
         },
         listing::LayerCollectionId,
     },
+    processing_graphs::processing_graph::ProcessingGraph,
     projects::RasterSymbology,
     util::sentinel_2_utm_zones::UtmZone,
-    workflows::workflow::Workflow,
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{
@@ -303,7 +303,7 @@ impl CopernicusDataspaceDataProvider {
                 id.product_band.band_name()
             ),
             description: String::new(),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {

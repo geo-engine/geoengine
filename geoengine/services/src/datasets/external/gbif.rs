@@ -11,8 +11,8 @@ use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
     SearchParameters, SearchType, SearchTypes,
 };
+use crate::processing_graphs::processing_graph::ProcessingGraph;
 use crate::util::postgres::DatabaseConnectionConfig;
-use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::Pool;
@@ -788,7 +788,7 @@ impl LayerCollectionProvider for GbifDataProvider {
             },
             name: canonicalname.to_string(),
             description: format!("All occurrences with a {taxonrank} of {canonicalname}"),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Vector(
                     OgrSource {
                         params: OgrSourceParameters {
@@ -3641,7 +3641,7 @@ mod tests {
                 },
                 name: "Rhipidia willistoniana".to_string(),
                 description: "All occurrences with a species of Rhipidia willistoniana".to_string(),
-                workflow: Workflow {
+                workflow: ProcessingGraph {
                     operator: TypedOperator::Vector(
                         OgrSource {
                             params: OgrSourceParameters {

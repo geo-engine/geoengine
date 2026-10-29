@@ -14,10 +14,10 @@ use geoengine_services::{
     contexts::{ApplicationContext, PostgresContext, SessionContext},
     datasets::external::stac::StacDataProviderDefinition,
     layers::storage::LayerProviderDb,
+    processing_graphs::processing_graph::{ProcessingGraph, ProcessingGraphId},
     quota::ComputationId,
     users::UserSession,
     util::tests::with_temp_context,
-    workflows::workflow::{Workflow, WorkflowId},
 };
 use std::{collections::BTreeMap, fs, path::Path};
 use tokio_postgres::NoTls;
@@ -108,7 +108,7 @@ async fn run_profile_query(
     let workflow_json = include_str!("../../test_data/api_calls/stac_provider/ndvi-workflow.json")
         .replace(PROVIDER_TEMPLATE_ID, &provider_id.to_string());
 
-    let workflow: Workflow =
+    let workflow: ProcessingGraph =
         serde_json::from_str(&workflow_json).context("deserializing NDVI workflow")?;
 
     let operator = workflow
@@ -166,7 +166,7 @@ async fn run_profile_query(
         RasterQueryRectangle::new(query_grid.grid_bounds(), query_time, BandSelection::first());
 
     let query_ctx = admin_ctx
-        .query_context(WorkflowId::new(), ComputationId::new())
+        .query_context(ProcessingGraphId::new(), ComputationId::new())
         .context("creating query context")?;
 
     let mut stream = processor

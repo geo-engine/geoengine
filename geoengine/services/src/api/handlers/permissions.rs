@@ -350,12 +350,12 @@ mod tests {
         ge_context,
         layers::{layer::AddLayer, listing::LayerCollectionProvider, storage::LayerDb},
         machine_learning::{MlModel, MlModelIdAndName},
+        processing_graphs::processing_graph::ProcessingGraph,
         users::{UserAuth, UserCredentials, UserRegistration},
         util::tests::{
             add_ndvi_to_datasets2, add_ports_to_datasets, admin_login, read_body_string,
             send_test_request,
         },
-        workflows::workflow::Workflow,
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -674,7 +674,7 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
                     r#type: Default::default(),
                     params: MockPointSourceParameters {

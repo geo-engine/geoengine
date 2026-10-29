@@ -3,12 +3,15 @@ pub mod raster;
 pub mod vector;
 
 use crate::{
-    api::model::processing_graphs::TypedOperator as ApiTypedOperator, workflows::workflow::Workflow,
+    api::model::processing_graphs::TypedOperator as ApiTypedOperator,
+    processing_graphs::processing_graph::ProcessingGraph as ServicesProcessingGraph,
 };
 use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
 
-/// Converts a [`Workflow`] into a `ProcessingGraph` represented by an `ApiTypedOperator`.
-pub fn workflow_to_processing_graph(workflow: &Workflow) -> anyhow::Result<ApiTypedOperator> {
+/// Converts a [`ServicesProcessingGraph`] into an API processing graph represented by an `ApiTypedOperator`.
+pub fn workflow_to_processing_graph(
+    workflow: &ServicesProcessingGraph,
+) -> anyhow::Result<ApiTypedOperator> {
     match &workflow.operator {
         OperatorsTypedOperator::Raster(raster_operator) => Ok(ApiTypedOperator::Raster(
             raster::raster_operator_from_runtime(raster_operator)?,

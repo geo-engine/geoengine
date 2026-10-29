@@ -810,7 +810,7 @@ where
         }
 
         let query = "
-            INSERT INTO quota_log (user_id, workflow_id, computation_id, operator_name, operator_path, data)
+            INSERT INTO quota_log (user_id, processing_graph_id, computation_id, operator_name, operator_path, data)
                 (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::text[], $5::text[], $6::text[]))
         ";
 
@@ -845,7 +845,7 @@ where
                 "
             SELECT
                 computation_id,
-                workflow_id,
+                processing_graph_id,
                 MIN(timestamp) AS timestamp,
                 COUNT(*) AS count
             FROM
@@ -854,7 +854,7 @@ where
                 user_id = $1
             GROUP BY
                 computation_id,
-                workflow_id
+                processing_graph_id
             ORDER BY 
                 MIN(TIMESTAMP) DESC
             OFFSET $2
@@ -931,10 +931,10 @@ where
             GROUP BY
                user_id,
                computation_id,
-               workflow_id,
+               processing_graph_id,
                data
             ORDER BY
-                MIN(timestamp) DESC, user_id ASC, computation_id ASC, workflow_id ASC, data ASC
+                MIN(timestamp) DESC, user_id ASC, computation_id ASC, processing_graph_id ASC, data ASC
             OFFSET
                 $1
             LIMIT

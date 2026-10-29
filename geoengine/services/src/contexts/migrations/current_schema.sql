@@ -606,8 +606,8 @@ CREATE TABLE project_version_layers (
         id
     ) ON DELETE CASCADE NOT NULL,
     name character varying(256) NOT NULL,
-    workflow_id uuid NOT NULL,
-    -- TODO: REFERENCES workflows(id)
+    processing_graph_id uuid NOT NULL,
+    -- TODO: REFERENCES processing_graphs(id)
     symbology "Symbology",
     visibility "LayerVisibility" NOT NULL,
     PRIMARY KEY (
@@ -624,8 +624,8 @@ CREATE TABLE project_version_plots (
         id
     ) ON DELETE CASCADE NOT NULL,
     name character varying(256) NOT NULL,
-    workflow_id uuid NOT NULL,
-    -- TODO: REFERENCES workflows(id)
+    processing_graph_id uuid NOT NULL,
+    -- TODO: REFERENCES processing_graphs(id)
     PRIMARY KEY (
         project_id,
         project_version_id,
@@ -633,9 +633,9 @@ CREATE TABLE project_version_plots (
     )
 );
 
-CREATE TABLE workflows (
+CREATE TABLE processing_graphs (
     id uuid PRIMARY KEY,
-    workflow json NOT NULL
+    processing_graph json NOT NULL
 );
 
 -- TODO: add constraint not null
@@ -695,7 +695,7 @@ CREATE TABLE layers (
     id uuid PRIMARY KEY,
     name text NOT NULL,
     description text NOT NULL,
-    workflow_id uuid REFERENCES workflows (id) NOT NULL,
+    processing_graph_id uuid REFERENCES processing_graphs (id) NOT NULL,
     symbology "Symbology",
     properties "PropertyType"[] NOT NULL,
     metadata "TextTextKeyValue"[] NOT NULL
@@ -1367,7 +1367,7 @@ CREATE TABLE quota_log (
     timestamp timestamp with time zone -- noqa: references.keywords
     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     user_id uuid NOT NULL,
-    workflow_id uuid NOT NULL,
+    processing_graph_id uuid NOT NULL,
     computation_id uuid NOT NULL,
     operator_name text NOT NULL,
     operator_path text NOT NULL,

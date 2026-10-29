@@ -7,7 +7,7 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
 };
-use crate::workflows::workflow::Workflow;
+use crate::processing_graphs::processing_graph::ProcessingGraph;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, LayerId, NamedData};
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
@@ -473,7 +473,7 @@ impl LayerCollectionProvider for StacDataProvider {
             },
             name: dataset.name.clone(),
             description: dataset.description.clone(),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     MultiBandGdalSource {
                         params: MultiBandGdalSourceParameters::new(NamedData {

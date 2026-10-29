@@ -1,9 +1,9 @@
-use crate::{error::Result, workflows::workflow::Workflow};
+use crate::{error::Result, processing_graphs::processing_graph::ProcessingGraph};
 use geoengine_operators::engine::{ExecutionContext, TypedOperator, WorkflowOperatorPath};
 
 /// ensure the workflow is valid by initializing it
 pub async fn validate_workflow<E: ExecutionContext>(
-    workflow: &Workflow,
+    workflow: &ProcessingGraph,
     execution_context: &E,
 ) -> Result<()> {
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();

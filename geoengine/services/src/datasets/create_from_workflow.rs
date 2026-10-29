@@ -5,10 +5,10 @@ use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::datasets::{DatasetIdAndName, DatasetName};
+use crate::processing_graphs::processing_graph::ProcessingGraphId;
+use crate::processing_graphs::registry::ProcessingGraphRegistry;
 use crate::quota::ComputationId;
 use crate::tasks::TaskContext;
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::WorkflowId;
 use crate::{
     error,
     tasks::{Task, TaskId, TaskManager, TaskStatusInfo},
@@ -101,7 +101,7 @@ impl<TC: TaskContext> ToGeoTiffProgressConsumer for ToGeoTiffTaskContext<TC> {
 pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub source_name: String,
 
-    pub workflow_id: WorkflowId,
+    pub workflow_id: ProcessingGraphId,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflowParams,
     pub upload: UploadId,
@@ -114,7 +114,11 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
         &self,
         to_geo_tiff_task_context: ToGeoTiffTaskContext<C::TaskContext>,
     ) -> error::Result<RasterDatasetFromWorkflowResult> {
-        let workflow = self.ctx.db().load_workflow(&self.workflow_id).await?;
+        let workflow = self
+            .ctx
+            .db()
+            .load_processing_graph(&self.workflow_id)
+            .await?;
         let exe_ctx = self.ctx.execution_context()?;
 
         let initialized_operator = workflow
@@ -253,7 +257,7 @@ impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C
 
 pub async fn schedule_raster_dataset_from_workflow_task<C: SessionContext>(
     source_name: String,
-    workflow_id: WorkflowId,
+    workflow_id: ProcessingGraphId,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflowParams,
     compression_num_threads: GdalCompressionNumThreads,

@@ -9,12 +9,12 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
 };
+use crate::processing_graphs::processing_graph::ProcessingGraph;
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
 use crate::util::format_stac_wgs84_bbox;
 use crate::util::operators::source_operator_from_dataset;
 use crate::util::sentinel_2_utm_zones::UtmZone;
-use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
@@ -237,7 +237,7 @@ impl SentinelS2L2aCogsDataProvider {
                         },
                         name: format!("Sentinel S2 L2A COGS {}:{} ({})", zone, band.long_name(), band.name()),
                         description: String::new(),
-                        workflow: Workflow {
+                        workflow: ProcessingGraph {
                             operator: source_operator_from_dataset(
                                 GdalSource::TYPE_NAME,
                                 &NamedData {
@@ -372,7 +372,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             },
             name: dataset.listing.name.clone(),
             description: dataset.listing.description.clone(),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters::new(NamedData {

@@ -23,6 +23,10 @@ use crate::{
         storage::{INTERNAL_PROVIDER_ID, LayerDb},
     },
     permissions::{Permission, PermissionDb, Role},
+    processing_graphs::{
+        processing_graph::{ProcessingGraph, ProcessingGraphId},
+        registry::ProcessingGraphRegistry,
+    },
     projects::{
         CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology,
         STRectangle, Symbology, UpdateProject,
@@ -36,10 +40,6 @@ use crate::{
         middleware::OutputRequestId,
         postgres::DatabaseConnectionConfig,
         server::{configure_extractors, render_404, render_405},
-    },
-    workflows::{
-        registry::WorkflowRegistry,
-        workflow::{Workflow, WorkflowId},
     },
 };
 use actix_web::{
@@ -120,7 +120,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
         name: Some("TestUpdate".to_string()),
         description: None,
         layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-            workflow: WorkflowId::new(),
+            workflow: ProcessingGraphId::new(),
             name: "L1".to_string(),
             visibility: Default::default(),
             symbology: Symbology::Raster(RasterSymbology {
@@ -141,7 +141,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ndvi_workflow_helper(
     app_ctx: &PostgresContext<NoTls>,
-) -> (Workflow, WorkflowId) {
+) -> (ProcessingGraph, ProcessingGraphId) {
     register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::new(0)).await
 }
 
@@ -149,10 +149,10 @@ pub async fn register_ndvi_workflow_helper(
 pub async fn register_ndvi_workflow_helper_with_cache_ttl(
     app_ctx: &PostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
-) -> (Workflow, WorkflowId) {
+) -> (ProcessingGraph, ProcessingGraphId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
 
-    let workflow = Workflow {
+    let workflow = ProcessingGraph {
         operator: TypedOperator::Raster(
             GdalSource {
                 params: GdalSourceParameters::new(dataset),
@@ -166,7 +166,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
     let id = app_ctx
         .session_context(session)
         .db()
-        .register_workflow(workflow.clone())
+        .register_processing_graph(workflow.clone())
         .await
         .unwrap();
 
@@ -350,7 +350,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
 #[allow(clippy::missing_panics_doc)]
 pub async fn register_ne2_multiband_workflow(
     app_ctx: &PostgresContext<NoTls>,
-) -> (Workflow, WorkflowId) {
+) -> (ProcessingGraph, ProcessingGraphId) {
     let session = admin_login(app_ctx).await;
     let ctx = app_ctx.session_context(session);
 
@@ -370,7 +370,7 @@ pub async fn register_ne2_multiband_workflow(
     )
     .await;
 
-    let workflow = Workflow {
+    let workflow = ProcessingGraph {
         operator: TypedOperator::Raster(
             RasterStacker {
                 params: RasterStackerParams {
@@ -410,7 +410,11 @@ pub async fn register_ne2_multiband_workflow(
         ),
     };
 
-    let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+    let id = ctx
+        .db()
+        .register_processing_graph(workflow.clone())
+        .await
+        .unwrap();
 
     for dataset_id in [red.id, green.id, blue.id] {
         ctx.db()
@@ -538,7 +542,7 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
         AddLayer {
             name: dataset_metadata.display_name,
             description: dataset_metadata.description,
-            workflow: Workflow { operator },
+            workflow: ProcessingGraph { operator },
             symbology,
             properties: vec![],
             metadata: Default::default(),
@@ -884,7 +888,7 @@ where
 {
     type Q = C::QueryContext;
     fn mock_query_context(&self) -> Result<C::QueryContext, crate::error::Error> {
-        self.query_context(WorkflowId::new(), ComputationId::new())
+        self.query_context(ProcessingGraphId::new(), ComputationId::new())
     }
 }
 
@@ -1022,7 +1026,7 @@ pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
         AddLayer {
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
@@ -1356,7 +1360,7 @@ pub async fn add_ndvi_3857_to_layers<C: ApplicationContext<Session = UserSession
         AddLayer {
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     Reprojection {
                         params: ReprojectionParams {

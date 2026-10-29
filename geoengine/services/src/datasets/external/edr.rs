@@ -9,8 +9,8 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
 };
+use crate::processing_graphs::processing_graph::ProcessingGraph;
 use crate::util::parsing::deserialize_base_url;
-use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use gdal::Dataset;
 use geoengine_datatypes::collections::VectorDataType;
@@ -1037,7 +1037,7 @@ impl LayerCollectionProvider for EdrDataProvider {
             },
             name: collection.title.unwrap_or(collection.id),
             description: String::new(),
-            workflow: Workflow { operator },
+            workflow: ProcessingGraph { operator },
             symbology: None, // TODO
             properties: vec![],
             metadata: HashMap::new(),

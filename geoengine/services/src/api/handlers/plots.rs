@@ -6,9 +6,9 @@ use crate::{
     config,
     contexts::{ApplicationContext, SessionContext},
     error::{self, Result},
+    processing_graphs::{processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry},
     quota::ComputationId,
     util::{parsing::parse_spatial_resolution_option, server::connection_closed},
-    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
 use base64::Engine;
@@ -130,8 +130,8 @@ async fn get_plot_handler<C: ApplicationContext>(
     );
 
     let ctx = app_ctx.session_context(session);
-    let workflow_id = WorkflowId(id.into_inner());
-    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+    let workflow_id = ProcessingGraphId(id.into_inner());
+    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
 
     let operator = workflow.operator.get_plot()?;
 
@@ -304,12 +304,12 @@ mod tests {
         },
         contexts::{PostgresContext, Session},
         ge_context,
+        processing_graphs::processing_graph::ProcessingGraph,
         users::UserAuth,
         util::tests::{
             add_ndvi_to_datasets, check_allowed_http_methods, read_body_json, read_body_string,
             send_test_request,
         },
-        workflows::workflow::Workflow,
     };
     use actix_web::{
         self,
@@ -335,7 +335,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -361,7 +361,7 @@ mod tests {
         let id = app_ctx
             .session_context(session.clone())
             .db()
-            .register_workflow(workflow)
+            .register_processing_graph(workflow)
             .await
             .unwrap();
 
@@ -420,7 +420,7 @@ mod tests {
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -446,7 +446,7 @@ mod tests {
         let id = app_ctx
             .session_context(session.clone())
             .db()
-            .register_workflow(workflow)
+            .register_processing_graph(workflow)
             .await
             .unwrap();
 
@@ -542,7 +542,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Histogram(Histogram {
                 r#type: Default::default(),
                 params: HistogramParameters {
@@ -576,7 +576,7 @@ mod tests {
         let id = app_ctx
             .session_context(session.clone())
             .db()
-            .register_workflow(workflow)
+            .register_processing_graph(workflow)
             .await
             .unwrap();
 
@@ -695,7 +695,7 @@ mod tests {
 
             let session_id = session.id();
 
-            let workflow = Workflow {
+            let workflow = ProcessingGraph {
                 operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                     r#type: Default::default(),
                     params: StatisticsParameters {
@@ -718,7 +718,7 @@ mod tests {
                 .unwrap(),
             };
 
-            let id = ctx.db().register_workflow(workflow).await.unwrap();
+            let id = ctx.db().register_processing_graph(workflow).await.unwrap();
 
             let params = &[
                 ("bbox", "-180,-90,180,90"),

@@ -2,8 +2,8 @@ use crate::config::ProjectService;
 use crate::config::get_config_element;
 use crate::error::Result;
 use crate::identifier;
+use crate::processing_graphs::processing_graph::ProcessingGraphId;
 use crate::projects::error::ProjectDbError;
-use crate::workflows::workflow::WorkflowId;
 use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::TimeInstance;
@@ -225,7 +225,7 @@ impl TemporalBounded for STRectangle {
 pub struct ProjectLayer {
     // TODO: check that workflow/operator output type fits to the type of LayerInfo
     // TODO: LayerId?
-    pub workflow: WorkflowId,
+    pub workflow: ProcessingGraphId,
     pub name: String,
     pub visibility: LayerVisibility,
     pub symbology: Symbology,
@@ -433,7 +433,7 @@ impl Default for LayerVisibility {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Plot {
-    pub workflow: WorkflowId,
+    pub workflow: ProcessingGraphId,
     pub name: String,
 }
 

@@ -16,10 +16,10 @@ use crate::{
         provider_registry::DataConnectorRegistry,
     },
     machine_learning::error::MachineLearningError,
+    processing_graphs::processing_graph::ProcessingGraphId,
     quota::{ComputationId, QuotaTrackingFactory, initialize_quota_tracking},
     tasks::{SimpleTaskManagerContext, TypedTaskManagerBackend, UserTaskManager},
     users::{OidcManager, UserAuth, UserSession},
-    workflows::workflow::WorkflowId,
 };
 use async_trait::async_trait;
 use bb8_postgres::{
@@ -483,7 +483,7 @@ where
 
     fn query_context(
         &self,
-        workflow: WorkflowId,
+        workflow: ProcessingGraphId,
         computation: ComputationId,
     ) -> Result<Self::QueryContext> {
         // TODO: load config only once
@@ -646,6 +646,7 @@ mod tests {
         },
         machine_learning::{MlModel, MlModelDb, MlModelIdAndName},
         permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId},
+        processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
         projects::{
             CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
             ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
@@ -660,7 +661,6 @@ mod tests {
             mock_oidc::{MockRefreshServerConfig, mock_refresh_server},
             register_ndvi_workflow_helper,
         },
-        workflows::{registry::WorkflowRegistry, workflow::Workflow},
     };
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
@@ -885,7 +885,7 @@ mod tests {
             .unwrap();
 
         let layer_workflow_id = db
-            .register_workflow(Workflow {
+            .register_processing_graph(ProcessingGraph {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -896,10 +896,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(db.load_workflow(&layer_workflow_id).await.is_ok());
+        assert!(db.load_processing_graph(&layer_workflow_id).await.is_ok());
 
         let plot_workflow_id = db
-            .register_workflow(Workflow {
+            .register_processing_graph(ProcessingGraph {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],
@@ -917,7 +917,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(db.load_workflow(&plot_workflow_id).await.is_ok());
+        assert!(db.load_processing_graph(&plot_workflow_id).await.is_ok());
 
         // add a plot
         let update = UpdateProject {
@@ -1131,7 +1131,7 @@ mod tests {
 
     #[ge_context::test]
     async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -1144,11 +1144,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
 
         let db = ctx.db();
-        let id = db.register_workflow(workflow).await.unwrap();
+        let id = db.register_processing_graph(workflow).await.unwrap();
 
         drop(ctx);
 
-        let workflow = db.load_workflow(&id).await.unwrap();
+        let workflow = db.load_processing_graph(&id).await.unwrap();
 
         let json = serde_json::to_value(&workflow).unwrap();
         assert_eq!(
@@ -1933,7 +1933,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -2134,7 +2134,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -2490,7 +2490,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -3013,7 +3013,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3193,7 +3193,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = Workflow {
+        let workflow = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -3596,7 +3596,7 @@ mod tests {
         );
 
         let tracking =
-            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
+            quota.create_quota_tracking(&session, ProcessingGraphId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();
@@ -3654,7 +3654,7 @@ mod tests {
         );
 
         let tracking =
-            quota.create_quota_tracking(&session, WorkflowId::new(), ComputationId::new());
+            quota.create_quota_tracking(&session, ProcessingGraphId::new(), ComputationId::new());
 
         tracking.mock_work_unit_done();
         tracking.mock_work_unit_done();
@@ -3732,7 +3732,7 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: Workflow {
+            workflow: ProcessingGraph {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3928,7 +3928,7 @@ mod tests {
                 AddLayer {
                     name: "layer".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow {
+                    workflow: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -3998,7 +3998,7 @@ mod tests {
                 AddLayer {
                     name: "layer 1".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow {
+                    workflow: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -4023,7 +4023,7 @@ mod tests {
                 AddLayer {
                     name: "layer 2".to_string(),
                     description: "description".to_string(),
-                    workflow: Workflow {
+                    workflow: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![

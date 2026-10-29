@@ -21,6 +21,7 @@ pub use crate::contexts::migrations::{
     migration_0034_plots_single_raster_source::Migration0034PlotsSingleRasterSource,
     migration_0035_stac_grid::Migration0035StacGrid,
     migration_0036_remove_aruna_provider::Migration0036RemoveArunaProvider,
+    migration_0037_rename_workflows_to_processing_graphs::Migration0037RenameWorkflowsToProcessingGraphs,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -49,6 +50,7 @@ mod migration_0033_gdal_multiband_cache_ttl;
 mod migration_0034_plots_single_raster_source;
 mod migration_0035_stac_grid;
 mod migration_0036_remove_aruna_provider;
+mod migration_0037_rename_workflows_to_processing_graphs;
 
 #[cfg(test)]
 mod schema_info;
@@ -91,6 +93,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0034PlotsSingleRasterSource),
         Box::new(Migration0035StacGrid),
         Box::new(Migration0036RemoveArunaProvider),
+        Box::new(Migration0037RenameWorkflowsToProcessingGraphs),
     ]
 }
 
