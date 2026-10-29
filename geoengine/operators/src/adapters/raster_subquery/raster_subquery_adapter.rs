@@ -37,11 +37,6 @@ pub struct RasterSubQueryAdapter<'a, PixelType: Pixel> {
 
 impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
     /// Creates a new adapter.
-    ///
-    /// # Panics
-    ///
-    /// The returned stream unwraps a time interval it sets itself in the
-    /// generation loop, so it only panics if that internal invariant is broken.
     pub fn new<RasterProcessor, SubQuery, TimeStream>(
         source_processor: &'a RasterProcessor,
         query_rect_to_answer: RasterQueryRectangle,
@@ -69,35 +64,34 @@ impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
         let descriptors = futures::stream::try_unfold(
             (
                 time_stream.boxed(),
-                None::<TileInformationBandCrossProductIter>,
-                None::<TimeInterval>,
+                None::<(TimeInterval, TileInformationBandCrossProductIter)>,
             ),
-            move |(mut time_stream, mut tile_band_iter, mut time)| {
+            move |(mut time_stream, mut current)| {
                 let descriptor_query = descriptor_query.clone();
                 let descriptor_bands = descriptor_bands.clone();
                 async move {
                     loop {
-                        if let Some(iter) = tile_band_iter.as_mut()
-                            && let Some((tile, band)) = iter.next() {
-                                return Ok(Some((
-                                    (time.expect("time is always set before `tile_band_iter` is produced in the same loop iteration"), tile, band),
-                                    (time_stream, tile_band_iter, time),
-                                )));
-                            }
+                        if let Some((time, tile_band_iter)) = current.as_mut()
+                            && let Some((tile, band)) = tile_band_iter.next()
+                        {
+                            let time = *time;
+                            return Ok(Some(((time, tile, band), (time_stream, current))));
+                        }
 
-                        let next_time = time_stream.next().await.transpose()?;
-                        let Some(next_time) = next_time else {
+                        let Some(time) = time_stream.next().await.transpose()? else {
                             return Ok(None);
                         };
-                        time = Some(next_time);
                         let tile_iter = tiling_strategy
                             .tile_information_iterator_from_pixel_bounds(
                                 descriptor_query.spatial_bounds(),
                             );
                         // order: time (outer loop), then tile, then band (inner)
-                        tile_band_iter = Some(TileInformationBandCrossProductIter::new(
-                            tile_iter,
-                            BandSelectionIter::new(descriptor_bands.clone()),
+                        current = Some((
+                            time,
+                            TileInformationBandCrossProductIter::new(
+                                tile_iter,
+                                BandSelectionIter::new(descriptor_bands.clone()),
+                            ),
                         ));
                     }
                 }
@@ -173,16 +167,18 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
             let Some(handout) = this.parallelism.handout(this.guaranteed_in_flight) else {
                 break;
             };
-            if matches!(handout, SubQueryHandout::Guaranteed) {
-                this.guaranteed_in_flight = true;
-            }
+            // only marked in flight once pushed: a pending descriptor must not hold the slot,
+            // or nothing in flight would wake us to retry
+            let guaranteed = matches!(handout, SubQueryHandout::Guaranteed);
 
             match this.descriptors.poll_next_unpin(cx) {
                 // on an error the handout is returned before its tile is yielded, which is
                 // harmless: the stream ends with that error and starts no more sub-queries
-                Poll::Ready(Some(Ok(sub_query))) => this
-                    .in_flight
-                    .push_back(sub_query.map_ok(|tile| (tile, handout)).boxed()),
+                Poll::Ready(Some(Ok(sub_query))) => {
+                    this.guaranteed_in_flight |= guaranteed;
+                    this.in_flight
+                        .push_back(sub_query.map_ok(|tile| (tile, handout)).boxed());
+                }
                 Poll::Ready(Some(Err(e))) => {
                     // queued behind the running sub-queries to keep the output order
                     this.in_flight
@@ -698,5 +694,40 @@ mod tests {
             );
             assert!(tile.is_empty());
         }
+    }
+
+    #[tokio::test]
+    async fn it_does_not_hang_when_the_time_stream_is_pending() {
+        let source = CountingLeaf {
+            descriptor: descriptor(4),
+            concurrency: Arc::default(),
+        };
+        let query_ctx = query_ctx(1);
+        let tiling_strategy = descriptor(4)
+            .tiling_grid_definition(query_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
+        // pending once, like a time stream that waits on I/O
+        let time_stream = futures::stream::once(async {
+            tokio::task::yield_now().await;
+            Ok(query(4).time_interval())
+        });
+
+        let tiles = RasterSubQueryAdapter::new(
+            &source,
+            query(4),
+            tiling_strategy,
+            &query_ctx,
+            IdentitySubQuery {
+                slow_head: false,
+                own_tile_only: true,
+            },
+            time_stream,
+        )
+        .collect::<Vec<_>>();
+
+        let tiles = tokio::time::timeout(Duration::from_secs(10), tiles)
+            .await
+            .expect("the adapter hung on a pending time stream");
+        assert_eq!(tiles.len(), 4);
     }
 }
