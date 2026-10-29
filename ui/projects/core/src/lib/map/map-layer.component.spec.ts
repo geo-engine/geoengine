@@ -330,6 +330,48 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests).toHaveLength(1);
     });
 
+    it('warns and ignores both restrictions for mismatched projections, restoring them when the view matches again', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const replacement = new View({projection: 'EPSG:4326', center: [0, 0], resolution: 2});
+        mapService.setView(replacement);
+        publishViewport(replacement);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(warn).toHaveBeenCalledWith('Ignoring minTileMatrixIndex because source and view projections differ.');
+        expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(Infinity);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        const tile = source.getTile(3, 0, 0, 1, getProjection('EPSG:3857')!);
+        tile.load();
+        expect(tileRequests).toHaveLength(1);
+        await setResolution(4, replacement);
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        mapService.setView(view);
+        publishViewport(view);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(resolutions[4]);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(tileRequests[0].aborted).toBe(true);
+        await setResolution(999);
+        const excluded = source.getTile(3, 1, 0, 1, getProjection('EPSG:3857')!);
+        excluded.load();
+        expect(excluded.getState()).toBe(TileState.EMPTY);
+        expect(tileRequests).toHaveLength(1);
+    });
+
+    it('accepts equivalent projection aliases without ignoring the limit', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const replacement = new View({projection: 'EPSG:900913', center: [0, 0], resolution: 2000});
+        mapService.setView(replacement);
+        publishViewport(replacement);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(warn).not.toHaveBeenCalled();
+        expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(resolutions[4]);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+    });
+
     it('hides a layer whose minimum matrix is outside the tileset', async () => {
         fixture.componentRef.setInput('minTileMatrixIndex', resolutions.length);
         fixture.detectChanges();

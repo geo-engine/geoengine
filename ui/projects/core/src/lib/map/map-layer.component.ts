@@ -1,6 +1,7 @@
 import {
     ChangeDetectionStrategy,
     Component,
+    computed,
     Directive,
     DestroyRef,
     OnChanges,
@@ -21,7 +22,7 @@ import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {unByKey} from 'ol/Observable';
-import {get as olGetProj} from 'ol/proj';
+import {equivalent, get as olGetProj} from 'ol/proj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import TileGrid from 'ol/tilegrid/TileGrid';
 import {Observable, Subject, Subscription} from 'rxjs';
@@ -511,7 +512,7 @@ export class OlOgcApiMapTileLayerComponent
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
     readonly tmsId = input<TMSId>('Custom');
-    /** Minimum source matrix index. A nonzero limit requires the source and view to share a projection. */
+    /** Minimum source matrix index. Ignored with a warning when source and view projections differ. */
     readonly minTileMatrixIndex = input(0);
     readonly zoomRequired = output<boolean>();
     private readonly mapService = inject(MapService);
@@ -552,7 +553,8 @@ export class OlOgcApiMapTileLayerComponent
             // the abort signal covers both a changed set of params and the destruction of the layer
             const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
-                acceptsTile: (tile): boolean => tile.getTileCoord()[0] >= params.minTileMatrixIndex,
+                acceptsTile: (tile): boolean =>
+                    this.effectiveMaxResolution() === Infinity || tile.getTileCoord()[0] >= params.minTileMatrixIndex,
                 canLoad: (): boolean => {
                     const view = this.mapService.view();
                     return view.isDef() && this._mapLayer.isVisible(view);
@@ -606,6 +608,22 @@ export class OlOgcApiMapTileLayerComponent
         },
     });
 
+    private readonly effectiveMaxResolution = computed(() => {
+        const maxResolution = this.sourceMaxResolution();
+        const projection = this.tileSource.value()?.getProjection();
+        if (
+            maxResolution !== undefined &&
+            maxResolution > 0 &&
+            maxResolution !== Infinity &&
+            projection &&
+            !equivalent(projection, this.mapService.view().getProjection())
+        ) {
+            console.warn('Ignoring minTileMatrixIndex because source and view projections differ.');
+            return Infinity;
+        }
+        return maxResolution;
+    });
+
     constructor() {
         super(
             new ImageTile({}), // use as placeholder until the actual source is loaded
@@ -623,7 +641,7 @@ export class OlOgcApiMapTileLayerComponent
         });
 
         effect(() => {
-            const maxResolution = this.sourceMaxResolution();
+            const maxResolution = this.effectiveMaxResolution();
             const blocked = maxResolution !== undefined && this.viewport().resolution >= maxResolution;
             this._mapLayer.setMaxResolution(maxResolution ?? 0);
             this._mapLayer.setVisible(this.isVisible());
