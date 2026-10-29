@@ -62,9 +62,9 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        ChunkByteSize, MultipleRasterSources, QueryContext, RasterBandDescriptor,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SingleRasterOrVectorSource,
-        SpatialGridDescriptor, TimeDescriptor, TypedOperator, WorkflowOperatorPath,
+        ChunkByteSize, MultipleRasterSources, ProcessingGraphOperatorPath, QueryContext,
+        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SingleRasterOrVectorSource, SpatialGridDescriptor, TimeDescriptor, TypedOperator,
     },
     meta::quota::QuotaTracking,
     processing::{
@@ -120,7 +120,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
         name: Some("TestUpdate".to_string()),
         description: None,
         layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-            workflow: ProcessingGraphId::new(),
+            processing_graph: ProcessingGraphId::new(),
             name: "L1".to_string(),
             visibility: Default::default(),
             symbology: Symbology::Raster(RasterSymbology {
@@ -139,20 +139,20 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper(
+pub async fn register_ndvi_processing_graph_helper(
     app_ctx: &PostgresContext<NoTls>,
 ) -> (ProcessingGraph, ProcessingGraphId) {
-    register_ndvi_workflow_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::new(0)).await
+    register_ndvi_processing_graph_helper_with_cache_ttl(app_ctx, CacheTtlSeconds::new(0)).await
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ndvi_workflow_helper_with_cache_ttl(
+pub async fn register_ndvi_processing_graph_helper_with_cache_ttl(
     app_ctx: &PostgresContext<NoTls>,
     cache_ttl: CacheTtlSeconds,
 ) -> (ProcessingGraph, ProcessingGraphId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
 
-    let workflow = ProcessingGraph {
+    let processing_graph = ProcessingGraph {
         operator: TypedOperator::Raster(
             GdalSource {
                 params: GdalSourceParameters::new(dataset),
@@ -166,11 +166,11 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
     let id = app_ctx
         .session_context(session)
         .db()
-        .register_processing_graph(workflow.clone())
+        .register_processing_graph(processing_graph.clone())
         .await
         .unwrap();
 
-    (workflow, id)
+    (processing_graph, id)
 }
 
 pub async fn add_ndvi_to_datasets(app_ctx: &PostgresContext<NoTls>) -> (DatasetId, NamedData) {
@@ -348,7 +348,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn register_ne2_multiband_workflow(
+pub async fn register_ne2_multiband_processing_graph(
     app_ctx: &PostgresContext<NoTls>,
 ) -> (ProcessingGraph, ProcessingGraphId) {
     let session = admin_login(app_ctx).await;
@@ -370,7 +370,7 @@ pub async fn register_ne2_multiband_workflow(
     )
     .await;
 
-    let workflow = ProcessingGraph {
+    let processing_graph = ProcessingGraph {
         operator: TypedOperator::Raster(
             RasterStacker {
                 params: RasterStackerParams {
@@ -412,7 +412,7 @@ pub async fn register_ne2_multiband_workflow(
 
     let id = ctx
         .db()
-        .register_processing_graph(workflow.clone())
+        .register_processing_graph(processing_graph.clone())
         .await
         .unwrap();
 
@@ -432,7 +432,7 @@ pub async fn register_ne2_multiband_workflow(
             .unwrap();
     }
 
-    (workflow, id)
+    (processing_graph, id)
 }
 
 /// Add a definition from a file to the datasets.
@@ -542,7 +542,7 @@ pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
         AddLayer {
             name: dataset_metadata.display_name,
             description: dataset_metadata.description,
-            workflow: ProcessingGraph { operator },
+            processing_graph: ProcessingGraph { operator },
             symbology,
             properties: vec![],
             metadata: Default::default(),
@@ -571,7 +571,7 @@ pub async fn add_file_definition_to_layers<D: GeoEngineDb>(
         AddLayer {
             name: def.name,
             description: def.description,
-            workflow: def.workflow,
+            processing_graph: def.processing_graph,
             symbology: def.symbology,
             properties: def.properties,
             metadata: def.metadata,
@@ -1026,7 +1026,7 @@ pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
         AddLayer {
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {
@@ -1360,7 +1360,7 @@ pub async fn add_ndvi_3857_to_layers<C: ApplicationContext<Session = UserSession
         AddLayer {
             name: "NDVI".to_string(),
             description: "NDVI Layer".to_string(),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     Reprojection {
                         params: ReprojectionParams {
@@ -1567,7 +1567,7 @@ pub trait MockQuotaTracking {
 
 impl MockQuotaTracking for QuotaTracking {
     fn mock_work_unit_done(&self) {
-        self.work_unit_done("test", WorkflowOperatorPath::initialize_root(), None);
+        self.work_unit_done("test", ProcessingGraphOperatorPath::initialize_root(), None);
     }
 }
 

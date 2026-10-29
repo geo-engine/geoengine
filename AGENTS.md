@@ -35,7 +35,7 @@ A server for processing and visualizing geospatial data, with native time-series
   - Operators with several inputs require the same spatial reference.
     Reprojection is an explicit operator, not an implicit conversion.
   - The processing graph id is a UUID v5 hash of the processing graph, so registering the same processing graph twice yields the same id.
-    A workflow is never changed in place.
+    A processing graph is never changed in place.
   - Access is controlled by `Read`/`Owner` permissions on layers, collections, projects, datasets, ML models and providers.
     Besides registered and OIDC users there are anonymous users (`POST /anonymous`, enabled by default via `[session] anonymous_access`), so features must not assume a user with an email or password.
     Quotas are optional (`[quota]` in `geoengine/Settings-default.toml`).

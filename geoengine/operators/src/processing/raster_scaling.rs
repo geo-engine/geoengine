@@ -1,8 +1,8 @@
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-    InitializedSources, Operator, OperatorName, QueryProcessor, RasterBandDescriptor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    InitializedSources, Operator, OperatorName, ProcessingGraphOperatorPath, QueryProcessor,
+    RasterBandDescriptor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -77,7 +77,7 @@ impl OperatorName for RasterScaling {
 
 pub struct InitializedRasterScalingOperator {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     result_descriptor: RasterResultDescriptor,
@@ -89,7 +89,7 @@ pub struct InitializedRasterScalingOperator {
 impl RasterOperator for RasterScaling {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -168,7 +168,7 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
         RasterScaling::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -399,7 +399,7 @@ mod tests {
         .typed();
 
         let initialized_op = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
             .await
             .unwrap();
 
@@ -513,7 +513,7 @@ mod tests {
         .typed();
 
         let initialized_op = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
             .await
             .unwrap();
 

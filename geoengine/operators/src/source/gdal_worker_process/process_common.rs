@@ -15,7 +15,7 @@ use std::{
 use super::{GdalDatasetParameters, GridAndProperties};
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
-/// The Workflow is as follows:
+/// The Processing graph is as follows:
 /// 1. The `gdal_read_window` is the window in the pixel space of the dataset that should be read.
 /// 2. The `read_window_bounds` is the area in the target pixel space where the data should be placed.
 ///    2.1 The data read in step one is read to the width and height of the `read_window_bounds`.

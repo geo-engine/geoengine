@@ -7,7 +7,7 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, RasterTile2D},
 };
 use geoengine_operators::{
-    engine::{RasterOperator, WorkflowOperatorPath},
+    engine::{ProcessingGraphOperatorPath, RasterOperator},
     source::{
         GdalSource, GdalSourceParameters, MultiBandGdalSource, MultiBandGdalSourceParameters,
     },
@@ -63,7 +63,7 @@ async fn bench_gdal_source() {
         .typed();
 
         let processor = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()
@@ -127,7 +127,7 @@ async fn bench_multi_band_gdal_source() {
         .typed();
 
         let processor = operator
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap()
             .query_processor()

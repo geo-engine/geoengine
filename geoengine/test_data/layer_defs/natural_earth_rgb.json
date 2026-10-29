@@ -2,7 +2,7 @@
   "id": "83866f7b-dcee-47b8-9242-e5636ceaf402",
   "name": "Natural Earth II – RGB",
   "description": "A raster with three bands for RGB visualization",
-  "workflow": {
+  "processingGraph": {
     "type": "Raster",
     "operator": {
       "type": "RasterStacker",

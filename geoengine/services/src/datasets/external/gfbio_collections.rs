@@ -686,7 +686,7 @@ impl LayerCollectionProvider for GfbioCollectionsDataProvider {
                     },
                     name: layer.name,
                     description: String::new(),
-                    workflow: ProcessingGraph {
+                    processing_graph: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             OgrSource {
                                 params: OgrSourceParameters {

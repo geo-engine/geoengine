@@ -1,7 +1,6 @@
-use crate::engine::TypedRasterOperator;
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
-    ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
+    ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath, RasterOperator,
+    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource, TypedRasterOperator,
 };
 use crate::error::{self, Optimization};
 use crate::processing::{
@@ -61,7 +60,7 @@ impl WrapWithProjectionAndResample {
             self
         } else {
             tracing::debug!(
-                "Target srs: {target_sref}, workflow srs: {result_sref} --> injecting reprojection"
+                "Target srs: {target_sref}, processing graph srs: {result_sref} --> injecting reprojection"
             );
 
             let reprojection_params = ReprojectionParams {
@@ -70,7 +69,7 @@ impl WrapWithProjectionAndResample {
             };
 
             // create the reprojection operator in order to get the canonic operator name
-            let reprojected_workflow = Reprojection {
+            let reprojected_processing_graph = Reprojection {
                 params: reprojection_params,
                 sources: SingleRasterOrVectorSource {
                     source: RasterOrVectorOperator::Raster(self.operator),
@@ -78,13 +77,13 @@ impl WrapWithProjectionAndResample {
             }
             .typed();
 
-            let irp = reprojected_workflow
+            let irp = reprojected_processing_graph
                 .clone()
-                .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
                 .await?;
 
             let rd = irp.result_descriptor().clone();
-            Self::new(reprojected_workflow, irp.boxed(), rd)
+            Self::new(reprojected_processing_graph, irp.boxed(), rd)
         };
         Ok(res)
     }
@@ -129,7 +128,7 @@ impl WrapWithProjectionAndResample {
             return Ok(self);
         }
 
-        // Query resolution is smaller than workflow => compute on full resolution and append interpolation to decrease resolution
+        // Query resolution is smaller than processing graph => compute on full resolution and append interpolation to decrease resolution
         if target_spatial_grid.spatial_resolution().x() <= rd_resolution.x()
             && target_spatial_grid.spatial_resolution().y() <= rd_resolution.y()
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
@@ -142,7 +141,7 @@ impl WrapWithProjectionAndResample {
             )
             .await
         } else {
-            // Query resolution is larger than workflow => compute on overview level and append downsampling to increase resolution
+            // Query resolution is larger than processing graph => compute on overview level and append downsampling to increase resolution
             self.downsampling(
                 target_spatial_resolution,
                 exe_ctx,
@@ -161,7 +160,7 @@ impl WrapWithProjectionAndResample {
         target_spatial_grid: crate::engine::SpatialGridDescriptor,
     ) -> std::result::Result<WrapWithProjectionAndResample, error::Error> {
         tracing::debug!(
-            "Query res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> optimize workflow and push-down downsampling"
+            "Query res: {target_spatial_resolution:?}, processing graph res: {rd_resolution:?} --> optimize processing graph and push-down downsampling"
         );
 
         let snapped_resolution = find_next_best_overview_level_resolution(
@@ -179,7 +178,7 @@ impl WrapWithProjectionAndResample {
             // target resolution is an overview level, so we can use the optimized operator directly
             let initialized_raster_operator = optimized_operator
                 .clone()
-                .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
                 .await?;
 
             let rd: RasterResultDescriptor =
@@ -207,7 +206,7 @@ impl WrapWithProjectionAndResample {
 
         let ido = dop
             .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
             .await?;
 
         let rd = ido.result_descriptor().clone();
@@ -222,7 +221,7 @@ impl WrapWithProjectionAndResample {
         target_spatial_grid: crate::engine::SpatialGridDescriptor,
     ) -> std::result::Result<WrapWithProjectionAndResample, error::Error> {
         tracing::debug!(
-            "Target res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting interpolation"
+            "Target res: {target_spatial_resolution:?}, processing graph res: {rd_resolution:?} --> injecting interpolation"
         );
 
         let interpolation_params = InterpolationParams {
@@ -241,7 +240,7 @@ impl WrapWithProjectionAndResample {
 
         let iip = iop
             .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
             .await?;
 
         let rd = iip.result_descriptor().clone();

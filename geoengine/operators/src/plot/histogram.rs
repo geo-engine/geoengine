@@ -1,9 +1,9 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
-    TypedPlotOperator, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, WorkflowOperatorPath,
+    PlotResultDescriptor, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+    SingleRasterOrVectorSource, TypedPlotOperator, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error;
 use crate::error::Error;
@@ -88,7 +88,7 @@ pub enum HistogramBounds {
 impl PlotOperator for Histogram {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -849,7 +849,10 @@ mod tests {
         assert!(
             histogram
                 .typed()
-                .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+                .initialize(
+                    ProcessingGraphOperatorPath::initialize_root(),
+                    &execution_context
+                )
                 .await
                 .is_err()
         );
@@ -906,7 +909,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -959,7 +965,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1033,7 +1042,10 @@ mod tests {
 
             let query_processor = histogram
                 .typed()
-                .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+                .initialize(
+                    ProcessingGraphOperatorPath::initialize_root(),
+                    &execution_context,
+                )
                 .await
                 .unwrap()
                 .query_processor()
@@ -1088,7 +1100,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1157,7 +1172,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1194,7 +1212,7 @@ mod tests {
         let dataset_id = DatasetId::new();
         let dataset_name = NamedData::with_system_name("ne_10m_ports");
 
-        let workflow = serde_json::json!({
+        let processing_graph = serde_json::json!({
             "type": "Histogram",
             "params": {
                 "attributeName": "featurecla",
@@ -1214,7 +1232,7 @@ mod tests {
                 }
             }
         });
-        let histogram: Histogram = serde_json::from_value(workflow).unwrap();
+        let histogram: Histogram = serde_json::from_value(processing_graph).unwrap();
 
         let mut execution_context = MockExecutionContext::test_default();
         execution_context.add_meta_data::<_, _, VectorQueryRectangle>(
@@ -1301,7 +1319,10 @@ mod tests {
 
         if let Err(Error::InvalidOperatorSpec { reason }) = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
         {
             assert_eq!(reason, "column `featurecla` must be numerical");
@@ -1356,7 +1377,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1414,7 +1438,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1480,7 +1507,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1563,7 +1593,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()

@@ -26,12 +26,11 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, RasterDataType, TilingSpecification},
     util::test::TestDefault,
 };
-use geoengine_operators::engine::TypedRasterOperator;
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        MockExecutionContext, QueryContext, RasterOperator, RasterQueryProcessor,
-        SingleRasterSource, WorkflowOperatorPath,
+        MockExecutionContext, ProcessingGraphOperatorPath, QueryContext, RasterOperator,
+        RasterQueryProcessor, SingleRasterSource, TypedRasterOperator,
     },
     processing::{
         Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Expression,
@@ -86,7 +85,7 @@ fn expression(raster: TypedRasterOperator, expression: &str) -> TypedRasterOpera
     .typed()
 }
 
-/// One benchmark case: a workflow and the query area in units of the data extent.
+/// One benchmark case: a processing graph and the query area in units of the data extent.
 struct Case {
     name: &'static str,
     operator: TypedRasterOperator,
@@ -130,7 +129,7 @@ async fn count_tiles<P: RasterQueryProcessor + ?Sized>(
 async fn run_case(case: Case, exe_ctx: &MockExecutionContext, query_ctx: &dyn QueryContext) {
     let initialized = case
         .operator
-        .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
         .await
         .unwrap();
     let data = initialized

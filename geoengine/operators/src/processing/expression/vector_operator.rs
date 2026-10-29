@@ -2,13 +2,12 @@ use super::{
     AsExpressionGeo, FromExpressionGeo, VectorExpressionError, canonicalize_name,
     error::vector as error, get_expression_dependencies,
 };
-use crate::engine::TypedVectorOperator;
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator,
-        Operator, OperatorName, QueryContext, SingleVectorSource, TypedVectorQueryProcessor,
-        VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath,
+        Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext, SingleVectorSource,
+        TypedVectorOperator, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor,
     },
     optimization::OptimizationError,
     util::Result,
@@ -108,7 +107,7 @@ impl From<GeoVectorDataType> for OutputColumn {
 
 struct InitializedVectorExpression {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     params: VectorExpressionParams,
     result_descriptor: VectorResultDescriptor,
     features: Box<dyn InitializedVectorOperator>,
@@ -121,7 +120,7 @@ struct InitializedVectorExpression {
 impl VectorOperator for VectorExpression {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         // TODO: This is super ugly to being forced to do this on every operator. This must be refactored.
@@ -461,7 +460,7 @@ impl InitializedVectorOperator for InitializedVectorExpression {
         VectorExpression::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -813,7 +812,7 @@ mod tests {
             sources: point_source.into(),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -901,7 +900,7 @@ mod tests {
             sources: point_source.into(),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1212,7 +1211,7 @@ mod tests {
         let operator = operator
             .typed()
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
             )
             .await

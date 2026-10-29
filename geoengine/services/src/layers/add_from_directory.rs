@@ -35,7 +35,7 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
             AddLayer {
                 name: def.name,
                 description: def.description,
-                workflow: def.workflow,
+                processing_graph: def.processing_graph,
                 symbology: def.symbology,
                 metadata: def.metadata,
                 properties: def.properties,

@@ -37,13 +37,13 @@ impl QuotaTrackingFactory {
     pub fn create_quota_tracking(
         &self,
         session: &UserSession,
-        workflow: ProcessingGraphId,
+        processing_graph: ProcessingGraphId,
         computation: ComputationId,
     ) -> QuotaTracking {
         QuotaTracking::new(
             self.quota_sender.clone(),
             session.user.id.0,
-            *workflow.uuid(),
+            *processing_graph.uuid(),
             *computation.uuid(),
         )
     }
@@ -107,7 +107,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         tracing::trace!(
                             "Quota received. User: {}, Processing graph: {}, Computation: {}",
                             computation.user,
-                            computation.workflow,
+                            computation.processing_graph,
                             computation.computation
                         );
 
@@ -196,7 +196,7 @@ pub struct OperatorQuota {
 pub struct ComputationQuota {
     pub timestamp: DateTime,
     pub computation_id: ComputationId,
-    pub workflow_id: ProcessingGraphId,
+    pub processing_graph_id: ProcessingGraphId,
     pub count: u64,
 }
 

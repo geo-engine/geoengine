@@ -2,13 +2,12 @@ use super::{
     RasterExpressionError, get_expression_dependencies,
     raster_query_processor::{ExpressionInput, ExpressionQueryProcessor},
 };
-use crate::engine::TypedRasterOperator;
 use crate::{
     engine::{
         CanonicOperatorName, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-        WorkflowOperatorPath,
+        ProcessingGraphOperatorPath, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+        RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+        TypedRasterQueryProcessor,
     },
     error::InvalidNumberOfExpressionInputBands,
     optimization::{OptimizableOperator, OptimizationError},
@@ -62,7 +61,7 @@ fn index_to_parameter(index: usize) -> String {
 impl RasterOperator for Expression {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -140,7 +139,7 @@ impl OperatorName for Expression {
 #[derive(Clone)]
 pub struct InitializedExpression {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     expression_string: String,
@@ -217,7 +216,7 @@ impl InitializedRasterOperator for InitializedExpression {
         Expression::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -330,7 +329,7 @@ mod tests {
             sources: SingleRasterSource { raster: raster_a },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
 
@@ -386,7 +385,7 @@ mod tests {
             sources: SingleRasterSource { raster: raster_a },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
 
@@ -453,7 +452,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
 
@@ -523,7 +522,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
 
@@ -594,7 +593,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
 
@@ -678,7 +677,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
 
@@ -750,7 +749,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
         .await
         .unwrap();
 
@@ -819,7 +818,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
 
@@ -931,7 +930,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
 
@@ -997,7 +996,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
 
@@ -1065,7 +1064,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &ectx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ectx)
         .await
         .unwrap();
 

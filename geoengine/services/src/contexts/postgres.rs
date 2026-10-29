@@ -483,7 +483,7 @@ where
 
     fn query_context(
         &self,
-        workflow: ProcessingGraphId,
+        processing_graph: ProcessingGraphId,
         computation: ComputationId,
     ) -> Result<Self::QueryContext> {
         // TODO: load config only once
@@ -496,11 +496,11 @@ where
             self.context.default_cache_ttl,
             Some(self.context.tile_cache.clone()),
             self.context.new_raster_cache.clone(),
-            Some(
-                self.context
-                    .quota
-                    .create_quota_tracking(&self.session, workflow, computation),
-            ),
+            Some(self.context.quota.create_quota_tracking(
+                &self.session,
+                processing_graph,
+                computation,
+            )),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
         ))
     }
@@ -659,7 +659,7 @@ mod tests {
         util::tests::{
             MockQuotaTracking, admin_login,
             mock_oidc::{MockRefreshServerConfig, mock_refresh_server},
-            register_ndvi_workflow_helper,
+            register_ndvi_processing_graph_helper,
         },
     };
     use bb8_postgres::tokio_postgres::NoTls;
@@ -884,7 +884,7 @@ mod tests {
             .await
             .unwrap();
 
-        let layer_workflow_id = db
+        let layer_processing_graph_id = db
             .register_processing_graph(ProcessingGraph {
                 operator: TypedOperator::Vector(
                     MockPointSource {
@@ -896,9 +896,13 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(db.load_processing_graph(&layer_workflow_id).await.is_ok());
+        assert!(
+            db.load_processing_graph(&layer_processing_graph_id)
+                .await
+                .is_ok()
+        );
 
-        let plot_workflow_id = db
+        let plot_processing_graph_id = db
             .register_processing_graph(ProcessingGraph {
                 operator: Statistics {
                     params: StatisticsParams {
@@ -917,7 +921,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(db.load_processing_graph(&plot_workflow_id).await.is_ok());
+        assert!(
+            db.load_processing_graph(&plot_processing_graph_id)
+                .await
+                .is_ok()
+        );
 
         // add a plot
         let update = UpdateProject {
@@ -925,13 +933,13 @@ mod tests {
             name: Some("Test9 Updated".into()),
             description: None,
             layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-                workflow: layer_workflow_id,
+                processing_graph: layer_processing_graph_id,
                 name: "TestLayer".into(),
                 symbology: PointSymbology::default().into(),
                 visibility: Default::default(),
             })]),
             plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {
-                workflow: plot_workflow_id,
+                processing_graph: plot_processing_graph_id,
                 name: "Test Plot".into(),
             })]),
             bounds: None,
@@ -948,18 +956,18 @@ mod tests {
             name: Some("Test9 Updated".into()),
             description: None,
             layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-                workflow: layer_workflow_id,
+                processing_graph: layer_processing_graph_id,
                 name: "TestLayer".into(),
                 symbology: PointSymbology::default().into(),
                 visibility: Default::default(),
             })]),
             plots: Some(vec![
                 PlotUpdate::UpdateOrInsert(Plot {
-                    workflow: plot_workflow_id,
+                    processing_graph: plot_processing_graph_id,
                     name: "Test Plot".into(),
                 }),
                 PlotUpdate::UpdateOrInsert(Plot {
-                    workflow: plot_workflow_id,
+                    processing_graph: plot_processing_graph_id,
                     name: "Test Plot".into(),
                 }),
             ]),
@@ -1130,8 +1138,8 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
-        let workflow = ProcessingGraph {
+    async fn it_persists_processing_graphs(app_ctx: PostgresContext<NoTls>) {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -1144,13 +1152,16 @@ mod tests {
         let ctx = app_ctx.session_context(session);
 
         let db = ctx.db();
-        let id = db.register_processing_graph(workflow).await.unwrap();
+        let id = db
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap();
 
         drop(ctx);
 
-        let workflow = db.load_processing_graph(&id).await.unwrap();
+        let processing_graph = db.load_processing_graph(&id).await.unwrap();
 
-        let json = serde_json::to_value(&workflow).unwrap();
+        let json = serde_json::to_value(&processing_graph).unwrap();
         assert_eq!(
             json,
             serde_json::json!({
@@ -1933,7 +1944,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -1953,7 +1964,7 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: [("meta".to_string(), "datum".to_string())].into(),
                     properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 },
@@ -1972,7 +1983,7 @@ mod tests {
                 name: "Layer1".to_string(),
                 description: "Layer 1".to_string(),
                 symbology: None,
-                workflow: workflow.clone(),
+                processing_graph: processing_graph.clone(),
                 metadata: [("meta".to_string(), "datum".to_string())].into(),
                 properties: vec![("proper".to_string(), "tee".to_string()).into()],
             }
@@ -1996,7 +2007,7 @@ mod tests {
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: Default::default(),
                     properties: Default::default(),
                 },
@@ -2134,7 +2145,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -2151,7 +2162,7 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: [("meta".to_string(), "datum".to_string())].into(),
                     properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 },
@@ -2178,7 +2189,7 @@ mod tests {
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: Default::default(),
                     properties: Default::default(),
                 },
@@ -2490,7 +2501,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -2510,7 +2521,7 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: [("meta".to_string(), "datum".to_string())].into(),
                     properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 },
@@ -2537,7 +2548,7 @@ mod tests {
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: Default::default(),
                     properties: Default::default(),
                 },
@@ -2576,7 +2587,7 @@ mod tests {
                     name: "Layer3".to_string(),
                     description: "Layer 3".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: Default::default(),
                     properties: Default::default(),
                 },
@@ -3013,7 +3024,7 @@ mod tests {
 
         let layer_db = app_ctx.session_context(session).db();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3030,7 +3041,7 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: [("meta".to_string(), "datum".to_string())].into(),
                     properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 },
@@ -3057,7 +3068,7 @@ mod tests {
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: Default::default(),
                     properties: Default::default(),
                 },
@@ -3193,7 +3204,7 @@ mod tests {
         let user_session = app_ctx.create_anonymous_session().await.unwrap();
         let user_layer_db = app_ctx.session_context(user_session.clone()).db();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Vector(
                 MockPointSource {
                     params: MockPointSourceParams {
@@ -3213,7 +3224,7 @@ mod tests {
                     name: "Layer1".to_string(),
                     description: "Layer 1".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: [("meta".to_string(), "datum".to_string())].into(),
                     properties: vec![("proper".to_string(), "tee".to_string()).into()],
                 },
@@ -3240,7 +3251,7 @@ mod tests {
                     name: "Layer2".to_string(),
                     description: "Layer 2".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: Default::default(),
                     properties: Default::default(),
                 },
@@ -3279,7 +3290,7 @@ mod tests {
                     name: "Layer3".to_string(),
                     description: "Layer 3".to_string(),
                     symbology: None,
-                    workflow: workflow.clone(),
+                    processing_graph: processing_graph.clone(),
                     metadata: Default::default(),
                     properties: Default::default(),
                 },
@@ -3732,7 +3743,7 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
@@ -3928,7 +3939,7 @@ mod tests {
                 AddLayer {
                     name: "layer".to_string(),
                     description: "description".to_string(),
-                    workflow: ProcessingGraph {
+                    processing_graph: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -3998,7 +4009,7 @@ mod tests {
                 AddLayer {
                     name: "layer 1".to_string(),
                     description: "description".to_string(),
-                    workflow: ProcessingGraph {
+                    processing_graph: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -4023,7 +4034,7 @@ mod tests {
                 AddLayer {
                     name: "layer 2".to_string(),
                     description: "description".to_string(),
-                    workflow: ProcessingGraph {
+                    processing_graph: ProcessingGraph {
                         operator: TypedOperator::Vector(
                             MockPointSource {
                                 params: MockPointSourceParams::new(vec![
@@ -4573,7 +4584,7 @@ mod tests {
     async fn it_updates_project_layer_symbology(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, processing_graph_id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let db = app_ctx.session_context(session.clone()).db();
 
@@ -4610,7 +4621,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "processingGraph": workflow_id.to_string(),
+                "processingGraph": processing_graph_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4647,7 +4658,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "processingGraph": workflow_id.to_string(),
+                "processingGraph": processing_graph_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4726,7 +4737,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "processingGraph": workflow_id.to_string(),
+                "processingGraph": processing_graph_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false
@@ -4805,7 +4816,7 @@ mod tests {
             "id": project_id.to_string(),
             "layers": [{
                 "name": "NDVI",
-                "processingGraph": workflow_id.to_string(),
+                "processingGraph": processing_graph_id.to_string(),
                 "visibility": {
                     "data": true,
                     "legend": false

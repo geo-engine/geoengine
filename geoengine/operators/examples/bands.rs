@@ -6,11 +6,10 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, RasterDataType, RasterTile2D, RenameBands},
     util::test::TestDefault,
 };
-use geoengine_operators::engine::TypedRasterOperator;
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
-        WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, ProcessingGraphOperatorPath, RasterOperator,
+        SingleRasterSource, TypedRasterOperator,
     },
     processing::{
         Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
@@ -64,7 +63,10 @@ async fn one_band_at_a_time(runs: usize, bands: u32) {
     let aggregation = aggregation_on_source(ndvi_source);
 
     let eprocessor = aggregation
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap()
         .query_processor()
@@ -131,7 +133,10 @@ async fn all_bands_at_once(runs: usize, bands: u32) {
     let aggregation = aggregation_on_source(stacker);
 
     let processor = aggregation
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap()
         .query_processor()

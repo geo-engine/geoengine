@@ -1,8 +1,9 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource, TypedPlotOperator,
-    TypedPlotQueryProcessor, VectorColumnInfo, VectorQueryProcessor, WorkflowOperatorPath,
+    PlotResultDescriptor, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+    SingleVectorSource, TypedPlotOperator, TypedPlotQueryProcessor, VectorColumnInfo,
+    VectorQueryProcessor,
 };
 use crate::error;
 use crate::optimization::OptimizationError;
@@ -49,7 +50,7 @@ pub struct FeatureAttributeValuesOverTimeParams {
 impl PlotOperator for FeatureAttributeValuesOverTime {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -352,7 +353,7 @@ mod tests {
 
         let operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 
@@ -499,7 +500,7 @@ mod tests {
 
         let operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 
@@ -634,7 +635,7 @@ mod tests {
 
         let operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

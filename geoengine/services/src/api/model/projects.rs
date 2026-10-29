@@ -64,7 +64,7 @@ pub struct ProjectLayer {
 impl From<crate::projects::ProjectLayer> for ProjectLayer {
     fn from(value: crate::projects::ProjectLayer) -> Self {
         Self {
-            processing_graph: value.workflow.into(),
+            processing_graph: value.processing_graph.into(),
             name: value.name,
             visibility: value.visibility,
             symbology: value.symbology,
@@ -75,7 +75,7 @@ impl From<crate::projects::ProjectLayer> for ProjectLayer {
 impl From<ProjectLayer> for crate::projects::ProjectLayer {
     fn from(value: ProjectLayer) -> Self {
         Self {
-            workflow: value.processing_graph.into(),
+            processing_graph: value.processing_graph.into(),
             name: value.name,
             visibility: value.visibility,
             symbology: value.symbology,
@@ -93,7 +93,7 @@ pub struct Plot {
 impl From<crate::projects::Plot> for Plot {
     fn from(value: crate::projects::Plot) -> Self {
         Self {
-            processing_graph: value.workflow.into(),
+            processing_graph: value.processing_graph.into(),
             name: value.name,
         }
     }
@@ -102,7 +102,7 @@ impl From<crate::projects::Plot> for Plot {
 impl From<Plot> for crate::projects::Plot {
     fn from(value: Plot) -> Self {
         Self {
-            workflow: value.processing_graph.into(),
+            processing_graph: value.processing_graph.into(),
             name: value.name,
         }
     }

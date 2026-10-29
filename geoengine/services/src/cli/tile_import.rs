@@ -231,7 +231,7 @@ async fn add_dataset_to_collection(
     let add_layer = AddLayer {
         name: layer_name.to_string(),
         description: String::new(),
-        workflow: ProcessingGraph {
+        processing_graph: ProcessingGraph {
             operator: TypedOperator::Raster(
                 MultiBandGdalSource {
                     params: MultiBandGdalSourceParameters {

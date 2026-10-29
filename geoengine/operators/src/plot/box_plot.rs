@@ -1,9 +1,9 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterOrVectorSource,
-    TypedPlotOperator, TypedPlotQueryProcessor, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, WorkflowOperatorPath,
+    PlotResultDescriptor, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+    SingleRasterOrVectorSource, TypedPlotOperator, TypedPlotQueryProcessor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor,
 };
 use crate::error::{self, Error};
 use crate::optimization::OptimizationError;
@@ -53,7 +53,7 @@ pub struct BoxPlotParams {
 impl PlotOperator for BoxPlot {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -615,7 +615,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -680,7 +683,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -731,7 +737,10 @@ mod tests {
 
         let init = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await;
 
         assert!(init.is_err());
@@ -760,7 +769,10 @@ mod tests {
 
         let init = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await;
 
         assert!(init.is_err());
@@ -789,7 +801,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -840,7 +855,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -893,7 +911,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -975,7 +996,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1045,7 +1069,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1116,7 +1143,10 @@ mod tests {
 
         let query_processor = box_plot
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1183,7 +1213,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1263,7 +1296,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1336,7 +1372,10 @@ mod tests {
 
         let query_processor = histogram
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap()
             .query_processor()
@@ -1425,7 +1464,10 @@ mod tests {
             sources: source.into(),
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await?
         .query_processor()?
         .json_vega()

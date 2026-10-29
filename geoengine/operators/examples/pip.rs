@@ -10,7 +10,8 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::engine::{
-    ChunkByteSize, MockExecutionContext, QueryProcessor, VectorOperator, WorkflowOperatorPath,
+    ChunkByteSize, MockExecutionContext, ProcessingGraphOperatorPath, QueryProcessor,
+    VectorOperator,
 };
 use geoengine_operators::mock::MockFeatureCollectionSource;
 use geoengine_operators::processing::{
@@ -36,7 +37,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         },
     }
     .typed()
-    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+    .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
     .await
     .unwrap();
 

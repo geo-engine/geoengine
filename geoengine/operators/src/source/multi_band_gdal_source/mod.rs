@@ -1,7 +1,6 @@
-use crate::engine::TypedRasterOperator;
 use crate::engine::{
-    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryContext, QueryProcessor,
-    SpatialGridDescriptor, WorkflowOperatorPath,
+    CanonicOperatorName, MetaData, OperatorData, OperatorName, ProcessingGraphOperatorPath,
+    QueryContext, QueryProcessor, SpatialGridDescriptor, TypedRasterOperator,
 };
 use crate::error::Error;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
@@ -324,7 +323,7 @@ impl OperatorName for MultiBandGdalSource {
 impl RasterOperator for MultiBandGdalSource {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let data_id = context.resolve_named_data(&self.params.data).await?;
@@ -371,7 +370,7 @@ impl RasterOperator for MultiBandGdalSource {
 
 pub struct InitializedGdalSourceOperator {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     data_name: NamedData,
     pub meta_data: MultiBandGdalMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
@@ -385,7 +384,7 @@ pub struct InitializedGdalSourceOperator {
 impl InitializedGdalSourceOperator {
     pub fn initialize_original_resolution(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         data_name: NamedData,
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
@@ -408,7 +407,7 @@ impl InitializedGdalSourceOperator {
     #[allow(clippy::too_many_arguments)]
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         data_name: NamedData,
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
@@ -567,7 +566,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         MultiBandGdalSource::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -581,7 +580,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     ) -> Result<TypedRasterOperator, OptimizationError> {
         self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
 
-        // TODO: handle cases where the original workflow explicitly loads overviews in the source
+        // TODO: handle cases where the original processing graph explicitly loads overviews in the source
         ensure!(
             self.overview_level == 0,
             SourcesMustNotUseOverviews {
@@ -1082,11 +1081,11 @@ mod tests {
         }
         .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -1186,11 +1185,11 @@ mod tests {
         }
         .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -1316,11 +1315,11 @@ mod tests {
         }
         .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -1496,11 +1495,11 @@ mod tests {
         }
         .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -1729,11 +1728,11 @@ mod tests {
         }
         .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -1834,11 +1833,11 @@ mod tests {
         }
         .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = operator
             .clone()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?.get_u16().unwrap();

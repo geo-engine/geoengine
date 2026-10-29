@@ -1,10 +1,10 @@
-use crate::engine::{CanonicOperatorName, OperatorData, QueryContext, TypedVectorOperator};
 use crate::optimization::OptimizationError;
 use crate::{
     engine::{
-        ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath,
+        CanonicOperatorName, ExecutionContext, InitializedVectorOperator, OperatorData,
+        OperatorName, ProcessingGraphOperatorPath, QueryContext, SourceOperator,
+        TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        VectorResultDescriptor,
     },
     util::Result,
 };
@@ -106,7 +106,7 @@ impl OperatorData for MockPointSource {
 impl VectorOperator for MockPointSource {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         _context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let bounds = match self.params.spatial_bounds {
@@ -138,7 +138,7 @@ impl VectorOperator for MockPointSource {
 
 pub struct InitializedMockPointSource {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     spatial_bounds: SpatialBoundsDerive,
     result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
@@ -167,7 +167,7 @@ impl InitializedVectorOperator for InitializedMockPointSource {
         MockPointSource::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -220,7 +220,10 @@ mod tests {
         }
         .typed();
         let initialized = mps
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 

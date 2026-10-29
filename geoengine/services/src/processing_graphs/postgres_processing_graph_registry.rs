@@ -19,22 +19,22 @@ where
 {
     async fn register_processing_graph_in_tx(
         &self,
-        workflow: ProcessingGraph,
+        processing_graph: ProcessingGraph,
         tx: &tokio_postgres::Transaction<'_>,
     ) -> Result<ProcessingGraphId> {
-        let workflow_id = ProcessingGraphId::from_hash(&workflow);
+        let processing_graph_id = ProcessingGraphId::from_hash(&processing_graph);
 
         tx.execute(
             "INSERT INTO processing_graphs (id, processing_graph) VALUES ($1, $2) 
             ON CONFLICT DO NOTHING;",
             &[
-                &workflow_id,
-                &serde_json::to_value(&workflow).context(error::SerdeJson)?,
+                &processing_graph_id,
+                &serde_json::to_value(&processing_graph).context(error::SerdeJson)?,
             ],
         )
         .await?;
 
-        Ok(workflow_id)
+        Ok(processing_graph_id)
     }
 }
 
@@ -48,12 +48,14 @@ where
 {
     async fn register_processing_graph(
         &self,
-        workflow: ProcessingGraph,
+        processing_graph: ProcessingGraph,
     ) -> Result<ProcessingGraphId> {
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.transaction().await?;
 
-        let id = self.register_processing_graph_in_tx(workflow, &tx).await?;
+        let id = self
+            .register_processing_graph_in_tx(processing_graph, &tx)
+            .await?;
 
         tx.commit().await?;
 
@@ -61,7 +63,7 @@ where
     }
 
     async fn load_processing_graph(&self, id: &ProcessingGraphId) -> Result<ProcessingGraph> {
-        // TODO: add authorization beyond the fact that you can only access workflows if you happen to know the id.
+        // TODO: add authorization beyond the fact that you can only access processing graphs if you happen to know the id.
         let conn = self.conn_pool.get().await?;
         let stmt = conn
             .prepare("SELECT processing_graph FROM processing_graphs WHERE id = $1")

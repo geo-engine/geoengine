@@ -1,10 +1,9 @@
-use crate::engine::{TypedRasterOperator, TypedVectorOperator};
 use geoengine_datatypes::dataset::NamedData;
 use serde::{Deserialize, Serialize};
 
 use crate::util::input::{MultiRasterOrVectorOperator, RasterOrVectorOperator};
 
-use super::OperatorData;
+use super::{OperatorData, TypedRasterOperator, TypedVectorOperator};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

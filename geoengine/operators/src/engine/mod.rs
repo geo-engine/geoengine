@@ -21,6 +21,7 @@ pub use operator_impl::{
     SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
     SingleVectorSource, SourceOperator,
 };
+pub use processing_graph_path::ProcessingGraphOperatorPath;
 pub use query::{
     ChunkByteSize, MockQueryContext, QueryAbortRegistration, QueryAbortTrigger, QueryContext,
 };
@@ -36,15 +37,14 @@ pub use result_descriptor::{
 };
 use tracing::Span;
 pub use typed_operators::{TypedPlotOperator, TypedRasterOperator, TypedVectorOperator};
-pub use workflow_path::WorkflowOperatorPath;
 mod clonable_operator;
 mod execution_context;
 mod initialized_sources;
 mod operator;
 mod operator_impl;
+mod processing_graph_path;
 mod query;
 mod typed_operators;
-mod workflow_path;
 
 #[macro_use]
 mod query_processor;
@@ -184,7 +184,7 @@ macro_rules! call_on_bi_generic_raster_processor {
 }
 
 /// Shorthand type for a function that creates a `Span` for tracing
-pub type CreateSpan = fn(path: &WorkflowOperatorPath, query_counter: usize) -> Span;
+pub type CreateSpan = fn(path: &ProcessingGraphOperatorPath, query_counter: usize) -> Span;
 
 /// Macro for creating a span-fn for a given type, e.g. `span_fn!(MyType)`
 macro_rules! span_fn {

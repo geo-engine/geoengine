@@ -270,12 +270,12 @@ impl OgcProtocol {
 pub fn ogc_endpoint_url(
     base: &Url,
     protocol: OgcProtocol,
-    workflow: ProcessingGraphId,
+    processing_graph: ProcessingGraphId,
 ) -> Result<Url> {
     ensure!(base.path().ends_with('/'), error::BaseUrlMustEndWithSlash);
 
     base.join(protocol.url_path())?
-        .join(&workflow.to_string())
+        .join(&processing_graph.to_string())
         .map_err(Into::into)
 }
 

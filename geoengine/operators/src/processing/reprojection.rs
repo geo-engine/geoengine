@@ -1,4 +1,3 @@
-use crate::engine::{TypedRasterOperator, TypedVectorOperator};
 use std::marker::PhantomData;
 
 use super::map_query::MapQueryProcessor;
@@ -9,11 +8,11 @@ use crate::{
     },
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
-        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
-        SingleRasterSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-        WorkflowOperatorPath,
+        InitializedVectorOperator, Operator, OperatorName, ProcessingGraphOperatorPath,
+        QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        SingleRasterOrVectorSource, SingleRasterSource, SpatialGridDescriptor, TypedRasterOperator,
+        TypedRasterQueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor,
     },
     error::{self, Error},
     optimization::{OptimizableOperator, OptimizationError, ProjectionOptimizationFailed},
@@ -68,7 +67,7 @@ impl OperatorName for Reprojection {
 
 pub struct InitializedVectorReprojection {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: VectorResultDescriptor,
     params: ReprojectionParams,
     source: Box<dyn InitializedVectorOperator>,
@@ -78,7 +77,7 @@ pub struct InitializedVectorReprojection {
 
 pub struct InitializedRasterReprojection<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     params: ReprojectionParams,
     source: O,
@@ -96,7 +95,7 @@ impl InitializedVectorReprojection {
     /// This function errors if the source's bounding box cannot be reprojected to the target's `SpatialReference`.
     pub fn try_new_with_input(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         params: ReprojectionParams,
         source_vector_operator: Box<dyn InitializedVectorOperator>,
     ) -> Result<Self> {
@@ -139,7 +138,7 @@ impl InitializedVectorReprojection {
 impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
     pub fn try_new_with_input(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         params: ReprojectionParams,
         source_raster_operator: O,
         tiling_spec: TilingSpecification,
@@ -237,7 +236,7 @@ fn compute_output_spatial_grid(
 impl VectorOperator for Reprojection {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -337,7 +336,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
         Reprojection::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -446,7 +445,7 @@ where
 impl RasterOperator for Reprojection {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -620,7 +619,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
         Reprojection::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -927,7 +926,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -1003,7 +1002,7 @@ mod tests {
                 source: lines_source.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -1086,7 +1085,7 @@ mod tests {
                 source: polygon_source.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -1253,7 +1252,7 @@ mod tests {
                 source: mrs1.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let qp = initialized_operator
@@ -1311,7 +1310,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let qp = initialized_operator
@@ -1524,7 +1523,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let qp = initialized_operator
@@ -1632,7 +1631,7 @@ mod tests {
                 source: gdal_op.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1697,7 +1696,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1779,7 +1778,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -1863,7 +1862,7 @@ mod tests {
                 source: point_source.into(),
             },
         })
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 

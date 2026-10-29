@@ -974,7 +974,7 @@ mod tests {
                 session_and_4326_layer_id, session_and_native_3857_layer_id,
             },
             util::{
-                get_initialized_raster_operator, load_layer, raster_workflow_metadata,
+                get_initialized_raster_operator, load_layer, raster_processing_graph_metadata,
                 reproject_if_necessary,
             },
         },
@@ -1058,13 +1058,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
-        let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow.clone(),
-                execution_context,
-            )
-            .await
-            .unwrap();
+        let descriptor = raster_processing_graph_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.processing_graph.clone(), execution_context)
+        .await
+        .unwrap();
 
         let tiling_spec = ctx.execution_context().unwrap().tiling_specification();
         let max_zoom = calculate_number_of_zoom_levels(&descriptor, &tiling_spec) - 1;
@@ -1102,13 +1100,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
-        let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow.clone(),
-                execution_context,
-            )
-            .await
-            .unwrap();
+        let descriptor = raster_processing_graph_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.processing_graph.clone(), execution_context)
+        .await
+        .unwrap();
 
         let tiling_spec = ctx.execution_context().unwrap().tiling_specification();
         let max_zoom = calculate_number_of_zoom_levels(&descriptor, &tiling_spec) - 1;
@@ -1141,13 +1137,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
-        let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow.clone(),
-                execution_context,
-            )
-            .await
-            .unwrap();
+        let descriptor = raster_processing_graph_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.processing_graph.clone(), execution_context)
+        .await
+        .unwrap();
 
         let tiles_with_levels = get_tiles_for_all_zoom_levels_with_details(&ctx, &descriptor);
 
@@ -1171,13 +1165,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
-        let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow.clone(),
-                execution_context,
-            )
-            .await
-            .unwrap();
+        let descriptor = raster_processing_graph_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.processing_graph.clone(), execution_context)
+        .await
+        .unwrap();
 
         let tiles_with_levels = get_tiles_for_all_zoom_levels_with_details(&ctx, &descriptor);
 
@@ -1205,13 +1197,11 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
-        let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow.clone(),
-                execution_context,
-            )
-            .await
-            .unwrap();
+        let descriptor = raster_processing_graph_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.processing_graph.clone(), execution_context)
+        .await
+        .unwrap();
 
         let tiles_with_levels = get_tiles_for_all_zoom_levels_with_details(&ctx, &descriptor);
 
@@ -1615,8 +1605,8 @@ mod tests {
         let ctx = app_ctx.session_context(session);
         let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
         let descriptor =
-            raster_workflow_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
-                layer.workflow.clone(),
+            raster_processing_graph_metadata::<crate::contexts::PostgresSessionContext<NoTls>>(
+                layer.processing_graph.clone(),
                 ctx.execution_context().unwrap(),
             )
             .await

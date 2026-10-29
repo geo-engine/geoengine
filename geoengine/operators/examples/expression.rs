@@ -7,11 +7,10 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, RasterDataType, RasterTile2D},
     util::test::TestDefault,
 };
-use geoengine_operators::engine::TypedRasterOperator;
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
-        WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, ProcessingGraphOperatorPath, RasterOperator,
+        SingleRasterSource, TypedRasterOperator,
     },
     processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
     source::{GdalSource, GdalSourceParameters},
@@ -70,7 +69,10 @@ async fn main() {
     let expression = expression_on_sources(ndvi_source.clone(), ndvi_source);
 
     let expression_processor = expression
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await
         .unwrap()
         .query_processor()

@@ -40,8 +40,8 @@ enum ReadStrategy {
     TiledReopenDataset { tile_size: usize },
 }
 
-/// Workflow of reading remote Sentinel-2 data using vsicurl, calculating NDVI, and exporting as PNG.
-/// Compare direct reads to tiled reads. This is a baseline to compare a Geo Engine workflow against.
+/// Processing graph of reading remote Sentinel-2 data using vsicurl, calculating NDVI, and exporting as PNG.
+/// Compare direct reads to tiled reads. This is a baseline to compare a Geo Engine processing graph against.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     const N_RUNS: usize = 5;
 
@@ -64,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pixel_size = 10.0; // Sentinel-2 10m resolution
 
     let sentinel_tile_pixel_size = 10980;
-    // clip tile, to make it comparable to Geo Engine workflow where we omit the borders as to avoid also downloading overlapping neighboring tiles
+    // clip tile, to make it comparable to Geo Engine processing graph where we omit the borders as to avoid also downloading overlapping neighboring tiles
     let pixel_border = 2000;
 
     let x_offset = pixel_border as isize;

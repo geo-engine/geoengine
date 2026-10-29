@@ -1,8 +1,8 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -63,7 +63,7 @@ pub enum BandFilterError {
 impl RasterOperator for BandFilter {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         ensure!(!self.params.bands.is_empty(), error::NoBandsSelected);
@@ -140,7 +140,7 @@ impl RasterOperator for BandFilter {
 
 pub struct InitializedBandFilter {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     bands: BandsByNameOrIndex,
@@ -172,7 +172,7 @@ impl InitializedRasterOperator for InitializedBandFilter {
         BandFilter::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -399,7 +399,10 @@ mod tests {
         );
 
         let initialized = band_filter
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -525,7 +528,10 @@ mod tests {
         );
 
         let initialized = band_filter
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 

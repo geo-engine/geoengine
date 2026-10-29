@@ -6,9 +6,9 @@ use crate::adapters::{
 };
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
@@ -75,7 +75,7 @@ impl OperatorName for Interpolation {
 impl RasterOperator for Interpolation {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -102,7 +102,7 @@ pub struct InitializedInterpolation<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
     output_result_descriptor: RasterResultDescriptor,
     raster_source: O,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     interpolation_method: InterpolationMethod,
     tiling_specification: TilingSpecification,
 }
@@ -110,7 +110,7 @@ pub struct InitializedInterpolation<O: InitializedRasterOperator> {
 impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
     pub fn new_with_source_and_params(
         name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         raster_source: O,
         params: &InterpolationParams,
         tiling_specification: TilingSpecification,
@@ -220,7 +220,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
         Interpolation::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -736,7 +736,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();
@@ -1130,7 +1130,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();
@@ -1184,7 +1184,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let processor = operator.query_processor()?.get_i8().unwrap();

@@ -1204,7 +1204,7 @@ impl StacImporter {
         let add_layer = AddLayer {
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     MultiBandGdalSource {
                         params: MultiBandGdalSourceParameters {

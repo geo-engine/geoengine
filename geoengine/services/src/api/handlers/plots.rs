@@ -19,11 +19,10 @@ use geoengine_datatypes::{
     spatial_reference::{DefaultCoordinateProjector, SpatialReference},
     util::Identifier,
 };
-use geoengine_operators::engine::TypedPlotOperator;
 use geoengine_operators::{
     engine::{
-        ExecutionContext, InitializedPlotOperator, QueryContext, ResultDescriptor,
-        TypedPlotQueryProcessor, WorkflowOperatorPath,
+        ExecutionContext, InitializedPlotOperator, ProcessingGraphOperatorPath, QueryContext,
+        ResultDescriptor, TypedPlotOperator, TypedPlotQueryProcessor,
     },
     util::abortable_query_execution,
 };
@@ -130,23 +129,24 @@ async fn get_plot_handler<C: ApplicationContext>(
     );
 
     let ctx = app_ctx.session_context(session);
-    let workflow_id = ProcessingGraphId(id.into_inner());
-    let workflow = ctx.db().load_processing_graph(&workflow_id).await?;
+    let processing_graph_id = ProcessingGraphId(id.into_inner());
+    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
 
-    let operator = workflow.operator.get_plot()?;
+    let operator = processing_graph.operator.get_plot()?;
 
     let execution_context = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
     let initialized = operator
-        .initialize(workflow_operator_path_root, &execution_context)
+        .initialize(processing_graph_operator_path_root, &execution_context)
         .await?;
 
-    // handle request and workflow crs matching
-    let workflow_spatial_ref: Option<SpatialReference> =
+    // handle request and processing graph crs matching
+    let processing_graph_spatial_ref: Option<SpatialReference> =
         initialized.result_descriptor().spatial_reference().into();
-    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+    let processing_graph_spatial_ref =
+        processing_graph_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     // TODO: use a default spatial reference if it is not set?
     let request_spatial_ref: SpatialReference =
@@ -159,7 +159,7 @@ async fn get_plot_handler<C: ApplicationContext>(
             params.bbox,
             request_resolution,
             request_spatial_ref,
-            workflow_spatial_ref,
+            processing_graph_spatial_ref,
         )
         .await?
     } else {
@@ -169,12 +169,12 @@ async fn get_plot_handler<C: ApplicationContext>(
     let query_rect =
         PlotQueryRectangle::new(params.bbox, params.time.into(), PlotSeriesSelection::all());
 
-    let query_rect = if request_spatial_ref == workflow_spatial_ref {
+    let query_rect = if request_spatial_ref == processing_graph_spatial_ref {
         Some(query_rect)
     } else {
         let repr_spatial_query = reproject_spatial_query::<_, DefaultCoordinateProjector>(
             query_rect.spatial_bounds(),
-            workflow_spatial_ref,
+            processing_graph_spatial_ref,
             request_spatial_ref,
             true,
         )?;
@@ -186,7 +186,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let Some(query_rect) = query_rect else {
         return Err(error::Error::UnresolvableQueryBoundingBox2DInSrs {
             query_bbox: params.bbox.into(),
-            query_srs: workflow_spatial_ref.into(),
+            query_srs: processing_graph_spatial_ref.into(),
         });
     };
 
@@ -194,7 +194,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let computation_id = ComputationId::new();
 
-    let mut query_ctx = ctx.query_context(workflow_id, computation_id)?;
+    let mut query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
@@ -260,16 +260,16 @@ async fn optimize_for_request_resolution(
     request_bbox: BoundingBox2D,
     request_resolution: SpatialResolution,
     request_spatial_ref: SpatialReference,
-    workflow_spatial_ref: SpatialReference,
+    processing_graph_spatial_ref: SpatialReference,
 ) -> Result<Box<dyn InitializedPlotOperator>> {
-    let resolution = if request_spatial_ref == workflow_spatial_ref {
+    let resolution = if request_spatial_ref == processing_graph_spatial_ref {
         Ok(request_resolution)
     } else {
         suggest_pixel_size_like_gdal_helper::<_, DefaultCoordinateProjector>(
             request_bbox,
             request_resolution,
             request_spatial_ref,
-            workflow_spatial_ref,
+            processing_graph_spatial_ref,
         )
     };
 
@@ -282,7 +282,10 @@ async fn optimize_for_request_resolution(
 
     match optimized {
         Ok(optimized) => Ok(optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                execution_context,
+            )
             .await?),
         Err(error) => {
             debug!("Computing plot without optimization: {error}");
@@ -335,7 +338,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -361,7 +364,7 @@ mod tests {
         let id = app_ctx
             .session_context(session.clone())
             .db()
-            .register_processing_graph(workflow)
+            .register_processing_graph(processing_graph)
             .await
             .unwrap();
 
@@ -420,7 +423,7 @@ mod tests {
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                 r#type: Default::default(),
                 params: StatisticsParameters {
@@ -446,7 +449,7 @@ mod tests {
         let id = app_ctx
             .session_context(session.clone())
             .db()
-            .register_processing_graph(workflow)
+            .register_processing_graph(processing_graph)
             .await
             .unwrap();
 
@@ -542,7 +545,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Plot(PlotOperator::Histogram(Histogram {
                 r#type: Default::default(),
                 params: HistogramParameters {
@@ -576,7 +579,7 @@ mod tests {
         let id = app_ctx
             .session_context(session.clone())
             .db()
-            .register_processing_graph(workflow)
+            .register_processing_graph(processing_graph)
             .await
             .unwrap();
 
@@ -686,7 +689,7 @@ mod tests {
 
     #[ge_context::test]
     async fn check_request_types(app_ctx: PostgresContext<NoTls>) {
-        async fn get_workflow_json(
+        async fn get_processing_graph_json(
             app_ctx: PostgresContext<NoTls>,
             method: Method,
         ) -> ServiceResponse {
@@ -695,7 +698,7 @@ mod tests {
 
             let session_id = session.id();
 
-            let workflow = ProcessingGraph {
+            let processing_graph = ProcessingGraph {
                 operator: TypedOperator::Plot(PlotOperator::Statistics(Statistics {
                     r#type: Default::default(),
                     params: StatisticsParameters {
@@ -718,7 +721,11 @@ mod tests {
                 .unwrap(),
             };
 
-            let id = ctx.db().register_processing_graph(workflow).await.unwrap();
+            let id = ctx
+                .db()
+                .register_processing_graph(processing_graph)
+                .await
+                .unwrap();
 
             let params = &[
                 ("bbox", "-180,-90,180,90"),
@@ -737,7 +744,7 @@ mod tests {
         }
 
         check_allowed_http_methods(
-            |method| get_workflow_json(app_ctx.clone(), method),
+            |method| get_processing_graph_json(app_ctx.clone(), method),
             &[Method::GET],
         )
         .await;

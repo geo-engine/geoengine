@@ -2,7 +2,7 @@
   "id": "52ef9e16-acd1-4c61-9a80-7d5b335d0d5a",
   "name": "Natural Earth II – R",
   "description": "A raster with one band (R from RGB)",
-  "workflow": {
+  "processingGraph": {
     "type": "Raster",
     "operator": {      
       "type": "GdalSource",

@@ -420,7 +420,7 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, VectorOperator, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, ProcessingGraphOperatorPath, VectorOperator,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::processing::vector_join::util::translation_table;
@@ -436,12 +436,18 @@ mod tests {
 
         let left = MockFeatureCollectionSource::single(left)
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
         let right = MockFeatureCollectionSource::single(right)
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 

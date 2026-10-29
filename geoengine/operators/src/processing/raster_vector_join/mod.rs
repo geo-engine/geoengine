@@ -3,12 +3,11 @@ mod aggregator;
 mod non_aggregated;
 mod util;
 
-use crate::engine::TypedVectorOperator;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedVectorOperator,
-    Operator, OperatorName, SingleVectorMultipleRasterSources, TypedRasterQueryProcessor,
-    TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor, WorkflowOperatorPath,
+    Operator, OperatorName, ProcessingGraphOperatorPath, SingleVectorMultipleRasterSources,
+    TypedRasterQueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor, VectorColumnInfo,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error::{self, ColumnNameConflict, Error};
 use crate::processing::raster_vector_join::non_aggregated::RasterVectorJoinProcessor;
@@ -106,7 +105,7 @@ pub enum TemporalAggregationMethod {
 impl VectorOperator for RasterVectorJoin {
     async fn _initialize(
         mut self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
@@ -253,7 +252,7 @@ pub struct RasterInput {
 
 pub struct InitializedRasterVectorJoin {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
@@ -347,7 +346,7 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
         RasterVectorJoin::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -531,7 +530,7 @@ mod tests {
 
         let operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 
@@ -608,7 +607,7 @@ mod tests {
 
         let operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 
@@ -688,7 +687,7 @@ mod tests {
 
         let operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctc)
             .await
             .unwrap();
 
@@ -759,7 +758,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctc)
         .await;
 
         assert!(matches!(
@@ -855,7 +854,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctc)
         .await
         .unwrap();
 

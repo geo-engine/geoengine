@@ -1713,8 +1713,8 @@ mod tests {
     use geoengine_operators::{
         engine::{
             ExecutionContext, InitializedVectorOperator, MetaData, MetaDataProvider,
-            QueryProcessor, RasterOperator as _, StaticMetaData, VectorOperator,
-            VectorResultDescriptor, WorkflowOperatorPath,
+            ProcessingGraphOperatorPath, QueryProcessor, RasterOperator as _, StaticMetaData,
+            VectorOperator, VectorResultDescriptor,
         },
         source::{
             MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSource,
@@ -2016,7 +2016,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
         .await
         .map_err(Into::into)
     }
@@ -3704,8 +3704,8 @@ mod tests {
 
         assert_eq!(res.status(), 200, "response: {res:?}");
 
-        // create workflow
-        let workflow = ProcessingGraph {
+        // create processing graph
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
                     r#type: Default::default(),
@@ -3721,7 +3721,7 @@ mod tests {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -3898,8 +3898,8 @@ mod tests {
 
         assert_eq!(res.status(), 200, "response: {res:?}");
 
-        // create workflow
-        let workflow = ProcessingGraph {
+        // create processing graph
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::MultiBandGdalSource(
                 MultiBandGdalSource {
                     r#type: Default::default(),
@@ -3915,7 +3915,7 @@ mod tests {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 
@@ -4149,12 +4149,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -4247,12 +4247,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -4354,12 +4354,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -4487,12 +4487,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -4718,12 +4718,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -4946,12 +4946,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -5044,12 +5044,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -5660,12 +5660,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;
@@ -5754,12 +5754,12 @@ mod tests {
 
         let execution_context = ctx.execution_context()?;
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized = OperatorsMultiBandGdalSource::try_from(operator.clone())
             .unwrap()
             .typed()
-            .initialize(workflow_operator_path_root, &execution_context)
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         let processor = initialized.query_processor()?;

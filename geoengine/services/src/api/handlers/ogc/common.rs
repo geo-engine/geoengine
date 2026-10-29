@@ -7,10 +7,10 @@ use crate::{
                 util::{
                     LinkCreator, crs_from_spatial_reference_option, ensure_layer_exists,
                     get_initialized_raster_operator, link_creator, load_layer, parse_bbox_option,
-                    parse_datetime_option, raster_workflow_metadata, to_ogc_bbox,
+                    parse_datetime_option, raster_processing_graph_metadata, to_ogc_bbox,
                 },
             },
-            processing_graphs::{ProvenanceEntry, workflow_provenance},
+            processing_graphs::{ProvenanceEntry, processing_graph_provenance},
         },
         model::datatypes::{DataProviderId, LayerId},
     },
@@ -288,11 +288,11 @@ pub async fn collections<C: ApplicationContext>(
         build_collection(
             layer_id,
             &create_link,
-            raster_workflow_metadata::<C::SessionContext>(
-                layer.workflow.clone(),
+            raster_processing_graph_metadata::<C::SessionContext>(
+                layer.processing_graph.clone(),
                 ctx.execution_context()?,
             ),
-            workflow_provenance(&layer.workflow, &ctx).map_err(Into::into),
+            processing_graph_provenance(&layer.processing_graph, &ctx).map_err(Into::into),
             no_timestamps(),
         )
         .await?,
@@ -362,13 +362,13 @@ pub async fn collection<C: ApplicationContext>(
 
     let processing_graph_id = ctx
         .db()
-        .register_processing_graph(layer.workflow.clone())
+        .register_processing_graph(layer.processing_graph.clone())
         .await?;
 
     let query_context = ctx.query_context(processing_graph_id, ComputationId::new())?;
 
-    let descriptor = raster_workflow_metadata::<C::SessionContext>(
-        layer.workflow.clone(),
+    let descriptor = raster_processing_graph_metadata::<C::SessionContext>(
+        layer.processing_graph.clone(),
         ctx.execution_context()?,
     )
     .await?;
@@ -382,7 +382,7 @@ pub async fn collection<C: ApplicationContext>(
         layer_id,
         &create_link,
         futures::future::ready(Ok(descriptor.clone())),
-        workflow_provenance(&layer.workflow, &ctx).map_err(Into::into),
+        processing_graph_provenance(&layer.processing_graph, &ctx).map_err(Into::into),
         Some(
             time_stream::<C::SessionContext>(
                 &query_context,

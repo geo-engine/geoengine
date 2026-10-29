@@ -7,8 +7,8 @@ use geoengine_datatypes::collections::VectorDataType;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
-    OperatorData, OperatorName, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
-    VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    OperatorData, OperatorName, ProcessingGraphOperatorPath, TypedVectorOperator,
+    TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::optimization::OptimizationError;
@@ -60,7 +60,7 @@ pub struct InitializedVectorJoinSources {
 impl InitializedSources<InitializedVectorJoinSources> for VectorJoinSources {
     async fn initialize_sources(
         self,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<InitializedVectorJoinSources> {
         Ok(InitializedVectorJoinSources {
@@ -94,7 +94,7 @@ pub enum VectorJoinType {
 impl VectorOperator for VectorJoin {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -211,7 +211,7 @@ pub struct InitializedVectorJoinParams {
 
 pub struct InitializedVectorJoin {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: VectorResultDescriptor,
     left: Box<dyn InitializedVectorOperator>,
     right: Box<dyn InitializedVectorOperator>,
@@ -292,7 +292,7 @@ impl InitializedVectorOperator for InitializedVectorJoin {
         VectorJoin::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -381,7 +381,7 @@ mod tests {
         operator
             .typed()
             .initialize(
-                WorkflowOperatorPath::initialize_root(),
+                ProcessingGraphOperatorPath::initialize_root(),
                 &MockExecutionContext::test_default(),
             )
             .await
@@ -423,7 +423,7 @@ mod tests {
         assert!(matches!(
             operator
                 .typed()
-                .initialize(WorkflowOperatorPath::initialize_root(), &MockExecutionContext::test_default())
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &MockExecutionContext::test_default())
                 .await,
             Err(error::Error::ColumnDoesNotExist { column }) if column == "foo"
         ));

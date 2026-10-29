@@ -33,7 +33,8 @@ pub struct Layer {
     pub id: ProviderLayerId,
     pub name: String,
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph", alias = "workflow")]
+    pub processing_graph: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -61,7 +62,8 @@ pub struct AddLayer {
     pub name: String,
     // #[schema(example = "Example layer description")]
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph", alias = "workflow")]
+    pub processing_graph: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -78,7 +80,8 @@ pub struct UpdateLayer {
     pub name: String,
     // #[schema(example = "Example layer description")]
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph", alias = "workflow")]
+    pub processing_graph: ProcessingGraph,
     #[serde(default)]
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
@@ -94,7 +97,8 @@ pub struct LayerDefinition {
     pub id: LayerId,
     pub name: String,
     pub description: String,
-    pub workflow: ProcessingGraph,
+    #[serde(rename = "processingGraph", alias = "workflow")]
+    pub processing_graph: ProcessingGraph,
     pub symbology: Option<Symbology>,
     /// properties, for instance, to be rendered in the UI
     #[serde(default)]
@@ -334,4 +338,39 @@ pub struct LayerCollectionDefinition {
     pub layers: Vec<LayerId>,
     #[serde(default)]
     pub properties: Vec<Property>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_reads_layer_definitions_with_the_former_workflow_key() {
+        let processing_graph = serde_json::json!({
+            "type": "Vector",
+            "operator": {
+                "type": "MockPointSource",
+                "params": { "points": [{ "x": 1.0, "y": 2.0 }] }
+            }
+        });
+        let definition = |key: &str| {
+            serde_json::json!({
+                "id": "9ee3619e-d0f9-4ced-9c44-3d407c3aed69",
+                "name": "Layer",
+                "description": "",
+                key: processing_graph,
+                "symbology": null
+            })
+        };
+
+        let current: LayerDefinition =
+            serde_json::from_value(definition("processingGraph")).unwrap();
+        let former: LayerDefinition = serde_json::from_value(definition("workflow")).unwrap();
+
+        assert_eq!(current.processing_graph, former.processing_graph);
+
+        let serialized = serde_json::to_value(&current).unwrap();
+        assert!(serialized.get("processingGraph").is_some());
+        assert!(serialized.get("workflow").is_none());
+    }
 }

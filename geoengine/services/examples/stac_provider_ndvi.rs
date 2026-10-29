@@ -8,7 +8,7 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, GridBounds, SpatialGridDefinition},
     util::Identifier,
 };
-use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
+use geoengine_operators::engine::{ExecutionContext, ProcessingGraphOperatorPath};
 use geoengine_services::{
     api::model::services::StacDataProviderDefinition as ApiStacDataProviderDefinition,
     contexts::{ApplicationContext, PostgresContext, SessionContext},
@@ -105,16 +105,17 @@ async fn run_profile_query(
         .await
         .context("registering STAC provider")?;
 
-    let workflow_json = include_str!("../../test_data/api_calls/stac_provider/ndvi-workflow.json")
-        .replace(PROVIDER_TEMPLATE_ID, &provider_id.to_string());
+    let processing_graph_json =
+        include_str!("../../test_data/api_calls/stac_provider/ndvi-processing-graph.json")
+            .replace(PROVIDER_TEMPLATE_ID, &provider_id.to_string());
 
-    let workflow: ProcessingGraph =
-        serde_json::from_str(&workflow_json).context("deserializing NDVI workflow")?;
+    let processing_graph: ProcessingGraph = serde_json::from_str(&processing_graph_json)
+        .context("deserializing NDVI processing graph")?;
 
-    let operator = workflow
+    let operator = processing_graph
         .operator
         .get_raster()
-        .context("expecting raster workflow")?;
+        .context("expecting raster processing graph")?;
 
     let execution_ctx = admin_ctx
         .execution_context()
@@ -122,9 +123,12 @@ async fn run_profile_query(
 
     let initialized = operator
         .clone()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_ctx)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_ctx,
+        )
         .await
-        .context("initializing workflow operator")?;
+        .context("initializing processing graph operator")?;
 
     let processor = initialized
         .query_processor()

@@ -1,7 +1,6 @@
 use super::Result;
-use crate::engine::TypedRasterOperator;
 use crate::{
-    engine::{ExecutionContext, QueryContext, WorkflowOperatorPath},
+    engine::{ExecutionContext, ProcessingGraphOperatorPath, QueryContext, TypedRasterOperator},
     machine_learning::onnx_util::{OrtEnvironment, create_ort_environment},
     util::gdal::gdal_open_dataset,
 };
@@ -38,7 +37,7 @@ pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryCo
     query_rectangle: RasterQueryRectangle,
 ) -> Result<Vec<RasterTile2D<u8>>> {
     let initialized_operator = operator
-        .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
         .await?;
     let query_processor = initialized_operator.query_processor()?.get_u8().ok_or(
         crate::error::Error::MustNotHappen {

@@ -315,7 +315,7 @@ where
         let mut layers = vec![];
         for row in rows {
             layers.push(ProjectLayer {
-                workflow: ProcessingGraphId(row.get(1)),
+                processing_graph: ProcessingGraphId(row.get(1)),
                 name: row.get(0),
                 symbology: row.get(2),
                 visibility: row.get(3),
@@ -436,7 +436,7 @@ pub async fn load_plots(
     let plots = rows
         .into_iter()
         .map(|row| Plot {
-            workflow: ProcessingGraphId(row.get(1)),
+            processing_graph: ProcessingGraphId(row.get(1)),
             name: row.get(0),
         })
         .collect();
@@ -474,7 +474,7 @@ pub async fn update_plots(
                     project_version_id,
                     &(idx as i32),
                     &plot.name,
-                    &plot.workflow,
+                    &plot.processing_graph,
                 ],
             )
             .await
@@ -636,7 +636,7 @@ pub async fn update_project(
                     &project.version.id,
                     &(idx as i32),
                     &layer.name,
-                    &layer.workflow,
+                    &layer.processing_graph,
                     &layer.symbology,
                     &layer.visibility,
                 ],

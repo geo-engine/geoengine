@@ -718,7 +718,7 @@ impl TestDefault for SharedCache {
     }
 }
 
-/// Holds all the cached results for an operator graph (workflow)
+/// Holds all the cached results for an operator graph (processing graph)
 #[derive(Debug, Default)]
 pub struct OperatorCacheEntry<CacheEntriesContainer, LandingZoneEntriesContainer> {
     // for a given operator and query we need to look through all entries to find one that matches

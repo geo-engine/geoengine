@@ -17,11 +17,11 @@ use snafu::ensure;
 
 use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedVectorOperator, Operator, QueryContext,
-    QueryProcessor, SingleVectorSource, TypedVectorOperator, TypedVectorQueryProcessor,
-    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+    CanonicOperatorName, ExecutionContext, InitializedSources, InitializedVectorOperator, Operator,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, SingleVectorSource,
+    TypedVectorOperator, TypedVectorQueryProcessor, VectorColumnInfo, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::engine::{InitializedSources, OperatorName, WorkflowOperatorPath};
 use crate::error::{self, Error};
 use crate::optimization::OptimizationError;
 use crate::processing::circle_merging_quadtree::aggregates::MeanAggregator;
@@ -65,7 +65,7 @@ impl OperatorName for VisualPointClustering {
 impl VectorOperator for VisualPointClustering {
     async fn _initialize(
         mut self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(!self.params.radius_column.is_empty(), error::EmptyInput);
@@ -187,7 +187,7 @@ impl VectorOperator for VisualPointClustering {
 
 pub struct InitializedVisualPointClustering {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     params: VisualPointClusteringParams,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
@@ -242,7 +242,7 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
         VisualPointClustering::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -554,7 +554,10 @@ mod tests {
 
         let initialized_operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -638,7 +641,10 @@ mod tests {
 
         let initialized_operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -723,7 +729,10 @@ mod tests {
 
         let initialized_operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -816,7 +825,10 @@ mod tests {
 
         let initialized_operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 
@@ -924,7 +936,10 @@ mod tests {
 
         let initialized_operator = operator
             .typed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
             .await
             .unwrap();
 

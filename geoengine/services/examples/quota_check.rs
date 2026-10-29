@@ -40,7 +40,7 @@ async fn bench() {
 
         let (_, dataset) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
-        let workflow = ProcessingGraph {
+        let processing_graph = ProcessingGraph {
             operator: TypedOperator::Raster(RasterOperator::TemporalRasterAggregation(
                 TemporalRasterAggregation {
                     r#type: Default::default(),
@@ -74,7 +74,7 @@ async fn bench() {
 
         let id = ctx
             .db()
-            .register_processing_graph(workflow.clone())
+            .register_processing_graph(processing_graph.clone())
             .await
             .unwrap();
 

@@ -586,7 +586,7 @@ async fn create_harvest_layer_collections(
         let add_layer = AddLayer {
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
-            workflow: ProcessingGraph {
+            processing_graph: ProcessingGraph {
                 operator: TypedOperator::Raster(
                     MultiBandGdalSource {
                         params: MultiBandGdalSourceParameters::new(NamedData {

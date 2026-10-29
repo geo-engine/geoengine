@@ -7,12 +7,11 @@ use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, VectorQueryRectangle},
     raster::arrow_conversion::raster_tile_2d_to_arrow_ipc_file,
 };
-use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
 use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,
     engine::{
-        InitializedRasterOperator, QueryAbortTrigger, QueryContext, QueryProcessorExt,
-        WorkflowOperatorPath,
+        InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
+        QueryProcessorExt, TypedRasterOperator, TypedVectorOperator,
     },
 };
 use tokio::{
@@ -68,10 +67,10 @@ impl WebsocketStreamTask {
         execution_ctx: C::ExecutionContext,
         query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized_operator = raster_operator
-            .initialize(workflow_operator_path_root, &execution_ctx)
+            .initialize(processing_graph_operator_path_root, &execution_ctx)
             .await?;
 
         Self::new_raster_initialized(initialized_operator, query_rectangle, query_ctx).await
@@ -83,10 +82,10 @@ impl WebsocketStreamTask {
         execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
         let initialized_operator = vector_operator
-            .initialize(workflow_operator_path_root, &execution_ctx)
+            .initialize(processing_graph_operator_path_root, &execution_ctx)
             .await?;
 
         let spatial_reference = initialized_operator.result_descriptor().spatial_reference;

@@ -39,38 +39,11 @@ use geoengine_operators::{
     util::input::RasterOrVectorOperator,
 };
 
-macro_rules! convert {
-    ($operator:expr, $($variant:ident),+ $(,)?) => {{
-        match $operator {
-            $(
-                OperatorsTypedVectorOperator::$variant(op) => Ok(VectorOperator::$variant(op.as_ref().try_into()?)),
-            )+
-            operator => anyhow::bail!(
-                "cannot convert runtime vector operator {type_name} to ProcessingGraph",
-                type_name = operator.type_name()
-            ),
-        }
-    }};
-}
-
 /// Converts a vector operator from `operators` into an API vector operator.
 pub fn vector_operator_from_runtime(
     operator: &OperatorsTypedVectorOperator,
 ) -> anyhow::Result<VectorOperator> {
-    convert!(
-        operator,
-        ColumnRangeFilter,
-        LineSimplification,
-        MockPointSource,
-        OgrSource,
-        PointInPolygonFilter,
-        RasterVectorJoin,
-        Reprojection,
-        TimeProjection,
-        VectorExpression,
-        VectorJoin,
-        VisualPointClustering,
-    )
+    VectorOperator::try_from(operator)
 }
 
 fn raster_operator_from_runtime(
@@ -384,10 +357,10 @@ mod tests {
     use super::*;
     use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
     use geoengine_datatypes::{dataset::NamedData, primitives::Measurement};
-    use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
     use geoengine_operators::{
         engine::{
             SingleRasterOrVectorSource, SingleVectorMultipleRasterSources, SingleVectorSource,
+            TypedRasterOperator, TypedVectorOperator,
         },
         mock::{MockPointSource, MockPointSourceParams, SpatialBoundsDerive},
         processing::{
@@ -506,6 +479,18 @@ mod tests {
                     },
                 }),
                 |graph| matches!(graph, VectorOperator::Reprojection(_)),
+            ),
+            (
+                TypedVectorOperator::from(geoengine_operators::processing::TimeShift {
+                    params: geoengine_operators::processing::TimeShiftParams::Relative {
+                        granularity: geoengine_datatypes::primitives::TimeGranularity::Months,
+                        value: -1,
+                    },
+                    sources: SingleRasterOrVectorSource {
+                        source: RasterOrVectorOperator::Vector(vector_source()),
+                    },
+                }),
+                |graph| matches!(graph, VectorOperator::TimeShift(_)),
             ),
             (
                 TypedVectorOperator::from(OperatorsTimeProjection {

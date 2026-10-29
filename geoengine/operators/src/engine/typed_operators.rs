@@ -5,8 +5,8 @@ use tracing::debug;
 
 use super::{
     CreateSpan, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, OperatorData, PlotOperator, RasterOperator, VectorOperator,
-    WorkflowOperatorPath,
+    InitializedVectorOperator, OperatorData, PlotOperator, ProcessingGraphOperatorPath,
+    RasterOperator, VectorOperator,
 };
 use crate::machine_learning::onnx::Onnx;
 use crate::mock::{
@@ -48,7 +48,7 @@ macro_rules! typed_operator {
             /// Initialize the operator
             pub async fn initialize(
                 self,
-                path: WorkflowOperatorPath,
+                path: ProcessingGraphOperatorPath,
                 context: &dyn ExecutionContext,
             ) -> Result<Box<dyn $initialized>> {
                 debug!("Initialize {}, path: {}", self.type_name(), &path);
@@ -68,6 +68,12 @@ macro_rules! typed_operator {
                 match self {
                     $(Self::$variant(operator) => $operator_trait::span(operator.as_ref()),)+
                 }
+            }
+
+            /// Pairs of variant names and the `OperatorName::TYPE_NAME` of their operators
+            #[cfg(test)]
+            fn variant_and_operator_names() -> &'static [(&'static str, &'static str)] {
+                &[$((stringify!($variant), <$operator as crate::engine::OperatorName>::TYPE_NAME),)+]
             }
         }
 
@@ -160,5 +166,33 @@ typed_operator! {
         PieChart(PieChart),
         ScatterPlot(ScatterPlot),
         Statistics(Statistics),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The variant names are the serialized `type` tags, while `OperatorName::TYPE_NAME` is used
+    /// for logging and tracing. They must not drift apart.
+    #[test]
+    fn it_uses_the_operator_names_as_variant_names() {
+        // generic mocks have one variant per type parameter, suffixed with the parameter
+        const GENERIC_MOCKS: [&str; 2] = ["MockRasterSource", "MockFeatureCollectionSource"];
+
+        for (variant, operator_name) in TypedRasterOperator::variant_and_operator_names()
+            .iter()
+            .chain(TypedVectorOperator::variant_and_operator_names())
+            .chain(TypedPlotOperator::variant_and_operator_names())
+        {
+            if GENERIC_MOCKS.contains(operator_name) {
+                assert!(
+                    variant.starts_with(operator_name),
+                    "variant {variant} must start with {operator_name}"
+                );
+            } else {
+                assert_eq!(variant, operator_name);
+            }
+        }
     }
 }

@@ -54,47 +54,11 @@ use geoengine_operators::{
     },
 };
 
-macro_rules! convert {
-    ($operator:expr, $($variant:ident),+ $(,)?) => {{
-        match $operator {
-            $(
-                OperatorsTypedRasterOperator::$variant(op) => Ok(RasterOperator::$variant(op.as_ref().try_into()?)),
-            )+
-            operator => anyhow::bail!(
-                "cannot convert runtime raster operator {type_name} to ProcessingGraph",
-                type_name = operator.type_name()
-            ),
-        }
-    }};
-}
-
 /// Converts a raster operator from `operators` into an API raster operator.
 pub fn raster_operator_from_runtime(
     operator: &OperatorsTypedRasterOperator,
 ) -> anyhow::Result<RasterOperator> {
-    convert!(
-        operator,
-        BandFilter,
-        BandNeighborhoodAggregate,
-        BandwiseExpression,
-        Downsampling,
-        Expression,
-        GdalSource,
-        Interpolation,
-        MultiBandGdalSource,
-        NeighborhoodAggregate,
-        Onnx,
-        Radiance,
-        RasterScaling,
-        RasterStacker,
-        RasterTypeConversion,
-        Rasterization,
-        Reprojection,
-        Reflectance,
-        Temperature,
-        TemporalRasterAggregation,
-        TimeShift,
-    )
+    RasterOperator::try_from(operator)
 }
 
 impl TryFrom<&OperatorsGdalSource> for GdalSource {
@@ -671,11 +635,10 @@ mod tests {
         primitives::{Coordinate2D, SpatialResolution, TimeGranularity, TimeStep},
         raster::RenameBands as RuntimeRenameBands,
     };
-    use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
     use geoengine_operators::{
         engine::{
             MultipleRasterSources, SingleRasterOrVectorSource, SingleRasterSource,
-            SingleVectorSource,
+            SingleVectorSource, TypedRasterOperator, TypedVectorOperator,
         },
         machine_learning::onnx::OnnxParams as OperatorsOnnxParameters,
         processing::{

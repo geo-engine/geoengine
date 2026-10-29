@@ -1,44 +1,7 @@
-use geoengine_operators::{
-    engine::{
-        PlotOperator as OperatorsPlotOperator, RasterOperator as OperatorsRasterOperator,
-        TypedOperator as OperatorsTypedOperator, TypedPlotOperator as OperatorsTypedPlotOperator,
-        TypedRasterOperator as OperatorsTypedRasterOperator,
-        TypedVectorOperator as OperatorsTypedVectorOperator,
-        VectorOperator as OperatorsVectorOperator,
-    },
-    machine_learning::onnx::Onnx as OperatorsOnnx,
-    mock::MockPointSource as OperatorsMockPointSource,
-    plot::{
-        BoxPlot as OperatorsBoxPlot, ClassHistogram as OperatorsClassHistogram,
-        FeatureAttributeValuesOverTime as OperatorsFeatureAttributeValuesOverTime,
-        Histogram as OperatorsHistogram,
-        MeanRasterPixelValuesOverTime as OperatorsMeanRasterPixelValuesOverTime,
-        PieChart as OperatorsPieChart, ScatterPlot as OperatorsScatterPlot,
-        Statistics as OperatorsStatistics,
-    },
-    processing::{
-        BandFilter as OperatorsBandFilter,
-        BandNeighborhoodAggregate as OperatorsBandNeighborhoodAggregate,
-        BandwiseExpression as OperatorsBandwiseExpression,
-        ColumnRangeFilter as OperatorsColumnRangeFilter, Downsampling as OperatorsDownsampling,
-        Expression as OperatorsExpression, Interpolation as OperatorsInterpolation,
-        LineSimplification as OperatorsLineSimplification,
-        NeighborhoodAggregate as OperatorsNeighborhoodAggregate,
-        PointInPolygonFilter as OperatorsPointInPolygonFilter, Radiance as OperatorsRadiance,
-        RasterScaling as OperatorsRasterScaling, RasterStacker as OperatorsRasterStacker,
-        RasterTypeConversion as OperatorsRasterTypeConversion,
-        RasterVectorJoin as OperatorsRasterVectorJoin, Rasterization as OperatorsRasterization,
-        Reflectance as OperatorsReflectance, Reprojection as OperatorsReprojection,
-        Temperature as OperatorsTemperature,
-        TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
-        TimeProjection as OperatorsTimeProjection, TimeShift as OperatorsTimeShift,
-        VectorExpression as OperatorsVectorExpression, VectorJoin as OperatorsVectorJoin,
-        VisualPointClustering as OperatorsVisualPointClustering,
-    },
-    source::{
-        GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
-        OgrSource as OperatorsOgrSource,
-    },
+use geoengine_operators::engine::{
+    TypedOperator as OperatorsTypedOperator, TypedPlotOperator as OperatorsTypedPlotOperator,
+    TypedRasterOperator as OperatorsTypedRasterOperator,
+    TypedVectorOperator as OperatorsTypedVectorOperator,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
@@ -148,7 +111,7 @@ impl TryFrom<&ServicesProcessingGraph> for ProcessingGraph {
 
     fn try_from(value: &ServicesProcessingGraph) -> Result<Self, Self::Error> {
         Ok(
-            match back_conversion::workflow_to_processing_graph(value)? {
+            match back_conversion::services_processing_graph_to_api(value)? {
                 TypedOperator::Vector(operator) => ProcessingGraph::Vector(operator),
                 TypedOperator::Raster(operator) => ProcessingGraph::Raster(operator),
                 TypedOperator::Plot(operator) => ProcessingGraph::Plot(operator),
@@ -235,158 +198,86 @@ pub enum PlotOperator {
     Statistics(Statistics),
 }
 
-impl TryFrom<RasterOperator> for OperatorsTypedRasterOperator {
-    type Error = anyhow::Error;
-    fn try_from(operator: RasterOperator) -> Result<Self, Self::Error> {
-        match operator {
-            RasterOperator::BandFilter(band_filter) => {
-                OperatorsBandFilter::try_from(band_filter).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::BandNeighborhoodAggregate(op) => {
-                OperatorsBandNeighborhoodAggregate::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::BandwiseExpression(op) => {
-                OperatorsBandwiseExpression::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Downsampling(downsampling) => {
-                OperatorsDownsampling::try_from(downsampling).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Expression(expression) => {
-                OperatorsExpression::try_from(expression).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::GdalSource(gdal_source) => {
-                OperatorsGdalSource::try_from(gdal_source).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Interpolation(interpolation) => {
-                OperatorsInterpolation::try_from(interpolation).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::MultiBandGdalSource(gdal_source) => {
-                OperatorsMultiBandGdalSource::try_from(gdal_source)
-                    .map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::NeighborhoodAggregate(op) => {
-                OperatorsNeighborhoodAggregate::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Onnx(op) => {
-                OperatorsOnnx::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::RasterScaling(op) => {
-                OperatorsRasterScaling::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::RasterStacker(raster_stacker) => {
-                OperatorsRasterStacker::try_from(raster_stacker).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::RasterTypeConversion(type_conversion) => {
-                OperatorsRasterTypeConversion::try_from(type_conversion)
-                    .map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Rasterization(op) => {
-                OperatorsRasterization::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Reprojection(reprojection) => {
-                OperatorsReprojection::try_from(reprojection).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Reflectance(op) => {
-                OperatorsReflectance::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Radiance(op) => {
-                OperatorsRadiance::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::TemporalRasterAggregation(aggregation) => {
-                OperatorsTemporalRasterAggregation::try_from(aggregation)
-                    .map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::Temperature(op) => {
-                OperatorsTemperature::try_from(op).map(OperatorsRasterOperator::typed)
-            }
-            RasterOperator::TimeShift(op) => {
-                OperatorsTimeShift::try_from(op).map(OperatorsRasterOperator::typed)
+/// Generates the conversions between an API operator enum and its counterpart in `operators`.
+/// Both enums use the same variant names.
+/// Operators that only exist in `operators`, like mocks, cannot be converted to API operators.
+macro_rules! operator_conversions {
+    ($api:ident <=> $operators:ident { $($variant:ident),+ $(,)? }) => {
+        impl TryFrom<$api> for $operators {
+            type Error = anyhow::Error;
+
+            fn try_from(operator: $api) -> Result<Self, Self::Error> {
+                Ok(match operator {
+                    $($api::$variant(operator) => Self::$variant(Box::new(operator.try_into()?)),)+
+                })
             }
         }
-    }
+
+        impl TryFrom<&$operators> for $api {
+            type Error = anyhow::Error;
+
+            #[allow(unreachable_patterns)] // if all operators have an API counterpart
+            fn try_from(operator: &$operators) -> Result<Self, Self::Error> {
+                match operator {
+                    $($operators::$variant(operator) => Ok(Self::$variant(operator.as_ref().try_into()?)),)+
+                    operator => anyhow::bail!(
+                        "cannot convert runtime operator {} to ProcessingGraph",
+                        operator.type_name()
+                    ),
+                }
+            }
+        }
+    };
 }
 
-impl TryFrom<VectorOperator> for OperatorsTypedVectorOperator {
-    type Error = anyhow::Error;
-    fn try_from(operator: VectorOperator) -> Result<Self, Self::Error> {
-        match operator {
-            VectorOperator::ColumnRangeFilter(op) => {
-                OperatorsColumnRangeFilter::try_from(op).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::LineSimplification(op) => {
-                OperatorsLineSimplification::try_from(op).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::MockPointSource(mock_point_source) => {
-                OperatorsMockPointSource::try_from(mock_point_source)
-                    .map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::OgrSource(ogr_source) => {
-                OperatorsOgrSource::try_from(ogr_source).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::PointInPolygonFilter(op) => {
-                OperatorsPointInPolygonFilter::try_from(op).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::RasterVectorJoin(rvj) => {
-                OperatorsRasterVectorJoin::try_from(rvj).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::Reprojection(reprojection) => {
-                OperatorsReprojection::try_from(reprojection).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::TimeProjection(op) => {
-                OperatorsTimeProjection::try_from(op).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::TimeShift(op) => {
-                OperatorsTimeShift::try_from(op).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::VectorExpression(vector_expression) => {
-                OperatorsVectorExpression::try_from(vector_expression)
-                    .map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::VectorJoin(op) => {
-                OperatorsVectorJoin::try_from(op).map(OperatorsVectorOperator::typed)
-            }
-            VectorOperator::VisualPointClustering(op) => {
-                OperatorsVisualPointClustering::try_from(op).map(OperatorsVectorOperator::typed)
-            }
-        }
-    }
-}
+operator_conversions!(RasterOperator <=> OperatorsTypedRasterOperator {
+    BandFilter,
+    BandNeighborhoodAggregate,
+    BandwiseExpression,
+    Downsampling,
+    Expression,
+    GdalSource,
+    Interpolation,
+    MultiBandGdalSource,
+    NeighborhoodAggregate,
+    Onnx,
+    RasterScaling,
+    RasterStacker,
+    RasterTypeConversion,
+    Rasterization,
+    Reprojection,
+    Reflectance,
+    Radiance,
+    TemporalRasterAggregation,
+    Temperature,
+    TimeShift,
+});
 
-impl TryFrom<PlotOperator> for OperatorsTypedPlotOperator {
-    type Error = anyhow::Error;
-    fn try_from(operator: PlotOperator) -> Result<Self, Self::Error> {
-        match operator {
-            PlotOperator::BoxPlot(box_plot) => {
-                OperatorsBoxPlot::try_from(box_plot).map(OperatorsPlotOperator::typed)
-            }
-            PlotOperator::ClassHistogram(class_histogram) => {
-                OperatorsClassHistogram::try_from(class_histogram).map(OperatorsPlotOperator::typed)
-            }
-            PlotOperator::FeatureAttributeValuesOverTime(feature_attribute_values_over_time) => {
-                OperatorsFeatureAttributeValuesOverTime::try_from(
-                    feature_attribute_values_over_time,
-                )
-                .map(OperatorsPlotOperator::typed)
-            }
-            PlotOperator::Histogram(histogram) => {
-                OperatorsHistogram::try_from(histogram).map(OperatorsPlotOperator::typed)
-            }
-            PlotOperator::MeanRasterPixelValuesOverTime(mean_raster_pixel_values_over_time) => {
-                OperatorsMeanRasterPixelValuesOverTime::try_from(mean_raster_pixel_values_over_time)
-                    .map(OperatorsPlotOperator::typed)
-            }
-            PlotOperator::PieChart(pie_chart) => {
-                OperatorsPieChart::try_from(pie_chart).map(OperatorsPlotOperator::typed)
-            }
-            PlotOperator::ScatterPlot(scatter_plot) => {
-                OperatorsScatterPlot::try_from(scatter_plot).map(OperatorsPlotOperator::typed)
-            }
-            PlotOperator::Statistics(statistics) => {
-                OperatorsStatistics::try_from(statistics).map(OperatorsPlotOperator::typed)
-            }
-        }
-    }
-}
+operator_conversions!(VectorOperator <=> OperatorsTypedVectorOperator {
+    ColumnRangeFilter,
+    LineSimplification,
+    MockPointSource,
+    OgrSource,
+    PointInPolygonFilter,
+    RasterVectorJoin,
+    Reprojection,
+    TimeProjection,
+    TimeShift,
+    VectorExpression,
+    VectorJoin,
+    VisualPointClustering,
+});
+
+operator_conversions!(PlotOperator <=> OperatorsTypedPlotOperator {
+    BoxPlot,
+    ClassHistogram,
+    FeatureAttributeValuesOverTime,
+    Histogram,
+    MeanRasterPixelValuesOverTime,
+    PieChart,
+    ScatterPlot,
+    Statistics,
+});
 
 impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     type Error = anyhow::Error;
@@ -528,10 +419,10 @@ mod tests {
                 },
             }));
 
-        let serialized_workflow = serde_json::to_value(&processing_graph).unwrap();
+        let serialized_processing_graph = serde_json::to_value(&processing_graph).unwrap();
 
         assert_eq!(
-            serialized_workflow,
+            serialized_processing_graph,
             serde_json::json!({
                 "type": "Vector",
                 "operator": {
@@ -552,15 +443,15 @@ mod tests {
             })
         );
 
-        let deserialized_workflow: ProcessingGraph =
-            serde_json::from_value(serialized_workflow).unwrap();
+        let deserialized_processing_graph: ProcessingGraph =
+            serde_json::from_value(serialized_processing_graph).unwrap();
 
-        assert_eq!(processing_graph, deserialized_workflow);
+        assert_eq!(processing_graph, deserialized_processing_graph);
     }
 
     #[test]
-    fn it_converts_workflow_to_processing_graph_for_mock_point_source() {
-        let workflow = ServicesProcessingGraph {
+    fn it_converts_services_processing_graph_to_api_for_mock_point_source() {
+        let processing_graph = ServicesProcessingGraph {
             operator: OperatorsTypedOperator::Vector(TypedVectorOperator::from(
                 geoengine_operators::mock::MockPointSource {
                     params: geoengine_operators::mock::MockPointSourceParams {
@@ -571,7 +462,7 @@ mod tests {
             )),
         };
 
-        let processing_graph = ProcessingGraph::try_from(&workflow).unwrap();
+        let processing_graph = ProcessingGraph::try_from(&processing_graph).unwrap();
 
         assert!(matches!(
             processing_graph,

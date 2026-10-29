@@ -1,10 +1,9 @@
-use crate::engine::TypedVectorOperator;
 use crate::engine::{
     CanonicOperatorName, InitializedVectorOperator, OperatorData, OperatorName, QueryContext,
-    SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-    VectorResultDescriptor,
+    SourceOperator, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
-use crate::engine::{QueryProcessor, WorkflowOperatorPath};
+use crate::engine::{ProcessingGraphOperatorPath, QueryProcessor};
 use crate::error;
 use crate::optimization::OptimizationError;
 use crate::util::{Result, safe_lock_mutex};
@@ -117,7 +116,7 @@ impl OperatorData for CsvSourceParameters {
 impl VectorOperator for CsvSource {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         _context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let initialized_source = InitializedCsvSource {
@@ -141,7 +140,7 @@ impl VectorOperator for CsvSource {
 
 pub struct InitializedCsvSource {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     result_descriptor: VectorResultDescriptor,
     state: CsvSourceParameters,
 }
@@ -169,7 +168,7 @@ impl InitializedVectorOperator for InitializedCsvSource {
         CsvSource::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 

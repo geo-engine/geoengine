@@ -27,13 +27,13 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, Pixel},
     util::test::TestDefault,
 };
-use geoengine_operators::engine::{TypedRasterOperator, TypedVectorOperator};
 use geoengine_operators::{
     engine::{
         BoxRasterQueryProcessor, ChunkByteSize, ExecutionContext, InitializedRasterOperator,
-        MockQueryContext, QueryContext, QueryProcessor, RasterOperator, SingleRasterSource,
-        SingleVectorMultipleRasterSources, StatisticsWrappingMockExecutionContext,
-        TypedRasterQueryProcessor, VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
+        MockQueryContext, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+        RasterOperator, SingleRasterSource, SingleVectorMultipleRasterSources,
+        StatisticsWrappingMockExecutionContext, TypedRasterOperator, TypedRasterQueryProcessor,
+        TypedVectorOperator, VectorOperator, VectorQueryProcessor,
     },
     meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking},
     processing::{
@@ -72,7 +72,7 @@ fn setup_contexts() -> (StatisticsWrappingMockExecutionContext, MockQueryContext
     let exe_ctx = StatisticsWrappingMockExecutionContext::test_default();
 
     let user = uuid::Uuid::new_v4();
-    let workflow = uuid::Uuid::new_v4();
+    let processing_graph = uuid::Uuid::new_v4();
     let computation = uuid::Uuid::new_v4();
 
     let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
@@ -81,7 +81,7 @@ fn setup_contexts() -> (StatisticsWrappingMockExecutionContext, MockQueryContext
         Some(QuotaTracking::new(
             tokio::sync::mpsc::unbounded_channel().0,
             user,
-            workflow,
+            processing_graph,
             computation,
         )),
         Some(Box::new(MockQuotaChecker) as QuotaChecker),
@@ -248,7 +248,7 @@ fn run_benchmark(
         } => {
             let operator = runtime.block_on(async {
                 operator
-                    .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                    .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
                     .await
                     .unwrap()
             });
@@ -295,7 +295,7 @@ fn run_benchmark(
         } => {
             let operator = runtime.block_on(async {
                 operator
-                    .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                    .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
                     .await
                     .unwrap()
             });

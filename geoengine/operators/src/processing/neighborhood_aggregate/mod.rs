@@ -7,9 +7,9 @@ use crate::adapters::RasterSubQueryAdapter;
 use crate::adapters::SimpleRasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
+    TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -131,7 +131,7 @@ pub enum NeighborhoodAggregateError {
 impl RasterOperator for NeighborhoodAggregate {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -174,7 +174,7 @@ impl RasterOperator for NeighborhoodAggregate {
 
 pub struct InitializedNeighborhoodAggregate {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     params: NeighborhoodAggregateParams,
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
@@ -218,7 +218,7 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
         NeighborhoodAggregate::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
@@ -490,7 +490,7 @@ mod tests {
             sources: SingleRasterSource { raster },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -541,7 +541,7 @@ mod tests {
         let raster = make_raster();
 
         let operator = raster
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -736,7 +736,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -806,7 +806,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
@@ -884,7 +884,7 @@ mod tests {
             },
         }
         .typed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
