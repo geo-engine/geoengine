@@ -22,7 +22,7 @@ If the `step` is negative, an error is thrown.
 | Name          | Type                 | Description                                        | Examples                           |
 | ------------- | -------------------- | -------------------------------------------------- | ---------------------------------- |
 | step          | TimeStep             | Time granularity and size for the projection step. | `{"granularity":"years","step":1}` |
-| stepReference | null or TimeInstance |                                                    |                                    |
+| stepReference | TimeInstance or null |                                                    |                                    |
 
 ## Sources
 

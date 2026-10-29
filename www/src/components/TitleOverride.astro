@@ -6,4 +6,6 @@ const route = Astro.locals.starlightRoute as StarlightRouteData;
 route.siteTitleHref = '/docs/';
 ---
 
-<Default {...Astro.props}><slot /></Default>
+<Default {...Astro.props}>
+    <slot />
+</Default>
