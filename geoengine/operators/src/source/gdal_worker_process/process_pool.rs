@@ -36,50 +36,6 @@ const INITIAL_SPAWN_DELAY_MS: u64 = 15;
 const THROTTLING_THRESHOLD_MS: u64 = 2;
 const THROTTLING_THRESHOLD_DURATION: Duration = Duration::from_millis(THROTTLING_THRESHOLD_MS);
 
-/// Cache Time-To-Live (TTL) threshold for affinity routing data tracking.
-/// Set to 30 minutes (1800s) to prioritize heavy S3 / cloud storage network connection caches.
-const CACHE_TTL_SECS: f64 = 1800.0;
-
-// Affinity scores rank the idle workers for a request in three tiers:
-// 1. Hit ([SCORE_EXPIRED_MATCH, ~SCORE_DATASET_MATCH + bonuses]): the worker has the dataset open
-//    and reuses it, refined by band and spatial window and decaying with idle time.
-// 2. Fresh (SCORE_FRESH_WORKER_DEFAULT): the worker has never read anything, so using it
-//    evicts nothing.
-// 3. Eviction ([0, SCORE_EVICTION_MAX]): the worker has to close its dataset. The score grows
-//    with idle time, so the least recently used dataset is closed.
-// Each worker holds only one open dataset, so idle workers act as an LRU cache of open datasets.
-
-/// Baseline numeric floor used when initiating the maximum-score matrix search.
-/// Below every valid score (min. 0.0), so any idle worker is chosen if one exists.
-const SCORE_INITIAL_FLOOR: f64 = -1.0;
-
-/// Base affinity score bonus awarded when a worker already has the requested dataset open.
-const SCORE_DATASET_MATCH: f64 = 10000.0;
-
-/// Additional score bonus awarded when both the dataset AND the specific raster band match.
-const SCORE_BAND_MATCH: f64 = 1000.0;
-
-/// Additional score bonus when the exact spatial window requested matches the worker's last task.
-const SCORE_EXACT_WINDOW_MATCH: f64 = 100.0;
-
-/// Maximum base bonus for nearby spatial windows to reward spatial locality.
-const SCORE_NEARBY_WINDOW_MAX: f64 = 50.0;
-
-/// Default baseline score given to completely fresh workers.
-const SCORE_FRESH_WORKER_DEFAULT: f64 = 0.5;
-
-/// Minimum score of a worker that has the requested dataset open, reached when it was idle for the
-/// TTL. Above `SCORE_FRESH_WORKER_DEFAULT`, as reusing the open dataset saves opening it again.
-const SCORE_EXPIRED_MATCH: f64 = 1.0;
-
-/// Maximum score of a worker that has to evict its open dataset. Grows with idle time, so the
-/// least recently used worker is evicted. Must stay below `SCORE_FRESH_WORKER_DEFAULT`.
-const SCORE_EVICTION_MAX: f64 = 0.4;
-
-/// High-affinity immediate dispatch cutoff threshold. If a candidate worker's affinity score
-/// matches or exceeds this, we short-circuit the matrix evaluation instantly.
-const IMMEDIATE_DISPATCH_THRESHOLD: f64 = SCORE_DATASET_MATCH + SCORE_BAND_MATCH;
-
 /// Max lookahead horizontal threshold for sweeps over unique datasets.
 const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
 
@@ -137,45 +93,58 @@ struct WorkerAffinity {
     timestamp: Instant,
 }
 
+/// How well an idle worker suits a request; greater is better. Each worker holds one open
+/// dataset, so idle workers act as a cache of open datasets, and the rank keeps that cache warm.
+/// The derived order compares the variants first (declaration order), then the fields in order,
+/// so the tiers can never overlap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum WorkerRank {
+    /// The worker has to close its open dataset. Prefer closing a dataset that another worker
+    /// also holds, then the least recently used one. Without the idle time, the broker would
+    /// take the first candidate in `idle_workers`, usually the most recently used worker.
+    Evict { duplicate: bool, idle: Duration },
+    /// The worker has nothing open, so using it closes nothing.
+    Fresh,
+    /// The worker has the dataset open, so reading saves opening it. Prefer the same band, then
+    /// the nearest window: their blocks are likely still cached. Idle time does not count, as the
+    /// caches only hold blocks of the open dataset and do not expire.
+    Hit {
+        same_band: bool,
+        distance: std::cmp::Reverse<u64>,
+    },
+}
+
+impl WorkerRank {
+    /// Same dataset, band and window: no other worker can be better.
+    const BEST: Self = Self::Hit {
+        same_band: true,
+        distance: std::cmp::Reverse(0),
+    };
+}
+
 impl WorkerAffinity {
-    /// Computes the affinity score, decaying the reward linearly over time.
-    /// `now` is passed down to bypass the expensive vDSO clock lookup bottleneck inside hot loops.
+    /// `now` is passed down to avoid a clock lookup per worker inside the dispatch loop.
+    /// `holders` counts the workers holding each dataset.
     #[inline]
-    pub fn calculate_score(
+    fn rank(
         &self,
         dataset_hash: u64,
         band: usize,
         window: &GridBoundingBox2D,
         now: Instant,
-    ) -> f64 {
-        let idle_duration = now.saturating_duration_since(self.timestamp).as_secs_f64();
-
-        // Another dataset: prefer the least recently used worker for eviction.
-        // A constant score would make the broker take the first candidate in `idle_workers`.
-        // Released workers are pushed last and taken with `swap_remove`, so that is usually the
-        // most recently used worker, whose dataset is the most likely to be requested again.
-        // Instead, rank by idle time: a worker released just now scores 0.0, and a worker
-        // idle for the full TTL scores `SCORE_EVICTION_MAX`.
+        holders: &FastHashMap<u64, usize>,
+    ) -> WorkerRank {
         if self.dataset_hash != dataset_hash {
-            return SCORE_EVICTION_MAX * (idle_duration / CACHE_TTL_SECS).min(1.0);
+            return WorkerRank::Evict {
+                duplicate: holders.get(&self.dataset_hash).copied().unwrap_or(0) > 1,
+                idle: now.saturating_duration_since(self.timestamp),
+            };
         }
 
-        let decay = (1.0 - (idle_duration / CACHE_TTL_SECS)).max(0.0);
-        let mut score = SCORE_DATASET_MATCH * decay;
-
-        if self.band == band {
-            score += SCORE_BAND_MATCH * decay;
-
-            let dist = calculate_grid_distance(&self.spatial_window, window);
-            if dist == 0.0 {
-                score += SCORE_EXACT_WINDOW_MATCH * decay;
-            } else {
-                score += (SCORE_NEARBY_WINDOW_MAX / (1.0 + dist)) * decay;
-            }
+        WorkerRank::Hit {
+            same_band: self.band == band,
+            distance: std::cmp::Reverse(calculate_grid_distance(&self.spatial_window, window)),
         }
-
-        // the decay only orders hits among themselves; a hit always beats fresh and evicting workers
-        score.max(SCORE_EXPIRED_MATCH)
     }
 }
 
@@ -189,16 +158,17 @@ struct WorkerProcess {
 
 impl WorkerProcess {
     #[inline]
-    fn score_for_job(
+    fn rank_for_job(
         &self,
         dataset_hash: u64,
         band: usize,
         window: &GridBoundingBox2D,
         now: Instant,
-    ) -> f64 {
+        holders: &FastHashMap<u64, usize>,
+    ) -> WorkerRank {
         match &self.affinity {
-            Some(affinity) => affinity.calculate_score(dataset_hash, band, window, now),
-            None => SCORE_FRESH_WORKER_DEFAULT,
+            Some(affinity) => affinity.rank(dataset_hash, band, window, now, holders),
+            None => WorkerRank::Fresh,
         }
     }
 }
@@ -277,6 +247,7 @@ enum BrokerCommand {
         dataset_hash: u64,
         band: usize,
         window: GridBoundingBox2D,
+        read_failed: bool,
     },
     WorkerDied {
         worker_id: usize,
@@ -466,6 +437,7 @@ impl GdalProcessPool {
                 .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from));
 
             let is_dead = res.is_err();
+            let read_failed = matches!(res, Ok(Err(_)));
             let _ = job.respond_to.send(ReadResult {
                 result: res,
                 companion_span,
@@ -483,6 +455,7 @@ impl GdalProcessPool {
                 dataset_hash,
                 band,
                 window,
+                read_failed,
             });
         }
     }
@@ -537,8 +510,9 @@ impl GdalProcessPool {
                         dataset_hash,
                         band,
                         window,
+                        read_failed,
                     } => {
-                        state.release_worker(worker_id, dataset_hash, band, window);
+                        state.release_worker(worker_id, dataset_hash, band, window, read_failed);
                     }
                     BrokerCommand::WorkerDied {
                         worker_id,
@@ -552,6 +526,7 @@ impl GdalProcessPool {
                             slot.active_count = slot.active_count.saturating_sub(1);
                         }
                         state.global_active_count = state.global_active_count.saturating_sub(1);
+                        state.set_affinity(worker_id, None);
 
                         let b_tx = broker_tx.clone();
                         let wc = worker_config.clone();
@@ -597,8 +572,8 @@ impl GdalProcessPool {
                         if let Some(worker) = state.workers.get_mut(worker_id) {
                             worker.child_guard = child_guard;
                             worker.job_tx = job_tx;
-                            worker.affinity = None;
                         }
+                        state.set_affinity(worker_id, None);
                         state.idle_workers.push(worker_id);
                     }
                 }
@@ -633,6 +608,8 @@ struct BrokerState {
     max_active_processes: usize,
     strategy: SchedulingStrategy,
     stats: BrokerStats,
+    /// Number of workers holding each dataset open, to evict duplicates first.
+    dataset_holders: FastHashMap<u64, usize>,
 }
 
 impl BrokerState {
@@ -643,7 +620,12 @@ impl BrokerState {
         strategy: SchedulingStrategy,
     ) -> Self {
         let idle_workers = (0..workers.len()).collect();
+        let mut dataset_holders = FastHashMap::default();
+        for affinity in workers.iter().filter_map(|w| w.affinity.as_ref()) {
+            *dataset_holders.entry(affinity.dataset_hash).or_default() += 1;
+        }
         Self {
+            dataset_holders,
             idle_workers,
             workers,
             dataset_registry: FastHashMap::default(),
@@ -696,6 +678,8 @@ impl BrokerState {
         self.stats.max_dataset_queue_len = self.stats.max_dataset_queue_len.max(slot.queue.len());
     }
 
+    /// `read_failed`: the worker may not hold the dataset, as a failed open leaves it with none.
+    /// A failed read cannot be told apart from a failed open, so both count as holding nothing.
     #[inline]
     pub fn release_worker(
         &mut self,
@@ -703,22 +687,41 @@ impl BrokerState {
         dataset_hash: u64,
         band: usize,
         window: GridBoundingBox2D,
+        read_failed: bool,
     ) {
         if let Some(slot) = self.dataset_registry.get_mut(&dataset_hash) {
             slot.active_count = slot.active_count.saturating_sub(1);
         }
         self.global_active_count = self.global_active_count.saturating_sub(1);
 
-        if let Some(worker) = self.workers.get_mut(worker_id) {
-            worker.affinity = Some(WorkerAffinity {
-                dataset_hash,
-                band,
-                spatial_window: window,
-                timestamp: Instant::now(),
-            });
-        }
+        let affinity = (!read_failed).then(|| WorkerAffinity {
+            dataset_hash,
+            band,
+            spatial_window: window,
+            timestamp: Instant::now(),
+        });
+        self.set_affinity(worker_id, affinity);
 
         self.idle_workers.push(worker_id);
+    }
+
+    /// Records what the worker holds open, keeping `dataset_holders` in sync.
+    fn set_affinity(&mut self, worker_id: usize, affinity: Option<WorkerAffinity>) {
+        let Some(worker) = self.workers.get_mut(worker_id) else {
+            return;
+        };
+        if let Some(old) = worker.affinity.take()
+            && let Some(count) = self.dataset_holders.get_mut(&old.dataset_hash)
+        {
+            *count -= 1;
+            if *count == 0 {
+                self.dataset_holders.remove(&old.dataset_hash);
+            }
+        }
+        if let Some(new) = &affinity {
+            *self.dataset_holders.entry(new.dataset_hash).or_default() += 1;
+        }
+        worker.affinity = affinity;
     }
 
     /// Single-pass scheduler execution pass. Inlines scheduling decisions to prevent matrix re-scanning.
@@ -748,7 +751,7 @@ impl BrokerState {
                 break;
             }
 
-            let mut best_score = SCORE_INITIAL_FLOOR;
+            let mut best_rank: Option<WorkerRank> = None;
             let mut best_w_matrix_idx = 0;
             let mut best_dataset_hash = 0;
             let mut best_dataset_active_idx = 0;
@@ -772,36 +775,36 @@ impl BrokerState {
                 let band = req.request.0.dataset_params.rasterband_channel;
 
                 let mut current_best_w_idx = 0;
-                let mut current_best_score = SCORE_INITIAL_FLOOR;
+                let mut current_best_rank: Option<WorkerRank> = None;
 
                 for (w_idx, &w_id) in self.idle_workers.iter().enumerate() {
                     let w = self
                         .workers
                         .get(w_id)
                         .expect("Idle worker ID missing from registry - invariant broken");
-                    let score = w.score_for_job(hash, band, window, now);
+                    let rank = w.rank_for_job(hash, band, window, now, &self.dataset_holders);
 
-                    if score > current_best_score {
-                        current_best_score = score;
+                    if Some(rank) > current_best_rank {
+                        current_best_rank = Some(rank);
                         current_best_w_idx = w_idx;
                     }
-                    if score >= IMMEDIATE_DISPATCH_THRESHOLD {
+                    if rank == WorkerRank::BEST {
                         break;
                     }
                 }
 
-                if current_best_score > best_score {
-                    best_score = current_best_score;
+                if current_best_rank > best_rank {
+                    best_rank = current_best_rank;
                     best_w_matrix_idx = current_best_w_idx;
                     best_dataset_hash = hash;
                     best_dataset_active_idx = idx;
                 }
 
-                if best_score >= IMMEDIATE_DISPATCH_THRESHOLD {
+                if best_rank == Some(WorkerRank::BEST) {
                     break;
                 }
 
-                if self.strategy == SchedulingStrategy::FifoGreedy && best_score >= 0.0 {
+                if self.strategy == SchedulingStrategy::FifoGreedy && best_rank.is_some() {
                     break;
                 }
 
@@ -810,7 +813,7 @@ impl BrokerState {
                 }
             }
 
-            if best_score == SCORE_INITIAL_FLOOR {
+            if best_rank.is_none() {
                 break;
             }
 
@@ -851,6 +854,16 @@ impl BrokerState {
             };
             self.stats.dispatched += 1;
 
+            // The worker holds the requested dataset once the read starts, not its previous one.
+            // Recorded now, so that a busy worker switching datasets does not count as a holder of
+            // its old dataset when ranking duplicates; the release corrects it.
+            let busy_affinity = WorkerAffinity {
+                dataset_hash: req.dataset_hash,
+                band: req.request.0.dataset_params.rasterband_channel,
+                spatial_window: req.request.0.read_advise.read_window_bounds,
+                timestamp: now,
+            };
+
             {
                 let _span = tracing::debug_span!(
                     "gdal_broker_dispatch",
@@ -878,16 +891,18 @@ impl BrokerState {
             if !slot.queue.is_empty() {
                 self.active_datasets.push_back(tracked_hash);
             }
+
+            self.set_affinity(worker_id, Some(busy_affinity));
         }
     }
 }
 
 #[inline]
-fn calculate_grid_distance(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> f64 {
+fn calculate_grid_distance(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> u64 {
     let a_min = a.min_index();
     let b_min = b.min_index();
-    let dy = (a_min.y() - b_min.y()).abs() as f64;
-    let dx = (a_min.x() - b_min.x()).abs() as f64;
+    let dy = (a_min.y() - b_min.y()).unsigned_abs() as u64;
+    let dx = (a_min.x() - b_min.x()).unsigned_abs() as u64;
     dy.max(dx)
 }
 
@@ -1124,7 +1139,6 @@ impl GdalProcessPoolAccess for Arc<GdalProcessPool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
     use geoengine_datatypes::util::NonZeroFiniteF64;
 
@@ -1138,31 +1152,31 @@ mod tests {
     #[test]
     fn same_window() {
         let w = window([0, 0], [7, 7]);
-        assert_approx_eq!(f64, calculate_grid_distance(&w, &w), 0.0);
+        assert_eq!(calculate_grid_distance(&w, &w), 0);
     }
 
     #[test]
     fn overlapping_windows() {
         let a = window([0, 0], [7, 7]);
         let b = window([4, 4], [11, 11]);
-        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 4.0);
+        assert_eq!(calculate_grid_distance(&a, &b), 4);
     }
 
     #[test]
     fn disjoint_far_apart() {
         let a = window([0, 0], [7, 7]);
         let b = window([100, 200], [107, 207]);
-        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 200.0);
+        assert_eq!(calculate_grid_distance(&a, &b), 200);
     }
 
     #[test]
     fn single_axis_offset() {
         let a = window([0, 0], [7, 7]);
         let b = window([50, 0], [57, 7]);
-        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 50.0);
+        assert_eq!(calculate_grid_distance(&a, &b), 50);
     }
 
-    // --- WorkerAffinity::calculate_score ---
+    // --- WorkerAffinity::rank ---
 
     fn make_affinity(dataset_hash: u64, band: usize, window: GridBoundingBox2D) -> WorkerAffinity {
         WorkerAffinity {
@@ -1173,67 +1187,92 @@ mod tests {
         }
     }
 
+    /// Idle times from just released to one day.
+    const IDLE_SECS: [u64; 5] = [0, 1, 600, 1800, 86_400];
+
+    fn rank_after(
+        aff: &WorkerAffinity,
+        idle_secs: u64,
+        dataset_hash: u64,
+        band: usize,
+    ) -> WorkerRank {
+        let w = window([0, 0], [7, 7]);
+        let now = aff.timestamp + Duration::from_secs(idle_secs);
+        aff.rank(dataset_hash, band, &w, now, &FastHashMap::default())
+    }
+
     #[test]
-    fn score_exact_match_fresh() {
+    fn rank_exact_match_is_best() {
         let w = window([100, 100], [200, 200]);
         let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
+        for idle in IDLE_SECS {
+            let now = aff.timestamp + Duration::from_secs(idle);
+            assert_eq!(
+                aff.rank(42, 1, &w, now, &FastHashMap::default()),
+                WorkerRank::BEST
+            );
+        }
+    }
 
-        assert_approx_eq!(
-            f64,
-            score,
-            SCORE_DATASET_MATCH + SCORE_BAND_MATCH + SCORE_EXACT_WINDOW_MATCH
+    /// Opening a dataset costs the most, so any hit beats a fresh worker, and a fresh worker beats
+    /// any eviction, however long the workers were idle.
+    #[test]
+    fn rank_tiers_never_overlap() {
+        let hit = make_affinity(42, 2, window([5000, 5000], [5007, 5007]));
+        let evict = make_affinity(99, 1, window([0, 0], [7, 7]));
+        let mut duplicates = FastHashMap::default();
+        duplicates.insert(99, 2);
+
+        for hit_idle in IDLE_SECS {
+            let worst_hit = rank_after(&hit, hit_idle, 42, 1);
+            assert!(worst_hit > WorkerRank::Fresh);
+            for evict_idle in IDLE_SECS {
+                let now = evict.timestamp + Duration::from_secs(evict_idle);
+                let best_evict = evict.rank(42, 1, &window([0, 0], [7, 7]), now, &duplicates);
+                assert!(WorkerRank::Fresh > best_evict);
+            }
+        }
+    }
+
+    /// The blocks of the same band and window are still cached, however long the worker was idle.
+    #[test]
+    fn rank_hits_by_band_then_distance_regardless_of_idle_time() {
+        let w = window([0, 0], [7, 7]);
+        let same_band = make_affinity(42, 1, w);
+        let other_band = make_affinity(42, 2, w);
+        let near = make_affinity(42, 1, window([512, 0], [519, 7]));
+        let far = make_affinity(42, 1, window([1024, 0], [1031, 7]));
+
+        for old in IDLE_SECS {
+            for recent in IDLE_SECS {
+                assert!(
+                    rank_after(&same_band, old, 42, 1) > rank_after(&other_band, recent, 42, 1)
+                );
+                assert!(rank_after(&near, old, 42, 1) > rank_after(&far, recent, 42, 1));
+            }
+        }
+    }
+
+    #[test]
+    fn rank_evicts_duplicates_then_least_recently_used() {
+        let w = window([0, 0], [7, 7]);
+        let aff = make_affinity(99, 1, w);
+        let mut holders = FastHashMap::default();
+        holders.insert(99, 1);
+        let unique_long_idle = aff.rank(
+            42,
+            1,
+            &w,
+            aff.timestamp + Duration::from_secs(3600),
+            &holders,
         );
-    }
+        let unique_short_idle =
+            aff.rank(42, 1, &w, aff.timestamp + Duration::from_secs(1), &holders);
+        holders.insert(99, 2);
+        let duplicate = aff.rank(42, 1, &w, aff.timestamp, &holders);
 
-    #[test]
-    fn score_nearby_window() {
-        let w = window([100, 100], [200, 200]);
-        let aff = make_affinity(42, 1, window([100, 101], [200, 201]));
-        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
-
-        // Chebyshev(|100-100|, |101-100|) = 1
-        let expected =
-            SCORE_DATASET_MATCH + SCORE_BAND_MATCH + (SCORE_NEARBY_WINDOW_MAX / (1.0 + 1.0));
-        assert_approx_eq!(f64, score, expected);
-    }
-
-    #[test]
-    fn score_different_band_same_dataset() {
-        let w = window([0, 0], [7, 7]);
-        let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(42, 2, &w, aff.timestamp);
-
-        assert_approx_eq!(f64, score, SCORE_DATASET_MATCH);
-    }
-
-    #[test]
-    fn score_different_dataset() {
-        let w = window([0, 0], [7, 7]);
-        let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(99, 1, &w, aff.timestamp);
-        assert_approx_eq!(f64, score, 0.0);
-
-        let half_ttl_later = aff.timestamp + Duration::from_secs_f64(CACHE_TTL_SECS / 2.0);
-        let score = aff.calculate_score(99, 1, &w, half_ttl_later);
-        assert_approx_eq!(f64, score, SCORE_EVICTION_MAX / 2.0);
-    }
-
-    #[test]
-    fn score_expired_cache() {
-        let w = window([0, 0], [7, 7]);
-        let mut aff = make_affinity(42, 1, w);
-        aff.timestamp = Instant::now()
-            .checked_sub(Duration::from_secs_f64(CACHE_TTL_SECS + 1.0))
-            .unwrap();
-        let score = aff.calculate_score(42, 1, &w, Instant::now());
-
-        assert_approx_eq!(f64, score, SCORE_EXPIRED_MATCH);
-        assert!(score > SCORE_FRESH_WORKER_DEFAULT);
-
-        // just before the TTL the decayed score would fall below a fresh worker's
-        let almost_expired = aff.timestamp + Duration::from_secs_f64(CACHE_TTL_SECS - 0.01);
-        assert!(aff.calculate_score(42, 1, &w, almost_expired) >= SCORE_EXPIRED_MATCH);
+        assert!(duplicate > unique_long_idle);
+        assert!(unique_long_idle > unique_short_idle);
     }
 
     // --- BrokerState dispatch tests ---
@@ -1347,8 +1386,10 @@ mod tests {
 
         assert_eq!(state.idle_workers.len(), 0);
         assert_eq!(state.global_active_count, 1);
+        // a busy worker already counts as a holder of the dataset it reads
+        assert_eq!(state.dataset_holders.get(&100), Some(&1));
 
-        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]));
+        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]), false);
 
         assert_eq!(state.idle_workers.len(), 1);
         assert_eq!(state.idle_workers[0], 0);
@@ -1373,7 +1414,7 @@ mod tests {
         let first = rx0.try_recv().unwrap().dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, first, 1, window([0, 0], [255, 255]));
+        state.release_worker(0, first, 1, window([0, 0], [255, 255]), false);
         state.try_dispatch();
         let second = rx0.try_recv().unwrap().dataset_hash;
 
@@ -1464,9 +1505,9 @@ mod tests {
     }
 
     #[test]
-    fn it_prefers_open_dataset_after_ttl() {
+    fn it_prefers_open_dataset_however_long_idle() {
         let (mut w0, mut rx0) = dummy_worker(0);
-        w0.affinity = Some(affinity_idle_for(100, CACHE_TTL_SECS as u64 + 60));
+        w0.affinity = Some(affinity_idle_for(100, 3600));
         let (w1, _rx1) = dummy_worker(1);
 
         let mut state = BrokerState::new(vec![w0, w1], 4, 4, SchedulingStrategy::GlobalMatrix);
@@ -1478,6 +1519,43 @@ mod tests {
         rx0.try_recv()
             .expect("the worker with the open dataset should be reused");
         assert_eq!(state.stats.affinity_hits, 1);
+    }
+
+    /// A failed open leaves the worker with no dataset, so it must not count as a holder.
+    #[test]
+    fn release_after_failed_read_holds_nothing() {
+        let (w0, mut rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 2, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req, _resp_rx) = make_request(100, 1, w);
+
+        state.enqueue_request(req);
+        state.try_dispatch();
+        let job = rx0.try_recv().unwrap();
+        state.release_worker(0, job.dataset_hash, 1, w, true);
+
+        assert!(state.workers[0].affinity.is_none());
+        assert!(state.dataset_holders.is_empty());
+    }
+
+    #[test]
+    fn it_evicts_a_duplicate_before_the_only_copy() {
+        let (mut w0, _rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, 600));
+        let (mut w1, mut rx1) = dummy_worker(1);
+        w1.affinity = Some(affinity_idle_for(200, 1));
+        let (mut w2, _rx2) = dummy_worker(2);
+        w2.affinity = Some(affinity_idle_for(200, 1));
+
+        let mut state = BrokerState::new(vec![w0, w1, w2], 4, 4, SchedulingStrategy::GlobalMatrix);
+
+        let (req, _resp) = make_request(400, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        rx1.try_recv()
+            .expect("a worker holding a copy of dataset 200 should be evicted");
+        assert_eq!(state.dataset_holders.get(&100), Some(&1));
     }
 
     #[test]
