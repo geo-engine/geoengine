@@ -442,29 +442,19 @@ pub struct GdalProcessPool {
 }
 
 impl GdalProcessPool {
-    /// Rejects sizes with which GDAL reads would never be dispatched or limits would have no effect.
+    /// Rejects sizes of 0, with which GDAL reads would never be dispatched. Limits above the
+    /// number of processes are allowed: they just have no effect.
     pub fn validate(&self) -> Result<()> {
-        let invalid = |reason: String| Err(crate::error::Error::InvalidConfig { reason });
         if self.number_of_processes == 0
             || self.max_active_processes == 0
             || self.max_dataset_processes == 0
         {
-            return invalid(format!(
-                "gdal_process_pool sizes must be at least 1, got number_of_processes = {}, max_active_processes = {}, max_dataset_processes = {}",
-                self.number_of_processes, self.max_active_processes, self.max_dataset_processes
-            ));
-        }
-        if self.max_active_processes > self.number_of_processes {
-            return invalid(format!(
-                "gdal_process_pool.max_active_processes ({}) must not exceed number_of_processes ({})",
-                self.max_active_processes, self.number_of_processes
-            ));
-        }
-        if self.max_dataset_processes > self.max_active_processes {
-            return invalid(format!(
-                "gdal_process_pool.max_dataset_processes ({}) must not exceed max_active_processes ({})",
-                self.max_dataset_processes, self.max_active_processes
-            ));
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "gdal_process_pool sizes must be at least 1, got number_of_processes = {}, max_active_processes = {}, max_dataset_processes = {}",
+                    self.number_of_processes, self.max_active_processes, self.max_dataset_processes
+                ),
+            });
         }
         Ok(())
     }
@@ -798,8 +788,8 @@ mod tests {
     }
 
     #[test]
-    fn it_rejects_inconsistent_pool_sizes() {
-        assert!(pool(8, 16, 8).validate().is_err());
-        assert!(pool(32, 8, 16).validate().is_err());
+    fn it_accepts_limits_above_the_number_of_processes() {
+        assert!(pool(8, 16, 8).validate().is_ok());
+        assert!(pool(32, 8, 16).validate().is_ok());
     }
 }
