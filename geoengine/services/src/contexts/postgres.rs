@@ -438,6 +438,28 @@ where
     fn oidc_manager(&self) -> &OidcManager {
         &self.oidc_manager
     }
+
+    async fn clear_caches(&self, session: Self::Session) -> Result<()> {
+        if !session.is_admin() {
+            return Err(Error::Unauthorized {
+                source: Box::new(Error::OperationRequiresAdminPrivilige),
+            });
+        }
+        self.gdal_process_pool
+            .clear_caches()
+            .await
+            .map_err(|source| Error::Operator {
+                source: geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(source),
+                },
+            })?;
+        self.provider_registry.clear_caches().await;
+        self.tile_cache.clear().await;
+        if let Some(cache) = &self.new_raster_cache {
+            cache.clear().await;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

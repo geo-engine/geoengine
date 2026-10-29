@@ -1,3 +1,4 @@
+export * from './CacheApi';
 export * from './DatasetsApi';
 export * from './GeneralApi';
 export * from './LayersApi';

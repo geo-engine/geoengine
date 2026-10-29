@@ -217,6 +217,7 @@ struct ReadResult {
 }
 
 enum BrokerCommand {
+    ClearCaches(oneshot::Sender<Result<(), GdalProcessPoolError>>),
     Read(Box<QueuedRequest>),
     ReturnWorker {
         worker_id: usize,
@@ -248,6 +249,17 @@ pub struct GdalProcessPool {
 }
 
 impl GdalProcessPool {
+    /// Drain scheduled reads and replace every worker to discard GDAL's process-local caches.
+    /// Returns only once replacement workers are ready. Concurrent queries may refill caches.
+    pub async fn clear_caches(&self) -> Result<(), GdalProcessPoolError> {
+        let (tx, rx) = oneshot::channel();
+        self.broker_tx
+            .send(BrokerCommand::ClearCaches(tx))
+            .await
+            .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+        rx.await.map_err(|_| GdalProcessPoolError::WorkerPanic)?
+    }
+
     const STRATEGY: SchedulingStrategy = SchedulingStrategy::GlobalMatrix;
 
     /// Initializes the GDAL process pool and spawns the broker loop in a dedicated Tokio task.
@@ -476,6 +488,7 @@ impl GdalProcessPool {
             max_active_processes,
             Self::STRATEGY,
         );
+        let mut pending_clears = Vec::new();
 
         while let Some(first_cmd) = rx.recv().await {
             let start_tick = Instant::now();
@@ -490,6 +503,7 @@ impl GdalProcessPool {
 
             for cmd in batch {
                 match cmd {
+                    BrokerCommand::ClearCaches(reply) => pending_clears.push(reply),
                     BrokerCommand::Read(req) => {
                         state.enqueue_request(req);
                     }
@@ -566,6 +580,63 @@ impl GdalProcessPool {
             }
 
             state.try_dispatch();
+
+            if !pending_clears.is_empty()
+                && state.global_active_count == 0
+                && state.idle_workers.len() == state.workers.len()
+                && state
+                    .dataset_registry
+                    .values()
+                    .all(|slot| slot.queue.is_empty())
+            {
+                let count = state.workers.len();
+                let tx = broker_tx.clone();
+                let config = worker_config.clone();
+                // Build the complete replacement first, preserving the existing pool on failure.
+                let replacements = tokio::task::spawn_blocking(move || {
+                    (0..count)
+                        .map(|id| {
+                            let (child_guard, _handle, job_tx) =
+                                Self::create_worker_with_id(id, tx.clone(), &config)?;
+                            Ok(WorkerProcess {
+                                _id: id,
+                                child_guard,
+                                job_tx,
+                                affinity: None,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, GdalProcessPoolError>>()
+                })
+                .await
+                .map_err(|_| GdalProcessPoolError::WorkerPanic)
+                .and_then(|result| result);
+                match replacements {
+                    Ok(workers) => {
+                        let previous = std::mem::replace(&mut state.workers, workers);
+                        // Child guards kill and wait for each process on drop.
+                        let shutdown = tokio::task::spawn_blocking(move || drop(previous)).await;
+                        state.dataset_registry.clear();
+                        state.active_datasets.clear();
+                        for reply in pending_clears.drain(..) {
+                            let _ = reply.send(
+                                shutdown
+                                    .as_ref()
+                                    .copied()
+                                    .map_err(|_| GdalProcessPoolError::WorkerPanic),
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            ?error,
+                            "Failed to replace GDAL workers while clearing caches"
+                        );
+                        for reply in pending_clears.drain(..) {
+                            let _ = reply.send(Err(error.clone()));
+                        }
+                    }
+                }
+            }
 
             let elapsed = start_tick.elapsed();
             if elapsed > THROTTLING_THRESHOLD_DURATION {
@@ -1141,6 +1212,96 @@ mod tests {
             allow_alphaband_as_mask: false,
             retry: None,
         }
+    }
+
+    #[tokio::test]
+    async fn it_clears_open_datasets_and_reads_with_ready_workers() {
+        use crate::source::gdal_worker_process::process_common::GdalDataGridVariant;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("data.tif");
+        let replacement = directory.path().join("replacement.tif");
+        let write = |path: &std::path::Path, value: f64| {
+            let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+            let mut dataset = driver
+                .create_with_band_type::<u8, _>(path, 256, 256, 1)
+                .unwrap();
+            dataset
+                .set_geo_transform(&[0., 1., 0., 0., 0., -1.])
+                .unwrap();
+            dataset.rasterband(1).unwrap().fill(value, None).unwrap();
+            dataset.flush_cache().unwrap();
+        };
+        write(&path, 1.0);
+        let pool = GdalProcessPool::new(1, 1, 1, WorkerConfig::default());
+        let (mut request, _) = make_request(0, 1, window([0, 0], [255, 255]));
+        request.request.0.dataset_params.file_path = path.clone();
+        for (iteration, expected) in [1, 1, 2, 2].into_iter().enumerate() {
+            let (tx, rx) = oneshot::channel();
+            pool.broker_tx
+                .send(BrokerCommand::Read(Box::new(QueuedRequest {
+                    dataset_hash: 0,
+                    request: request.request.clone(),
+                    respond_to: tx,
+                })))
+                .await
+                .unwrap();
+            let bytes = rx.await.unwrap().result.unwrap().unwrap();
+            let payload: GdalIpcPayload<u8> = (&bytes).try_into().unwrap();
+            let data = match payload.data_variant {
+                GdalDataGridVariant::AllValid { data }
+                | GdalDataGridVariant::WithNoData { data, .. } => data,
+                other => panic!("Expected pixels, got {other:?}"),
+            };
+            assert!(data.iter().all(|value| *value == expected));
+            if iteration == 0 {
+                // Replacing the inode leaves the worker's open dataset pointing at old pixels.
+                write(&replacement, 2.0);
+                std::fs::rename(&replacement, &path).unwrap();
+            } else if iteration == 1 {
+                pool.clear_caches().await.unwrap();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn it_waits_for_reads_before_replacing_all_workers() {
+        let (worker0, mut jobs0) = dummy_worker(0);
+        let (worker1, mut jobs1) = dummy_worker(1);
+        let (tx, rx) = mpsc::channel(16);
+        let broker = tokio::spawn(GdalProcessPool::broker_loop(
+            rx,
+            vec![worker0, worker1],
+            2,
+            2,
+            tx.clone(),
+            WorkerConfig::default(),
+        ));
+        let (request, _response) = make_request(0, 1, window([0, 0], [255, 255]));
+        tx.send(BrokerCommand::Read(request)).await.unwrap();
+        let job = jobs0.recv().await.unwrap();
+        let (reply, mut cleared) = oneshot::channel();
+        tx.send(BrokerCommand::ClearCaches(reply)).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut cleared)
+                .await
+                .is_err()
+        );
+        tx.send(BrokerCommand::ReturnWorker {
+            worker_id: 0,
+            dataset_hash: job.dataset_hash,
+            band: 1,
+            window: window([0, 0], [255, 255]),
+        })
+        .await
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(10), cleared)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert!(jobs0.recv().await.is_none());
+        assert!(jobs1.recv().await.is_none());
+        broker.abort();
     }
 
     fn make_request(

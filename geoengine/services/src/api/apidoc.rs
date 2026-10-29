@@ -162,6 +162,7 @@ use utoipa::{
         handlers::projects::update_project_handler,
         handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::tasks::abort_handler,
+        handlers::cache::clear_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
         handlers::upload::list_upload_file_layers_handler,
