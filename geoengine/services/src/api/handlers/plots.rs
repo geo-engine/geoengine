@@ -339,6 +339,18 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
+    async fn it_uses_the_data_crs_without_crs(app_ctx: PostgresContext<NoTls>) {
+        let statistics = query_ndvi_statistics(
+            app_ctx,
+            &[("bbox", "51,10,52,11"), ("time", "2014-05-01T00:00:00.0Z")],
+        )
+        .await;
+
+        // same as with `crs=EPSG:4326`, the NDVI's crs
+        assert_eq!(statistics["valueCount"], 121);
+    }
+
+    #[ge_context::test(tiling_spec = "json_tiling_spec")]
     async fn it_uses_overview_for_coarse_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
         let statistics = query_ndvi_statistics(
             app_ctx,

@@ -757,6 +757,22 @@ mod tests {
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
+    async fn get_map_missing_crs(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        // WMS errors are XML with status 200
+        assert_eq!(res.status(), 200);
+        let body = read_body_string(res).await;
+        assert!(body.contains("<ServiceException>"), "{body}");
+        assert!(body.contains("MissingSpatialReference"), "{body}");
+    }
+
+    #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn get_map_colorizer(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());

@@ -54,8 +54,40 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contexts::{ApplicationContext, PostgresContext};
+    use crate::ge_context;
+    use crate::users::UserAuth;
     use futures::FutureExt;
     use std::time::Duration;
+    use tokio_postgres::NoTls;
+
+    #[ge_context::test]
+    async fn it_runs_queries_on_the_processing_runtime_of_the_context(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let processing = ctx.processing_runtime().id();
+
+        // like an actix worker: a current-thread runtime on its own thread
+        let (caller, ran_on) = tokio::task::spawn_blocking(move || {
+            let caller = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let ran_on = caller
+                .block_on(run_query(&ctx, futures::future::pending().boxed(), async {
+                    Ok::<_, Error>(Handle::current().id())
+                }))
+                .unwrap();
+            (caller.handle().id(), ran_on)
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(ran_on, processing);
+        assert_ne!(ran_on, caller);
+    }
 
     #[test]
     fn it_runs_the_work_on_the_given_runtime() {

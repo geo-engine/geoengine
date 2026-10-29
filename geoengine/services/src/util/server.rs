@@ -460,6 +460,9 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFut
             }
         });
 
+        // stop monitoring once the request is done, not only when the connection closes
+        let handle = tokio_util::task::AbortOnDropHandle::new(handle);
+
         // TODO: return `pending` on JoinError?
         let handle = handle.unwrap_or_else(|_| ());
 

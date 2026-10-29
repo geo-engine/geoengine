@@ -93,6 +93,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
 tracing-appender = { workspace = true }
