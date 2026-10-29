@@ -12,8 +12,8 @@ use geoengine_operators::engine::SubQueryParallelism;
 use geoengine_operators::source::gdal_worker_process::{GdalProcessPool, WorkerConfig};
 use geoengine_operators::{
     engine::{
-        BoxRasterQueryProcessor, MockExecutionContext, QueryContext, RasterOperator,
-        WorkflowOperatorPath,
+        BoxRasterQueryProcessor, MockExecutionContext, ProcessingGraphOperatorPath, QueryContext,
+        RasterOperator, TypedRasterOperator,
     },
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
     source::{GdalSource, GdalSourceParameters},
@@ -22,8 +22,8 @@ use geoengine_operators::{
 use std::hint::black_box;
 use std::sync::Arc;
 
-fn reproject(source: Box<dyn RasterOperator>, target: SpatialReference) -> Box<dyn RasterOperator> {
-    RasterOperator::boxed(Reprojection {
+fn reproject(source: TypedRasterOperator, target: SpatialReference) -> TypedRasterOperator {
+    Reprojection {
         params: ReprojectionParams {
             target_spatial_reference: target,
             derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -31,7 +31,8 @@ fn reproject(source: Box<dyn RasterOperator>, target: SpatialReference) -> Box<d
         sources: SingleRasterOrVectorSource {
             source: source.into(),
         },
-    })
+    }
+    .typed()
 }
 
 /// `chained` nests two reprojections to measure that fan-out does not multiply per level.
@@ -53,13 +54,16 @@ fn setup(
     let source = GdalSource {
         params: GdalSourceParameters::new(dataset),
     }
-    .boxed();
+    .typed();
     let mut operator = reproject(source, SpatialReference::web_mercator());
     if chained {
         operator = reproject(operator, SpatialReference::epsg_4326());
     }
     let initialized = runtime
-        .block_on(operator.initialize(WorkflowOperatorPath::initialize_root(), &execution_context))
+        .block_on(operator.initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        ))
         .unwrap();
     let processor = initialized.query_processor().unwrap().get_u8().unwrap();
     let query_context = execution_context.mock_query_context_test_default();
