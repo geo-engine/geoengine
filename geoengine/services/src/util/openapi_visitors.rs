@@ -217,7 +217,7 @@ mod tests {
                                             "application/json",
                                             ContentBuilder::new()
                                                 .schema(Some(Ref::from_schema_name("Schema2")))
-                                                .into(),
+                                                .build(),
                                         )
                                         .into(),
                                 ))
@@ -227,7 +227,7 @@ mod tests {
                                         "application/json",
                                         ContentBuilder::new()
                                             .schema(Some(Ref::from_schema_name("Schema3")))
-                                            .into(),
+                                            .build(),
                                     ),
                                 ),
                         )
@@ -263,7 +263,7 @@ mod tests {
                                         "application/json",
                                         ContentBuilder::new()
                                             .schema(Some(Ref::from_schema_name("MissingSchema")))
-                                            .into(),
+                                            .build(),
                                     )
                                     .into(),
                             )),
@@ -331,7 +331,7 @@ mod tests {
                                     "application/json",
                                     ContentBuilder::new()
                                         .schema(Some(Ref::from_schema_name("MissingSchema")))
-                                        .into(),
+                                        .build(),
                                 ),
                             ),
                         )

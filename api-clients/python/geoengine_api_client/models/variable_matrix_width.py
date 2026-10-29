@@ -27,10 +27,10 @@ class VariableMatrixWidth(BaseModel):
     """
     Variable Matrix Width data structure
     """ # noqa: E501
-    coalesc: Annotated[int, Field(strict=True, ge=2)] = Field(description="Number of tiles in width that coalesce in a single tile for these rows")
+    coalesce: Annotated[int, Field(strict=True, ge=2)] = Field(description="Number of tiles in width that coalesce in a single tile for these rows")
     min_tile_row: Annotated[int, Field(strict=True, ge=0)] = Field(description="First tile row where the coalescence factor applies for this tilematrix", alias="minTileRow")
-    smax_tile_row: Annotated[int, Field(strict=True, ge=0)] = Field(description="Last tile row where the coalescence factor applies for this tilematrix", alias="smaxTileRow")
-    __properties: ClassVar[List[str]] = ["coalesc", "minTileRow", "smaxTileRow"]
+    max_tile_row: Annotated[int, Field(strict=True, ge=0)] = Field(description="Last tile row where the coalescence factor applies for this tilematrix", alias="maxTileRow")
+    __properties: ClassVar[List[str]] = ["coalesce", "minTileRow", "maxTileRow"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,9 +83,9 @@ class VariableMatrixWidth(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "coalesc": obj.get("coalesc"),
+            "coalesce": obj.get("coalesce"),
             "minTileRow": obj.get("minTileRow"),
-            "smaxTileRow": obj.get("smaxTileRow")
+            "maxTileRow": obj.get("maxTileRow")
         })
         return _obj
 

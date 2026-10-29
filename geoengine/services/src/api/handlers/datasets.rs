@@ -200,7 +200,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     path = "/dataset/{dataset}/tiles",
     request_body = Vec<AddDatasetTile>,
     responses(
-        (status = 200),
+        (status = 200, description = "Tiles were added to the dataset"),
     ),
     params(
         ("dataset" = DatasetName, description = "Dataset Name"),
@@ -772,7 +772,7 @@ pub fn add_tag(properties: &mut AddDataset, tag: String) {
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, body = DatasetNameResponse),
+        (status = 200, description = "Name of the created dataset", body = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -1492,7 +1492,7 @@ pub struct VolumeFileLayersResponse {
     get,
     path = "/dataset/volumes/{volume_name}/files/{file_name}/layers",
     responses(
-        (status = 200, body = VolumeFileLayersResponse,
+        (status = 200, description = "Layers of the volume file", body = VolumeFileLayersResponse,
              example = json!({"layers": ["layer1", "layer2"]}))
     ),
     params(
@@ -1547,7 +1547,7 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
     path = "/dataset", 
     request_body = CreateDataset,
     responses(
-        (status = 200, body = DatasetNameResponse),
+        (status = 200, description = "Name of the created dataset", body = DatasetNameResponse),
     ),
     security(
         ("session_token" = [])

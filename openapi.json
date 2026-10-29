@@ -94,7 +94,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "Name of the created dataset",
             "content": {
               "application/json": {
                 "schema": {
@@ -130,7 +130,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "Name of the created dataset",
             "content": {
               "application/json": {
                 "schema": {
@@ -402,7 +402,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Layers of the volume file",
             "content": {
               "application/json": {
                 "schema": {
@@ -838,7 +838,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Tiles were added to the dataset"
           }
         },
         "security": [
@@ -1063,7 +1063,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Layer collection was updated"
           }
         },
         "security": [
@@ -1368,7 +1368,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Layer was updated"
           }
         },
         "security": [
@@ -2384,7 +2384,7 @@
         "operationId": "list_ml_models",
         "responses": {
           "200": {
-            "description": "",
+            "description": "List of ML models",
             "content": {
               "application/json": {
                 "schema": {
@@ -2421,7 +2421,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "Name of the added ML model",
             "content": {
               "application/json": {
                 "schema": {
@@ -2458,7 +2458,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "The ML model",
             "content": {
               "application/json": {
                 "schema": {
@@ -2618,10 +2618,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/CollectionsResponseFormat"
                 },
                 {
-                  "$ref": "#/components/schemas/CollectionsResponseFormat"
+                  "type": "null"
                 }
               ]
             },
@@ -3090,7 +3090,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "URL to start the OIDC login",
             "content": {
               "application/json": {
                 "schema": {
@@ -3135,7 +3135,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "The created session",
             "content": {
               "application/json": {
                 "schema": {
@@ -4677,10 +4677,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/TaskFilter"
                 },
                 {
-                  "$ref": "#/components/schemas/TaskFilter"
+                  "type": "null"
                 }
               ]
             }
@@ -4887,7 +4887,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Files of the upload",
             "content": {
               "application/json": {
                 "schema": {
@@ -4939,7 +4939,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "Layers of the upload file",
             "content": {
               "application/json": {
                 "schema": {
@@ -5264,10 +5264,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/WcsVersion"
                 },
                 {
-                  "$ref": "#/components/schemas/WcsVersion"
+                  "type": "null"
                 }
               ]
             }
@@ -5440,10 +5440,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/WfsVersion"
                 },
                 {
-                  "$ref": "#/components/schemas/WfsVersion"
+                  "type": "null"
                 }
               ]
             }
@@ -5630,10 +5630,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/GetMapExceptionFormat"
                 },
                 {
-                  "$ref": "#/components/schemas/GetMapExceptionFormat"
+                  "type": "null"
                 }
               ]
             }
@@ -5645,10 +5645,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/WmsResponseFormat"
                 },
                 {
-                  "$ref": "#/components/schemas/WmsResponseFormat"
+                  "type": "null"
                 }
               ]
             }
@@ -5775,10 +5775,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/WmsVersion"
                 },
                 {
-                  "$ref": "#/components/schemas/WmsVersion"
+                  "type": "null"
                 }
               ]
             }
@@ -5832,10 +5832,10 @@
           "name": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/DatasetName"
               },
               {
-                "$ref": "#/components/schemas/DatasetName"
+                "type": "null"
               }
             ]
           },
@@ -5851,10 +5851,10 @@
           "symbology": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Symbology"
               },
               {
-                "$ref": "#/components/schemas/Symbology"
+                "type": "null"
               }
             ]
           },
@@ -5930,10 +5930,10 @@
           "symbology": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Symbology"
               },
               {
-                "$ref": "#/components/schemas/Symbology"
+                "type": "null"
               }
             ]
           },
@@ -6203,11 +6203,11 @@
           "measurement": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Measurement",
                 "description": "Optional measurement metadata for the aggregated result."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -6941,10 +6941,10 @@
           "extent": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Extent"
               },
               {
-                "$ref": "#/components/schemas/Extent"
+                "type": "null"
               }
             ]
           },
@@ -7423,10 +7423,10 @@
           "timeStep": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TimeStep"
               },
               {
-                "$ref": "#/components/schemas/TimeStep"
+                "type": "null"
               }
             ]
           }
@@ -7664,10 +7664,10 @@
           "symbology": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Symbology"
               },
               {
-                "$ref": "#/components/schemas/Symbology"
+                "type": "null"
               }
             ]
           },
@@ -7692,10 +7692,10 @@
           "dataPath": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/DataPath"
               },
               {
-                "$ref": "#/components/schemas/DataPath"
+                "type": "null"
               }
             ]
           }
@@ -7821,10 +7821,10 @@
           "symbology": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Symbology"
               },
               {
-                "$ref": "#/components/schemas/Symbology"
+                "type": "null"
               }
             ]
           }
@@ -8021,11 +8021,11 @@
           "outputOriginReference": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Coordinate2D",
                 "description": "Optional reference point used to align the output grid origin."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -8143,10 +8143,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -8191,20 +8191,20 @@
           "vectorSpec": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/EdrVectorSpec"
               },
               {
-                "$ref": "#/components/schemas/EdrVectorSpec"
+                "type": "null"
               }
             ]
           },
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           },
@@ -8350,20 +8350,20 @@
           "spatial": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SpatialExtent"
               },
               {
-                "$ref": "#/components/schemas/SpatialExtent"
+                "type": "null"
               }
             ]
           },
           "temporal": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TemporalExtent"
               },
               {
-                "$ref": "#/components/schemas/TemporalExtent"
+                "type": "null"
               }
             ]
           }
@@ -8540,10 +8540,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           },
@@ -8644,20 +8644,20 @@
           "params": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/GdalDatasetParameters"
               },
               {
-                "$ref": "#/components/schemas/GdalDatasetParameters"
+                "type": "null"
               }
             ]
           },
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -8729,10 +8729,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -8755,10 +8755,10 @@
           "time": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TimeInterval"
               },
               {
-                "$ref": "#/components/schemas/TimeInterval"
+                "type": "null"
               }
             ]
           },
@@ -8771,10 +8771,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -8842,10 +8842,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -8870,11 +8870,11 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CacheTtlSeconds",
                 "description": "Dataset-level TTL fallback used when no tile-level TTL is provided."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -9093,11 +9093,11 @@
           "crs": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TilesCrs",
                 "description": "Coordinate Reference System (CRS)"
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -9218,10 +9218,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -9275,10 +9275,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -9568,11 +9568,11 @@
           "outputOriginReference": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Coordinate2D",
                 "description": "Optional reference point used to align the output grid origin."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -9704,10 +9704,10 @@
           "symbology": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Symbology"
               },
               {
-                "$ref": "#/components/schemas/Symbology"
+                "type": "null"
               }
             ]
           },
@@ -10012,10 +10012,10 @@
           "text": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TextSymbology"
               },
               {
-                "$ref": "#/components/schemas/TextSymbology"
+                "type": "null"
               }
             ]
           },
@@ -10977,10 +10977,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -11068,10 +11068,10 @@
           "formatSpecifics": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/FormatSpecifics"
               },
               {
-                "$ref": "#/components/schemas/FormatSpecifics"
+                "type": "null"
               }
             ]
           },
@@ -11145,10 +11145,10 @@
           "dataType": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/VectorDataType"
               },
               {
-                "$ref": "#/components/schemas/VectorDataType"
+                "type": "null"
               }
             ]
           },
@@ -11158,20 +11158,20 @@
           "defaultGeometry": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TypedGeometry"
               },
               {
-                "$ref": "#/components/schemas/TypedGeometry"
+                "type": "null"
               }
             ]
           },
           "columns": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/OgrSourceColumnSpec"
               },
               {
-                "$ref": "#/components/schemas/OgrSourceColumnSpec"
+                "type": "null"
               }
             ]
           },
@@ -11199,10 +11199,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -11721,10 +11721,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           }
@@ -11935,20 +11935,20 @@
           "time": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TimeInterval"
               },
               {
-                "$ref": "#/components/schemas/TimeInterval"
+                "type": "null"
               }
             ]
           },
           "bbox": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/BoundingBox2D"
               },
               {
-                "$ref": "#/components/schemas/BoundingBox2D"
+                "type": "null"
               }
             ]
           }
@@ -12059,10 +12059,10 @@
           "text": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TextSymbology"
               },
               {
-                "$ref": "#/components/schemas/TextSymbology"
+                "type": "null"
               }
             ]
           }
@@ -12092,10 +12092,10 @@
           "text": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TextSymbology"
               },
               {
-                "$ref": "#/components/schemas/TextSymbology"
+                "type": "null"
               }
             ]
           },
@@ -12552,10 +12552,10 @@
           "name": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/DatasetName"
               },
               {
-                "$ref": "#/components/schemas/DatasetName"
+                "type": "null"
               }
             ]
           },
@@ -12809,11 +12809,11 @@
           "outputMeasurement": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Measurement",
                 "description": "*Optional:* output measurement of the result of the scaling operation."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13167,11 +13167,11 @@
           "densityParams": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DensityParams",
                 "description": "Optional density parameters for a Gaussian density rasterization."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -13703,10 +13703,10 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/CacheTtlSeconds"
               },
               {
-                "$ref": "#/components/schemas/CacheTtlSeconds"
+                "type": "null"
               }
             ]
           },
@@ -14094,20 +14094,20 @@
           "axisLabels": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/StringPair"
               },
               {
-                "$ref": "#/components/schemas/StringPair"
+                "type": "null"
               }
             ]
           },
           "axisOrder": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/AxisOrder"
               },
               {
-                "$ref": "#/components/schemas/AxisOrder"
+                "type": "null"
               }
             ]
           }
@@ -14215,20 +14215,20 @@
           "s3Config": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/StacProviderS3Config"
               },
               {
-                "$ref": "#/components/schemas/StacProviderS3Config"
+                "type": "null"
               }
             ]
           },
           "authentication": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/StacProviderAuthentication"
               },
               {
-                "$ref": "#/components/schemas/StacProviderAuthentication"
+                "type": "null"
               }
             ]
           },
@@ -14253,22 +14253,22 @@
           "cacheTtlSecs": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CacheTtlSeconds",
                 "description": "Optional output cache lifetime; omitted values use the global cache default."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "stacGrid": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StacGrid",
                 "description": "Target number of square search cells per dataset CRS projected area of use; omitted values use 512."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -14380,20 +14380,20 @@
           "accessKey": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Secret_String"
               },
               {
-                "$ref": "#/components/schemas/Secret_String"
+                "type": "null"
               }
             ]
           },
           "secretKey": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Secret_String"
               },
               {
-                "$ref": "#/components/schemas/Secret_String"
+                "type": "null"
               }
             ]
           }
@@ -14987,22 +14987,22 @@
           "windowReference": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimeInstance",
                 "description": "Optional reference timestamp used as the anchor for window boundaries.\n\nIf omitted, windows are anchored at `1970-01-01T00:00:00Z`."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "outputType": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/RasterDataType",
                 "description": "Optional output raster data type."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -15607,10 +15607,10 @@
           "bounds": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TimeInterval"
               },
               {
-                "$ref": "#/components/schemas/TimeInterval"
+                "type": "null"
               }
             ]
           },
@@ -15749,11 +15749,11 @@
           "stepReference": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TimeInstance",
                 "description": "Optional anchor point for the time step."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -16238,10 +16238,10 @@
           "symbology": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Symbology"
               },
               {
-                "$ref": "#/components/schemas/Symbology"
+                "type": "null"
               }
             ]
           },
@@ -16329,20 +16329,20 @@
           "bounds": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/STRectangle"
               },
               {
-                "$ref": "#/components/schemas/STRectangle"
+                "type": "null"
               }
             ]
           },
           "timeStep": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TimeStep"
               },
               {
-                "$ref": "#/components/schemas/TimeStep"
+                "type": "null"
               }
             ]
           }
@@ -16558,20 +16558,20 @@
           "project": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/ProjectId"
               },
               {
-                "$ref": "#/components/schemas/ProjectId"
+                "type": "null"
               }
             ]
           },
           "view": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/STRectangle"
               },
               {
-                "$ref": "#/components/schemas/STRectangle"
+                "type": "null"
               }
             ]
           },
@@ -16587,12 +16587,12 @@
         "type": "object",
         "description": "Variable Matrix Width data structure",
         "required": [
-          "coalesc",
+          "coalesce",
           "minTileRow",
-          "smaxTileRow"
+          "maxTileRow"
         ],
         "properties": {
-          "coalesc": {
+          "coalesce": {
             "type": "integer",
             "description": "Number of tiles in width that coalesce in a single tile for these rows",
             "minimum": 2
@@ -16603,7 +16603,7 @@
             "description": "First tile row where the coalescence factor applies for this tilematrix",
             "minimum": 0
           },
-          "smaxTileRow": {
+          "maxTileRow": {
             "type": "integer",
             "format": "int64",
             "description": "Last tile row where the coalescence factor applies for this tilematrix",
@@ -16967,20 +16967,20 @@
           "time": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/TimeInterval"
               },
               {
-                "$ref": "#/components/schemas/TimeInterval"
+                "type": "null"
               }
             ]
           },
           "bbox": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/BoundingBox2D"
               },
               {
-                "$ref": "#/components/schemas/BoundingBox2D"
+                "type": "null"
               }
             ]
           }
@@ -17227,10 +17227,10 @@
           "refreshToken": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/Secret_String"
               },
               {
-                "$ref": "#/components/schemas/Secret_String"
+                "type": "null"
               }
             ]
           },

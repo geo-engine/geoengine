@@ -59,7 +59,7 @@ CREATE TYPE "Provenance" AS (
     uri text
 );
 
-CREATE DOMAIN "RgbaColor" AS smallint [4] CHECK (
+CREATE DOMAIN "RgbaColor" AS smallint[4] CHECK (
     0 <= ALL(value) AND 255 >= ALL(value)
 );
 
@@ -382,7 +382,7 @@ CREATE TYPE "OgrSourceErrorSpec" AS ENUM (
 -- We store `Polygon`s as an array of rings that are closed postgres `path`s.
 -- We do not use an array of `polygon`s as it is the same as storing a path 
 -- plus a stored bbox that we don't want to compute and store (overhead).
-CREATE DOMAIN "Polygon" AS path [];
+CREATE DOMAIN "Polygon" AS path[];
 
 CREATE TYPE "TypedGeometry" AS (
     -- oneOf
@@ -444,7 +444,7 @@ CREATE TYPE "GdalMetadataMapping" AS (
     target_type "RasterPropertiesEntryType"
 );
 
-CREATE DOMAIN "StringPair" AS text [2];
+CREATE DOMAIN "StringPair" AS text[2];
 
 CREATE TYPE "GdalRetryOptions" AS (
     max_retries bigint
@@ -604,12 +604,12 @@ CREATE TABLE datasets (
     name "DatasetName" UNIQUE NOT NULL,
     display_name text NOT NULL,
     description text NOT NULL,
-    tags text [],
+    tags text[],
     source_operator text NOT NULL,
     result_descriptor "ResultDescriptor" NOT NULL,
     meta_data "MetaDataDefinition" NOT NULL,
     symbology "Symbology",
-    provenance "Provenance" []
+    provenance "Provenance"[]
 );
 
 -- TODO: add constraint not null
@@ -629,7 +629,7 @@ CREATE TYPE "FileUpload" AS (
 CREATE TABLE uploads (
     id uuid PRIMARY KEY,
     -- user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-    files "FileUpload" [] NOT NULL
+    files "FileUpload"[] NOT NULL
 );
 
 CREATE TYPE "PropertyType" AS (key text, value text);
@@ -638,7 +638,7 @@ CREATE TABLE layer_collections (
     id uuid PRIMARY KEY,
     name text NOT NULL,
     description text NOT NULL,
-    properties "PropertyType" [] NOT NULL
+    properties "PropertyType"[] NOT NULL
 );
 
 CREATE TABLE layers (
@@ -647,8 +647,8 @@ CREATE TABLE layers (
     description text NOT NULL,
     workflow_id uuid REFERENCES workflows (id) NOT NULL,
     symbology "Symbology",
-    properties "PropertyType" [] NOT NULL,
-    metadata "TextTextKeyValue" [] NOT NULL
+    properties "PropertyType"[] NOT NULL,
+    metadata "TextTextKeyValue"[] NOT NULL
 );
 
 CREATE TABLE collection_layers (
@@ -827,11 +827,11 @@ CREATE TABLE ebv_provider_overviews (
 CREATE TABLE ebv_provider_groups (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
-    name text [] NOT NULL,
+    name text[] NOT NULL,
     title text NOT NULL,
     description text NOT NULL,
     data_type "RasterDataType",
-    data_range float [2],
+    data_range float[2],
     unit text NOT NULL,
 
     -- TODO: check if we need it
@@ -875,7 +875,7 @@ CREATE TABLE ebv_provider_timestamps (
 CREATE TABLE ebv_provider_loading_infos (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
-    group_names text [] NOT NULL,
+    group_names text[] NOT NULL,
     entity_id bigint NOT NULL,
     meta_data "GdalMetaDataList" NOT NULL,
 
@@ -1202,7 +1202,7 @@ VALUES (
     '05102bb3-a855-4a37-8a8a-30026a91fef1',
     'Layers',
     'All available Geo Engine layers',
-    ARRAY[]::"PropertyType" []
+    ARRAY[]::"PropertyType"[]
 );
 
 INSERT INTO layer_collections (
@@ -1215,7 +1215,7 @@ VALUES (
     'ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f',
     'Unsorted',
     'Unsorted Layers',
-    ARRAY[]::"PropertyType" []
+    ARRAY[]::"PropertyType"[]
 );
 
 INSERT INTO collection_children (

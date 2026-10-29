@@ -88,6 +88,8 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Rustfmt
         run: just backend lint-rustfmt
+      - name: Cargo.toml format
+        run: just backend lint-toml
       - name: Clippy
         run: just backend lint-clippy --deny-warnings
       - name: SQLFluff

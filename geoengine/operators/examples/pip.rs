@@ -57,7 +57,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
         .collect::<Vec<MultiPointCollection>>()
         .await;
 
-    assert!(!res.is_empty());
+    assert_ne!(res, [] as [_; 0]);
 }
 
 fn random_points<T: Rng>(rng: &mut T, num_points: usize) -> MultiPointCollection {

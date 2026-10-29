@@ -36,15 +36,16 @@ actix-web = { workspace = true }
 actix-web-httpauth = { workspace = true }
 actix-ws = { workspace = true }
 aes-gcm = { workspace = true }
-anyhow.workspace = true
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bb8-postgres = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-clap.workspace = true
+clap = { workspace = true }
 config = { workspace = true }
 convert_case = { workspace = true }
+dashmap = { workspace = true }
 erased-serde = { workspace = true }
 flexi_logger = { workspace = true }
 float-cmp = { workspace = true }
@@ -66,8 +67,9 @@ oauth2 = { workspace = true }
 ogcapi-types = { workspace = true }
 openidconnect = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+ort = { workspace = true }
 paste = { workspace = true }
 pbkdf2 = { workspace = true }
 postgres-protocol = { workspace = true }
@@ -115,8 +117,8 @@ criterion = { workspace = true }
 csv = { workspace = true }
 httptest = { workspace = true }
 pretty_assertions = { workspace = true }
-tempfile = { workspace = true }
 serial_test = { workspace = true }
+tempfile = { workspace = true }
 xml = { workspace = true }
 
 [build-dependencies]

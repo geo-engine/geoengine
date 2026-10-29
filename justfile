@@ -22,7 +22,7 @@ lint fix="false": (repo::lint fix) api-clients::lint (backend::lint fix) (python
 # Check the format for all submodules. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
-format write="false": (repo::format write) (www::format write) (ui::format write)
+format write="false": (repo::format write) (backend::lint-toml (if write == "true" { "--write" } else { "" })) (www::format write) (ui::format write)
 
 # Build all submodules.
 [group("build")]

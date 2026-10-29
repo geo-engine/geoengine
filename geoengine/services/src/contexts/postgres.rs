@@ -6,7 +6,7 @@ use crate::{
         MigrationResult, QueryContextImpl, QuotaCheckerImpl, SessionContext, SessionId,
         initialize_database, migrations,
     },
-    datasets::{DatasetName, upload::Volumes},
+    datasets::{DatasetName, external::stac::StacRequestRegistry, upload::Volumes},
     error::{self, Error, Result},
     layers::{
         add_from_directory::{
@@ -35,6 +35,7 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
     engine::ChunkByteSize,
+    machine_learning::onnx_util::OrtEnvironment,
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
@@ -68,7 +69,21 @@ where
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
     provider_registry: Arc<DataConnectorRegistry>,
+    stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
+    ort_environment: OrtEnvironment,
+}
+
+/// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
+pub struct ContextSpec<Tls> {
+    pub config: Config,
+    pub tls: Tls,
+    pub exe_ctx_tiling_spec: TilingSpecification,
+    pub query_ctx_chunk_size: ChunkByteSize,
+    pub quota_config: Quota,
+    pub oidc_manager: OidcManager,
+    pub gdal_process_pool_config: crate::config::GdalProcessPool,
+    pub ort_environment: OrtEnvironment,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -79,13 +94,16 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     pub async fn new_with_context_spec(
-        config: Config,
-        tls: Tls,
-        exe_ctx_tiling_spec: TilingSpecification,
-        query_ctx_chunk_size: ChunkByteSize,
-        quota_config: Quota,
-        oidc_db: OidcManager,
-        gdal_process_pool_config: crate::config::GdalProcessPool,
+        ContextSpec {
+            config,
+            tls,
+            exe_ctx_tiling_spec,
+            query_ctx_chunk_size,
+            quota_config,
+            oidc_manager,
+            gdal_process_pool_config,
+            ort_environment,
+        }: ContextSpec<Tls>,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
@@ -94,10 +112,12 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
+        let stac_request_registry = StacRequestRegistry::new();
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
             provider_registry.clone(),
+            stac_request_registry.clone(),
         );
         let quota = initialize_quota_tracking(
             quota_config.mode,
@@ -118,7 +138,7 @@ where
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
-            oidc_manager: oidc_db,
+            oidc_manager,
             quota,
             pool,
             volumes: Default::default(),
@@ -126,7 +146,9 @@ where
             new_raster_cache: None,
             default_cache_ttl: CacheTtlSeconds::new(0),
             provider_registry,
+            stac_request_registry,
             gdal_process_pool,
+            ort_environment,
         })
     }
 
@@ -138,6 +160,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
+        ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -147,10 +170,12 @@ where
         Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
+        let stac_request_registry = StacRequestRegistry::new();
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
             provider_registry.clone(),
+            stac_request_registry.clone(),
         );
         let quota = initialize_quota_tracking(
             quota_config.mode,
@@ -193,7 +218,9 @@ where
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
+            stac_request_registry,
             gdal_process_pool,
+            ort_environment,
         })
     }
 
@@ -213,6 +240,7 @@ where
         cache_config: Cache,
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
+        ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -222,10 +250,12 @@ where
         let created_schema = Self::create_pro_database(pool.get().await?).await?;
 
         let provider_registry = Arc::new(DataConnectorRegistry::default());
+        let stac_request_registry = StacRequestRegistry::new();
         let db = PostgresDb::new(
             pool.clone(),
             UserSession::admin_session(),
             provider_registry.clone(),
+            stac_request_registry.clone(),
         );
         let quota = initialize_quota_tracking(
             quota_config.mode,
@@ -268,7 +298,9 @@ where
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
             provider_registry,
+            stac_request_registry,
             gdal_process_pool,
+            ort_environment,
         };
 
         if created_schema {
@@ -441,6 +473,7 @@ where
             self.context.pool.clone(),
             self.session.clone(),
             self.context.provider_registry.clone(),
+            self.context.stac_request_registry.clone(),
         )
     }
 
@@ -480,6 +513,7 @@ where
             self.context.gdal_process_pool.clone(),
             self.context.new_raster_cache.clone(),
             self.context.default_cache_ttl,
+            self.context.ort_environment.clone(),
         ))
     }
 
@@ -516,6 +550,7 @@ where
     pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
     pub(crate) session: UserSession,
     pub(crate) provider_registry: Arc<DataConnectorRegistry>,
+    pub(crate) stac_request_registry: StacRequestRegistry,
 }
 
 impl<Tls> PostgresDb<Tls>
@@ -529,11 +564,13 @@ where
         conn_pool: Pool<PostgresConnectionManager<Tls>>,
         session: UserSession,
         provider_registry: Arc<DataConnectorRegistry>,
+        stac_request_registry: StacRequestRegistry,
     ) -> Self {
         Self {
             conn_pool,
             session,
             provider_registry,
+            stac_request_registry,
         }
     }
 

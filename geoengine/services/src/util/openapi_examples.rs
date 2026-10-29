@@ -2,11 +2,12 @@ use crate::api::model::responses::ErrorResponse;
 use crate::contexts::PostgresContext;
 use crate::contexts::SessionId;
 use crate::users::UserAuth;
+use crate::util::openapi_visitor::operations_from_path;
 use actix_web::dev::ServiceResponse;
 use actix_web::http::{Method, header};
 use actix_web::test::TestRequest;
 use actix_web_httpauth::headers::authorization::Bearer;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use tokio_postgres::NoTls;
 use utoipa::PartialSchema;
@@ -17,8 +18,6 @@ use utoipa::openapi::{
 };
 use uuid::Uuid;
 
-use super::openapi_visitor::operations_from_path;
-
 pub struct RunnableExample<'a, C, F, Fut>
 where
     F: Fn(TestRequest, C) -> Fut,
@@ -27,7 +26,7 @@ where
     pub(crate) components: &'a Components,
     pub(crate) http_method: &'a HttpMethod,
     pub(crate) uri: &'a str,
-    pub(crate) parameters: &'a Option<Vec<Parameter>>,
+    pub(crate) parameters: &'a Option<Vec<RefOr<Parameter>>>,
     pub(crate) body: serde_json::Value,
     pub(crate) with_auth: bool,
     pub(crate) ctx: C,
@@ -90,13 +89,15 @@ where
         }
     }
 
-    fn insert_parameters(&self, parameters: &Vec<Parameter>) -> TestRequest {
+    fn insert_parameters(&self, parameters: &'a Vec<RefOr<Parameter>>) -> TestRequest {
         let mut req = TestRequest::default();
         let mut uri = self.uri.to_string();
         let mut query_params = HashMap::new();
+        let mut query_strings = Vec::new();
         let mut cookies = HashMap::new();
 
         for parameter in parameters {
+            let parameter = resolve_component(parameter, "parameters", &self.components.parameters);
             let schema = self.resolve_schema(
                 parameter
                     .schema
@@ -118,6 +119,10 @@ where
                 ParameterIn::Cookie => {
                     cookies.insert(parameter.name.as_str(), value);
                 }
+                ParameterIn::QueryString => {
+                    // the parameter value is the entire query string
+                    query_strings.push(value);
+                }
             }
         }
         if let Ok(cookie_str) = serde_urlencoded::to_string(cookies)
@@ -128,7 +133,10 @@ where
         if let Ok(query_params_str) = serde_urlencoded::to_string(query_params)
             && !query_params_str.is_empty()
         {
-            uri = format!("{uri}?{query_params_str}");
+            query_strings.push(query_params_str);
+        }
+        if !query_strings.is_empty() {
+            uri = format!("{uri}?{}", query_strings.join("&"));
         }
         req.uri(uri.as_str())
     }
@@ -189,6 +197,25 @@ where
     }
 }
 
+/// Resolves a reference to a component of the given kind (e.g. `parameters`).
+/// References are checked before by `can_resolve_api`.
+fn resolve_component<'c, T>(
+    ref_or: &'c RefOr<T>,
+    kind: &str,
+    items: &'c BTreeMap<String, RefOr<T>>,
+) -> &'c T {
+    match ref_or {
+        RefOr::Ref(reference) => {
+            let name = reference
+                .ref_location
+                .strip_prefix(&format!("#/components/{kind}/"))
+                .expect("reference should point to a component of the given kind");
+            resolve_component(items.get(name).expect("checked before"), kind, items)
+        }
+        RefOr::T(concrete) => concrete,
+    }
+}
+
 /// Runs all example requests against the provided test server to check for bad documentation,
 /// for example due to incompatible schema changes between the time of writing the request body
 /// and now. It can also detect if the query parameters are not documented correctly or the
@@ -215,8 +242,12 @@ pub async fn can_run_examples<F, Fut>(
         for (http_method, operation) in operations_from_path(&path_item) {
             if let Some(request_body) = &operation.request_body {
                 let with_auth = operation.security.is_some();
+                let request_body =
+                    resolve_component(request_body, "requestBodies", &components.request_bodies);
 
-                for content in request_body.content.clone().into_values() {
+                for content in request_body.content.values() {
+                    let content =
+                        resolve_component(content, "mediaTypes", &components.media_types).clone();
                     if let Some(example) = content.example {
                         RunnableExample {
                             components: &components,
@@ -373,7 +404,7 @@ mod tests {
                                                 ContentBuilder::new()
                                                     .schema(Some(Volume::schema()))
                                                     .example(Some(example))
-                                                    .into(),
+                                                    .build(),
                                             )
                                             .into(),
                                     )),

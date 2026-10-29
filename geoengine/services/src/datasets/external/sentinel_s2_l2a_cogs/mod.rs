@@ -1243,7 +1243,8 @@ mod tests {
                 ),
                 request::headers(contains(("range", "bytes=0-16383"))),
             ])
-            .times(4)
+            // the mask flags are read with the header, so the failing tile requests do not fetch it again
+            .times(3)
             .respond_with(responders::cycle![
                 // first fail
                 responders::status_code(500),
@@ -1253,8 +1254,7 @@ mod tests {
                     responders::status_code(500)
                 ),
                 // then succeed
-                get_success_response(), // -> GET tile fails
-                get_success_response(), // -> GET tile times out
+                get_success_response(),
             ]),
         );
 

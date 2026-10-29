@@ -14,23 +14,23 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct VariableMatrixWidth {
     /// Number of tiles in width that coalesce in a single tile for these rows
-    #[serde(rename = "coalesc")]
-    pub coalesc: i32,
+    #[serde(rename = "coalesce")]
+    pub coalesce: i32,
     /// First tile row where the coalescence factor applies for this tilematrix
     #[serde(rename = "minTileRow")]
     pub min_tile_row: i64,
     /// Last tile row where the coalescence factor applies for this tilematrix
-    #[serde(rename = "smaxTileRow")]
-    pub smax_tile_row: i64,
+    #[serde(rename = "maxTileRow")]
+    pub max_tile_row: i64,
 }
 
 impl VariableMatrixWidth {
     /// Variable Matrix Width data structure
-    pub fn new(coalesc: i32, min_tile_row: i64, smax_tile_row: i64) -> VariableMatrixWidth {
+    pub fn new(coalesce: i32, min_tile_row: i64, max_tile_row: i64) -> VariableMatrixWidth {
         VariableMatrixWidth {
-            coalesc,
+            coalesce,
             min_tile_row,
-            smax_tile_row,
+            max_tile_row,
         }
     }
 }

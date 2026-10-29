@@ -93,7 +93,7 @@ use crate::{
         UserSession,
     },
     util::{
-        apidoc::{DeriveDiscriminatorMapping, OpenApiServerInfo},
+        apidoc::{CollapseInlinedFieldDescriptions, DeriveDiscriminatorMapping, OpenApiServerInfo},
         server::ServerInfo,
     },
 };
@@ -457,7 +457,13 @@ use utoipa::{
         (path = "/processingGraphs", api = crate::api::model::processing_graphs::OperatorsApi),
         (path = "/ogc", api = crate::api::handlers::ogc::OgcApiDoc),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
+    modifiers(
+        &SecurityAddon,
+        &ApiDocInfo,
+        &OpenApiServerInfo,
+        &DeriveDiscriminatorMapping,
+        &CollapseInlinedFieldDescriptions
+    ),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;

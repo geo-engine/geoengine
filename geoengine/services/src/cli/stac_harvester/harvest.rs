@@ -162,10 +162,14 @@ pub(super) async fn harvest_tiles(params: StacHarvest) -> Result<(), anyhow::Err
     .await?;
 
     // Separate reqwest client for STAC API calls (not Geo Engine)
-    let stac_client = StacClient::new(reqwest::Client::new())
-        .with_authentication(provider_def.authentication.clone(), &provider_def.api_url)
-        .await
-        .context("Cannot authenticate with STAC API")?;
+    let stac_client = StacClient::new(
+        reqwest::Client::new(),
+        &provider_def.api_url,
+        crate::datasets::external::stac::StacRequestRegistry::new(),
+    )?
+    .with_authentication(provider_def.authentication.clone())
+    .await
+    .context("Cannot authenticate with STAC API")?;
 
     let created_datasets = setup_datasets(&api_config, &params, provider_def).await?;
 
@@ -929,23 +933,9 @@ async fn query_item_collection_internal(
             query_url,
             query_params,
         } => {
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    client
-                        .get(query_url)
-                        .await?
-                        .query(&query_params)
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
-                },
-                "Query STAC first page",
-                &RetryPolicy::new(),
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await?;
+            let request = client.get(query_url).query(&query_params);
+            let item_collection: stac::ItemCollection =
+                client.execute_json(request, &RetryPolicy::new()).await?;
 
             let new_state = item_collection
                 .links
@@ -958,22 +948,9 @@ async fn query_item_collection_internal(
             Ok((item_collection, new_state))
         }
         QueryState::NextPage { next_url } => {
-            let item_collection: stac::ItemCollection = retry_http(
-                || async {
-                    client
-                        .get(next_url)
-                        .await?
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .json()
-                        .await
-                },
-                "Query STAC next page",
-                &RetryPolicy::new(),
-                |e| e.status().map(|s| s.as_u16()),
-            )
-            .await?;
+            let request = client.get(next_url);
+            let item_collection: stac::ItemCollection =
+                client.execute_json(request, &RetryPolicy::new()).await?;
 
             let new_state = item_collection
                 .links
@@ -1405,16 +1382,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn harvest_pages_use_shared_stac_authentication() {
+    async fn it_harvests_pages_with_authentication_only_for_the_configured_origin() {
         use crate::datasets::external::stac::StacProviderAuthentication;
         use httptest::{
             Expectation, Server, all_of,
-            matchers::{contains, request},
+            matchers::{any, contains, not, request},
             responders,
         };
 
-        for authenticated in [false, true] {
+        for (authenticated, same_origin) in
+            [(false, false), (false, true), (true, false), (true, true)]
+        {
             let server = Server::run();
+            let next_server = Server::run();
+            let next_server = if same_origin { &server } else { &next_server };
             let authentication = authenticated.then(|| StacProviderAuthentication {
                 endpoint: server.url_str("/token"),
                 client_id: "client".into(),
@@ -1435,25 +1416,36 @@ mod tests {
             ))
             .unwrap();
             first_page["links"] = serde_json::json!([{
-                "rel": "next", "href": server.url_str("/next")
+                "rel": "next", "href": next_server.url_str("/next")
             }]);
             let last_page =
                 serde_json::json!({"type": "FeatureCollection", "features": [], "links": []});
-            for (path, page) in [("/items", first_page), ("/next", last_page)] {
-                let expectation = if authenticated {
+            for (page_server, path, page) in [
+                (&server, "/items", first_page),
+                (next_server, "/next", last_page),
+            ] {
+                let expectation = if authenticated && (path == "/items" || same_origin) {
                     Expectation::matching(all_of![
                         request::method_path("GET", path),
                         request::headers(contains(("authorization", "Bearer access"))),
                     ])
                 } else {
-                    Expectation::matching(request::method_path("GET", path))
+                    Expectation::matching(all_of![
+                        request::method_path("GET", path),
+                        request::headers(not(contains(("authorization", any())))),
+                    ])
                 };
-                server.expect(expectation.respond_with(responders::json_encoded(page)));
+                page_server.expect(expectation.respond_with(responders::json_encoded(page)));
             }
-            let client = StacClient::new(reqwest::Client::new())
-                .with_authentication(authentication, &server.url_str("/"))
-                .await
-                .unwrap();
+            let client = StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
+            )
+            .unwrap()
+            .with_authentication(authentication)
+            .await
+            .unwrap();
             let pages = create_page_stream(
                 QueryState::FirstPage {
                     query_url: server.url_str("/items"),
@@ -1464,7 +1456,7 @@ mod tests {
                 1,
             );
             futures::pin_mut!(pages);
-            assert!(!pages.next().await.unwrap().unwrap().items.is_empty());
+            assert_ne!(pages.next().await.unwrap().unwrap().items, [] as [_; 0]);
             assert!(pages.next().await.is_none());
         }
     }

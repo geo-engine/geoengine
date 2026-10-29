@@ -829,6 +829,10 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    fn stac_request_registry(&self) -> &crate::datasets::external::stac::StacRequestRegistry {
+        &self.stac_request_registry
+    }
+
     async fn add_layer_provider(
         &self,
         provider: TypedDataProviderDefinition,
@@ -954,6 +958,7 @@ where
                     conn_pool: self.conn_pool.clone(),
                     session: self.session.clone(),
                     provider_registry: self.provider_registry.clone(),
+                    stac_request_registry: self.stac_request_registry.clone(),
                 };
 
                 async move {

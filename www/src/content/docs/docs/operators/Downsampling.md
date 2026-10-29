@@ -28,7 +28,7 @@ DownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })
 | --------------------- | ---------------------- | ------------------------- | --------------------------------- |
 | samplingMethod        | DownsamplingMethod     | Downsampling method.      | `"nearestNeighbor"`               |
 | outputResolution      | DownsamplingResolution | Target output resolution. | `{"type":"fraction","x":2,"y":2}` |
-| outputOriginReference | null or Coordinate2D   |                           |                                   |
+| outputOriginReference | Coordinate2D or null   |                           |                                   |
 
 ## Sources
 

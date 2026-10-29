@@ -484,7 +484,11 @@ describe('TileLoader', () => {
             expect(cachedDuringBackoff.getState()).toBe(TileState.ERROR);
 
             const sourceTiles: Array<ImageTile> = [];
-            renderer.getSourceTileCache().forEach((tile: ImageTile) => sourceTiles.push(tile));
+            renderer.getSourceTileCache().forEach((tile: Tile | null) => {
+                if (tile instanceof ImageTile) {
+                    sourceTiles.push(tile);
+                }
+            });
             expect(sourceTiles.length).toBeGreaterThan(0);
             expect(fetchMock).toHaveBeenCalledTimes(sourceTiles.length);
 
@@ -544,7 +548,7 @@ describe('TileLoader', () => {
             obsolete.next('resolution changed');
             await vi.advanceTimersByTimeAsync(0);
             expect(signals.every((signal) => signal.aborted)).toBe(true);
-            renderer.getSourceTileCache().forEach((tile: ImageTile) => expect(tile.getState()).toBe(TileState.IDLE));
+            renderer.getSourceTileCache().forEach((tile: Tile | null) => expect(tile?.getState()).toBe(TileState.IDLE));
 
             // The source is ready to load again, so its display tile must also be queueable.
             expect(displayTile().getState()).toBe(TileState.IDLE);

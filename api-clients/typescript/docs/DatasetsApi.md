@@ -88,7 +88,7 @@ example().catch(console.error);
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-| **200** |  |  -  |
+| **200** | Tiles were added to the dataset |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
@@ -157,7 +157,7 @@ example().catch(console.error);
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-| **200** |  |  -  |
+| **200** | Name of the created dataset |  -  |
 | **400** | Bad request |  -  |
 | **401** | Authorization failed |  -  |
 | **413** | Payload too large |  -  |
@@ -230,7 +230,7 @@ example().catch(console.error);
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-| **200** |  |  -  |
+| **200** | Name of the created dataset |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
@@ -596,7 +596,7 @@ example().catch(console.error);
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-| **200** |  |  -  |
+| **200** | Layers of the volume file |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 

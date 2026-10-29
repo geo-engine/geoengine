@@ -15,11 +15,14 @@ use std::{fmt, sync::Arc};
 mod auth;
 mod cache;
 pub(crate) mod common;
+mod coordinator;
 mod grid;
 mod listing;
 mod loading_info;
 mod storage;
 use cache::StacQueryCache;
+pub(crate) use coordinator::StacClient;
+pub use coordinator::StacRequestRegistry;
 pub use grid::{ProjectedStacGrid, StacGrid, StacGridCell, StacGridCells};
 pub use loading_info::StacMultiBandMetaData;
 
@@ -220,16 +223,16 @@ impl StacProviderDatasetBand {
 
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
-    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+    async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         let mut definition = *self;
         let authentication = definition.authentication.take();
         validate_authentication(authentication.as_ref())?;
-        let mut provider = StacDataProvider::from_definition(definition)?;
+        let mut provider = StacDataProvider::from_definition_with_request_registry(
+            definition,
+            db.stac_request_registry().clone(),
+        )?;
 
-        provider.client = provider
-            .client
-            .with_authentication(authentication, &provider.api_url)
-            .await?;
+        provider.client = provider.client.with_authentication(authentication).await?;
 
         Ok(Box::new(provider))
     }
@@ -316,8 +319,19 @@ pub struct StacDataProvider {
 impl StacDataProvider {
     /// Builds a provider from its persisted definition after validating its configuration.
     ///
+    /// This standalone constructor creates its own request registry. Use
+    /// [`Self::from_definition_with_request_registry`] to share quotas across providers.
+    ///
     /// Authentication is installed asynchronously by [`StacDataProviderDefinition::initialize`].
     pub fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
+        Self::from_definition_with_request_registry(definition, StacRequestRegistry::new())
+    }
+
+    /// Builds a provider with the registry shared by its application or standalone operation.
+    pub fn from_definition_with_request_registry(
+        definition: StacDataProviderDefinition,
+        request_registry: StacRequestRegistry,
+    ) -> crate::error::Result<Self> {
         validate_s3_config(definition.s3_config.as_ref())?;
         validate_time_dimension(definition.time_dimension)?;
         let grid = definition.stac_grid.unwrap_or_default().validate()?;
@@ -326,8 +340,8 @@ impl StacDataProvider {
             .timeout(std::time::Duration::from_secs(
                 definition.query_timeout_secs as u64,
             ))
-            .build()
-            .unwrap_or_default();
+            .build()?;
+        let client = StacClient::new(client, &definition.api_url, request_registry)?;
 
         Ok(Self {
             id: definition.id,
@@ -339,7 +353,7 @@ impl StacDataProvider {
             time_dimension: definition.time_dimension,
             datasets: definition.datasets,
             page_limit: definition.page_limit,
-            client: StacClient::new(client),
+            client,
             cache_ttl_secs: definition.cache_ttl_secs,
             query_cache: Arc::new(StacQueryCache::default()),
             grid,
@@ -367,80 +381,345 @@ impl DataProvider for StacDataProvider {
     }
 }
 
-/// Shared STAC HTTP client. Clones share token renewal state, and each request
-/// reads the current token so pagination and retries use refreshed credentials.
-#[derive(Clone, Debug)]
-pub(crate) struct StacClient {
-    client: reqwest::Client,
-    authentication: Option<auth::StacAuthentication>,
-    authentication_origin: Option<url::Url>,
-}
-
-impl StacClient {
-    pub(crate) fn new(client: reqwest::Client) -> Self {
-        Self {
-            client,
-            authentication: None,
-            authentication_origin: None,
-        }
-    }
-
-    pub(crate) async fn with_authentication(
-        mut self,
-        config: Option<StacProviderAuthentication>,
-        stac_api_url: &str,
-    ) -> crate::error::Result<Self> {
-        self.authentication_origin = config
-            .as_ref()
-            .map(|_| url::Url::parse(stac_api_url))
-            .transpose()?;
-        self.authentication = match config {
-            Some(config) => {
-                Some(auth::StacAuthentication::initialize(self.client.clone(), config).await?)
-            }
-            None => None,
-        };
-        Ok(self)
-    }
-
-    pub(crate) async fn get(
-        &self,
-        url: impl reqwest::IntoUrl,
-    ) -> reqwest::Result<reqwest::RequestBuilder> {
-        let url = url.into_url()?;
-        let request = self.client.get(url.clone());
-        match (&self.authentication, &self.authentication_origin) {
-            (Some(authentication), Some(authentication_origin))
-                if same_origin(authentication_origin, &url) =>
-            {
-                Ok(authentication.authorize(request).await)
-            }
-            _ => Ok(request),
-        }
-    }
-}
-
-fn same_origin(expected: &url::Url, actual: &url::Url) -> bool {
-    expected.scheme() == actual.scheme()
-        && expected.host() == actual.host()
-        && expected.port_or_known_default() == actual.port_or_known_default()
-}
-
 #[cfg(test)]
 mod tests {
+    use super::coordinator::StacClientError;
     use super::*;
+    use httptest::{Expectation, Server, matchers::request, responders};
+    use std::time::Duration;
 
-    #[test]
-    fn same_origin_ignores_path_but_checks_scheme_host_and_port() {
-        assert!(same_origin(
-            &url::Url::parse("https://example.test/api").unwrap(),
-            &url::Url::parse("https://example.test/other").unwrap(),
+    #[tokio::test]
+    async fn it_injects_the_context_registry_into_independently_initialized_providers() {
+        use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
+        use tokio_postgres::NoTls;
+
+        // No connection is needed: STAC initialization obtains the registry from
+        // its database handle without touching PostgreSQL or a remote STAC API.
+        let pool = Pool::builder().build_unchecked(PostgresConnectionManager::new(
+            tokio_postgres::Config::new(),
+            NoTls,
         ));
-        assert!(!same_origin(
-            &url::Url::parse("https://example.test/api").unwrap(),
-            &url::Url::parse("https://other.test/api").unwrap(),
-        ));
+        let request_registry = StacRequestRegistry::new();
+        let db = crate::contexts::PostgresDb::new(
+            pool,
+            crate::users::UserSession::admin_session(),
+            Arc::new(crate::layers::provider_registry::DataConnectorRegistry::default()),
+            request_registry.clone(),
+        );
+        let mut definition: StacDataProviderDefinition =
+            serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
+                include_str!("../../../../../test_data/provider_defs_api/stac_sentinel2.json"),
+            )
+            .unwrap()
+            .into();
+        definition.api_url = "https://context-owned-registry.test".to_owned();
+        definition.authentication = None;
+        definition.s3_config = None;
+        let first = Box::new(definition.clone())
+            .initialize(db.clone())
+            .await
+            .unwrap();
+        definition.id = DataProviderId::from_u128(2);
+        definition.collection_name = "another-collection".to_owned();
+        let second = Box::new(definition).initialize(db).await.unwrap();
+        let first = first
+            .as_ref()
+            .as_any()
+            .downcast_ref::<StacDataProvider>()
+            .unwrap();
+        let second = second
+            .as_ref()
+            .as_any()
+            .downcast_ref::<StacDataProvider>()
+            .unwrap();
+        let origin = url::Url::parse("https://context-owned-registry.test").unwrap();
+        let expected = request_registry.shared(&origin, None).unwrap();
+        let first_coordinator = first.client.request_registry.shared(&origin, None).unwrap();
+        let second_coordinator = second
+            .client
+            .request_registry
+            .shared(&origin, None)
+            .unwrap();
+        assert!(Arc::ptr_eq(&expected, &first_coordinator));
+        assert!(Arc::ptr_eq(&expected, &second_coordinator));
     }
+
+    type AuthenticationBucketArrivals =
+        Arc<std::sync::Mutex<Vec<(&'static str, std::time::Instant)>>>;
+
+    fn authentication_bucket_server(
+        authenticated: bool,
+    ) -> (httptest::Server, AuthenticationBucketArrivals) {
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{any, contains, not, request},
+            responders,
+        };
+        use serde_json::json;
+        use std::{sync::Mutex, time::Instant};
+
+        let server = Server::run();
+        // Separate token grants for matching credentials deliberately issue
+        // different tokens. Renewed/independently issued tokens keep one bucket.
+        let tokens = if authenticated {
+            vec!["shared-first", "shared-second", "independent"]
+        } else {
+            vec!["independent"]
+        };
+        let token_count = tokens.len();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(token_count)
+                .respond_with(responders::cycle(
+                    tokens
+                        .into_iter()
+                        .map(|token| {
+                            Box::new(responders::json_encoded(json!({
+                                "access_token": token, "expires_in": 3600
+                            }))) as Box<dyn responders::Responder>
+                        })
+                        .collect(),
+                )),
+        );
+        let arrivals = Arc::new(Mutex::new(Vec::new()));
+        for (path, token) in [
+            ("/probe", authenticated.then_some("shared-first")),
+            ("/shared", authenticated.then_some("shared-second")),
+            ("/independent", Some("independent")),
+            ("/anonymous", None),
+        ] {
+            if path == "/anonymous" && !authenticated {
+                continue;
+            }
+            let expectation = if let Some(token) = token {
+                Expectation::matching(all_of![
+                    request::method_path("GET", path),
+                    request::headers(contains(("authorization", format!("Bearer {token}"))))
+                ])
+            } else {
+                Expectation::matching(all_of![
+                    request::method_path("GET", path),
+                    request::headers(not(contains(("authorization", any()))))
+                ])
+            };
+            let arrivals = arrivals.clone();
+            server.expect(expectation.times(1).respond_with(move || {
+                arrivals.lock().unwrap().push((path, Instant::now()));
+                let response = responders::status_code(200).body("null");
+                if path == "/probe" {
+                    response
+                        .append_header("x-ratelimit-limit", "10, 10;w=1, 60;w=60")
+                        .append_header("x-ratelimit-remaining", "0")
+                        .append_header("x-ratelimit-reset", "1")
+                } else {
+                    response
+                }
+            }));
+        }
+        (server, arrivals)
+    }
+
+    async fn authentication_bucket_contract(authenticated: bool) {
+        use serde_json::Value;
+        use std::time::{Duration, Instant};
+
+        let (server, arrivals) = authentication_bucket_server(authenticated);
+        let request_registry = StacRequestRegistry::new();
+        let create_client = |username: Option<&str>| {
+            let request_registry = request_registry.clone();
+            let config = username.map(|username| StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                client_id: "client".into(),
+                username: username.into(),
+                password: "password".into(),
+            });
+            let api_url = server.url_str("/");
+            async move {
+                StacClient::new(reqwest::Client::new(), &api_url, request_registry)
+                    .unwrap()
+                    .with_authentication(config)
+                    .await
+                    .unwrap()
+            }
+        };
+        let first = create_client(authenticated.then_some("shared-user")).await;
+        let same = create_client(authenticated.then_some("shared-user")).await;
+        let other = create_client(Some("different-user")).await;
+        let anonymous = create_client(None).await;
+        let policy = crate::util::retry::RetryPolicy::new().stop_on_status(&[400, 404]);
+        let exhausted = Instant::now();
+        first
+            .execute_json::<Value>(first.get(server.url_str("/probe")), &policy)
+            .await
+            .unwrap();
+        let waiting = same.execute_json::<Value>(same.get(server.url_str("/shared")), &policy);
+        tokio::pin!(waiting);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut waiting)
+                .await
+                .is_err(),
+            "matching authentication must share the exhausted bucket"
+        );
+        tokio::time::timeout(
+            Duration::from_millis(300),
+            other.execute_json::<Value>(other.get(server.url_str("/independent")), &policy),
+        )
+        .await
+        .expect("different authentication has an independent quota")
+        .unwrap();
+        if authenticated {
+            tokio::time::timeout(
+                Duration::from_millis(300),
+                anonymous
+                    .execute_json::<Value>(anonymous.get(server.url_str("/anonymous")), &policy),
+            )
+            .await
+            .expect("anonymous quota is independent of authenticated quota")
+            .unwrap();
+        }
+        tokio::time::timeout(Duration::from_secs(3), &mut waiting)
+            .await
+            .unwrap()
+            .unwrap();
+        let arrivals = arrivals.lock().unwrap();
+        let shared_start = arrivals
+            .iter()
+            .find(|(path, _)| *path == "/shared")
+            .unwrap()
+            .1;
+        assert!(shared_start.duration_since(exhausted) >= Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn it_shares_anonymous_rate_limits_across_clients() {
+        authentication_bucket_contract(false).await;
+    }
+
+    #[tokio::test]
+    async fn it_reuses_the_initialized_coordinator_across_clones() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+        use std::time::{Duration, Instant};
+
+        let server = Server::run();
+        for path in ["/items", "/next"] {
+            server.expect(
+                Expectation::matching(request::method_path("GET", path))
+                    .times(1)
+                    .respond_with(
+                        responders::status_code(200)
+                            .append_header("x-ratelimit-remaining", "0")
+                            .append_header("x-ratelimit-reset", "1")
+                            .body("null"),
+                    ),
+            );
+        }
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            StacRequestRegistry::new(),
+        )
+        .unwrap();
+        let cloned = client.clone();
+        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+        let started = Instant::now();
+        client
+            .execute_json::<Value>(client.get(server.url_str("/items")), &policy)
+            .await
+            .unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(3),
+            cloned.execute_json::<Value>(cloned.get(server.url_str("/next")), &policy),
+        )
+        .await
+        .expect("the cloned client should proceed after the shared quota resets")
+        .unwrap();
+        assert!(started.elapsed() >= Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn it_shares_matching_authentication_and_isolates_other_credentials() {
+        authentication_bucket_contract(true).await;
+    }
+
+    #[tokio::test]
+    async fn it_authorizes_after_queue_wait_and_preserves_request_timeout() {
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{contains, request},
+            responders,
+        };
+        use serde_json::json;
+        use std::time::Duration;
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(2)
+                .respond_with(responders::cycle![
+                    responders::json_encoded(json!({
+                        "access_token": "initial", "refresh_token": "refresh",
+                        "expires_in": 1
+                    })),
+                    responders::json_encoded(json!({
+                        "access_token": "renewed", "refresh_token": "next-refresh",
+                        "expires_in": 3600
+                    })),
+                ]),
+        );
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/probe"),
+                request::headers(contains(("authorization", "Bearer initial"))),
+            ])
+            .times(1)
+            .respond_with(
+                responders::status_code(200)
+                    .append_header("x-ratelimit-limit", "10, 10;w=1, 60;w=60")
+                    .append_header("x-ratelimit-remaining", "0")
+                    .append_header("x-ratelimit-reset", "1")
+                    .body("null"),
+            ),
+        );
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/queued"),
+                request::headers(contains(("authorization", "Bearer renewed"))),
+            ])
+            .times(1)
+            .respond_with(responders::status_code(200).body("null")),
+        );
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            StacRequestRegistry::new(),
+        )
+        .unwrap()
+        .with_authentication(Some(StacProviderAuthentication {
+            endpoint: server.url_str("/token"),
+            client_id: "client".into(),
+            username: "user".into(),
+            password: "password".into(),
+        }))
+        .await
+        .unwrap();
+        let queued = client
+            .get(server.url_str("/queued"))
+            .timeout(Duration::from_millis(100));
+        let policy = crate::util::retry::RetryPolicy::new().stop_on_status(&[400, 404]);
+        client
+            .execute_json::<serde_json::Value>(client.get(server.url_str("/probe")), &policy)
+            .await
+            .unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(3),
+            client.execute_json::<serde_json::Value>(queued, &policy),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    }
+
     #[test]
     fn secret_replacement_is_rejected_without_existing_authentication() {
         let authentication = StacProviderAuthentication {
@@ -537,5 +816,256 @@ mod tests {
             db.get_layer_provider_definition(id).await.unwrap(),
             definition.into()
         );
+    }
+
+    #[tokio::test]
+    async fn it_reuses_the_coordinator_across_requests_and_client_clones() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+
+        let server = Server::run();
+        for path in ["/first", "/second", "/third"] {
+            server.expect(
+                Expectation::matching(request::method_path("GET", path))
+                    .times(1)
+                    .respond_with(responders::status_code(200).body("null")),
+            );
+        }
+        let registry = StacRequestRegistry::new();
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            registry.clone(),
+        )
+        .unwrap();
+        let clone = client.clone();
+        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+
+        let origin = url::Url::parse(&server.url_str("/")).unwrap();
+        let coordinator = registry.shared(&origin, None).unwrap();
+
+        client
+            .execute_json::<Value>(client.get(server.url_str("/first")), &policy)
+            .await
+            .unwrap();
+        clone
+            .execute_json::<Value>(clone.get(server.url_str("/second")), &policy)
+            .await
+            .unwrap();
+        client
+            .execute_json::<Value>(client.get(server.url_str("/third")), &policy)
+            .await
+            .unwrap();
+
+        assert!(Arc::ptr_eq(
+            &coordinator,
+            &registry.shared(&origin, None).unwrap()
+        ));
+    }
+
+    #[tokio::test]
+    async fn it_preserves_existing_clones_authentication_after_reconfiguration() {
+        use httptest::{
+            Expectation, Server, all_of,
+            matchers::{any, contains, not, request},
+            responders,
+        };
+        use serde_json::{Value, json};
+
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("POST", "/token"))
+                .times(1)
+                .respond_with(responders::json_encoded(json!({
+                    "access_token": "registry-test-token", "expires_in": 3600
+                }))),
+        );
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/anonymous"),
+                request::headers(not(contains(("authorization", any())))),
+            ])
+            .times(2)
+            .respond_with(responders::status_code(200).body("null")),
+        );
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/authenticated"),
+                request::headers(contains(("authorization", "Bearer registry-test-token"))),
+            ])
+            .times(2)
+            .respond_with(responders::status_code(200).body("null")),
+        );
+
+        let registry = StacRequestRegistry::new();
+        let anonymous = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            registry.clone(),
+        )
+        .unwrap();
+        let existing_anonymous_clone = anonymous.clone();
+        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+        existing_anonymous_clone
+            .execute_json::<Value>(
+                existing_anonymous_clone.get(server.url_str("/anonymous")),
+                &policy,
+            )
+            .await
+            .unwrap();
+
+        let authenticated = anonymous
+            .clone()
+            .with_authentication(Some(StacProviderAuthentication {
+                endpoint: server.url_str("/token"),
+                client_id: "client".to_owned(),
+                username: "user".to_owned(),
+                password: "password".to_owned(),
+            }))
+            .await
+            .unwrap();
+        for _ in 0..2 {
+            authenticated
+                .execute_json::<Value>(authenticated.get(server.url_str("/authenticated")), &policy)
+                .await
+                .unwrap();
+        }
+        anonymous
+            .execute_json::<Value>(anonymous.get(server.url_str("/anonymous")), &policy)
+            .await
+            .unwrap();
+    }
+
+    #[test]
+    fn it_replaces_a_closed_coordinator_after_runtime_shutdown() {
+        use httptest::{Expectation, Server, matchers::request, responders};
+        use serde_json::Value;
+
+        let server = Server::run();
+        for path in ["/first", "/second", "/third"] {
+            server.expect(
+                Expectation::matching(request::method_path("GET", path))
+                    .times(1)
+                    .respond_with(responders::status_code(200).body("null")),
+            );
+        }
+        let registry = StacRequestRegistry::new();
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            &server.url_str("/"),
+            registry.clone(),
+        )
+        .unwrap();
+        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+        let request = |path: &str| client.get(server.url_str(path));
+        let first_runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let origin = url::Url::parse(&server.url_str("/")).unwrap();
+        let first_coordinator = first_runtime.block_on(async {
+            client
+                .execute_json::<Value>(request("/first"), &policy)
+                .await
+                .unwrap();
+            registry.shared(&origin, None).unwrap()
+        });
+        drop(first_runtime);
+        assert!(first_coordinator.is_closed());
+
+        let second_runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        second_runtime.block_on(async {
+            client
+                .execute_json::<Value>(request("/second"), &policy)
+                .await
+                .unwrap();
+            let replacement = registry.shared(&origin, None).unwrap();
+            assert!(!replacement.is_closed());
+            assert!(!Arc::ptr_eq(&first_coordinator, &replacement));
+            client
+                .execute_json::<Value>(request("/third"), &policy)
+                .await
+                .unwrap();
+            assert!(Arc::ptr_eq(
+                &replacement,
+                &registry.shared(&origin, None).unwrap()
+            ));
+        });
+    }
+
+    #[tokio::test]
+    async fn it_rejects_streaming_request_bodies_without_panicking() {
+        let client = StacClient::new(
+            reqwest::Client::new(),
+            "https://non-replayable.test",
+            StacRequestRegistry::new(),
+        )
+        .unwrap();
+        let body = reqwest::Body::wrap_stream(futures::stream::pending::<
+            Result<Vec<u8>, std::io::Error>,
+        >());
+        let request = client.get("https://non-replayable.test/items").body(body);
+        let error = tokio::time::timeout(
+            Duration::from_millis(100),
+            client.execute_json::<serde_json::Value>(
+                request,
+                &crate::util::retry::RetryPolicy::new(),
+            ),
+        )
+        .await
+        .expect("non-replayable requests must fail before sending or retrying")
+        .unwrap_err();
+        assert!(matches!(error, StacClientError::RequestNotReplayable));
+    }
+
+    #[tokio::test]
+    async fn it_shares_quota_channels_while_preserving_each_clients_timeout() {
+        let server = Server::run();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/items"))
+                .times(2)
+                .respond_with(responders::delay_and_then(
+                    Duration::from_millis(400),
+                    responders::json_encoded(serde_json::json!({"complete": true})),
+                )),
+        );
+        let registry = StacRequestRegistry::new();
+        let fast = StacClient::new(
+            reqwest::Client::builder()
+                .timeout(Duration::from_millis(100))
+                .build()
+                .unwrap(),
+            &server.url_str("/"),
+            registry.clone(),
+        )
+        .unwrap();
+        let slow = StacClient::new(
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(2))
+                .build()
+                .unwrap(),
+            &server.url_str("/"),
+            registry,
+        )
+        .unwrap();
+        let policy = crate::util::retry::RetryPolicy::new().max_retries(1);
+        let error = fast
+            .execute_json::<serde_json::Value>(fast.get(server.url_str("/items")), &policy)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, StacClientError::Http { source } if source.is_timeout()));
+        let result = slow
+            .execute_json::<serde_json::Value>(slow.get(server.url_str("/items")), &policy)
+            .await
+            .unwrap();
+        assert_eq!(result, serde_json::json!({"complete": true}));
+        let origin = url::Url::parse(&server.url_str("/")).unwrap();
+        assert!(Arc::ptr_eq(
+            &fast.request_registry.shared(&origin, None).unwrap(),
+            &slow.request_registry.shared(&origin, None).unwrap(),
+        ));
     }
 }
