@@ -11,14 +11,16 @@ use crate::{
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
     queries::{
-        raster_grid::{CoverageQuery, coverage_geotiff},
+        raster_grid::{RasterEncoding, RasterGridQuery, raster_grid},
         run_query,
     },
     util::server::{CacheControlHeader, connection_closed},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
-    primitives::AxisAlignedRectangle, raster::GridShape2D, spatial_reference::SpatialReference,
+    primitives::{AxisAlignedRectangle, BandSelection},
+    raster::GridShape2D,
+    spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{InitializedRasterOperator, WorkflowOperatorPath};
 use serde::Deserialize;
@@ -375,20 +377,25 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
-    let query = CoverageQuery {
+    let bounds = request.spatial_partition()?;
+    let query = RasterGridQuery {
         workflow: identifier,
-        partition: request.spatial_partition()?,
         crs: request.spatial_ref().map(Into::into)?,
+        bounds,
         resolution: request.spatial_resolution().transpose()?,
+        origin: Some(bounds.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
         time: request
             .time
             .map_or_else(config::default_time_from_config::<config::Wcs>, Into::into),
+        bands: BandSelection::first(), // TODO: support multi bands in API and set the selection here
+    };
+    let encoding = RasterEncoding::GeoTiff {
         no_data_value: request.nodatavalue,
     };
 
     let ctx = app_ctx.session_context(session);
     let (bytes, cache_hint, computation_id) =
-        run_query(&ctx, conn_closed, coverage_geotiff(ctx.clone(), query)).await?;
+        run_query(&ctx, conn_closed, raster_grid(ctx.clone(), query, encoding)).await?;
 
     Ok(HttpResponse::Ok()
         .append_header(cache_hint.cache_control_header())

@@ -9,7 +9,7 @@ use crate::{
     error::{self, Result},
     queries::{
         run_query,
-        vector::{FeatureQuery, features_geojson},
+        vector::{VectorQuery, features_geojson},
     },
     util::server::{CacheControlHeader, connection_closed},
     workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
@@ -487,10 +487,10 @@ async fn wfs_get_feature<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
-    let query = FeatureQuery {
+    let query = VectorQuery {
         workflow: type_names,
         // TODO: use a default spatial reference if it is not set?
-        srs: request
+        crs: request
             .srs_name
             .ok_or(error::Error::InvalidSpatialReference)?,
         bounds: request.bbox.bounds_naive()?,

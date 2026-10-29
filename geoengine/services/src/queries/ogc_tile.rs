@@ -3,10 +3,11 @@
 use crate::{
     api::handlers::ogc::{
         OgcApiResult, error,
-        tiles::TileQuery,
+        error::OgcApiError,
         tms_spec::{TileMatrixSetProvider, TypedTileMatrixSetProvider},
         util::{get_initialized_raster_operator, load_layer, reproject_if_necessary},
     },
+    api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
     projects::Symbology,
@@ -16,7 +17,8 @@ use crate::{
 use geoengine_datatypes::{
     error::BoxedResultExt,
     operations::image::RasterColorizer,
-    primitives::{BandSelection, CacheHint, RasterQueryRectangle},
+    primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
+    raster::GridShape2D,
     util::Identifier,
 };
 #[cfg(debug_assertions)]
@@ -26,9 +28,43 @@ use geoengine_operators::{
     engine::{ExecutionContext, InitializedRasterOperator, TypedRasterQueryProcessor},
     util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
+use ogcapi_types::tiles::TileMatrixSetId;
+
+/// A tile of an OGC API tile matrix set
+pub struct TileQuery {
+    pub data_connector_id: DataProviderId,
+    pub layer_id: LayerId,
+
+    pub time_interval: TimeInterval,
+
+    pub tile_matrix_set_id: TileMatrixSetId,
+    pub tile_matrix: u8,
+    pub tile_row: u32,
+    pub tile_col: u32,
+}
+
+impl TileQuery {
+    fn check_inside_bounds(
+        &self,
+        expected_number_of_tiles_at_zoom_level: GridShape2D,
+    ) -> OgcApiResult<()> {
+        let (tile_row, tile_col) = (self.tile_row as usize, self.tile_col as usize);
+        if tile_row >= expected_number_of_tiles_at_zoom_level.y()
+            || tile_col >= expected_number_of_tiles_at_zoom_level.x()
+        {
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: self.tile_matrix.to_string(),
+                row: self.tile_row,
+                col: self.tile_col,
+            });
+        }
+
+        Ok(())
+    }
+}
 
 /// Renders the tile of `query`
-pub(crate) async fn render_tile<C: ApplicationContext>(
+pub async fn render_tile<C: ApplicationContext>(
     ctx: C::SessionContext,
     query: TileQuery,
 ) -> OgcApiResult<(Vec<u8>, CacheHint, ComputationId)> {

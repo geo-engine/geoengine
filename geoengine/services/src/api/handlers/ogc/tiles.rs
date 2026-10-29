@@ -16,14 +16,14 @@ use crate::{
     },
     config::{self},
     contexts::{ApplicationContext, SessionContext},
-    queries::{ogc_tile::render_tile, run_query},
+    queries::{
+        ogc_tile::{TileQuery, render_tile},
+        run_query,
+    },
     util::server::{CacheControlHeader, connection_closed},
 };
 use actix_web::{HttpRequest, HttpResponse, web};
-use geoengine_datatypes::{
-    primitives::{AxisAlignedRectangle, TimeInstance, TimeInterval},
-    raster::GridShape2D,
-};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, TimeInstance, TimeInterval};
 use geoengine_operators::engine::ExecutionContext;
 use ogcapi_types::{
     common::{
@@ -252,18 +252,6 @@ pub struct TileQueryParams {
     pub datetime: Option<OgcDatetime>,
 }
 
-pub(crate) struct TileQuery {
-    pub(crate) data_connector_id: DataProviderId,
-    pub(crate) layer_id: LayerId,
-
-    pub(crate) time_interval: TimeInterval,
-
-    pub(crate) tile_matrix_set_id: TileMatrixSetId,
-    pub(crate) tile_matrix: u8,
-    pub(crate) tile_row: u32,
-    pub(crate) tile_col: u32,
-}
-
 impl TileQuery {
     fn from_params(
         path: web::Path<(
@@ -299,24 +287,6 @@ impl TileQuery {
             tile_row,
             tile_col,
         })
-    }
-
-    pub(crate) fn check_inside_bounds(
-        &self,
-        expected_number_of_tiles_at_zoom_level: GridShape2D,
-    ) -> OgcApiResult<()> {
-        let (tile_row, tile_col) = (self.tile_row as usize, self.tile_col as usize);
-        if tile_row >= expected_number_of_tiles_at_zoom_level.y()
-            || tile_col >= expected_number_of_tiles_at_zoom_level.x()
-        {
-            return Err(OgcApiError::TileCoordinatesOutOfBounds {
-                matrix: self.tile_matrix.to_string(),
-                row: self.tile_row,
-                col: self.tile_col,
-            });
-        }
-
-        Ok(())
     }
 }
 

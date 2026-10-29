@@ -12,7 +12,7 @@ mod cors;
 pub(crate) mod error;
 #[cfg(test)]
 mod test_util;
-pub(crate) mod tiles;
+mod tiles;
 mod tms;
 pub(crate) mod tms_spec;
 pub(crate) mod util;

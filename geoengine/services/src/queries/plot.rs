@@ -45,12 +45,11 @@ pub(crate) async fn plot<C: SessionContext>(
         initialized.result_descriptor().spatial_reference().into();
     let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
-    // TODO: use a default spatial reference if it is not set?
-    let request_spatial_ref: SpatialReference =
-        params.crs.ok_or(error::Error::MissingSpatialReference)?;
+    // without a requested crs, the bbox is in the data's crs
+    let request_spatial_ref: SpatialReference = params.crs.unwrap_or(workflow_spatial_ref);
 
     let initialized = if let Some(request_resolution) = params.spatial_resolution {
-        optimize_for_request_resolution(
+        rewrite_for_request_resolution(
             initialized,
             &execution_context,
             params.bbox,
@@ -131,7 +130,7 @@ pub(crate) async fn plot<C: SessionContext>(
 ///
 /// Falls back to the unoptimized operator if the processing graph cannot be optimized,
 /// e.g., because a source explicitly loads an overview level.
-async fn optimize_for_request_resolution(
+async fn rewrite_for_request_resolution(
     initialized: Box<dyn InitializedPlotOperator>,
     execution_context: &dyn ExecutionContext,
     request_bbox: BoundingBox2D,

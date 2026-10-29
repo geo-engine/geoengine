@@ -17,15 +17,19 @@ use crate::{
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
     queries::{
-        raster_grid::{MapQuery, map_png},
+        raster_grid::{RasterEncoding, RasterGridQuery, raster_grid},
         run_query,
     },
     quota::ComputationId,
     util::server::{CacheControlHeader, connection_closed, not_implemented_handler},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
-use geoengine_datatypes::primitives::CacheHint;
-use geoengine_operators::engine::WorkflowOperatorPath;
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BandSelection, CacheHint, SpatialPartition2D, SpatialResolution,
+};
+use geoengine_operators::{
+    engine::WorkflowOperatorPath, util::raster_stream_to_png::default_colorizer_gradient,
+};
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::ensure;
@@ -342,20 +346,46 @@ async fn wms_get_map<C: ApplicationContext>(
 
         let conn_closed = connection_closed(&req, request_timeout_seconds.map(Duration::from_secs));
 
-        let query = MapQuery {
+        let crs = request.crs.ok_or(error::Error::MissingSpatialReference)?;
+        let bounds: SpatialPartition2D = request.bbox.bounds(crs)?;
+        let resolution = SpatialResolution::new(
+            (bounds.size_x() / f64::from(request.width)).abs(),
+            (bounds.size_y() / f64::from(request.height)).abs(),
+        )?;
+
+        let colorizer = raster_colorizer_from_style(&request.styles)?;
+        let bands = colorizer.as_ref().map_or_else(
+            // TODO: move this to a method of RasterColorizer
+            || Ok(BandSelection::new_single(0)),
+            |colorizer| RasterColorizer::band_selection(colorizer).try_into(),
+        )?;
+        let colorizer = colorizer.map_or_else(
+            || geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: default_colorizer_gradient::<u8>(),
+            },
+            Into::into,
+        );
+
+        let query = RasterGridQuery {
             workflow: layer,
-            bbox: request.bbox,
-            crs: request.crs,
-            width: request.width,
-            height: request.height,
+            crs: crs.into(),
+            bounds,
+            resolution: Some(resolution),
+            origin: None, // this needs to be `None`` to avoid moving the data origin to a png pixel origin. Since the WMS requests are not consistent with their origins using them distortes the results more then it helps.
             time: request
                 .time
                 .map_or_else(config::default_time_from_config::<config::Wms>, Into::into),
-            colorizer: raster_colorizer_from_style(&request.styles)?,
+            bands,
+        };
+        let encoding = RasterEncoding::Png {
+            width: request.width,
+            height: request.height,
+            colorizer,
         };
 
         let ctx = app_ctx.session_context(session);
-        run_query(&ctx, conn_closed, map_png(ctx.clone(), query)).await
+        run_query(&ctx, conn_closed, raster_grid(ctx.clone(), query, encoding)).await
     }
 
     match compute_result(req, processing_graph, &request, app_ctx, session).await {

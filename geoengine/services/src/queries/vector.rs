@@ -1,4 +1,4 @@
-//! Vector queries: WFS features as `GeoJSON`.
+//! Vector queries, encoded as `GeoJSON`.
 
 use crate::{
     contexts::SessionContext,
@@ -28,10 +28,10 @@ use geoengine_operators::{
 };
 use serde_json::json;
 
-/// A WFS `GetFeature` request, validated by the handler
-pub struct FeatureQuery {
+/// A vector workflow, reprojected to `crs` if needed
+pub struct VectorQuery {
     pub workflow: WorkflowId,
-    pub srs: SpatialReference,
+    pub crs: SpatialReference,
     pub bounds: BoundingBox2D,
     pub time: TimeInterval,
 }
@@ -39,11 +39,11 @@ pub struct FeatureQuery {
 /// Queries the features of a vector workflow as a `GeoJSON` feature collection
 pub async fn features_geojson<C: SessionContext>(
     ctx: C,
-    query: FeatureQuery,
+    query: VectorQuery,
 ) -> Result<(serde_json::Value, CacheHint, ComputationId)> {
-    let FeatureQuery {
+    let VectorQuery {
         workflow: workflow_id,
-        srs,
+        crs,
         bounds,
         time,
     } = query;
@@ -65,14 +65,14 @@ pub async fn features_geojson<C: SessionContext>(
         initialized.result_descriptor().spatial_reference().into();
     let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
-    let request_spatial_ref = srs;
+    let request_spatial_ref = crs;
 
     // perform reprojection if necessary
     let initialized = if request_spatial_ref == workflow_spatial_ref {
         initialized
     } else {
         tracing::debug!(
-            "WFS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
+            "vector query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
         );
 
         let reprojection_params = ReprojectionParams {
