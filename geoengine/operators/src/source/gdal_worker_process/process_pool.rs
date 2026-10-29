@@ -522,10 +522,7 @@ impl GdalProcessPool {
                             "GDAL Worker {} died unexpectedly! Initiating respawn...",
                             worker_id
                         );
-                        if let Some(slot) = state.dataset_registry.get_mut(&dataset_hash) {
-                            slot.active_count = slot.active_count.saturating_sub(1);
-                        }
-                        state.global_active_count = state.global_active_count.saturating_sub(1);
+                        state.finish_read(dataset_hash);
                         state.set_affinity(worker_id, None);
 
                         let b_tx = broker_tx.clone();
@@ -689,10 +686,7 @@ impl BrokerState {
         window: GridBoundingBox2D,
         read_failed: bool,
     ) {
-        if let Some(slot) = self.dataset_registry.get_mut(&dataset_hash) {
-            slot.active_count = slot.active_count.saturating_sub(1);
-        }
-        self.global_active_count = self.global_active_count.saturating_sub(1);
+        self.finish_read(dataset_hash);
 
         let affinity = (!read_failed).then(|| WorkerAffinity {
             dataset_hash,
@@ -703,6 +697,28 @@ impl BrokerState {
         self.set_affinity(worker_id, affinity);
 
         self.idle_workers.push(worker_id);
+    }
+
+    /// Counts a read of the dataset as finished, whether the worker survived it or not.
+    fn finish_read(&mut self, dataset_hash: u64) {
+        if let Some(slot) = self.dataset_registry.get_mut(&dataset_hash) {
+            slot.active_count = slot.active_count.saturating_sub(1);
+        }
+        self.global_active_count = self.global_active_count.saturating_sub(1);
+        self.remove_slot_if_unused(dataset_hash);
+    }
+
+    /// Removes the dataset's slot when nothing is queued or read, so the registry does not keep
+    /// one entry for every dataset ever read. A new request creates the slot again.
+    /// An empty queue implies the dataset is not in `active_datasets`.
+    fn remove_slot_if_unused(&mut self, dataset_hash: u64) {
+        if self
+            .dataset_registry
+            .get(&dataset_hash)
+            .is_some_and(|slot| slot.queue.is_empty() && slot.active_count == 0)
+        {
+            self.dataset_registry.remove(&dataset_hash);
+        }
     }
 
     /// Records what the worker holds open, keeping `dataset_holders` in sync.
@@ -738,6 +754,7 @@ impl BrokerState {
             };
             if should_pop {
                 self.active_datasets.pop_front();
+                self.remove_slot_if_unused(front_hash);
             } else {
                 break;
             }
@@ -826,6 +843,7 @@ impl BrokerState {
             // Take the request before the worker: its callers may have given up since the scan
             let Some(req) = slot.pop_next_valid(&mut self.stats.cancelled_dropped) else {
                 self.active_datasets.remove(best_dataset_active_idx);
+                self.remove_slot_if_unused(best_dataset_hash);
                 continue;
             };
 
@@ -1395,6 +1413,10 @@ mod tests {
         assert_eq!(state.idle_workers[0], 0);
         assert_eq!(state.global_active_count, 0);
         assert!(state.workers[0].affinity.is_some());
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept after the last read"
+        );
     }
 
     #[test]
@@ -1666,6 +1688,10 @@ mod tests {
         assert!(rx0.try_recv().is_err(), "no job for a cancelled request");
         assert_eq!(state.stats.cancelled_dropped, 1);
         assert_eq!(state.global_active_count, 0);
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept for a dataset with no reads"
+        );
     }
 
     /// Callers can cancel between the scan (`peek_first_valid`) and the dispatch, so taking the
