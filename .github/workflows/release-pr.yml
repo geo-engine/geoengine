@@ -1,0 +1,128 @@
+# This workflow increases the version number, updates the changelog and opens a release PR.
+# Merging the PR triggers `publish.yml`, which publishes the packages and creates the git tag and GitHub release.
+
+name: Release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump: `minor` (e.g. 0.10.0 → 0.10.1) or `major` (e.g. 0.10.0 → 0.11.0)"
+        required: true
+        type: choice
+        default: minor
+        options:
+          - minor
+          - major
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-pr:
+    name: Create Release PR
+    if: github.repository_owner == 'geo-engine'
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: write # push the release branch
+      pull-requests: write # open the release PR
+      actions: write # start CI on the release branch
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0 # git-cliff needs the full history and all tags
+          fetch-tags: true
+
+      - name: Configure git
+        run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install cargo-edit & git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-edit,git-cliff
+
+      - name: Store old version
+        id: old
+        run: echo "version=$(just repo print-version-number)" >> "$GITHUB_OUTPUT"
+
+      - name: Increase version number & update changelog
+        run: just repo increase-version-number ${{ inputs.bump == 'major' && '--major' || '' }}
+
+      - name: Prepare commit message & PR body
+        id: release
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          NEW_VERSION="$(just repo print-version-number)"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+          # release notes of this version only (the CHANGELOG.md section without its heading)
+          NOTES="$(git cliff --unreleased --tag "$NEW_VERSION" --strip all | sed '1{/^## /d}')"
+
+          # the commit is skipped by `cliff.toml`, so it never shows up in the changelog
+          {
+            echo "commit_message<<EOF_COMMIT"
+            echo "build: release $NEW_VERSION"
+            echo
+            echo "Increase the version from $OLD_VERSION to $NEW_VERSION ($BUMP) and update the"
+            echo "OpenAPI spec, API clients, Python library, UI and CHANGELOG.md accordingly."
+            echo "EOF_COMMIT"
+          } >> "$GITHUB_OUTPUT"
+
+          cat > "$RUNNER_TEMP/release-pr-body.md" <<EOF
+          Release **$NEW_VERSION** (previous version: $OLD_VERSION, bump: \`$BUMP\`).
+
+          This PR was created by the [Release PR workflow]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID).
+          It updates the version in Cargo, the OpenAPI spec, the API clients, the Python library and the UI, and regenerates \`CHANGELOG.md\`.
+
+          ## Checklist
+
+          - [ ] The changelog below is complete and correct (edit \`CHANGELOG.md\` on this branch if needed)
+          - [ ] CI is green
+
+          Merging this PR triggers the publish workflow: it publishes the packages and creates the tag \`v$NEW_VERSION\` and the GitHub release.
+
+          ## Changelog
+
+          $NOTES
+          EOF
+
+      - name: Create pull request
+        id: pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: main
+          branch: release/v${{ steps.release.outputs.version }}
+          delete-branch: true
+          title: "build: release ${{ steps.release.outputs.version }}"
+          commit-message: ${{ steps.release.outputs.commit_message }}
+          body-path: ${{ runner.temp }}/release-pr-body.md
+          sign-commits: true
+
+      # Events caused by `GITHUB_TOKEN` (like opening the PR) do not trigger workflows, except `workflow_dispatch`.
+      # So we start CI explicitly; its checks show up on the PR because they run on the PR's head commit.
+      - name: Start CI on the release branch
+        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
+        uses: actions/github-script@v9
+        env:
+          RELEASE_BRANCH: release/v${{ steps.release.outputs.version }}
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "ci.yml",
+              ref: process.env.RELEASE_BRANCH,
+            });
