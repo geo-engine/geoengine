@@ -243,6 +243,9 @@ describe('OGC map tile minimum matrix index', () => {
         queue.loadMoreTiles(16, 16);
         expect(tileRequests).toHaveLength(0);
         for (const tile of tilesByZ[4]) expect(tile.getState()).toBe(TileState.IDLE);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        await setResolution(2000);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
     });
 
     it('cancels in-flight imagery on zoom-out and resumes the same tile on zoom-in', async () => {

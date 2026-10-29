@@ -653,6 +653,7 @@ export class OlOgcApiMapTileLayerComponent
 
         effect(() => {
             const maxResolution = this.effectiveMaxResolution();
+            // The existing viewport stream emits at move end; canLoad gates queued requests live.
             const valid = maxResolution !== undefined && maxResolution > 0;
             const blocked = valid && this.viewport().resolution >= maxResolution;
             this._mapLayer.setMaxResolution(maxResolution ?? 0);
