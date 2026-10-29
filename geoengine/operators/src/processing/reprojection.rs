@@ -794,6 +794,7 @@ where
             out_srs: self.to,
             fold_fn: fold_by_coordinate_lookup_future,
             state,
+            index_cache: Default::default(),
             _phantom_data: PhantomData,
         };
 
