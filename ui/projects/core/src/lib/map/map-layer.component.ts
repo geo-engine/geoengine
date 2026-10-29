@@ -599,9 +599,20 @@ export class OlOgcApiMapTileLayerComponent
                 const grid = source.getTileGrid();
                 if (abortSignal.aborted || !grid) return;
                 const index = params.minTileMatrixIndex;
+                const resolution = grid.getResolution(index);
+                if (
+                    index !== 0 &&
+                    (!Number.isInteger(index) || index < grid.getMinZoom() || index > grid.getMaxZoom() || resolution === undefined)
+                ) {
+                    console.warn(
+                        `Invalid minTileMatrixIndex ${index}: expected 0 or a source matrix index from ${grid.getMinZoom()} to ${grid.getMaxZoom()}. Tile loading is disabled.`,
+                    );
+                    this.sourceMaxResolution.set(0);
+                    return;
+                }
                 // Deliberately use the matrix resolution as an exclusive cutoff. This can require
                 // one extra view zoom level; do not widen it to the nearest-matrix midpoint.
-                this.sourceMaxResolution.set(index === 0 ? Infinity : (grid.getResolution(index) ?? 0));
+                this.sourceMaxResolution.set(index === 0 ? Infinity : resolution);
             });
 
             return source;
@@ -642,10 +653,11 @@ export class OlOgcApiMapTileLayerComponent
 
         effect(() => {
             const maxResolution = this.effectiveMaxResolution();
-            const blocked = maxResolution !== undefined && this.viewport().resolution >= maxResolution;
+            const valid = maxResolution !== undefined && maxResolution > 0;
+            const blocked = valid && this.viewport().resolution >= maxResolution;
             this._mapLayer.setMaxResolution(maxResolution ?? 0);
             this._mapLayer.setVisible(this.isVisible());
-            this.loader?.setEnabled(maxResolution !== undefined && this.isVisible() && !blocked);
+            this.loader?.setEnabled(valid && this.isVisible() && !blocked);
             this.zoomRequired.emit(blocked);
         });
 

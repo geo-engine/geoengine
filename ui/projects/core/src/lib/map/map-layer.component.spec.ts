@@ -372,13 +372,19 @@ describe('OGC map tile minimum matrix index', () => {
         expect(zoomRequired).toHaveBeenLastCalledWith(true);
     });
 
-    it('hides a layer whose minimum matrix is outside the tileset', async () => {
-        fixture.componentRef.setInput('minTileMatrixIndex', resolutions.length);
+    it.each([resolutions.length, -1, 1.5])('warns and blocks an invalid matrix index %s without asking the user to zoom', async (index) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        fixture.componentRef.setInput('minTileMatrixIndex', index);
         fixture.detectChanges();
         await fixture.whenStable();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`Invalid minTileMatrixIndex ${index}:`));
         expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(0);
         expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
-        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        await setResolution(1);
+        expect(zoomRequired).toHaveBeenLastCalledWith(false);
+        source = fixture.componentInstance.mapLayer.getSource() as OGCMapTile;
+        source.getTile(4, 0, 0, 1, getProjection('EPSG:3857')!).load();
         expect(tileRequests).toHaveLength(0);
     });
 });
