@@ -13,7 +13,7 @@ use geoengine_operators::source::gdal_worker_process::{GdalProcessPool, WorkerCo
 use geoengine_operators::{
     engine::{
         BoxRasterQueryProcessor, MockExecutionContext, QueryContext, RasterOperator,
-        WorkflowOperatorPath,
+        TypedRasterOperator, WorkflowOperatorPath,
     },
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
     source::{GdalSource, GdalSourceParameters},
@@ -22,8 +22,8 @@ use geoengine_operators::{
 use std::hint::black_box;
 use std::sync::Arc;
 
-fn reproject(source: Box<dyn RasterOperator>, target: SpatialReference) -> Box<dyn RasterOperator> {
-    RasterOperator::boxed(Reprojection {
+fn reproject(source: TypedRasterOperator, target: SpatialReference) -> TypedRasterOperator {
+    Reprojection {
         params: ReprojectionParams {
             target_spatial_reference: target,
             derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
@@ -31,7 +31,8 @@ fn reproject(source: Box<dyn RasterOperator>, target: SpatialReference) -> Box<d
         sources: SingleRasterOrVectorSource {
             source: source.into(),
         },
-    })
+    }
+    .typed()
 }
 
 /// `chained` nests two reprojections to measure that fan-out does not multiply per level.
@@ -53,7 +54,7 @@ fn setup(
     let source = GdalSource {
         params: GdalSourceParameters::new(dataset),
     }
-    .boxed();
+    .typed();
     let mut operator = reproject(source, SpatialReference::web_mercator());
     if chained {
         operator = reproject(operator, SpatialReference::epsg_4326());
