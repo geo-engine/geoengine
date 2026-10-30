@@ -8658,11 +8658,11 @@
           "tileSize": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TileSize",
                 "description": "Optional tile size override. If absent, the configured default tile size is used."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -12928,11 +12928,11 @@
           "outputOrigin": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Coordinate2D",
                 "description": "Override the origin of the stacked output grid.\nIf `None`, the first input's origin is used."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -13283,22 +13283,22 @@
           "tileSize": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TileSize",
                 "description": "Override the output tile size.\nIf `None`, the configured default tile size is used."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "origin": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Coordinate2D",
                 "description": "Override the output tiling origin.\nIf `None`, the source's own geo-transform origin is used."
+              },
+              {
+                "type": "null"
               }
             ]
           }

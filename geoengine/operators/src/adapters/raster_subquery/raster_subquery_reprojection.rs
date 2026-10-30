@@ -528,17 +528,21 @@ mod tests {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
-            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
-                GeoTransform::new_unchecked(Coordinate2D::new(0., 2.), 1., -1.),
-                GridShape::new_2d(2, 4).bounding_box(),
-            )),
+            // the grid origin (0, 0) anchors the tiles, so the data lies in pixel rows -2..-1
+            spatial_grid: SpatialGridDescriptor::new_source(
+                SpatialGridDefinition::new(
+                    GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
+                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                ),
+                TileSize::new_unchecked(2, 2),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
         let tiling_spec = TilingSpecification::new(TileSize::new_unchecked(2, 2));
-        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
-        let tiling_strat = tiling_grid.generate_data_tiling_strategy();
-        let in_spatial_grid = tiling_grid.tiling_spatial_grid_definition();
+        let tiling_grid = result_descriptor.tiling_grid_definition();
+        let tiling_strat = tiling_grid.tiling_strategy();
+        let in_spatial_grid = tiling_grid.to_spatial_grid();
         // the output grid covers all three tiles, so only the adapter's source bounds check can skip the last one
         let out_spatial_grid = SpatialGridDefinition::new(
             in_spatial_grid.geo_transform(),

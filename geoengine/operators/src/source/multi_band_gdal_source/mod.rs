@@ -347,7 +347,7 @@ impl RasterOperator for MultiBandGdalSource {
 
 pub struct InitializedGdalSourceOperator {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     pub meta_data: MultiBandGdalMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_grid: TilingGrid,

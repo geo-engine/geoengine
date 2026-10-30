@@ -1,5 +1,8 @@
 use super::database_migration::{DatabaseVersion, Migration};
-use crate::{contexts::migrations::migration_0037_rename_workflows_to_processing_graphs::Migration0037RenameWorkflowsToProcessingGraphs, error::Result};
+use crate::{
+    contexts::migrations::migration_0037_rename_workflows_to_processing_graphs::Migration0037RenameWorkflowsToProcessingGraphs,
+    error::Result,
+};
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 

@@ -20,8 +20,8 @@ use crate::processing::{
     BandFilter, BandNeighborhoodAggregate, BandwiseExpression, ColumnRangeFilter, Downsampling,
     Expression, Interpolation, LineSimplification, NeighborhoodAggregate, PointInPolygonFilter,
     Radiance, RasterScaling, RasterStacker, RasterTypeConversion, RasterVectorJoin, Rasterization,
-    Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeProjection, TimeShift,
-    VectorExpression, VectorJoin, VisualPointClustering,
+    ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeProjection,
+    TimeShift, VectorExpression, VectorJoin, VisualPointClustering,
 };
 use crate::source::{CsvSource, GdalSource, MultiBandGdalSource, OgrSource};
 use crate::util::Result;
@@ -112,6 +112,7 @@ typed_operator! {
         RasterScaling(RasterScaling),
         RasterStacker(RasterStacker),
         RasterTypeConversion(RasterTypeConversion),
+        ReTile(ReTile),
         Rasterization(Rasterization),
         Reflectance(Reflectance),
         Reprojection(Reprojection),

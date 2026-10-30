@@ -495,13 +495,12 @@ mod tests {
         let exe_ctx = MockExecutionContext::test_default();
         let mut ctx = exe_ctx.mock_query_context_test_default();
         ctx.processing_runtime = processing.handle().clone();
-        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(600, 600));
 
         let meta_data = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             meta_data.result_descriptor.clone(),
-            tiling_specification,
+            meta_data.result_descriptor.tiling_grid_definition(),
             Box::new(meta_data),
         );
 
@@ -512,7 +511,7 @@ mod tests {
         };
 
         let query = RasterQueryRectangle::new(
-            GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),
+            GridBoundingBox2D::new([100, 1700], [701, 2299]).unwrap(),
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),
         );

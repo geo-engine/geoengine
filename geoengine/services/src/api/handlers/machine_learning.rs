@@ -1,5 +1,6 @@
 use actix_web::{FromRequest, HttpResponse, ResponseError, web};
 use geoengine_datatypes::machine_learning::MlModelName;
+use geoengine_operators::engine::ExecutionContext;
 use geoengine_operators::machine_learning::onnx_util::{
     check_input_output_mapping_supported, check_onnx_model_matches_metadata,
     load_onnx_model_from_loading_info,
@@ -72,6 +73,9 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     let model: crate::machine_learning::MlModel = model.into_inner().into();
 
     // This call also checks that the file is available!
+    let exe_context = session_context
+        .execution_context()
+        .expect("Execution Context must exist");
     let ml_model_metadata = model.loading_info()?;
     // tile shapes are source-specific, so only the shape-independent part is checked here;
     // the `Onnx` operator checks the shapes against its input's tiles

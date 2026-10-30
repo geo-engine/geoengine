@@ -233,6 +233,7 @@ macro_rules! operator_conversions {
 }
 
 operator_conversions!(RasterOperator <=> OperatorsTypedRasterOperator {
+    ReTile,
     BandFilter,
     BandNeighborhoodAggregate,
     BandwiseExpression,
