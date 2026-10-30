@@ -27,6 +27,27 @@ mat-toolbar {
     z-index: 10;
 }
 
+.zoom-prompt {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: calc(100% - 10rem);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background: var(--geoengine-card-background-color);
+    color: var(--geoengine-foreground-text-color);
+    @include mat.elevation(3);
+    pointer-events: none;
+
+    mat-icon {
+        flex-shrink: 0;
+    }
+}
+
 mat-drawer {
     width: 360px;
 
