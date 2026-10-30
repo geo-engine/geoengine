@@ -2,7 +2,7 @@ use crate::api::model::processing_graphs::ProcessingGraphId;
 use crate::{
     api::{
         model::{
-            datatypes::{RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval},
+            datatypes::{RasterColorizer, SpatialReference, SpatialReferenceOption},
             responses::ErrorResponse,
         },
         ogc::{
@@ -13,35 +13,31 @@ use crate::{
             },
         },
     },
-    config::{self, get_config_element},
+    config::{self},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
     processing_graphs::{
         processing_graph::ProcessingGraphId as ServicesProcessingGraphId,
         registry::ProcessingGraphRegistry,
     },
+    queries::{
+        raster_grid::{RasterEncoding, RasterGridQuery, raster_grid},
+        run_query,
+    },
     quota::ComputationId,
     util::server::{CacheControlHeader, connection_closed, not_implemented_handler},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
-use geoengine_datatypes::{
-    primitives::{
-        AxisAlignedRectangle, BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution,
-    },
-    raster::GridIntersection,
-    util::Identifier,
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BandSelection, CacheHint, SpatialPartition2D, SpatialResolution,
 };
 use geoengine_operators::{
-    call_on_generic_raster_processor,
-    engine::{ExecutionContext, ProcessingGraphOperatorPath},
-    util::raster_stream_to_png::{default_colorizer_gradient, raster_stream_to_png_bytes},
+    engine::ProcessingGraphOperatorPath, util::raster_stream_to_png::default_colorizer_gradient,
 };
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::ensure;
 use std::{str::FromStr, time::Duration};
-use tracing::debug;
 use utoipa::{
     IntoParams,
     openapi::{Ref, Required},
@@ -354,144 +350,46 @@ async fn wms_get_map<C: ApplicationContext>(
 
         let conn_closed = connection_closed(&req, request_timeout_seconds.map(Duration::from_secs));
 
-        let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
+        let crs = request.crs.ok_or(error::Error::MissingSpatialReference)?;
+        let bounds: SpatialPartition2D = request.bbox.bounds(crs)?;
+        let resolution = SpatialResolution::new(
+            (bounds.size_x() / f64::from(request.width)).abs(),
+            (bounds.size_y() / f64::from(request.height)).abs(),
+        )?;
 
-        let ctx = app_ctx.session_context(session);
-
-        let tiling_spec = ctx.execution_context()?.tiling_specification();
-
-        let processing_graph_id = ServicesProcessingGraphId::from_str(&request.layers)?;
-        let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
-
-        let operator = processing_graph.operator.get_raster()?;
-
-        let execution_context = ctx.execution_context()?;
-
-        let computation_id = ComputationId::new();
-
-        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
-
-        let initialized = operator
-            .clone()
-            .initialize(processing_graph_operator_path_root, &execution_context)
-            .await?;
-
-        // Use the datasets crs as default spatial reference if none is requested
-        let result_desc_crs_option = initialized
-            .result_descriptor()
-            .spatial_reference
-            .as_option();
-        let request_spatial_ref: SpatialReference = request
-            .crs
-            .or(result_desc_crs_option.map(Into::into))
-            .ok_or(error::Error::MissingSpatialReference)?;
-
-        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
-        let x_request_res = request_bounds.size_x() / f64::from(request.width);
-        let y_request_res = request_bounds.size_y() / f64::from(request.height);
-        let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
-
-        let wrapped =
-            geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
-                operator,
-                initialized,
-            )
-            .wrap_with_projection_and_resample(
-                None, // this needs to be `None`` to avoid moving the data origin to a png pixel origin. Since the WMS requests are not consistent with their origins using them distortes the results more then it helps.
-                Some(request_resolution),
-                request_spatial_ref.into(),
-                &execution_context,
-            )
-            .await?;
-        // TODO: add a resammple operator for downsampling AND resample push down!
-
-        let initialized = wrapped.initialized_operator;
-
-        let processor = initialized.query_processor()?;
-
-        let query_tiling_pixel_grid = wrapped
-            .result_descriptor
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec)
-            .tiling_spatial_grid_definition()
-            .spatial_bounds_to_compatible_spatial_grid(request_bounds);
-
-        let attributes = raster_colorizer.as_ref().map_or_else(
+        let colorizer = raster_colorizer_from_style(&request.styles)?;
+        let bands = colorizer.as_ref().map_or_else(
             // TODO: move this to a method of RasterColorizer
-            || BandSelection::new_single(0),
-            |colorizer: &RasterColorizer| {
-                RasterColorizer::band_selection(colorizer)
-                    .try_into()
-                    .expect("conversion of usize to u32 succeeds for small band numbers")
-            },
-        );
-
-        let raster_colorizer: Option<geoengine_datatypes::operations::image::RasterColorizer> =
-            raster_colorizer.map(Into::into);
-
-        let raster_colorizer = match raster_colorizer {
-            Some(colorizer) => colorizer,
-            None => geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
+            || Ok(BandSelection::new_single(0)),
+            |colorizer| RasterColorizer::band_selection(colorizer).try_into(),
+        )?;
+        let colorizer = colorizer.map_or_else(
+            || geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
                 band: 0,
                 band_colorizer: default_colorizer_gradient::<u8>(),
             },
-        };
-
-        let query_time = request.time.unwrap_or_else(default_time_from_config).into();
-        let result_descriptor_intersects_query_time = wrapped
-            .result_descriptor
-            .time
-            .bounds
-            .is_none_or(|b| b.intersects(&query_time));
-
-        let result_descriptor_intersects_query_space = wrapped
-            .result_descriptor
-            .spatial_grid
-            .tiling_grid_definition(tiling_spec)
-            .tiling_grid_bounds()
-            .intersects(&query_tiling_pixel_grid.grid_bounds());
-
-        if !result_descriptor_intersects_query_time || !result_descriptor_intersects_query_space {
-            debug!(
-                "WMS request does not intersect data bounds (time: {}, space: {}), returning empty image",
-                result_descriptor_intersects_query_time, result_descriptor_intersects_query_space
-            );
-
-            let empty_image =
-                geoengine_datatypes::operations::image::create_empty_no_data_color_png_bytes(
-                    request.width,
-                    request.height,
-                    raster_colorizer.no_data_color(),
-                )?;
-
-            return Ok((
-                empty_image,
-                execution_context.default_cache_ttl().into(),
-                computation_id,
-            ));
-        }
-
-        debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
-
-        let query_rect = RasterQueryRectangle::new(
-            query_tiling_pixel_grid.grid_bounds(),
-            query_time,
-            attributes,
+            Into::into,
         );
 
-        debug!("WMS query rect: {:?}", query_rect);
+        let query = RasterGridQuery {
+            processing_graph: layer,
+            crs: crs.into(),
+            bounds,
+            resolution: Some(resolution),
+            origin: None, // this needs to be `None`` to avoid moving the data origin to a png pixel origin. Since the WMS requests are not consistent with their origins using them distortes the results more then it helps.
+            time: request
+                .time
+                .map_or_else(config::default_time_from_config::<config::Wms>, Into::into),
+            bands,
+        };
+        let encoding = RasterEncoding::Png {
+            width: request.width,
+            height: request.height,
+            colorizer,
+        };
 
-        let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
-
-        // The raster to png code already resamples when the tiles are filled. We should add resample for lower resolutions
-        let result = call_on_generic_raster_processor!(
-            processor,
-            p =>
-                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), Some(raster_colorizer), conn_closed).await // TODO: pass raster colorizer here
-        )
-        .map_err(error::Error::from);
-
-        result.map(|(image_bytes, cache_hint)| (image_bytes, cache_hint, computation_id))
+        let ctx = app_ctx.session_context(session);
+        run_query(&ctx, conn_closed, raster_grid(ctx.clone(), query, encoding)).await
     }
 
     match compute_result(req, processing_graph, &request, app_ctx, session).await {
@@ -537,32 +435,13 @@ fn raster_colorizer_from_style(styles: &str) -> Result<Option<RasterColorizer>> 
     }
 }
 
-fn default_time_from_config() -> TimeInterval {
-    get_config_element::<config::Wms>()
-        .ok()
-        .and_then(|wms| wms.default_time)
-        .map_or_else(
-            || {
-                get_config_element::<config::Ogc>()
-                    .ok()
-                    .and_then(|ogc| ogc.default_time)
-                    .map_or_else(
-                        || {
-                            geoengine_datatypes::primitives::TimeInterval::new_instant(
-                                geoengine_datatypes::primitives::TimeInstance::now(),
-                            )
-                            .expect("is a valid time interval")
-                        },
-                        |time| time.time_interval(),
-                    )
-            },
-            |time| time.time_interval(),
-        )
-        .into()
-}
-
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::{
+        primitives::{BandSelection, RasterQueryRectangle},
+        util::Identifier,
+    };
+    use geoengine_operators::util::raster_stream_to_png::raster_stream_to_png_bytes;
 
     use super::*;
     use crate::api::model::datatypes::MultiBandRasterColorizer;
@@ -879,6 +758,22 @@ mod tests {
             "Unable to parse query string: missing field `layers`",
         )
         .await;
+    }
+
+    #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
+    async fn get_map_missing_crs(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
+
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        // WMS errors are XML with status 200
+        assert_eq!(res.status(), 200);
+        let body = read_body_string(res).await;
+        assert!(body.contains("<ServiceException>"), "{body}");
+        assert!(body.contains("MissingSpatialReference"), "{body}");
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]

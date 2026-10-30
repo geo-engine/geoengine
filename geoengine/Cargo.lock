@@ -2929,6 +2929,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-postgres",
+ "tokio-util",
  "tracing",
  "tracing-actix-web",
  "tracing-appender",

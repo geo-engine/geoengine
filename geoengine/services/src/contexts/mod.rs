@@ -114,6 +114,9 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
 
     /// Get the current session
     fn session(&self) -> &Self::Session;
+
+    /// The runtime that queries run on, see [`QueryContext::processing_runtime`]
+    fn processing_runtime(&self) -> tokio::runtime::Handle;
 }
 
 /// The trait for accessing all resources

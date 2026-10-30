@@ -8,6 +8,7 @@ pub mod layers;
 pub mod machine_learning;
 pub mod permissions;
 pub mod projects;
+pub mod queries;
 pub mod quota;
 pub mod server;
 pub mod stac;

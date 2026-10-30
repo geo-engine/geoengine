@@ -550,6 +550,10 @@ where
     fn session(&self) -> &Self::Session {
         &self.session
     }
+
+    fn processing_runtime(&self) -> tokio::runtime::Handle {
+        self.context.processing_runtime.clone()
+    }
 }
 
 #[derive(Debug, Clone)]

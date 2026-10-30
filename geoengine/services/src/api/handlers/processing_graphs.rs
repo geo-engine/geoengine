@@ -19,7 +19,7 @@ use crate::{
     error::Result,
     layers::storage::LayerProviderDb,
     processing_graphs::{
-        WebsocketStreamTask, handle_websocket_message,
+        handle_websocket_message,
         processing_graph::{
             ProcessingGraph as ServicesProcessingGraph,
             ProcessingGraphId as ServicesProcessingGraphId,
@@ -27,21 +27,21 @@ use crate::{
         registry::ProcessingGraphRegistry,
         send_websocket_message,
     },
-    quota::ComputationId,
+    queries::{
+        run_query,
+        stream::{raster_stream, vector_stream},
+    },
     util::{
         parsing::{parse_band_selection, parse_spatial_partition},
         processing_graphs::validate_processing_graph,
+        server::connection_closed,
     },
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
 use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::{
     error::{BoxedResultExt, ErrorSource},
-    primitives::{
-        BoundingBox2D, ColumnSelection, RasterQueryRectangle, SpatialPartition2D,
-        VectorQueryRectangle,
-    },
-    util::Identifier,
+    primitives::{BoundingBox2D, ColumnSelection, SpatialPartition2D, VectorQueryRectangle},
 };
 use geoengine_operators::{
     call_on_typed_operator,
@@ -571,35 +571,8 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     stream: web::Payload,
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
-
     let processing_graph_id: ServicesProcessingGraphId = id.into_inner().into();
-    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
-
-    let operator = processing_graph
-        .operator
-        .get_raster()
-        .boxed_context(error::ProcessingGraphMustBeOfTypeRaster)?;
-
-    let execution_context = ctx.execution_context()?;
-
-    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
-
-    let initialized_operator = operator
-        .initialize(processing_graph_operator_path_root, &execution_context)
-        .await?;
-
     let query = query.into_inner();
-
-    let query_bounds = initialized_operator
-        .result_descriptor()
-        .tiling_grid_definition(execution_context.tiling_specification())
-        .tiling_geo_transform()
-        .spatial_to_grid_bounds(&query.spatial_bounds);
-    let query_rectangle = RasterQueryRectangle::new(
-        query_bounds,
-        query.time_interval.into(),
-        query.attributes.clone().try_into()?,
-    );
 
     // this is the only result type for now
     debug_assert!(matches!(
@@ -607,13 +580,18 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let query_ctx = ctx.query_context(processing_graph_id, ComputationId::new())?;
-
-    let mut stream_task = WebsocketStreamTask::new_raster_initialized::<_>(
-        initialized_operator.as_ref(),
-        query_rectangle,
-        query_ctx,
-    )?;
+    let mut stream_task = run_query(
+        &ctx,
+        connection_closed(&request, None),
+        raster_stream(
+            ctx.clone(),
+            processing_graph_id,
+            query.spatial_bounds,
+            query.time_interval.into(),
+            query.attributes.try_into()?,
+        ),
+    )
+    .await?;
 
     let (response, mut session, mut msg_stream) = match actix_ws::handle(&request, stream) {
         Ok((response, session, msg_stream)) => (response, session, msg_stream),
@@ -696,14 +674,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
     stream: web::Payload,
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
-
     let processing_graph_id: ServicesProcessingGraphId = id.into_inner().into();
-    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
-
-    let operator = processing_graph
-        .operator
-        .get_vector()
-        .boxed_context(error::ProcessingGraphMustBeOfTypeVector)?;
 
     let query_rectangle = VectorQueryRectangle::new(
         query.spatial_bounds,
@@ -717,11 +688,10 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let mut stream_task = WebsocketStreamTask::new_vector::<C::SessionContext>(
-        operator,
-        query_rectangle,
-        ctx.execution_context()?,
-        ctx.query_context(processing_graph_id, ComputationId::new())?,
+    let mut stream_task = run_query(
+        &ctx,
+        connection_closed(&request, None),
+        vector_stream(ctx.clone(), processing_graph_id, query_rectangle),
     )
     .await?;
 
@@ -781,6 +751,8 @@ pub enum ProcessingGraphApiError {
 
 #[cfg(test)]
 mod tests {
+    use crate::quota::ComputationId;
+    use geoengine_datatypes::util::Identifier;
 
     use super::*;
     use crate::{
