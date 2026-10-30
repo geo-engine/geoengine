@@ -818,7 +818,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
         .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap()
@@ -931,8 +931,8 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap()
         .query_processor()
