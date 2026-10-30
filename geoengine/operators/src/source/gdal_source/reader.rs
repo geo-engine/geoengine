@@ -180,7 +180,7 @@ mod tests {
         let tile_information =
             tile_information_with_partition_and_shape(output_bounds, output_shape);
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(2, 2, 2, std::time::Duration::ZERO, WorkerConfig::default());
         let gw = gpp.get_gdal_worker();
 
         let RasterTile2D {

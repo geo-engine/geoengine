@@ -122,6 +122,10 @@ max_active_processes = 16
 # Max. concurrent reads of a single dataset. Keeps one file from occupying all workers and
 # evicting the other datasets they hold open.
 max_dataset_processes = 8
+# Max. time in ms a read may wait for a busy worker that holds more of the read's blocks in its
+# GDAL block cache than any idle worker, instead of reading and decoding them again elsewhere.
+# Helps files whose blocks are larger than the tiles, e.g. Sentinel-2 JPEG2000. 0 never waits.
+busy_holder_wait_ms = 0
 
 [gdal]
 # TODO: find good default

@@ -133,6 +133,7 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            std::time::Duration::from_millis(gdal_process_pool_config.busy_holder_wait_ms),
             gdal_process_pool_config.worker.into(),
         );
 
@@ -195,6 +196,7 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            std::time::Duration::from_millis(gdal_process_pool_config.busy_holder_wait_ms),
             gdal_process_pool_config.worker.into(),
         );
 
@@ -279,6 +281,7 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            std::time::Duration::from_millis(gdal_process_pool_config.busy_holder_wait_ms),
             gdal_process_pool_config.worker.into(),
         );
 
