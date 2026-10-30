@@ -56,9 +56,12 @@ jobs:
 
           mkdir -p ${{ env.ARTIFACT_FILE_DIR }}
 
-          gh run download --name benchmark-results --dir ${{ env.ARTIFACT_FILE_DIR }}
-
-          mv "${{ env.ARTIFACT_FILE_PATH }}" "${{ env.BENCH_FILE_PATH }}" || echo "No previous benchmark data found. This may be the first run or the artifact may not have been uploaded correctly."
+          if gh run download --name ${{ env.BENCH_UPLOAD_NAME }} --dir ${{ env.ARTIFACT_FILE_DIR }} && [ -f "${{ env.ARTIFACT_FILE_PATH }}" ]; then
+            mv "${{ env.ARTIFACT_FILE_PATH }}" "${{ env.BENCH_FILE_PATH }}"
+            echo "Found previous benchmark data with $(grep -o '"commit"' "${{ env.BENCH_FILE_PATH }}" | wc -l) entries."
+          else
+            echo "::warning::No previous benchmark data found. This may be the first run or the artifact may have expired or not been uploaded correctly."
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_FILE_DIR: ${{ runner.temp }}/artifacts
@@ -69,9 +72,10 @@ jobs:
         working-directory: .
         run: |
           if [ ! -f "${{ env.BENCH_FILE_PATH }}" ]; then
-            echo "No previous benchmark data found at ${{ env.BENCH_FILE_PATH }}. Please ensure that a benchmark run has been completed on the main branch and that the results have been uploaded as an artifact."
+            echo "::error::No previous benchmark data found at ${{ env.BENCH_FILE_PATH }}. Please ensure that a benchmark run has been completed on the main branch and that the results have been uploaded as an artifact."
             exit 1
           fi
+          echo "Comparing against benchmark data at ${{ env.BENCH_FILE_PATH }}."
 
       - name: Run benchmark
         run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ../${{ env.CARGO_BENCH_FILE_PATH }}
