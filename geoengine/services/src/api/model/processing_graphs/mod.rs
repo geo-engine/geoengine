@@ -240,6 +240,8 @@ macro_rules! operator_conversions {
 }
 
 operator_conversions!(RasterOperator <=> OperatorsTypedRasterOperator {
+    AddTileOverlap,
+    RemoveTileOverlap,
     ReTile,
     BandFilter,
     BandNeighborhoodAggregate,
@@ -266,6 +268,7 @@ operator_conversions!(RasterOperator <=> OperatorsTypedRasterOperator {
 });
 
 operator_conversions!(VectorOperator <=> OperatorsTypedVectorOperator {
+    OnnxObjectDetection,
     ColumnRangeFilter,
     LineSimplification,
     MockPointSource,

@@ -26,7 +26,7 @@ pub use self::async_util::{
 };
 pub use self::gdal_config_options::{GdalConfigOptions, TemporaryGdalThreadLocalConfigOptions};
 pub use self::rayon::create_rayon_thread_pool;
-pub use wrap_with_projection_and_resample::WrapWithProjectionAndResample;
+pub use wrap_with_projection_and_resample::{WrapWithProjectionAndResample, strip_tile_overlap};
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 

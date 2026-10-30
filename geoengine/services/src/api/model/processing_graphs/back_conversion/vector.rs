@@ -3,15 +3,15 @@ use crate::api::model::{
     processing_graphs::{
         AttributeFilter, ColumnRangeFilter, ColumnRangeFilterParameters, LineSimplification,
         LineSimplificationAlgorithm, LineSimplificationParameters, MockPointSource,
-        MockPointSourceParameters, OgrSource, OgrSourceParameters, PointInPolygonFilter,
-        PointInPolygonFilterParameters, PointInPolygonFilterSource, RasterVectorJoin,
-        RasterVectorJoinParameters, Reprojection, ReprojectionParameters, TimeProjection,
-        TimeProjectionParameters, VectorExpression, VectorExpressionParameters, VectorJoin,
-        VectorJoinParameters, VectorJoinSources, VectorOperator, VisualPointClustering,
-        VisualPointClusteringParameters,
+        MockPointSourceParameters, OgrSource, OgrSourceParameters, OnnxObjectDetection,
+        OnnxObjectDetectionParameters, PointInPolygonFilter, PointInPolygonFilterParameters,
+        PointInPolygonFilterSource, RasterVectorJoin, RasterVectorJoinParameters, Reprojection,
+        ReprojectionParameters, TimeProjection, TimeProjectionParameters, VectorExpression,
+        VectorExpressionParameters, VectorJoin, VectorJoinParameters, VectorJoinSources,
+        VectorOperator, VisualPointClustering, VisualPointClusteringParameters,
         parameters::OutputColumn as ApiOutputColumn,
         processing::{
-            AttributeAggregateDef, AttributeAggregateType, VectorJoinType,
+            AttributeAggregateDef, AttributeAggregateType, DetectionLayout, VectorJoinType,
             VectorJoinTypeEquiGeoToData,
         },
     },
@@ -21,6 +21,10 @@ use geoengine_operators::{
     engine::{
         TypedRasterOperator as OperatorsTypedRasterOperator,
         TypedVectorOperator as OperatorsTypedVectorOperator,
+    },
+    machine_learning::onnx_object_detection::{
+        DetectionLayout as OperatorsDetectionLayout,
+        OnnxObjectDetection as OperatorsOnnxObjectDetection,
     },
     mock::MockPointSource as OperatorsMockPointSource,
     processing::{
@@ -52,6 +56,36 @@ fn raster_operator_from_runtime(
     crate::api::model::processing_graphs::back_conversion::raster::raster_operator_from_runtime(
         operator,
     )
+}
+
+impl TryFrom<&OperatorsOnnxObjectDetection> for OnnxObjectDetection {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsOnnxObjectDetection) -> Result<Self, Self::Error> {
+        let params = &value.params;
+        Ok(Self {
+            r#type: Default::default(),
+            params: OnnxObjectDetectionParameters {
+                model: params.model.clone().into(),
+                expected_resolution: params.expected_resolution,
+                resolution_epsilon: params.resolution_epsilon,
+                layout: match params.layout {
+                    OperatorsDetectionLayout::YoloBoxes { objectness } => {
+                        DetectionLayout::YoloBoxes { objectness }
+                    }
+                    OperatorsDetectionLayout::PreDecoded => DetectionLayout::PreDecoded,
+                },
+                num_classes: params.num_classes,
+                conf_threshold: params.conf_threshold,
+                iou_threshold: params.iou_threshold,
+                class_names: params.class_names.clone(),
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
+            }
+            .into(),
+        })
+    }
 }
 
 impl TryFrom<&OperatorsColumnRangeFilter> for ColumnRangeFilter {
