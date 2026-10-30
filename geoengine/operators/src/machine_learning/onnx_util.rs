@@ -4,7 +4,8 @@ use crate::machine_learning::{
         AsymmetricModelOverlap, InvalidInputPixelShape, InvalidInputTensorShape,
         InvalidOutputPixelShape, InvalidOutputType, MetadataModelInputShapeMismatch,
         MetadataModelInputTypeMismatch, MetadataModelOutputShapeMismatch,
-        MultipleInputsNotSupported, Ort, UnsupportedInOutMapping, UnsupportedNumberOfOutputAttributes,
+        MultipleInputsNotSupported, Ort, UnsupportedInOutMapping,
+        UnsupportedNumberOfOutputAttributes,
     },
 };
 use geoengine_datatypes::{

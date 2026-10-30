@@ -515,6 +515,7 @@ mod tests {
 
         let tile = |x: isize, values: Vec<u8>| RasterTile2D {
             time: TimeInterval::new_unchecked(0, 5),
+            overlap: TileOverlap::zero(),
             tile_position: [-1, x].into(),
             band: 0,
             global_geo_transform: TestDefault::test_default(),

@@ -20,10 +20,10 @@ use snafu::{ResultExt, ensure};
 
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-    InitializedSources, InitializedVectorOperator, Operator, OperatorName, QueryContext,
-    QueryProcessor, RasterQueryProcessor, SingleRasterSource, TypedVectorQueryProcessor,
-    VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
-    WorkflowOperatorPath,
+    InitializedSources, InitializedVectorOperator, Operator, OperatorName,
+    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterQueryProcessor,
+    SingleRasterSource, TypedVectorOperator, TypedVectorQueryProcessor, VectorColumnInfo,
+    VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::error;
 use crate::machine_learning::{
@@ -33,7 +33,7 @@ use crate::machine_learning::{
         InputResolutionMismatch, InputSizeMismatch, InputTypeMismatch, Ort,
         UnsupportedDetectionOutputShape,
     },
-    onnx_util::load_onnx_model_from_loading_info,
+    onnx_util::{OrtEnvironment, load_onnx_model_from_loading_info},
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -97,12 +97,11 @@ impl OperatorName for OnnxObjectDetection {
     const TYPE_NAME: &'static str = "OnnxObjectDetection";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl VectorOperator for OnnxObjectDetection {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -192,6 +191,7 @@ impl VectorOperator for OnnxObjectDetection {
             source,
             model_loading_info,
             source_overlap,
+            ort_environment: context.ort_environment().clone(),
         }))
     }
 
@@ -200,7 +200,7 @@ impl VectorOperator for OnnxObjectDetection {
 
 pub struct InitializedOnnxObjectDetection {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     params: OnnxObjectDetectionParams,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
@@ -208,6 +208,7 @@ pub struct InitializedOnnxObjectDetection {
     /// Halo the source tiles carry. The model input is core-sized, so it has to
     /// be read from the core region of each tile, not from its data corner.
     source_overlap: TileOverlap,
+    ort_environment: OrtEnvironment,
 }
 
 impl InitializedVectorOperator for InitializedOnnxObjectDetection {
@@ -228,6 +229,7 @@ impl InitializedVectorOperator for InitializedOnnxObjectDetection {
                 self.model_loading_info.clone(),
                 self.params.clone(),
                 self.source_overlap,
+                self.ort_environment.clone(),
             )
             .boxed(),
         ))
@@ -241,21 +243,21 @@ impl InitializedVectorOperator for InitializedOnnxObjectDetection {
         OnnxObjectDetection::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+    ) -> Result<TypedVectorOperator, OptimizationError> {
         Ok(OnnxObjectDetection {
             params: self.params.clone(),
             sources: SingleRasterSource {
                 raster: self.source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -265,6 +267,7 @@ pub struct OnnxObjectDetectionProcessor {
     model_loading_info: MlModelLoadingInfo,
     params: OnnxObjectDetectionParams,
     source_overlap: TileOverlap,
+    ort_environment: OrtEnvironment,
 }
 
 impl OnnxObjectDetectionProcessor {
@@ -274,6 +277,7 @@ impl OnnxObjectDetectionProcessor {
         model_loading_info: MlModelLoadingInfo,
         params: OnnxObjectDetectionParams,
         source_overlap: TileOverlap,
+        ort_environment: OrtEnvironment,
     ) -> Self {
         Self {
             source,
@@ -281,6 +285,7 @@ impl OnnxObjectDetectionProcessor {
             model_loading_info,
             params,
             source_overlap,
+            ort_environment,
         }
     }
 }
@@ -308,7 +313,10 @@ impl QueryProcessor for OnnxObjectDetectionProcessor {
             geo_transform,
         );
 
-        let mut session = load_onnx_model_from_loading_info(&self.model_loading_info)?;
+        let mut session = load_onnx_model_from_loading_info(
+            self.ort_environment.get().await?,
+            &self.model_loading_info,
+        )?;
         let input_name = session.inputs()[0].name().to_string();
         let decoder = decoder_from_params(&self.params);
         let conf_threshold = self.params.conf_threshold;
@@ -556,9 +564,9 @@ mod tests {
     use futures::StreamExt;
 
     use crate::engine::{
-        MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-        SingleRasterSource, SpatialGridDescriptor, TimeDescriptor, VectorOperator,
-        WorkflowOperatorPath,
+        MockExecutionContext, ProcessingGraphOperatorPath, RasterBandDescriptors, RasterOperator,
+        RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor, TimeDescriptor,
+        VectorOperator,
     };
     use crate::machine_learning::{
         MlModelInputNoDataHandling, MlModelLoadingInfo, MlModelMetadata,
@@ -762,7 +770,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         let model_name = MlModelName {
             namespace: None,
@@ -782,7 +790,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: source },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         // Tiles must match the model's 4x4 input (no resampling).
@@ -805,7 +813,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let initialized = op
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await?;
         let qp = initialized
             .query_processor()

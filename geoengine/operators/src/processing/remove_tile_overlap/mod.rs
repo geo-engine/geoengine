@@ -12,9 +12,9 @@
 use crate::{
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-        RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
-        WorkflowOperatorPath,
+        Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+        RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+        TypedRasterOperator, TypedRasterQueryProcessor,
     },
     error,
     optimization::OptimizationError,
@@ -52,12 +52,11 @@ impl OperatorName for RemoveTileOverlap {
     const TYPE_NAME: &'static str = "RemoveTileOverlap";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for RemoveTileOverlap {
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn ExecutionContext,
     ) -> util::Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -105,7 +104,7 @@ impl RasterOperator for RemoveTileOverlap {
 /// Initialized form of the `RemoveTileOverlap` operator.
 pub struct InitializedRemoveTileOverlap<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     removed: TileOverlap,
     result_descriptor: RasterResultDescriptor,
     raster_source: O,
@@ -141,14 +140,14 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRemo
         RemoveTileOverlap::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         Ok(RemoveTileOverlap {
             // keep the resolved amount so optimization does not change semantics
             params: RemoveTileOverlapParams {
@@ -158,7 +157,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRemo
                 raster: self.raster_source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -263,7 +262,7 @@ mod tests {
     /// -----
     /// 3 | 4
     /// ```
-    fn mock_raster_source() -> Box<MockRasterSource<f64>> {
+    fn mock_raster_source() -> TypedRasterOperator {
         let geo_transform = GeoTransform::new_unchecked((0., 0.).into(), 1., -1.);
         let tile_shape = GridShape2D::new_2d(2, 2);
 
@@ -285,7 +284,7 @@ mod tests {
             })
             .collect();
 
-        Box::new(MockRasterSource {
+        MockRasterSource {
             params: MockRasterSourceParams {
                 data,
                 result_descriptor: RasterResultDescriptor {
@@ -302,7 +301,8 @@ mod tests {
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
-        })
+        }
+        .typed()
     }
 
     fn mock_execution_context() -> MockExecutionContext {
@@ -312,9 +312,7 @@ mod tests {
         context
     }
 
-    async fn query_operator(
-        operator: Box<dyn RasterOperator>,
-    ) -> util::Result<Vec<RasterTile2D<f64>>> {
+    async fn query_operator(operator: TypedRasterOperator) -> util::Result<Vec<RasterTile2D<f64>>> {
         use futures::StreamExt;
 
         let execution_context = mock_execution_context();
@@ -322,7 +320,7 @@ mod tests {
 
         let initialized = operator
             .initialize(
-                crate::engine::WorkflowOperatorPath::initialize_root(),
+                crate::engine::ProcessingGraphOperatorPath::initialize_root(),
                 &execution_context,
             )
             .await?;
@@ -345,26 +343,26 @@ mod tests {
 
     async fn remove_tiles(
         amount: Option<TileOverlap>,
-        source: Box<dyn RasterOperator>,
+        source: TypedRasterOperator,
     ) -> util::Result<Vec<RasterTile2D<f64>>> {
         query_operator(
             RemoveTileOverlap {
                 params: RemoveTileOverlapParams { amount },
                 sources: SingleRasterSource { raster: source },
             }
-            .boxed(),
+            .typed(),
         )
         .await
     }
 
-    fn padded_source(overlap: TileOverlap) -> Box<dyn RasterOperator> {
+    fn padded_source(overlap: TileOverlap) -> TypedRasterOperator {
         AddTileOverlap {
             params: AddTileOverlapParams { overlap },
             sources: SingleRasterSource {
                 raster: mock_raster_source(),
             },
         }
-        .boxed()
+        .typed()
     }
 
     #[tokio::test]
@@ -418,12 +416,12 @@ mod tests {
                 raster: mock_raster_source(), // has no overlap at all
             },
         }
-        .boxed();
+        .typed();
 
         let execution_context = mock_execution_context();
         let err = result
             .initialize(
-                crate::engine::WorkflowOperatorPath::initialize_root(),
+                crate::engine::ProcessingGraphOperatorPath::initialize_root(),
                 &execution_context,
             )
             .await

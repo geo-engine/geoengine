@@ -9,6 +9,7 @@ use super::{
     RasterOperator, VectorOperator,
 };
 use crate::machine_learning::onnx::Onnx;
+use crate::machine_learning::onnx_object_detection::OnnxObjectDetection;
 use crate::mock::{
     MockDatasetDataSource, MockFeatureCollectionSource, MockPointSource, MockRasterSource,
 };
@@ -17,10 +18,10 @@ use crate::plot::{
     MeanRasterPixelValuesOverTime, PieChart, ScatterPlot, Statistics,
 };
 use crate::processing::{
-    BandFilter, BandNeighborhoodAggregate, BandwiseExpression, ColumnRangeFilter, Downsampling,
+    AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, ColumnRangeFilter, Downsampling,
     Expression, Interpolation, LineSimplification, NeighborhoodAggregate, PointInPolygonFilter,
     PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion,
-    RasterVectorJoin, Rasterization, ReTile, Reflectance, Reprojection, Temperature,
+    RasterVectorJoin, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature,
     TemporalRasterAggregation, TimeProjection, TimeShift, VectorExpression, VectorJoin,
     VisualPointClustering,
 };
@@ -99,6 +100,7 @@ macro_rules! typed_operator {
 typed_operator! {
     /// An operator that produces raster data
     TypedRasterOperator: RasterOperator => InitializedRasterOperator {
+        AddTileOverlap(AddTileOverlap),
         BandFilter(BandFilter),
         BandNeighborhoodAggregate(BandNeighborhoodAggregate),
         BandwiseExpression(BandwiseExpression),
@@ -114,6 +116,7 @@ typed_operator! {
         RasterScaling(RasterScaling),
         RasterStacker(RasterStacker),
         RasterTypeConversion(RasterTypeConversion),
+        RemoveTileOverlap(RemoveTileOverlap),
         ReTile(ReTile),
         Rasterization(Rasterization),
         Reflectance(Reflectance),
@@ -141,6 +144,7 @@ typed_operator! {
         CsvSource(CsvSource),
         LineSimplification(LineSimplification),
         OgrSource(OgrSource),
+        OnnxObjectDetection(OnnxObjectDetection),
         PointInPolygonFilter(PointInPolygonFilter),
         RasterVectorJoin(RasterVectorJoin),
         Reprojection(Reprojection),

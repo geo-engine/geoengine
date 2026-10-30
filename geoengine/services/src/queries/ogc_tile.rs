@@ -22,7 +22,8 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 #[cfg(debug_assertions)]
-use geoengine_operators::engine::RasterResultDescriptor;
+use geoengine_operators::engine::{RasterResultDescriptor, TypedOperator};
+use geoengine_operators::util::strip_tile_overlap;
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{ExecutionContext, InitializedRasterOperator, TypedRasterQueryProcessor},
@@ -78,6 +79,16 @@ pub async fn render_tile<C: ApplicationContext>(
         get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context)
             .instrument(debug_span!("initialize"))
             .await?;
+    // strip the overlap in the graph, so a later reprojection or resampling never sees halos
+    if let TypedOperator::Raster(operator) = &layer.processing_graph.operator
+        && let Some(operator) =
+            strip_tile_overlap(operator.clone(), initialized_operator.result_descriptor())
+    {
+        layer.processing_graph.operator = TypedOperator::Raster(operator);
+        initialized_operator =
+            get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context)
+                .await?;
+    }
     let tiling_specification = execution_context.tiling_specification();
 
     let required_origin_and_resolution =

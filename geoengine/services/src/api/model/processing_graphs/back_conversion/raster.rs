@@ -1,5 +1,5 @@
 use crate::api::model::processing_graphs::{
-    BandFilter, BandFilterParameters, BandNeighborhoodAggregate,
+    AddTileOverlap, AddTileOverlapParameters, BandFilter, BandFilterParameters, BandNeighborhoodAggregate,
     BandNeighborhoodAggregateParameters, BandsByNameOrIndex, BandwiseExpression,
     BandwiseExpressionParameters, Downsampling, DownsamplingMethod, DownsamplingParameters,
     DownsamplingResolution, Expression, ExpressionParameters, GdalSource, GdalSourceParameters,
@@ -9,7 +9,7 @@ use crate::api::model::processing_graphs::{
     Radiance, RadianceParameters, RasterOperator, RasterScaling, RasterScalingParameters,
     RasterStacker, RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
     Rasterization, RasterizationParameters, ReTile, ReTileParameters, Reflectance,
-    ReflectanceParameters, RenameBands, Temperature, TemperatureParameters,
+    ReflectanceParameters, RemoveTileOverlap, RemoveTileOverlapParameters, RenameBands, Temperature, TemperatureParameters,
     TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
@@ -30,8 +30,8 @@ use geoengine_operators::{
     engine::TypedRasterOperator as OperatorsTypedRasterOperator,
     machine_learning::onnx::Onnx as OperatorsOnnx,
     processing::{
-        AggregateFunctionParams, BandDistance as OperatorsBandDistance,
-        BandFilter as OperatorsBandFilter,
+        AddTileOverlap as OperatorsAddTileOverlap, AggregateFunctionParams,
+        BandDistance as OperatorsBandDistance, BandFilter as OperatorsBandFilter,
         BandNeighborhoodAggregate as OperatorsBandNeighborhoodAggregate,
         BandNeighborhoodAggregateMethod as OperatorsBandNeighborhoodAggregateMethod,
         BandwiseExpression as OperatorsBandwiseExpression, Downsampling as OperatorsDownsampling,
@@ -45,8 +45,9 @@ use geoengine_operators::{
         RasterScaling as OperatorsRasterScaling, RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
         Rasterization as OperatorsRasterization, ReTile as OperatorsReTile,
-        Reflectance as OperatorsReflectance, ScalingMode as OperatorsScalingMode,
-        SlopeOffsetSelection as OperatorsSlopeOffsetSelection, Temperature as OperatorsTemperature,
+        Reflectance as OperatorsReflectance, RemoveTileOverlap as OperatorsRemoveTileOverlap,
+        ScalingMode as OperatorsScalingMode, SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
+        Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeShift as OperatorsTimeShift, TimeShiftParams as OperatorsTimeShiftParams,
     },
@@ -594,6 +595,41 @@ impl TryFrom<&OperatorsReTile> for ReTile {
     }
 }
 
+impl TryFrom<&OperatorsAddTileOverlap> for AddTileOverlap {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsAddTileOverlap) -> Result<Self, Self::Error> {
+        let overlap = value.params.overlap;
+        Ok(Self {
+            r#type: Default::default(),
+            params: AddTileOverlapParameters {
+                overlap: [overlap.y, overlap.x],
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
+            }
+            .into(),
+        })
+    }
+}
+
+impl TryFrom<&OperatorsRemoveTileOverlap> for RemoveTileOverlap {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsRemoveTileOverlap) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            params: RemoveTileOverlapParameters {
+                amount: value.params.amount.map(|amount| [amount.y, amount.x]),
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
+            }
+            .into(),
+        })
+    }
+}
+
 impl TryFrom<&OperatorsReflectance> for Reflectance {
     type Error = anyhow::Error;
 
@@ -678,7 +714,7 @@ mod tests {
         dataset::NamedData,
         machine_learning::MlModelName,
         primitives::{Coordinate2D, SpatialResolution, TimeGranularity, TimeStep},
-        raster::{RenameBands as RuntimeRenameBands, TileSize},
+        raster::{RenameBands as RuntimeRenameBands, TileOverlap, TileSize},
     };
     use geoengine_operators::{
         engine::{
@@ -687,8 +723,8 @@ mod tests {
         },
         machine_learning::onnx::OnnxParams as OperatorsOnnxParameters,
         processing::{
-            AggregateFunctionParams, BandFilter as OperatorsBandFilter,
-            BandFilterParams as OperatorsBandFilterParams,
+            AddTileOverlapParams as OperatorsAddTileOverlapParams, AggregateFunctionParams,
+            BandFilter as OperatorsBandFilter, BandFilterParams as OperatorsBandFilterParams,
             BandNeighborhoodAggregate as OperatorsBandNeighborhoodAggregate,
             BandNeighborhoodAggregateMethod as OperatorsBandNeighborhoodAggregateMethod,
             BandNeighborhoodAggregateParams as OperatorsBandNeighborhoodAggregateParameters,
@@ -720,7 +756,9 @@ mod tests {
             RasterizationParams as OperatorsRasterizationParams,
             RasterizationTime as OperatorsRasterizationTime, ReTile as OperatorsReTile,
             ReTileParams as OperatorsReTileParams, Reflectance as OperatorsReflectance,
-            ReflectanceParams as OperatorsReflectanceParams, Reprojection as OperatorsReprojection,
+            ReflectanceParams as OperatorsReflectanceParams,
+            RemoveTileOverlapParams as OperatorsRemoveTileOverlapParams,
+            Reprojection as OperatorsReprojection,
             ReprojectionParams as OperatorsReprojectionParams, ScalingMode as OperatorsScalingMode,
             SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
             Temperature as OperatorsTemperature, TemperatureParams as OperatorsTemperatureParams,
@@ -977,6 +1015,26 @@ mod tests {
                     },
                 }),
                 |graph| matches!(graph, RasterOperator::ReTile(_)),
+            ),
+            (
+                TypedRasterOperator::from(OperatorsAddTileOverlap {
+                    params: OperatorsAddTileOverlapParams {
+                        overlap: TileOverlap::new(2, 3),
+                    },
+                    sources: SingleRasterSource {
+                        raster: raster_source(),
+                    },
+                }),
+                |graph| matches!(graph, RasterOperator::AddTileOverlap(_)),
+            ),
+            (
+                TypedRasterOperator::from(OperatorsRemoveTileOverlap {
+                    params: OperatorsRemoveTileOverlapParams { amount: None },
+                    sources: SingleRasterSource {
+                        raster: raster_source(),
+                    },
+                }),
+                |graph| matches!(graph, RasterOperator::RemoveTileOverlap(_)),
             ),
             (
                 TypedRasterOperator::from(OperatorsReflectance {

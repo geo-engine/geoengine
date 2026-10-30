@@ -10,8 +10,8 @@ use crate::{
         MachineLearningError, MlModelInputNoDataHandling, MlModelLoadingInfo,
         error::{InputTypeMismatch, ModelOverlapRequired, Ort},
         onnx_util::{
-            OrtEnvironment, check_model_input_features, check_model_shape, check_model_shape_overlap,
-            load_onnx_model_from_loading_info, model_data_shape,
+            OrtEnvironment, check_model_input_features, check_model_shape,
+            check_model_shape_overlap, load_onnx_model_from_loading_info, model_data_shape,
         },
     },
     optimization::OptimizationError,
@@ -253,6 +253,7 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
 }
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         source: BoxRasterQueryProcessor<TIn>,
         result_descriptor: RasterResultDescriptor,
@@ -644,6 +645,7 @@ impl_no_data_value_none!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::TypedRasterOperator;
 
     use crate::engine::TimeDescriptor;
     use crate::machine_learning::MlModelInputNoDataHandling;
@@ -1396,7 +1398,7 @@ mod tests {
     }
 
     // A source whose descriptor carries the given tile overlap (no data tiles).
-    fn overlap_source(overlap: TileOverlap) -> Box<dyn RasterOperator> {
+    fn overlap_source(overlap: TileOverlap) -> TypedRasterOperator {
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: Vec::<RasterTile2D<f32>>::new(),
@@ -1417,7 +1419,7 @@ mod tests {
                 },
             },
         }
-        .boxed()
+        .typed()
     }
 
     // A conv model needs a 1px input halo; a source with *less* overlap must be rejected.
@@ -1433,7 +1435,7 @@ mod tests {
                 raster: overlap_source(TileOverlap::zero()),
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
@@ -1442,7 +1444,7 @@ mod tests {
             .insert(model_name, ml_info((4, 4), (2, 2)));
 
         let Err(err) = onnx
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
         else {
             panic!("expected initialization to fail")
@@ -1468,7 +1470,7 @@ mod tests {
                 raster: overlap_source(TileOverlap::new(2, 2)),
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
@@ -1477,7 +1479,7 @@ mod tests {
             .insert(model_name, ml_info((4, 4), (2, 2)));
 
         // must not error: 2px available >= 1px required
-        onnx.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        onnx.initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .expect("excess overlap must be accepted");
     }
@@ -1495,7 +1497,7 @@ mod tests {
                 raster: overlap_source(TileOverlap::zero()),
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
@@ -1505,7 +1507,7 @@ mod tests {
             .insert(model_name, ml_info((5, 5), (2, 2)));
 
         let Err(err) = onnx
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
         else {
             panic!("expected initialization to fail")
@@ -1562,7 +1564,7 @@ mod tests {
                 },
             },
         }
-        .boxed();
+        .typed();
 
         // pad every core tile with a 1px halo, blitted from its neighbours
         let with_halo = AddTileOverlap {
@@ -1571,7 +1573,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let model_name = MlModelName {
             namespace: None,
@@ -1581,7 +1583,7 @@ mod tests {
             params: OnnxParams::new(model_name.clone()),
             sources: SingleRasterSource { raster: with_halo },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
@@ -1591,7 +1593,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
         let qp = op.query_processor().unwrap().get_f32().unwrap();
