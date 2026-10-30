@@ -475,7 +475,11 @@ impl GdalProcessPool {
                         .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
                         .and_then(|response| match response {
                             WorkerResponse::CachesCleared => Ok(()),
-                            WorkerResponse::Raster(_) => Err(GdalProcessPoolError::WorkerPanic),
+                            WorkerResponse::Raster(_) => Err(IpcProcessError::IpcOther {
+                                msg: "Unexpected worker response: expected CachesCleared, received Raster"
+                                    .to_owned(),
+                            }
+                            .into()),
                         });
                     let failed = result.is_err();
                     let notification = if failed {
@@ -512,7 +516,11 @@ impl GdalProcessPool {
                 .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
                 .and_then(|response| match response {
                     WorkerResponse::Raster(result) => Ok(result),
-                    WorkerResponse::CachesCleared => Err(GdalProcessPoolError::WorkerPanic),
+                    WorkerResponse::CachesCleared => Err(IpcProcessError::IpcOther {
+                        msg: "Unexpected worker response: expected Raster, received CachesCleared"
+                            .to_owned(),
+                    }
+                    .into()),
                 });
 
             let is_dead = res.is_err();
@@ -1416,6 +1424,14 @@ mod tests {
                 .await
                 .unwrap();
             assert!(result.is_err(), "{failure} must fail clearance");
+            if failure == "unexpected response" {
+                assert!(matches!(
+                    result,
+                    Err(GdalProcessPoolError::IpcProcessError {
+                        source: IpcProcessError::IpcOther { msg },
+                    }) if msg.contains("expected CachesCleared") && msg.contains("received Raster")
+                ));
+            }
             tokio::time::timeout(Duration::from_secs(10), completion)
                 .await
                 .unwrap()
