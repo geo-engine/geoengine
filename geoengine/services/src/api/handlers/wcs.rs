@@ -21,7 +21,6 @@ use crate::{
     util::server::{CacheControlHeader, connection_closed},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
-use geoengine_datatypes::raster::{GridShape2D, TilingGrid};
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, BandSelection},
     raster::GridShape2D,

@@ -21,8 +21,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    InitializedRasterOperator, ProcessingGraphOperatorPath, RasterResultDescriptor,
-    TimeDescriptor,
+    InitializedRasterOperator, ProcessingGraphOperatorPath, RasterResultDescriptor, TimeDescriptor,
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,

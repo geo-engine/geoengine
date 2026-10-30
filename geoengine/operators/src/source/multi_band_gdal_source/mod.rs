@@ -2016,6 +2016,7 @@ mod tests {
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
                             retry: None,
+                            tile_size: None,
                         },
                     });
                 }

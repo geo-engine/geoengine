@@ -658,7 +658,7 @@ mod tests {
         }
         .typed()
         .initialize(
-            WorkflowOperatorPath::initialize_root(),
+            ProcessingGraphOperatorPath::initialize_root(),
             &MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
                 TileSize::new_unchecked(3, 2),
             )),

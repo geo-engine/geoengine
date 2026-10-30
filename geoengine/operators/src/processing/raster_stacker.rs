@@ -1025,7 +1025,7 @@ mod tests {
                 result_descriptor: descriptor,
             },
         }
-        .boxed();
+        .typed();
         let output_origin = Coordinate2D::new(2., -2.);
         let expected_grid = input_grid
             .spatial_grid
@@ -1040,12 +1040,12 @@ mod tests {
                 rasters: vec![source],
             },
         }
-        .boxed();
+        .typed();
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
 
         let initialized = stacker
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -1077,7 +1077,7 @@ mod tests {
                     },
                 },
             }
-            .boxed()
+            .typed()
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -1099,11 +1099,11 @@ mod tests {
                     ],
                 },
             }
-            .boxed();
+            .typed();
 
             assert!(matches!(
                 stacker
-                    .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                    .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
                     .await,
                 Err(crate::error::Error::RasterInputsNotReTileCompatible { .. })
             ));
@@ -1167,7 +1167,7 @@ mod tests {
                 result_descriptor: descriptor1,
             },
         }
-        .boxed();
+        .typed();
 
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
@@ -1175,7 +1175,7 @@ mod tests {
                 result_descriptor: descriptor2,
             },
         }
-        .boxed();
+        .typed();
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -1186,7 +1186,7 @@ mod tests {
                 rasters: vec![mrs1, mrs2],
             },
         }
-        .boxed();
+        .typed();
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size = TileSize::new_unchecked(2, 2);
@@ -1200,7 +1200,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 

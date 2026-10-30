@@ -932,8 +932,7 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            ChunkByteSize, ExecutionContext, MockExecutionContext, ProcessingGraphOperatorPath,
-            RasterOperator,
+            ChunkByteSize, MockExecutionContext, ProcessingGraphOperatorPath, RasterOperator,
         },
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
