@@ -2049,7 +2049,7 @@ mod tests {
             GeoTransform::new_unchecked((0.0, 4.0).into(), 1.0, -1.0),
         );
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(2, 2, 2, std::time::Duration::ZERO, WorkerConfig::default());
         let gw = gpp.get_gdal_worker();
 
         let tile = GdalPoolReader::load_tile_from_files_async::<u16>(

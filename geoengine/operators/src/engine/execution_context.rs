@@ -130,7 +130,13 @@ impl TestDefault for MockExecutionContext {
             ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
             default_cache_ttl: CacheTtlSeconds::new(0),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(
+                2,
+                2,
+                2,
+                std::time::Duration::ZERO,
+                WorkerConfig::default(),
+            ),
             ort_environment: test_ort_environment(),
         }
     }
@@ -153,6 +159,7 @@ impl MockExecutionContext {
                 2,
                 2,
                 2,
+                std::time::Duration::ZERO,
                 WorkerConfig::default(),
             ),
             ort_environment: test_ort_environment(),
@@ -167,7 +174,13 @@ impl MockExecutionContext {
             ml_models: HashMap::default(),
             tiling_specification,
             default_cache_ttl: CacheTtlSeconds::new(0),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(
+                2,
+                2,
+                2,
+                std::time::Duration::ZERO,
+                WorkerConfig::default(),
+            ),
             ort_environment: test_ort_environment(),
         }
     }
@@ -183,7 +196,13 @@ impl MockExecutionContext {
             ml_models: HashMap::default(),
             tiling_specification,
             default_cache_ttl: CacheTtlSeconds::new(0),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(
+                2,
+                2,
+                2,
+                std::time::Duration::ZERO,
+                WorkerConfig::default(),
+            ),
             ort_environment: test_ort_environment(),
         }
     }

@@ -362,6 +362,8 @@ impl DatasetSlot {
 
 struct QueuedRequest {
     dataset_hash: u64,
+    /// Since when the broker holds the request back for a busy worker holding its blocks.
+    held_since: std::cell::Cell<Option<Instant>>,
     request: IpcChannelMessage,
     /// Closed once the leader task drops its receiver because all callers gave up (see
     /// `await_read_or_abandon`). The broker then drops the request instead of reading it.
@@ -438,6 +440,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        busy_holder_wait: Duration,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
@@ -473,6 +476,7 @@ impl GdalProcessPool {
                 workers,
                 max_active_processes,
                 max_dataset_processes,
+                busy_holder_wait,
                 b_tx_clone,
                 wc2,
             )
@@ -495,6 +499,7 @@ impl GdalProcessPool {
     /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
     /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
     /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `busy_holder_wait`: How long a read may wait for a busy worker that holds more of its blocks than any idle worker. Zero never waits.
     ///
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
@@ -504,6 +509,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        busy_holder_wait: Duration,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
         Self::new_with_tokio_handle(
@@ -511,6 +517,7 @@ impl GdalProcessPool {
             number_of_processes,
             max_active_processes,
             max_dataset_processes,
+            busy_holder_wait,
             worker_config,
         )
     }
@@ -608,6 +615,7 @@ impl GdalProcessPool {
         workers: Vec<WorkerProcess>,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        busy_holder_wait: Duration,
         broker_tx: mpsc::Sender<BrokerCommand>,
         worker_config: WorkerConfig,
     ) {
@@ -617,11 +625,13 @@ impl GdalProcessPool {
             max_active_processes,
             Self::STRATEGY,
         );
+        state.busy_holder_wait = busy_holder_wait;
 
         let mut stats_tick = tokio::time::interval(STATS_REPORT_INTERVAL);
         stats_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         loop {
+            let wake = state.next_wake;
             let first_cmd = tokio::select! {
                 cmd = rx.recv() => match cmd {
                     Some(cmd) => cmd,
@@ -629,6 +639,11 @@ impl GdalProcessPool {
                 },
                 _ = stats_tick.tick() => {
                     state.report_and_reset_stats();
+                    continue;
+                }
+                // a held read's wait for a busy worker expired
+                () = tokio::time::sleep_until(wake.unwrap_or_else(Instant::now).into()), if wake.is_some() => {
+                    state.try_dispatch();
                     continue;
                 }
             };
@@ -757,6 +772,10 @@ struct BrokerState {
     stats: BrokerStats,
     /// Number of workers holding each dataset open, to evict duplicates first.
     dataset_holders: FastHashMap<u64, usize>,
+    /// How long a read may wait for a busy worker holding more of its blocks than any idle one.
+    busy_holder_wait: Duration,
+    /// When the earliest held read stops waiting, to dispatch it without another command.
+    next_wake: Option<Instant>,
 }
 
 impl BrokerState {
@@ -782,6 +801,8 @@ impl BrokerState {
             max_active_processes,
             strategy,
             stats: BrokerStats::default(),
+            busy_holder_wait: Duration::ZERO,
+            next_wake: None,
         }
     }
 
@@ -897,10 +918,45 @@ impl BrokerState {
         worker.affinity = affinity;
     }
 
+    /// Until when to hold `req` back for a busy worker that holds more of its blocks than the
+    /// best idle worker, or `None` to dispatch it now. The wait counts from the first time the
+    /// request was held, so it is bounded by `busy_holder_wait` in total.
+    fn busy_holder_deadline(
+        &self,
+        req: &QueuedRequest,
+        best_idle: Option<WorkerRank>,
+        now: Instant,
+    ) -> Option<Instant> {
+        if self.busy_holder_wait.is_zero() {
+            return None;
+        }
+        let idle_shared = match best_idle {
+            Some(WorkerRank::Hit { shared_blocks, .. }) => shared_blocks,
+            _ => 0,
+        };
+        let band = req.request.0.dataset_params.rasterband_channel;
+        // Idle workers share at most `idle_shared` blocks, so a worker sharing more is busy.
+        let busy_holder = self
+            .workers
+            .iter()
+            .filter_map(|w| w.affinity.as_ref())
+            .filter(|a| a.dataset_hash == req.dataset_hash && a.band == band)
+            .any(|a| a.shared_blocks(&req.request.0.read_advise) > idle_shared);
+        if !busy_holder {
+            return None;
+        }
+        let held_since = req.held_since.get().unwrap_or(now);
+        req.held_since.set(Some(held_since));
+        let deadline = held_since + self.busy_holder_wait;
+        (now < deadline).then_some(deadline)
+    }
+
     /// Single-pass scheduler execution pass. Inlines scheduling decisions to prevent matrix re-scanning.
     #[allow(clippy::too_many_lines)]
     #[inline]
     pub fn try_dispatch(&mut self) {
+        self.next_wake = None;
+
         while let Some(&front_hash) = self.active_datasets.front() {
             let should_pop = match self.dataset_registry.get_mut(&front_hash) {
                 Some(slot) => {
@@ -965,6 +1021,11 @@ impl BrokerState {
                     if rank.is_best() {
                         break;
                     }
+                }
+
+                if let Some(deadline) = self.busy_holder_deadline(req, current_best_rank, now) {
+                    self.next_wake = Some(self.next_wake.map_or(deadline, |w| w.min(deadline)));
+                    continue;
                 }
 
                 if current_best_rank > best_rank {
@@ -1234,6 +1295,7 @@ impl GdalPoolDispatcher {
                         .broker_tx
                         .send(BrokerCommand::Read(Box::new(QueuedRequest {
                             dataset_hash: routing_hash,
+                            held_since: std::cell::Cell::new(None),
                             request: request_clone,
                             respond_to: oneshot_tx,
                         })))
@@ -1693,6 +1755,106 @@ mod tests {
             .expect("the worker holding all four blocks should read them");
     }
 
+    // --- waiting for a busy holder ---
+
+    /// Worker 0 is busy and holds all blocks of `read_across_blocks`, idle worker 1 holds none.
+    fn state_with_busy_holder(
+        wait: Duration,
+    ) -> (
+        BrokerState,
+        mpsc::UnboundedReceiver<WorkerJob>,
+        mpsc::UnboundedReceiver<WorkerJob>,
+    ) {
+        let (mut w0, rx0) = dummy_worker(0);
+        w0.affinity = Some(holding_blocks(
+            1,
+            window([0, 0], [511, 511]),
+            &[(0, 0), (1, 0), (0, 1), (1, 1)],
+        ));
+        let (w1, rx1) = dummy_worker(1);
+        let mut state = BrokerState::new(vec![w0, w1], 4, 4, SchedulingStrategy::GlobalMatrix);
+        state.idle_workers = vec![1];
+        state.global_active_count = 1;
+        state.busy_holder_wait = wait;
+        (state, rx0, rx1)
+    }
+
+    fn enqueue_read_across_blocks(state: &mut BrokerState) -> oneshot::Receiver<ReadResult> {
+        let (mut req, resp) = make_request(42, 1, window([784, 784], [1295, 1295]));
+        req.request.0.read_advise = read_across_blocks();
+        state.enqueue_request(req);
+        resp
+    }
+
+    fn release_holder(state: &mut BrokerState) {
+        state.release_worker(
+            0,
+            42,
+            1,
+            &advise(window([0, 0], [511, 511])),
+            Some(BLOCK),
+            false,
+        );
+    }
+
+    #[test]
+    fn it_waits_for_a_busy_worker_holding_the_blocks() {
+        let (mut state, mut rx0, mut rx1) = state_with_busy_holder(Duration::from_secs(60));
+        let _resp = enqueue_read_across_blocks(&mut state);
+
+        state.try_dispatch();
+        assert!(rx1.try_recv().is_err(), "the idle worker holds no blocks");
+        assert!(state.next_wake.is_some());
+
+        release_holder(&mut state);
+        state.try_dispatch();
+        rx0.try_recv()
+            .expect("the holder reads the blocks once it is idle");
+        assert!(state.next_wake.is_none());
+    }
+
+    #[test]
+    fn it_reads_elsewhere_once_the_wait_expired() {
+        let (mut state, _rx0, mut rx1) = state_with_busy_holder(Duration::from_millis(20));
+        let _resp = enqueue_read_across_blocks(&mut state);
+
+        state.try_dispatch();
+        assert!(rx1.try_recv().is_err());
+        let wake = state
+            .next_wake
+            .expect("the broker wakes up when the wait expires");
+
+        std::thread::sleep(wake.saturating_duration_since(Instant::now()));
+        state.try_dispatch();
+        rx1.try_recv()
+            .expect("the idle worker reads once the wait expired");
+        assert!(state.next_wake.is_none());
+    }
+
+    #[test]
+    fn it_does_not_wait_for_a_busy_holder_by_default() {
+        let (mut state, _rx0, mut rx1) = state_with_busy_holder(Duration::ZERO);
+        let _resp = enqueue_read_across_blocks(&mut state);
+
+        state.try_dispatch();
+        rx1.try_recv().expect("the idle worker reads at once");
+    }
+
+    #[test]
+    fn it_drops_a_held_read_whose_callers_gave_up() {
+        let (mut state, mut rx0, mut rx1) = state_with_busy_holder(Duration::from_secs(60));
+        let resp = enqueue_read_across_blocks(&mut state);
+        state.try_dispatch();
+
+        drop(resp);
+        release_holder(&mut state);
+        state.try_dispatch();
+
+        assert!(rx0.try_recv().is_err() && rx1.try_recv().is_err());
+        assert_eq!(state.stats.cancelled_dropped, 1);
+        assert!(state.dataset_registry.is_empty());
+    }
+
     // --- BrokerState dispatch tests ---
 
     use crate::source::gdal_worker_process::gdal_dataset_params::{
@@ -1764,6 +1926,7 @@ mod tests {
         });
         let req = Box::new(QueuedRequest {
             dataset_hash,
+            held_since: std::cell::Cell::new(None),
             request: msg,
             respond_to: tx,
         });
