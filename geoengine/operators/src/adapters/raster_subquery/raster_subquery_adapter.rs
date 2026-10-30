@@ -1,29 +1,21 @@
-use crate::engine::{QueryContext, RasterQueryProcessor};
+use crate::engine::{QueryContext, RasterQueryProcessor, SubQueryHandout, SubQueryParallelism};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::Stream;
-use futures::future::BoxFuture;
-use futures::{Future, stream::FusedStream};
-use futures::{
-    FutureExt, TryFuture, TryStreamExt, ready,
-    stream::{BoxStream, TryFold},
+use futures::future::{BoxFuture, TryFutureExt};
+use futures::stream::{BoxStream, FuturesOrdered, TryStreamExt};
+use futures::{Future, FutureExt, Stream, StreamExt};
+use geoengine_datatypes::primitives::{
+    BandSelectionIter, CacheHint, RasterQueryRectangle, TimeInterval,
 };
-use geoengine_datatypes::primitives::RasterQueryRectangle;
-use geoengine_datatypes::primitives::TimeInterval;
-use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridIntersection, GridOrEmpty, TileInformationBandCrossProductIter,
-    TilingSpecification, TilingStrategy,
+    GridBoundingBox2D, GridIntersection, GridOrEmpty, Pixel, RasterTile2D, TileInformation,
+    TileInformationBandCrossProductIter, TilingSpecification, TilingStrategy,
 };
-use geoengine_datatypes::raster::{Pixel, RasterTile2D, TileInformation};
 use rayon::ThreadPool;
 use std::pin::Pin;
-
-use pin_project::pin_project;
-
 use std::sync::Arc;
-use std::task::Poll;
+use std::task::{Context, Poll};
 
 #[async_trait]
 pub trait FoldTileAccu {
@@ -37,130 +29,30 @@ pub trait FoldTileAccuMut: FoldTileAccu {
     fn set_cache_hint(&mut self, new_cache_hint: CacheHint);
 }
 
-pub type RasterFold<'a, T, FoldFuture, FoldMethod, FoldTileAccu> =
-    TryFold<BoxStream<'a, Result<RasterTile2D<T>>>, FoldFuture, FoldTileAccu, FoldMethod>;
-
-type QueryAccuFuture<'a, T, A> = BoxFuture<'a, Result<(BoxStream<'a, Result<RasterTile2D<T>>>, A)>>;
-
-type IntoTileFuture<'a, T> = BoxFuture<'a, Result<RasterTile2D<T>>>;
-
-/// This adapter allows to generate a tile stream using sub-querys.
-/// This is done using a `TileSubQuery`.
-/// The sub-query is resolved for each produced tile.
-
-#[pin_project(project=StateInnerProjection)]
-#[derive(Debug, Clone)]
-enum StateInner<A, B, C, D> {
-    ProgressTileBand {
-        time: TimeInterval,
-    },
-    CreateNextTime,
-    // PollingTime(#[pin] N), not needed?
-    CreateNextQuery {
-        time: TimeInterval,
-        tile: TileInformation,
-        band: u32,
-    },
-    RunningQuery {
-        #[pin]
-        query_with_accu: A,
-        time: TimeInterval,
-        tile: TileInformation,
-        band: u32,
-    },
-    RunningFold {
-        #[pin]
-        fold: B,
-        time: TimeInterval,
-        tile: TileInformation,
-        band: u32,
-    },
-    RunningIntoTile {
-        #[pin]
-        into_tile: D,
-        time: TimeInterval,
-        tile: TileInformation,
-        band: u32,
-    },
-    ReturnResult {
-        result: Option<C>,
-        time: TimeInterval,
-        tile: TileInformation,
-        band: u32,
-    },
-    Ended,
+/// Generates tiles by running ordered sub-queries, concurrently while the query's
+/// [`SubQueryParallelism`] has permits left.
+pub struct RasterSubQueryAdapter<'a, PixelType: Pixel> {
+    stream: BoxStream<'a, Result<RasterTile2D<PixelType>>>,
 }
 
-/// This type is needed to stop Clippy from complaining about a very complex type in the `RasterSubQueryAdapter` struct.
-type StateInnerType<'a, P, FoldFuture, FoldMethod, TileAccu> = StateInner<
-    QueryAccuFuture<'a, P, TileAccu>,
-    RasterFold<'a, P, FoldFuture, FoldMethod, TileAccu>,
-    RasterTile2D<P>,
-    IntoTileFuture<'a, P>,
->;
-
-/// This adapter allows to generate a tile stream using sub-querys.
-/// This is done using a `TileSubQuery`.
-/// The sub-query is resolved for each produced tile.
-#[pin_project(project = RasterSubQueryAdapterProjection)]
-pub struct RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
-where
-    PixelType: Pixel,
-    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: SubQueryTileAggregator<'a, PixelType>,
-    TimeStream: Stream<Item = Result<TimeInterval>>,
-{
-    /// The '`TimeStream`' providing the time steps to produce
-    #[pin]
-    time_stream: TimeStream,
-    /// The `RasterQueryProcessor` to answer the sub-queries
-    source_processor: &'a RasterProcessorType,
-    /// The `QueryContext` to use for sub-queries
-    query_ctx: &'a dyn QueryContext,
-    /// The `QueryRectangle` the adapter is queried with
-    query_rect_to_answer: RasterQueryRectangle,
-    /// The pixel bounds of the source data. Sub-queries outside of it produce empty tiles without querying the source.
-    source_data_bounds: GridBoundingBox2D,
-
-    /// The `SubQuery` defines what this adapter does.
-    sub_query: SubQuery,
-
-    /// This `TimeInterval` is the time currently worked on
-    current_time: TimeInterval,
-
-    band_tile_iter: TileInformationBandCrossProductIter,
-
-    /// This current state of the adapter
-    #[pin]
-    state: StateInnerType<
-        'a,
-        PixelType,
-        SubQuery::FoldFuture,
-        SubQuery::FoldMethod,
-        SubQuery::TileAccu,
-    >,
-}
-
-impl<'a, PixelType, RasterProcessor, SubQuery, TimeStream>
-    RasterSubQueryAdapter<'a, PixelType, RasterProcessor, SubQuery, TimeStream>
-where
-    PixelType: Pixel,
-    RasterProcessor: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: SubQueryTileAggregator<'a, PixelType>,
-    TimeStream: Stream<Item = Result<TimeInterval>>,
-{
-    pub fn new(
+impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
+    /// Creates a new adapter.
+    pub fn new<RasterProcessor, SubQuery, TimeStream>(
         source_processor: &'a RasterProcessor,
         query_rect_to_answer: RasterQueryRectangle,
         tiling_strategy: TilingStrategy,
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
         time_stream: TimeStream,
-    ) -> Self {
-        let tile_iter = tiling_strategy
-            .tile_information_iterator_from_pixel_bounds(query_rect_to_answer.spatial_bounds());
-        let band_iter = BandSelectionIter::new(query_rect_to_answer.attributes().clone());
-        let band_tile_iter = TileInformationBandCrossProductIter::new(tile_iter, band_iter);
+    ) -> Self
+    where
+        RasterProcessor: RasterQueryProcessor<RasterType = PixelType> + 'a,
+        SubQuery: SubQueryTileAggregator<'a, PixelType> + Sync + 'a,
+        TimeStream: Stream<Item = Result<TimeInterval>> + Send + 'a,
+    {
+        let descriptor_query = query_rect_to_answer.clone();
+        let descriptor_bands = query_rect_to_answer.attributes().clone();
+        let sub_query = Arc::new(sub_query);
         let source_data_bounds = source_processor
             .raster_result_descriptor()
             .spatial_grid_descriptor()
@@ -169,325 +61,200 @@ where
             ))
             .tiling_spatial_grid_definition()
             .grid_bounds();
+        let descriptors = futures::stream::try_unfold(
+            (
+                time_stream.boxed(),
+                None::<(TimeInterval, TileInformationBandCrossProductIter)>,
+            ),
+            move |(mut time_stream, mut current)| {
+                let descriptor_query = descriptor_query.clone();
+                let descriptor_bands = descriptor_bands.clone();
+                async move {
+                    loop {
+                        if let Some((time, tile_band_iter)) = current.as_mut()
+                            && let Some((tile, band)) = tile_band_iter.next()
+                        {
+                            let time = *time;
+                            return Ok(Some(((time, tile, band), (time_stream, current))));
+                        }
+
+                        let Some(time) = time_stream.next().await.transpose()? else {
+                            return Ok(None);
+                        };
+                        let tile_iter = tiling_strategy
+                            .tile_information_iterator_from_pixel_bounds(
+                                descriptor_query.spatial_bounds(),
+                            );
+                        // order: time (outer loop), then tile, then band (inner)
+                        current = Some((
+                            time,
+                            TileInformationBandCrossProductIter::new(
+                                tile_iter,
+                                BandSelectionIter::new(descriptor_bands.clone()),
+                            ),
+                        ));
+                    }
+                }
+            },
+        )
+        .map_ok(move |descriptor| {
+            process_tile(
+                source_processor,
+                query_ctx,
+                sub_query.clone(),
+                query_rect_to_answer.clone(),
+                source_data_bounds,
+                descriptor,
+            )
+            .boxed()
+        })
+        .boxed();
 
         Self {
-            current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!
-            query_rect_to_answer,
-            source_data_bounds,
-            band_tile_iter,
-            query_ctx,
-            source_processor,
-            state: StateInner::CreateNextTime,
-            sub_query,
-            time_stream,
+            stream: ParallelSubQueries {
+                descriptors,
+                in_flight: FuturesOrdered::new(),
+                parallelism: query_ctx.subquery_parallelism(),
+                guaranteed_in_flight: false,
+                done: false,
+            }
+            .boxed(),
         }
     }
 
-    pub fn box_pin(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
-    where
-        SubQuery: Send + 'static,
-        TimeStream: Send + 'a,
-    {
-        Box::pin(self)
+    pub fn box_pin(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>> {
+        self.stream
     }
 }
 
-impl<'a, PixelType, RasterProcessorType, SubQuery, TimeStream> FusedStream
-    for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
-where
-    PixelType: Pixel,
-    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
-    TimeStream: Stream<Item = Result<TimeInterval>> + Send,
-{
-    fn is_terminated(&self) -> bool {
-        matches!(self.state, StateInner::Ended)
-    }
-}
-
-impl<'a, PixelType, RasterProcessorType, SubQuery, TimeStream> Stream
-    for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery, TimeStream>
-where
-    PixelType: Pixel,
-    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
-    SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
-    TimeStream: Stream<Item = Result<TimeInterval>> + Send,
-{
+impl<PixelType: Pixel> Stream for RasterSubQueryAdapter<'_, PixelType> {
     type Item = Result<RasterTile2D<PixelType>>;
 
-    /**************************************************************************************************************************************
-     * This method uses the `StateInner` enum to keep track of the current state
-     *
-     * There are two cases aka transition flows that are valid:
-     *  a) CreateNextQuery -> ReturnResult
-     *  b) CreateNextQuery -> RunningQuery -> RunningFold -> ReturnResult
-     *
-     * In case a) a valid `QueryRectangle` for the target tile is produced and a stream is queryed and folded to produce a new tile.
-     * In case b) no valid `QueryRectange` is produced. Therefore, all async steps are skipped and None is produced instead of a tile.
-     *
-     * When all tiles are queried the state transitions from ReturnResult to Ended.
-     *
-     * In case an Error occures the state is set to Ended AND the method returns Poll::Ready(Some(Err))).
-     *************************************************************************************************************************************/
-    #[allow(clippy::too_many_lines)]
     fn poll_next(
-        self: Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        let mut this = self.project();
+        self.get_mut().stream.poll_next_unpin(cx)
+    }
+}
 
-        // check if we ended in a previous call
-        if matches!(*this.state, StateInner::Ended) {
-            return Poll::Ready(None);
-        }
+type TileWithHandout<P> = (RasterTile2D<P>, SubQueryHandout);
 
-        // check if we ended in a previous call
-        if matches!(*this.state, StateInner::ProgressTileBand { .. }) {
-            // The state is pinned. Project it to get access to the query stored in the context.
-            let time = if let StateInnerProjection::ProgressTileBand { time } =
-                this.state.as_mut().project()
-            {
-                *time
-            } else {
-                // we already checked that the state is `StateInner::RunningQuery` so this case can not happen.
-                unreachable!()
+/// Runs sub-queries in order, each with a [`SubQueryHandout`] from the query's
+/// [`SubQueryParallelism`]: the first running one is always handed out, so every adapter
+/// makes progress; parallel ones only while permits are free, so nested adapters share one
+/// pool and the outermost adapter (which asks first) gets most of the parallelism.
+///
+/// A handout is returned when its tile is yielded, not when the sub-query finishes, so
+/// finished tiles waiting behind a slow one still count against the available parallelism.
+struct ParallelSubQueries<'a, P: Pixel> {
+    descriptors: BoxStream<'a, Result<BoxFuture<'a, Result<RasterTile2D<P>>>>>,
+    in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithHandout<P>>>>,
+    parallelism: &'a SubQueryParallelism,
+    /// The guaranteed slot is reused as soon as its tile is yielded, not only once all
+    /// parallel sub-queries are done; otherwise N parallelism would run at N - 1.
+    guaranteed_in_flight: bool,
+    done: bool,
+}
+
+impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
+    type Item = Result<RasterTile2D<P>>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+
+        while !this.done {
+            let Some(handout) = this.parallelism.handout(this.guaranteed_in_flight) else {
+                break;
             };
+            // only marked in flight once pushed: a pending descriptor must not hold the slot,
+            // or nothing in flight would wake us to retry
+            let guaranteed = matches!(handout, SubQueryHandout::Guaranteed);
 
-            if let Some((next_tile, next_band)) = this.band_tile_iter.next() {
-                this.state.set(StateInner::CreateNextQuery {
-                    time,
-                    band: next_band,
-                    tile: next_tile,
-                });
-            } else {
-                this.state.set(StateInner::CreateNextTime);
+            match this.descriptors.poll_next_unpin(cx) {
+                // on an error the handout is returned before its tile is yielded, which is
+                // harmless: the stream ends with that error and starts no more sub-queries
+                Poll::Ready(Some(Ok(sub_query))) => {
+                    this.guaranteed_in_flight |= guaranteed;
+                    this.in_flight
+                        .push_back(sub_query.map_ok(|tile| (tile, handout)).boxed());
+                }
+                Poll::Ready(Some(Err(e))) => {
+                    // queued behind the running sub-queries to keep the output order
+                    this.in_flight
+                        .push_back(futures::future::ready(Err(e)).boxed());
+                    this.done = true;
+                }
+                Poll::Ready(None) => this.done = true,
+                Poll::Pending => break,
             }
         }
 
-        if matches!(*this.state, StateInner::CreateNextTime) {
-            let time_future = ready!(this.time_stream.poll_next(cx));
-            match time_future {
-                None => {
-                    this.state.set(StateInner::Ended);
-                    return Poll::Ready(None);
-                }
-                Some(Err(e)) => {
-                    this.state.set(StateInner::Ended);
-                    return Poll::Ready(Some(Err(e)));
-                }
-                Some(Ok(time)) => {
-                    *this.current_time = time;
-                    this.band_tile_iter.reset();
-                    let (tile, band) = this
-                        .band_tile_iter
-                        .next()
-                        .expect("There must be at least one band/tile");
-                    this.state
-                        .set(StateInner::CreateNextQuery { time, band, tile });
-                }
+        match this.in_flight.poll_next_unpin(cx) {
+            Poll::Ready(Some(Err(e))) => {
+                this.done = true;
+                this.in_flight = FuturesOrdered::new();
+                Poll::Ready(Some(Err(e)))
             }
-        }
-
-        // first generate a new query.
-        if matches!(*this.state, StateInner::CreateNextQuery { .. }) {
-            let (time, band, tile) =
-                if let StateInnerProjection::CreateNextQuery { time, band, tile } =
-                    this.state.as_mut().project()
-                {
-                    (*time, *band, *tile)
-                } else {
-                    // we already checked that the state is `StateInner::RunningQuery` so this case can not happen.
-                    unreachable!()
-                };
-
-            match this.sub_query.tile_query_rectangle(
-                tile,
-                this.query_rect_to_answer.clone(),
-                time,
-                band,
-            ) {
-                Ok(Some(raster_query_rect))
-                    if raster_query_rect
-                        .spatial_bounds()
-                        .intersection(this.source_data_bounds)
-                        .is_some() =>
-                {
-                    let tile_query_stream_fut = this
-                        .source_processor
-                        .raster_query(raster_query_rect.clone(), *this.query_ctx);
-
-                    let tile_folding_accu_fut = this.sub_query.new_fold_accu(
-                        tile,
-                        raster_query_rect,
-                        this.query_ctx.thread_pool(),
-                    );
-
-                    let joined_future =
-                        async { futures::try_join!(tile_query_stream_fut, tile_folding_accu_fut) }
-                            .boxed();
-
-                    this.state.set(StateInner::RunningQuery {
-                        query_with_accu: joined_future,
-                        band,
-                        tile,
-                        time,
-                    });
+            Poll::Ready(Some(Ok((tile, handout)))) => {
+                if matches!(handout, SubQueryHandout::Guaranteed) {
+                    this.guaranteed_in_flight = false;
                 }
-                // no query or no source data => produce an empty tile
-                Ok(Some(_) | None) => this.state.set(StateInner::ReturnResult {
-                    result: None,
-                    band,
-                    tile,
-                    time,
-                }),
-                Err(e) => {
-                    this.state.set(StateInner::Ended);
-                    return Poll::Ready(Some(Err(e)));
-                }
+                Poll::Ready(Some(Ok(tile)))
             }
+            Poll::Ready(None) if !this.done => Poll::Pending,
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
         }
+    }
+}
 
-        // A query was issued, so we check whether it is finished
-        // To work in this scope we first check if the state is the one we expect. We want to set the state in this scope so we can not borrow it here!
-        if matches!(*this.state, StateInner::RunningQuery { .. }) {
-            // The state is pinned. Project it to get access to the query stored in the context.
-            let (time, band, tile, query_with_accu) = if let StateInnerProjection::RunningQuery {
-                query_with_accu,
-                tile,
-                band,
-                time,
-            } = this.state.as_mut().project()
-            {
-                (*time, *band, *tile, query_with_accu)
-            } else {
-                // we already checked that the state is `StateInner::RunningQuery` so this case can not happen.
-                unreachable!()
-            };
-
-            match ready!(query_with_accu.poll(cx)) {
-                Ok((query, tile_folding_accu)) => {
-                    let tile_folding_stream =
-                        query.try_fold(tile_folding_accu, this.sub_query.fold_method());
-
-                    this.state.set(StateInner::RunningFold {
-                        fold: tile_folding_stream,
-                        time,
-                        tile,
-                        band,
-                    });
-                }
-                Err(e) => {
-                    this.state.set(StateInner::Ended);
-                    return Poll::Ready(Some(Err(e)));
-                }
-            }
-        }
-
-        // We are waiting for/expecting the result of the fold.
-        // This block uses the same check and project pattern as above.
-        if matches!(*this.state, StateInner::RunningFold { .. }) {
-            let (tile, band, time, fold) = if let StateInnerProjection::RunningFold {
-                fold,
-                time,
-                tile,
-                band,
-            } = this.state.as_mut().project()
-            {
-                (*tile, *band, *time, fold)
-            } else {
-                unreachable!()
-            };
-
-            match ready!(fold.poll(cx)) {
-                Ok(tile_accu) => {
-                    let into_tile = tile_accu.into_tile();
-                    this.state.set(StateInner::RunningIntoTile {
-                        into_tile,
-                        time,
-                        tile,
-                        band,
-                    });
-                }
-                Err(e) => {
-                    this.state.set(StateInner::Ended);
-                    return Poll::Ready(Some(Err(e)));
-                }
-            }
-        }
-
-        // We are waiting for/expecting the result of `into_tile` method.
-        // This block uses the same check and project pattern as above.
-        if matches!(*this.state, StateInner::RunningIntoTile { .. }) {
-            let (time, band, tile, into_tile) = if let StateInnerProjection::RunningIntoTile {
-                into_tile,
-                time,
-                tile,
-                band,
-            } = this.state.as_mut().project()
-            {
-                (*time, *band, *tile, into_tile)
-            } else {
-                unreachable!()
-            };
-
-            match ready!(into_tile.poll(cx)) {
-                Ok(mut result_tile) => {
-                    // set the tile band to the running index, that is because output bands always start at zero and are consecutive, independent of the input bands.
-                    result_tile.band = band;
-                    this.state.set(StateInner::ReturnResult {
-                        result: Some(result_tile),
-                        time,
-                        tile,
-                        band,
-                    });
-                }
-                Err(e) => {
-                    this.state.set(StateInner::Ended);
-                    return Poll::Ready(Some(Err(e)));
-                }
-            }
-        }
-
-        debug_assert!(
-            matches!(*this.state, StateInner::ReturnResult { .. }),
-            "Must be in 'ReturnResult' state at this point!"
-        );
-        // At this stage we are in ReturnResult state. Either from a running fold or because the tile query rect was not valid.
-        // This block uses the check and project pattern as above.
-        let (tile, band, time, result) = if let StateInnerProjection::ReturnResult {
-            result,
+async fn process_tile<'a, P, R, S>(
+    source_processor: &'a R,
+    query_ctx: &'a dyn QueryContext,
+    sub_query: Arc<S>,
+    query_rect: RasterQueryRectangle,
+    source_data_bounds: GridBoundingBox2D,
+    (time, tile, band): (TimeInterval, TileInformation, u32),
+) -> Result<RasterTile2D<P>>
+where
+    P: Pixel,
+    R: RasterQueryProcessor<RasterType = P>,
+    S: SubQueryTileAggregator<'a, P> + Sync,
+{
+    // no query or no source data => an empty tile, without querying the source
+    let Some(raster_query_rect) = sub_query
+        .tile_query_rectangle(tile, query_rect, time, band)?
+        .filter(|rect| {
+            rect.spatial_bounds()
+                .intersection(&source_data_bounds)
+                .is_some()
+        })
+    else {
+        return Ok(RasterTile2D::new_with_tile_info(
             time,
             tile,
             band,
-        } = this.state.as_mut().project()
-        {
-            (*tile, *band, *time, result.take())
-        } else {
-            unreachable!()
-        };
-        // In the next poll we need to produce a new tile (if nothing else happens)
-        this.state.set(StateInner::ProgressTileBand { time });
+            GridOrEmpty::new_empty_shape(tile.tile_size_in_pixels),
+            CacheHint::max_duration(),
+        ));
+    };
 
-        let result_tile = result.unwrap_or_else(|| {
-            RasterTile2D::new_with_tile_info(
-                time,
-                tile,
-                band,
-                GridOrEmpty::new_empty_shape(tile.tile_size_in_pixels),
-                CacheHint::max_duration(),
-            )
-        });
-
-        Poll::Ready(Some(Ok(result_tile)))
-    }
+    let (query, accu) = futures::try_join!(
+        source_processor.raster_query(raster_query_rect.clone(), query_ctx),
+        sub_query.new_fold_accu(tile, raster_query_rect, query_ctx.thread_pool()),
+    )?;
+    let accu = query.try_fold(accu, sub_query.fold_method()).await?;
+    let mut result = accu.into_tile().await?;
+    result.band = band;
+    Ok(result)
 }
 
-/// This trait defines the behavior of the `RasterOverlapAdapter`.
-pub trait SubQueryTileAggregator<'a, T>: Send
+pub trait SubQueryTileAggregator<'a, T>: Send + 'a
 where
     T: Pixel,
 {
-    type FoldFuture: Send + TryFuture<Ok = Self::TileAccu, Error = error::Error>;
+    type FoldFuture: Send + futures::TryFuture<Ok = Self::TileAccu, Error = error::Error>;
     type FoldMethod: 'a
         + Send
         + Sync
@@ -496,7 +263,6 @@ where
     type TileAccu: FoldTileAccu<RasterType = T> + Clone + Send;
     type TileAccuFuture: Send + Future<Output = Result<Self::TileAccu>>;
 
-    /// This method generates a new accumulator which is used to fold the `Stream` of `RasterTile2D` of a sub-query.
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
@@ -504,8 +270,6 @@ where
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture;
 
-    /// This method generates `Some(QueryRectangle)` for a tile-specific sub-query or `None` if the `query_rect` cannot be translated.
-    /// In the latter case an `EmptyTile` will be produced for the sub query instead of querying the source.
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
@@ -520,7 +284,6 @@ where
         )))
     }
 
-    /// This method generates the method which combines the accumulator and each tile of the sub-query stream in the `TryFold` stream adapter.
     fn fold_method(&self) -> Self::FoldMethod;
 
     fn into_raster_subquery_adapter<S, G>(
@@ -530,19 +293,441 @@ where
         ctx: &'a dyn QueryContext,
         tiling_strategy: TilingStrategy,
         time_stream: G,
-    ) -> RasterSubQueryAdapter<'a, T, S, Self, G>
+    ) -> RasterSubQueryAdapter<'a, T>
     where
         S: RasterQueryProcessor<RasterType = T>,
-        G: Stream<Item = Result<TimeInterval>>,
-        Self: Sized,
+        G: Stream<Item = Result<TimeInterval>> + Send + 'a,
+        Self: Sized + Sync,
     {
-        RasterSubQueryAdapter::<'a, T, S, Self, G>::new(
-            source,
-            query,
+        RasterSubQueryAdapter::new(source, query, tiling_strategy, ctx, self, time_stream)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{
+        BoxRasterQueryProcessor, MockExecutionContext, MockQueryContext, QueryProcessor,
+        RasterBandDescriptors, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
+    };
+    use futures::future::{Ready, ready};
+    use geoengine_datatypes::primitives::{BandSelection, Coordinate2D, TimeStep};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GeoTransform, GridBoundingBox2D, GridIdx2D, GridShape, SpatialGridDefinition,
+        TilingSpecification,
+    };
+    use geoengine_datatypes::util::test::TestDefault;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    fn descriptor(size: usize) -> RasterResultDescriptor {
+        RasterResultDescriptor {
+            data_type: geoengine_datatypes::raster::RasterDataType::U8,
+            spatial_reference: geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326(
+            )
+            .into(),
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.).unwrap(),
+                GridShape::new_2d(size, size).bounding_box(),
+            )),
+            bands: RasterBandDescriptors::new_single_band(),
+        }
+    }
+
+    #[derive(Default)]
+    struct Concurrency {
+        started: AtomicUsize,
+        active: AtomicUsize,
+        max: AtomicUsize,
+    }
+
+    /// Counts how many queries are running at the same time.
+    struct CountingLeaf {
+        descriptor: RasterResultDescriptor,
+        concurrency: Arc<Concurrency>,
+    }
+
+    #[async_trait]
+    impl QueryProcessor for CountingLeaf {
+        type Output = RasterTile2D<u8>;
+        type ResultDescription = RasterResultDescriptor;
+        type Selection = BandSelection;
+        type SpatialBounds = GridBoundingBox2D;
+
+        async fn _query<'a>(
+            &'a self,
+            query: RasterQueryRectangle,
+            _ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+            let index = self.concurrency.started.fetch_add(1, Ordering::SeqCst);
+            let active = self.concurrency.active.fetch_add(1, Ordering::SeqCst) + 1;
+            self.concurrency.max.fetch_max(active, Ordering::SeqCst);
+            // staggered, so completions wake the adapter one at a time
+            tokio::time::sleep(Duration::from_millis(2 + index as u64 % 4)).await;
+            self.concurrency.active.fetch_sub(1, Ordering::SeqCst);
+
+            let tile = RasterTile2D::new(
+                query.time_interval(),
+                [0, 0].into(),
+                0,
+                TestDefault::test_default(),
+                GridOrEmpty::new_empty_shape([2, 2].into()),
+                CacheHint::no_cache(),
+            );
+            Ok(futures::stream::once(ready(Ok(tile))).boxed())
+        }
+
+        fn result_descriptor(&self) -> &RasterResultDescriptor {
+            &self.descriptor
+        }
+    }
+
+    #[async_trait]
+    impl RasterQueryProcessor for CountingLeaf {
+        type RasterType = u8;
+
+        async fn _time_query<'a>(
+            &'a self,
+            query: TimeInterval,
+            _ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+            Ok(futures::stream::once(ready(Ok(query))).boxed())
+        }
+    }
+
+    /// One sub-query adapter level over `inner`.
+    struct Nested {
+        inner: BoxRasterQueryProcessor<u8>,
+        descriptor: RasterResultDescriptor,
+        slow_head: bool,
+    }
+
+    #[async_trait]
+    impl QueryProcessor for Nested {
+        type Output = RasterTile2D<u8>;
+        type ResultDescription = RasterResultDescriptor;
+        type Selection = BandSelection;
+        type SpatialBounds = GridBoundingBox2D;
+
+        async fn _query<'a>(
+            &'a self,
+            query: RasterQueryRectangle,
+            ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+            let tiling_strategy = self
+                .descriptor
+                .tiling_grid_definition(ctx.tiling_specification())
+                .generate_data_tiling_strategy();
+            let time_stream = self.inner.time_query(query.time_interval(), ctx).await?;
+            Ok(RasterSubQueryAdapter::new(
+                &self.inner,
+                query,
+                tiling_strategy,
+                ctx,
+                IdentitySubQuery {
+                    slow_head: self.slow_head,
+                    own_tile_only: false,
+                },
+                time_stream,
+            )
+            .box_pin())
+        }
+
+        fn result_descriptor(&self) -> &RasterResultDescriptor {
+            &self.descriptor
+        }
+    }
+
+    #[async_trait]
+    impl RasterQueryProcessor for Nested {
+        type RasterType = u8;
+
+        async fn _time_query<'a>(
+            &'a self,
+            query: TimeInterval,
+            ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+            self.inner.time_query(query, ctx).await
+        }
+    }
+
+    #[derive(Clone)]
+    struct IdentityAccu {
+        tile: TileInformation,
+        time: TimeInterval,
+        pool: Arc<ThreadPool>,
+    }
+
+    #[async_trait]
+    impl FoldTileAccu for IdentityAccu {
+        type RasterType = u8;
+
+        async fn into_tile(self) -> Result<RasterTile2D<u8>> {
+            Ok(RasterTile2D::new_with_tile_info(
+                self.time,
+                self.tile,
+                0,
+                GridOrEmpty::new_empty_shape(self.tile.tile_size_in_pixels),
+                CacheHint::no_cache(),
+            ))
+        }
+
+        fn thread_pool(&self) -> &Arc<ThreadPool> {
+            &self.pool
+        }
+    }
+
+    struct IdentitySubQuery {
+        /// building the accumulator of tile [0, 0], the first output tile, takes 50 ms
+        slow_head: bool,
+        /// each output tile reads only its own pixels instead of the whole extent
+        own_tile_only: bool,
+    }
+
+    fn identity_fold(accu: IdentityAccu, _: RasterTile2D<u8>) -> Ready<Result<IdentityAccu>> {
+        ready(Ok(accu))
+    }
+
+    impl SubQueryTileAggregator<'_, u8> for IdentitySubQuery {
+        type FoldFuture = Ready<Result<IdentityAccu>>;
+        type FoldMethod = fn(IdentityAccu, RasterTile2D<u8>) -> Self::FoldFuture;
+        type TileAccu = IdentityAccu;
+        type TileAccuFuture = BoxFuture<'static, Result<IdentityAccu>>;
+
+        fn new_fold_accu(
+            &self,
+            tile: TileInformation,
+            query_rect: RasterQueryRectangle,
+            pool: &Arc<ThreadPool>,
+        ) -> Self::TileAccuFuture {
+            let delay = self.slow_head && tile.global_tile_position == [0, 0].into();
+            let accu = IdentityAccu {
+                tile,
+                time: query_rect.time_interval(),
+                pool: pool.clone(),
+            };
+            async move {
+                if delay {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                Ok(accu)
+            }
+            .boxed()
+        }
+
+        /// Every output tile reads the whole extent, so each inner level has several
+        /// sub-queries and per-level fanout would multiply.
+        fn tile_query_rectangle(
+            &self,
+            tile: TileInformation,
+            query_rect: RasterQueryRectangle,
+            time: TimeInterval,
+            band_idx: u32,
+        ) -> Result<Option<RasterQueryRectangle>> {
+            Ok(Some(RasterQueryRectangle::new(
+                if self.own_tile_only {
+                    tile.global_pixel_bounds()
+                } else {
+                    query_rect.spatial_bounds()
+                },
+                time,
+                band_idx.into(),
+            )))
+        }
+
+        fn fold_method(&self) -> Self::FoldMethod {
+            identity_fold
+        }
+    }
+
+    /// `depth` nested adapters over a counting leaf on a `size`×`size` raster of 2×2 tiles.
+    fn nested(
+        depth: usize,
+        size: usize,
+        slow_head: bool,
+    ) -> (BoxRasterQueryProcessor<u8>, Arc<Concurrency>) {
+        let concurrency = Arc::new(Concurrency::default());
+        let mut processor: BoxRasterQueryProcessor<u8> = CountingLeaf {
+            descriptor: descriptor(size),
+            concurrency: concurrency.clone(),
+        }
+        .boxed();
+        for _ in 0..depth {
+            processor = Nested {
+                inner: processor,
+                descriptor: descriptor(size),
+                slow_head,
+            }
+            .boxed();
+        }
+        (processor, concurrency)
+    }
+
+    fn query_ctx(parallelism: usize) -> MockQueryContext {
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        query_ctx.subquery_parallelism = SubQueryParallelism::new(parallelism);
+        query_ctx
+    }
+
+    fn query(size: isize) -> RasterQueryRectangle {
+        RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [size - 1, size - 1]).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            BandSelection::first(),
+        )
+    }
+
+    /// Runs `depth` nested adapters over a counting leaf, returning the output tile
+    /// positions and the highest number of leaf queries that ran at once.
+    async fn run_nested(depth: usize, parallelism: usize) -> (Vec<GridIdx2D>, usize) {
+        let (processor, concurrency) = nested(depth, 4, false);
+        let query_ctx = query_ctx(parallelism);
+        let tiles: Vec<_> = processor
+            .raster_query(query(4), &query_ctx)
+            .await
+            .unwrap()
+            .map(|tile| tile.unwrap().tile_position)
+            .collect()
+            .await;
+
+        (tiles, concurrency.max.load(Ordering::SeqCst))
+    }
+
+    #[tokio::test]
+    async fn it_does_not_multiply_fanout_when_nested() {
+        let (sequential, sequential_max) = run_nested(3, 1).await;
+        let (tiles, max) = run_nested(3, 4).await;
+
+        assert_eq!(sequential.len(), 4);
+        assert_eq!(sequential_max, 1, "parallelism 1 must run sequentially");
+        assert_eq!(tiles, sequential);
+        // per-level fanout would run up to 4^3 leaf queries at once
+        assert!(max > 1, "expected concurrent sub-queries, got {max}");
+        assert!(max <= 4, "fanout multiplied across levels: {max}");
+    }
+
+    #[tokio::test]
+    async fn it_bounds_finished_tiles_waiting_behind_a_slow_one() {
+        let (processor, concurrency) = nested(1, 8, true);
+        let query_ctx = query_ctx(3);
+        let mut tiles = processor.raster_query(query(8), &query_ctx).await.unwrap();
+
+        tiles.next().await.unwrap().unwrap();
+
+        // the slow head plus 2 permits; releasing permits on completion instead of on
+        // yield would keep starting sub-queries while the head is still running
+        let started = concurrency.started.load(Ordering::SeqCst);
+        assert!(started > 1, "expected parallel sub-queries, got {started}");
+        assert!(
+            started <= 3,
+            "{started} sub-queries started behind the slow head"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_keeps_full_parallelism_after_the_first_tile() {
+        let (processor, concurrency) = nested(1, 8, false);
+        let query_ctx = query_ctx(3);
+        let mut tiles = processor.raster_query(query(8), &query_ctx).await.unwrap();
+
+        tiles.next().await.unwrap().unwrap();
+        concurrency.max.store(0, Ordering::SeqCst);
+        while let Some(tile) = tiles.next().await {
+            tile.unwrap();
+        }
+
+        // the guaranteed slot is reused once its tile is yielded, so 3 still run at once
+        assert_eq!(concurrency.max.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn it_does_not_deadlock_with_little_parallelism() {
+        let result = tokio::time::timeout(Duration::from_secs(10), run_nested(3, 2)).await;
+        assert_eq!(result.expect("nested adapters deadlocked").0.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn it_does_not_query_the_source_outside_of_its_data_bounds() {
+        let concurrency = Arc::new(Concurrency::default());
+        let source = CountingLeaf {
+            descriptor: descriptor(4),
+            concurrency: concurrency.clone(),
+        };
+        let query_ctx = query_ctx(1);
+        let tiling_strategy = descriptor(8)
+            .tiling_grid_definition(query_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
+        let time_stream = source
+            .time_query(query(8).time_interval(), &query_ctx)
+            .await
+            .unwrap();
+
+        let tiles: Vec<_> = RasterSubQueryAdapter::new(
+            &source,
+            query(8),
             tiling_strategy,
-            ctx,
-            self,
+            &query_ctx,
+            IdentitySubQuery {
+                slow_head: false,
+                own_tile_only: true,
+            },
             time_stream,
         )
+        .map(|tile| tile.unwrap())
+        .collect()
+        .await;
+
+        // 16 tiles of 2×2 pixels, of which the 4 inside the 4×4 source data are queried
+        assert_eq!(tiles.len(), 16);
+        assert_eq!(concurrency.started.load(Ordering::SeqCst), 4);
+        // the others are empty and cacheable, unlike the source's `no_cache` tiles
+        for tile in &tiles {
+            let outside = tile.tile_position.x() >= 2 || tile.tile_position.y() >= 2;
+            assert_eq!(
+                tile.cache_hint.may_cache(),
+                outside,
+                "{:?}",
+                tile.tile_position
+            );
+            assert!(tile.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn it_does_not_hang_when_the_time_stream_is_pending() {
+        let source = CountingLeaf {
+            descriptor: descriptor(4),
+            concurrency: Arc::default(),
+        };
+        let query_ctx = query_ctx(1);
+        let tiling_strategy = descriptor(4)
+            .tiling_grid_definition(query_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
+        // pending once, like a time stream that waits on I/O
+        let time_stream = futures::stream::once(async {
+            tokio::task::yield_now().await;
+            Ok(query(4).time_interval())
+        });
+
+        let tiles = RasterSubQueryAdapter::new(
+            &source,
+            query(4),
+            tiling_strategy,
+            &query_ctx,
+            IdentitySubQuery {
+                slow_head: false,
+                own_tile_only: true,
+            },
+            time_stream,
+        )
+        .collect::<Vec<_>>();
+
+        let tiles = tokio::time::timeout(Duration::from_secs(10), tiles)
+            .await
+            .expect("the adapter hung on a pending time stream");
+        assert_eq!(tiles.len(), 4);
     }
 }

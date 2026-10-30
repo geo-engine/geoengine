@@ -1,6 +1,9 @@
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     task::{Context, Poll},
 };
 
@@ -24,6 +27,74 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
+
+/// The parallelism available to the sub-queries of a query.
+///
+/// An adapter asks for a [`SubQueryHandout`] before each sub-query:
+/// - its first running sub-query is always handed out ([`SubQueryHandout::Guaranteed`]),
+///   which guarantees progress and avoids deadlocks;
+/// - every further one ([`SubQueryHandout::Parallel`]) takes one from the query's counter
+///   and is refused instead of waiting when none is left.
+///
+/// The counter is shared by all adapters of the query, so nested adapters add up instead of
+/// multiplying their fanout. It is a lock-free atomic, no semaphore.
+pub struct SubQueryParallelism {
+    available: Arc<AtomicUsize>,
+}
+
+/// Permission to run one more sub-query, held until its tile is yielded.
+pub enum SubQueryHandout {
+    /// The first running sub-query of an adapter, always handed out.
+    Guaranteed,
+    /// A sub-query running in parallel to the guaranteed one.
+    Parallel(ParallelSubQueryPermit),
+}
+
+/// Gives its sub-query back to the query's counter when dropped.
+pub struct ParallelSubQueryPermit(Arc<AtomicUsize>);
+
+impl Drop for ParallelSubQueryPermit {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+impl SubQueryParallelism {
+    /// Up to `available_per_query` sub-queries of the query run at once, counting the
+    /// guaranteed one, however deep adapters nest.
+    pub fn new(available_per_query: usize) -> Self {
+        Self {
+            // the guaranteed sub-query takes nothing, so the counter holds the rest
+            available: Arc::new(AtomicUsize::new(available_per_query.saturating_sub(1))),
+        }
+    }
+
+    /// The handout for an adapter's next sub-query; the guaranteed one whenever the adapter's
+    /// guaranteed sub-query is not in flight, else a parallel one or `None` when all
+    /// parallelism is in use.
+    ///
+    /// Never waits: waiting deadlocks when outer sub-queries hold all of the parallelism.
+    pub fn handout(&self, guaranteed_in_flight: bool) -> Option<SubQueryHandout> {
+        if !guaranteed_in_flight {
+            return Some(SubQueryHandout::Guaranteed);
+        }
+        // Relaxed: the counter guards no other data, it only bounds the number of sub-queries
+        self.available
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+            .ok()?;
+        Some(SubQueryHandout::Parallel(ParallelSubQueryPermit(
+            self.available.clone(),
+        )))
+    }
+}
+
+/// Sequential, the behavior before sub-queries ran in parallel. Servers read
+/// `[query_context] available_subquery_parallelism_per_query` instead.
+impl TestDefault for SubQueryParallelism {
+    fn test_default() -> Self {
+        Self::new(1)
+    }
+}
 
 impl ChunkByteSize {
     pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
@@ -61,6 +132,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
+    fn subquery_parallelism(&self) -> &SubQueryParallelism;
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 
@@ -192,6 +264,7 @@ pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
+    pub subquery_parallelism: SubQueryParallelism,
 
     pub cache: Option<Arc<SharedCache>>,
     pub quota_tracking: Option<QuotaTracking>,
@@ -220,6 +293,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -248,6 +322,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache,
             quota_checker,
             quota_tracking,
@@ -274,6 +349,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             gdal_process_pool,
             cache: None,
             quota_checker: None,
@@ -303,6 +379,10 @@ impl QueryContext for MockQueryContext {
 
     fn default_cache_ttl(&self) -> CacheTtlSeconds {
         self.default_cache_ttl
+    }
+
+    fn subquery_parallelism(&self) -> &SubQueryParallelism {
+        &self.subquery_parallelism
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
@@ -404,5 +484,32 @@ mod tests {
             Some(Err(error::Error::QueryCanceled))
         ));
         assert!(stream.next().await.is_none());
+    }
+
+    fn is_parallel(handout: Option<&SubQueryHandout>) -> bool {
+        matches!(handout, Some(SubQueryHandout::Parallel(_)))
+    }
+
+    #[test]
+    fn it_always_hands_out_the_guaranteed_subquery() {
+        for parallelism in [SubQueryParallelism::new(0), SubQueryParallelism::new(1)] {
+            assert!(matches!(
+                parallelism.handout(false),
+                Some(SubQueryHandout::Guaranteed)
+            ));
+            assert!(parallelism.handout(true).is_none());
+        }
+    }
+
+    #[test]
+    fn it_hands_out_up_to_the_available_parallelism() {
+        let parallelism = SubQueryParallelism::new(3);
+        let held = [parallelism.handout(true), parallelism.handout(true)];
+        assert!(held.iter().all(|h| is_parallel(h.as_ref())));
+        // the guaranteed one plus 2 parallel ones = 3
+        assert!(parallelism.handout(true).is_none());
+
+        drop(held);
+        assert!(is_parallel(parallelism.handout(true).as_ref()));
     }
 }

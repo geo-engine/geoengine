@@ -24,6 +24,7 @@ use geoengine_datatypes::{
     machine_learning::MlModelName,
     primitives::{CacheTtlSeconds, RasterQueryRectangle, VectorQueryRectangle},
     raster::TilingSpecification,
+    util::test::TestDefault,
 };
 use geoengine_operators::{
     cache::{
@@ -34,7 +35,8 @@ use geoengine_operators::{
     engine::{
         ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-        QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+        QueryAbortTrigger, QueryContext, RasterResultDescriptor, SubQueryParallelism,
+        VectorResultDescriptor,
     },
     machine_learning::{MlModelLoadingInfo, onnx_util::OrtEnvironment},
     meta::{
@@ -142,6 +144,7 @@ pub struct QueryContextImpl {
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     default_cache_ttl: CacheTtlSeconds,
+    subquery_parallelism: SubQueryParallelism,
     cache: Option<Arc<SharedCache>>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     quota_tracking: Option<QuotaTracking>,
@@ -167,6 +170,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache: None,
             new_raster_cache: None,
             quota_tracking: None,
@@ -185,6 +189,7 @@ impl QueryContextImpl {
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
         default_cache_ttl: CacheTtlSeconds,
+        subquery_parallelism: SubQueryParallelism,
         cache: Option<Arc<SharedCache>>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
@@ -197,6 +202,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
+            subquery_parallelism,
             cache,
             new_raster_cache,
             quota_checker,
@@ -221,6 +227,10 @@ impl QueryContext for QueryContextImpl {
 
     fn default_cache_ttl(&self) -> CacheTtlSeconds {
         self.default_cache_ttl
+    }
+
+    fn subquery_parallelism(&self) -> &SubQueryParallelism {
+        &self.subquery_parallelism
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
