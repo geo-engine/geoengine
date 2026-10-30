@@ -48,6 +48,8 @@ jobs:
           && sudo apt install gh -y
 
       - name: Download previous benchmark data
+        # same directory as the benchmark actions, which ignore `defaults.run`
+        working-directory: .
         run: |
           # Add the workspace to safe.directory to bypass the ownership check
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -64,6 +66,7 @@ jobs:
 
       - name: Check that benchmark data is available
         if: github.event_name == 'pull_request'
+        working-directory: .
         run: |
           if [ ! -f "${{ env.BENCH_FILE_PATH }}" ]; then
             echo "No previous benchmark data found at ${{ env.BENCH_FILE_PATH }}. Please ensure that a benchmark run has been completed on the main branch and that the results have been uploaded as an artifact."
