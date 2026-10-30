@@ -714,6 +714,7 @@ impl GdalHandling {
             dimensions: read_advise.read_window_bounds,
             properties,
             data_variant: result_gdal_raster,
+            block_size: Some(rasterband.block_size()),
         })
     }
 }
@@ -1032,6 +1033,8 @@ mod tests {
             Ok(r) => r,
             Err(e) => panic!("Error receiving from IPC process: {e:?}"),
         };
+
+        assert_eq!(payload.block_size, Some((256, 256)), "the band's block size");
 
         let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
 
