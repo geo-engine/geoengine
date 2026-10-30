@@ -155,6 +155,10 @@ impl BlockRange {
         Self::of_window(&read_advise.gdal_read_widow, block_size)
     }
 
+    fn len(&self) -> usize {
+        (self.max.0 - self.min.0 + 1) * (self.max.1 - self.min.1 + 1)
+    }
+
     fn contains(&self, (x, y): (usize, usize)) -> bool {
         (self.min.0..=self.max.0).contains(&x) && (self.min.1..=self.max.1).contains(&y)
     }
@@ -232,11 +236,12 @@ impl WorkerAffinity {
         affinity
     }
 
+    fn blocks_of(&self, read_advise: &GdalReadAdvise) -> Option<BlockRange> {
+        BlockRange::of_read(read_advise, self.block_size?)
+    }
+
     fn record_blocks(&mut self, read_advise: &GdalReadAdvise) {
-        let Some(range) = self
-            .block_size
-            .and_then(|block_size| BlockRange::of_read(read_advise, block_size))
-        else {
+        let Some(range) = self.blocks_of(read_advise) else {
             return;
         };
         for block in range.iter() {
@@ -252,13 +257,24 @@ impl WorkerAffinity {
 
     /// How many of the read's blocks of `self.band` the worker holds.
     fn shared_blocks(&self, read_advise: &GdalReadAdvise) -> usize {
-        let Some(range) = self
-            .block_size
-            .and_then(|block_size| BlockRange::of_read(read_advise, block_size))
-        else {
-            return 0;
-        };
-        self.blocks.iter().filter(|&&b| range.contains(b)).count()
+        self.blocks_of(read_advise).map_or(0, |range| {
+            self.blocks.iter().filter(|&&b| range.contains(b)).count()
+        })
+    }
+
+    /// The read's blocks the worker holds and does not hold, if it knows their block size.
+    fn block_hits_and_misses(
+        &self,
+        dataset_hash: u64,
+        band: usize,
+        read_advise: &GdalReadAdvise,
+    ) -> Option<(u64, u64)> {
+        if self.dataset_hash != dataset_hash || self.band != band {
+            return None;
+        }
+        let total = self.blocks_of(read_advise)?.len();
+        let hits = self.shared_blocks(read_advise);
+        Some((hits as u64, (total - hits) as u64))
     }
 
     /// `now` is passed down to avoid a clock lookup per worker inside the dispatch loop.
@@ -332,6 +348,24 @@ struct BrokerStats {
     evictions: u64,
     cancelled_dropped: u64,
     max_dataset_queue_len: usize,
+    /// Blocks of dispatched reads that the worker held or did not hold, counted only where the
+    /// worker knew the block size, i.e. had read the dataset and band before.
+    block_hits: u64,
+    block_misses: u64,
+    /// Reads held back for a busy worker holding their blocks, how many of them were dispatched
+    /// only after the wait expired, and their total wait.
+    busy_waits: u64,
+    busy_wait_timeouts: u64,
+    busy_wait: Duration,
+    per_worker: FastHashMap<usize, WorkerStats>,
+}
+
+#[derive(Debug, Default)]
+struct WorkerStats {
+    block_hits: u64,
+    block_misses: u64,
+    busy_waits: u64,
+    busy_wait_ms: u128,
 }
 
 struct DatasetSlot {
@@ -949,6 +983,16 @@ impl BrokerState {
             evictions = stats.evictions,
             cancelled_dropped = stats.cancelled_dropped,
             max_dataset_queue_len = stats.max_dataset_queue_len,
+            block_hits = stats.block_hits,
+            block_misses = stats.block_misses,
+            busy_waits = stats.busy_waits,
+            busy_wait_timeouts = stats.busy_wait_timeouts,
+            busy_wait_ms = stats.busy_wait.as_millis(),
+            per_worker = ?{
+                let mut per_worker: Vec<_> = stats.per_worker.into_iter().collect();
+                per_worker.sort_unstable_by_key(|(worker_id, _)| *worker_id);
+                per_worker
+            },
             "GDAL process pool statistics"
         );
     }
@@ -1214,6 +1258,30 @@ impl BrokerState {
                 }
             };
             self.stats.dispatched += 1;
+
+            let worker_stats = self.stats.per_worker.entry(worker_id).or_default();
+            if let Some((hits, misses)) = worker.affinity.as_ref().and_then(|a| {
+                a.block_hits_and_misses(
+                    best_dataset_hash,
+                    req.request.0.dataset_params.rasterband_channel,
+                    &req.request.0.read_advise,
+                )
+            }) {
+                self.stats.block_hits += hits;
+                self.stats.block_misses += misses;
+                worker_stats.block_hits += hits;
+                worker_stats.block_misses += misses;
+            }
+            if let Some(held_since) = req.held_since.get() {
+                let waited = now.saturating_duration_since(held_since);
+                self.stats.busy_waits += 1;
+                self.stats.busy_wait += waited;
+                if waited >= self.busy_holder_wait {
+                    self.stats.busy_wait_timeouts += 1;
+                }
+                worker_stats.busy_waits += 1;
+                worker_stats.busy_wait_ms += waited.as_millis();
+            }
 
             // The worker holds the requested dataset once the read starts, not its previous one.
             // Recorded now, so that a busy worker switching datasets does not count as a holder of
@@ -1702,7 +1770,7 @@ mod tests {
             Some(block_range((1, 0), (1, 0)))
         );
         assert_eq!(
-            blocks_of(784, 784, 512, 512).unwrap().iter().count(),
+            blocks_of(784, 784, 512, 512).unwrap().len(),
             4,
             "a 512 px tile can touch 4 blocks"
         );
@@ -1878,6 +1946,14 @@ mod tests {
 
         rx1.try_recv()
             .expect("the worker holding all four blocks should read them");
+        assert_eq!((state.stats.block_hits, state.stats.block_misses), (4, 0));
+
+        // worker 0 holds one of the four blocks
+        let (mut req, _resp) = make_request(42, 1, window([784, 784], [1295, 1295]));
+        req.request.0.read_advise = read_across_blocks();
+        state.enqueue_request(req);
+        state.try_dispatch();
+        assert_eq!((state.stats.block_hits, state.stats.block_misses), (5, 3));
     }
 
     // --- waiting for a busy holder ---
@@ -1936,6 +2012,11 @@ mod tests {
         rx0.try_recv()
             .expect("the holder reads the blocks once it is idle");
         assert!(state.next_wake.is_none());
+        assert_eq!(state.stats.busy_waits, 1);
+        assert_eq!(state.stats.busy_wait_timeouts, 0);
+        assert_eq!(state.stats.block_hits, 4);
+        assert_eq!(state.stats.block_misses, 0);
+        assert_eq!(state.stats.per_worker[&0].busy_waits, 1);
     }
 
     #[test]
@@ -1954,6 +2035,14 @@ mod tests {
         rx1.try_recv()
             .expect("the idle worker reads once the wait expired");
         assert!(state.next_wake.is_none());
+        assert_eq!(state.stats.busy_waits, 1);
+        assert_eq!(state.stats.busy_wait_timeouts, 1);
+        assert!(state.stats.busy_wait >= Duration::from_millis(20));
+        assert_eq!(
+            (state.stats.block_hits, state.stats.block_misses),
+            (0, 0),
+            "worker 1 has not read the dataset, so its block size is unknown"
+        );
     }
 
     #[test]
