@@ -1064,7 +1064,11 @@ mod tests {
         };
         let payload = result.unwrap();
 
-        assert_eq!(payload.block_size, Some((256, 256)), "the band's block size");
+        assert_eq!(
+            payload.block_size,
+            Some((256, 256)),
+            "the band's block size"
+        );
 
         let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
 
