@@ -475,8 +475,8 @@ impl GdalProcessPool {
                         .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
                         .and_then(|response| match response {
                             WorkerResponse::CachesCleared => Ok(()),
-                            WorkerResponse::Raster(_) => Err(IpcProcessError::IpcOther {
-                                msg: "Unexpected worker response: expected CachesCleared, received Raster"
+                            WorkerResponse::ReadResult(_) => Err(IpcProcessError::IpcOther {
+                                msg: "Unexpected worker response: expected CachesCleared, received ReadResult"
                                     .to_owned(),
                             }
                             .into()),
@@ -515,9 +515,9 @@ impl GdalProcessPool {
                 .map_err(GdalProcessPoolError::from)
                 .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from))
                 .and_then(|response| match response {
-                    WorkerResponse::Raster(result) => Ok(result),
+                    WorkerResponse::ReadResult(result) => Ok(result),
                     WorkerResponse::CachesCleared => Err(IpcProcessError::IpcOther {
-                        msg: "Unexpected worker response: expected Raster, received CachesCleared"
+                        msg: "Unexpected worker response: expected ReadResult, received CachesCleared"
                             .to_owned(),
                     }
                     .into()),
@@ -1397,7 +1397,9 @@ mod tests {
             let _request_receiver = (failure != "send").then_some(request_receiver);
             if failure == "unexpected response" {
                 response_sender
-                    .send(WorkerResponse::Raster(Err(IpcProcessError::Disconnected)))
+                    .send(WorkerResponse::ReadResult(Err(
+                        IpcProcessError::Disconnected,
+                    )))
                     .unwrap();
             }
             drop(response_sender);
@@ -1429,7 +1431,7 @@ mod tests {
                     result,
                     Err(GdalProcessPoolError::IpcProcessError {
                         source: IpcProcessError::IpcOther { msg },
-                    }) if msg.contains("expected CachesCleared") && msg.contains("received Raster")
+                    }) if msg.contains("expected CachesCleared") && msg.contains("received ReadResult")
                 ));
             }
             tokio::time::timeout(Duration::from_secs(10), completion)

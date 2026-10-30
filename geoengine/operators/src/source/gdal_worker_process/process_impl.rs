@@ -1034,8 +1034,8 @@ mod tests {
             .inspect_err(|e| panic!("IPC receive: {e:?}"))
             .unwrap();
 
-        let WorkerResponse::Raster(result) = rx_result else {
-            panic!("Expected raster response");
+        let WorkerResponse::ReadResult(result) = rx_result else {
+            panic!("Expected read result");
         };
         let payload = result.unwrap();
 

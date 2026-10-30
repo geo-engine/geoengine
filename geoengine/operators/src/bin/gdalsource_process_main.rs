@@ -351,7 +351,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
 
     let byte_payload = gp.and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into));
     // Propagate channel send errors directly up out of the handler
-    sender.send(WorkerResponse::Raster(byte_payload))?;
+    sender.send(WorkerResponse::ReadResult(byte_payload))?;
 
     Ok(())
 }

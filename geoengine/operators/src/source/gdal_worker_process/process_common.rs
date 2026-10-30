@@ -86,10 +86,10 @@ pub enum WorkerRequest {
     ClearCaches,
 }
 
-/// Acknowledgement or raster result returned by a GDAL worker.
+/// Read result or acknowledgement returned by a GDAL worker.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum WorkerResponse {
-    Raster(IpcProcessRasterResult),
+    ReadResult(IpcProcessRasterResult),
     CachesCleared,
 }
 
