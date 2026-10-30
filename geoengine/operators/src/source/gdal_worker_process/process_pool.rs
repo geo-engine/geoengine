@@ -26,6 +26,9 @@ use super::{
 /// Capacity for the broker incoming request multi-producer mpsc channel.
 const BROKER_QUEUE_CAPACITY: usize = 8192;
 
+/// Bounds the entire clear operation, including broker submission and worker acknowledgements.
+const CLEAR_CACHES_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Maximum number of commands to read reactively from the mpsc channel per loop iteration.
 /// Prevents an incoming flood of requests from starving the dispatch execution logic.
 const BATCH_RECEIVE_LIMIT: usize = 256;
@@ -83,6 +86,9 @@ pub enum GdalProcessPoolError {
     },
 
     WorkerPanic,
+
+    #[snafu(display("Timed out waiting for GDAL worker caches to be cleared"))]
+    CacheClearTimeout,
 }
 
 impl From<IpcProcessError> for GdalProcessPoolError {
@@ -224,8 +230,10 @@ struct ReadResult {
     companion_span: Option<tracing::Span>,
 }
 
+type CacheClearAcknowledgement = oneshot::Receiver<Result<(), GdalProcessPoolError>>;
+
 enum BrokerCommand {
-    ClearCaches(oneshot::Sender<Result<(), GdalProcessPoolError>>),
+    ClearCaches(oneshot::Sender<Vec<CacheClearAcknowledgement>>),
     Read(Box<QueuedRequest>),
     ReturnWorker {
         worker_id: usize,
@@ -258,14 +266,25 @@ pub struct GdalProcessPool {
 
 impl GdalProcessPool {
     /// Ask every worker to close its dataset and clear remote file caches.
-    /// Returns after every worker acknowledges clearance. Concurrent queries may refill caches.
+    /// Waits for every worker acknowledgement, even if another worker fails.
+    /// `CLEAR_CACHES_TIMEOUT` bounds the entire operation, including broker submission and response.
+    /// Queued clears may still run after a timeout, and concurrent queries may refill caches.
     pub async fn clear_caches(&self) -> Result<(), GdalProcessPoolError> {
-        let (tx, rx) = oneshot::channel();
-        self.broker_tx
-            .send(BrokerCommand::ClearCaches(tx))
-            .await
-            .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
-        rx.await.map_err(|_| GdalProcessPoolError::WorkerPanic)?
+        tokio::time::timeout(CLEAR_CACHES_TIMEOUT, async {
+            let (tx, rx) = oneshot::channel();
+            self.broker_tx
+                .send(BrokerCommand::ClearCaches(tx))
+                .await
+                .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+            let acknowledgements = rx.await.map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+            // Await all workers before reporting an error from any of them.
+            let results = futures::future::join_all(acknowledgements).await;
+            results
+                .into_iter()
+                .try_for_each(|ack| ack.unwrap_or(Err(GdalProcessPoolError::WorkerPanic)))
+        })
+        .await
+        .map_err(|_| GdalProcessPoolError::CacheClearTimeout)?
     }
 
     const STRATEGY: SchedulingStrategy = SchedulingStrategy::GlobalMatrix;
@@ -533,21 +552,12 @@ impl GdalProcessPool {
                         for worker in &mut state.workers {
                             let (tx, rx) = oneshot::channel();
                             // Each companion queues this after its current read and before later reads.
+                            // A failed send drops tx; retain rx so the caller reports the failure.
                             let _ = worker.job_tx.send(WorkerCommand::ClearCaches(tx));
                             worker.affinity = None;
                             acknowledgements.push(rx);
                         }
-                        tokio::spawn(async move {
-                            let mut result = Ok(());
-                            for ack in acknowledgements {
-                                if let Err(error) =
-                                    ack.await.unwrap_or(Err(GdalProcessPoolError::WorkerPanic))
-                                {
-                                    result = Err(error);
-                                }
-                            }
-                            let _ = reply.send(result);
-                        });
+                        let _ = reply.send(acknowledgements);
                     }
                     BrokerCommand::Read(req) => {
                         state.enqueue_request(req);
@@ -1188,6 +1198,19 @@ mod tests {
         (wp, job_rx)
     }
 
+    fn pool_with_broker_channel(
+        capacity: usize,
+    ) -> (GdalProcessPool, mpsc::Receiver<BrokerCommand>) {
+        let (broker_tx, broker_rx) = mpsc::channel(capacity);
+        (
+            GdalProcessPool {
+                broker_tx,
+                in_flight_tiles: Mutex::new(FastHashMap::default()),
+            },
+            broker_rx,
+        )
+    }
+
     fn make_params(file_path: &str, band: usize) -> GdalDatasetParameters {
         GdalDatasetParameters {
             file_path: file_path.into(),
@@ -1262,7 +1285,8 @@ mod tests {
     async fn it_sends_clear_to_every_worker_and_waits_for_acknowledgements() {
         let (worker0, mut jobs0) = dummy_worker(0);
         let (worker1, mut jobs1) = dummy_worker(1);
-        let (tx, rx) = mpsc::channel(16);
+        let (pool, rx) = pool_with_broker_channel(16);
+        let tx = pool.broker_tx.clone();
         let broker = tokio::spawn(GdalProcessPool::broker_loop(
             rx,
             vec![worker0, worker1],
@@ -1274,8 +1298,9 @@ mod tests {
         let (request, _response) = make_request(0, 1, window([0, 0], [255, 255]));
         tx.send(BrokerCommand::Read(request)).await.unwrap();
         let _active_read = read_job(jobs0.recv().await.unwrap());
-        let (reply, mut cleared) = oneshot::channel();
-        tx.send(BrokerCommand::ClearCaches(reply)).await.unwrap();
+        let cleared = pool.clear_caches();
+        tokio::pin!(cleared);
+        assert!(futures::poll!(&mut cleared).is_pending());
         let WorkerCommand::ClearCaches(ack0) = jobs0.recv().await.unwrap() else {
             panic!("Expected clearance after active read");
         };
@@ -1283,12 +1308,9 @@ mod tests {
             panic!("Expected clearance for idle worker");
         };
         ack0.send(Ok(())).unwrap();
-        assert!(matches!(
-            cleared.try_recv(),
-            Err(oneshot::error::TryRecvError::Empty)
-        ));
+        assert!(futures::poll!(&mut cleared).is_pending());
         ack1.send(Ok(())).unwrap();
-        cleared.await.unwrap().unwrap();
+        cleared.await.unwrap();
         // Both existing companion channels remain open; no workers were replaced.
         assert!(matches!(
             jobs0.try_recv(),
@@ -1299,6 +1321,124 @@ mod tests {
             Err(mpsc::error::TryRecvError::Empty)
         ));
         broker.abort();
+    }
+
+    #[tokio::test]
+    async fn it_waits_for_all_clear_acknowledgements_after_a_worker_fails() {
+        for disconnect in [false, true] {
+            let (pool, mut broker_rx) = pool_with_broker_channel(1);
+            let cleared = pool.clear_caches();
+            tokio::pin!(cleared);
+            assert!(futures::poll!(&mut cleared).is_pending());
+            let BrokerCommand::ClearCaches(reply) = broker_rx.recv().await.unwrap() else {
+                panic!("Expected clearance request");
+            };
+            let (ack0, rx0) = oneshot::channel();
+            let (ack1, rx1) = oneshot::channel();
+            reply.send(vec![rx0, rx1]).unwrap();
+            if disconnect {
+                drop(ack0);
+            } else {
+                ack0.send(Err(GdalProcessPoolError::IpcError {
+                    error_str: "clear failed".to_owned(),
+                }))
+                .unwrap();
+            }
+            assert!(futures::poll!(&mut cleared).is_pending());
+            ack1.send(Ok(())).unwrap();
+            let error = cleared.await.unwrap_err();
+            if disconnect {
+                assert!(matches!(error, GdalProcessPoolError::WorkerPanic));
+            } else {
+                assert!(matches!(
+                    error,
+                    GdalProcessPoolError::IpcError { error_str } if error_str == "clear failed"
+                ));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn it_reports_failed_clear_submission_to_a_worker_after_waiting_for_other_workers() {
+        let (worker0, jobs0) = dummy_worker(0);
+        let (worker1, mut jobs1) = dummy_worker(1);
+        drop(jobs0);
+        let (pool, rx) = pool_with_broker_channel(1);
+        let broker = tokio::spawn(GdalProcessPool::broker_loop(
+            rx,
+            vec![worker0, worker1],
+            2,
+            2,
+            pool.broker_tx.clone(),
+            WorkerConfig::default(),
+        ));
+        let cleared = pool.clear_caches();
+        tokio::pin!(cleared);
+        assert!(futures::poll!(&mut cleared).is_pending());
+        let WorkerCommand::ClearCaches(ack1) = jobs1.recv().await.unwrap() else {
+            panic!("Expected clearance for surviving worker");
+        };
+        assert!(futures::poll!(&mut cleared).is_pending());
+        ack1.send(Ok(())).unwrap();
+        assert!(matches!(
+            cleared.await,
+            Err(GdalProcessPoolError::WorkerPanic)
+        ));
+        broker.abort();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_times_out_clearance_when_the_broker_queue_is_full() {
+        let (pool, _broker_rx) = pool_with_broker_channel(1);
+        let (reply, _response) = oneshot::channel();
+        pool.broker_tx
+            .send(BrokerCommand::ClearCaches(reply))
+            .await
+            .unwrap();
+        let cleared = pool.clear_caches();
+        tokio::pin!(cleared);
+        assert!(futures::poll!(&mut cleared).is_pending());
+        tokio::time::advance(CLEAR_CACHES_TIMEOUT).await;
+        assert!(matches!(
+            cleared.await,
+            Err(GdalProcessPoolError::CacheClearTimeout)
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_times_out_clearance_waiting_for_the_broker_response() {
+        let (pool, mut broker_rx) = pool_with_broker_channel(1);
+        let cleared = pool.clear_caches();
+        tokio::pin!(cleared);
+        assert!(futures::poll!(&mut cleared).is_pending());
+        let _command = broker_rx.recv().await.unwrap();
+        tokio::time::advance(CLEAR_CACHES_TIMEOUT).await;
+        assert!(matches!(
+            cleared.await,
+            Err(GdalProcessPoolError::CacheClearTimeout)
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_times_out_clearance_waiting_for_a_worker_acknowledgement() {
+        let (pool, mut broker_rx) = pool_with_broker_channel(1);
+        let cleared = pool.clear_caches();
+        tokio::pin!(cleared);
+        assert!(futures::poll!(&mut cleared).is_pending());
+        let BrokerCommand::ClearCaches(reply) = broker_rx.recv().await.unwrap() else {
+            panic!("Expected clearance request");
+        };
+        let (ack, rx) = oneshot::channel();
+        // Earlier stages consume part of the same deadline; the worker gets no new timeout.
+        tokio::time::advance(CLEAR_CACHES_TIMEOUT / 2).await;
+        reply.send(vec![rx]).unwrap();
+        assert!(futures::poll!(&mut cleared).is_pending());
+        tokio::time::advance(CLEAR_CACHES_TIMEOUT / 2).await;
+        assert!(matches!(
+            cleared.await,
+            Err(GdalProcessPoolError::CacheClearTimeout)
+        ));
+        assert!(ack.send(Ok(())).is_err());
     }
 
     #[tokio::test]
