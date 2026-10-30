@@ -112,8 +112,15 @@ layer_defs_path = "./test_data/layer_defs"
 layer_collection_defs_path = "./test_data/layer_collection_defs"
 
 [gdal_process_pool]
+# GDAL worker processes. Each keeps its last dataset open, so idle workers act as a cache: with
+# many files (e.g. one per scene and band), more processes reuse more open datasets, at the cost
+# of memory per process.
 number_of_processes = 32
+# Max. concurrent GDAL reads. More is not necessarily faster: parallel reads of one file spread
+# its cache over more processes, and fewer active reads leave more idle workers as cache.
 max_active_processes = 16
+# Max. concurrent reads of a single dataset. Keeps one file from occupying all workers and
+# evicting the other datasets they hold open.
 max_dataset_processes = 8
 
 [gdal]
@@ -200,16 +207,30 @@ endpoint = "http://127.0.0.1:4317"
 #
 # Two categories:
 # 1. Frozen at first /vsicurl/ use (changing these requires restarting the worker process):
-#    - VSI_CACHE, VSI_CACHE_SIZE
 #    - CPL_VSIL_CURL_CHUNK_SIZE
-# 2. Read per dataset open (can also be overridden per request via gdal_config_options):
+#    - CPL_VSIL_CURL_CACHE_SIZE
+# 2. Read per dataset open or request (can also be overridden per dataset via its
+#    gdal_config_options, which apply while the dataset is open, i.e. also to its reads):
+#    - VSI_CACHE, VSI_CACHE_SIZE
 #    - GDAL_DISABLE_READDIR_ON_OPEN
 #    - CPL_VSIL_CURL_ALLOWED_EXTENSIONS
+#    - GDAL_HTTP_LOW_SPEED_LIMIT, GDAL_HTTP_LOW_SPEED_TIME, GDAL_HTTP_CONNECTTIMEOUT
+#
+# Every worker process has its own caches, so the GDAL memory bound of the pool is about
+# number_of_processes * (GDAL_CACHEMAX + VSI_CACHE_SIZE + CPL_VSIL_CURL_CACHE_SIZE (default 16mb)).
 GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
 CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
 CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
 VSI_CACHE = "TRUE"
-VSI_CACHE_SIZE = "67108864" # 64mb per worker! TODO: need to tune this!
+VSI_CACHE_SIZE = "67108864" # 64mb per open file; a worker keeps one file open
+# block cache in mb per worker; without it, GDAL uses 5% of the RAM per worker process
+GDAL_CACHEMAX = "256"
+# Abort HTTP transfers that stall (below LIMIT bytes/s for TIME seconds), otherwise a hanging
+# remote blocks a worker forever. Unlike a total timeout (GDAL_HTTP_TIMEOUT), this does not abort
+# slow transfers that still make progress.
+GDAL_HTTP_LOW_SPEED_LIMIT = "1024"
+GDAL_HTTP_LOW_SPEED_TIME = "30"
+GDAL_HTTP_CONNECTTIMEOUT = "10"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
