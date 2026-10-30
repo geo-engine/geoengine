@@ -445,20 +445,17 @@ where
                 source: Box::new(Error::OperationRequiresAdminPrivilige),
             });
         }
-        self.gdal_process_pool
-            .clear_caches()
-            .await
-            .map_err(|source| Error::Operator {
-                source: geoengine_operators::error::Error::QueryingProcessorFailed {
-                    source: Box::new(source),
-                },
-            })?;
+        let gdal_result = self.gdal_process_pool.clear_caches().await;
         self.provider_registry.clear_caches().await;
         self.tile_cache.clear().await;
         if let Some(cache) = &self.new_raster_cache {
             cache.clear().await;
         }
-        Ok(())
+        gdal_result.map_err(|source| Error::Operator {
+            source: geoengine_operators::error::Error::QueryingProcessorFailed {
+                source: Box::new(source),
+            },
+        })
     }
 }
 
@@ -723,6 +720,91 @@ mod tests {
     use openidconnect::SubjectIdentifier;
     use serde_json::json;
     use std::str::FromStr;
+
+    #[ge_context::test]
+    async fn it_clears_operator_cache_even_if_gdal_clearance_fails(
+        mut app_ctx: PostgresContext<NoTls>,
+    ) {
+        use geoengine_datatypes::{
+            primitives::{BandSelection, CacheHint},
+            raster::{Grid2D, RasterTile2D},
+        };
+        use geoengine_operators::{
+            cache::{error::CacheError, shared_cache::AsyncCache},
+            engine::CanonicOperatorName,
+            source::gdal_worker_process::{GdalProcessPoolError, WorkerConfig},
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let cache = app_ctx.tile_cache.clone();
+        let operator = CanonicOperatorName::new(&"clear_failure_regression").unwrap();
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+            TimeInterval::default(),
+            BandSelection::first(),
+        );
+        let query_id =
+            <SharedCache as AsyncCache<RasterTile2D<u8>>>::insert_query(&cache, &operator, &query)
+                .await
+                .unwrap();
+        cache
+            .insert_query_element(
+                &operator,
+                &query_id,
+                RasterTile2D::new(
+                    TimeInterval::default(),
+                    [0, 0].into(),
+                    0,
+                    GeoTransform::test_default(),
+                    Grid2D::new_filled([2, 2].into(), 7_u8).into(),
+                    CacheHint::max_duration(),
+                ),
+            )
+            .await
+            .unwrap();
+        <SharedCache as AsyncCache<RasterTile2D<u8>>>::finish_query(&cache, &operator, &query_id)
+            .await
+            .unwrap();
+        assert!(
+            <SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(&cache, &operator, &query)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // Dropping this runtime closes the broker channel without starting any workers.
+        app_ctx.gdal_process_pool = tokio::task::spawn_blocking(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            GdalProcessPool::new_with_tokio_handle(
+                runtime.handle(),
+                0,
+                0,
+                0,
+                WorkerConfig::default(),
+            )
+        })
+        .await
+        .unwrap();
+
+        let error = app_ctx.clear_caches(session).await.unwrap_err();
+        let Error::Operator {
+            source: geoengine_operators::error::Error::QueryingProcessorFailed { source },
+        } = error
+        else {
+            panic!("Expected the GDAL clearance error");
+        };
+        assert!(matches!(
+            source.downcast_ref::<GdalProcessPoolError>(),
+            Some(GdalProcessPoolError::WorkerPanic)
+        ));
+        assert!(matches!(
+            <SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(&cache, &operator, &query)
+                .await,
+            Ok(None) | Err(CacheError::OperatorCacheEntryNotFound)
+        ));
+    }
 
     #[ge_context::test]
     async fn test(app_ctx: PostgresContext<NoTls>) {
