@@ -819,7 +819,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap()
@@ -932,7 +932,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed()
+        .typed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap()
