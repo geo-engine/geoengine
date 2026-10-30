@@ -105,6 +105,9 @@ struct WorkerAffinity {
     band: usize,
     spatial_window: GridBoundingBox2D,
     timestamp: Instant,
+    /// Block size `(x, y)` of `band`, as reported by the worker's last read of it. `None` until
+    /// the worker has read this dataset and band.
+    block_size: Option<(usize, usize)>,
 }
 
 /// How well an idle worker suits a request; greater is better. Each worker holds one open
@@ -265,6 +268,7 @@ enum BrokerCommand {
         dataset_hash: u64,
         band: usize,
         window: GridBoundingBox2D,
+        block_size: Option<(usize, usize)>,
         read_failed: bool,
     },
     WorkerCachesCleared {
@@ -521,6 +525,10 @@ impl GdalProcessPool {
 
             let is_dead = res.is_err();
             let read_failed = matches!(res, Ok(Err(_)));
+            let block_size = match &res {
+                Ok(Ok(payload)) => payload.block_size,
+                _ => None,
+            };
             let _ = job.respond_to.send(ReadResult {
                 result: res,
                 companion_span,
@@ -538,6 +546,7 @@ impl GdalProcessPool {
                 dataset_hash,
                 band,
                 window,
+                block_size,
                 read_failed,
             });
         }
@@ -638,9 +647,17 @@ impl GdalProcessPool {
                         dataset_hash,
                         band,
                         window,
+                        block_size,
                         read_failed,
                     } => {
-                        state.release_worker(worker_id, dataset_hash, band, window, read_failed);
+                        state.release_worker(
+                            worker_id,
+                            dataset_hash,
+                            band,
+                            window,
+                            block_size,
+                            read_failed,
+                        );
                     }
                     BrokerCommand::WorkerCachesCleared { worker_id } => {
                         state.finish_clearing_worker(worker_id);
@@ -817,6 +834,7 @@ impl BrokerState {
         dataset_hash: u64,
         band: usize,
         window: GridBoundingBox2D,
+        block_size: Option<(usize, usize)>,
         read_failed: bool,
     ) {
         self.release_read_capacity(dataset_hash);
@@ -828,6 +846,7 @@ impl BrokerState {
             band,
             spatial_window: window,
             timestamp: Instant::now(),
+            block_size,
         });
         self.set_affinity(worker_id, affinity);
 
@@ -1003,11 +1022,18 @@ impl BrokerState {
             // The worker holds the requested dataset once the read starts, not its previous one.
             // Recorded now, so that a busy worker switching datasets does not count as a holder of
             // its old dataset when ranking duplicates; the release corrects it.
+            let band = req.request.0.dataset_params.rasterband_channel;
             let busy_affinity = WorkerAffinity {
                 dataset_hash: req.dataset_hash,
-                band: req.request.0.dataset_params.rasterband_channel,
+                band,
                 spatial_window: req.request.0.read_advise.read_window_bounds,
                 timestamp: now,
+                // a block size only applies to the dataset and band it was read from
+                block_size: worker
+                    .affinity
+                    .as_ref()
+                    .filter(|a| a.dataset_hash == req.dataset_hash && a.band == band)
+                    .and_then(|a| a.block_size),
             };
 
             {
@@ -1330,6 +1356,7 @@ mod tests {
             band,
             spatial_window: window,
             timestamp: Instant::now(),
+            block_size: None,
         }
     }
 
@@ -1513,7 +1540,7 @@ mod tests {
                 panic!("Expected second clear");
             };
             if active_read {
-                state.release_worker(0, 100, 1, bounds, false);
+                state.release_worker(0, 100, 1, bounds, None, false);
             }
             let (next, _next_response) = make_request(200, 1, bounds);
             state.enqueue_request(next);
@@ -1557,7 +1584,7 @@ mod tests {
         let second = read_job(jobs1.try_recv().unwrap());
 
         let _cleared = state.clear_caches();
-        state.release_worker(0, first.dataset_hash, 1, bounds, false);
+        state.release_worker(0, first.dataset_hash, 1, bounds, None, false);
         state.remove_worker(0);
         assert_eq!(state.global_active_count, 1);
         assert_eq!(state.dataset_registry[&second.dataset_hash].active_count, 1);
@@ -1997,7 +2024,14 @@ mod tests {
         // a busy worker already counts as a holder of the dataset it reads
         assert_eq!(state.dataset_holders.get(&100), Some(&1));
 
-        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]), false);
+        state.release_worker(
+            0,
+            job.dataset_hash,
+            1,
+            window([0, 0], [255, 255]),
+            None,
+            false,
+        );
 
         assert_eq!(state.idle_workers.len(), 1);
         assert_eq!(state.idle_workers[0], 0);
@@ -2026,7 +2060,7 @@ mod tests {
         let first = read_job(rx0.try_recv().unwrap()).dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, first, 1, window([0, 0], [255, 255]), false);
+        state.release_worker(0, first, 1, window([0, 0], [255, 255]), None, false);
         state.try_dispatch();
         let second = read_job(rx0.try_recv().unwrap()).dataset_hash;
 
@@ -2146,7 +2180,7 @@ mod tests {
         state.enqueue_request(req);
         state.try_dispatch();
         let job = read_job(rx0.try_recv().unwrap());
-        state.release_worker(0, job.dataset_hash, 1, w, true);
+        state.release_worker(0, job.dataset_hash, 1, w, None, true);
 
         assert!(state.workers[0].affinity.is_none());
         assert!(state.dataset_holders.is_empty());
@@ -2170,6 +2204,42 @@ mod tests {
         rx1.try_recv()
             .expect("a worker holding a copy of dataset 200 should be evicted");
         assert_eq!(state.dataset_holders.get(&100), Some(&1));
+    }
+
+    /// A block size belongs to the dataset and band it was read from.
+    #[test]
+    fn it_keeps_the_block_size_only_for_the_same_dataset_and_band() {
+        let w = window([0, 0], [255, 255]);
+        let (w0, mut rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 4, 4, SchedulingStrategy::GlobalMatrix);
+        let block_size =
+            |state: &BrokerState| state.workers[0].affinity.as_ref().unwrap().block_size;
+
+        let mut read = |state: &mut BrokerState, dataset_hash, band| {
+            let (req, _resp) = make_request(dataset_hash, band, w);
+            state.enqueue_request(req);
+            state.try_dispatch();
+            rx0.try_recv().unwrap();
+        };
+
+        read(&mut state, 100, 1);
+        state.release_worker(0, 100, 1, w, Some((1024, 1024)), false);
+        assert_eq!(block_size(&state), Some((1024, 1024)));
+
+        read(&mut state, 100, 1);
+        assert_eq!(
+            block_size(&state),
+            Some((1024, 1024)),
+            "same dataset and band"
+        );
+        state.release_worker(0, 100, 1, w, Some((1024, 1024)), false);
+
+        read(&mut state, 100, 2);
+        assert_eq!(block_size(&state), None, "other band");
+        state.release_worker(0, 100, 2, w, Some((512, 512)), false);
+
+        read(&mut state, 200, 2);
+        assert_eq!(block_size(&state), None, "other dataset");
     }
 
     #[test]
@@ -2201,6 +2271,7 @@ mod tests {
                     properties_map: vec![],
                 },
                 data_variant: GdalDataGridByteVariant::Empty,
+                block_size: None,
             })),
             companion_span: None,
         }

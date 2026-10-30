@@ -98,6 +98,9 @@ pub struct GdalIpcBytePayload {
     pub dimensions: GridBoundingBox2D,
     pub properties: GdalIpcRasterProperties,
     pub data_variant: GdalDataGridByteVariant,
+    /// Block size `(x, y)` of the band that was read, for the pool's block-aware worker affinity.
+    #[serde(default)]
+    pub block_size: Option<(usize, usize)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -208,6 +211,9 @@ pub struct GdalIpcPayload<T> {
     pub dimensions: GridBoundingBox2D,
     pub properties: RasterProperties,
     pub data_variant: GdalDataGridVariant<T>,
+    /// Block size `(x, y)` of the band that was read.
+    #[serde(default)]
+    pub block_size: Option<(usize, usize)>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -240,6 +246,7 @@ where
             dimensions: value.dimensions,
             properties: value.properties.into(),
             data_variant: value.data_variant.try_into()?,
+            block_size: value.block_size,
         })
     }
 }
@@ -331,6 +338,7 @@ where
             dimensions: value.dimensions,
             properties: value.properties.clone().into(),
             data_variant: (&value.data_variant).try_into()?,
+            block_size: value.block_size,
         })
     }
 }
@@ -579,6 +587,7 @@ mod tests {
             dimensions: GridBoundingBox2D::new([0, 0], [1, 1]).expect("valid bounds"),
             properties: RasterProperties::default(),
             data_variant,
+            block_size: None,
         })
         .grid
     }
