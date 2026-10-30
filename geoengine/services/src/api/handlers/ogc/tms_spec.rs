@@ -1776,7 +1776,7 @@ mod tests {
         assert_eq!(level_0.tile_height, to_non_zero_u16(512));
         assert_eq!(level_0.matrix_width, to_non_zero_u64(1));
         assert_eq!(level_0.matrix_height, to_non_zero_u64(1));
-        assert!(level_0.variable_matrix_widths.is_empty());
+        assert_eq!(level_0.variable_matrix_widths.len(), 0);
 
         let initialized_operator =
             get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(

@@ -16,7 +16,7 @@ use geoengine_datatypes::{
     },
     util::Identifier,
 };
-use geoengine_operators::engine::{ExecutionContext, ProcessingGraphOperatorPath};
+use geoengine_operators::engine::ProcessingGraphOperatorPath;
 
 /// Initializes a raster processing graph and starts streaming the tiles within `spatial_bounds`
 pub async fn raster_stream<C: SessionContext>(
@@ -45,8 +45,8 @@ pub async fn raster_stream<C: SessionContext>(
 
     let query_bounds = initialized_operator
         .result_descriptor()
-        .tiling_grid_definition(execution_context.tiling_specification())
-        .tiling_geo_transform()
+        .tiling_grid_definition()
+        .geo_transform
         .spatial_to_grid_bounds(&spatial_bounds);
     let query_rectangle = RasterQueryRectangle::new(query_bounds, time_interval, bands);
 

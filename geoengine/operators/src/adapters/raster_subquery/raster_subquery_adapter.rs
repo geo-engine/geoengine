@@ -14,7 +14,7 @@ use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridIntersection, GridOrEmpty, TileInformationBandCrossProductIter,
-    TilingSpecification, TilingStrategy,
+    TilingStrategy,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D, TileInformation};
 use rayon::ThreadPool;

@@ -3,8 +3,9 @@ use crate::adapters::{
 };
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, InitializedSources, Operator, OperatorName,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleRasterSource, SpatialGridDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor,
+    TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -46,7 +47,6 @@ impl OperatorName for ReTile {
     const TYPE_NAME: &'static str = "ReTile";
 }
 
-#[typetag::serde]
 #[async_trait]
 impl RasterOperator for ReTile {
     /// Initializes the `ReTile` operator.
@@ -59,7 +59,7 @@ impl RasterOperator for ReTile {
     /// aligned to the new tiling origin) and stores it in the result descriptor.
     async fn _initialize(
         self: Box<Self>,
-        path: WorkflowOperatorPath,
+        path: ProcessingGraphOperatorPath,
         context: &dyn crate::engine::ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
@@ -128,7 +128,7 @@ impl RasterOperator for ReTile {
 /// tiling (origin and tile size), and the source operator.
 pub struct InitializedReTile<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
-    path: WorkflowOperatorPath,
+    path: ProcessingGraphOperatorPath,
     output_result_descriptor: RasterResultDescriptor,
     raster_source: O,
 }
@@ -159,14 +159,14 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTi
         ReTile::TYPE_NAME
     }
 
-    fn path(&self) -> WorkflowOperatorPath {
+    fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
 
     fn optimize(
         &self,
         target_resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+    ) -> Result<TypedRasterOperator, OptimizationError> {
         let out_grid = self.output_result_descriptor.spatial_grid_descriptor();
         Ok(ReTile {
             params: ReTileParams {
@@ -177,7 +177,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedReTi
                 raster: self.raster_source.optimize(target_resolution)?,
             },
         }
-        .boxed())
+        .typed())
     }
 }
 
@@ -527,7 +527,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let retile = ReTile {
             params: ReTileParams {
@@ -536,7 +536,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
@@ -547,7 +547,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context(ChunkByteSize::test_default());
 
         let op = retile
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -695,7 +695,7 @@ mod tests {
                 result_descriptor,
             },
         }
-        .boxed();
+        .typed();
 
         let new_origin = Coordinate2D::new(2.0, -2.0);
         let retile = ReTile {
@@ -705,7 +705,7 @@ mod tests {
             },
             sources: SingleRasterSource { raster: mrs },
         }
-        .boxed();
+        .typed();
 
         let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
@@ -716,7 +716,7 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context(ChunkByteSize::test_default());
 
         let op = retile
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
