@@ -13,6 +13,7 @@ use geoengine_operators::{
         InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
         QueryProcessorExt, TypedRasterOperator, TypedVectorOperator,
     },
+    util::{QUERY_TASK_CHANNEL_CAPACITY, spawn_stream},
 };
 use tokio::{
     sync::mpsc::{Receiver, Sender, error::TrySendError},
@@ -30,8 +31,8 @@ pub struct WebsocketStreamTask {
 }
 
 impl WebsocketStreamTask {
-    pub async fn new_raster_initialized<C: QueryContext + 'static>(
-        initialized_operator: Box<dyn InitializedRasterOperator>,
+    pub fn new_raster_initialized<C: QueryContext + 'static>(
+        initialized_operator: &dyn InitializedRasterOperator,
         query_rectangle: RasterQueryRectangle,
         mut query_ctx: C,
     ) -> Result<Self> {
@@ -41,16 +42,19 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
-            let tile_stream = p
-                .query_into_owned_stream(query_rectangle, Box::new(query_ctx))
-                .await?;
+        let runtime = query_ctx.processing_runtime();
 
-            tile_stream.and_then(
-                move |tile| crate::util::spawn_blocking(
-                    move || raster_tile_2d_to_arrow_ipc_file(tile, spatial_reference).map_err(Into::into)
-                ).err_into().map(| r | r.and_then(std::convert::identity))
-            ).boxed()
+        // the query and the IPC encoding run in the task; this side only forwards bytes
+        let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
+            let tile_stream = p.query_into_owned_boxed_stream(query_rectangle, Box::new(query_ctx));
+
+            spawn_stream(&runtime, QUERY_TASK_CHANNEL_CAPACITY, async move {
+                Ok(tile_stream.await?.and_then(
+                    move |tile| crate::util::spawn_blocking(
+                        move || raster_tile_2d_to_arrow_ipc_file(tile, spatial_reference).map_err(Into::into)
+                    ).err_into().map(| r | r.and_then(std::convert::identity))
+                ).boxed())
+            })
         });
 
         // TODO: think about buffering the stream?
@@ -73,7 +77,7 @@ impl WebsocketStreamTask {
             .initialize(processing_graph_operator_path_root, &execution_ctx)
             .await?;
 
-        Self::new_raster_initialized(initialized_operator, query_rectangle, query_ctx).await
+        Self::new_raster_initialized(initialized_operator.as_ref(), query_rectangle, query_ctx)
     }
 
     pub async fn new_vector<C: SessionContext>(
@@ -94,16 +98,19 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let byte_stream = call_on_generic_vector_processor!(query_processor, p => {
-            let batch_stream = p
-                .query_into_owned_stream(query_rectangle, Box::new(query_ctx))
-                .await?;
+        let runtime = query_ctx.processing_runtime();
 
-            batch_stream.and_then(
-                move |batch| crate::util::spawn_blocking(
-                    move || batch.to_arrow_ipc_file_bytes(spatial_reference).map_err(Into::into)
-                ).err_into().map(| r | r.and_then(std::convert::identity))
-            ).boxed()
+        // the query and the IPC encoding run in the task; this side only forwards bytes
+        let byte_stream = call_on_generic_vector_processor!(query_processor, p => {
+            let batch_stream = p.query_into_owned_boxed_stream(query_rectangle, Box::new(query_ctx));
+
+            spawn_stream(&runtime, QUERY_TASK_CHANNEL_CAPACITY, async move {
+                Ok(batch_stream.await?.and_then(
+                    move |batch| crate::util::spawn_blocking(
+                        move || batch.to_arrow_ipc_file_bytes(spatial_reference).map_err(Into::into)
+                    ).err_into().map(| r | r.and_then(std::convert::identity))
+                ).boxed())
+            })
         });
 
         // TODO: think about buffering the stream?

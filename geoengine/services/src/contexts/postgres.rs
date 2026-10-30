@@ -72,6 +72,8 @@ where
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
     ort_environment: OrtEnvironment,
+    /// runs query tasks, so they leave the single-threaded HTTP workers
+    processing_runtime: tokio::runtime::Handle,
 }
 
 /// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
@@ -134,7 +136,9 @@ where
         );
 
         Ok(PostgresContext {
-            task_manager: Default::default(),
+            task_manager: Arc::new(TypedTaskManagerBackend::new(
+                tokio::runtime::Handle::current(),
+            )),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -149,6 +153,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            processing_runtime: tokio::runtime::Handle::current(),
         })
     }
 
@@ -200,7 +205,9 @@ where
         };
 
         Ok(PostgresContext {
-            task_manager: Default::default(),
+            task_manager: Arc::new(TypedTaskManagerBackend::new(
+                tokio::runtime::Handle::current(),
+            )),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
@@ -221,6 +228,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            processing_runtime: tokio::runtime::Handle::current(),
         })
     }
 
@@ -280,7 +288,9 @@ where
         };
 
         let app_ctx = PostgresContext {
-            task_manager: Default::default(),
+            task_manager: Arc::new(TypedTaskManagerBackend::new(
+                tokio::runtime::Handle::current(),
+            )),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
@@ -301,6 +311,8 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            // the server builds its context on the main runtime, which then runs all queries
+            processing_runtime: tokio::runtime::Handle::current(),
         };
 
         if created_schema {
@@ -502,6 +514,7 @@ where
                 computation,
             )),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
+            self.context.processing_runtime.clone(),
         ))
     }
 
@@ -1135,6 +1148,22 @@ mod tests {
         db.logout().await.unwrap();
 
         assert!(app_ctx.session_by_id(session.id).await.is_err());
+    }
+
+    #[ge_context::test]
+    async fn it_runs_queries_on_the_runtime_it_was_created_on(app_ctx: PostgresContext<NoTls>) {
+        use geoengine_operators::engine::QueryContext;
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let query_ctx = app_ctx
+            .session_context(session)
+            .query_context(ProcessingGraphId::new(), ComputationId::new())
+            .unwrap();
+
+        assert_eq!(
+            query_ctx.processing_runtime().id(),
+            tokio::runtime::Handle::current().id()
+        );
     }
 
     #[ge_context::test]

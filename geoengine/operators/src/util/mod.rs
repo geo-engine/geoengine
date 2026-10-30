@@ -21,7 +21,8 @@ use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard};
 
 pub use self::async_util::{
-    abortable_query_execution, spawn, spawn_blocking, spawn_blocking_with_thread_pool,
+    QUERY_TASK_CHANNEL_CAPACITY, abortable_query_execution, spawn, spawn_blocking,
+    spawn_blocking_with_thread_pool, spawn_query, spawn_query_task, spawn_stream,
 };
 pub use self::gdal_config_options::{GdalConfigOptions, TemporaryGdalThreadLocalConfigOptions};
 pub use self::rayon::create_rayon_thread_pool;

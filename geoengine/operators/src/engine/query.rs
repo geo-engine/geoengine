@@ -72,6 +72,9 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
         None
     }
 
+    /// The runtime that runs query tasks, see [`crate::util::spawn_query`].
+    fn processing_runtime(&self) -> tokio::runtime::Handle;
+
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
 
@@ -198,6 +201,9 @@ pub struct MockQueryContext {
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
 
+    /// see [`QueryContext::processing_runtime`]; the constructors use the current runtime
+    pub processing_runtime: tokio::runtime::Handle,
+
     gdal_process_pool: Arc<GdalProcessPool>,
 }
 
@@ -222,6 +228,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            processing_runtime: tokio::runtime::Handle::current(),
             gdal_process_pool,
         }
     }
@@ -249,6 +256,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            processing_runtime: tokio::runtime::Handle::current(),
             gdal_process_pool,
         }
     }
@@ -275,6 +283,7 @@ impl MockQueryContext {
             )),
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            processing_runtime: tokio::runtime::Handle::current(),
         }
     }
 }
@@ -282,6 +291,10 @@ impl MockQueryContext {
 impl QueryContext for MockQueryContext {
     fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
+    }
+
+    fn processing_runtime(&self) -> tokio::runtime::Handle {
+        self.processing_runtime.clone()
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {

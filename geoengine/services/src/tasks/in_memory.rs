@@ -14,21 +14,24 @@ use std::{
     sync::Arc,
 };
 use tokio::{
+    runtime::Handle,
     sync::{RwLock, RwLockWriteGuard},
     task::JoinHandle,
 };
-use tracing::warn;
+use tracing::{Instrument, warn};
 
 type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
 
 /// An in-memory implementation of the [`TaskManager`] trait.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct SimpleTaskManagerBackend {
     tasks_by_id: Db<HashMap<TaskId, TaskHandle>>,
     unique_tasks: Db<HashSet<(&'static str, String)>>,
     // these two lists won't be cleaned-up
     status_by_id: Db<HashMap<TaskId, Db<TaskStatus>>>,
     status_list: Db<VecDeque<TaskUpdateStatusWithTaskId>>,
+    /// runs the tasks, so they don't run on the runtime that schedules them, e.g. an HTTP worker
+    runtime: Handle,
 }
 
 struct TaskHandle {
@@ -39,6 +42,24 @@ struct TaskHandle {
 }
 
 impl SimpleTaskManagerBackend {
+    /// Runs tasks on `runtime` instead of the runtime that schedules them, e.g. an HTTP worker.
+    pub fn new(runtime: Handle) -> Self {
+        Self {
+            tasks_by_id: Db::default(),
+            unique_tasks: Db::default(),
+            status_by_id: Db::default(),
+            status_list: Db::default(),
+            runtime,
+        }
+    }
+
+    fn spawn<F>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        self.runtime.spawn(future.in_current_span())
+    }
+
     async fn write_lock_all(&self) -> WriteLockAll<'_> {
         let (tasks_by_id, status_by_id, task_list, unique_tasks) = tokio::join!(
             self.tasks_by_id.write(),
@@ -279,7 +300,7 @@ fn run_task(
     task_ctx: SimpleTaskManagerContext,
     notify: Option<oneshot::Sender<TaskStatus>>,
 ) -> JoinHandle<()> {
-    crate::util::spawn(async move {
+    task_manager.clone().spawn(async move {
         let result = task.run(task_ctx.clone()).await;
 
         let mut update_lock = task_manager.write_lock_for_update().await;
@@ -400,7 +421,7 @@ fn clean_up_phase(
         status: task_handle.status.clone(),
     };
 
-    let handle = crate::util::spawn(async move {
+    let handle = task_manager.clone().spawn(async move {
         let result = task.cleanup_on_error(task_ctx.clone()).await;
 
         let mut update_lock = task_manager.write_lock_for_update().await;

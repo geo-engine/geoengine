@@ -32,6 +32,7 @@ pub fn create_rayon_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
 
     let thread_pool = ThreadPoolBuilder::new()
         .num_threads(num_threads)
+        .thread_name(|index| format!("ge-rayon-{index}"))
         .build()
         .expect("Thread Pool must be initializable");
 

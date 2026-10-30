@@ -33,12 +33,12 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        ProcessingGraphOperatorPath, QueryContext, QueryProcessor, ResultDescriptor,
+        ProcessingGraphOperatorPath, QueryContext, QueryProcessorExt, ResultDescriptor,
         SingleRasterOrVectorSource, TypedVectorQueryProcessor, VectorOperator,
         VectorQueryProcessor,
     },
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
-    util::{abortable_query_execution, input::RasterOrVectorOperator},
+    util::{abortable_query_execution, input::RasterOrVectorOperator, spawn_query_task},
 };
 use reqwest::Url;
 use serde::Deserialize;
@@ -630,35 +630,48 @@ where
     let query_abort_trigger = query_ctx.abort_trigger()?;
     let default_cache_ttl = query_ctx.default_cache_ttl();
 
-    let features: Vec<serde_json::Value> = Vec::new();
-    // TODO: more efficient merging of the partial feature collections
-    let stream = processor.query(query_rect, &query_ctx).await?;
+    let runtime = query_ctx.processing_runtime();
 
-    let future: BoxFuture<geoengine_operators::util::Result<(Vec<_>, Option<CacheHint>)>> =
-        Box::pin(stream.try_fold(
-            (features, None::<CacheHint>),
-            |(mut output, mut cache_hint), collection| async move {
-                // TODO: avoid parsing the generated json
-                let mut json: serde_json::Value =
-                    serde_json::from_str(&collection.to_geo_json()).expect("to_geojson is correct");
-                let more_features = json
-                    .get_mut("features")
-                    .expect("to_geojson is correct")
-                    .as_array_mut()
-                    .expect("to geojson is correct");
+    // query and GeoJSON merging run as one task off the caller's runtime
+    let work = async move {
+        let features: Vec<serde_json::Value> = Vec::new();
+        // TODO: more efficient merging of the partial feature collections
+        let stream = processor
+            .query_into_owned_boxed_stream(query_rect, Box::new(query_ctx))
+            .await?;
 
-                output.append(more_features);
+        stream
+            .try_fold(
+                (features, None::<CacheHint>),
+                |(mut output, mut cache_hint), collection| async move {
+                    // TODO: avoid parsing the generated json
+                    let mut json: serde_json::Value =
+                        serde_json::from_str(&collection.to_geo_json())
+                            .expect("to_geojson is correct");
+                    let more_features = json
+                        .get_mut("features")
+                        .expect("to_geojson is correct")
+                        .as_array_mut()
+                        .expect("to geojson is correct");
 
-                cache_hint
-                    .get_or_insert_with(CacheHint::max_duration)
-                    .merge_with(&collection.cache_hint);
+                    output.append(more_features);
 
-                Ok((output, cache_hint))
-            },
-        ));
+                    cache_hint
+                        .get_or_insert_with(CacheHint::max_duration)
+                        .merge_with(&collection.cache_hint);
 
-    let (features, cache_hint) =
-        abortable_query_execution(future, conn_closed, query_abort_trigger).await?;
+                    Ok((output, cache_hint))
+                },
+            )
+            .await
+    };
+
+    let (features, cache_hint) = abortable_query_execution(
+        spawn_query_task(runtime, work),
+        conn_closed,
+        query_abort_trigger,
+    )
+    .await?;
     let cache_hint = cache_hint.unwrap_or_else(|| default_cache_ttl.into());
 
     let mut output = json!({

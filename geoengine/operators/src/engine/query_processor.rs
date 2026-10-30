@@ -6,8 +6,8 @@ use super::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::Stream;
 use futures::stream::BoxStream;
+use futures::{Stream, StreamExt};
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
@@ -77,6 +77,20 @@ pub trait QueryProcessorExt: QueryProcessor {
             })
             .await?,
         )
+    }
+
+    /// [`Self::query_into_owned_stream`], boxed. The returned future is boxed too, so awaiting it
+    /// inside another task keeps the processor's trait object type out of that task's `Send` inference.
+    async fn query_into_owned_boxed_stream(
+        self,
+        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
+        ctx: Box<dyn QueryContext>,
+    ) -> Result<BoxStream<'static, Result<Self::Output>>>
+    where
+        Self: Sized + 'static,
+        Self::Output: Send + 'static,
+    {
+        Ok(self.query_into_owned_stream(query, ctx).await?.boxed())
     }
 }
 

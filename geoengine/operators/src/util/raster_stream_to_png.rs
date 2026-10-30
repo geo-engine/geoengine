@@ -1,6 +1,6 @@
 use super::abortable_query_execution;
-use crate::engine::{BoxRasterQueryProcessor, QueryAbortTrigger, QueryContext, QueryProcessor};
-use crate::util::Result;
+use crate::engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessorExt};
+use crate::util::{Result, spawn_query_task};
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
@@ -79,39 +79,46 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     }
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
+    let runtime = query_ctx.processing_runtime();
 
-    match raster_colorizer {
-        RasterColorizer::SingleBand { band_colorizer, .. } => {
-            single_band_colorizer_to_png_bytes(
-                processor,
-                query_rect,
-                query_ctx,
-                width,
-                height,
-                band_colorizer,
-                conn_closed,
-                query_abort_trigger,
-            )
-            .await
+    // query, blit and encode run as one task, so the caller's runtime only awaits the bytes
+    let work = async move {
+        match raster_colorizer {
+            RasterColorizer::SingleBand { band_colorizer, .. } => {
+                single_band_colorizer_to_png_bytes(
+                    processor,
+                    query_rect,
+                    query_ctx,
+                    width,
+                    height,
+                    band_colorizer,
+                )
+                .await
+            }
+            RasterColorizer::MultiBand {
+                rgb_params: rgba_params,
+                ..
+            } => {
+                multi_band_colorizer_to_png_bytes(
+                    processor,
+                    query_rect,
+                    query_ctx,
+                    width,
+                    height,
+                    rgba_params,
+                    band_positions,
+                )
+                .await
+            }
         }
-        RasterColorizer::MultiBand {
-            rgb_params: rgba_params,
-            ..
-        } => {
-            multi_band_colorizer_to_png_bytes(
-                processor,
-                query_rect,
-                query_ctx,
-                width,
-                height,
-                rgba_params,
-                band_positions,
-                conn_closed,
-                query_abort_trigger,
-            )
-            .await
-        }
-    }
+    };
+
+    abortable_query_execution(
+        spawn_query_task(runtime, work),
+        conn_closed,
+        query_abort_trigger,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -122,13 +129,13 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     width: u32,
     height: u32,
     colorizer: Colorizer,
-    conn_closed: BoxFuture<'_, ()>,
-    query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
     debug_assert_eq!(query_rect.attributes().count(), 1);
 
     // the tile stream will allways produce tiles aligned to the tiling origin
-    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+    let tile_stream = processor
+        .query_into_owned_boxed_stream(query_rect.clone(), Box::new(query_ctx))
+        .await?;
     let output_cache_hint = CacheHint::max_duration();
 
     let output_grid =
@@ -152,9 +159,12 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
             }
         }));
 
-    let (result, ch) =
-        abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((result.unbounded().to_png(width, height, &colorizer)?, ch))
+    let (result, ch) = output_tile.await?;
+    let png =
+        crate::util::spawn_blocking(move || result.unbounded().to_png(width, height, &colorizer))
+            .await
+            .boxed_context(error::UnexpectedComputational)??;
+    Ok((png, ch))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -166,8 +176,6 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     height: u32,
     rgb_params: RgbParams,
     band_positions: Vec<usize>,
-    conn_closed: BoxFuture<'_, ()>,
-    query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
     let rgb_channel_count = query_rect.attributes().count() as usize;
     let no_data_color = rgb_params.no_data_color;
@@ -178,7 +186,9 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     let green_band_index = band_positions[1];
     let blue_band_index = band_positions[2];
 
-    let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+    let tile_stream = processor
+        .query_into_owned_boxed_stream(query_rect.clone(), Box::new(query_ctx))
+        .await?;
     let accu = Ok((tile_template, output_cache_hint));
 
     let output_tile = Box::pin(tile_stream.try_chunks(rgb_channel_count).fold(
@@ -212,14 +222,15 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         },
     ));
 
-    let (result, ch) =
-        abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((
+    let (result, ch) = output_tile.await?;
+    let png = crate::util::spawn_blocking(move || {
         result
             .unbounded()
-            .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?,
-        ch,
-    ))
+            .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)
+    })
+    .await
+    .boxed_context(error::UnexpectedComputational)??;
+    Ok((png, ch))
 }
 
 fn blit_tile<T>(
@@ -352,8 +363,12 @@ pub enum PngCreationError {
 #[cfg(test)]
 mod tests {
 
-    use crate::engine::{MockExecutionContext, RasterQueryProcessor};
+    use crate::engine::{
+        MockExecutionContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor,
+    };
     use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
+    use async_trait::async_trait;
+    use futures::stream::BoxStream;
     use geoengine_datatypes::primitives::{DateTime, TimeInstance};
     use geoengine_datatypes::{
         primitives::BandSelection,
@@ -361,6 +376,7 @@ mod tests {
         test_data,
         util::{assert_image_equals, test::TestDefault},
     };
+    use std::sync::{Arc, Mutex};
 
     use super::*;
 
@@ -415,5 +431,122 @@ mod tests {
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "png_from_stream.png");
 
         assert_image_equals(test_data!("raster/png/png_from_stream.png"), &image_bytes);
+    }
+
+    /// Records the name of the thread that creates the query and polls each of its tiles.
+    struct ThreadRecording {
+        inner: BoxRasterQueryProcessor<u8>,
+        threads: Arc<Mutex<Vec<Option<String>>>>,
+    }
+
+    fn record_thread(threads: &Mutex<Vec<Option<String>>>) {
+        threads
+            .lock()
+            .unwrap()
+            .push(std::thread::current().name().map(ToOwned::to_owned));
+    }
+
+    #[async_trait]
+    impl QueryProcessor for ThreadRecording {
+        type Output = RasterTile2D<u8>;
+        type SpatialBounds = GridBoundingBox2D;
+        type Selection = BandSelection;
+        type ResultDescription = RasterResultDescriptor;
+
+        async fn _query<'a>(
+            &'a self,
+            query: RasterQueryRectangle,
+            ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<RasterTile2D<u8>>>> {
+            record_thread(&self.threads);
+            let threads = self.threads.clone();
+            Ok(self
+                .inner
+                .query(query, ctx)
+                .await?
+                .inspect(move |_| record_thread(&threads))
+                .boxed())
+        }
+
+        fn result_descriptor(&self) -> &RasterResultDescriptor {
+            self.inner.result_descriptor()
+        }
+    }
+
+    #[async_trait]
+    impl RasterQueryProcessor for ThreadRecording {
+        type RasterType = u8;
+
+        async fn _time_query<'a>(
+            &'a self,
+            query: TimeInterval,
+            ctx: &'a dyn QueryContext,
+        ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+            self.inner.time_query(query, ctx).await
+        }
+    }
+
+    #[tokio::test]
+    async fn png_from_stream_runs_on_the_processing_runtime() {
+        let processing = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("processing-test")
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let exe_ctx = MockExecutionContext::test_default();
+        let mut ctx = exe_ctx.mock_query_context_test_default();
+        ctx.processing_runtime = processing.handle().clone();
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let meta_data = create_ndvi_meta_data();
+
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            meta_data.result_descriptor.clone(),
+            tiling_specification,
+            Box::new(meta_data),
+        );
+
+        let threads = Arc::new(Mutex::new(Vec::new()));
+        let processor = ThreadRecording {
+            inner: gdal_source.boxed(),
+            threads: threads.clone(),
+        };
+
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),
+            TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
+        );
+
+        let (image_bytes, _) = raster_stream_to_png_bytes(
+            processor.boxed(),
+            query,
+            ctx,
+            600,
+            600,
+            None,
+            None,
+            Box::pin(futures::future::pending()),
+        )
+        .await
+        .unwrap();
+
+        assert_image_equals(test_data!("raster/png/png_from_stream.png"), &image_bytes);
+
+        let threads = threads.lock().unwrap().clone();
+        assert!(
+            threads.len() > 1,
+            "the query and at least one tile: {threads:?}"
+        );
+        assert!(
+            threads
+                .iter()
+                .all(|thread| thread.as_deref() == Some("processing-test")),
+            "{threads:?}"
+        );
+
+        processing.shutdown_background();
     }
 }

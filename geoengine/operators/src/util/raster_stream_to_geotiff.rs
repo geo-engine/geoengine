@@ -1,10 +1,10 @@
-use crate::engine::{BoxRasterQueryProcessor, QueryProcessor};
+use crate::engine::{BoxRasterQueryProcessor, QueryProcessor, QueryProcessorExt};
 use crate::error;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalSourceTimePlaceholder, TimeReference,
 };
-use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
+use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions, spawn_query, spawn_query_task};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
@@ -54,17 +54,43 @@ where
     let tiling_strategy = tiling_grid_def.generate_data_tiling_strategy();
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
+    let runtime = query_ctx.processing_runtime();
 
-    let tiles = abortable_query_execution(
-        consume_stream_into_vec(processor, query_rect.clone(), query_ctx, tile_limit),
+    // query, GeoTIFF writing and copying the bytes run as one task off the caller's runtime
+    let work = async move {
+        let tiles =
+            consume_stream_into_vec(processor, query_rect.clone(), query_ctx, tile_limit).await?;
+        write_multiband_geotiff_bytes(
+            tiles,
+            &query_rect,
+            tiling_strategy,
+            gdal_tiff_options,
+            gdal_tiff_metadata,
+        )
+        .await
+    };
+
+    abortable_query_execution(
+        spawn_query_task(runtime, work),
         conn_closed,
         query_abort_trigger,
     )
-    .await?;
+    .await
+}
 
+async fn write_multiband_geotiff_bytes<T>(
+    tiles: Vec<RasterTile2D<T>>,
+    query_rect: &RasterQueryRectangle,
+    tiling_strategy: TilingStrategy,
+    gdal_tiff_options: GdalGeoTiffOptions,
+    gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
+) -> Result<(Vec<u8>, CacheHint)>
+where
+    T: Pixel + GdalType,
+{
     let (initial_tile_time, file_path, dataset, writer) = create_multiband_dataset_and_writer(
         &tiles,
-        &query_rect,
+        query_rect,
         tiling_strategy,
         gdal_tiff_options,
         gdal_tiff_metadata,
@@ -106,7 +132,7 @@ where
     .await??;
 
     Ok((
-        gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)?,
+        spawn_blocking(move || gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)).await??,
         cache_hint,
     ))
 }
@@ -224,7 +250,7 @@ where
     T: Pixel + GdalType,
 {
     let mut tile_stream = processor
-        .raster_query(query_rect, &query_ctx)
+        .query_into_owned_boxed_stream(query_rect, Box::new(query_ctx))
         .await?
         .enumerate();
     let mut tiles = Vec::new();
@@ -389,10 +415,8 @@ where
                     gdal_config_options,
                 );
 
-            let mut tile_stream = processor
-                .raster_query(query_rect.clone(), &query_ctx)
-                .await?
-                .enumerate();
+            let mut tile_stream =
+                spawn_query(processor, query_rect.clone(), Box::new(query_ctx)).enumerate();
 
             let tiles_intersecting_qrect = tiling_strategy
                 .num_tiles_intersecting_grid_bounds(query_rect.spatial_bounds());

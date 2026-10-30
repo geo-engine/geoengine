@@ -610,11 +610,10 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     let query_ctx = ctx.query_context(processing_graph_id, ComputationId::new())?;
 
     let mut stream_task = WebsocketStreamTask::new_raster_initialized::<_>(
-        initialized_operator,
+        initialized_operator.as_ref(),
         query_rectangle,
         query_ctx,
-    )
-    .await?;
+    )?;
 
     let (response, mut session, mut msg_stream) = match actix_ws::handle(&request, stream) {
         Ok((response, session, msg_stream)) => (response, session, msg_stream),
