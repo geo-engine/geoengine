@@ -524,6 +524,7 @@ export class OlOgcApiMapTileLayerComponent
             sessionToken: this.sessionToken(),
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
+            tmsId: this.tmsId(),
         }),
         loader: async ({abortSignal}): Promise<OGCMapTile> => {
             // `source` is assigned after the await below, so the closures that read it must only
