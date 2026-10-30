@@ -175,6 +175,21 @@ fn assert_multiple_of_original_resolution(
         .grid_shape();
     let new_pixel_resolution = new_result_descriptor.spatial_grid_descriptor().grid_shape();
 
+    // This should hold, but currently does not for all layers, so it only logs an error.
+    // Re-enable the asserts once it holds.
+    // debug_assert!(
+    //     original_pixel_resolution
+    //         .x()
+    //         .is_multiple_of(new_pixel_resolution.x()),
+    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
+    // );
+    // debug_assert!(
+    //     original_pixel_resolution
+    //         .y()
+    //         .is_multiple_of(new_pixel_resolution.y()),
+    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
+    // );
+
     if !original_pixel_resolution
         .x()
         .is_multiple_of(new_pixel_resolution.x())
