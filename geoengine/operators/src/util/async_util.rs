@@ -43,30 +43,10 @@ where
     Q::Output: Send + 'static,
 {
     spawn_stream(
-        &query_ctx.as_ref().processing_runtime().clone(),
+        &query_ctx.as_ref().processing_runtime(),
         QUERY_TASK_CHANNEL_CAPACITY,
-        owned_query_stream(processor, query, query_ctx),
+        processor.query_into_owned_boxed_stream(query, query_ctx),
     )
-}
-
-/// [`QueryProcessorExt::query_into_owned_stream`] as a boxed `'static` future. Awaiting it inside
-/// another task keeps the processor's trait object type out of that task's `Send` inference.
-pub fn owned_query_stream<Q>(
-    processor: Q,
-    query: QueryRectangle<Q::SpatialBounds, Q::Selection>,
-    query_ctx: Box<dyn QueryContext>,
-) -> BoxFuture<'static, Result<BoxStream<'static, Result<Q::Output>>>>
-where
-    Q: QueryProcessor + 'static,
-    Q::Output: Send + 'static,
-{
-    async move {
-        Ok(processor
-            .query_into_owned_stream(query, query_ctx)
-            .await?
-            .boxed())
-    }
-    .boxed()
 }
 
 /// Builds a stream with `build` and drives it as a task on `runtime`, handing items to the

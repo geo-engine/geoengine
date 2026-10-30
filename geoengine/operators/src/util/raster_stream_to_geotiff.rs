@@ -1,13 +1,10 @@
-use crate::engine::{BoxRasterQueryProcessor, QueryProcessor};
+use crate::engine::{BoxRasterQueryProcessor, QueryProcessor, QueryProcessorExt};
 use crate::error;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalSourceTimePlaceholder, TimeReference,
 };
-use crate::util::{
-    Result, TemporaryGdalThreadLocalConfigOptions, owned_query_stream, spawn_query,
-    spawn_query_task,
-};
+use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions, spawn_query, spawn_query_task};
 use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
@@ -57,7 +54,7 @@ where
     let tiling_strategy = tiling_grid_def.generate_data_tiling_strategy();
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
-    let runtime = query_ctx.processing_runtime().clone();
+    let runtime = query_ctx.processing_runtime();
 
     // query, GeoTIFF writing and copying the bytes run as one task off the caller's runtime
     let work = async move {
@@ -252,7 +249,8 @@ async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
 where
     T: Pixel + GdalType,
 {
-    let mut tile_stream = owned_query_stream(processor, query_rect, Box::new(query_ctx))
+    let mut tile_stream = processor
+        .query_into_owned_boxed_stream(query_rect, Box::new(query_ctx))
         .await?
         .enumerate();
     let mut tiles = Vec::new();

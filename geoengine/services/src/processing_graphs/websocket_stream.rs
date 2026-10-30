@@ -11,9 +11,9 @@ use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,
     engine::{
         InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
-        TypedRasterOperator, TypedVectorOperator,
+        QueryProcessorExt, TypedRasterOperator, TypedVectorOperator,
     },
-    util::{QUERY_TASK_CHANNEL_CAPACITY, owned_query_stream, spawn_stream},
+    util::{QUERY_TASK_CHANNEL_CAPACITY, spawn_stream},
 };
 use tokio::{
     sync::mpsc::{Receiver, Sender, error::TrySendError},
@@ -42,11 +42,11 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let runtime = query_ctx.processing_runtime().clone();
+        let runtime = query_ctx.processing_runtime();
 
         // the query and the IPC encoding run in the task; this side only forwards bytes
         let byte_stream = call_on_generic_raster_processor!(query_processor, p => {
-            let tile_stream = owned_query_stream(p, query_rectangle, Box::new(query_ctx));
+            let tile_stream = p.query_into_owned_boxed_stream(query_rectangle, Box::new(query_ctx));
 
             spawn_stream(&runtime, QUERY_TASK_CHANNEL_CAPACITY, async move {
                 Ok(tile_stream.await?.and_then(
@@ -98,11 +98,11 @@ impl WebsocketStreamTask {
 
         let abort_handle = query_ctx.abort_trigger()?;
 
-        let runtime = query_ctx.processing_runtime().clone();
+        let runtime = query_ctx.processing_runtime();
 
         // the query and the IPC encoding run in the task; this side only forwards bytes
         let byte_stream = call_on_generic_vector_processor!(query_processor, p => {
-            let batch_stream = owned_query_stream(p, query_rectangle, Box::new(query_ctx));
+            let batch_stream = p.query_into_owned_boxed_stream(query_rectangle, Box::new(query_ctx));
 
             spawn_stream(&runtime, QUERY_TASK_CHANNEL_CAPACITY, async move {
                 Ok(batch_stream.await?.and_then(

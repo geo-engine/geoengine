@@ -33,14 +33,12 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        ProcessingGraphOperatorPath, QueryContext, ResultDescriptor, SingleRasterOrVectorSource,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
+        ProcessingGraphOperatorPath, QueryContext, QueryProcessorExt, ResultDescriptor,
+        SingleRasterOrVectorSource, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor,
     },
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
-    util::{
-        abortable_query_execution, input::RasterOrVectorOperator, owned_query_stream,
-        spawn_query_task,
-    },
+    util::{abortable_query_execution, input::RasterOrVectorOperator, spawn_query_task},
 };
 use reqwest::Url;
 use serde::Deserialize;
@@ -632,13 +630,15 @@ where
     let query_abort_trigger = query_ctx.abort_trigger()?;
     let default_cache_ttl = query_ctx.default_cache_ttl();
 
-    let runtime = query_ctx.processing_runtime().clone();
+    let runtime = query_ctx.processing_runtime();
 
     // query and GeoJSON merging run as one task off the caller's runtime
     let work = async move {
         let features: Vec<serde_json::Value> = Vec::new();
         // TODO: more efficient merging of the partial feature collections
-        let stream = owned_query_stream(processor, query_rect, Box::new(query_ctx)).await?;
+        let stream = processor
+            .query_into_owned_boxed_stream(query_rect, Box::new(query_ctx))
+            .await?;
 
         stream
             .try_fold(

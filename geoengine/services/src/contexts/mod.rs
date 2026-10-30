@@ -250,8 +250,8 @@ impl QueryContext for QueryContextImpl {
         self.new_raster_cache.clone()
     }
 
-    fn processing_runtime(&self) -> &tokio::runtime::Handle {
-        &self.processing_runtime
+    fn processing_runtime(&self) -> tokio::runtime::Handle {
+        self.processing_runtime.clone()
     }
 }
 

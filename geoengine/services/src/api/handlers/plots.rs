@@ -197,7 +197,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let mut query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
-    let runtime = query_ctx.processing_runtime().clone();
+    let runtime = query_ctx.processing_runtime();
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();
@@ -213,8 +213,7 @@ async fn get_plot_handler<C: ApplicationContext>(
             let chart = spawn_query_task(runtime, async move {
                 processor.plot_query(query_rect, &query_ctx).await
             });
-            let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await;
-            let chart = chart?;
+            let chart = abortable_query_execution(chart, conn_closed, query_abort_trigger).await?;
 
             serde_json::to_value(chart).context(error::SerdeJson)?
         }

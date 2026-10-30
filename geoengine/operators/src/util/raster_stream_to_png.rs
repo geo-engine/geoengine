@@ -1,6 +1,6 @@
 use super::abortable_query_execution;
-use crate::engine::{BoxRasterQueryProcessor, QueryContext};
-use crate::util::{Result, owned_query_stream, spawn_query_task};
+use crate::engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessorExt};
+use crate::util::{Result, spawn_query_task};
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
@@ -79,7 +79,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     }
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
-    let runtime = query_ctx.processing_runtime().clone();
+    let runtime = query_ctx.processing_runtime();
 
     // query, blit and encode run as one task, so the caller's runtime only awaits the bytes
     let work = async move {
@@ -133,8 +133,9 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     debug_assert_eq!(query_rect.attributes().count(), 1);
 
     // the tile stream will allways produce tiles aligned to the tiling origin
-    let tile_stream =
-        owned_query_stream(processor, query_rect.clone(), Box::new(query_ctx)).await?;
+    let tile_stream = processor
+        .query_into_owned_boxed_stream(query_rect.clone(), Box::new(query_ctx))
+        .await?;
     let output_cache_hint = CacheHint::max_duration();
 
     let output_grid =
@@ -185,8 +186,9 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     let green_band_index = band_positions[1];
     let blue_band_index = band_positions[2];
 
-    let tile_stream =
-        owned_query_stream(processor, query_rect.clone(), Box::new(query_ctx)).await?;
+    let tile_stream = processor
+        .query_into_owned_boxed_stream(query_rect.clone(), Box::new(query_ctx))
+        .await?;
     let accu = Ok((tile_template, output_cache_hint));
 
     let output_tile = Box::pin(tile_stream.try_chunks(rgb_channel_count).fold(

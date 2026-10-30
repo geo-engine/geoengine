@@ -73,7 +73,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     }
 
     /// The runtime that runs query tasks, see [`crate::util::spawn_query`].
-    fn processing_runtime(&self) -> &tokio::runtime::Handle;
+    fn processing_runtime(&self) -> tokio::runtime::Handle;
 
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
@@ -293,8 +293,8 @@ impl QueryContext for MockQueryContext {
         self.chunk_byte_size
     }
 
-    fn processing_runtime(&self) -> &tokio::runtime::Handle {
-        &self.processing_runtime
+    fn processing_runtime(&self) -> tokio::runtime::Handle {
+        self.processing_runtime.clone()
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {
