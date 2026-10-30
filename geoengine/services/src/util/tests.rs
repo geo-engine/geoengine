@@ -685,6 +685,7 @@ pub fn create_test_app(
         )
         .configure(handlers::upload::init_upload_routes::<PostgresContext<NoTls>>)
         .configure(handlers::tasks::init_task_routes::<PostgresContext<NoTls>>)
+        .configure(handlers::cache::init_cache_routes::<PostgresContext<NoTls>>)
         .configure(handlers::wcs::init_wcs_routes::<PostgresContext<NoTls>>)
         .configure(handlers::wfs::init_wfs_routes::<PostgresContext<NoTls>>)
         .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)

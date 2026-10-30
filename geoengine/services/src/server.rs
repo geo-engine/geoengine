@@ -53,6 +53,7 @@ where
             .configure(handlers::spatial_references::init_spatial_reference_routes::<C>)
             .configure(handlers::upload::init_upload_routes::<C>)
             .configure(handlers::tasks::init_task_routes::<C>)
+            .configure(handlers::cache::init_cache_routes::<C>)
             .configure(handlers::wcs::init_wcs_routes::<C>)
             .configure(handlers::wfs::init_wfs_routes::<C>)
             .configure(handlers::wms::init_wms_routes::<C>)

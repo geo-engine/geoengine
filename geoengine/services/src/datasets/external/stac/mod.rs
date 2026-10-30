@@ -371,6 +371,10 @@ impl StacDataProvider {
 
 #[async_trait]
 impl DataProvider for StacDataProvider {
+    async fn clear_cache(&self) {
+        self.query_cache.clear().await;
+    }
+
     async fn provenance(
         &self,
         _id: &geoengine_datatypes::dataset::DataId,

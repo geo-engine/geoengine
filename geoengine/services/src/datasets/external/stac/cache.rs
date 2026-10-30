@@ -100,6 +100,11 @@ impl Default for StacQueryCache {
 }
 
 impl StacQueryCache {
+    pub(crate) async fn clear(&self) {
+        self.cache.invalidate_all();
+        self.cache.run_pending_tasks().await;
+    }
+
     pub(crate) fn new(max_bytes: usize, ttl: Duration) -> Self {
         let cache = Cache::builder()
             .max_capacity(max_bytes as u64)
@@ -413,6 +418,34 @@ mod tests {
         .unwrap();
         gate.notify_one();
         held.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_fetches_again_after_clear_and_then_reuses_results() {
+        let cache = Arc::new(StacQueryCache::new(4096, Duration::from_mins(1)));
+        let count = Arc::new(AtomicUsize::new(0));
+        for iteration in 0..4 {
+            if iteration == 2 {
+                cache.clear().await;
+            }
+            let calls = count.clone();
+            get(
+                cache.clone(),
+                dataset("same"),
+                0,
+                TimeInterval::default(),
+                move || async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(Vec::new())
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                count.load(Ordering::SeqCst),
+                if iteration < 2 { 1 } else { 2 }
+            );
+        }
     }
 
     #[tokio::test]

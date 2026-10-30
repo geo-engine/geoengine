@@ -16,9 +16,9 @@ Next, try it out.
 ```ts
 import {
   Configuration,
-  DatasetsApi,
+  CacheApi,
 } from '@geoengine/api-client';
-import type { AddDatasetTilesHandlerRequest } from '@geoengine/api-client';
+import type { ClearHandlerRequest } from '@geoengine/api-client';
 
 async function example() {
   console.log("🚀 Testing @geoengine/api-client SDK...");
@@ -26,17 +26,10 @@ async function example() {
     // Configure HTTP bearer authorization: session_token
     accessToken: "YOUR BEARER TOKEN",
   });
-  const api = new DatasetsApi(config);
-
-  const body = {
-    // string | Dataset Name
-    dataset: dataset_example,
-    // Array<AddDatasetTile>
-    addDatasetTile: ...,
-  } satisfies AddDatasetTilesHandlerRequest;
+  const api = new CacheApi(config);
 
   try {
-    const data = await api.addDatasetTilesHandler(body);
+    const data = await api.clearHandler();
     console.log(data);
   } catch (error) {
     console.error(error);
@@ -56,6 +49,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 | Class | Method | HTTP request | Description
 | ----- | ------ | ------------ | -------------
+*CacheApi* | [**clearHandler**](docs/CacheApi.md#clearhandler) | **POST** /cache/clear | Clear operator results, STAC query metadata and GDAL worker caches.
 *DatasetsApi* | [**addDatasetTilesHandler**](docs/DatasetsApi.md#adddatasettileshandler) | **POST** /dataset/{dataset}/tiles | Add a tile to a gdal dataset.
 *DatasetsApi* | [**autoCreateDatasetHandler**](docs/DatasetsApi.md#autocreatedatasethandler) | **POST** /dataset/auto | Creates a new dataset using previously uploaded files. The format of the files will be automatically detected when possible.
 *DatasetsApi* | [**createDatasetHandler**](docs/DatasetsApi.md#createdatasethandler) | **POST** /dataset | Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.

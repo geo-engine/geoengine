@@ -42,6 +42,7 @@ docs/BoundingBox2D.md
 docs/BoxPlot.md
 docs/BoxPlotParameters.md
 docs/Breakpoint.md
+docs/CacheApi.md
 docs/ClassHistogram.md
 docs/ClassHistogramParameters.md
 docs/ClassificationMeasurement.md
@@ -457,6 +458,7 @@ docs/WmsService.md
 docs/WmsVersion.md
 docs/WrappedPlotOutput.md
 git_push.sh
+src/apis/cache_api.rs
 src/apis/configuration.rs
 src/apis/datasets_api.rs
 src/apis/general_api.rs
