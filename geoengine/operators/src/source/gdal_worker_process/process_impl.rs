@@ -1034,7 +1034,11 @@ mod tests {
             Err(e) => panic!("Error receiving from IPC process: {e:?}"),
         };
 
-        assert_eq!(payload.block_size, Some((256, 256)), "the band's block size");
+        assert_eq!(
+            payload.block_size,
+            Some((256, 256)),
+            "the band's block size"
+        );
 
         let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
 

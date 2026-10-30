@@ -6,7 +6,7 @@ use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
 
-use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
+use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, GridSize, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
@@ -14,7 +14,10 @@ use crate::source::gdal_worker_process::process_common::GdalIpcBytePayload;
 
 use super::{
     GdalProcessPoolAccess,
-    process_common::{GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult},
+    process_common::{
+        GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcChannelMessage, IpcProcessError,
+        IpcProcessRasterResult,
+    },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
 
@@ -38,6 +41,12 @@ const THROTTLING_THRESHOLD_DURATION: Duration = Duration::from_millis(THROTTLING
 
 /// Max lookahead horizontal threshold for sweeps over unique datasets.
 const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
+
+/// Blocks remembered per worker for block-aware affinity. A 1024×1024 block of `UInt16` takes
+/// 2 MiB, so 64 blocks stay well within the default `GDAL_CACHEMAX` of 256 MiB per worker.
+/// shortcut: fixed instead of derived from `GDAL_CACHEMAX` and the data type, change if the cache
+/// size or block sizes differ a lot from that.
+const MAX_TRACKED_BLOCKS: usize = 64;
 
 /// Interval for logging the broker statistics.
 const STATS_REPORT_INTERVAL: Duration = Duration::from_secs(30);
@@ -94,6 +103,54 @@ struct WorkerAffinity {
     /// Block size `(x, y)` of `band`, as reported by the worker's last read of it. `None` until
     /// the worker has read this dataset and band.
     block_size: Option<(usize, usize)>,
+    /// Recently read blocks `(x, y)` of `band`, least recently read first, at most
+    /// `MAX_TRACKED_BLOCKS`. GDAL keeps them in the worker's block cache while the dataset is open.
+    blocks: VecDeque<(usize, usize)>,
+}
+
+/// The blocks a read touches, as inclusive block index ranges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BlockRange {
+    min: (usize, usize),
+    max: (usize, usize),
+}
+
+impl BlockRange {
+    fn of_window(window: &GdalReadWindow, (block_x, block_y): (usize, usize)) -> Option<Self> {
+        let (start_x, start_y) = window.gdal_window_start();
+        let (size_x, size_y) = window.gdal_window_size();
+        if size_x == 0 || size_y == 0 || block_x == 0 || block_y == 0 {
+            return None;
+        }
+        let start_x = usize::try_from(start_x).ok()?;
+        let start_y = usize::try_from(start_y).ok()?;
+        Some(Self {
+            min: (start_x / block_x, start_y / block_y),
+            max: (
+                (start_x + size_x - 1) / block_x,
+                (start_y + size_y - 1) / block_y,
+            ),
+        })
+    }
+
+    /// The blocks of the band that a read decodes. `None` for a downsampled read, as GDAL may
+    /// then read an overview, whose blocks are not the band's.
+    fn of_read(read_advise: &GdalReadAdvise, block_size: (usize, usize)) -> Option<Self> {
+        let (size_x, size_y) = read_advise.gdal_read_widow.gdal_window_size();
+        let out = &read_advise.read_window_bounds;
+        if size_x > out.axis_size_x() || size_y > out.axis_size_y() {
+            return None;
+        }
+        Self::of_window(&read_advise.gdal_read_widow, block_size)
+    }
+
+    fn contains(&self, (x, y): (usize, usize)) -> bool {
+        (self.min.0..=self.max.0).contains(&x) && (self.min.1..=self.max.1).contains(&y)
+    }
+
+    fn iter(self) -> impl Iterator<Item = (usize, usize)> {
+        (self.min.1..=self.max.1).flat_map(move |y| (self.min.0..=self.max.0).map(move |x| (x, y)))
+    }
 }
 
 /// How well an idle worker suits a request; greater is better. Each worker holds one open
@@ -108,24 +165,91 @@ enum WorkerRank {
     Evict { duplicate: bool, idle: Duration },
     /// The worker has nothing open, so using it closes nothing.
     Fresh,
-    /// The worker has the dataset open, so reading saves opening it. Prefer the same band, then
-    /// the nearest window: their blocks are likely still cached. Idle time does not count, as the
-    /// caches only hold blocks of the open dataset and do not expire.
+    /// The worker has the dataset open, so reading saves opening it. Prefer the worker that
+    /// holds most of the read's blocks in its block cache, as each block then is read and decoded
+    /// only once. Then prefer the same band and the nearest window, whose blocks are likely cached
+    /// too: `shared_blocks` is 0 while the block size is unknown and for downsampled reads. Idle
+    /// time does not count, as the caches only hold blocks of the open dataset and do not expire.
     Hit {
+        shared_blocks: usize,
         same_band: bool,
         distance: std::cmp::Reverse<u64>,
     },
 }
 
 impl WorkerRank {
-    /// Same dataset, band and window: no other worker can be better.
-    const BEST: Self = Self::Hit {
-        same_band: true,
-        distance: std::cmp::Reverse(0),
-    };
+    /// Same dataset, band and window as the worker's last read, so it holds all of the read's
+    /// blocks: no other worker can be better.
+    fn is_best(self) -> bool {
+        matches!(
+            self,
+            Self::Hit {
+                same_band: true,
+                distance: std::cmp::Reverse(0),
+                ..
+            }
+        )
+    }
 }
 
 impl WorkerAffinity {
+    /// The affinity of a worker that reads `read_advise` of `dataset_hash` and `band` after
+    /// `prev`. It keeps the block size and blocks only for the same dataset and band, as a worker
+    /// closes its dataset to open another. `block_size` is the one the read reported, if any.
+    fn after_read(
+        prev: Option<&WorkerAffinity>,
+        dataset_hash: u64,
+        band: usize,
+        read_advise: &GdalReadAdvise,
+        block_size: Option<(usize, usize)>,
+        timestamp: Instant,
+    ) -> Self {
+        let same = prev.filter(|a| a.dataset_hash == dataset_hash && a.band == band);
+        let block_size = block_size.or(same.and_then(|a| a.block_size));
+        let mut affinity = Self {
+            dataset_hash,
+            band,
+            spatial_window: read_advise.read_window_bounds,
+            timestamp,
+            block_size,
+            blocks: same
+                .filter(|a| a.block_size == block_size)
+                .map(|a| a.blocks.clone())
+                .unwrap_or_default(),
+        };
+        affinity.record_blocks(read_advise);
+        affinity
+    }
+
+    fn record_blocks(&mut self, read_advise: &GdalReadAdvise) {
+        let Some(range) = self
+            .block_size
+            .and_then(|block_size| BlockRange::of_read(read_advise, block_size))
+        else {
+            return;
+        };
+        for block in range.iter() {
+            if let Some(i) = self.blocks.iter().position(|&b| b == block) {
+                self.blocks.remove(i);
+            }
+            self.blocks.push_back(block);
+            if self.blocks.len() > MAX_TRACKED_BLOCKS {
+                self.blocks.pop_front();
+            }
+        }
+    }
+
+    /// How many of the read's blocks of `self.band` the worker holds.
+    fn shared_blocks(&self, read_advise: &GdalReadAdvise) -> usize {
+        let Some(range) = self
+            .block_size
+            .and_then(|block_size| BlockRange::of_read(read_advise, block_size))
+        else {
+            return 0;
+        };
+        self.blocks.iter().filter(|&&b| range.contains(b)).count()
+    }
+
     /// `now` is passed down to avoid a clock lookup per worker inside the dispatch loop.
     /// `holders` counts the workers holding each dataset.
     #[inline]
@@ -133,7 +257,7 @@ impl WorkerAffinity {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        read_advise: &GdalReadAdvise,
         now: Instant,
         holders: &FastHashMap<u64, usize>,
     ) -> WorkerRank {
@@ -144,9 +268,18 @@ impl WorkerAffinity {
             };
         }
 
+        let same_band = self.band == band;
         WorkerRank::Hit {
-            same_band: self.band == band,
-            distance: std::cmp::Reverse(calculate_grid_distance(&self.spatial_window, window)),
+            shared_blocks: if same_band {
+                self.shared_blocks(read_advise)
+            } else {
+                0
+            },
+            same_band,
+            distance: std::cmp::Reverse(calculate_grid_distance(
+                &self.spatial_window,
+                &read_advise.read_window_bounds,
+            )),
         }
     }
 }
@@ -165,12 +298,12 @@ impl WorkerProcess {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        read_advise: &GdalReadAdvise,
         now: Instant,
         holders: &FastHashMap<u64, usize>,
     ) -> WorkerRank {
         match &self.affinity {
-            Some(affinity) => affinity.rank(dataset_hash, band, window, now, holders),
+            Some(affinity) => affinity.rank(dataset_hash, band, read_advise, now, holders),
             None => WorkerRank::Fresh,
         }
     }
@@ -249,7 +382,7 @@ enum BrokerCommand {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        read_advise: GdalReadAdvise,
         block_size: Option<(usize, usize)>,
         read_failed: bool,
     },
@@ -420,7 +553,7 @@ impl GdalProcessPool {
         broker_tx: &mpsc::Sender<BrokerCommand>,
     ) {
         while let Some(job) = job_rx.blocking_recv() {
-            let window = job.request.0.read_advise.read_window_bounds;
+            let read_advise = job.request.0.read_advise;
             let band = job.request.0.dataset_params.rasterband_channel;
             let dataset_hash = job.dataset_hash;
 
@@ -462,7 +595,7 @@ impl GdalProcessPool {
                 worker_id,
                 dataset_hash,
                 band,
-                window,
+                read_advise,
                 block_size,
                 read_failed,
             });
@@ -518,7 +651,7 @@ impl GdalProcessPool {
                         worker_id,
                         dataset_hash,
                         band,
-                        window,
+                        read_advise,
                         block_size,
                         read_failed,
                     } => {
@@ -526,7 +659,7 @@ impl GdalProcessPool {
                             worker_id,
                             dataset_hash,
                             band,
-                            window,
+                            &read_advise,
                             block_size,
                             read_failed,
                         );
@@ -700,18 +833,23 @@ impl BrokerState {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        read_advise: &GdalReadAdvise,
         block_size: Option<(usize, usize)>,
         read_failed: bool,
     ) {
         self.finish_read(dataset_hash);
 
-        let affinity = (!read_failed).then(|| WorkerAffinity {
-            dataset_hash,
-            band,
-            spatial_window: window,
-            timestamp: Instant::now(),
-            block_size,
+        let affinity = (!read_failed).then(|| {
+            WorkerAffinity::after_read(
+                self.workers
+                    .get(worker_id)
+                    .and_then(|w| w.affinity.as_ref()),
+                dataset_hash,
+                band,
+                read_advise,
+                block_size,
+                Instant::now(),
+            )
         });
         self.set_affinity(worker_id, affinity);
 
@@ -807,7 +945,7 @@ impl BrokerState {
                 };
 
                 datasets_scanned += 1;
-                let window = &req.request.0.read_advise.read_window_bounds;
+                let read_advise = &req.request.0.read_advise;
                 let band = req.request.0.dataset_params.rasterband_channel;
 
                 let mut current_best_w_idx = 0;
@@ -818,13 +956,13 @@ impl BrokerState {
                         .workers
                         .get(w_id)
                         .expect("Idle worker ID missing from registry - invariant broken");
-                    let rank = w.rank_for_job(hash, band, window, now, &self.dataset_holders);
+                    let rank = w.rank_for_job(hash, band, read_advise, now, &self.dataset_holders);
 
                     if Some(rank) > current_best_rank {
                         current_best_rank = Some(rank);
                         current_best_w_idx = w_idx;
                     }
-                    if rank == WorkerRank::BEST {
+                    if rank.is_best() {
                         break;
                     }
                 }
@@ -836,7 +974,7 @@ impl BrokerState {
                     best_dataset_active_idx = idx;
                 }
 
-                if best_rank == Some(WorkerRank::BEST) {
+                if best_rank.is_some_and(WorkerRank::is_best) {
                     break;
                 }
 
@@ -894,19 +1032,15 @@ impl BrokerState {
             // The worker holds the requested dataset once the read starts, not its previous one.
             // Recorded now, so that a busy worker switching datasets does not count as a holder of
             // its old dataset when ranking duplicates; the release corrects it.
-            let band = req.request.0.dataset_params.rasterband_channel;
-            let busy_affinity = WorkerAffinity {
-                dataset_hash: req.dataset_hash,
-                band,
-                spatial_window: req.request.0.read_advise.read_window_bounds,
-                timestamp: now,
-                // a block size only applies to the dataset and band it was read from
-                block_size: worker
-                    .affinity
-                    .as_ref()
-                    .filter(|a| a.dataset_hash == req.dataset_hash && a.band == band)
-                    .and_then(|a| a.block_size),
-            };
+            // Includes the blocks being read, so the next read of them prefers this worker.
+            let busy_affinity = WorkerAffinity::after_read(
+                worker.affinity.as_ref(),
+                req.dataset_hash,
+                req.request.0.dataset_params.rasterband_channel,
+                &req.request.0.read_advise,
+                None,
+                now,
+            );
 
             {
                 let _span = tracing::debug_span!(
@@ -1229,6 +1363,20 @@ mod tests {
             spatial_window: window,
             timestamp: Instant::now(),
             block_size: None,
+            blocks: VecDeque::new(),
+        }
+    }
+
+    /// A read at native resolution whose file window equals the target window.
+    fn advise(w: GridBoundingBox2D) -> GdalReadAdvise {
+        GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new(
+                w.min_index(),
+                GridShape2D::new([w.axis_size_y(), w.axis_size_x()]),
+            ),
+            read_window_bounds: w,
+            bounds_of_target: w,
+            flip_y: false,
         }
     }
 
@@ -1243,7 +1391,7 @@ mod tests {
     ) -> WorkerRank {
         let w = window([0, 0], [7, 7]);
         let now = aff.timestamp + Duration::from_secs(idle_secs);
-        aff.rank(dataset_hash, band, &w, now, &FastHashMap::default())
+        aff.rank(dataset_hash, band, &advise(w), now, &FastHashMap::default())
     }
 
     #[test]
@@ -1252,9 +1400,9 @@ mod tests {
         let aff = make_affinity(42, 1, w);
         for idle in IDLE_SECS {
             let now = aff.timestamp + Duration::from_secs(idle);
-            assert_eq!(
-                aff.rank(42, 1, &w, now, &FastHashMap::default()),
-                WorkerRank::BEST
+            assert!(
+                aff.rank(42, 1, &advise(w), now, &FastHashMap::default())
+                    .is_best()
             );
         }
     }
@@ -1273,7 +1421,8 @@ mod tests {
             assert!(worst_hit > WorkerRank::Fresh);
             for evict_idle in IDLE_SECS {
                 let now = evict.timestamp + Duration::from_secs(evict_idle);
-                let best_evict = evict.rank(42, 1, &window([0, 0], [7, 7]), now, &duplicates);
+                let best_evict =
+                    evict.rank(42, 1, &advise(window([0, 0], [7, 7])), now, &duplicates);
                 assert!(WorkerRank::Fresh > best_evict);
             }
         }
@@ -1307,17 +1456,241 @@ mod tests {
         let unique_long_idle = aff.rank(
             42,
             1,
-            &w,
+            &advise(w),
             aff.timestamp + Duration::from_secs(3600),
             &holders,
         );
-        let unique_short_idle =
-            aff.rank(42, 1, &w, aff.timestamp + Duration::from_secs(1), &holders);
+        let unique_short_idle = aff.rank(
+            42,
+            1,
+            &advise(w),
+            aff.timestamp + Duration::from_secs(1),
+            &holders,
+        );
         holders.insert(99, 2);
-        let duplicate = aff.rank(42, 1, &w, aff.timestamp, &holders);
+        let duplicate = aff.rank(42, 1, &advise(w), aff.timestamp, &holders);
 
         assert!(duplicate > unique_long_idle);
         assert!(unique_long_idle > unique_short_idle);
+    }
+
+    // --- BlockRange ---
+
+    const BLOCK: (usize, usize) = (1024, 1024);
+
+    fn file_window(x: isize, y: isize, size_x: usize, size_y: usize) -> GdalReadWindow {
+        GdalReadWindow::new(GridIdx2D::new([y, x]), GridShape2D::new([size_y, size_x]))
+    }
+
+    fn blocks_of(x: isize, y: isize, size_x: usize, size_y: usize) -> Option<BlockRange> {
+        BlockRange::of_window(&file_window(x, y, size_x, size_y), BLOCK)
+    }
+
+    fn block_range(min: (usize, usize), max: (usize, usize)) -> BlockRange {
+        BlockRange { min, max }
+    }
+
+    #[test]
+    fn block_range_of_aligned_window() {
+        assert_eq!(blocks_of(0, 0, 512, 512), Some(block_range((0, 0), (0, 0))));
+        assert_eq!(
+            blocks_of(1536, 512, 512, 512),
+            Some(block_range((1, 0), (1, 0)))
+        );
+        assert_eq!(
+            blocks_of(0, 0, 2048, 1024),
+            Some(block_range((0, 0), (1, 0)))
+        );
+    }
+
+    /// Neighbouring MGRS tiles start 10000 px apart, which is 9 blocks and 784 px.
+    #[test]
+    fn block_range_of_window_offset_by_784_px() {
+        assert_eq!(
+            blocks_of(784, 784, 512, 512),
+            Some(block_range((0, 0), (1, 1)))
+        );
+        assert_eq!(
+            blocks_of(784 + 512, 0, 512, 512),
+            Some(block_range((1, 0), (1, 0)))
+        );
+        assert_eq!(
+            blocks_of(784, 784, 512, 512).unwrap().iter().count(),
+            4,
+            "a 512 px tile can touch 4 blocks"
+        );
+    }
+
+    #[test]
+    fn block_range_of_window_on_block_edge() {
+        assert_eq!(
+            blocks_of(512, 0, 512, 512),
+            Some(block_range((0, 0), (0, 0)))
+        );
+        assert_eq!(
+            blocks_of(1024, 1024, 512, 512),
+            Some(block_range((1, 1), (1, 1)))
+        );
+        assert_eq!(blocks_of(1023, 0, 2, 1), Some(block_range((0, 0), (1, 0))));
+    }
+
+    /// A 10980 px wide file ends in block 10, which covers only 740 px.
+    #[test]
+    fn block_range_of_partial_edge_blocks() {
+        assert_eq!(
+            blocks_of(10240, 10240, 740, 740),
+            Some(block_range((10, 10), (10, 10)))
+        );
+        assert_eq!(
+            blocks_of(10000, 0, 980, 512),
+            Some(block_range((9, 0), (10, 0)))
+        );
+    }
+
+    #[test]
+    fn block_range_of_empty_or_downsampled_read() {
+        assert_eq!(blocks_of(0, 0, 0, 512), None);
+
+        let mut read = advise(window([0, 0], [511, 511]));
+        read.gdal_read_widow = file_window(0, 0, 1024, 1024);
+        assert_eq!(
+            BlockRange::of_read(&read, BLOCK),
+            None,
+            "may read an overview"
+        );
+
+        read.gdal_read_widow = file_window(0, 0, 256, 256);
+        assert_eq!(
+            BlockRange::of_read(&read, BLOCK),
+            Some(block_range((0, 0), (0, 0))),
+            "upsampling reads the band itself"
+        );
+    }
+
+    #[test]
+    fn it_tracks_the_most_recently_read_blocks() {
+        let mut aff = make_affinity(42, 1, window([0, 0], [511, 511]));
+        aff.block_size = Some((1, 1));
+        // 100 blocks, more than are tracked
+        aff.record_blocks(&advise(window([0, 0], [9, 9])));
+        assert_eq!(aff.blocks.len(), MAX_TRACKED_BLOCKS);
+        assert_eq!(aff.blocks.back(), Some(&(9, 9)));
+
+        aff.record_blocks(&advise(window([0, 0], [0, 0])));
+        assert_eq!(aff.blocks.len(), MAX_TRACKED_BLOCKS, "no duplicate entries");
+        assert_eq!(
+            aff.blocks.back(),
+            Some(&(0, 0)),
+            "read again, so most recent"
+        );
+    }
+
+    // --- block-aware rank ---
+
+    /// A worker on dataset 42 whose last read was `w`, holding `blocks` of 1024 px.
+    fn holding_blocks(
+        band: usize,
+        w: GridBoundingBox2D,
+        blocks: &[(usize, usize)],
+    ) -> WorkerAffinity {
+        let mut aff = make_affinity(42, band, w);
+        aff.block_size = Some(BLOCK);
+        aff.blocks = blocks.iter().copied().collect();
+        aff
+    }
+
+    fn rank_for(aff: &WorkerAffinity, band: usize, read: &GdalReadAdvise) -> WorkerRank {
+        aff.rank(42, band, read, aff.timestamp, &FastHashMap::default())
+    }
+
+    /// Reads blocks (0, 0) to (1, 1) at file pixels 784..1295.
+    fn read_across_blocks() -> GdalReadAdvise {
+        advise(window([784, 784], [1295, 1295]))
+    }
+
+    #[test]
+    fn rank_prefers_more_shared_blocks() {
+        let read = read_across_blocks();
+        let far = window([9000, 9000], [9511, 9511]);
+        let near = window([784, 1296], [1295, 1807]);
+
+        let two_far = holding_blocks(1, far, &[(0, 0), (1, 0), (5, 5)]);
+        let one_near = holding_blocks(1, near, &[(1, 1), (2, 1)]);
+        let other_band_near = holding_blocks(2, near, &[(0, 0), (1, 0), (0, 1), (1, 1)]);
+
+        assert!(rank_for(&two_far, 1, &read) > rank_for(&one_near, 1, &read));
+        assert!(rank_for(&one_near, 1, &read) > rank_for(&other_band_near, 1, &read));
+        assert!(matches!(
+            rank_for(&two_far, 1, &read),
+            WorkerRank::Hit {
+                shared_blocks: 2,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rank_breaks_shared_block_ties_by_band_then_distance() {
+        let read = read_across_blocks();
+        let far = window([9000, 9000], [9511, 9511]);
+        let near = window([784, 1296], [1295, 1807]);
+
+        let same_band_far = holding_blocks(1, far, &[]);
+        let other_band_near = holding_blocks(2, near, &[]);
+        assert!(rank_for(&same_band_far, 1, &read) > rank_for(&other_band_near, 1, &read));
+
+        let one_far = holding_blocks(1, far, &[(0, 0)]);
+        let one_near = holding_blocks(1, near, &[(1, 1)]);
+        assert!(rank_for(&one_near, 1, &read) > rank_for(&one_far, 1, &read));
+    }
+
+    /// Without a known block size, or for a downsampled read, no blocks count and the rank is the
+    /// same as without block awareness.
+    #[test]
+    fn rank_without_block_size_uses_band_and_distance() {
+        let read = read_across_blocks();
+        let mut near = holding_blocks(1, window([784, 1296], [1295, 1807]), &[(0, 0)]);
+        near.block_size = None;
+        assert_eq!(
+            rank_for(&near, 1, &read),
+            WorkerRank::Hit {
+                shared_blocks: 0,
+                same_band: true,
+                distance: std::cmp::Reverse(512),
+            }
+        );
+
+        let holding = holding_blocks(1, window([9000, 9000], [9511, 9511]), &[(0, 0)]);
+        let mut downsampled = read;
+        downsampled.gdal_read_widow = file_window(0, 0, 2048, 2048);
+        assert!(matches!(
+            rank_for(&holding, 1, &downsampled),
+            WorkerRank::Hit {
+                shared_blocks: 0,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn it_dispatches_to_the_worker_holding_the_blocks() {
+        let (mut w0, _rx0) = dummy_worker(0);
+        w0.affinity = Some(holding_blocks(1, window([0, 512], [511, 1023]), &[(0, 0)]));
+        let (mut w1, mut rx1) = dummy_worker(1);
+        w1.affinity = Some(holding_blocks(
+            1,
+            window([3000, 3000], [3511, 3511]),
+            &[(0, 0), (1, 0), (0, 1), (1, 1)],
+        ));
+
+        let mut state = BrokerState::new(vec![w0, w1], 4, 4, SchedulingStrategy::GlobalMatrix);
+        let (mut req, _resp) = make_request(42, 1, window([784, 784], [1295, 1295]));
+        req.request.0.read_advise = read_across_blocks();
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        rx1.try_recv()
+            .expect("the worker holding all four blocks should read them");
     }
 
     // --- BrokerState dispatch tests ---
@@ -1438,7 +1811,7 @@ mod tests {
             0,
             job.dataset_hash,
             1,
-            window([0, 0], [255, 255]),
+            &advise(window([0, 0], [255, 255])),
             None,
             false,
         );
@@ -1470,7 +1843,14 @@ mod tests {
         let first = rx0.try_recv().unwrap().dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, first, 1, window([0, 0], [255, 255]), None, false);
+        state.release_worker(
+            0,
+            first,
+            1,
+            &advise(window([0, 0], [255, 255])),
+            None,
+            false,
+        );
         state.try_dispatch();
         let second = rx0.try_recv().unwrap().dataset_hash;
 
@@ -1588,7 +1968,7 @@ mod tests {
         state.enqueue_request(req);
         state.try_dispatch();
         let job = rx0.try_recv().unwrap();
-        state.release_worker(0, job.dataset_hash, 1, w, None, true);
+        state.release_worker(0, job.dataset_hash, 1, &advise(w), None, true);
 
         assert!(state.workers[0].affinity.is_none());
         assert!(state.dataset_holders.is_empty());
@@ -1631,7 +2011,7 @@ mod tests {
         };
 
         read(&mut state, 100, 1);
-        state.release_worker(0, 100, 1, w, Some((1024, 1024)), false);
+        state.release_worker(0, 100, 1, &advise(w), Some((1024, 1024)), false);
         assert_eq!(block_size(&state), Some((1024, 1024)));
 
         read(&mut state, 100, 1);
@@ -1640,11 +2020,11 @@ mod tests {
             Some((1024, 1024)),
             "same dataset and band"
         );
-        state.release_worker(0, 100, 1, w, Some((1024, 1024)), false);
+        state.release_worker(0, 100, 1, &advise(w), Some((1024, 1024)), false);
 
         read(&mut state, 100, 2);
         assert_eq!(block_size(&state), None, "other band");
-        state.release_worker(0, 100, 2, w, Some((512, 512)), false);
+        state.release_worker(0, 100, 2, &advise(w), Some((512, 512)), false);
 
         read(&mut state, 200, 2);
         assert_eq!(block_size(&state), None, "other dataset");
