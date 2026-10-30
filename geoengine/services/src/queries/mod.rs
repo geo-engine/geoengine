@@ -23,7 +23,7 @@ where
     E: From<Error> + Send + 'static,
     F: Future<Output = Result<T, E>> + Send + 'static,
 {
-    run_on(ctx.processing_runtime().clone(), cancel, work).await
+    run_on(ctx.processing_runtime(), cancel, work).await
 }
 
 fn run_on<T, E, F>(

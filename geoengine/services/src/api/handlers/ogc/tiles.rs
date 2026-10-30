@@ -9,7 +9,7 @@ use crate::{
             },
             util::{
                 crs_from_spatial_reference_option, link_creator, load_layer, parse_datetime_option,
-                raster_workflow_metadata,
+                raster_processing_graph_metadata,
             },
         },
         model::datatypes::{DataProviderId, LayerId},

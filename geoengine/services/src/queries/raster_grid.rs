@@ -3,8 +3,10 @@
 use crate::config::{self, get_config_element};
 use crate::contexts::SessionContext;
 use crate::error::Result;
+use crate::processing_graphs::{
+    processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry,
+};
 use crate::quota::ComputationId;
-use crate::workflows::{registry::WorkflowRegistry, workflow::WorkflowId};
 use geoengine_datatypes::{
     operations::image::RasterColorizer,
     primitives::{
@@ -17,7 +19,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_raster_processor_gdal_types,
-    engine::{ExecutionContext, WorkflowOperatorPath},
+    engine::{ExecutionContext, ProcessingGraphOperatorPath},
     util::{
         WrapWithProjectionAndResample,
         raster_stream_to_geotiff::{
@@ -29,14 +31,14 @@ use geoengine_operators::{
 };
 use tracing::debug;
 
-/// A raster workflow, projected and resampled onto the requested grid
+/// A raster processing graph, projected and resampled onto the requested grid
 pub struct RasterGridQuery {
-    pub workflow: WorkflowId,
+    pub processing_graph: ProcessingGraphId,
     pub crs: SpatialReference,
     pub bounds: SpatialPartition2D,
-    /// `None` keeps the workflow's resolution
+    /// `None` keeps the processing graph's resolution
     pub resolution: Option<SpatialResolution>,
-    /// `None` keeps the workflow's grid origin
+    /// `None` keeps the processing graph's grid origin
     pub origin: Option<Coordinate2D>,
     pub time: TimeInterval,
     pub bands: BandSelection,
@@ -61,7 +63,7 @@ pub async fn raster_grid<C: SessionContext>(
     encoding: RasterEncoding,
 ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
     let RasterGridQuery {
-        workflow,
+        processing_graph,
         crs,
         bounds,
         resolution,
@@ -72,7 +74,7 @@ pub async fn raster_grid<C: SessionContext>(
 
     let operator = ctx
         .db()
-        .load_workflow(&workflow)
+        .load_processing_graph(&processing_graph)
         .await?
         .operator
         .get_raster()?;
@@ -82,7 +84,10 @@ pub async fn raster_grid<C: SessionContext>(
 
     let initialized = operator
         .clone()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await?;
 
     // TODO: add a resammple operator for downsampling AND resample push down!
@@ -150,7 +155,7 @@ pub async fn raster_grid<C: SessionContext>(
 
     let processor = wrapped.initialized_operator.query_processor()?;
 
-    let query_ctx = ctx.query_context(workflow, computation_id)?;
+    let query_ctx = ctx.query_context(processing_graph, computation_id)?;
 
     // cancellation is handled by the task that runs this function
     let not_canceled = Box::pin(futures::future::pending());

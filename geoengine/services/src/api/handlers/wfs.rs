@@ -7,12 +7,15 @@ use crate::{
     config::{self},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Result},
+    processing_graphs::{
+        processing_graph::ProcessingGraphId as ServicesProcessingGraphId,
+        registry::ProcessingGraphRegistry,
+    },
     queries::{
         run_query,
         vector::{VectorQuery, features_geojson},
     },
     util::server::{CacheControlHeader, connection_closed},
-    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::{
@@ -20,7 +23,7 @@ use geoengine_datatypes::{
     primitives::{CacheHint, FeatureData, MultiPoint},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::WorkflowOperatorPath;
+use geoengine_operators::engine::ProcessingGraphOperatorPath;
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::ensure;
@@ -488,7 +491,7 @@ async fn wfs_get_feature<C: ApplicationContext>(
     );
 
     let query = VectorQuery {
-        workflow: type_names,
+        processing_graph: type_names,
         // TODO: use a default spatial reference if it is not set?
         crs: request
             .srs_name

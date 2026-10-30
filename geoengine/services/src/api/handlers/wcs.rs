@@ -10,6 +10,10 @@ use crate::{
     config::{self},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
+    processing_graphs::{
+        processing_graph::ProcessingGraphId as ServicesProcessingGraphId,
+        registry::ProcessingGraphRegistry,
+    },
     queries::{
         raster_grid::{RasterEncoding, RasterGridQuery, raster_grid},
         run_query,
@@ -22,7 +26,7 @@ use geoengine_datatypes::{
     raster::GridShape2D,
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::engine::{InitializedRasterOperator, WorkflowOperatorPath};
+use geoengine_operators::engine::{InitializedRasterOperator, ProcessingGraphOperatorPath};
 use serde::Deserialize;
 use snafu::ensure;
 use std::{str::FromStr, time::Duration};
@@ -379,7 +383,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
     let bounds = request.spatial_partition()?;
     let query = RasterGridQuery {
-        workflow: identifier,
+        processing_graph: identifier,
         crs: request.spatial_ref().map(Into::into)?,
         bounds,
         resolution: request.spatial_resolution().transpose()?,

@@ -10,8 +10,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,
     engine::{
-        InitializedRasterOperator, QueryAbortTrigger, QueryContext, VectorOperator,
-        WorkflowOperatorPath,
+        InitializedRasterOperator, ProcessingGraphOperatorPath, QueryAbortTrigger, QueryContext,
+        QueryProcessorExt, TypedVectorOperator,
     },
     util::{QUERY_TASK_CHANNEL_CAPACITY, spawn_stream},
 };

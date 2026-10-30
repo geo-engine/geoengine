@@ -1,11 +1,11 @@
-//! Plots of a plot workflow.
+//! Plots of a plot processing graph.
 
 use crate::{
     api::handlers::plots::{GetPlot, WrappedPlotOutput},
     contexts::SessionContext,
     error::{self, Result},
+    processing_graphs::{processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry},
     quota::ComputationId,
-    workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use base64::Engine;
 use geoengine_datatypes::{
@@ -16,37 +16,38 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedPlotOperator, PlotOperator, ResultDescriptor,
-    TypedPlotQueryProcessor, WorkflowOperatorPath,
+    ExecutionContext, InitializedPlotOperator, ProcessingGraphOperatorPath, ResultDescriptor,
+    TypedPlotOperator, TypedPlotQueryProcessor,
 };
 use snafu::ResultExt;
 use tracing::debug;
 
-/// Computes the plot of a workflow
+/// Computes the plot of a processing graph
 pub(crate) async fn plot<C: SessionContext>(
     ctx: C,
-    workflow_id: WorkflowId,
+    processing_graph_id: ProcessingGraphId,
     params: GetPlot,
 ) -> Result<(WrappedPlotOutput, ComputationId)> {
-    let workflow = ctx.db().load_workflow(&workflow_id).await?;
+    let processing_graph = ctx.db().load_processing_graph(&processing_graph_id).await?;
 
-    let operator = workflow.operator.get_plot()?;
+    let operator = processing_graph.operator.get_plot()?;
 
     let execution_context = ctx.execution_context()?;
 
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
     let initialized = operator
-        .initialize(workflow_operator_path_root, &execution_context)
+        .initialize(processing_graph_operator_path_root, &execution_context)
         .await?;
 
-    // handle request and workflow crs matching
-    let workflow_spatial_ref: Option<SpatialReference> =
+    // handle request and processing graph crs matching
+    let processing_graph_spatial_ref: Option<SpatialReference> =
         initialized.result_descriptor().spatial_reference().into();
-    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+    let processing_graph_spatial_ref =
+        processing_graph_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     // without a requested crs, the bbox is in the data's crs
-    let request_spatial_ref: SpatialReference = params.crs.unwrap_or(workflow_spatial_ref);
+    let request_spatial_ref: SpatialReference = params.crs.unwrap_or(processing_graph_spatial_ref);
 
     let initialized = if let Some(request_resolution) = params.spatial_resolution {
         rewrite_for_request_resolution(
@@ -55,7 +56,7 @@ pub(crate) async fn plot<C: SessionContext>(
             params.bbox,
             request_resolution,
             request_spatial_ref,
-            workflow_spatial_ref,
+            processing_graph_spatial_ref,
         )
         .await?
     } else {
@@ -65,12 +66,12 @@ pub(crate) async fn plot<C: SessionContext>(
     let query_rect =
         PlotQueryRectangle::new(params.bbox, params.time.into(), PlotSeriesSelection::all());
 
-    let query_rect = if request_spatial_ref == workflow_spatial_ref {
+    let query_rect = if request_spatial_ref == processing_graph_spatial_ref {
         Some(query_rect)
     } else {
         let repr_spatial_query = reproject_spatial_query::<_, DefaultCoordinateProjector>(
             query_rect.spatial_bounds(),
-            workflow_spatial_ref,
+            processing_graph_spatial_ref,
             request_spatial_ref,
             true,
         )?;
@@ -82,7 +83,7 @@ pub(crate) async fn plot<C: SessionContext>(
     let Some(query_rect) = query_rect else {
         return Err(error::Error::UnresolvableQueryBoundingBox2DInSrs {
             query_bbox: params.bbox.into(),
-            query_srs: workflow_spatial_ref.into(),
+            query_srs: processing_graph_spatial_ref.into(),
         });
     };
 
@@ -90,7 +91,7 @@ pub(crate) async fn plot<C: SessionContext>(
 
     let computation_id = ComputationId::new();
 
-    let query_ctx = ctx.query_context(workflow_id, computation_id)?;
+    let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
     let output_format = PlotOutputFormat::from(&processor);
     let plot_type = processor.plot_type();
@@ -136,20 +137,20 @@ async fn rewrite_for_request_resolution(
     request_bbox: BoundingBox2D,
     request_resolution: SpatialResolution,
     request_spatial_ref: SpatialReference,
-    workflow_spatial_ref: SpatialReference,
+    processing_graph_spatial_ref: SpatialReference,
 ) -> Result<Box<dyn InitializedPlotOperator>> {
-    let resolution = if request_spatial_ref == workflow_spatial_ref {
+    let resolution = if request_spatial_ref == processing_graph_spatial_ref {
         Ok(request_resolution)
     } else {
         suggest_pixel_size_like_gdal_helper::<_, DefaultCoordinateProjector>(
             request_bbox,
             request_resolution,
             request_spatial_ref,
-            workflow_spatial_ref,
+            processing_graph_spatial_ref,
         )
     };
 
-    let optimized: Result<Box<dyn PlotOperator>, String> = match resolution {
+    let optimized: Result<TypedPlotOperator, String> = match resolution {
         Ok(resolution) => initialized
             .optimize(resolution)
             .map_err(|error| error.to_string()),
@@ -158,7 +159,10 @@ async fn rewrite_for_request_resolution(
 
     match optimized {
         Ok(optimized) => Ok(optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), execution_context)
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                execution_context,
+            )
             .await?),
         Err(error) => {
             debug!("Computing plot without optimization: {error}");

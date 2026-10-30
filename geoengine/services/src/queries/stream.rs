@@ -4,8 +4,10 @@ use crate::{
     api::handlers::processing_graphs::error,
     contexts::SessionContext,
     error::Result,
+    processing_graphs::{
+        WebsocketStreamTask, processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry,
+    },
     quota::ComputationId,
-    workflows::{WebsocketStreamTask, registry::WorkflowRegistry, workflow::WorkflowId},
 };
 use geoengine_datatypes::{
     error::BoxedResultExt,
@@ -14,19 +16,19 @@ use geoengine_datatypes::{
     },
     util::Identifier,
 };
-use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
+use geoengine_operators::engine::{ExecutionContext, ProcessingGraphOperatorPath};
 
-/// Initializes a raster workflow and starts streaming the tiles within `spatial_bounds`
+/// Initializes a raster processing graph and starts streaming the tiles within `spatial_bounds`
 pub async fn raster_stream<C: SessionContext>(
     ctx: C,
-    workflow_id: WorkflowId,
+    processing_graph_id: ProcessingGraphId,
     spatial_bounds: SpatialPartition2D,
     time_interval: TimeInterval,
     bands: BandSelection,
 ) -> Result<WebsocketStreamTask> {
     let operator = ctx
         .db()
-        .load_workflow(&workflow_id)
+        .load_processing_graph(&processing_graph_id)
         .await?
         .operator
         .get_raster()
@@ -35,7 +37,10 @@ pub async fn raster_stream<C: SessionContext>(
     let execution_context = ctx.execution_context()?;
 
     let initialized_operator = operator
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
         .await?;
 
     let query_bounds = initialized_operator
@@ -45,7 +50,7 @@ pub async fn raster_stream<C: SessionContext>(
         .spatial_to_grid_bounds(&spatial_bounds);
     let query_rectangle = RasterQueryRectangle::new(query_bounds, time_interval, bands);
 
-    let query_ctx = ctx.query_context(workflow_id, ComputationId::new())?;
+    let query_ctx = ctx.query_context(processing_graph_id, ComputationId::new())?;
 
     WebsocketStreamTask::new_raster_initialized(
         initialized_operator.as_ref(),
@@ -54,15 +59,15 @@ pub async fn raster_stream<C: SessionContext>(
     )
 }
 
-/// Initializes a vector workflow and starts streaming its chunks
+/// Initializes a vector processing graph and starts streaming its chunks
 pub async fn vector_stream<C: SessionContext>(
     ctx: C,
-    workflow_id: WorkflowId,
+    processing_graph_id: ProcessingGraphId,
     query_rectangle: VectorQueryRectangle,
 ) -> Result<WebsocketStreamTask> {
     let operator = ctx
         .db()
-        .load_workflow(&workflow_id)
+        .load_processing_graph(&processing_graph_id)
         .await?
         .operator
         .get_vector()
@@ -72,7 +77,7 @@ pub async fn vector_stream<C: SessionContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
-        ctx.query_context(workflow_id, ComputationId::new())?,
+        ctx.query_context(processing_graph_id, ComputationId::new())?,
     )
     .await
 }

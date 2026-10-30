@@ -10,9 +10,9 @@ use crate::{
     api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
+    processing_graphs::registry::ProcessingGraphRegistry,
     projects::Symbology,
     quota::ComputationId,
-    workflows::registry::WorkflowRegistry,
 };
 use geoengine_datatypes::{
     error::BoxedResultExt,
@@ -205,7 +205,10 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
     initialized_operator: &dyn InitializedRasterOperator,
     ctx: &C,
 ) -> OgcApiResult<(TypedRasterQueryProcessor, C::QueryContext, ComputationId)> {
-    let processing_graph_id = ctx.db().register_workflow(layer.workflow.clone()).await?; // TODO: can we get this without re-registering it?
+    let processing_graph_id = ctx
+        .db()
+        .register_processing_graph(layer.processing_graph.clone())
+        .await?; // TODO: can we get this without re-registering it?
     let computation_id = ComputationId::new();
     let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 

@@ -18,20 +18,23 @@ use crate::{
     },
     error::Result,
     layers::storage::LayerProviderDb,
+    processing_graphs::{
+        handle_websocket_message,
+        processing_graph::{
+            ProcessingGraph as ServicesProcessingGraph,
+            ProcessingGraphId as ServicesProcessingGraphId,
+        },
+        registry::ProcessingGraphRegistry,
+        send_websocket_message,
+    },
     queries::{
         run_query,
         stream::{raster_stream, vector_stream},
     },
     util::{
         parsing::{parse_band_selection, parse_spatial_partition},
+        processing_graphs::validate_processing_graph,
         server::connection_closed,
-        workflows::validate_workflow,
-    },
-    workflows::{
-        handle_websocket_message,
-        registry::WorkflowRegistry,
-        send_websocket_message,
-        workflow::{Workflow, WorkflowId},
     },
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
@@ -568,7 +571,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     stream: web::Payload,
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
-    let workflow_id: WorkflowId = id.into_inner().into();
+    let processing_graph_id: ServicesProcessingGraphId = id.into_inner().into();
     let query = query.into_inner();
 
     // this is the only result type for now
@@ -582,7 +585,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         connection_closed(&request, None),
         raster_stream(
             ctx.clone(),
-            workflow_id,
+            processing_graph_id,
             query.spatial_bounds,
             query.time_interval.into(),
             query.attributes.try_into()?,
@@ -671,7 +674,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
     stream: web::Payload,
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
-    let workflow_id: WorkflowId = id.into_inner().into();
+    let processing_graph_id: ServicesProcessingGraphId = id.into_inner().into();
 
     let query_rectangle = VectorQueryRectangle::new(
         query.spatial_bounds,
@@ -688,7 +691,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
     let mut stream_task = run_query(
         &ctx,
         connection_closed(&request, None),
-        vector_stream(ctx.clone(), workflow_id, query_rectangle),
+        vector_stream(ctx.clone(), processing_graph_id, query_rectangle),
     )
     .await?;
 

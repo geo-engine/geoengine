@@ -551,8 +551,8 @@ where
         &self.session
     }
 
-    fn processing_runtime(&self) -> &tokio::runtime::Handle {
-        &self.context.processing_runtime
+    fn processing_runtime(&self) -> tokio::runtime::Handle {
+        self.context.processing_runtime.clone()
     }
 }
 

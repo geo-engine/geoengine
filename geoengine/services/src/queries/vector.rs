@@ -3,11 +3,11 @@
 use crate::{
     contexts::SessionContext,
     error::{self, Result},
-    quota::ComputationId,
-    workflows::{
-        registry::WorkflowRegistry,
-        workflow::{Workflow, WorkflowId},
+    processing_graphs::{
+        processing_graph::{ProcessingGraph, ProcessingGraphId},
+        registry::ProcessingGraphRegistry,
     },
+    quota::ComputationId,
 };
 use futures_util::TryStreamExt;
 use geoengine_datatypes::{
@@ -20,59 +20,62 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        QueryContext, ResultDescriptor, SingleRasterOrVectorSource, TypedVectorQueryProcessor,
-        VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
+        ProcessingGraphOperatorPath, QueryContext, QueryProcessorExt, ResultDescriptor,
+        SingleRasterOrVectorSource, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor,
     },
     processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
-    util::{input::RasterOrVectorOperator, owned_query_stream},
+    util::input::RasterOrVectorOperator,
 };
 use serde_json::json;
 
-/// A vector workflow, reprojected to `crs` if needed
+/// A vector processing graph, reprojected to `crs` if needed
 pub struct VectorQuery {
-    pub workflow: WorkflowId,
+    pub processing_graph: ProcessingGraphId,
     pub crs: SpatialReference,
     pub bounds: BoundingBox2D,
     pub time: TimeInterval,
 }
 
-/// Queries the features of a vector workflow as a `GeoJSON` feature collection
+/// Queries the features of a vector processing graph as a `GeoJSON` feature collection
 pub async fn features_geojson<C: SessionContext>(
     ctx: C,
     query: VectorQuery,
 ) -> Result<(serde_json::Value, CacheHint, ComputationId)> {
     let VectorQuery {
-        workflow: workflow_id,
+        processing_graph: processing_graph_id,
         crs,
         bounds,
         time,
     } = query;
 
-    let workflow: Workflow = ctx.db().load_workflow(&workflow_id).await?;
+    let processing_graph: ProcessingGraph =
+        ctx.db().load_processing_graph(&processing_graph_id).await?;
 
-    let operator = workflow.operator.get_vector()?;
+    let operator = processing_graph.operator.get_vector()?;
 
     let execution_context = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+    let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
     let initialized = operator
         .clone()
-        .initialize(workflow_operator_path_root, &execution_context)
+        .initialize(processing_graph_operator_path_root, &execution_context)
         .await?;
 
-    // handle request and workflow crs matching
-    let workflow_spatial_ref: Option<SpatialReference> =
+    // handle request and processing graph crs matching
+    let processing_graph_spatial_ref: Option<SpatialReference> =
         initialized.result_descriptor().spatial_reference().into();
-    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+    let processing_graph_spatial_ref =
+        processing_graph_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
 
     let request_spatial_ref = crs;
 
     // perform reprojection if necessary
-    let initialized = if request_spatial_ref == workflow_spatial_ref {
+    let initialized = if request_spatial_ref == processing_graph_spatial_ref {
         initialized
     } else {
         tracing::debug!(
-            "vector query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
+            "vector query srs: {request_spatial_ref}, processing graph srs: {processing_graph_spatial_ref} --> injecting reprojection"
         );
 
         let reprojection_params = ReprojectionParams {
@@ -81,27 +84,27 @@ pub async fn features_geojson<C: SessionContext>(
         };
 
         // create the reprojection operator in order to get the canonic operator name
-        let reprojected_workflow = Reprojection {
+        let reprojected_processing_graph = Reprojection {
             params: reprojection_params,
             sources: SingleRasterOrVectorSource {
                 source: RasterOrVectorOperator::Vector(operator),
             },
         }
-        .boxed();
+        .typed();
 
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let processing_graph_operator_path_root = ProcessingGraphOperatorPath::initialize_root();
 
-        // TODO: avoid re-initialization and re-use unprojected workflow.
+        // TODO: avoid re-initialization and re-use unprojected processing graph.
         // In order to check whether we need to inject a reprojection, we first need to initialize the
-        // original workflow. Then we can check the result projection. Previously, we then just wrapped
-        // the initialized workflow with an initialized reprojection. IMHO this is wrong because
-        // initialization propagates the workflow path down the children and appends a new segment for
-        // each level. So we can't re-use an already initialized workflow, because all the workflow path/
-        // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+        // original processing graph. Then we can check the result projection. Previously, we then just wrapped
+        // the initialized processing graph with an initialized reprojection. IMHO this is wrong because
+        // initialization propagates the processing graph path down the children and appends a new segment for
+        // each level. So we can't re-use an already initialized processing graph, because all the processing graph path/
+        // operator names will be wrong. That's why I now build a new processing graph with a reprojection and
         // perform a full initialization. I only added the TODO because we did some optimization here
-        // which broke at some point when the workflow operator paths were introduced but no one noticed.
-        let ivp = reprojected_workflow
-            .initialize(workflow_operator_path_root, &execution_context)
+        // which broke at some point when the processing graph operator paths were introduced but no one noticed.
+        let ivp = reprojected_processing_graph
+            .initialize(processing_graph_operator_path_root, &execution_context)
             .await?;
 
         Box::new(ivp)
@@ -111,7 +114,7 @@ pub async fn features_geojson<C: SessionContext>(
 
     let query_rect = VectorQueryRectangle::new(bounds, time, ColumnSelection::all());
     let computation_id = ComputationId::new();
-    let query_ctx = ctx.query_context(workflow_id, computation_id)?;
+    let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
 
     let (json, cache_hint) = match processor {
         TypedVectorQueryProcessor::Data(p) => {
@@ -144,7 +147,9 @@ where
 
     let features: Vec<serde_json::Value> = Vec::new();
     // TODO: more efficient merging of the partial feature collections
-    let stream = owned_query_stream(processor, query_rect, Box::new(query_ctx)).await?;
+    let stream = processor
+        .query_into_owned_boxed_stream(query_rect, Box::new(query_ctx))
+        .await?;
 
     let (features, cache_hint) = stream
         .try_fold(

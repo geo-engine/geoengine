@@ -16,6 +16,10 @@ use crate::{
     config::{self},
     contexts::{ApplicationContext, SessionContext},
     error::{self, Error, Result},
+    processing_graphs::{
+        processing_graph::ProcessingGraphId as ServicesProcessingGraphId,
+        registry::ProcessingGraphRegistry,
+    },
     queries::{
         raster_grid::{RasterEncoding, RasterGridQuery, raster_grid},
         run_query,
@@ -28,7 +32,7 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, CacheHint, SpatialPartition2D, SpatialResolution,
 };
 use geoengine_operators::{
-    engine::WorkflowOperatorPath, util::raster_stream_to_png::default_colorizer_gradient,
+    engine::ProcessingGraphOperatorPath, util::raster_stream_to_png::default_colorizer_gradient,
 };
 use reqwest::Url;
 use serde::Deserialize;
@@ -368,7 +372,7 @@ async fn wms_get_map<C: ApplicationContext>(
         );
 
         let query = RasterGridQuery {
-            workflow: layer,
+            processing_graph: layer,
             crs: crs.into(),
             bounds,
             resolution: Some(resolution),
@@ -760,7 +764,7 @@ mod tests {
     async fn get_map_missing_crs(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
 
         let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
         let res = send_test_request(req, app_ctx).await;

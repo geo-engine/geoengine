@@ -6,9 +6,9 @@ use crate::{
     config,
     contexts::ApplicationContext,
     error::Result,
+    processing_graphs::processing_graph::ProcessingGraphId,
     queries::{plot::plot, run_query},
     util::{parsing::parse_spatial_resolution_option, server::connection_closed},
-    workflows::workflow::WorkflowId,
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::{
@@ -117,11 +117,11 @@ async fn get_plot_handler<C: ApplicationContext>(
     );
 
     let ctx = app_ctx.session_context(session);
-    let workflow_id = WorkflowId(id.into_inner());
+    let processing_graph_id = ProcessingGraphId(id.into_inner());
     let (output, computation_id) = run_query(
         &ctx,
         conn_closed,
-        plot(ctx.clone(), workflow_id, params.into_inner()),
+        plot(ctx.clone(), processing_graph_id, params.into_inner()),
     )
     .await?;
 
@@ -144,7 +144,7 @@ pub struct WrappedPlotOutput {
 mod tests {
     use super::*;
     use crate::contexts::SessionContext;
-    use crate::workflows::registry::WorkflowRegistry;
+    use crate::processing_graphs::registry::ProcessingGraphRegistry;
     use crate::{
         api::model::datatypes::NamedData,
         api::model::processing_graphs::{
