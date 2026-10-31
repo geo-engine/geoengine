@@ -83,6 +83,10 @@ harness = false
 name = "no_data_tiles"
 harness = false
 
+[[bench]]
+name = "core_scaling"
+harness = false
+
 
 [lints]
 workspace = true
