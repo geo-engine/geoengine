@@ -195,6 +195,12 @@ scopes = []
 enabled = false
 endpoint = "http://127.0.0.1:4317"
 
+[gdal_process_pool.worker]
+# Threads of the OpenBLAS and OpenMP pools in each worker process. GDAL links them via Armadillo,
+# and a threaded OpenBLAS otherwise starts one idle thread per core in every worker. GDAL reads do
+# not use them.
+blas_threads = 1
+
 [gdal_process_pool.worker.gdal_config_options]
 # Process-global GDAL config options applied once when a GDAL worker process starts.
 #

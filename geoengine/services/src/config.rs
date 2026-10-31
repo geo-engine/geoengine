@@ -9,6 +9,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
 use url::Url;
@@ -442,7 +443,7 @@ pub struct GdalProcessPool {
 }
 
 /// Configuration for GDAL worker processes, passed from the main process at spawn time.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct GdalProcessPoolWorkerConfig {
     #[serde(default)]
     pub gdal_config_options: Option<std::collections::HashMap<String, String>>,
@@ -450,6 +451,24 @@ pub struct GdalProcessPoolWorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
+    /// Size of the `OpenBLAS` and OpenMP thread pools of each worker process.
+    #[serde(default = "default_blas_threads")]
+    pub blas_threads: NonZeroUsize,
+}
+
+fn default_blas_threads() -> NonZeroUsize {
+    NonZeroUsize::MIN
+}
+
+impl Default for GdalProcessPoolWorkerConfig {
+    fn default() -> Self {
+        Self {
+            gdal_config_options: None,
+            logging: WorkerLoggingConfig::default(),
+            open_telemetry: OpenTelemetryConfig::default(),
+            blas_threads: default_blas_threads(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -515,6 +534,7 @@ impl From<GdalProcessPoolWorkerConfig>
                 enabled: config.open_telemetry.enabled,
                 endpoint: config.open_telemetry.endpoint,
             },
+            blas_threads: config.blas_threads.get(),
         }
     }
 }
