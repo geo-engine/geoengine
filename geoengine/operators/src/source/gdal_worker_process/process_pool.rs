@@ -71,6 +71,9 @@ const IMMEDIATE_DISPATCH_THRESHOLD: f64 = SCORE_DATASET_MATCH + SCORE_BAND_MATCH
 /// Max lookahead horizontal threshold for sweeps over unique datasets.
 const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
 
+/// Interval for logging the broker statistics.
+const STATS_REPORT_INTERVAL: Duration = Duration::from_secs(30);
+
 type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 #[derive(Debug, Snafu, Clone)]
@@ -194,21 +197,38 @@ impl WorkerProcess {
     }
 }
 
+/// Counters of the broker's scheduling decisions, logged at debug level and reset every `STATS_REPORT_INTERVAL`.
+/// A dispatch is an affinity hit iff the worker's open dataset is reused (`partial_hash` covers
+/// exactly the fields `GdalDatasetHolder::is_hit` compares).
+#[derive(Debug, Default)]
+struct BrokerStats {
+    dispatched: u64,
+    affinity_hits: u64,
+    fresh: u64,
+    evictions: u64,
+    cancelled_dropped: u64,
+    max_dataset_queue_len: usize,
+}
+
 struct DatasetSlot {
     active_count: usize,
     queue: VecDeque<QueuedRequest>,
 }
 
 impl DatasetSlot {
+    /// Removes canceled requests from the front of the queue and returns how many were removed.
     #[inline]
-    pub fn clean_canceled_front(&mut self) {
+    pub fn clean_canceled_front(&mut self) -> u64 {
+        let mut removed = 0;
         while let Some(req) = self.queue.front() {
             if req.respond_to.is_closed() {
                 self.queue.pop_front();
+                removed += 1;
             } else {
                 break;
             }
         }
+        removed
     }
 
     #[inline]
@@ -565,7 +585,20 @@ impl GdalProcessPool {
             Self::STRATEGY,
         );
 
-        while let Some(first_cmd) = rx.recv().await {
+        let mut stats_tick = tokio::time::interval(STATS_REPORT_INTERVAL);
+        stats_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        loop {
+            let first_cmd = tokio::select! {
+                cmd = rx.recv() => match cmd {
+                    Some(cmd) => cmd,
+                    None => break,
+                },
+                _ = stats_tick.tick() => {
+                    state.report_and_reset_stats();
+                    continue;
+                }
+            };
             let start_tick = Instant::now();
             let mut batch = vec![first_cmd];
 
@@ -648,6 +681,7 @@ struct BrokerState {
     max_dataset_processes: usize,
     max_active_processes: usize,
     strategy: SchedulingStrategy,
+    stats: BrokerStats,
 }
 
 impl BrokerState {
@@ -667,6 +701,7 @@ impl BrokerState {
             max_dataset_processes,
             max_active_processes,
             strategy,
+            stats: BrokerStats::default(),
         }
     }
 
@@ -706,10 +741,28 @@ impl BrokerState {
         self.global_active_count = self.global_active_count.saturating_sub(1);
     }
 
+    fn report_and_reset_stats(&mut self) {
+        let stats = std::mem::take(&mut self.stats);
+        if stats.dispatched == 0 && stats.cancelled_dropped == 0 {
+            return;
+        }
+        tracing::debug!(
+            target: "gdal_pool_stats",
+            dispatched = stats.dispatched,
+            affinity_hits = stats.affinity_hits,
+            fresh = stats.fresh,
+            evictions = stats.evictions,
+            cancelled_dropped = stats.cancelled_dropped,
+            max_dataset_queue_len = stats.max_dataset_queue_len,
+            "GDAL process pool statistics"
+        );
+    }
+
     #[inline]
     // on BrokerCommand::Read
     pub fn enqueue_request(&mut self, req: Box<QueuedRequest>) {
         if req.respond_to.is_closed() {
+            self.stats.cancelled_dropped += 1;
             return;
         }
         let hash = req.dataset_hash;
@@ -725,6 +778,7 @@ impl BrokerState {
             self.active_datasets.push_back(hash);
         }
         slot.queue.push_back(*req);
+        self.stats.max_dataset_queue_len = self.stats.max_dataset_queue_len.max(slot.queue.len());
     }
 
     #[inline]
@@ -758,7 +812,7 @@ impl BrokerState {
         while let Some(&front_hash) = self.active_datasets.front() {
             let should_pop = match self.dataset_registry.get_mut(&front_hash) {
                 Some(slot) => {
-                    slot.clean_canceled_front();
+                    self.stats.cancelled_dropped += slot.clean_canceled_front();
                     slot.queue.is_empty()
                 }
                 None => true,
@@ -855,7 +909,7 @@ impl BrokerState {
                 .get_mut(&best_dataset_hash)
                 .expect("Selected dataset missing from registry - invariant broken");
 
-            slot.clean_canceled_front();
+            self.stats.cancelled_dropped += slot.clean_canceled_front();
 
             let req = slot
                 .queue
@@ -865,10 +919,27 @@ impl BrokerState {
             self.global_active_count += 1;
             slot.active_count += 1;
 
+            let affinity = match &worker.affinity {
+                None => {
+                    self.stats.fresh += 1;
+                    "fresh"
+                }
+                Some(a) if a.dataset_hash == best_dataset_hash => {
+                    self.stats.affinity_hits += 1;
+                    "hit"
+                }
+                Some(_) => {
+                    self.stats.evictions += 1;
+                    "evict"
+                }
+            };
+            self.stats.dispatched += 1;
+
             {
                 let _span = tracing::debug_span!(
                     "gdal_broker_dispatch",
                     worker_id = worker_id,
+                    affinity = affinity,
                     dataset = %req.request.0.dataset_params.file_path.display(),
                     read_id = req.request.0.read_id.as_deref().unwrap_or(""),
                 )
@@ -881,7 +952,7 @@ impl BrokerState {
                 })));
             }
 
-            slot.clean_canceled_front();
+            self.stats.cancelled_dropped += slot.clean_canceled_front();
 
             // Maintain FIFO/Round-Robin dataset cycling fairness
             let tracked_hash = self
@@ -1812,6 +1883,35 @@ mod tests {
                 .expect("worker 0 should have received the job (affinity match)"),
         );
         assert_eq!(job.dataset_hash, 100);
+    }
+
+    #[test]
+    fn it_counts_dispatch_affinity() {
+        let (mut w0, _rx0) = dummy_worker(0);
+        w0.affinity = Some(make_affinity(100, 1, window([0, 0], [255, 255])));
+        let (mut w1, _rx1) = dummy_worker(1);
+        w1.affinity = Some(make_affinity(300, 1, window([0, 0], [255, 255])));
+        let (w2, _rx2) = dummy_worker(2);
+
+        let mut state = BrokerState::new(vec![w0, w1, w2], 4, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req_hit, _r1) = make_request(100, 1, w);
+        let (req_fresh, _r2) = make_request(200, 1, w);
+        let (req_evict, _r3) = make_request(400, 1, w);
+        let (req_cancelled, r4) = make_request(500, 1, w);
+        drop(r4);
+
+        state.enqueue_request(req_hit);
+        state.enqueue_request(req_fresh);
+        state.enqueue_request(req_evict);
+        state.enqueue_request(req_cancelled);
+        state.try_dispatch();
+
+        assert_eq!(state.stats.dispatched, 3);
+        assert_eq!(state.stats.affinity_hits, 1);
+        assert_eq!(state.stats.fresh, 1);
+        assert_eq!(state.stats.evictions, 1);
+        assert_eq!(state.stats.cancelled_dropped, 1);
     }
 
     // --- Leader/follower dedup test ---
