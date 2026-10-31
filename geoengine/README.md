@@ -236,6 +236,16 @@ cargo bench --profile bench -p geoengine-services --bench query_pipelines -- --b
 
 The runs are sequential, so keep the machine idle: load changes between them show up as differences of a few percent.
 
+### Runtime metrics
+
+Build with `--features runtime-metrics` to log Tokio runtime metrics (worker busy ratio, global queue depth, …) every second at target `runtime_metrics`.
+Poll counts, local queue depths and blocking pool metrics also need the `tokio_unstable` cfg.
+`RUSTFLAGS` replaces the rustflags from `.cargo/config.toml`, so repeat them:
+
+```bash
+RUSTFLAGS="--cfg tokio_unstable -C link-arg=-fuse-ld=lld" cargo run --release --features runtime-metrics --bin geoengine-server
+```
+
 ### Expression dependencies
 
 We use the [`expression/deps-workspace`](expression/deps-workspace) crate to manage dependencies for compiling expressions at runtime.
