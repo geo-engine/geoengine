@@ -65,39 +65,17 @@ jobs:
           OLD_VERSION: ${{ steps.old.outputs.version }}
           BUMP: ${{ inputs.bump }}
         run: |
-          NEW_VERSION="$(just repo print-version-number)"
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$(just repo print-version-number)" >> "$GITHUB_OUTPUT"
 
-          # release notes of this version only (the CHANGELOG.md section without its heading)
-          NOTES="$(git cliff --unreleased --tag "$NEW_VERSION" --strip all | sed '1{/^## /d}')"
-
-          # the commit is skipped by `cliff.toml`, so it never shows up in the changelog
           {
             echo "commit_message<<EOF_COMMIT"
-            echo "build: release $NEW_VERSION"
-            echo
-            echo "Increase the version from $OLD_VERSION to $NEW_VERSION ($BUMP) and update the"
-            echo "OpenAPI spec, API clients, Python library, UI and CHANGELOG.md accordingly."
+            just repo print-release-commit-message "$OLD_VERSION" "$BUMP"
             echo "EOF_COMMIT"
           } >> "$GITHUB_OUTPUT"
 
-          cat > "$RUNNER_TEMP/release-pr-body.md" <<EOF
-          Release **$NEW_VERSION** (previous version: $OLD_VERSION, bump: \`$BUMP\`).
-
-          This PR was created by the [Release PR workflow]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID).
-          It updates the version in Cargo, the OpenAPI spec, the API clients, the Python library and the UI, and regenerates \`CHANGELOG.md\`.
-
-          ## Checklist
-
-          - [ ] The changelog below is complete and correct (edit \`CHANGELOG.md\` on this branch if needed)
-          - [ ] CI is green
-
-          Merging this PR triggers the publish workflow: it publishes the packages and creates the tag \`v$NEW_VERSION\` and the GitHub release.
-
-          ## Changelog
-
-          $NOTES
-          EOF
+          just repo print-release-pr-body "$OLD_VERSION" "$BUMP" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            > "$RUNNER_TEMP/release-pr-body.md"
 
       - name: Create pull request
         id: pr
