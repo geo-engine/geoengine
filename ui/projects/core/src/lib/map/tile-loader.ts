@@ -184,7 +184,8 @@ export interface TileFrame {
  *
  * `zoom` is `undefined` unless the grid OpenLayers measures the view resolution in is the grid the
  * tile coordinates belong to, which a reprojected source does not guarantee. It is a zoom level and
- * never a resolution, so a movement within one zoom level does not cancel anything.
+ * never a resolution, so a movement within one zoom level does not cancel anything. Reprojected
+ * sources need the extent of complete display tiles, including their portions outside the viewport.
  *
  * While an animation runs, `nextExtent` and `nextResolution` describe the destination the frame is
  * heading to. The extent is widened to cover both, and the zoom threshold is the coarser of current
@@ -195,7 +196,17 @@ export const currentViewport = (source: TileImageLike, frame: TileFrame, tileGri
     const next = viewState.nextResolution;
     const threshold = next !== undefined && Number.isFinite(next) ? Math.max(viewState.resolution, next) : viewState.resolution;
     const viewGrid = source.getTileGridForProjection(viewState.projection);
-    const wanted = frame.nextExtent ? extend([...frame.extent], frame.nextExtent) : frame.extent;
+    let wanted = frame.nextExtent ? extend([...frame.extent], frame.nextExtent) : frame.extent;
+    if (viewGrid !== tileGrid) {
+        // Reprojection needs source tiles for the whole display tile, including the part beyond
+        // the viewport. Cancelling those edge tiles makes OpenLayers request them again forever.
+        const zoom = viewGrid.getZForResolution(threshold, source.zDirection);
+        const range = viewGrid.getTileRangeForExtentAndZ(wanted, zoom);
+        wanted = extend(
+            viewGrid.getTileCoordExtent([zoom, range.minX, range.minY]),
+            viewGrid.getTileCoordExtent([zoom, range.maxX, range.maxY]),
+        );
+    }
     return {
         extent: olExtentToTuple(wanted),
         zoom: viewGrid === tileGrid ? viewGrid.getZForResolution(threshold, source.zDirection) : undefined,

@@ -3,6 +3,21 @@
 
     <div class="space"></div>
 
+    @if (debug()) {
+        <mat-button-toggle-group
+            aria-label="Tile reprojection"
+            [value]="frontendReprojection()"
+            (change)="frontendReprojection.set($event.value)"
+        >
+            <mat-button-toggle [value]="false" matTooltip="Request Web Mercator tiles; reproject in the backend">
+                Backend
+            </mat-button-toggle>
+            <mat-button-toggle [value]="true" matTooltip="Request native projection tiles; reproject in OpenLayers">
+                Frontend
+            </mat-button-toggle>
+        </mat-button-toggle-group>
+    }
+
     <a matIconButton aria-label="Help" href="https://knowledgebase.code-de.org/">
         <mat-icon>help</mat-icon>
     </a>
@@ -35,13 +50,23 @@
     <mat-drawer position="start" mode="side" opened="true">
         <div class="drawer-container">
             <mat-nav-list>
-                <mat-list-item [activated]="isLayersActive()" routerLink="/map/layers" routerLinkActive="active">
+                <mat-list-item
+                    [activated]="isLayersActive()"
+                    routerLink="/map/layers"
+                    queryParamsHandling="preserve"
+                    routerLinkActive="active"
+                >
                     <span matListItemTitle>
                         <mat-icon>layers</mat-icon>
                     </span>
                     <span matListItemLine>Layers</span>
                 </mat-list-item>
-                <mat-list-item [activated]="isComputeActive()" routerLink="/map/compute" routerLinkActive="active">
+                <mat-list-item
+                    [activated]="isComputeActive()"
+                    routerLink="/map/compute"
+                    queryParamsHandling="preserve"
+                    routerLinkActive="active"
+                >
                     <span matListItemTitle>
                         <mat-icon svgIcon="cogs"></mat-icon>
                     </span>
@@ -55,7 +80,12 @@
                     <span matListItemLine>Download</span>
                 </mat-list-item> -->
                 <div class="spacer"></div>
-                <mat-list-item [activated]="isAboutActive()" routerLink="/map/about" routerLinkActive="active">
+                <mat-list-item
+                    [activated]="isAboutActive()"
+                    routerLink="/map/about"
+                    queryParamsHandling="preserve"
+                    routerLinkActive="active"
+                >
                     <span matListItemTitle>
                         <img src="assets/geoengine.png" alt="Geo Engine" class="geoengine-logo" />
                     </span>
@@ -84,7 +114,7 @@
                         [sessionToken]="currentSessionToken"
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
-                        [tmsId]="'CustomWebMercator'"
+                        [tmsId]="tileMatrixSet()"
                         [isVisible]="testIsVisible()"
                         (loading)="onTileLoading($event)"
                     ></geoengine-ol-ogc-api-map-tile-layer>

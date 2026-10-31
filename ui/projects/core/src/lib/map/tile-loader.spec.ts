@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import {containsExtent} from 'ol/extent';
 import ImageTile from 'ol/ImageTile';
 import {FrameState} from 'ol/Map';
 import {get as getProjection, transformExtent} from 'ol/proj';
@@ -1019,7 +1020,26 @@ describe('currentViewport', () => {
         const view = new View({projection: 'EPSG:4326', center: [0, 0], resolution: 1});
 
         expect(currentViewport(source, frameOf(view), grid).zoom).toBeUndefined();
-        expect(currentViewport(source, frameOf(view), grid).extent).toEqual(olExtentToTuple(view.calculateExtent(size)));
+        expect(containsExtent(currentViewport(source, frameOf(view), grid).extent, view.calculateExtent(size))).toBe(true);
+    });
+
+    it('keeps native source tiles beyond the viewport that complete a reprojected display tile', () => {
+        const source = new TileWMS({projection: 'EPSG:4326', params: {LAYERS: 'test'}});
+        const grid = source.getTileGridForProjection(source.getProjection()!);
+        const frame: TileFrame = {
+            extent: [1, 1, 10, 10],
+            viewState: {resolution: 1222.99245256282, projection: getProjection('EPSG:3857')!},
+        };
+        const {extent, zoom} = currentViewport(source, frame, grid);
+
+        // This source tile is outside the visible rectangle but intersects the display tile that
+        // contains it. Cancelling it would leave that reprojection incomplete and cause a loop.
+        const neededSourceTile = [20, 20, 30, 30];
+        expect(containsExtent(frame.extent, neededSourceTile)).toBe(false);
+        expect(containsExtent(extent, neededSourceTile)).toBe(true);
+        expect(extent[2]).toBeCloseTo(313086.06785608194);
+        expect(extent[3]).toBeCloseTo(313086.06785608194);
+        expect(zoom).toBeUndefined();
     });
 
     it('reports the coarser zoom level during a zoom-out animation', () => {
