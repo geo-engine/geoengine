@@ -442,6 +442,25 @@ pub struct GdalProcessPool {
     pub worker: GdalProcessPoolWorkerConfig,
 }
 
+impl GdalProcessPool {
+    /// Rejects sizes of 0, with which GDAL reads would never be dispatched. Limits above the
+    /// number of processes are allowed: they just have no effect.
+    pub fn validate(&self) -> Result<()> {
+        if self.number_of_processes == 0
+            || self.max_active_processes == 0
+            || self.max_dataset_processes == 0
+        {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "gdal_process_pool sizes must be at least 1, got number_of_processes = {}, max_active_processes = {}, max_dataset_processes = {}",
+                    self.number_of_processes, self.max_active_processes, self.max_dataset_processes
+                ),
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Configuration for GDAL worker processes, passed from the main process at spawn time.
 #[derive(Debug, Deserialize)]
 pub struct GdalProcessPoolWorkerConfig {
@@ -756,4 +775,41 @@ pub struct WildliveOidc {
 
 impl ConfigElement for Wildlive {
     const KEY: &'static str = "wildlive";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pool(
+        number_of_processes: u64,
+        max_active_processes: u64,
+        max_dataset_processes: u64,
+    ) -> GdalProcessPool {
+        GdalProcessPool {
+            number_of_processes,
+            max_active_processes,
+            max_dataset_processes,
+            worker: GdalProcessPoolWorkerConfig::default(),
+        }
+    }
+
+    #[test]
+    fn it_accepts_valid_pool_sizes() {
+        assert!(pool(32, 16, 8).validate().is_ok());
+        assert!(pool(2, 2, 2).validate().is_ok());
+    }
+
+    #[test]
+    fn it_rejects_zero_pool_sizes() {
+        assert!(pool(0, 0, 0).validate().is_err());
+        assert!(pool(32, 0, 0).validate().is_err());
+        assert!(pool(32, 16, 0).validate().is_err());
+    }
+
+    #[test]
+    fn it_accepts_limits_above_the_number_of_processes() {
+        assert!(pool(8, 16, 8).validate().is_ok());
+        assert!(pool(32, 8, 16).validate().is_ok());
+    }
 }
