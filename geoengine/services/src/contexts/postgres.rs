@@ -151,7 +151,10 @@ where
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache: None,
             default_cache_ttl: CacheTtlSeconds::new(0),
-            available_subquery_parallelism_per_query: 1,
+            available_subquery_parallelism_per_query: get_config_element::<
+                crate::config::QueryContext,
+            >()?
+            .available_subquery_parallelism_per_query,
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
@@ -228,7 +231,10 @@ where
             ),
             new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(cache_config.default_ttl_seconds),
-            available_subquery_parallelism_per_query: 1,
+            available_subquery_parallelism_per_query: get_config_element::<
+                crate::config::QueryContext,
+            >()?
+            .available_subquery_parallelism_per_query,
             provider_registry,
             stac_request_registry,
             gdal_process_pool,
