@@ -29,6 +29,7 @@ use geoengine_operators::{
     util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use ogcapi_types::tiles::TileMatrixSetId;
+use tracing::{Instrument, debug_span};
 
 /// A tile of an OGC API tile matrix set
 pub struct TileQuery {
@@ -70,10 +71,13 @@ pub async fn render_tile<C: ApplicationContext>(
 ) -> OgcApiResult<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
 
-    let mut layer: Layer =
-        load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone()).await?;
+    let mut layer: Layer = load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone())
+        .instrument(debug_span!("load_processing_graph"))
+        .await?;
     let mut initialized_operator =
-        get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context).await?;
+        get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context)
+            .instrument(debug_span!("initialize"))
+            .await?;
     let tiling_specification = execution_context.tiling_specification();
 
     let required_origin_and_resolution =
@@ -88,6 +92,7 @@ pub async fn render_tile<C: ApplicationContext>(
         TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id),
         required_origin_and_resolution,
     )
+    .instrument(debug_span!("initialize"))
     .await?;
 
     let tms_spec = TypedTileMatrixSetProvider::resolve(
@@ -112,6 +117,7 @@ pub async fn render_tile<C: ApplicationContext>(
     {
         initialized_operator = initialized_operator
             .optimize_and_reinitialize(spatial_resolution, &execution_context)
+            .instrument(debug_span!("initialize"))
             .await
             .boxed_context(error::InitializingProcessingGraph)?;
     }
@@ -223,6 +229,7 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
     let processing_graph_id = ctx
         .db()
         .register_processing_graph(layer.processing_graph.clone())
+        .instrument(debug_span!("register_processing_graph"))
         .await?; // TODO: can we get this without re-registering it?
     let computation_id = ComputationId::new();
     let query_ctx = ctx.query_context(processing_graph_id, computation_id)?;
