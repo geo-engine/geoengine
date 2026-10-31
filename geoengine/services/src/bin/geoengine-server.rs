@@ -2,6 +2,10 @@ use geoengine_services::{
     config::{self, get_config_element},
     error::Result,
 };
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 use tracing::Subscriber;
 use tracing_appender::{
     non_blocking::WorkerGuard,
@@ -212,7 +216,40 @@ fn configure_error_report_formatting(logging_config: &config::Logging) {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    start_server().await.expect("the server has to start");
+/// Builds the same runtime as `#[tokio::main]`, but names worker threads `ge-tokio-w-N` and blocking threads `ge-tokio-b-N`.
+fn build_runtime() -> tokio::runtime::Runtime {
+    // the builder spawns all worker threads inside `build()`, so names generated before it returns belong to workers
+    let building = Arc::new(AtomicBool::new(true));
+    let next_index = Arc::new(AtomicUsize::new(0));
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_name_fn({
+            let building = building.clone();
+            let next_index = next_index.clone();
+            move || {
+                let index = next_index.fetch_add(1, Ordering::Relaxed);
+                if building.load(Ordering::Relaxed) {
+                    format!("ge-tokio-w-{index}")
+                } else {
+                    format!("ge-tokio-b-{index}")
+                }
+            }
+        })
+        .build()
+        .expect("the Tokio runtime must be buildable");
+    building.store(false, Ordering::Relaxed);
+
+    debug_assert_eq!(
+        next_index.load(Ordering::Relaxed),
+        runtime.metrics().num_workers()
+    );
+
+    runtime
+}
+
+fn main() {
+    build_runtime().block_on(async {
+        start_server().await.expect("the server has to start");
+    });
 }
