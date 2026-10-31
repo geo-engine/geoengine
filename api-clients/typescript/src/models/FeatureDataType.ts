@@ -22,7 +22,7 @@ export const FeatureDataType = {
     Float: 'float',
     Text: 'text',
     Bool: 'bool',
-    DateTime: 'dateTime'
+    DateTime: 'dateTime',
 } as const;
 export type FeatureDataType = typeof FeatureDataType[keyof typeof FeatureDataType];
 

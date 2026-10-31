@@ -22,13 +22,15 @@ exports.DownsamplingResolutionFractionToJSONTyped = DownsamplingResolutionFracti
  * @export
  */
 exports.DownsamplingResolutionFractionTypeEnum = {
-    Fraction: 'fraction'
+    Fraction: 'fraction',
 };
 /**
  * Check if a given object implements the DownsamplingResolutionFraction interface.
  */
 function instanceOfDownsamplingResolutionFraction(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'fraction')
         return false;
     if (!('x' in value) || value['x'] === undefined)
         return false;

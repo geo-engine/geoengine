@@ -35,7 +35,7 @@ function MlModelInputNoDataHandlingFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'variant': (0, MlModelInputNoDataHandlingVariant_1.MlModelInputNoDataHandlingVariantFromJSON)(json['variant']),
-        'noDataValue': json['noDataValue'] == null ? undefined : json['noDataValue'],
+        'noDataValue': json['noDataValue'] === undefined ? undefined : json['noDataValue'] === null ? null : json['noDataValue'],
     };
 }
 function MlModelInputNoDataHandlingToJSON(json) {

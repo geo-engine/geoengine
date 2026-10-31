@@ -24,7 +24,7 @@ exports.TimeReferenceToJSONTyped = TimeReferenceToJSONTyped;
  */
 exports.TimeReference = {
     Start: 'start',
-    End: 'end'
+    End: 'end',
 };
 function instanceOfTimeReference(value) {
     for (const key in exports.TimeReference) {

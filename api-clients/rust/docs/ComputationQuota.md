@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**timestamp** | **String** |  | 
+**timestamp** | **chrono::DateTime<chrono::FixedOffset>** |  | 
 **computation_id** | **uuid::Uuid** |  | 
 **processing_graph_id** | **uuid::Uuid** |  | 
 **count** | **i64** |  | 

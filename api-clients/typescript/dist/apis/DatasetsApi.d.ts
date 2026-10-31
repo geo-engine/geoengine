@@ -9,54 +9,137 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { AddDatasetTile, AutoCreateDataset, CreateDataset, Dataset, DatasetListing, DatasetNameResponse, MetaDataDefinition, MetaDataSuggestion, OrderBy, Provenances, SuggestMetaData, Symbology, UpdateDataset, Volume, VolumeFileLayersResponse } from '../models/index';
+import { type AddDatasetTile } from '../models/AddDatasetTile';
+import { type AutoCreateDataset } from '../models/AutoCreateDataset';
+import { type CreateDataset } from '../models/CreateDataset';
+import { type Dataset } from '../models/Dataset';
+import { type DatasetListing } from '../models/DatasetListing';
+import { type DatasetNameResponse } from '../models/DatasetNameResponse';
+import { type MetaDataDefinition } from '../models/MetaDataDefinition';
+import { type MetaDataSuggestion } from '../models/MetaDataSuggestion';
+import { type OrderBy } from '../models/OrderBy';
+import { type Provenances } from '../models/Provenances';
+import { type SuggestMetaData } from '../models/SuggestMetaData';
+import { type Symbology } from '../models/Symbology';
+import { type UpdateDataset } from '../models/UpdateDataset';
+import { type Volume } from '../models/Volume';
+import { type VolumeFileLayersResponse } from '../models/VolumeFileLayersResponse';
 export interface AddDatasetTilesHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     *
+     */
     addDatasetTile: Array<AddDatasetTile>;
 }
 export interface AutoCreateDatasetHandlerRequest {
+    /**
+     *
+     */
     autoCreateDataset: AutoCreateDataset;
 }
 export interface CreateDatasetHandlerRequest {
+    /**
+     *
+     */
     createDataset: CreateDataset;
 }
 export interface DeleteDatasetHandlerRequest {
+    /**
+     * Dataset id
+     */
     dataset: string;
 }
 export interface GetDatasetHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
 }
 export interface GetLoadingInfoHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
 }
 export interface ListDatasetsHandlerRequest {
+    /**
+     *
+     */
     order: OrderBy;
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
+    /**
+     *
+     */
     filter?: string;
+    /**
+     *
+     */
     tags?: Array<string>;
 }
 export interface ListVolumeFileLayersHandlerRequest {
+    /**
+     * Volume name
+     */
     volumeName: string;
+    /**
+     * File name
+     */
     fileName: string;
 }
 export interface SuggestMetaDataHandlerRequest {
+    /**
+     *
+     */
     suggestMetaData: SuggestMetaData;
 }
 export interface UpdateDatasetHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     *
+     */
     updateDataset: UpdateDataset;
 }
 export interface UpdateDatasetProvenanceHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     *
+     */
     provenances: Provenances;
 }
 export interface UpdateDatasetSymbologyHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     *
+     */
     symbology: Symbology;
 }
 export interface UpdateLoadingInfoHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     *
+     */
     metaDataDefinition: MetaDataDefinition;
 }
 /**

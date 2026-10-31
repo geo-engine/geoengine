@@ -37,9 +37,9 @@ export function NumberParamToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'derived':
-            return Object.assign({}, DerivedNumberToJSON(value), { type: 'derived' });
+            return Object.assign({}, DerivedNumberToJSON(value), { 'type': 'derived' });
         case 'static':
-            return Object.assign({}, StaticNumberToJSON(value), { type: 'static' });
+            return Object.assign({}, StaticNumberToJSON(value), { 'type': 'static' });
         default:
             return value;
     }

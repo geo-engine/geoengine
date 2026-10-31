@@ -25,7 +25,7 @@ exports.CsvHeaderToJSONTyped = CsvHeaderToJSONTyped;
 exports.CsvHeader = {
     Yes: 'yes',
     No: 'no',
-    Auto: 'auto'
+    Auto: 'auto',
 };
 function instanceOfCsvHeader(value) {
     for (const key in exports.CsvHeader) {

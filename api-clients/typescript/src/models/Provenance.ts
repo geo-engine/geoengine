@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface Provenance {
     /**
      * 
-     * @type {string}
-     * @memberof Provenance
      */
     citation: string;
     /**
      * 
-     * @type {string}
-     * @memberof Provenance
      */
     license: string;
     /**
      * 
-     * @type {string}
-     * @memberof Provenance
      */
     uri: string;
 }

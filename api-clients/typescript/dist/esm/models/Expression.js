@@ -16,13 +16,15 @@ import { ExpressionParametersFromJSON, ExpressionParametersToJSON, } from './Exp
  * @export
  */
 export const ExpressionTypeEnum = {
-    Expression: 'Expression'
+    Expression: 'Expression',
 };
 /**
  * Check if a given object implements the Expression interface.
  */
 export function instanceOfExpression(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Expression')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

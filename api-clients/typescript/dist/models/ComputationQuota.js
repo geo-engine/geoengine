@@ -17,6 +17,7 @@ exports.ComputationQuotaFromJSON = ComputationQuotaFromJSON;
 exports.ComputationQuotaFromJSONTyped = ComputationQuotaFromJSONTyped;
 exports.ComputationQuotaToJSON = ComputationQuotaToJSON;
 exports.ComputationQuotaToJSONTyped = ComputationQuotaToJSONTyped;
+const runtime_1 = require("../runtime");
 /**
  * Check if a given object implements the ComputationQuota interface.
  */
@@ -39,7 +40,7 @@ function ComputationQuotaFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : (0, runtime_1.parseDateTime)(json['timestamp'])),
         'computationId': json['computationId'],
         'processingGraphId': json['processingGraphId'],
         'count': json['count'],
@@ -53,7 +54,7 @@ function ComputationQuotaToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : (0, runtime_1.serializeDateTime)(value['timestamp']),
         'computationId': value['computationId'],
         'processingGraphId': value['processingGraphId'],
         'count': value['count'],

@@ -33,8 +33,8 @@ export function TemporalRasterAggregationParametersFromJSONTyped(json, ignoreDis
     return {
         'aggregation': AggregationFromJSON(json['aggregation']),
         'window': TimeStepFromJSON(json['window']),
-        'windowReference': json['windowReference'] == null ? undefined : json['windowReference'],
-        'outputType': json['outputType'] == null ? undefined : RasterDataTypeFromJSON(json['outputType']),
+        'windowReference': json['windowReference'] === undefined ? undefined : json['windowReference'] === null ? null : json['windowReference'],
+        'outputType': json['outputType'] === undefined ? undefined : json['outputType'] === null ? null : RasterDataTypeFromJSON(json['outputType']),
     };
 }
 export function TemporalRasterAggregationParametersToJSON(json) {

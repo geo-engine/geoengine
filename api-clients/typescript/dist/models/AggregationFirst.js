@@ -22,13 +22,15 @@ exports.AggregationFirstToJSONTyped = AggregationFirstToJSONTyped;
  * @export
  */
 exports.AggregationFirstTypeEnum = {
-    First: 'first'
+    First: 'first',
 };
 /**
  * Check if a given object implements the AggregationFirst interface.
  */
 function instanceOfAggregationFirst(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'first')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

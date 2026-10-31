@@ -26,6 +26,7 @@ from geoengine_api_client.models.vector_data_type import VectorDataType
 from geoengine_api_client.models.vector_result_descriptor import VectorResultDescriptor
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class TypedVectorResultDescriptor(VectorResultDescriptor):
     """
@@ -42,7 +43,8 @@ class TypedVectorResultDescriptor(VectorResultDescriptor):
         return value
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -54,8 +56,7 @@ class TypedVectorResultDescriptor(VectorResultDescriptor):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -84,8 +85,7 @@ class TypedVectorResultDescriptor(VectorResultDescriptor):
         _field_dict = {}
         if self.columns:
             for _key_columns in self.columns:
-                if self.columns[_key_columns]:
-                    _field_dict[_key_columns] = self.columns[_key_columns].to_dict()
+                _field_dict[_key_columns] = self.columns[_key_columns].to_dict() if self.columns[_key_columns] is not None else None
             _dict['columns'] = _field_dict
         # override the default output from pydantic by calling `to_dict()` of time
         if self.time:

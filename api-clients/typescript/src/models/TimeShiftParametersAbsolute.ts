@@ -28,14 +28,10 @@ import {
 export interface TimeShiftParametersAbsolute {
     /**
      * 
-     * @type {TimeShiftParametersAbsoluteTypeEnum}
-     * @memberof TimeShiftParametersAbsolute
      */
     type: TimeShiftParametersAbsoluteTypeEnum;
     /**
      * Fixed time interval used as the shift target.
-     * @type {TimeInterval}
-     * @memberof TimeShiftParametersAbsolute
      */
     timeInterval: TimeInterval;
 }
@@ -45,7 +41,7 @@ export interface TimeShiftParametersAbsolute {
  * @export
  */
 export const TimeShiftParametersAbsoluteTypeEnum = {
-    Absolute: 'absolute'
+    Absolute: 'absolute',
 } as const;
 export type TimeShiftParametersAbsoluteTypeEnum = typeof TimeShiftParametersAbsoluteTypeEnum[keyof typeof TimeShiftParametersAbsoluteTypeEnum];
 
@@ -55,6 +51,8 @@ export type TimeShiftParametersAbsoluteTypeEnum = typeof TimeShiftParametersAbso
  */
 export function instanceOfTimeShiftParametersAbsolute(value: object): value is TimeShiftParametersAbsolute {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'absolute') return false;
+    
     if (!('timeInterval' in value) || value['timeInterval'] === undefined) return false;
     return true;
 }

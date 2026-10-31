@@ -17,8 +17,6 @@ import type { MultiPoint } from './MultiPoint';
 export interface TypedGeometryMultiPoint {
     /**
      *
-     * @type {MultiPoint}
-     * @memberof TypedGeometryMultiPoint
      */
     multiPoint: MultiPoint;
 }

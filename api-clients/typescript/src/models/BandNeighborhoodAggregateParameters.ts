@@ -31,8 +31,6 @@ export interface BandNeighborhoodAggregateParameters {
      * 
      * The average method computes the mean over the current band window, while the
      * first-derivative method approximates the derivative using the configured band distance.
-     * @type {BandNeighborhoodAggregateMethod}
-     * @memberof BandNeighborhoodAggregateParameters
      */
     aggregate: BandNeighborhoodAggregateMethod;
 }

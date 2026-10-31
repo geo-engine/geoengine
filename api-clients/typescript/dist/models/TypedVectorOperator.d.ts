@@ -17,14 +17,10 @@ import type { VectorOperator } from './VectorOperator';
 export interface TypedVectorOperator {
     /**
      *
-     * @type {VectorOperator}
-     * @memberof TypedVectorOperator
      */
     operator: VectorOperator;
     /**
      *
-     * @type {TypedVectorOperatorTypeEnum}
-     * @memberof TypedVectorOperator
      */
     type: TypedVectorOperatorTypeEnum;
 }

@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { NeighborhoodKernelRectangle } from './NeighborhoodKernelRectangle';
 import {
     instanceOfNeighborhoodKernelRectangle,
@@ -61,9 +62,9 @@ export function NeighborhoodKernelToJSONTyped(value?: NeighborhoodKernel | null,
     }
     switch (value['type']) {
         case 'rectangle':
-            return Object.assign({}, NeighborhoodKernelRectangleToJSON(value), { type: 'rectangle' } as const);
+            return Object.assign({}, NeighborhoodKernelRectangleToJSON(value), { 'type': 'rectangle' } as const);
         case 'weightsMatrix':
-            return Object.assign({}, NeighborhoodKernelWeightsMatrixToJSON(value), { type: 'weightsMatrix' } as const);
+            return Object.assign({}, NeighborhoodKernelWeightsMatrixToJSON(value), { 'type': 'weightsMatrix' } as const);
         default:
             return value;
     }

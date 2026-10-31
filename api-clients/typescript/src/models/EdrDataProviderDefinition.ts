@@ -35,62 +35,42 @@ import {
 export interface EdrDataProviderDefinition {
     /**
      * 
-     * @type {EdrDataProviderDefinitionTypeEnum}
-     * @memberof EdrDataProviderDefinition
      */
     type: EdrDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof EdrDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     baseUrl: string;
     /**
      * 
-     * @type {EdrVectorSpec}
-     * @memberof EdrDataProviderDefinition
      */
     vectorSpec?: EdrVectorSpec | null;
     /**
      * 
-     * @type {number}
-     * @memberof EdrDataProviderDefinition
      */
     cacheTtl?: number | null;
     /**
      * List of vertical reference systems with a discrete scale
-     * @type {Array<string>}
-     * @memberof EdrDataProviderDefinition
      */
     discreteVrs?: Array<string>;
     /**
      * 
-     * @type {Array<Provenance>}
-     * @memberof EdrDataProviderDefinition
      */
     provenance?: Array<Provenance> | null;
 }
@@ -100,7 +80,7 @@ export interface EdrDataProviderDefinition {
  * @export
  */
 export const EdrDataProviderDefinitionTypeEnum = {
-    Edr: 'Edr'
+    Edr: 'Edr',
 } as const;
 export type EdrDataProviderDefinitionTypeEnum = typeof EdrDataProviderDefinitionTypeEnum[keyof typeof EdrDataProviderDefinitionTypeEnum];
 
@@ -110,6 +90,8 @@ export type EdrDataProviderDefinitionTypeEnum = typeof EdrDataProviderDefinition
  */
 export function instanceOfEdrDataProviderDefinition(value: object): value is EdrDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Edr') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
@@ -130,13 +112,13 @@ export function EdrDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrimi
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'id': json['id'],
         'baseUrl': json['baseUrl'],
-        'vectorSpec': json['vectorSpec'] == null ? undefined : EdrVectorSpecFromJSON(json['vectorSpec']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'vectorSpec': json['vectorSpec'] === undefined ? undefined : json['vectorSpec'] === null ? null : EdrVectorSpecFromJSON(json['vectorSpec']),
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
         'discreteVrs': json['discreteVrs'] == null ? undefined : json['discreteVrs'],
-        'provenance': json['provenance'] == null ? undefined : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
+        'provenance': json['provenance'] === undefined ? undefined : json['provenance'] === null ? null : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
     };
 }
 

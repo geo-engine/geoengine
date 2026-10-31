@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface InternalDataId {
     /**
      * 
-     * @type {InternalDataIdTypeEnum}
-     * @memberof InternalDataId
      */
     type: InternalDataIdTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof InternalDataId
      */
     datasetId: string;
 }
@@ -37,7 +33,7 @@ export interface InternalDataId {
  * @export
  */
 export const InternalDataIdTypeEnum = {
-    Internal: 'internal'
+    Internal: 'internal',
 } as const;
 export type InternalDataIdTypeEnum = typeof InternalDataIdTypeEnum[keyof typeof InternalDataIdTypeEnum];
 
@@ -47,6 +43,8 @@ export type InternalDataIdTypeEnum = typeof InternalDataIdTypeEnum[keyof typeof 
  */
 export function instanceOfInternalDataId(value: object): value is InternalDataId {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'internal') return false;
+    
     if (!('datasetId' in value) || value['datasetId'] === undefined) return false;
     return true;
 }

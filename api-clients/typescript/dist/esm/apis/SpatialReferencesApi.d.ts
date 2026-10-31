@@ -9,8 +9,11 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { SpatialReferenceSpecification } from '../models/index';
+import { type SpatialReferenceSpecification } from '../models/SpatialReferenceSpecification';
 export interface GetSpatialReferenceSpecificationHandlerRequest {
+    /**
+     *
+     */
     srsString: string;
 }
 /**

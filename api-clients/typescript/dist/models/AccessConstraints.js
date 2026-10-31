@@ -27,7 +27,7 @@ exports.AccessConstraints = {
     Restricted: 'restricted',
     Confidential: 'confidential',
     Secret: 'secret',
-    TopSecret: 'topSecret'
+    TopSecret: 'topSecret',
 };
 function instanceOfAccessConstraints(value) {
     for (const key in exports.AccessConstraints) {

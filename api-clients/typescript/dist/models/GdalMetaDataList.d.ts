@@ -18,20 +18,14 @@ import type { GdalLoadingInfoTemporalSlice } from './GdalLoadingInfoTemporalSlic
 export interface GdalMetaDataList {
     /**
      *
-     * @type {GdalMetaDataListTypeEnum}
-     * @memberof GdalMetaDataList
      */
     type: GdalMetaDataListTypeEnum;
     /**
      *
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMetaDataList
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      *
-     * @type {Array<GdalLoadingInfoTemporalSlice>}
-     * @memberof GdalMetaDataList
      */
     params: Array<GdalLoadingInfoTemporalSlice>;
 }

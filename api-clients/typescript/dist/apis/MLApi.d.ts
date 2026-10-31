@@ -9,11 +9,18 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { MlModel, MlModelNameResponse } from '../models/index';
+import { type MlModel } from '../models/MlModel';
+import { type MlModelNameResponse } from '../models/MlModelNameResponse';
 export interface AddMlModelRequest {
+    /**
+     *
+     */
     mlModel: MlModel;
 }
 export interface GetMlModelRequest {
+    /**
+     * Ml Model Name
+     */
     modelName: string;
 }
 /**

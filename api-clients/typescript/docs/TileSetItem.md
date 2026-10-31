@@ -8,7 +8,7 @@ A minimal tileset element for use within a list of tilesets linking to full desc
 Name | Type
 ------------ | -------------
 `title` | string
-`dataType` | [GeospatialDataDataType](GeospatialDataDataType.md)
+`dataType` | [TileSetDataType](TileSetDataType.md)
 `crs` | [TilesCrs](TilesCrs.md)
 `tileMatrixSetURI` | string
 `links` | [Array&lt;Link&gt;](Link.md)

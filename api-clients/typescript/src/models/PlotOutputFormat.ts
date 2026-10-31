@@ -19,7 +19,7 @@
 export const PlotOutputFormat = {
     JsonPlain: 'JsonPlain',
     JsonVega: 'JsonVega',
-    ImagePng: 'ImagePng'
+    ImagePng: 'ImagePng',
 } as const;
 export type PlotOutputFormat = typeof PlotOutputFormat[keyof typeof PlotOutputFormat];
 

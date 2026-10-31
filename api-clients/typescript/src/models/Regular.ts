@@ -35,8 +35,6 @@ import {
 export interface Regular extends RegularTimeDimension {
     /**
      * 
-     * @type {RegularTypeEnum}
-     * @memberof Regular
      */
     type: RegularTypeEnum;
 }
@@ -46,7 +44,7 @@ export interface Regular extends RegularTimeDimension {
  * @export
  */
 export const RegularTypeEnum = {
-    Regular: 'regular'
+    Regular: 'regular',
 } as const;
 export type RegularTypeEnum = typeof RegularTypeEnum[keyof typeof RegularTypeEnum];
 
@@ -56,6 +54,8 @@ export type RegularTypeEnum = typeof RegularTypeEnum[keyof typeof RegularTypeEnu
  */
 export function instanceOfRegular(value: object): value is Regular {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'regular') return false;
+    
     return true;
 }
 

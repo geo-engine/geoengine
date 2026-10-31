@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface Quota {
     /**
      * 
-     * @type {number}
-     * @memberof Quota
      */
     available: number;
     /**
      * 
-     * @type {number}
-     * @memberof Quota
      */
     used: number;
 }

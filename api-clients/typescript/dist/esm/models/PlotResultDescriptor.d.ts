@@ -18,20 +18,14 @@ import type { BoundingBox2D } from './BoundingBox2D';
 export interface PlotResultDescriptor {
     /**
      *
-     * @type {string}
-     * @memberof PlotResultDescriptor
      */
     spatialReference: string;
     /**
      *
-     * @type {TimeInterval}
-     * @memberof PlotResultDescriptor
      */
     time?: TimeInterval | null;
     /**
      *
-     * @type {BoundingBox2D}
-     * @memberof PlotResultDescriptor
      */
     bbox?: BoundingBox2D | null;
 }

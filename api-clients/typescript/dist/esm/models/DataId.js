@@ -37,9 +37,9 @@ export function DataIdToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'external':
-            return Object.assign({}, ExternalDataIdToJSON(value), { type: 'external' });
+            return Object.assign({}, ExternalDataIdToJSON(value), { 'type': 'external' });
         case 'internal':
-            return Object.assign({}, InternalDataIdToJSON(value), { type: 'internal' });
+            return Object.assign({}, InternalDataIdToJSON(value), { 'type': 'internal' });
         default:
             return value;
     }

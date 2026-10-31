@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { WrappedPlotOutputFromJSON, } from '../models/index';
+import { WrappedPlotOutputFromJSON, } from '../models/WrappedPlotOutput';
 /**
  *
  */
@@ -61,7 +61,7 @@ export class PlotsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/plot/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',

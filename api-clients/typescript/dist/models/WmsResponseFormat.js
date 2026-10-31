@@ -24,7 +24,7 @@ exports.WmsResponseFormatToJSONTyped = WmsResponseFormatToJSONTyped;
  */
 exports.WmsResponseFormat = {
     TextXml: 'text/xml',
-    ImagePng: 'image/png'
+    ImagePng: 'image/png',
 };
 function instanceOfWmsResponseFormat(value) {
     for (const key in exports.WmsResponseFormat) {

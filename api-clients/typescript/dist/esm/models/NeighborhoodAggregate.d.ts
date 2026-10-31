@@ -40,20 +40,14 @@ import type { NeighborhoodAggregateParameters } from './NeighborhoodAggregatePar
 export interface NeighborhoodAggregate {
     /**
      *
-     * @type {NeighborhoodAggregateTypeEnum}
-     * @memberof NeighborhoodAggregate
      */
     type: NeighborhoodAggregateTypeEnum;
     /**
      *
-     * @type {NeighborhoodAggregateParameters}
-     * @memberof NeighborhoodAggregate
      */
     params: NeighborhoodAggregateParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof NeighborhoodAggregate
      */
     sources: SingleRasterSource;
 }

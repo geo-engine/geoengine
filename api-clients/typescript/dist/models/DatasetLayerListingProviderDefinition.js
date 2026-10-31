@@ -23,13 +23,15 @@ const DatasetLayerListingCollection_1 = require("./DatasetLayerListingCollection
  * @export
  */
 exports.DatasetLayerListingProviderDefinitionTypeEnum = {
-    DatasetLayerListing: 'DatasetLayerListing'
+    DatasetLayerListing: 'DatasetLayerListing',
 };
 /**
  * Check if a given object implements the DatasetLayerListingProviderDefinition interface.
  */
 function instanceOfDatasetLayerListingProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'DatasetLayerListing')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
@@ -53,7 +55,7 @@ function DatasetLayerListingProviderDefinitionFromJSONTyped(json, ignoreDiscrimi
         'id': json['id'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'collections': (json['collections'].map(DatasetLayerListingCollection_1.DatasetLayerListingCollectionFromJSON)),
     };
 }

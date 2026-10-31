@@ -30,13 +30,13 @@ function GeospatialDataDataTypeFromJSONTyped(json, ignoreDiscriminator) {
     if ((0, GeospatialDataDataTypeOneOf_1.instanceOfGeospatialDataDataTypeOneOf)(json)) {
         return (0, GeospatialDataDataTypeOneOf_1.GeospatialDataDataTypeOneOfFromJSONTyped)(json, true);
     }
-    if (typeof json === 'string' && (json === 'coverage')) {
-        return json;
-    }
     if (typeof json === 'string' && (json === 'map')) {
         return json;
     }
     if (typeof json === 'string' && (json === 'vector')) {
+        return json;
+    }
+    if (typeof json === 'string' && (json === 'coverage')) {
         return json;
     }
     return {};
@@ -54,13 +54,13 @@ function GeospatialDataDataTypeToJSONTyped(value, ignoreDiscriminator = false) {
     if ((0, GeospatialDataDataTypeOneOf_1.instanceOfGeospatialDataDataTypeOneOf)(value)) {
         return (0, GeospatialDataDataTypeOneOf_1.GeospatialDataDataTypeOneOfToJSON)(value);
     }
-    if (typeof value === 'string' && (value === 'coverage')) {
-        return value;
-    }
     if (typeof value === 'string' && (value === 'map')) {
         return value;
     }
     if (typeof value === 'string' && (value === 'vector')) {
+        return value;
+    }
+    if (typeof value === 'string' && (value === 'coverage')) {
         return value;
     }
     return {};

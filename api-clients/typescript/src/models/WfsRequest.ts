@@ -18,7 +18,7 @@
  */
 export const WfsRequest = {
     GetCapabilities: 'GetCapabilities',
-    GetFeature: 'GetFeature'
+    GetFeature: 'GetFeature',
 } as const;
 export type WfsRequest = typeof WfsRequest[keyof typeof WfsRequest];
 

@@ -32,8 +32,6 @@ export interface RasterStackerParameters {
      * - `default`: appends ` (n)` with the smallest `n` that avoids a conflict.
      * - `suffix`: appends one suffix per input.
      * - `rename`: explicitly provides names for all resulting bands.
-     * @type {RenameBands}
-     * @memberof RasterStackerParameters
      */
     renameBands: RenameBands;
 }

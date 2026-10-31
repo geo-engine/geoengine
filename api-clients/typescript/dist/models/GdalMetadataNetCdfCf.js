@@ -25,13 +25,15 @@ const GdalDatasetParameters_1 = require("./GdalDatasetParameters");
  * @export
  */
 exports.GdalMetadataNetCdfCfTypeEnum = {
-    GdalMetaDataNetCdfCf: 'GdalMetaDataNetCdfCf'
+    GdalMetaDataNetCdfCf: 'GdalMetaDataNetCdfCf',
 };
 /**
  * Check if a given object implements the GdalMetadataNetCdfCf interface.
  */
 function instanceOfGdalMetadataNetCdfCf(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalMetaDataNetCdfCf')
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -62,7 +64,7 @@ function GdalMetadataNetCdfCfFromJSONTyped(json, ignoreDiscriminator) {
         'end': json['end'],
         'step': (0, TimeStep_1.TimeStepFromJSON)(json['step']),
         'bandOffset': json['bandOffset'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 function GdalMetadataNetCdfCfToJSON(json) {

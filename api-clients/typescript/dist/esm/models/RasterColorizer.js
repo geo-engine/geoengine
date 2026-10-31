@@ -37,9 +37,9 @@ export function RasterColorizerToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'multiBand':
-            return Object.assign({}, MultiBandRasterColorizerToJSON(value), { type: 'multiBand' });
+            return Object.assign({}, MultiBandRasterColorizerToJSON(value), { 'type': 'multiBand' });
         case 'singleBand':
-            return Object.assign({}, SingleBandRasterColorizerToJSON(value), { type: 'singleBand' });
+            return Object.assign({}, SingleBandRasterColorizerToJSON(value), { 'type': 'singleBand' });
         default:
             return value;
     }

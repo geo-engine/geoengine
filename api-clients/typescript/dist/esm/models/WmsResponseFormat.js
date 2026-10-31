@@ -16,7 +16,7 @@
  */
 export const WmsResponseFormat = {
     TextXml: 'text/xml',
-    ImagePng: 'image/png'
+    ImagePng: 'image/png',
 };
 export function instanceOfWmsResponseFormat(value) {
     for (const key in WmsResponseFormat) {

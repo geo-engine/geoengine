@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 
-import { mapValues } from '../runtime';
+import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { TileMatrixLimits } from './TileMatrixLimits';
 import {
     TileMatrixLimitsFromJSON,
@@ -26,13 +26,6 @@ import {
     AccessConstraintsToJSON,
     AccessConstraintsToJSONTyped,
 } from './AccessConstraints';
-import type { GeospatialDataDataType } from './GeospatialDataDataType';
-import {
-    GeospatialDataDataTypeFromJSON,
-    GeospatialDataDataTypeFromJSONTyped,
-    GeospatialDataDataTypeToJSON,
-    GeospatialDataDataTypeToJSONTyped,
-} from './GeospatialDataDataType';
 import type { TilePoint } from './TilePoint';
 import {
     TilePointFromJSON,
@@ -54,6 +47,13 @@ import {
     StyleToJSON,
     StyleToJSONTyped,
 } from './Style';
+import type { TileSetDataType } from './TileSetDataType';
+import {
+    TileSetDataTypeFromJSON,
+    TileSetDataTypeFromJSONTyped,
+    TileSetDataTypeToJSON,
+    TileSetDataTypeToJSONTyped,
+} from './TileSetDataType';
 import type { GeospatialData } from './GeospatialData';
 import {
     GeospatialDataFromJSON,
@@ -85,35 +85,25 @@ import {
 export interface TileSet {
     /**
      * A title for this tileset
-     * @type {string}
-     * @memberof TileSet
      */
     title?: string;
     /**
      * Brief narrative description of this tile set
-     * @type {string}
-     * @memberof TileSet
      */
     description?: string;
     /**
      * Unordered list of one or more commonly used or formalized word(s) or
      * phrase(s) used to describe a [`TileSet`]
-     * @type {Array<string>}
-     * @memberof TileSet
      */
     keywords?: Array<string>;
     /**
      * 
-     * @type {GeospatialDataDataType}
-     * @memberof TileSet
      */
-    dataType: GeospatialDataDataType;
+    dataType: TileSetDataType;
     /**
      * Reference to a Tile Matrix Set on the OGC NA definition server
      * (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is
      * registered on the definition server.
-     * @type {string}
-     * @memberof TileSet
      */
     tileMatrixSetURI?: string;
     /**
@@ -121,20 +111,14 @@ export interface TileSet {
      * [`TileMatrixSet`]. If missing, there are no limits other that the ones
      * imposed by the [`TileMatrixSet`]. If present the tile matrices listed are
      * limited and the rest not available at all
-     * @type {Array<TileMatrixLimits>}
-     * @memberof TileSet
      */
     tileMatrixSetLimits?: Array<TileMatrixLimits>;
     /**
      * Coordinate Reference System (CRS)
-     * @type {TilesCrs}
-     * @memberof TileSet
      */
     crs: TilesCrs;
     /**
      * Epoch of the Coordinate Reference System (CRS)
-     * @type {number}
-     * @memberof TileSet
      */
     epoch?: number;
     /**
@@ -143,83 +127,57 @@ export interface TileSet {
      * the tiles; 'alternate' for a URL pointing to another representation of
      * the [`TileSetMetadata`] (e.g a [`TileJSON` file); 'tiling-scheme' for a
      * definition of the [`TileMatrixSet`]
-     * @type {Array<Link>}
-     * @memberof TileSet
      */
     links: Array<Link>;
     /**
      * 
-     * @type {Array<GeospatialData>}
-     * @memberof TileSet
      */
     layers?: Array<GeospatialData>;
     /**
      * Minimum bounding rectangle surrounding the tile matrix set, in the supported CRS
-     * @type {BoundingBox2D}
-     * @memberof TileSet
      */
     boundingBox?: BoundingBox2D;
     /**
      * Location of a tile that nicely represents the tileset. Implementations
      * may use this center value to set the default location or to present a
      * representative tile in a user interface
-     * @type {TilePoint}
-     * @memberof TileSet
      */
     centerPoint?: TilePoint;
     /**
      * Style involving all layers used to generate the tileset
-     * @type {Style}
-     * @memberof TileSet
      */
     style?: Style;
     /**
      * Short reference to recognize the author or provider
-     * @type {string}
-     * @memberof TileSet
      */
     attribution?: string;
     /**
      * License applicable to the tiles
-     * @type {string}
-     * @memberof TileSet
      */
     license?: string;
     /**
      * Restrictions on the availability of the Tile Set that the user needs to
      * be aware of before using or redistributing the Tile Set
-     * @type {AccessConstraints}
-     * @memberof TileSet
      */
     accessConstraints?: AccessConstraints;
     /**
      * Version of the Tile Set. Changes if the data behind the tiles has been changed
-     * @type {string}
-     * @memberof TileSet
      */
     version?: string;
     /**
      * When the Tile Set was first produced
-     * @type {Date}
-     * @memberof TileSet
      */
     created?: Date;
     /**
      * Last Tile Set change/revision
-     * @type {Date}
-     * @memberof TileSet
      */
     updated?: Date;
     /**
      * Useful information to contact the authors or custodians for the Tile Set
-     * @type {string}
-     * @memberof TileSet
      */
     pointOfContact?: string;
     /**
      * Media types available for the tiles
-     * @type {Array<string>}
-     * @memberof TileSet
      */
     mediaTypes?: Array<string>;
 }
@@ -249,7 +207,7 @@ export function TileSetFromJSONTyped(json: any, ignoreDiscriminator: boolean): T
         'title': json['title'] == null ? undefined : json['title'],
         'description': json['description'] == null ? undefined : json['description'],
         'keywords': json['keywords'] == null ? undefined : json['keywords'],
-        'dataType': GeospatialDataDataTypeFromJSON(json['dataType']),
+        'dataType': TileSetDataTypeFromJSON(json['dataType']),
         'tileMatrixSetURI': json['tileMatrixSetURI'] == null ? undefined : json['tileMatrixSetURI'],
         'tileMatrixSetLimits': json['tileMatrixSetLimits'] == null ? undefined : ((json['tileMatrixSetLimits'] as Array<any>).map(TileMatrixLimitsFromJSON)),
         'crs': TilesCrsFromJSON(json['crs']),
@@ -263,8 +221,8 @@ export function TileSetFromJSONTyped(json: any, ignoreDiscriminator: boolean): T
         'license': json['license'] == null ? undefined : json['license'],
         'accessConstraints': json['accessConstraints'] == null ? undefined : AccessConstraintsFromJSON(json['accessConstraints']),
         'version': json['version'] == null ? undefined : json['version'],
-        'created': json['created'] == null ? undefined : (new Date(json['created'])),
-        'updated': json['updated'] == null ? undefined : (new Date(json['updated'])),
+        'created': json['created'] == null ? undefined : (parseDateTime(json['created'])),
+        'updated': json['updated'] == null ? undefined : (parseDateTime(json['updated'])),
         'pointOfContact': json['pointOfContact'] == null ? undefined : json['pointOfContact'],
         'mediaTypes': json['mediaTypes'] == null ? undefined : json['mediaTypes'],
     };
@@ -284,7 +242,7 @@ export function TileSetToJSONTyped(value?: TileSet | null, ignoreDiscriminator: 
         'title': value['title'],
         'description': value['description'],
         'keywords': value['keywords'],
-        'dataType': GeospatialDataDataTypeToJSON(value['dataType']),
+        'dataType': TileSetDataTypeToJSON(value['dataType']),
         'tileMatrixSetURI': value['tileMatrixSetURI'],
         'tileMatrixSetLimits': value['tileMatrixSetLimits'] == null ? undefined : ((value['tileMatrixSetLimits'] as Array<any>).map(TileMatrixLimitsToJSON)),
         'crs': TilesCrsToJSON(value['crs']),
@@ -298,8 +256,8 @@ export function TileSetToJSONTyped(value?: TileSet | null, ignoreDiscriminator: 
         'license': value['license'],
         'accessConstraints': AccessConstraintsToJSON(value['accessConstraints']),
         'version': value['version'],
-        'created': value['created'] == null ? value['created'] : value['created'].toISOString(),
-        'updated': value['updated'] == null ? value['updated'] : value['updated'].toISOString(),
+        'created': value['created'] == null ? value['created'] : serializeDateTime(value['created']),
+        'updated': value['updated'] == null ? value['updated'] : serializeDateTime(value['updated']),
         'pointOfContact': value['pointOfContact'],
         'mediaTypes': value['mediaTypes'],
     };

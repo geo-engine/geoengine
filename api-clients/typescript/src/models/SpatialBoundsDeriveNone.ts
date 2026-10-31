@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface SpatialBoundsDeriveNone {
     /**
      * 
-     * @type {SpatialBoundsDeriveNoneTypeEnum}
-     * @memberof SpatialBoundsDeriveNone
      */
     type: SpatialBoundsDeriveNoneTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface SpatialBoundsDeriveNone {
  * @export
  */
 export const SpatialBoundsDeriveNoneTypeEnum = {
-    None: 'none'
+    None: 'none',
 } as const;
 export type SpatialBoundsDeriveNoneTypeEnum = typeof SpatialBoundsDeriveNoneTypeEnum[keyof typeof SpatialBoundsDeriveNoneTypeEnum];
 
@@ -41,6 +39,8 @@ export type SpatialBoundsDeriveNoneTypeEnum = typeof SpatialBoundsDeriveNoneType
  */
 export function instanceOfSpatialBoundsDeriveNone(value: object): value is SpatialBoundsDeriveNone {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'none') return false;
+    
     return true;
 }
 

@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface SlopeOffsetSelectionConstant {
     /**
      * 
-     * @type {SlopeOffsetSelectionConstantTypeEnum}
-     * @memberof SlopeOffsetSelectionConstant
      */
     type: SlopeOffsetSelectionConstantTypeEnum;
     /**
      * Fixed slope or offset value.
-     * @type {number}
-     * @memberof SlopeOffsetSelectionConstant
      */
     value: number;
 }
@@ -37,7 +33,7 @@ export interface SlopeOffsetSelectionConstant {
  * @export
  */
 export const SlopeOffsetSelectionConstantTypeEnum = {
-    Constant: 'constant'
+    Constant: 'constant',
 } as const;
 export type SlopeOffsetSelectionConstantTypeEnum = typeof SlopeOffsetSelectionConstantTypeEnum[keyof typeof SlopeOffsetSelectionConstantTypeEnum];
 
@@ -47,6 +43,8 @@ export type SlopeOffsetSelectionConstantTypeEnum = typeof SlopeOffsetSelectionCo
  */
 export function instanceOfSlopeOffsetSelectionConstant(value: object): value is SlopeOffsetSelectionConstant {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'constant') return false;
+    
     if (!('value' in value) || value['value'] === undefined) return false;
     return true;
 }

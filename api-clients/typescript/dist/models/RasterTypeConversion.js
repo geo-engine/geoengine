@@ -24,13 +24,15 @@ const RasterTypeConversionParameters_1 = require("./RasterTypeConversionParamete
  * @export
  */
 exports.RasterTypeConversionTypeEnum = {
-    RasterTypeConversion: 'RasterTypeConversion'
+    RasterTypeConversion: 'RasterTypeConversion',
 };
 /**
  * Check if a given object implements the RasterTypeConversion interface.
  */
 function instanceOfRasterTypeConversion(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'RasterTypeConversion')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

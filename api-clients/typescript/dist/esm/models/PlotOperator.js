@@ -55,21 +55,21 @@ export function PlotOperatorToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'BoxPlot':
-            return Object.assign({}, BoxPlotToJSON(value), { type: 'BoxPlot' });
+            return Object.assign({}, BoxPlotToJSON(value), { 'type': 'BoxPlot' });
         case 'ClassHistogram':
-            return Object.assign({}, ClassHistogramToJSON(value), { type: 'ClassHistogram' });
+            return Object.assign({}, ClassHistogramToJSON(value), { 'type': 'ClassHistogram' });
         case 'FeatureAttributeValuesOverTime':
-            return Object.assign({}, FeatureAttributeValuesOverTimeToJSON(value), { type: 'FeatureAttributeValuesOverTime' });
+            return Object.assign({}, FeatureAttributeValuesOverTimeToJSON(value), { 'type': 'FeatureAttributeValuesOverTime' });
         case 'Histogram':
-            return Object.assign({}, HistogramToJSON(value), { type: 'Histogram' });
+            return Object.assign({}, HistogramToJSON(value), { 'type': 'Histogram' });
         case 'MeanRasterPixelValuesOverTime':
-            return Object.assign({}, MeanRasterPixelValuesOverTimeToJSON(value), { type: 'MeanRasterPixelValuesOverTime' });
+            return Object.assign({}, MeanRasterPixelValuesOverTimeToJSON(value), { 'type': 'MeanRasterPixelValuesOverTime' });
         case 'PieChart':
-            return Object.assign({}, PieChartToJSON(value), { type: 'PieChart' });
+            return Object.assign({}, PieChartToJSON(value), { 'type': 'PieChart' });
         case 'ScatterPlot':
-            return Object.assign({}, ScatterPlotToJSON(value), { type: 'ScatterPlot' });
+            return Object.assign({}, ScatterPlotToJSON(value), { 'type': 'ScatterPlot' });
         case 'Statistics':
-            return Object.assign({}, StatisticsToJSON(value), { type: 'Statistics' });
+            return Object.assign({}, StatisticsToJSON(value), { 'type': 'Statistics' });
         default:
             return value;
     }

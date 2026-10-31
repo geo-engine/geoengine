@@ -17,32 +17,22 @@ import type { RasterToDatasetQueryRectangle } from './RasterToDatasetQueryRectan
 export interface RasterDatasetFromProcessingGraph {
     /**
      *
-     * @type {string}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     name?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     displayName: string;
     /**
      *
-     * @type {string}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     description?: string | null;
     /**
      *
-     * @type {RasterToDatasetQueryRectangle}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     query: RasterToDatasetQueryRectangle;
     /**
      *
-     * @type {boolean}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     asCog?: boolean;
 }

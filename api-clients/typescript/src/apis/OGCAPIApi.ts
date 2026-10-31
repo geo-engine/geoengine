@@ -11,96 +11,198 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  Collection,
-  Collections,
-  CollectionsResponseFormat,
-  Conformance,
-  LandingPage,
-  TileMatrixSet,
-  TileMatrixSetId,
-  TileMatrixSets,
-  TileSet,
-  TileSets,
-} from '../models/index';
 import {
+    type Collection,
     CollectionFromJSON,
     CollectionToJSON,
+} from '../models/Collection';
+import {
+    type Collections,
     CollectionsFromJSON,
     CollectionsToJSON,
+} from '../models/Collections';
+import {
+    type CollectionsResponseFormat,
     CollectionsResponseFormatFromJSON,
     CollectionsResponseFormatToJSON,
+} from '../models/CollectionsResponseFormat';
+import {
+    type Conformance,
     ConformanceFromJSON,
     ConformanceToJSON,
+} from '../models/Conformance';
+import {
+    type LandingPage,
     LandingPageFromJSON,
     LandingPageToJSON,
+} from '../models/LandingPage';
+import {
+    type TileMatrixSet,
     TileMatrixSetFromJSON,
     TileMatrixSetToJSON,
+} from '../models/TileMatrixSet';
+import {
+    type TileMatrixSetId,
     TileMatrixSetIdFromJSON,
     TileMatrixSetIdToJSON,
+} from '../models/TileMatrixSetId';
+import {
+    type TileMatrixSets,
     TileMatrixSetsFromJSON,
     TileMatrixSetsToJSON,
+} from '../models/TileMatrixSets';
+import {
+    type TileSet,
     TileSetFromJSON,
     TileSetToJSON,
+} from '../models/TileSet';
+import {
+    type TileSets,
     TileSetsFromJSON,
     TileSetsToJSON,
-} from '../models/index';
+} from '../models/TileSets';
 
 export interface CollectionRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 
 export interface CollectionTilesetRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
     tileMatrixSetId: TileMatrixSetId;
 }
 
 export interface CollectionTilesetsRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 
 export interface CollectionsRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+     */
     datetime?: string;
+    /**
+     * Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).
+     */
     bbox?: string;
+    /**
+     * Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10).
+     */
     limit?: number | null;
+    /**
+     * Response format. If omitted, the `Accept` header is used.
+     */
     f?: CollectionsResponseFormat | null;
 }
 
 export interface ConformanceRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 
 export interface LandingPageRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 
 export interface TileRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
     tileMatrixSetId: TileMatrixSetId;
+    /**
+     * Tile matrix level
+     */
     tileMatrix: number;
+    /**
+     * Tile row
+     */
     tileRow: number;
+    /**
+     * Tile column
+     */
     tileCol: number;
+    /**
+     * Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+     */
     datetime?: string;
 }
 
 export interface TileMatrixSetRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
     tileMatrixSetId: TileMatrixSetId;
 }
 
 export interface TileMatrixSetsRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 
@@ -141,8 +243,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -211,9 +313,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-        urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
 
         return {
             path: urlPath,
@@ -275,8 +377,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -354,8 +456,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -417,8 +519,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/conformance`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -480,8 +582,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -575,12 +677,12 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-        urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
-        urlPath = urlPath.replace(`{${"tileMatrix"}}`, encodeURIComponent(String(requestParameters['tileMatrix'])));
-        urlPath = urlPath.replace(`{${"tileRow"}}`, encodeURIComponent(String(requestParameters['tileRow'])));
-        urlPath = urlPath.replace(`{${"tileCol"}}`, encodeURIComponent(String(requestParameters['tileCol'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+        urlPath = urlPath.replace('{tileMatrix}', encodeURIComponent(String(requestParameters['tileMatrix'])));
+        urlPath = urlPath.replace('{tileRow}', encodeURIComponent(String(requestParameters['tileRow'])));
+        urlPath = urlPath.replace('{tileCol}', encodeURIComponent(String(requestParameters['tileCol'])));
 
         return {
             path: urlPath,
@@ -594,7 +696,7 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
      * OGC API Tile
      */
-    async tileRaw(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>> {
+    async tileRaw(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>> {
         const requestOptions = await this.tileRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -605,7 +707,7 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
      * OGC API Tile
      */
-    async tile(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob> {
+    async tile(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile> {
         const response = await this.tileRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -649,9 +751,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-        urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
 
         return {
             path: urlPath,
@@ -713,8 +815,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets`;
-        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,

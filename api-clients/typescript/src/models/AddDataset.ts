@@ -35,44 +35,30 @@ import {
 export interface AddDataset {
     /**
      * 
-     * @type {string}
-     * @memberof AddDataset
      */
     name?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof AddDataset
      */
     displayName: string;
     /**
      * 
-     * @type {string}
-     * @memberof AddDataset
      */
     description: string;
     /**
      * 
-     * @type {string}
-     * @memberof AddDataset
      */
     sourceOperator: string;
     /**
      * 
-     * @type {Symbology}
-     * @memberof AddDataset
      */
     symbology?: Symbology | null;
     /**
      * 
-     * @type {Array<Provenance>}
-     * @memberof AddDataset
      */
     provenance?: Array<Provenance> | null;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof AddDataset
      */
     tags?: Array<string> | null;
 }
@@ -97,13 +83,13 @@ export function AddDatasetFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
-        'name': json['name'] == null ? undefined : json['name'],
+        'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
         'displayName': json['displayName'],
         'description': json['description'],
         'sourceOperator': json['sourceOperator'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
-        'provenance': json['provenance'] == null ? undefined : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
-        'tags': json['tags'] == null ? undefined : json['tags'],
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] === undefined ? undefined : json['provenance'] === null ? null : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
+        'tags': json['tags'] === undefined ? undefined : json['tags'] === null ? null : json['tags'],
     };
 }
 

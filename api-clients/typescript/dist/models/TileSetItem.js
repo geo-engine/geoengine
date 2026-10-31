@@ -17,7 +17,7 @@ exports.TileSetItemFromJSON = TileSetItemFromJSON;
 exports.TileSetItemFromJSONTyped = TileSetItemFromJSONTyped;
 exports.TileSetItemToJSON = TileSetItemToJSON;
 exports.TileSetItemToJSONTyped = TileSetItemToJSONTyped;
-const GeospatialDataDataType_1 = require("./GeospatialDataDataType");
+const TileSetDataType_1 = require("./TileSetDataType");
 const Link_1 = require("./Link");
 const TilesCrs_1 = require("./TilesCrs");
 /**
@@ -41,7 +41,7 @@ function TileSetItemFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'title': json['title'] == null ? undefined : json['title'],
-        'dataType': (0, GeospatialDataDataType_1.GeospatialDataDataTypeFromJSON)(json['dataType']),
+        'dataType': (0, TileSetDataType_1.TileSetDataTypeFromJSON)(json['dataType']),
         'crs': (0, TilesCrs_1.TilesCrsFromJSON)(json['crs']),
         'tileMatrixSetURI': json['tileMatrixSetURI'] == null ? undefined : json['tileMatrixSetURI'],
         'links': (json['links'].map(Link_1.LinkFromJSON)),
@@ -56,7 +56,7 @@ function TileSetItemToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'title': value['title'],
-        'dataType': (0, GeospatialDataDataType_1.GeospatialDataDataTypeToJSON)(value['dataType']),
+        'dataType': (0, TileSetDataType_1.TileSetDataTypeToJSON)(value['dataType']),
         'crs': (0, TilesCrs_1.TilesCrsToJSON)(value['crs']),
         'tileMatrixSetURI': value['tileMatrixSetURI'],
         'links': (value['links'].map(Link_1.LinkToJSON)),

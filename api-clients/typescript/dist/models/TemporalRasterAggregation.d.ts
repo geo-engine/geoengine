@@ -27,20 +27,14 @@ import type { SingleRasterSource } from './SingleRasterSource';
 export interface TemporalRasterAggregation {
     /**
      *
-     * @type {TemporalRasterAggregationTypeEnum}
-     * @memberof TemporalRasterAggregation
      */
     type: TemporalRasterAggregationTypeEnum;
     /**
      *
-     * @type {TemporalRasterAggregationParameters}
-     * @memberof TemporalRasterAggregation
      */
     params: TemporalRasterAggregationParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof TemporalRasterAggregation
      */
     sources: SingleRasterSource;
 }

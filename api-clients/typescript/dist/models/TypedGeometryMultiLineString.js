@@ -22,7 +22,7 @@ const MultiLineString_1 = require("./MultiLineString");
  * Check if a given object implements the TypedGeometryMultiLineString interface.
  */
 function instanceOfTypedGeometryMultiLineString(value) {
-    if (!('multiLineString' in value) || value['multiLineString'] === undefined)
+    if ((!('multiLineString' in value) && !('MultiLineString' in value)) || (value['multiLineString'] === undefined && value['MultiLineString'] === undefined))
         return false;
     return true;
 }

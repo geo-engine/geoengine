@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { BoxPlot } from './BoxPlot';
 import {
     instanceOfBoxPlot,
@@ -115,21 +116,21 @@ export function PlotOperatorToJSONTyped(value?: PlotOperator | null, ignoreDiscr
     }
     switch (value['type']) {
         case 'BoxPlot':
-            return Object.assign({}, BoxPlotToJSON(value), { type: 'BoxPlot' } as const);
+            return Object.assign({}, BoxPlotToJSON(value), { 'type': 'BoxPlot' } as const);
         case 'ClassHistogram':
-            return Object.assign({}, ClassHistogramToJSON(value), { type: 'ClassHistogram' } as const);
+            return Object.assign({}, ClassHistogramToJSON(value), { 'type': 'ClassHistogram' } as const);
         case 'FeatureAttributeValuesOverTime':
-            return Object.assign({}, FeatureAttributeValuesOverTimeToJSON(value), { type: 'FeatureAttributeValuesOverTime' } as const);
+            return Object.assign({}, FeatureAttributeValuesOverTimeToJSON(value), { 'type': 'FeatureAttributeValuesOverTime' } as const);
         case 'Histogram':
-            return Object.assign({}, HistogramToJSON(value), { type: 'Histogram' } as const);
+            return Object.assign({}, HistogramToJSON(value), { 'type': 'Histogram' } as const);
         case 'MeanRasterPixelValuesOverTime':
-            return Object.assign({}, MeanRasterPixelValuesOverTimeToJSON(value), { type: 'MeanRasterPixelValuesOverTime' } as const);
+            return Object.assign({}, MeanRasterPixelValuesOverTimeToJSON(value), { 'type': 'MeanRasterPixelValuesOverTime' } as const);
         case 'PieChart':
-            return Object.assign({}, PieChartToJSON(value), { type: 'PieChart' } as const);
+            return Object.assign({}, PieChartToJSON(value), { 'type': 'PieChart' } as const);
         case 'ScatterPlot':
-            return Object.assign({}, ScatterPlotToJSON(value), { type: 'ScatterPlot' } as const);
+            return Object.assign({}, ScatterPlotToJSON(value), { 'type': 'ScatterPlot' } as const);
         case 'Statistics':
-            return Object.assign({}, StatisticsToJSON(value), { type: 'Statistics' } as const);
+            return Object.assign({}, StatisticsToJSON(value), { 'type': 'Statistics' } as const);
         default:
             return value;
     }

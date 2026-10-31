@@ -17,6 +17,7 @@ exports.DataUsageSummaryFromJSON = DataUsageSummaryFromJSON;
 exports.DataUsageSummaryFromJSONTyped = DataUsageSummaryFromJSONTyped;
 exports.DataUsageSummaryToJSON = DataUsageSummaryToJSON;
 exports.DataUsageSummaryToJSONTyped = DataUsageSummaryToJSONTyped;
+const runtime_1 = require("../runtime");
 /**
  * Check if a given object implements the DataUsageSummary interface.
  */
@@ -37,7 +38,7 @@ function DataUsageSummaryFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : (0, runtime_1.parseDateTime)(json['timestamp'])),
         'data': json['data'],
         'count': json['count'],
     };
@@ -50,7 +51,7 @@ function DataUsageSummaryToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : (0, runtime_1.serializeDateTime)(value['timestamp']),
         'data': value['data'],
         'count': value['count'],
     };

@@ -28,14 +28,10 @@ import {
 export interface MultiBandGdalSource {
     /**
      * 
-     * @type {MultiBandGdalSourceTypeEnum}
-     * @memberof MultiBandGdalSource
      */
     type: MultiBandGdalSourceTypeEnum;
     /**
      * 
-     * @type {GdalSourceParameters}
-     * @memberof MultiBandGdalSource
      */
     params: GdalSourceParameters;
 }
@@ -45,7 +41,7 @@ export interface MultiBandGdalSource {
  * @export
  */
 export const MultiBandGdalSourceTypeEnum = {
-    MultiBandGdalSource: 'MultiBandGdalSource'
+    MultiBandGdalSource: 'MultiBandGdalSource',
 } as const;
 export type MultiBandGdalSourceTypeEnum = typeof MultiBandGdalSourceTypeEnum[keyof typeof MultiBandGdalSourceTypeEnum];
 
@@ -55,6 +51,8 @@ export type MultiBandGdalSourceTypeEnum = typeof MultiBandGdalSourceTypeEnum[key
  */
 export function instanceOfMultiBandGdalSource(value: object): value is MultiBandGdalSource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'MultiBandGdalSource') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }

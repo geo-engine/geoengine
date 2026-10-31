@@ -23,7 +23,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProjectsApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const CreateProject_1 = require("../models/CreateProject");
+const IdResponse_1 = require("../models/IdResponse");
+const Project_1 = require("../models/Project");
+const ProjectListing_1 = require("../models/ProjectListing");
+const ProjectVersion_1 = require("../models/ProjectVersion");
+const UpdateProject_1 = require("../models/UpdateProject");
 /**
  *
  */
@@ -52,7 +57,7 @@ class ProjectsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.CreateProjectToJSON)(requestParameters['createProject']),
+                body: (0, CreateProject_1.CreateProjectToJSON)(requestParameters['createProject']),
             };
         });
     }
@@ -63,7 +68,7 @@ class ProjectsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.createProjectHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -93,7 +98,7 @@ class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -144,9 +149,9 @@ class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/projects`;
-            urlPath = urlPath.replace(`{${"order"}}`, encodeURIComponent(String(requestParameters['order'])));
-            urlPath = urlPath.replace(`{${"offset"}}`, encodeURIComponent(String(requestParameters['offset'])));
-            urlPath = urlPath.replace(`{${"limit"}}`, encodeURIComponent(String(requestParameters['limit'])));
+            urlPath = urlPath.replace('{order}', encodeURIComponent(String(requestParameters['order'])));
+            urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
+            urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -162,7 +167,7 @@ class ProjectsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listProjectsHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.ProjectListingFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProjectListing_1.ProjectListingFromJSON));
         });
     }
     /**
@@ -192,7 +197,7 @@ class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -208,7 +213,7 @@ class ProjectsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.loadProjectLatestHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.ProjectFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Project_1.ProjectFromJSON)(jsonValue));
         });
     }
     /**
@@ -241,8 +246,8 @@ class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}/{version}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
-            urlPath = urlPath.replace(`{${"version"}}`, encodeURIComponent(String(requestParameters['version'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{version}', encodeURIComponent(String(requestParameters['version'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -258,7 +263,7 @@ class ProjectsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.loadProjectVersionHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.ProjectFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Project_1.ProjectFromJSON)(jsonValue));
         });
     }
     /**
@@ -288,7 +293,7 @@ class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}/versions`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -304,7 +309,7 @@ class ProjectsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.projectVersionsHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.ProjectVersionFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProjectVersion_1.ProjectVersionFromJSON));
         });
     }
     /**
@@ -338,13 +343,13 @@ class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'PATCH',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.UpdateProjectToJSON)(requestParameters['updateProject']),
+                body: (0, UpdateProject_1.UpdateProjectToJSON)(requestParameters['updateProject']),
             };
         });
     }

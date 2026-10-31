@@ -16,8 +16,6 @@
 export interface SpatialBoundsDeriveDerive {
     /**
      *
-     * @type {SpatialBoundsDeriveDeriveTypeEnum}
-     * @memberof SpatialBoundsDeriveDerive
      */
     type: SpatialBoundsDeriveDeriveTypeEnum;
 }

@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface AggregationMean {
     /**
      * 
-     * @type {AggregationMeanTypeEnum}
-     * @memberof AggregationMean
      */
     type: AggregationMeanTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationMean
      */
     ignoreNoData: boolean;
 }
@@ -37,7 +33,7 @@ export interface AggregationMean {
  * @export
  */
 export const AggregationMeanTypeEnum = {
-    Mean: 'mean'
+    Mean: 'mean',
 } as const;
 export type AggregationMeanTypeEnum = typeof AggregationMeanTypeEnum[keyof typeof AggregationMeanTypeEnum];
 
@@ -47,6 +43,8 @@ export type AggregationMeanTypeEnum = typeof AggregationMeanTypeEnum[keyof typeo
  */
 export function instanceOfAggregationMean(value: object): value is AggregationMean {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'mean') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     return true;
 }

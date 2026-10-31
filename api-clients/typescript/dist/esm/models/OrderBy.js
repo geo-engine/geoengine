@@ -16,7 +16,7 @@
  */
 export const OrderBy = {
     NameAsc: 'NameAsc',
-    NameDesc: 'NameDesc'
+    NameDesc: 'NameDesc',
 };
 export function instanceOfOrderBy(value) {
     for (const key in OrderBy) {

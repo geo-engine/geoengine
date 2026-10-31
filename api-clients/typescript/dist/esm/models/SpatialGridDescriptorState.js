@@ -16,7 +16,7 @@
  */
 export const SpatialGridDescriptorState = {
     Source: 'source',
-    Derived: 'derived'
+    Derived: 'derived',
 };
 export function instanceOfSpatialGridDescriptorState(value) {
     for (const key in SpatialGridDescriptorState) {

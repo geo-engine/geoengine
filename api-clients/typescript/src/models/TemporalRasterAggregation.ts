@@ -44,20 +44,14 @@ import {
 export interface TemporalRasterAggregation {
     /**
      * 
-     * @type {TemporalRasterAggregationTypeEnum}
-     * @memberof TemporalRasterAggregation
      */
     type: TemporalRasterAggregationTypeEnum;
     /**
      * 
-     * @type {TemporalRasterAggregationParameters}
-     * @memberof TemporalRasterAggregation
      */
     params: TemporalRasterAggregationParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof TemporalRasterAggregation
      */
     sources: SingleRasterSource;
 }
@@ -67,7 +61,7 @@ export interface TemporalRasterAggregation {
  * @export
  */
 export const TemporalRasterAggregationTypeEnum = {
-    TemporalRasterAggregation: 'TemporalRasterAggregation'
+    TemporalRasterAggregation: 'TemporalRasterAggregation',
 } as const;
 export type TemporalRasterAggregationTypeEnum = typeof TemporalRasterAggregationTypeEnum[keyof typeof TemporalRasterAggregationTypeEnum];
 
@@ -77,6 +71,8 @@ export type TemporalRasterAggregationTypeEnum = typeof TemporalRasterAggregation
  */
 export function instanceOfTemporalRasterAggregation(value: object): value is TemporalRasterAggregation {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'TemporalRasterAggregation') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

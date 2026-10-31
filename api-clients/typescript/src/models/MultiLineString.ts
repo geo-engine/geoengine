@@ -28,8 +28,6 @@ import {
 export interface MultiLineString {
     /**
      * 
-     * @type {Array<Array<Coordinate2D>>}
-     * @memberof MultiLineString
      */
     coordinates: Array<Array<Coordinate2D>>;
 }

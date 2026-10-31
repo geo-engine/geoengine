@@ -16,7 +16,7 @@
  */
 export const CornerOfOrigin = {
     TopLeft: 'topLeft',
-    BottomLeft: 'bottomLeft'
+    BottomLeft: 'bottomLeft',
 };
 export function instanceOfCornerOfOrigin(value) {
     for (const key in CornerOfOrigin) {

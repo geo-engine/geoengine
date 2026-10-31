@@ -18,7 +18,7 @@
  */
 export const TimeReference = {
     Start: 'start',
-    End: 'end'
+    End: 'end',
 } as const;
 export type TimeReference = typeof TimeReference[keyof typeof TimeReference];
 

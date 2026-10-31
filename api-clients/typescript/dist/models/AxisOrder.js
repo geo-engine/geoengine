@@ -24,7 +24,7 @@ exports.AxisOrderToJSONTyped = AxisOrderToJSONTyped;
  */
 exports.AxisOrder = {
     NorthEast: 'northEast',
-    EastNorth: 'eastNorth'
+    EastNorth: 'eastNorth',
 };
 function instanceOfAxisOrder(value) {
     for (const key in exports.AxisOrder) {

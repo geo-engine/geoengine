@@ -23,7 +23,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TasksApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const TaskStatus_1 = require("../models/TaskStatus");
+const TaskStatusWithId_1 = require("../models/TaskStatusWithId");
 /**
  *
  */
@@ -49,7 +50,7 @@ class TasksApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/tasks/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -102,9 +103,9 @@ class TasksApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/tasks/list`;
-            urlPath = urlPath.replace(`{${"filter"}}`, encodeURIComponent(String(requestParameters['filter'])));
-            urlPath = urlPath.replace(`{${"offset"}}`, encodeURIComponent(String(requestParameters['offset'])));
-            urlPath = urlPath.replace(`{${"limit"}}`, encodeURIComponent(String(requestParameters['limit'])));
+            urlPath = urlPath.replace('{filter}', encodeURIComponent(String(requestParameters['filter'])));
+            urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
+            urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -120,7 +121,7 @@ class TasksApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.TaskStatusWithIdFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(TaskStatusWithId_1.TaskStatusWithIdFromJSON));
         });
     }
     /**
@@ -150,7 +151,7 @@ class TasksApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/tasks/{id}/status`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -166,7 +167,7 @@ class TasksApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.statusHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TaskStatusFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TaskStatus_1.TaskStatusFromJSON)(jsonValue));
         });
     }
     /**

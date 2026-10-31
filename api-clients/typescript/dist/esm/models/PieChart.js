@@ -16,13 +16,15 @@ import { PieChartParametersFromJSON, PieChartParametersToJSON, } from './PieChar
  * @export
  */
 export const PieChartTypeEnum = {
-    PieChart: 'PieChart'
+    PieChart: 'PieChart',
 };
 /**
  * Check if a given object implements the PieChart interface.
  */
 export function instanceOfPieChart(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'PieChart')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

@@ -92,20 +92,14 @@ import type { ExpressionParameters } from './ExpressionParameters';
 export interface Expression {
     /**
      *
-     * @type {ExpressionTypeEnum}
-     * @memberof Expression
      */
     type: ExpressionTypeEnum;
     /**
      *
-     * @type {ExpressionParameters}
-     * @memberof Expression
      */
     params: ExpressionParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof Expression
      */
     sources: SingleRasterSource;
 }

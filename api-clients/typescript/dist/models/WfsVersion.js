@@ -23,7 +23,7 @@ exports.WfsVersionToJSONTyped = WfsVersionToJSONTyped;
  * @export
  */
 exports.WfsVersion = {
-    _200: '2.0.0'
+    _200: '2.0.0',
 };
 function instanceOfWfsVersion(value) {
     for (const key in exports.WfsVersion) {

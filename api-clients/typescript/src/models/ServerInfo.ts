@@ -20,26 +20,18 @@ import { mapValues } from '../runtime';
 export interface ServerInfo {
     /**
      * 
-     * @type {string}
-     * @memberof ServerInfo
      */
     buildDate: string;
     /**
      * 
-     * @type {string}
-     * @memberof ServerInfo
      */
     commitHash: string;
     /**
      * 
-     * @type {string}
-     * @memberof ServerInfo
      */
     version: string;
     /**
      * 
-     * @type {string}
-     * @memberof ServerInfo
      */
     features: string;
 }

@@ -16,14 +16,10 @@
 export interface ScatterPlotParameters {
     /**
      * The name of the attribute making up the x-axis of the plot.
-     * @type {string}
-     * @memberof ScatterPlotParameters
      */
     columnX: string;
     /**
      * The name of the attribute making up the y-axis of the plot.
-     * @type {string}
-     * @memberof ScatterPlotParameters
      */
     columnY: string;
 }

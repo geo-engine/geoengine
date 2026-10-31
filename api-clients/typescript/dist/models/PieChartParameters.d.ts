@@ -16,20 +16,14 @@
 export interface PieChartParameters {
     /**
      *
-     * @type {PieChartParametersTypeEnum}
-     * @memberof PieChartParameters
      */
     type: PieChartParametersTypeEnum;
     /**
      * The names of the attribute to generate pies for.
-     * @type {string}
-     * @memberof PieChartParameters
      */
     columnName: string;
     /**
      * Whether to render the chart as a donut.
-     * @type {boolean}
-     * @memberof PieChartParameters
      */
     donut?: boolean;
 }

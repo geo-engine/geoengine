@@ -16,13 +16,15 @@ import { MockDatasetDataSourceLoadingInfoFromJSON, MockDatasetDataSourceLoadingI
  * @export
  */
 export const MockMetaDataTypeEnum = {
-    MockMetaData: 'MockMetaData'
+    MockMetaData: 'MockMetaData',
 };
 /**
  * Check if a given object implements the MockMetaData interface.
  */
 export function instanceOfMockMetaData(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'MockMetaData')
         return false;
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined)
         return false;

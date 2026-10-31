@@ -67,29 +67,29 @@ export function TypedDataProviderDefinitionToJSONTyped(value, ignoreDiscriminato
     }
     switch (value['type']) {
         case 'CopernicusDataspace':
-            return Object.assign({}, CopernicusDataspaceDataProviderDefinitionToJSON(value), { type: 'CopernicusDataspace' });
+            return Object.assign({}, CopernicusDataspaceDataProviderDefinitionToJSON(value), { 'type': 'CopernicusDataspace' });
         case 'DatasetLayerListing':
-            return Object.assign({}, DatasetLayerListingProviderDefinitionToJSON(value), { type: 'DatasetLayerListing' });
+            return Object.assign({}, DatasetLayerListingProviderDefinitionToJSON(value), { 'type': 'DatasetLayerListing' });
         case 'EbvPortal':
-            return Object.assign({}, EbvPortalDataProviderDefinitionToJSON(value), { type: 'EbvPortal' });
+            return Object.assign({}, EbvPortalDataProviderDefinitionToJSON(value), { 'type': 'EbvPortal' });
         case 'Edr':
-            return Object.assign({}, EdrDataProviderDefinitionToJSON(value), { type: 'Edr' });
+            return Object.assign({}, EdrDataProviderDefinitionToJSON(value), { 'type': 'Edr' });
         case 'Gbif':
-            return Object.assign({}, GbifDataProviderDefinitionToJSON(value), { type: 'Gbif' });
+            return Object.assign({}, GbifDataProviderDefinitionToJSON(value), { 'type': 'Gbif' });
         case 'GfbioAbcd':
-            return Object.assign({}, GfbioAbcdDataProviderDefinitionToJSON(value), { type: 'GfbioAbcd' });
+            return Object.assign({}, GfbioAbcdDataProviderDefinitionToJSON(value), { 'type': 'GfbioAbcd' });
         case 'GfbioCollections':
-            return Object.assign({}, GfbioCollectionsDataProviderDefinitionToJSON(value), { type: 'GfbioCollections' });
+            return Object.assign({}, GfbioCollectionsDataProviderDefinitionToJSON(value), { 'type': 'GfbioCollections' });
         case 'NetCdfCf':
-            return Object.assign({}, NetCdfCfDataProviderDefinitionToJSON(value), { type: 'NetCdfCf' });
+            return Object.assign({}, NetCdfCfDataProviderDefinitionToJSON(value), { 'type': 'NetCdfCf' });
         case 'Pangaea':
-            return Object.assign({}, PangaeaDataProviderDefinitionToJSON(value), { type: 'Pangaea' });
+            return Object.assign({}, PangaeaDataProviderDefinitionToJSON(value), { 'type': 'Pangaea' });
         case 'SentinelS2L2ACogs':
-            return Object.assign({}, SentinelS2L2ACogsProviderDefinitionToJSON(value), { type: 'SentinelS2L2ACogs' });
+            return Object.assign({}, SentinelS2L2ACogsProviderDefinitionToJSON(value), { 'type': 'SentinelS2L2ACogs' });
         case 'StacProviderDefinition':
-            return Object.assign({}, StacDataProviderDefinitionToJSON(value), { type: 'StacProviderDefinition' });
+            return Object.assign({}, StacDataProviderDefinitionToJSON(value), { 'type': 'StacProviderDefinition' });
         case 'WildLIVE!':
-            return Object.assign({}, WildliveDataConnectorDefinitionToJSON(value), { type: 'WildLIVE!' });
+            return Object.assign({}, WildliveDataConnectorDefinitionToJSON(value), { 'type': 'WildLIVE!' });
         default:
             return value;
     }

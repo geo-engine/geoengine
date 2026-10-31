@@ -19,7 +19,7 @@
 export const TemporalAggregationMethod = {
     None: 'none',
     First: 'first',
-    Mean: 'mean'
+    Mean: 'mean',
 } as const;
 export type TemporalAggregationMethod = typeof TemporalAggregationMethod[keyof typeof TemporalAggregationMethod];
 

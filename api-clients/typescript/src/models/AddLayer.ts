@@ -35,38 +35,26 @@ import {
 export interface AddLayer {
     /**
      * 
-     * @type {string}
-     * @memberof AddLayer
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof AddLayer
      */
     description: string;
     /**
      * 
-     * @type {ProcessingGraph}
-     * @memberof AddLayer
      */
     processingGraph: ProcessingGraph;
     /**
      * 
-     * @type {Symbology}
-     * @memberof AddLayer
      */
     symbology?: Symbology | null;
     /**
      * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof AddLayer
      */
     properties?: Array<Array<string>>;
     /**
      * metadata used for loading the data
-     * @type {{ [key: string]: string; }}
-     * @memberof AddLayer
      */
     metadata?: { [key: string]: string; };
 }
@@ -94,7 +82,7 @@ export function AddLayerFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
         'name': json['name'],
         'description': json['description'],
         'processingGraph': ProcessingGraphFromJSON(json['processingGraph']),
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : SymbologyFromJSON(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };

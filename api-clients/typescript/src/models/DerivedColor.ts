@@ -28,20 +28,14 @@ import {
 export interface DerivedColor {
     /**
      * 
-     * @type {DerivedColorTypeEnum}
-     * @memberof DerivedColor
      */
     type: DerivedColorTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof DerivedColor
      */
     attribute: string;
     /**
      * 
-     * @type {Colorizer}
-     * @memberof DerivedColor
      */
     colorizer: Colorizer;
 }
@@ -51,7 +45,7 @@ export interface DerivedColor {
  * @export
  */
 export const DerivedColorTypeEnum = {
-    Derived: 'derived'
+    Derived: 'derived',
 } as const;
 export type DerivedColorTypeEnum = typeof DerivedColorTypeEnum[keyof typeof DerivedColorTypeEnum];
 
@@ -61,6 +55,8 @@ export type DerivedColorTypeEnum = typeof DerivedColorTypeEnum[keyof typeof Deri
  */
 export function instanceOfDerivedColor(value: object): value is DerivedColor {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'derived') return false;
+    
     if (!('attribute' in value) || value['attribute'] === undefined) return false;
     if (!('colorizer' in value) || value['colorizer'] === undefined) return false;
     return true;

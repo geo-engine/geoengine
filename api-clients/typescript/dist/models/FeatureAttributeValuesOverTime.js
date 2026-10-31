@@ -24,13 +24,15 @@ const SingleVectorSource_1 = require("./SingleVectorSource");
  * @export
  */
 exports.FeatureAttributeValuesOverTimeTypeEnum = {
-    FeatureAttributeValuesOverTime: 'FeatureAttributeValuesOverTime'
+    FeatureAttributeValuesOverTime: 'FeatureAttributeValuesOverTime',
 };
 /**
  * Check if a given object implements the FeatureAttributeValuesOverTime interface.
  */
 function instanceOfFeatureAttributeValuesOverTime(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'FeatureAttributeValuesOverTime')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

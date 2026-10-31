@@ -9,17 +9,37 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { TaskFilter, TaskStatus, TaskStatusWithId } from '../models/index';
+import { type TaskFilter } from '../models/TaskFilter';
+import { type TaskStatus } from '../models/TaskStatus';
+import { type TaskStatusWithId } from '../models/TaskStatusWithId';
 export interface AbortHandlerRequest {
+    /**
+     * Task id
+     */
     id: string;
+    /**
+     *
+     */
     force?: boolean;
 }
 export interface ListHandlerRequest {
+    /**
+     *
+     */
     filter: TaskFilter | null;
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
 }
 export interface StatusHandlerRequest {
+    /**
+     * Task id
+     */
     id: string;
 }
 /**

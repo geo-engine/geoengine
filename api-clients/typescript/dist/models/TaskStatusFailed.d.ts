@@ -16,20 +16,14 @@
 export interface TaskStatusFailed {
     /**
      *
-     * @type {TaskStatusFailedStatusEnum}
-     * @memberof TaskStatusFailed
      */
     status: TaskStatusFailedStatusEnum;
     /**
      *
-     * @type {any}
-     * @memberof TaskStatusFailed
      */
     error: any | null;
     /**
      *
-     * @type {any}
-     * @memberof TaskStatusFailed
      */
     cleanUp: any | null;
 }

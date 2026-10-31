@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface TileMatrixSetIdOneOf {
     /**
      * 
-     * @type {string}
-     * @memberof TileMatrixSetIdOneOf
      */
     custom: string;
 }
@@ -30,7 +28,7 @@ export interface TileMatrixSetIdOneOf {
  * Check if a given object implements the TileMatrixSetIdOneOf interface.
  */
 export function instanceOfTileMatrixSetIdOneOf(value: object): value is TileMatrixSetIdOneOf {
-    if (!('custom' in value) || value['custom'] === undefined) return false;
+    if ((!('custom' in (value as Record<string, any>)) && !('Custom' in (value as Record<string, any>))) || ((value as Record<string, any>)['custom'] === undefined && (value as Record<string, any>)['Custom'] === undefined)) return false;
     return true;
 }
 

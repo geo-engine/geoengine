@@ -24,13 +24,15 @@ const OgrSourceDataset_1 = require("./OgrSourceDataset");
  * @export
  */
 exports.OgrMetaDataTypeEnum = {
-    OgrMetaData: 'OgrMetaData'
+    OgrMetaData: 'OgrMetaData',
 };
 /**
  * Check if a given object implements the OgrMetaData interface.
  */
 function instanceOfOgrMetaData(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'OgrMetaData')
         return false;
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined)
         return false;

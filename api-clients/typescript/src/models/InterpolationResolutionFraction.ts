@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface InterpolationResolutionFraction {
     /**
      * 
-     * @type {InterpolationResolutionFractionTypeEnum}
-     * @memberof InterpolationResolutionFraction
      */
     type: InterpolationResolutionFractionTypeEnum;
     /**
      * Scaling factor in x/y direction.
-     * @type {number}
-     * @memberof InterpolationResolutionFraction
      */
     x: number;
     /**
      * 
-     * @type {number}
-     * @memberof InterpolationResolutionFraction
      */
     y: number;
 }
@@ -43,7 +37,7 @@ export interface InterpolationResolutionFraction {
  * @export
  */
 export const InterpolationResolutionFractionTypeEnum = {
-    Fraction: 'fraction'
+    Fraction: 'fraction',
 } as const;
 export type InterpolationResolutionFractionTypeEnum = typeof InterpolationResolutionFractionTypeEnum[keyof typeof InterpolationResolutionFractionTypeEnum];
 
@@ -53,6 +47,8 @@ export type InterpolationResolutionFractionTypeEnum = typeof InterpolationResolu
  */
 export function instanceOfInterpolationResolutionFraction(value: object): value is InterpolationResolutionFraction {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'fraction') return false;
+    
     if (!('x' in value) || value['x'] === undefined) return false;
     if (!('y' in value) || value['y'] === undefined) return false;
     return true;

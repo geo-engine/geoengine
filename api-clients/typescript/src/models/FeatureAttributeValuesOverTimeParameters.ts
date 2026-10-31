@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface FeatureAttributeValuesOverTimeParameters {
     /**
      * The column name of the `id` attribute (one line per `id`.)
-     * @type {string}
-     * @memberof FeatureAttributeValuesOverTimeParameters
      */
     idColumn: string;
     /**
      * The column name of the `value` attribute (y-axis values).
-     * @type {string}
-     * @memberof FeatureAttributeValuesOverTimeParameters
      */
     valueColumn: string;
 }

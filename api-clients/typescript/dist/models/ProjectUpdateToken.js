@@ -24,7 +24,7 @@ exports.ProjectUpdateTokenToJSONTyped = ProjectUpdateTokenToJSONTyped;
  */
 exports.ProjectUpdateToken = {
     None: 'none',
-    Delete: 'delete'
+    Delete: 'delete',
 };
 function instanceOfProjectUpdateToken(value) {
     for (const key in exports.ProjectUpdateToken) {

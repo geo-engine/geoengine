@@ -16,8 +16,6 @@
 export interface UploadFilesResponse {
     /**
      *
-     * @type {Array<string>}
-     * @memberof UploadFilesResponse
      */
     files: Array<string>;
 }

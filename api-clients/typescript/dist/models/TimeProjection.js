@@ -24,13 +24,15 @@ const SingleVectorSource_1 = require("./SingleVectorSource");
  * @export
  */
 exports.TimeProjectionTypeEnum = {
-    TimeProjection: 'TimeProjection'
+    TimeProjection: 'TimeProjection',
 };
 /**
  * Check if a given object implements the TimeProjection interface.
  */
 function instanceOfTimeProjection(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'TimeProjection')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

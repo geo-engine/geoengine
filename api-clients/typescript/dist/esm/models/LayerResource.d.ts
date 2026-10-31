@@ -16,14 +16,10 @@
 export interface LayerResource {
     /**
      *
-     * @type {LayerResourceTypeEnum}
-     * @memberof LayerResource
      */
     type: LayerResourceTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof LayerResource
      */
     id: string;
 }

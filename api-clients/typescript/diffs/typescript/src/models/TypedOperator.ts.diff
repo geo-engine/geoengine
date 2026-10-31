@@ -1,6 +1,6 @@
 --- typescript/src/models/TypedOperator.ts
 +++ typescript/src/models/TypedOperator.ts
-@@ -88,3 +88,12 @@
+@@ -89,3 +89,12 @@
      return {};
  }
  

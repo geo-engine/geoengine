@@ -28,14 +28,10 @@ import {
 export interface TypedRasterOperator {
     /**
      * 
-     * @type {RasterOperator}
-     * @memberof TypedRasterOperator
      */
     operator: RasterOperator;
     /**
      * 
-     * @type {TypedRasterOperatorTypeEnum}
-     * @memberof TypedRasterOperator
      */
     type: TypedRasterOperatorTypeEnum;
 }
@@ -45,7 +41,7 @@ export interface TypedRasterOperator {
  * @export
  */
 export const TypedRasterOperatorTypeEnum = {
-    Raster: 'Raster'
+    Raster: 'Raster',
 } as const;
 export type TypedRasterOperatorTypeEnum = typeof TypedRasterOperatorTypeEnum[keyof typeof TypedRasterOperatorTypeEnum];
 
@@ -56,6 +52,8 @@ export type TypedRasterOperatorTypeEnum = typeof TypedRasterOperatorTypeEnum[key
 export function instanceOfTypedRasterOperator(value: object): value is TypedRasterOperator {
     if (!('operator' in value) || value['operator'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Raster') return false;
+    
     return true;
 }
 

@@ -23,7 +23,7 @@ exports.DataToJSONTyped = DataToJSONTyped;
  * @export
  */
 exports.Data = {
-    Data: 'data'
+    Data: 'data',
 };
 function instanceOfData(value) {
     for (const key in exports.Data) {

@@ -17,20 +17,14 @@ import type { Coordinate2D } from './Coordinate2D';
 export interface GeoTransform {
     /**
      *
-     * @type {Coordinate2D}
-     * @memberof GeoTransform
      */
     originCoordinate: Coordinate2D;
     /**
      *
-     * @type {number}
-     * @memberof GeoTransform
      */
     xPixelSize: number;
     /**
      *
-     * @type {number}
-     * @memberof GeoTransform
      */
     yPixelSize: number;
 }

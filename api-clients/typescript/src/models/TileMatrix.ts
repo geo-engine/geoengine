@@ -37,86 +37,60 @@ export interface TileMatrix {
     /**
      * Identifier selecting one of the scales defined in the [`TileMatrixSet`]
      * and representing the scaleDenominator the tile.
-     * @type {string}
-     * @memberof TileMatrix
      */
     id: string;
     /**
      * Title of a tile matrix, normally used for display to a human
-     * @type {string}
-     * @memberof TileMatrix
      */
     title?: string;
     /**
      * Brief narrative description of a tile matrix, normally available
      * for display to a human
-     * @type {string}
-     * @memberof TileMatrix
      */
     description?: string;
     /**
      * Unordered list of one or more commonly used or formalized word(s) or
      * phrase(s) used to describe this tile set
-     * @type {Array<string>}
-     * @memberof TileMatrix
      */
     keywords?: Array<string>;
     /**
      * Scale denominator of this tile matrix
-     * @type {number}
-     * @memberof TileMatrix
      */
     scaleDenominator: number;
     /**
      * Cell size of this tile matrix
-     * @type {number}
-     * @memberof TileMatrix
      */
     cellSize: number;
     /**
      * The corner of the tile matrix (_topLeft_ or
      * _bottomLeft_) used as the origin for numbering tile rows and columns.
      * This corner is also a corner of the (0, 0) tile.
-     * @type {CornerOfOrigin}
-     * @memberof TileMatrix
      */
     cornerOfOrigin?: CornerOfOrigin;
     /**
      * Precise position in CRS coordinates of the corner of origin (e.g. the
      * top-left corner) for this tile matrix. This position is also a corner
      * of the (0, 0) tile.
-     * @type {Array<number>}
-     * @memberof TileMatrix
      */
     pointOfOrigin: Array<number>;
     /**
      * Width of each tile of this tile matrix in pixels
-     * @type {number}
-     * @memberof TileMatrix
      */
     tileWidth: number;
     /**
      * Height of each tile of this tile matrix in pixels
-     * @type {number}
-     * @memberof TileMatrix
      */
     tileHeight: number;
     /**
      * Width of the matrix (number of tiles in width)
-     * @type {number}
-     * @memberof TileMatrix
      */
     matrixWidth: number;
     /**
      * Height of the matrix (number of tiles in height)
-     * @type {number}
-     * @memberof TileMatrix
      */
     matrixHeight: number;
     /**
      * Describes the rows that has variable matrix width
-     * @type {Array<VariableMatrixWidth>}
-     * @memberof TileMatrix
      */
     variableMatrixWidths?: Array<VariableMatrixWidth>;
 }

@@ -56,44 +56,30 @@ import {
 export interface GdalMetaDataRegular {
     /**
      * 
-     * @type {GdalMetaDataRegularTypeEnum}
-     * @memberof GdalMetaDataRegular
      */
     type: GdalMetaDataRegularTypeEnum;
     /**
      * 
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMetaDataRegular
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      * 
-     * @type {GdalDatasetParameters}
-     * @memberof GdalMetaDataRegular
      */
     params: GdalDatasetParameters;
     /**
      * 
-     * @type {{ [key: string]: GdalSourceTimePlaceholder; }}
-     * @memberof GdalMetaDataRegular
      */
     timePlaceholders: { [key: string]: GdalSourceTimePlaceholder; };
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof GdalMetaDataRegular
      */
     dataTime: TimeInterval;
     /**
      * 
-     * @type {TimeStep}
-     * @memberof GdalMetaDataRegular
      */
     step: TimeStep;
     /**
      * 
-     * @type {number}
-     * @memberof GdalMetaDataRegular
      */
     cacheTtl?: number | null;
 }
@@ -103,7 +89,7 @@ export interface GdalMetaDataRegular {
  * @export
  */
 export const GdalMetaDataRegularTypeEnum = {
-    GdalMetaDataRegular: 'GdalMetaDataRegular'
+    GdalMetaDataRegular: 'GdalMetaDataRegular',
 } as const;
 export type GdalMetaDataRegularTypeEnum = typeof GdalMetaDataRegularTypeEnum[keyof typeof GdalMetaDataRegularTypeEnum];
 
@@ -113,6 +99,8 @@ export type GdalMetaDataRegularTypeEnum = typeof GdalMetaDataRegularTypeEnum[key
  */
 export function instanceOfGdalMetaDataRegular(value: object): value is GdalMetaDataRegular {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GdalMetaDataRegular') return false;
+    
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('timePlaceholders' in value) || value['timePlaceholders'] === undefined) return false;
@@ -137,7 +125,7 @@ export function GdalMetaDataRegularFromJSONTyped(json: any, ignoreDiscriminator:
         'timePlaceholders': (mapValues(json['timePlaceholders'], GdalSourceTimePlaceholderFromJSON)),
         'dataTime': TimeIntervalFromJSON(json['dataTime']),
         'step': TimeStepFromJSON(json['step']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

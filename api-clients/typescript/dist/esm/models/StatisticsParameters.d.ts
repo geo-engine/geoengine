@@ -19,14 +19,10 @@ export interface StatisticsParameters {
      * _Optional_: The attributes to generate statistics for.
      * For vector data, these are numeric columns, for raster data, these are bands.
      * Defaults to `all`, i.e., all numeric columns or all bands.
-     * @type {AttributeSelection}
-     * @memberof StatisticsParameters
      */
     attributes?: AttributeSelection;
     /**
      * The percentiles to compute for each attribute.
-     * @type {Array<number>}
-     * @memberof StatisticsParameters
      */
     percentiles?: Array<number>;
 }

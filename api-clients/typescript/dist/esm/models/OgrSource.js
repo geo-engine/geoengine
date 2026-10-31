@@ -15,13 +15,15 @@ import { OgrSourceParametersFromJSON, OgrSourceParametersToJSON, } from './OgrSo
  * @export
  */
 export const OgrSourceTypeEnum = {
-    OgrSource: 'OgrSource'
+    OgrSource: 'OgrSource',
 };
 /**
  * Check if a given object implements the OgrSource interface.
  */
 export function instanceOfOgrSource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'OgrSource')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

@@ -16,8 +16,6 @@
 export interface UploadFileLayersResponse {
     /**
      *
-     * @type {Array<string>}
-     * @memberof UploadFileLayersResponse
      */
     layers: Array<string>;
 }

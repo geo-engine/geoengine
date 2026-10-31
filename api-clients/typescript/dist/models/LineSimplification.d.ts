@@ -25,20 +25,14 @@ import type { LineSimplificationParameters } from './LineSimplificationParameter
 export interface LineSimplification {
     /**
      *
-     * @type {LineSimplificationTypeEnum}
-     * @memberof LineSimplification
      */
     type: LineSimplificationTypeEnum;
     /**
      *
-     * @type {LineSimplificationParameters}
-     * @memberof LineSimplification
      */
     params: LineSimplificationParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof LineSimplification
      */
     sources: SingleVectorSource;
 }

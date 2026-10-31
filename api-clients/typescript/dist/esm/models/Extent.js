@@ -26,8 +26,8 @@ export function ExtentFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'spatial': json['spatial'] == null ? undefined : SpatialExtentFromJSON(json['spatial']),
-        'temporal': json['temporal'] == null ? undefined : TemporalExtentFromJSON(json['temporal']),
+        'spatial': json['spatial'] === undefined ? undefined : json['spatial'] === null ? null : SpatialExtentFromJSON(json['spatial']),
+        'temporal': json['temporal'] === undefined ? undefined : json['temporal'] === null ? null : TemporalExtentFromJSON(json['temporal']),
     };
 }
 export function ExtentToJSON(json) {

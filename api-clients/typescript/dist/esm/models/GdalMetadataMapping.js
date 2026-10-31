@@ -16,11 +16,11 @@ import { RasterPropertiesEntryTypeFromJSON, RasterPropertiesEntryTypeToJSON, } f
  * Check if a given object implements the GdalMetadataMapping interface.
  */
 export function instanceOfGdalMetadataMapping(value) {
-    if (!('sourceKey' in value) || value['sourceKey'] === undefined)
+    if ((!('sourceKey' in value) && !('source_key' in value)) || (value['sourceKey'] === undefined && value['source_key'] === undefined))
         return false;
-    if (!('targetKey' in value) || value['targetKey'] === undefined)
+    if ((!('targetKey' in value) && !('target_key' in value)) || (value['targetKey'] === undefined && value['target_key'] === undefined))
         return false;
-    if (!('targetType' in value) || value['targetType'] === undefined)
+    if ((!('targetType' in value) && !('target_type' in value)) || (value['targetType'] === undefined && value['target_type'] === undefined))
         return false;
     return true;
 }

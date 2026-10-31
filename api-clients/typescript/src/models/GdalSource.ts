@@ -34,14 +34,10 @@ import {
 export interface GdalSource {
     /**
      * 
-     * @type {GdalSourceTypeEnum}
-     * @memberof GdalSource
      */
     type: GdalSourceTypeEnum;
     /**
      * 
-     * @type {GdalSourceParameters}
-     * @memberof GdalSource
      */
     params: GdalSourceParameters;
 }
@@ -51,7 +47,7 @@ export interface GdalSource {
  * @export
  */
 export const GdalSourceTypeEnum = {
-    GdalSource: 'GdalSource'
+    GdalSource: 'GdalSource',
 } as const;
 export type GdalSourceTypeEnum = typeof GdalSourceTypeEnum[keyof typeof GdalSourceTypeEnum];
 
@@ -61,6 +57,8 @@ export type GdalSourceTypeEnum = typeof GdalSourceTypeEnum[keyof typeof GdalSour
  */
 export function instanceOfGdalSource(value: object): value is GdalSource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GdalSource') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }

@@ -22,13 +22,15 @@ exports.NetCdfCfDataProviderDefinitionToJSONTyped = NetCdfCfDataProviderDefiniti
  * @export
  */
 exports.NetCdfCfDataProviderDefinitionTypeEnum = {
-    NetCdfCf: 'NetCdfCf'
+    NetCdfCf: 'NetCdfCf',
 };
 /**
  * Check if a given object implements the NetCdfCfDataProviderDefinition interface.
  */
 function instanceOfNetCdfCfDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'NetCdfCf')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -51,10 +53,10 @@ function NetCdfCfDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) 
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'data': json['data'],
         'overviews': json['overviews'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 function NetCdfCfDataProviderDefinitionToJSON(json) {

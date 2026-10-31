@@ -24,13 +24,15 @@ const SingleRasterOrVectorSource_1 = require("./SingleRasterOrVectorSource");
  * @export
  */
 exports.TimeShiftTypeEnum = {
-    TimeShift: 'TimeShift'
+    TimeShift: 'TimeShift',
 };
 /**
  * Check if a given object implements the TimeShift interface.
  */
 function instanceOfTimeShift(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'TimeShift')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

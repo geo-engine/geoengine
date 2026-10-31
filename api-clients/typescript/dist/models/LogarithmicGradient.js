@@ -23,13 +23,15 @@ const Breakpoint_1 = require("./Breakpoint");
  * @export
  */
 exports.LogarithmicGradientTypeEnum = {
-    LogarithmicGradient: 'logarithmicGradient'
+    LogarithmicGradient: 'logarithmicGradient',
 };
 /**
  * Check if a given object implements the LogarithmicGradient interface.
  */
 function instanceOfLogarithmicGradient(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'logarithmicGradient')
         return false;
     if (!('breakpoints' in value) || value['breakpoints'] === undefined)
         return false;

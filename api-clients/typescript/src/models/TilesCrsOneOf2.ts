@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface TilesCrsOneOf2 {
     /**
      * 
-     * @type {string}
-     * @memberof TilesCrsOneOf2
      */
     referenceSystem: string;
 }

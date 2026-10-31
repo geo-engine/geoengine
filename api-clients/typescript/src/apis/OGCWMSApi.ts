@@ -11,49 +11,117 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  GetMapExceptionFormat,
-  WmsRequest,
-  WmsResponseFormat,
-  WmsService,
-  WmsVersion,
-} from '../models/index';
 import {
+    type GetMapExceptionFormat,
     GetMapExceptionFormatFromJSON,
     GetMapExceptionFormatToJSON,
+} from '../models/GetMapExceptionFormat';
+import {
+    type WmsRequest,
     WmsRequestFromJSON,
     WmsRequestToJSON,
+} from '../models/WmsRequest';
+import {
+    type WmsResponseFormat,
     WmsResponseFormatFromJSON,
     WmsResponseFormatToJSON,
+} from '../models/WmsResponseFormat';
+import {
+    type WmsService,
     WmsServiceFromJSON,
     WmsServiceToJSON,
+} from '../models/WmsService';
+import {
+    type WmsVersion,
     WmsVersionFromJSON,
     WmsVersionToJSON,
-} from '../models/index';
+} from '../models/WmsVersion';
 
 export interface WmsHandlerRequest {
+    /**
+     * Processing graph id
+     */
     processingGraph: string;
+    /**
+     * type of WMS request
+     */
     request: WmsRequest;
+    /**
+     * 
+     */
     bbox?: string;
+    /**
+     * 
+     */
     bgcolor?: string | null;
+    /**
+     * 
+     */
     crs?: string | null;
+    /**
+     * 
+     */
     elevation?: string | null;
+    /**
+     * 
+     */
     exceptions?: GetMapExceptionFormat | null;
+    /**
+     * 
+     */
     format?: WmsResponseFormat | null;
+    /**
+     * 
+     */
     height?: number;
+    /**
+     * 
+     */
     infoFormat?: string | null;
+    /**
+     * 
+     */
     layer?: string;
+    /**
+     * 
+     */
     layers?: string;
+    /**
+     * 
+     */
     queryLayers?: string;
+    /**
+     * 
+     */
     service?: WmsService;
+    /**
+     * 
+     */
     sld?: string | null;
+    /**
+     * 
+     */
     sldBody?: string | null;
+    /**
+     * 
+     */
     styles?: string;
+    /**
+     * 
+     */
     time?: string;
+    /**
+     * 
+     */
     transparent?: boolean | null;
+    /**
+     * 
+     */
     version?: WmsVersion | null;
+    /**
+     * 
+     */
     width?: number;
 }
 
@@ -174,7 +242,7 @@ export class OGCWMSApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/wms/{processingGraph}`;
-        urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
+        urlPath = urlPath.replace('{processingGraph}', encodeURIComponent(String(requestParameters['processingGraph'])));
 
         return {
             path: urlPath,
@@ -187,7 +255,7 @@ export class OGCWMSApi extends runtime.BaseAPI {
     /**
      * OGC WMS endpoint
      */
-    async wmsHandlerRaw(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>> {
+    async wmsHandlerRaw(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>> {
         const requestOptions = await this.wmsHandlerRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -197,7 +265,7 @@ export class OGCWMSApi extends runtime.BaseAPI {
     /**
      * OGC WMS endpoint
      */
-    async wmsHandler(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob> {
+    async wmsHandler(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile> {
         const response = await this.wmsHandlerRaw(requestParameters, initOverrides);
         return await response.value();
     }

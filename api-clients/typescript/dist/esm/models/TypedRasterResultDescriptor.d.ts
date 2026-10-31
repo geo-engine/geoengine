@@ -17,8 +17,6 @@ import type { RasterResultDescriptor } from './RasterResultDescriptor';
 export interface TypedRasterResultDescriptor extends RasterResultDescriptor {
     /**
      *
-     * @type {TypedRasterResultDescriptorTypeEnum}
-     * @memberof TypedRasterResultDescriptor
      */
     type: TypedRasterResultDescriptorTypeEnum;
 }

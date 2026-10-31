@@ -25,20 +25,14 @@ import type { BandFilterParameters } from './BandFilterParameters';
 export interface BandFilter {
     /**
      *
-     * @type {BandFilterTypeEnum}
-     * @memberof BandFilter
      */
     type: BandFilterTypeEnum;
     /**
      *
-     * @type {BandFilterParameters}
-     * @memberof BandFilter
      */
     params: BandFilterParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof BandFilter
      */
     sources: SingleRasterSource;
 }

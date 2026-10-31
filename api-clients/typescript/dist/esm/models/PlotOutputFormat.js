@@ -17,7 +17,7 @@
 export const PlotOutputFormat = {
     JsonPlain: 'JsonPlain',
     JsonVega: 'JsonVega',
-    ImagePng: 'ImagePng'
+    ImagePng: 'ImagePng',
 };
 export function instanceOfPlotOutputFormat(value) {
     for (const key in PlotOutputFormat) {

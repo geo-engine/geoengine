@@ -20,7 +20,7 @@ export const VectorDataType = {
     Data: 'Data',
     MultiPoint: 'MultiPoint',
     MultiLineString: 'MultiLineString',
-    MultiPolygon: 'MultiPolygon'
+    MultiPolygon: 'MultiPolygon',
 } as const;
 export type VectorDataType = typeof VectorDataType[keyof typeof VectorDataType];
 

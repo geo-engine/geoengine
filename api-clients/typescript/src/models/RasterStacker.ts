@@ -42,20 +42,14 @@ import {
 export interface RasterStacker {
     /**
      * 
-     * @type {RasterStackerTypeEnum}
-     * @memberof RasterStacker
      */
     type: RasterStackerTypeEnum;
     /**
      * 
-     * @type {RasterStackerParameters}
-     * @memberof RasterStacker
      */
     params: RasterStackerParameters;
     /**
      * 
-     * @type {MultipleRasterSources}
-     * @memberof RasterStacker
      */
     sources: MultipleRasterSources;
 }
@@ -65,7 +59,7 @@ export interface RasterStacker {
  * @export
  */
 export const RasterStackerTypeEnum = {
-    RasterStacker: 'RasterStacker'
+    RasterStacker: 'RasterStacker',
 } as const;
 export type RasterStackerTypeEnum = typeof RasterStackerTypeEnum[keyof typeof RasterStackerTypeEnum];
 
@@ -75,6 +69,8 @@ export type RasterStackerTypeEnum = typeof RasterStackerTypeEnum[keyof typeof Ra
  */
 export function instanceOfRasterStacker(value: object): value is RasterStacker {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'RasterStacker') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

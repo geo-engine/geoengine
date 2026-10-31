@@ -24,13 +24,15 @@ const MockDatasetDataSourceLoadingInfo_1 = require("./MockDatasetDataSourceLoadi
  * @export
  */
 exports.MockMetaDataTypeEnum = {
-    MockMetaData: 'MockMetaData'
+    MockMetaData: 'MockMetaData',
 };
 /**
  * Check if a given object implements the MockMetaData interface.
  */
 function instanceOfMockMetaData(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'MockMetaData')
         return false;
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined)
         return false;

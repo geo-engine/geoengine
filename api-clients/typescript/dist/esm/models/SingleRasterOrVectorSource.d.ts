@@ -17,8 +17,6 @@ import type { SingleRasterOrVectorOperator } from './SingleRasterOrVectorOperato
 export interface SingleRasterOrVectorSource {
     /**
      *
-     * @type {SingleRasterOrVectorOperator}
-     * @memberof SingleRasterOrVectorSource
      */
     source: SingleRasterOrVectorOperator;
 }

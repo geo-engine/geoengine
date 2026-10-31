@@ -35,8 +35,6 @@ import {
 export interface OgrSourceDurationSpecValue extends TimeStep {
     /**
      * 
-     * @type {OgrSourceDurationSpecValueTypeEnum}
-     * @memberof OgrSourceDurationSpecValue
      */
     type: OgrSourceDurationSpecValueTypeEnum;
 }
@@ -46,7 +44,7 @@ export interface OgrSourceDurationSpecValue extends TimeStep {
  * @export
  */
 export const OgrSourceDurationSpecValueTypeEnum = {
-    Value: 'value'
+    Value: 'value',
 } as const;
 export type OgrSourceDurationSpecValueTypeEnum = typeof OgrSourceDurationSpecValueTypeEnum[keyof typeof OgrSourceDurationSpecValueTypeEnum];
 
@@ -56,6 +54,8 @@ export type OgrSourceDurationSpecValueTypeEnum = typeof OgrSourceDurationSpecVal
  */
 export function instanceOfOgrSourceDurationSpecValue(value: object): value is OgrSourceDurationSpecValue {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'value') return false;
+    
     return true;
 }
 

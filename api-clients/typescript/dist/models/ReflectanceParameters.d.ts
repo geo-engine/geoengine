@@ -16,20 +16,14 @@
 export interface ReflectanceParameters {
     /**
      *
-     * @type {boolean}
-     * @memberof ReflectanceParameters
      */
     solarCorrection: boolean;
     /**
      *
-     * @type {boolean}
-     * @memberof ReflectanceParameters
      */
     forceHRV: boolean;
     /**
      *
-     * @type {number}
-     * @memberof ReflectanceParameters
      */
     forceSatellite?: number | null;
 }

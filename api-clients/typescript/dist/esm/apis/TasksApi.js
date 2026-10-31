@@ -20,7 +20,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { TaskStatusFromJSON, TaskStatusWithIdFromJSON, } from '../models/index';
+import { TaskStatusFromJSON, } from '../models/TaskStatus';
+import { TaskStatusWithIdFromJSON, } from '../models/TaskStatusWithId';
 /**
  *
  */
@@ -46,7 +47,7 @@ export class TasksApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/tasks/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -99,9 +100,9 @@ export class TasksApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/tasks/list`;
-            urlPath = urlPath.replace(`{${"filter"}}`, encodeURIComponent(String(requestParameters['filter'])));
-            urlPath = urlPath.replace(`{${"offset"}}`, encodeURIComponent(String(requestParameters['offset'])));
-            urlPath = urlPath.replace(`{${"limit"}}`, encodeURIComponent(String(requestParameters['limit'])));
+            urlPath = urlPath.replace('{filter}', encodeURIComponent(String(requestParameters['filter'])));
+            urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
+            urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -147,7 +148,7 @@ export class TasksApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/tasks/{id}/status`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',

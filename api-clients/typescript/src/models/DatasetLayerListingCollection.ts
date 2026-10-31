@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface DatasetLayerListingCollection {
     /**
      * 
-     * @type {string}
-     * @memberof DatasetLayerListingCollection
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof DatasetLayerListingCollection
      */
     description: string;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof DatasetLayerListingCollection
      */
     tags: Array<string>;
 }

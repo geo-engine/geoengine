@@ -22,13 +22,15 @@ exports.InternalDataIdToJSONTyped = InternalDataIdToJSONTyped;
  * @export
  */
 exports.InternalDataIdTypeEnum = {
-    Internal: 'internal'
+    Internal: 'internal',
 };
 /**
  * Check if a given object implements the InternalDataId interface.
  */
 function instanceOfInternalDataId(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'internal')
         return false;
     if (!('datasetId' in value) || value['datasetId'] === undefined)
         return false;

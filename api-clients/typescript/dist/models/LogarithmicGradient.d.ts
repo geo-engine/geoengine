@@ -17,32 +17,22 @@ import type { Breakpoint } from './Breakpoint';
 export interface LogarithmicGradient {
     /**
      *
-     * @type {LogarithmicGradientTypeEnum}
-     * @memberof LogarithmicGradient
      */
     type: LogarithmicGradientTypeEnum;
     /**
      *
-     * @type {Array<Breakpoint>}
-     * @memberof LogarithmicGradient
      */
     breakpoints: Array<Breakpoint>;
     /**
      *
-     * @type {Array<number>}
-     * @memberof LogarithmicGradient
      */
     noDataColor: Array<number>;
     /**
      *
-     * @type {Array<number>}
-     * @memberof LogarithmicGradient
      */
     overColor: Array<number>;
     /**
      *
-     * @type {Array<number>}
-     * @memberof LogarithmicGradient
      */
     underColor: Array<number>;
 }

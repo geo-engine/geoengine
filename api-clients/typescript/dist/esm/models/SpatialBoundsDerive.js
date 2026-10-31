@@ -40,11 +40,11 @@ export function SpatialBoundsDeriveToJSONTyped(value, ignoreDiscriminator = fals
     }
     switch (value['type']) {
         case 'bounds':
-            return Object.assign({}, SpatialBoundsDeriveBoundsToJSON(value), { type: 'bounds' });
+            return Object.assign({}, SpatialBoundsDeriveBoundsToJSON(value), { 'type': 'bounds' });
         case 'derive':
-            return Object.assign({}, SpatialBoundsDeriveDeriveToJSON(value), { type: 'derive' });
+            return Object.assign({}, SpatialBoundsDeriveDeriveToJSON(value), { 'type': 'derive' });
         case 'none':
-            return Object.assign({}, SpatialBoundsDeriveNoneToJSON(value), { type: 'none' });
+            return Object.assign({}, SpatialBoundsDeriveNoneToJSON(value), { 'type': 'none' });
         default:
             return value;
     }

@@ -22,13 +22,15 @@ exports.DownsamplingResolutionResolutionToJSONTyped = DownsamplingResolutionReso
  * @export
  */
 exports.DownsamplingResolutionResolutionTypeEnum = {
-    Resolution: 'resolution'
+    Resolution: 'resolution',
 };
 /**
  * Check if a given object implements the DownsamplingResolutionResolution interface.
  */
 function instanceOfDownsamplingResolutionResolution(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'resolution')
         return false;
     if (!('x' in value) || value['x'] === undefined)
         return false;

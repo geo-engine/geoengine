@@ -44,16 +44,16 @@ function OgrSourceDatasetFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'fileName': json['fileName'],
         'layerName': json['layerName'],
-        'dataType': json['dataType'] == null ? undefined : (0, VectorDataType_1.VectorDataTypeFromJSON)(json['dataType']),
+        'dataType': json['dataType'] === undefined ? undefined : json['dataType'] === null ? null : (0, VectorDataType_1.VectorDataTypeFromJSON)(json['dataType']),
         'time': json['time'] == null ? undefined : (0, OgrSourceDatasetTimeType_1.OgrSourceDatasetTimeTypeFromJSON)(json['time']),
-        'defaultGeometry': json['defaultGeometry'] == null ? undefined : (0, TypedGeometry_1.TypedGeometryFromJSON)(json['defaultGeometry']),
-        'columns': json['columns'] == null ? undefined : (0, OgrSourceColumnSpec_1.OgrSourceColumnSpecFromJSON)(json['columns']),
+        'defaultGeometry': json['defaultGeometry'] === undefined ? undefined : json['defaultGeometry'] === null ? null : (0, TypedGeometry_1.TypedGeometryFromJSON)(json['defaultGeometry']),
+        'columns': json['columns'] === undefined ? undefined : json['columns'] === null ? null : (0, OgrSourceColumnSpec_1.OgrSourceColumnSpecFromJSON)(json['columns']),
         'forceOgrTimeFilter': json['forceOgrTimeFilter'] == null ? undefined : json['forceOgrTimeFilter'],
         'forceOgrSpatialFilter': json['forceOgrSpatialFilter'] == null ? undefined : json['forceOgrSpatialFilter'],
         'onError': (0, OgrSourceErrorSpec_1.OgrSourceErrorSpecFromJSON)(json['onError']),
-        'sqlQuery': json['sqlQuery'] == null ? undefined : json['sqlQuery'],
-        'attributeQuery': json['attributeQuery'] == null ? undefined : json['attributeQuery'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'sqlQuery': json['sqlQuery'] === undefined ? undefined : json['sqlQuery'] === null ? null : json['sqlQuery'],
+        'attributeQuery': json['attributeQuery'] === undefined ? undefined : json['attributeQuery'] === null ? null : json['attributeQuery'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 function OgrSourceDatasetToJSON(json) {

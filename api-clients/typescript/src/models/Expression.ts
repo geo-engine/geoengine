@@ -109,20 +109,14 @@ import {
 export interface Expression {
     /**
      * 
-     * @type {ExpressionTypeEnum}
-     * @memberof Expression
      */
     type: ExpressionTypeEnum;
     /**
      * 
-     * @type {ExpressionParameters}
-     * @memberof Expression
      */
     params: ExpressionParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof Expression
      */
     sources: SingleRasterSource;
 }
@@ -132,7 +126,7 @@ export interface Expression {
  * @export
  */
 export const ExpressionTypeEnum = {
-    Expression: 'Expression'
+    Expression: 'Expression',
 } as const;
 export type ExpressionTypeEnum = typeof ExpressionTypeEnum[keyof typeof ExpressionTypeEnum];
 
@@ -142,6 +136,8 @@ export type ExpressionTypeEnum = typeof ExpressionTypeEnum[keyof typeof Expressi
  */
 export function instanceOfExpression(value: object): value is Expression {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Expression') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -42,7 +42,7 @@ function RasterScalingParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'slope': (0, SlopeOffsetSelection_1.SlopeOffsetSelectionFromJSON)(json['slope']),
         'offset': (0, SlopeOffsetSelection_1.SlopeOffsetSelectionFromJSON)(json['offset']),
-        'outputMeasurement': json['outputMeasurement'] == null ? undefined : (0, Measurement_1.MeasurementFromJSON)(json['outputMeasurement']),
+        'outputMeasurement': json['outputMeasurement'] === undefined ? undefined : json['outputMeasurement'] === null ? null : (0, Measurement_1.MeasurementFromJSON)(json['outputMeasurement']),
         'scalingMode': (0, ScalingMode_1.ScalingModeFromJSON)(json['scalingMode']),
     };
 }

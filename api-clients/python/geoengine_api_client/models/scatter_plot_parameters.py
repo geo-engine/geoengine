@@ -21,17 +21,19 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class ScatterPlotParameters(BaseModel):
     """
     The parameter spec for `ScatterPlot`.
     """ # noqa: E501
-    column_x: StrictStr = Field(description="The name of the attribute making up the x-axis of the plot.", alias="columnX")
-    column_y: StrictStr = Field(description="The name of the attribute making up the y-axis of the plot.", alias="columnY")
+    column_x: StrictStr = Field(description="The name of the attribute making up the x-axis of the plot.", alias="columnX", json_schema_extra={"examples": ["temperature"]})
+    column_y: StrictStr = Field(description="The name of the attribute making up the y-axis of the plot.", alias="columnY", json_schema_extra={"examples": ["humidity"]})
     __properties: ClassVar[List[str]] = ["columnX", "columnY"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -43,8 +45,7 @@ class ScatterPlotParameters(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:

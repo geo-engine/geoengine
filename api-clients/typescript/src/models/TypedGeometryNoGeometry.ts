@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface TypedGeometryNoGeometry {
     /**
      * 
-     * @type {any}
-     * @memberof TypedGeometryNoGeometry
      */
     data: any | null;
 }
@@ -30,7 +28,7 @@ export interface TypedGeometryNoGeometry {
  * Check if a given object implements the TypedGeometryNoGeometry interface.
  */
 export function instanceOfTypedGeometryNoGeometry(value: object): value is TypedGeometryNoGeometry {
-    if (!('data' in value) || value['data'] === undefined) return false;
+    if ((!('data' in (value as Record<string, any>)) && !('Data' in (value as Record<string, any>))) || ((value as Record<string, any>)['data'] === undefined && (value as Record<string, any>)['Data'] === undefined)) return false;
     return true;
 }
 

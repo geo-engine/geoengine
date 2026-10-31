@@ -15,13 +15,15 @@ import { TimeGranularityFromJSON, TimeGranularityToJSON, } from './TimeGranulari
  * @export
  */
 export const TimeShiftParametersRelativeTypeEnum = {
-    Relative: 'relative'
+    Relative: 'relative',
 };
 /**
  * Check if a given object implements the TimeShiftParametersRelative interface.
  */
 export function instanceOfTimeShiftParametersRelative(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'relative')
         return false;
     if (!('granularity' in value) || value['granularity'] === undefined)
         return false;

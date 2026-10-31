@@ -115,20 +115,14 @@ import type { SingleVectorSource } from './SingleVectorSource';
 export interface VectorExpression {
     /**
      *
-     * @type {VectorExpressionTypeEnum}
-     * @memberof VectorExpression
      */
     type: VectorExpressionTypeEnum;
     /**
      *
-     * @type {VectorExpressionParameters}
-     * @memberof VectorExpression
      */
     params: VectorExpressionParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof VectorExpression
      */
     sources: SingleVectorSource;
 }

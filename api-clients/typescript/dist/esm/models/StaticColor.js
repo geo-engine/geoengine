@@ -14,13 +14,15 @@
  * @export
  */
 export const StaticColorTypeEnum = {
-    Static: 'static'
+    Static: 'static',
 };
 /**
  * Check if a given object implements the StaticColor interface.
  */
 export function instanceOfStaticColor(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'static')
         return false;
     if (!('color' in value) || value['color'] === undefined)
         return false;

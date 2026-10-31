@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface TaskStatusFailed {
     /**
      * 
-     * @type {TaskStatusFailedStatusEnum}
-     * @memberof TaskStatusFailed
      */
     status: TaskStatusFailedStatusEnum;
     /**
      * 
-     * @type {any}
-     * @memberof TaskStatusFailed
      */
     error: any | null;
     /**
      * 
-     * @type {any}
-     * @memberof TaskStatusFailed
      */
     cleanUp: any | null;
 }
@@ -43,7 +37,7 @@ export interface TaskStatusFailed {
  * @export
  */
 export const TaskStatusFailedStatusEnum = {
-    Failed: 'failed'
+    Failed: 'failed',
 } as const;
 export type TaskStatusFailedStatusEnum = typeof TaskStatusFailedStatusEnum[keyof typeof TaskStatusFailedStatusEnum];
 
@@ -53,6 +47,8 @@ export type TaskStatusFailedStatusEnum = typeof TaskStatusFailedStatusEnum[keyof
  */
 export function instanceOfTaskStatusFailed(value: object): value is TaskStatusFailed {
     if (!('status' in value) || value['status'] === undefined) return false;
+    if (value['status'] !== 'failed') return false;
+    
     if (!('error' in value) || value['error'] === undefined) return false;
     if (!('cleanUp' in value) || value['cleanUp'] === undefined) return false;
     return true;

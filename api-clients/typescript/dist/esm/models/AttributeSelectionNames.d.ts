@@ -21,14 +21,10 @@
 export interface AttributeSelectionNames {
     /**
      *
-     * @type {AttributeSelectionNamesTypeEnum}
-     * @memberof AttributeSelectionNames
      */
     type: AttributeSelectionNamesTypeEnum;
     /**
      *
-     * @type {Set<string>}
-     * @memberof AttributeSelectionNames
      */
     values: Array<string>;
 }

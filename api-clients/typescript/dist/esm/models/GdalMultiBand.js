@@ -15,13 +15,15 @@ import { RasterResultDescriptorFromJSON, RasterResultDescriptorToJSON, } from '.
  * @export
  */
 export const GdalMultiBandTypeEnum = {
-    GdalMultiBand: 'GdalMultiBand'
+    GdalMultiBand: 'GdalMultiBand',
 };
 /**
  * Check if a given object implements the GdalMultiBand interface.
  */
 export function instanceOfGdalMultiBand(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalMultiBand')
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -37,7 +39,7 @@ export function GdalMultiBandFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function GdalMultiBandToJSON(json) {

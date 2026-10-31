@@ -17,7 +17,7 @@
 export const TemporalAggregationMethod = {
     None: 'none',
     First: 'first',
-    Mean: 'mean'
+    Mean: 'mean',
 };
 export function instanceOfTemporalAggregationMethod(value) {
     for (const key in TemporalAggregationMethod) {

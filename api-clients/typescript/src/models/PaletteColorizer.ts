@@ -20,28 +20,20 @@ import { mapValues } from '../runtime';
 export interface PaletteColorizer {
     /**
      * 
-     * @type {PaletteColorizerTypeEnum}
-     * @memberof PaletteColorizer
      */
     type: PaletteColorizerTypeEnum;
     /**
      * A map from value to color
      * 
      * It is assumed that is has at least one and at most 256 entries.
-     * @type {{ [key: string]: Array<number>; }}
-     * @memberof PaletteColorizer
      */
     colors: { [key: string]: Array<number>; };
     /**
      * 
-     * @type {Array<number>}
-     * @memberof PaletteColorizer
      */
     noDataColor: Array<number>;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof PaletteColorizer
      */
     defaultColor: Array<number>;
 }
@@ -51,7 +43,7 @@ export interface PaletteColorizer {
  * @export
  */
 export const PaletteColorizerTypeEnum = {
-    Palette: 'palette'
+    Palette: 'palette',
 } as const;
 export type PaletteColorizerTypeEnum = typeof PaletteColorizerTypeEnum[keyof typeof PaletteColorizerTypeEnum];
 
@@ -61,6 +53,8 @@ export type PaletteColorizerTypeEnum = typeof PaletteColorizerTypeEnum[keyof typ
  */
 export function instanceOfPaletteColorizer(value: object): value is PaletteColorizer {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'palette') return false;
+    
     if (!('colors' in value) || value['colors'] === undefined) return false;
     if (!('noDataColor' in value) || value['noDataColor'] === undefined) return false;
     if (!('defaultColor' in value) || value['defaultColor'] === undefined) return false;

@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 /**
  * Check if a given object implements the ProjectListing interface.
  */
@@ -41,7 +42,7 @@ export function ProjectListingFromJSONTyped(json, ignoreDiscriminator) {
         'description': json['description'],
         'layerNames': json['layerNames'],
         'plotNames': json['plotNames'],
-        'changed': (new Date(json['changed'])),
+        'changed': (json['changed'] == null ? json['changed'] : parseDateTime(json['changed'])),
     };
 }
 export function ProjectListingToJSON(json) {
@@ -57,6 +58,6 @@ export function ProjectListingToJSONTyped(value, ignoreDiscriminator = false) {
         'description': value['description'],
         'layerNames': value['layerNames'],
         'plotNames': value['plotNames'],
-        'changed': value['changed'].toISOString(),
+        'changed': value['changed'] == null ? value['changed'] : serializeDateTime(value['changed']),
     };
 }

@@ -18,7 +18,7 @@
  */
 export const FeatureAggregationMethod = {
     First: 'first',
-    Mean: 'mean'
+    Mean: 'mean',
 } as const;
 export type FeatureAggregationMethod = typeof FeatureAggregationMethod[keyof typeof FeatureAggregationMethod];
 

@@ -18,7 +18,7 @@
  */
 export const WmsResponseFormat = {
     TextXml: 'text/xml',
-    ImagePng: 'image/png'
+    ImagePng: 'image/png',
 } as const;
 export type WmsResponseFormat = typeof WmsResponseFormat[keyof typeof WmsResponseFormat];
 

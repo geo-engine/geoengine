@@ -28,20 +28,14 @@ import {
 export interface SearchCapabilities {
     /**
      * 
-     * @type {SearchTypes}
-     * @memberof SearchCapabilities
      */
     searchTypes: SearchTypes;
     /**
      * 
-     * @type {boolean}
-     * @memberof SearchCapabilities
      */
     autocomplete: boolean;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof SearchCapabilities
      */
     filters?: Array<string> | null;
 }
@@ -67,7 +61,7 @@ export function SearchCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator: 
         
         'searchTypes': SearchTypesFromJSON(json['searchTypes']),
         'autocomplete': json['autocomplete'],
-        'filters': json['filters'] == null ? undefined : json['filters'],
+        'filters': json['filters'] === undefined ? undefined : json['filters'] === null ? null : json['filters'],
     };
 }
 

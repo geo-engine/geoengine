@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { HistogramBucketsNumber } from './HistogramBucketsNumber';
 import {
     instanceOfHistogramBucketsNumber,
@@ -61,9 +62,9 @@ export function HistogramBucketsToJSONTyped(value?: HistogramBuckets | null, ign
     }
     switch (value['type']) {
         case 'number':
-            return Object.assign({}, HistogramBucketsNumberToJSON(value), { type: 'number' } as const);
+            return Object.assign({}, HistogramBucketsNumberToJSON(value), { 'type': 'number' } as const);
         case 'squareRootChoiceRule':
-            return Object.assign({}, HistogramBucketsSquareRootChoiceRuleToJSON(value), { type: 'squareRootChoiceRule' } as const);
+            return Object.assign({}, HistogramBucketsSquareRootChoiceRuleToJSON(value), { 'type': 'squareRootChoiceRule' } as const);
         default:
             return value;
     }

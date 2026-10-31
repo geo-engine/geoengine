@@ -19,53 +19,37 @@ import type { GdalDatasetParameters } from './GdalDatasetParameters';
 export interface GdalMetadataNetCdfCf {
     /**
      *
-     * @type {GdalMetadataNetCdfCfTypeEnum}
-     * @memberof GdalMetadataNetCdfCf
      */
     type: GdalMetadataNetCdfCfTypeEnum;
     /**
      *
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMetadataNetCdfCf
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      *
-     * @type {GdalDatasetParameters}
-     * @memberof GdalMetadataNetCdfCf
      */
     params: GdalDatasetParameters;
     /**
      *
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     start: number;
     /**
      * We use the end to specify the last, non-inclusive valid time point.
      * Queries behind this point return no data.
      * TODO: Alternatively, we could think about using the number of possible time steps in the future.
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     end: number;
     /**
      *
-     * @type {TimeStep}
-     * @memberof GdalMetadataNetCdfCf
      */
     step: TimeStep;
     /**
      * A band offset specifies the first band index to use for the first point in time.
      * All other time steps are added to this offset.
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     bandOffset: number;
     /**
      *
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     cacheTtl?: number | null;
 }

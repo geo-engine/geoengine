@@ -11,165 +11,334 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  AddLayer,
-  AddLayerCollection,
-  IdResponse,
-  Layer,
-  LayerCollection,
-  LayerProviderListing,
-  ProviderCapabilities,
-  SearchType,
-  TaskResponse,
-  TypedDataProviderDefinition,
-  UpdateLayer,
-  UpdateLayerCollection,
-} from '../models/index';
 import {
+    type AddLayer,
     AddLayerFromJSON,
     AddLayerToJSON,
+} from '../models/AddLayer';
+import {
+    type AddLayerCollection,
     AddLayerCollectionFromJSON,
     AddLayerCollectionToJSON,
+} from '../models/AddLayerCollection';
+import {
+    type IdResponse,
     IdResponseFromJSON,
     IdResponseToJSON,
+} from '../models/IdResponse';
+import {
+    type Layer,
     LayerFromJSON,
     LayerToJSON,
+} from '../models/Layer';
+import {
+    type LayerCollection,
     LayerCollectionFromJSON,
     LayerCollectionToJSON,
+} from '../models/LayerCollection';
+import {
+    type LayerProviderListing,
     LayerProviderListingFromJSON,
     LayerProviderListingToJSON,
+} from '../models/LayerProviderListing';
+import {
+    type ProviderCapabilities,
     ProviderCapabilitiesFromJSON,
     ProviderCapabilitiesToJSON,
+} from '../models/ProviderCapabilities';
+import {
+    type SearchType,
     SearchTypeFromJSON,
     SearchTypeToJSON,
+} from '../models/SearchType';
+import {
+    type TaskResponse,
     TaskResponseFromJSON,
     TaskResponseToJSON,
+} from '../models/TaskResponse';
+import {
+    type TypedDataProviderDefinition,
     TypedDataProviderDefinitionFromJSON,
     TypedDataProviderDefinitionToJSON,
+} from '../models/TypedDataProviderDefinition';
+import {
+    type UpdateLayer,
     UpdateLayerFromJSON,
     UpdateLayerToJSON,
+} from '../models/UpdateLayer';
+import {
+    type UpdateLayerCollection,
     UpdateLayerCollectionFromJSON,
     UpdateLayerCollectionToJSON,
-} from '../models/index';
+} from '../models/UpdateLayerCollection';
 
 export interface AddCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * 
+     */
     addLayerCollection: AddLayerCollection;
 }
 
 export interface AddExistingCollectionToCollectionRequest {
+    /**
+     * Parent layer collection id
+     */
     parent: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
 }
 
 export interface AddExistingLayerToCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 
 export interface AddLayerRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * 
+     */
     addLayer: AddLayer;
 }
 
 export interface AddProviderRequest {
+    /**
+     * 
+     */
     typedDataProviderDefinition: TypedDataProviderDefinition;
 }
 
 export interface AutocompleteHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * 
+     */
     searchType: SearchType;
+    /**
+     * 
+     */
     searchString: string;
+    /**
+     * 
+     */
     limit: number;
+    /**
+     * 
+     */
     offset: number;
 }
 
 export interface DeleteProviderRequest {
+    /**
+     * Layer provider id
+     */
     provider: string;
 }
 
 export interface GetProviderDefinitionRequest {
+    /**
+     * Layer provider id
+     */
     provider: string;
 }
 
 export interface LayerHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 
 export interface LayerToDatasetRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 
 export interface LayerToProcessingGraphIdHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 
 export interface ListCollectionHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
 }
 
 export interface ListProvidersRequest {
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
 }
 
 export interface ListRootCollectionsHandlerRequest {
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
 }
 
 export interface ProviderCapabilitiesHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
 }
 
 export interface RemoveCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
 }
 
 export interface RemoveCollectionFromCollectionRequest {
+    /**
+     * Parent layer collection id
+     */
     parent: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
 }
 
 export interface RemoveLayerRequest {
+    /**
+     * Layer id
+     */
     layer: string;
 }
 
 export interface RemoveLayerFromCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 
 export interface SearchHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * 
+     */
     searchType: SearchType;
+    /**
+     * 
+     */
     searchString: string;
+    /**
+     * 
+     */
     limit: number;
+    /**
+     * 
+     */
     offset: number;
 }
 
 export interface UpdateCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * 
+     */
     updateLayerCollection: UpdateLayerCollection;
 }
 
 export interface UpdateLayerRequest {
+    /**
+     * Layer id
+     */
     layer: string;
+    /**
+     * 
+     */
     updateLayer: UpdateLayer;
 }
 
 export interface UpdateProviderDefinitionRequest {
+    /**
+     * Layer provider id
+     */
     provider: string;
+    /**
+     * 
+     */
     typedDataProviderDefinition: TypedDataProviderDefinition;
 }
 
@@ -212,7 +381,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{collection}/collections`;
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -273,8 +442,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{parent}/collections/{collection}`;
-        urlPath = urlPath.replace(`{${"parent"}}`, encodeURIComponent(String(requestParameters['parent'])));
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{parent}', encodeURIComponent(String(requestParameters['parent'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -333,8 +502,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{collection}/layers/{layer}`;
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
-        urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
 
         return {
             path: urlPath,
@@ -395,7 +564,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{collection}/layers`;
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -555,8 +724,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layers/collections/search/autocomplete/{provider}/{collection}`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -609,7 +778,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/providers/{provider}`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
 
         return {
             path: urlPath,
@@ -661,7 +830,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/providers/{provider}`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
 
         return {
             path: urlPath,
@@ -721,8 +890,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layers/{provider}/{layer}`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-        urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
 
         return {
             path: urlPath,
@@ -782,8 +951,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layers/{provider}/{layer}/dataset`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-        urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
 
         return {
             path: urlPath,
@@ -843,8 +1012,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layers/{provider}/{layer}/processingGraphId`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-        urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
 
         return {
             path: urlPath,
@@ -926,8 +1095,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layers/collections/{provider}/{collection}`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -1114,7 +1283,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layers/{provider}/capabilities`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
 
         return {
             path: urlPath,
@@ -1165,7 +1334,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{collection}`;
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -1224,8 +1393,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{parent}/collections/{collection}`;
-        urlPath = urlPath.replace(`{${"parent"}}`, encodeURIComponent(String(requestParameters['parent'])));
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{parent}', encodeURIComponent(String(requestParameters['parent'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -1277,7 +1446,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/layers/{layer}`;
-        urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
 
         return {
             path: urlPath,
@@ -1336,8 +1505,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{collection}/layers/{layer}`;
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
-        urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
 
         return {
             path: urlPath,
@@ -1440,8 +1609,8 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layers/collections/search/{provider}/{collection}`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -1503,7 +1672,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/collections/{collection}`;
-        urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+        urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
 
         return {
             path: urlPath,
@@ -1565,7 +1734,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/layers/{layer}`;
-        urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
 
         return {
             path: urlPath,
@@ -1627,7 +1796,7 @@ export class LayersApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/layerDb/providers/{provider}`;
-        urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
 
         return {
             path: urlPath,

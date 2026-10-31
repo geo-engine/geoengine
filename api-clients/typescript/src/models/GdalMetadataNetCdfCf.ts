@@ -42,53 +42,37 @@ import {
 export interface GdalMetadataNetCdfCf {
     /**
      * 
-     * @type {GdalMetadataNetCdfCfTypeEnum}
-     * @memberof GdalMetadataNetCdfCf
      */
     type: GdalMetadataNetCdfCfTypeEnum;
     /**
      * 
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMetadataNetCdfCf
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      * 
-     * @type {GdalDatasetParameters}
-     * @memberof GdalMetadataNetCdfCf
      */
     params: GdalDatasetParameters;
     /**
      * 
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     start: number;
     /**
      * We use the end to specify the last, non-inclusive valid time point.
      * Queries behind this point return no data.
      * TODO: Alternatively, we could think about using the number of possible time steps in the future.
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     end: number;
     /**
      * 
-     * @type {TimeStep}
-     * @memberof GdalMetadataNetCdfCf
      */
     step: TimeStep;
     /**
      * A band offset specifies the first band index to use for the first point in time.
      * All other time steps are added to this offset.
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     bandOffset: number;
     /**
      * 
-     * @type {number}
-     * @memberof GdalMetadataNetCdfCf
      */
     cacheTtl?: number | null;
 }
@@ -98,7 +82,7 @@ export interface GdalMetadataNetCdfCf {
  * @export
  */
 export const GdalMetadataNetCdfCfTypeEnum = {
-    GdalMetaDataNetCdfCf: 'GdalMetaDataNetCdfCf'
+    GdalMetaDataNetCdfCf: 'GdalMetaDataNetCdfCf',
 } as const;
 export type GdalMetadataNetCdfCfTypeEnum = typeof GdalMetadataNetCdfCfTypeEnum[keyof typeof GdalMetadataNetCdfCfTypeEnum];
 
@@ -108,6 +92,8 @@ export type GdalMetadataNetCdfCfTypeEnum = typeof GdalMetadataNetCdfCfTypeEnum[k
  */
 export function instanceOfGdalMetadataNetCdfCf(value: object): value is GdalMetadataNetCdfCf {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GdalMetaDataNetCdfCf') return false;
+    
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('start' in value) || value['start'] === undefined) return false;
@@ -134,7 +120,7 @@ export function GdalMetadataNetCdfCfFromJSONTyped(json: any, ignoreDiscriminator
         'end': json['end'],
         'step': TimeStepFromJSON(json['step']),
         'bandOffset': json['bandOffset'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

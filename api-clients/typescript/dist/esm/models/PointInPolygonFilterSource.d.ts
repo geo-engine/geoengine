@@ -17,14 +17,10 @@ import type { VectorOperator } from './VectorOperator';
 export interface PointInPolygonFilterSource {
     /**
      * Point collection that is checked against the polygon collection.
-     * @type {VectorOperator}
-     * @memberof PointInPolygonFilterSource
      */
     points: VectorOperator;
     /**
      * Polygon collection used as the filter mask.
-     * @type {VectorOperator}
-     * @memberof PointInPolygonFilterSource
      */
     polygons: VectorOperator;
 }

@@ -27,7 +27,7 @@ export function StacAssetBandFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'assetTitle': json['assetTitle'],
-        'bandName': json['bandName'] == null ? undefined : json['bandName'],
+        'bandName': json['bandName'] === undefined ? undefined : json['bandName'] === null ? null : json['bandName'],
     };
 }
 export function StacAssetBandToJSON(json) {

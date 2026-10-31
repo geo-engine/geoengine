@@ -24,13 +24,15 @@ const RasterVectorJoinParameters_1 = require("./RasterVectorJoinParameters");
  * @export
  */
 exports.RasterVectorJoinTypeEnum = {
-    RasterVectorJoin: 'RasterVectorJoin'
+    RasterVectorJoin: 'RasterVectorJoin',
 };
 /**
  * Check if a given object implements the RasterVectorJoin interface.
  */
 function instanceOfRasterVectorJoin(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'RasterVectorJoin')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

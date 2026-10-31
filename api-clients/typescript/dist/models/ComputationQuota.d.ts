@@ -16,26 +16,18 @@
 export interface ComputationQuota {
     /**
      *
-     * @type {Date}
-     * @memberof ComputationQuota
      */
     timestamp: Date;
     /**
      *
-     * @type {string}
-     * @memberof ComputationQuota
      */
     computationId: string;
     /**
      *
-     * @type {string}
-     * @memberof ComputationQuota
      */
     processingGraphId: string;
     /**
      *
-     * @type {number}
-     * @memberof ComputationQuota
      */
     count: number;
 }

@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { ServerInfoFromJSON, } from '../models/index';
+import { ServerInfoFromJSON, } from '../models/ServerInfo';
 /**
  *
  */

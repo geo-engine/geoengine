@@ -14,13 +14,15 @@
  * @export
  */
 export const OgrSourceTimeFormatAutoFormatEnum = {
-    Auto: 'auto'
+    Auto: 'auto',
 };
 /**
  * Check if a given object implements the OgrSourceTimeFormatAuto interface.
  */
 export function instanceOfOgrSourceTimeFormatAuto(value) {
     if (!('format' in value) || value['format'] === undefined)
+        return false;
+    if (value['format'] !== 'auto')
         return false;
     return true;
 }

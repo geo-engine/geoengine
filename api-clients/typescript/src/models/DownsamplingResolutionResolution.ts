@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface DownsamplingResolutionResolution {
     /**
      * 
-     * @type {DownsamplingResolutionResolutionTypeEnum}
-     * @memberof DownsamplingResolutionResolution
      */
     type: DownsamplingResolutionResolutionTypeEnum;
     /**
      * Explicit output resolution (`x`, `y`) in target coordinates.
-     * @type {number}
-     * @memberof DownsamplingResolutionResolution
      */
     x: number;
     /**
      * 
-     * @type {number}
-     * @memberof DownsamplingResolutionResolution
      */
     y: number;
 }
@@ -43,7 +37,7 @@ export interface DownsamplingResolutionResolution {
  * @export
  */
 export const DownsamplingResolutionResolutionTypeEnum = {
-    Resolution: 'resolution'
+    Resolution: 'resolution',
 } as const;
 export type DownsamplingResolutionResolutionTypeEnum = typeof DownsamplingResolutionResolutionTypeEnum[keyof typeof DownsamplingResolutionResolutionTypeEnum];
 
@@ -53,6 +47,8 @@ export type DownsamplingResolutionResolutionTypeEnum = typeof DownsamplingResolu
  */
 export function instanceOfDownsamplingResolutionResolution(value: object): value is DownsamplingResolutionResolution {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'resolution') return false;
+    
     if (!('x' in value) || value['x'] === undefined) return false;
     if (!('y' in value) || value['y'] === undefined) return false;
     return true;

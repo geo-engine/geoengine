@@ -22,13 +22,15 @@ exports.LayerCollectionResourceToJSONTyped = LayerCollectionResourceToJSONTyped;
  * @export
  */
 exports.LayerCollectionResourceTypeEnum = {
-    LayerCollection: 'layerCollection'
+    LayerCollection: 'layerCollection',
 };
 /**
  * Check if a given object implements the LayerCollectionResource interface.
  */
 function instanceOfLayerCollectionResource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'layerCollection')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

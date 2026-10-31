@@ -17,8 +17,6 @@ import type { BoundingBox2D } from './BoundingBox2D';
 export interface SpatialBoundsDeriveBounds extends BoundingBox2D {
     /**
      *
-     * @type {SpatialBoundsDeriveBoundsTypeEnum}
-     * @memberof SpatialBoundsDeriveBounds
      */
     type: SpatialBoundsDeriveBoundsTypeEnum;
 }

@@ -28,8 +28,6 @@ import {
 export interface SingleVectorSource {
     /**
      * 
-     * @type {VectorOperator}
-     * @memberof SingleVectorSource
      */
     vector: VectorOperator;
 }

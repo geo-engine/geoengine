@@ -18,20 +18,14 @@ import type { Resource } from './Resource';
 export interface PermissionRequest {
     /**
      *
-     * @type {Resource}
-     * @memberof PermissionRequest
      */
     resource: Resource;
     /**
      *
-     * @type {string}
-     * @memberof PermissionRequest
      */
     roleId: string;
     /**
      *
-     * @type {Permission}
-     * @memberof PermissionRequest
      */
     permission: Permission;
 }

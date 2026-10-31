@@ -16,14 +16,10 @@
 export interface NewOutputColumn {
     /**
      * The expression will append a new `Float` column
-     * @type {string}
-     * @memberof NewOutputColumn
      */
     value: string;
     /**
      *
-     * @type {NewOutputColumnTypeEnum}
-     * @memberof NewOutputColumn
      */
     type: NewOutputColumnTypeEnum;
 }

@@ -16,14 +16,10 @@
 export interface NeighborhoodKernelRectangle {
     /**
      *
-     * @type {NeighborhoodKernelRectangleTypeEnum}
-     * @memberof NeighborhoodKernelRectangle
      */
     type: NeighborhoodKernelRectangleTypeEnum;
     /**
      * Width and height of the rectangular neighborhood in pixels.
-     * @type {Array<number>}
-     * @memberof NeighborhoodKernelRectangle
      */
     dimensions: Array<number>;
 }

@@ -16,13 +16,15 @@ import { DownsamplingParametersFromJSON, DownsamplingParametersToJSON, } from '.
  * @export
  */
 export const DownsamplingTypeEnum = {
-    Downsampling: 'Downsampling'
+    Downsampling: 'Downsampling',
 };
 /**
  * Check if a given object implements the Downsampling interface.
  */
 export function instanceOfDownsampling(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Downsampling')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

@@ -6,8 +6,8 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **id** | **uuid::Uuid** |  | 
 **user** | [**models::UserInfo**](UserInfo.md) |  | 
-**created** | **String** |  | 
-**valid_until** | **String** |  | 
+**created** | **chrono::DateTime<chrono::FixedOffset>** |  | 
+**valid_until** | **chrono::DateTime<chrono::FixedOffset>** |  | 
 **project** | Option<**uuid::Uuid**> |  | [optional]
 **view** | Option<[**models::StRectangle**](STRectangle.md)> |  | [optional]
 **roles** | **Vec<uuid::Uuid>** |  | 

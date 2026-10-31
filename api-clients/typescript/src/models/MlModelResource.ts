@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface MlModelResource {
     /**
      * 
-     * @type {MlModelResourceTypeEnum}
-     * @memberof MlModelResource
      */
     type: MlModelResourceTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof MlModelResource
      */
     id: string;
 }
@@ -37,7 +33,7 @@ export interface MlModelResource {
  * @export
  */
 export const MlModelResourceTypeEnum = {
-    MlModel: 'mlModel'
+    MlModel: 'mlModel',
 } as const;
 export type MlModelResourceTypeEnum = typeof MlModelResourceTypeEnum[keyof typeof MlModelResourceTypeEnum];
 
@@ -47,6 +43,8 @@ export type MlModelResourceTypeEnum = typeof MlModelResourceTypeEnum[keyof typeo
  */
 export function instanceOfMlModelResource(value: object): value is MlModelResource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'mlModel') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }

@@ -26,7 +26,7 @@ export const RasterDataType = {
     I32: 'I32',
     I64: 'I64',
     F32: 'F32',
-    F64: 'F64'
+    F64: 'F64',
 } as const;
 export type RasterDataType = typeof RasterDataType[keyof typeof RasterDataType];
 

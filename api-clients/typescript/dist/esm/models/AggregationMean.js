@@ -14,13 +14,15 @@
  * @export
  */
 export const AggregationMeanTypeEnum = {
-    Mean: 'mean'
+    Mean: 'mean',
 };
 /**
  * Check if a given object implements the AggregationMean interface.
  */
 export function instanceOfAggregationMean(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'mean')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

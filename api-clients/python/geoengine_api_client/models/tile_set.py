@@ -24,14 +24,15 @@ from typing_extensions import Annotated
 from geoengine_api_client.models.access_constraints import AccessConstraints
 from geoengine_api_client.models.bounding_box2_d import BoundingBox2D
 from geoengine_api_client.models.geospatial_data import GeospatialData
-from geoengine_api_client.models.geospatial_data_data_type import GeospatialDataDataType
 from geoengine_api_client.models.link import Link
 from geoengine_api_client.models.style import Style
 from geoengine_api_client.models.tile_matrix_limits import TileMatrixLimits
 from geoengine_api_client.models.tile_point import TilePoint
+from geoengine_api_client.models.tile_set_data_type import TileSetDataType
 from geoengine_api_client.models.tiles_crs import TilesCrs
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class TileSet(BaseModel):
     """
@@ -40,7 +41,7 @@ class TileSet(BaseModel):
     title: Optional[StrictStr] = Field(default=None, description="A title for this tileset")
     description: Optional[StrictStr] = Field(default=None, description="Brief narrative description of this tile set")
     keywords: Optional[List[StrictStr]] = Field(default=None, description="Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe a [`TileSet`]")
-    data_type: GeospatialDataDataType = Field(alias="dataType")
+    data_type: TileSetDataType = Field(alias="dataType")
     tile_matrix_set_uri: Optional[StrictStr] = Field(default=None, description="Reference to a Tile Matrix Set on the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on the definition server.", alias="tileMatrixSetURI")
     tile_matrix_set_limits: Optional[List[TileMatrixLimits]] = Field(default=None, description="Limits for the [`TileRow`] and [`TileCol`] values for each [`TileMatrix`] in the [`TileMatrixSet`]. If missing, there are no limits other that the ones imposed by the [`TileMatrixSet`]. If present the tile matrices listed are limited and the rest not available at all", alias="tileMatrixSetLimits")
     crs: TilesCrs = Field(description="Coordinate Reference System (CRS)")
@@ -61,7 +62,8 @@ class TileSet(BaseModel):
     __properties: ClassVar[List[str]] = ["title", "description", "keywords", "dataType", "tileMatrixSetURI", "tileMatrixSetLimits", "crs", "epoch", "links", "layers", "boundingBox", "centerPoint", "style", "attribution", "license", "accessConstraints", "version", "created", "updated", "pointOfContact", "mediaTypes"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -73,8 +75,7 @@ class TileSet(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -106,8 +107,7 @@ class TileSet(BaseModel):
         _items = []
         if self.tile_matrix_set_limits:
             for _item_tile_matrix_set_limits in self.tile_matrix_set_limits:
-                if _item_tile_matrix_set_limits:
-                    _items.append(_item_tile_matrix_set_limits.to_dict())
+                _items.append(_item_tile_matrix_set_limits.to_dict() if _item_tile_matrix_set_limits is not None else None)
             _dict['tileMatrixSetLimits'] = _items
         # override the default output from pydantic by calling `to_dict()` of crs
         if self.crs:
@@ -116,15 +116,13 @@ class TileSet(BaseModel):
         _items = []
         if self.links:
             for _item_links in self.links:
-                if _item_links:
-                    _items.append(_item_links.to_dict())
+                _items.append(_item_links.to_dict() if _item_links is not None else None)
             _dict['links'] = _items
         # override the default output from pydantic by calling `to_dict()` of each item in layers (list)
         _items = []
         if self.layers:
             for _item_layers in self.layers:
-                if _item_layers:
-                    _items.append(_item_layers.to_dict())
+                _items.append(_item_layers.to_dict() if _item_layers is not None else None)
             _dict['layers'] = _items
         # override the default output from pydantic by calling `to_dict()` of bounding_box
         if self.bounding_box:
@@ -150,7 +148,7 @@ class TileSet(BaseModel):
             "title": obj.get("title"),
             "description": obj.get("description"),
             "keywords": obj.get("keywords"),
-            "dataType": GeospatialDataDataType.from_dict(obj["dataType"]) if obj.get("dataType") is not None else None,
+            "dataType": TileSetDataType.from_dict(obj["dataType"]) if obj.get("dataType") is not None else None,
             "tileMatrixSetURI": obj.get("tileMatrixSetURI"),
             "tileMatrixSetLimits": [TileMatrixLimits.from_dict(_item) for _item in obj["tileMatrixSetLimits"]] if obj.get("tileMatrixSetLimits") is not None else None,
             "crs": TilesCrs.from_dict(obj["crs"]) if obj.get("crs") is not None else None,

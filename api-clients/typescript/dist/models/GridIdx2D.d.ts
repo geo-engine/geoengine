@@ -16,14 +16,10 @@
 export interface GridIdx2D {
     /**
      *
-     * @type {number}
-     * @memberof GridIdx2D
      */
     yIdx: number;
     /**
      *
-     * @type {number}
-     * @memberof GridIdx2D
      */
     xIdx: number;
 }

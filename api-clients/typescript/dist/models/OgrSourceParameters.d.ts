@@ -17,20 +17,14 @@ import type { AttributeFilter } from './AttributeFilter';
 export interface OgrSourceParameters {
     /**
      * Dataset name or identifier to be loaded.
-     * @type {string}
-     * @memberof OgrSourceParameters
      */
     data: string;
     /**
      * *Optional*: list of attributes to include. When `None`, all attributes are included.
-     * @type {Array<string>}
-     * @memberof OgrSourceParameters
      */
     attributeProjection?: Array<string> | null;
     /**
      * *Optional*: list of attribute filters to apply. When `None`, no filters are applied.
-     * @type {Array<AttributeFilter>}
-     * @memberof OgrSourceParameters
      */
     attributeFilters?: Array<AttributeFilter> | null;
 }

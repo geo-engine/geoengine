@@ -38,8 +38,8 @@ export function SpatialReferenceSpecificationFromJSONTyped(json, ignoreDiscrimin
         'spatialReference': json['spatialReference'],
         'projString': json['projString'],
         'extent': BoundingBox2DFromJSON(json['extent']),
-        'axisLabels': json['axisLabels'] == null ? undefined : json['axisLabels'],
-        'axisOrder': json['axisOrder'] == null ? undefined : AxisOrderFromJSON(json['axisOrder']),
+        'axisLabels': json['axisLabels'] === undefined ? undefined : json['axisLabels'] === null ? null : json['axisLabels'],
+        'axisOrder': json['axisOrder'] === undefined ? undefined : json['axisOrder'] === null ? null : AxisOrderFromJSON(json['axisOrder']),
     };
 }
 export function SpatialReferenceSpecificationToJSON(json) {

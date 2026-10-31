@@ -33,20 +33,14 @@ import type { SingleVectorSource } from './SingleVectorSource';
 export interface ScatterPlot {
     /**
      *
-     * @type {ScatterPlotTypeEnum}
-     * @memberof ScatterPlot
      */
     type: ScatterPlotTypeEnum;
     /**
      *
-     * @type {ScatterPlotParameters}
-     * @memberof ScatterPlot
      */
     params: ScatterPlotParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof ScatterPlot
      */
     sources: SingleVectorSource;
 }

@@ -16,13 +16,15 @@ import { OnnxParametersFromJSON, OnnxParametersToJSON, } from './OnnxParameters'
  * @export
  */
 export const OnnxTypeEnum = {
-    Onnx: 'Onnx'
+    Onnx: 'Onnx',
 };
 /**
  * Check if a given object implements the Onnx interface.
  */
 export function instanceOfOnnx(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Onnx')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

@@ -16,14 +16,10 @@
 export interface DataProviderResource {
     /**
      *
-     * @type {DataProviderResourceTypeEnum}
-     * @memberof DataProviderResource
      */
     type: DataProviderResourceTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof DataProviderResource
      */
     id: string;
 }

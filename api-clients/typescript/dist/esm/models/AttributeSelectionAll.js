@@ -14,13 +14,15 @@
  * @export
  */
 export const AttributeSelectionAllTypeEnum = {
-    All: 'all'
+    All: 'all',
 };
 /**
  * Check if a given object implements the AttributeSelectionAll interface.
  */
 export function instanceOfAttributeSelectionAll(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'all')
         return false;
     return true;
 }

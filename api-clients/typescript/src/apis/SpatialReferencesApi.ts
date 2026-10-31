@@ -11,17 +11,17 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  SpatialReferenceSpecification,
-} from '../models/index';
 import {
+    type SpatialReferenceSpecification,
     SpatialReferenceSpecificationFromJSON,
     SpatialReferenceSpecificationToJSON,
-} from '../models/index';
+} from '../models/SpatialReferenceSpecification';
 
 export interface GetSpatialReferenceSpecificationHandlerRequest {
+    /**
+     * 
+     */
     srsString: string;
 }
 
@@ -55,7 +55,7 @@ export class SpatialReferencesApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/spatialReferenceSpecification/{srsString}`;
-        urlPath = urlPath.replace(`{${"srsString"}}`, encodeURIComponent(String(requestParameters['srsString'])));
+        urlPath = urlPath.replace('{srsString}', encodeURIComponent(String(requestParameters['srsString'])));
 
         return {
             path: urlPath,

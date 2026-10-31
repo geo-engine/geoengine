@@ -17,6 +17,7 @@ exports.ProjectVersionFromJSON = ProjectVersionFromJSON;
 exports.ProjectVersionFromJSONTyped = ProjectVersionFromJSONTyped;
 exports.ProjectVersionToJSON = ProjectVersionToJSON;
 exports.ProjectVersionToJSONTyped = ProjectVersionToJSONTyped;
+const runtime_1 = require("../runtime");
 /**
  * Check if a given object implements the ProjectVersion interface.
  */
@@ -36,7 +37,7 @@ function ProjectVersionFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'id': json['id'],
-        'changed': (new Date(json['changed'])),
+        'changed': (json['changed'] == null ? json['changed'] : (0, runtime_1.parseDateTime)(json['changed'])),
     };
 }
 function ProjectVersionToJSON(json) {
@@ -48,6 +49,6 @@ function ProjectVersionToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'id': value['id'],
-        'changed': value['changed'].toISOString(),
+        'changed': value['changed'] == null ? value['changed'] : (0, runtime_1.serializeDateTime)(value['changed']),
     };
 }

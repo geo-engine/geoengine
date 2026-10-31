@@ -20,7 +20,7 @@ export const TaskFilter = {
     Running: 'running',
     Aborted: 'aborted',
     Failed: 'failed',
-    Completed: 'completed'
+    Completed: 'completed',
 } as const;
 export type TaskFilter = typeof TaskFilter[keyof typeof TaskFilter];
 

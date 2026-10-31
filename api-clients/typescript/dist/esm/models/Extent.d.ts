@@ -20,14 +20,10 @@ import type { SpatialExtent } from './SpatialExtent';
 export interface Extent {
     /**
      *
-     * @type {SpatialExtent}
-     * @memberof Extent
      */
     spatial?: SpatialExtent | null;
     /**
      *
-     * @type {TemporalExtent}
-     * @memberof Extent
      */
     temporal?: TemporalExtent | null;
 }

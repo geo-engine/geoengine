@@ -43,13 +43,13 @@ export function SymbologyToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'line':
-            return Object.assign({}, LineSymbologyToJSON(value), { type: 'line' });
+            return Object.assign({}, LineSymbologyToJSON(value), { 'type': 'line' });
         case 'point':
-            return Object.assign({}, PointSymbologyToJSON(value), { type: 'point' });
+            return Object.assign({}, PointSymbologyToJSON(value), { 'type': 'point' });
         case 'polygon':
-            return Object.assign({}, PolygonSymbologyToJSON(value), { type: 'polygon' });
+            return Object.assign({}, PolygonSymbologyToJSON(value), { 'type': 'polygon' });
         case 'raster':
-            return Object.assign({}, RasterSymbologyToJSON(value), { type: 'raster' });
+            return Object.assign({}, RasterSymbologyToJSON(value), { 'type': 'raster' });
         default:
             return value;
     }

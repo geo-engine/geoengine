@@ -35,38 +35,26 @@ import {
 export interface Collections {
     /**
      * 
-     * @type {Array<Link>}
-     * @memberof Collections
      */
     links?: Array<Link>;
     /**
      * 
-     * @type {string}
-     * @memberof Collections
      */
     timeStamp?: string | null;
     /**
      * 
-     * @type {number}
-     * @memberof Collections
      */
     numberMatched?: number | null;
     /**
      * 
-     * @type {number}
-     * @memberof Collections
      */
     numberReturned?: number | null;
     /**
      * 
-     * @type {Array<Collection>}
-     * @memberof Collections
      */
     collections: Array<Collection>;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof Collections
      */
     crs?: Array<string>;
 }
@@ -90,9 +78,9 @@ export function CollectionsFromJSONTyped(json: any, ignoreDiscriminator: boolean
     return {
         
         'links': json['links'] == null ? undefined : ((json['links'] as Array<any>).map(LinkFromJSON)),
-        'timeStamp': json['timeStamp'] == null ? undefined : json['timeStamp'],
-        'numberMatched': json['numberMatched'] == null ? undefined : json['numberMatched'],
-        'numberReturned': json['numberReturned'] == null ? undefined : json['numberReturned'],
+        'timeStamp': json['timeStamp'] === undefined ? undefined : json['timeStamp'] === null ? null : json['timeStamp'],
+        'numberMatched': json['numberMatched'] === undefined ? undefined : json['numberMatched'] === null ? null : json['numberMatched'],
+        'numberReturned': json['numberReturned'] === undefined ? undefined : json['numberReturned'] === null ? null : json['numberReturned'],
         'collections': ((json['collections'] as Array<any>).map(CollectionFromJSON)),
         'crs': json['crs'] == null ? undefined : json['crs'],
     };

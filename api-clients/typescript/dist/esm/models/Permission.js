@@ -16,7 +16,7 @@
  */
 export const Permission = {
     Read: 'Read',
-    Owner: 'Owner'
+    Owner: 'Owner',
 };
 export function instanceOfPermission(value) {
     for (const key in Permission) {

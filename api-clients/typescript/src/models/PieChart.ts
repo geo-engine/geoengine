@@ -51,20 +51,14 @@ import {
 export interface PieChart {
     /**
      * 
-     * @type {PieChartTypeEnum}
-     * @memberof PieChart
      */
     type: PieChartTypeEnum;
     /**
      * 
-     * @type {PieChartParameters}
-     * @memberof PieChart
      */
     params: PieChartParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof PieChart
      */
     sources: SingleVectorSource;
 }
@@ -74,7 +68,7 @@ export interface PieChart {
  * @export
  */
 export const PieChartTypeEnum = {
-    PieChart: 'PieChart'
+    PieChart: 'PieChart',
 } as const;
 export type PieChartTypeEnum = typeof PieChartTypeEnum[keyof typeof PieChartTypeEnum];
 
@@ -84,6 +78,8 @@ export type PieChartTypeEnum = typeof PieChartTypeEnum[keyof typeof PieChartType
  */
 export function instanceOfPieChart(value: object): value is PieChart {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'PieChart') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

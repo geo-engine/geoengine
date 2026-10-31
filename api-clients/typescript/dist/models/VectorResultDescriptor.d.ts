@@ -20,34 +20,24 @@ import type { BoundingBox2D } from './BoundingBox2D';
 export interface VectorResultDescriptor {
     /**
      *
-     * @type {VectorDataType}
-     * @memberof VectorResultDescriptor
      */
     dataType: VectorDataType;
     /**
      *
-     * @type {string}
-     * @memberof VectorResultDescriptor
      */
     spatialReference: string;
     /**
      *
-     * @type {{ [key: string]: VectorColumnInfo; }}
-     * @memberof VectorResultDescriptor
      */
     columns: {
         [key: string]: VectorColumnInfo;
     };
     /**
      *
-     * @type {TimeInterval}
-     * @memberof VectorResultDescriptor
      */
     time?: TimeInterval | null;
     /**
      *
-     * @type {BoundingBox2D}
-     * @memberof VectorResultDescriptor
      */
     bbox?: BoundingBox2D | null;
 }

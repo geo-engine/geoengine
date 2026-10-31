@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface AggregationFirst {
     /**
      * 
-     * @type {AggregationFirstTypeEnum}
-     * @memberof AggregationFirst
      */
     type: AggregationFirstTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationFirst
      */
     ignoreNoData: boolean;
 }
@@ -37,7 +33,7 @@ export interface AggregationFirst {
  * @export
  */
 export const AggregationFirstTypeEnum = {
-    First: 'first'
+    First: 'first',
 } as const;
 export type AggregationFirstTypeEnum = typeof AggregationFirstTypeEnum[keyof typeof AggregationFirstTypeEnum];
 
@@ -47,6 +43,8 @@ export type AggregationFirstTypeEnum = typeof AggregationFirstTypeEnum[keyof typ
  */
 export function instanceOfAggregationFirst(value: object): value is AggregationFirst {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'first') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     return true;
 }

@@ -22,13 +22,15 @@ exports.CopernicusDataspaceDataProviderDefinitionToJSONTyped = CopernicusDataspa
  * @export
  */
 exports.CopernicusDataspaceDataProviderDefinitionTypeEnum = {
-    CopernicusDataspace: 'CopernicusDataspace'
+    CopernicusDataspace: 'CopernicusDataspace',
 };
 /**
  * Check if a given object implements the CopernicusDataspaceDataProviderDefinition interface.
  */
 function instanceOfCopernicusDataspaceDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'CopernicusDataspace')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -65,7 +67,7 @@ function CopernicusDataspaceDataProviderDefinitionFromJSONTyped(json, ignoreDisc
         's3AccessKey': json['s3AccessKey'],
         's3SecretKey': json['s3SecretKey'],
         'gdalConfig': json['gdalConfig'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
     };
 }
 function CopernicusDataspaceDataProviderDefinitionToJSON(json) {

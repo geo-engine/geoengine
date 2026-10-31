@@ -24,7 +24,7 @@ exports.SearchTypeToJSONTyped = SearchTypeToJSONTyped;
  */
 exports.SearchType = {
     Fulltext: 'fulltext',
-    Prefix: 'prefix'
+    Prefix: 'prefix',
 };
 function instanceOfSearchType(value) {
     for (const key in exports.SearchType) {

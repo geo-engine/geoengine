@@ -12,19 +12,13 @@ import type { TaskStatus } from './TaskStatus';
 /**
  *
  * @export
- * @interface TaskStatusWithId
  */
-export type TaskStatusWithId = {
-    taskId: string;
-} & TaskStatus;
-export interface _TaskStatusWithId {
+export type TaskStatusWithId = TaskStatus & {
     /**
      *
-     * @type {string}
-     * @memberof TaskStatusWithId
      */
     taskId: string;
-}
+};
 /**
  * Check if a given object implements the TaskStatusWithId interface.
  */

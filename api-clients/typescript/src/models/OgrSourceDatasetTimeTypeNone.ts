@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface OgrSourceDatasetTimeTypeNone {
     /**
      * 
-     * @type {OgrSourceDatasetTimeTypeNoneTypeEnum}
-     * @memberof OgrSourceDatasetTimeTypeNone
      */
     type: OgrSourceDatasetTimeTypeNoneTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface OgrSourceDatasetTimeTypeNone {
  * @export
  */
 export const OgrSourceDatasetTimeTypeNoneTypeEnum = {
-    None: 'none'
+    None: 'none',
 } as const;
 export type OgrSourceDatasetTimeTypeNoneTypeEnum = typeof OgrSourceDatasetTimeTypeNoneTypeEnum[keyof typeof OgrSourceDatasetTimeTypeNoneTypeEnum];
 
@@ -41,6 +39,8 @@ export type OgrSourceDatasetTimeTypeNoneTypeEnum = typeof OgrSourceDatasetTimeTy
  */
 export function instanceOfOgrSourceDatasetTimeTypeNone(value: object): value is OgrSourceDatasetTimeTypeNone {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'none') return false;
+    
     return true;
 }
 

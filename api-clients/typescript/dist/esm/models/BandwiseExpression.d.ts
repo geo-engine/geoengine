@@ -25,20 +25,14 @@ import type { BandwiseExpressionParameters } from './BandwiseExpressionParameter
 export interface BandwiseExpression {
     /**
      *
-     * @type {BandwiseExpressionTypeEnum}
-     * @memberof BandwiseExpression
      */
     type: BandwiseExpressionTypeEnum;
     /**
      *
-     * @type {BandwiseExpressionParameters}
-     * @memberof BandwiseExpression
      */
     params: BandwiseExpressionParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof BandwiseExpression
      */
     sources: SingleRasterSource;
 }

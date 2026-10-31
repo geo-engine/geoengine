@@ -348,7 +348,7 @@ class ProcessingGraphsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> bytearray:
+    ) -> bytes:
         """Gets a ZIP archive of the processing graph, its provenance and the output metadata.
 
 
@@ -385,7 +385,7 @@ class ProcessingGraphsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "bytearray",
+            '200': "bytes",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -414,7 +414,7 @@ class ProcessingGraphsApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[bytearray]:
+    ) -> ApiResponse[bytes]:
         """Gets a ZIP archive of the processing graph, its provenance and the output metadata.
 
 
@@ -451,7 +451,7 @@ class ProcessingGraphsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "bytearray",
+            '200': "bytes",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -517,7 +517,7 @@ class ProcessingGraphsApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "bytearray",
+            '200': "bytes",
         }
         response_data = self.api_client.call_api(
             *_param,
@@ -1639,7 +1639,7 @@ class ProcessingGraphsApi:
         # process the query parameters
         if spatial_bounds is not None:
             
-            _query_params.append(('spatialBounds', spatial_bounds))
+            _query_params.extend(self.api_client.explode_query_object('spatialBounds', spatial_bounds))
             
         if time_interval is not None:
             

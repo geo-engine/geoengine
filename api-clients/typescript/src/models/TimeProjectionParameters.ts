@@ -28,14 +28,10 @@ import {
 export interface TimeProjectionParameters {
     /**
      * Time granularity and size for the projection step.
-     * @type {TimeStep}
-     * @memberof TimeProjectionParameters
      */
     step: TimeStep;
     /**
      * Optional anchor point for the time step.
-     * @type {number}
-     * @memberof TimeProjectionParameters
      */
     stepReference?: number | null;
 }
@@ -59,7 +55,7 @@ export function TimeProjectionParametersFromJSONTyped(json: any, ignoreDiscrimin
     return {
         
         'step': TimeStepFromJSON(json['step']),
-        'stepReference': json['stepReference'] == null ? undefined : json['stepReference'],
+        'stepReference': json['stepReference'] === undefined ? undefined : json['stepReference'] === null ? null : json['stepReference'],
     };
 }
 

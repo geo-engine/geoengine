@@ -17,14 +17,10 @@ import type { Coordinate2D } from './Coordinate2D';
 export interface SpatialPartition2D {
     /**
      *
-     * @type {Coordinate2D}
-     * @memberof SpatialPartition2D
      */
     upperLeftCoordinate: Coordinate2D;
     /**
      *
-     * @type {Coordinate2D}
-     * @memberof SpatialPartition2D
      */
     lowerRightCoordinate: Coordinate2D;
 }

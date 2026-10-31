@@ -35,20 +35,14 @@ import {
 export interface Reflectance {
     /**
      * 
-     * @type {ReflectanceTypeEnum}
-     * @memberof Reflectance
      */
     type: ReflectanceTypeEnum;
     /**
      * 
-     * @type {ReflectanceParameters}
-     * @memberof Reflectance
      */
     params: ReflectanceParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof Reflectance
      */
     sources: SingleRasterSource;
 }
@@ -58,7 +52,7 @@ export interface Reflectance {
  * @export
  */
 export const ReflectanceTypeEnum = {
-    Reflectance: 'Reflectance'
+    Reflectance: 'Reflectance',
 } as const;
 export type ReflectanceTypeEnum = typeof ReflectanceTypeEnum[keyof typeof ReflectanceTypeEnum];
 
@@ -68,6 +62,8 @@ export type ReflectanceTypeEnum = typeof ReflectanceTypeEnum[keyof typeof Reflec
  */
 export function instanceOfReflectance(value: object): value is Reflectance {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Reflectance') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -35,20 +35,14 @@ import {
 export interface STRectangle {
     /**
      * 
-     * @type {string}
-     * @memberof STRectangle
      */
     spatialReference: string;
     /**
      * 
-     * @type {BoundingBox2D}
-     * @memberof STRectangle
      */
     boundingBox: BoundingBox2D;
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof STRectangle
      */
     timeInterval: TimeInterval;
 }

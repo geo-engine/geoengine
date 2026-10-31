@@ -25,7 +25,7 @@ exports.PlotOutputFormatToJSONTyped = PlotOutputFormatToJSONTyped;
 exports.PlotOutputFormat = {
     JsonPlain: 'JsonPlain',
     JsonVega: 'JsonVega',
-    ImagePng: 'ImagePng'
+    ImagePng: 'ImagePng',
 };
 function instanceOfPlotOutputFormat(value) {
     for (const key in exports.PlotOutputFormat) {

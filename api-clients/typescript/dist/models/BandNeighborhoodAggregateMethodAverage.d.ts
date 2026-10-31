@@ -16,15 +16,11 @@
 export interface BandNeighborhoodAggregateMethodAverage {
     /**
      *
-     * @type {BandNeighborhoodAggregateMethodAverageTypeEnum}
-     * @memberof BandNeighborhoodAggregateMethodAverage
      */
     type: BandNeighborhoodAggregateMethodAverageTypeEnum;
     /**
      * Number of neighboring bands to include in the moving average window.
      * The window size must be odd; at the raster borders the window is reduced.
-     * @type {number}
-     * @memberof BandNeighborhoodAggregateMethodAverage
      */
     windowSize: number;
 }

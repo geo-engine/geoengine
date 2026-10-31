@@ -33,8 +33,8 @@ function ExtentFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'spatial': json['spatial'] == null ? undefined : (0, SpatialExtent_1.SpatialExtentFromJSON)(json['spatial']),
-        'temporal': json['temporal'] == null ? undefined : (0, TemporalExtent_1.TemporalExtentFromJSON)(json['temporal']),
+        'spatial': json['spatial'] === undefined ? undefined : json['spatial'] === null ? null : (0, SpatialExtent_1.SpatialExtentFromJSON)(json['spatial']),
+        'temporal': json['temporal'] === undefined ? undefined : json['temporal'] === null ? null : (0, TemporalExtent_1.TemporalExtentFromJSON)(json['temporal']),
     };
 }
 function ExtentToJSON(json) {

@@ -14,13 +14,15 @@
  * @export
  */
 export const LayerResourceTypeEnum = {
-    Layer: 'layer'
+    Layer: 'layer',
 };
 /**
  * Check if a given object implements the LayerResource interface.
  */
 export function instanceOfLayerResource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'layer')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

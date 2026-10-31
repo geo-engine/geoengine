@@ -16,14 +16,10 @@
 export interface AggregationCount {
     /**
      *
-     * @type {AggregationCountTypeEnum}
-     * @memberof AggregationCount
      */
     type: AggregationCountTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationCount
      */
     ignoreNoData: boolean;
 }

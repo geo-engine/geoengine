@@ -18,14 +18,10 @@ import type { Coordinate2D } from './Coordinate2D';
 export interface BoundingBox2D {
     /**
      *
-     * @type {Coordinate2D}
-     * @memberof BoundingBox2D
      */
     lowerLeftCoordinate: Coordinate2D;
     /**
      *
-     * @type {Coordinate2D}
-     * @memberof BoundingBox2D
      */
     upperRightCoordinate: Coordinate2D;
 }

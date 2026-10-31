@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface AggregationLast {
     /**
      * 
-     * @type {AggregationLastTypeEnum}
-     * @memberof AggregationLast
      */
     type: AggregationLastTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationLast
      */
     ignoreNoData: boolean;
 }
@@ -37,7 +33,7 @@ export interface AggregationLast {
  * @export
  */
 export const AggregationLastTypeEnum = {
-    Last: 'last'
+    Last: 'last',
 } as const;
 export type AggregationLastTypeEnum = typeof AggregationLastTypeEnum[keyof typeof AggregationLastTypeEnum];
 
@@ -47,6 +43,8 @@ export type AggregationLastTypeEnum = typeof AggregationLastTypeEnum[keyof typeo
  */
 export function instanceOfAggregationLast(value: object): value is AggregationLast {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'last') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     return true;
 }

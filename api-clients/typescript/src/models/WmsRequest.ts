@@ -21,7 +21,7 @@ export const WmsRequest = {
     GetMap: 'GetMap',
     GetFeatureInfo: 'GetFeatureInfo',
     GetStyles: 'GetStyles',
-    GetLegendGraphic: 'GetLegendGraphic'
+    GetLegendGraphic: 'GetLegendGraphic',
 } as const;
 export type WmsRequest = typeof WmsRequest[keyof typeof WmsRequest];
 

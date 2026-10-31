@@ -14,13 +14,15 @@
  * @export
  */
 export const TaskStatusAbortedStatusEnum = {
-    Aborted: 'aborted'
+    Aborted: 'aborted',
 };
 /**
  * Check if a given object implements the TaskStatusAborted interface.
  */
 export function instanceOfTaskStatusAborted(value) {
     if (!('status' in value) || value['status'] === undefined)
+        return false;
+    if (value['status'] !== 'aborted')
         return false;
     if (!('cleanUp' in value) || value['cleanUp'] === undefined)
         return false;

@@ -23,13 +23,15 @@ const TimeInterval_1 = require("./TimeInterval");
  * @export
  */
 exports.TimeShiftParametersAbsoluteTypeEnum = {
-    Absolute: 'absolute'
+    Absolute: 'absolute',
 };
 /**
  * Check if a given object implements the TimeShiftParametersAbsolute interface.
  */
 function instanceOfTimeShiftParametersAbsolute(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'absolute')
         return false;
     if (!('timeInterval' in value) || value['timeInterval'] === undefined)
         return false;

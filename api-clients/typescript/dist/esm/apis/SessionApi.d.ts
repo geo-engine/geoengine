@@ -9,24 +9,50 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { AuthCodeRequestURL, AuthCodeResponse, STRectangle, UserCredentials, UserRegistration, UserSession } from '../models/index';
+import { type AuthCodeRequestURL } from '../models/AuthCodeRequestURL';
+import { type AuthCodeResponse } from '../models/AuthCodeResponse';
+import { type STRectangle } from '../models/STRectangle';
+import { type UserCredentials } from '../models/UserCredentials';
+import { type UserRegistration } from '../models/UserRegistration';
+import { type UserSession } from '../models/UserSession';
 export interface LoginHandlerRequest {
+    /**
+     *
+     */
     userCredentials: UserCredentials;
 }
 export interface OidcInitRequest {
+    /**
+     *
+     */
     redirectUri: string;
 }
 export interface OidcLoginRequest {
+    /**
+     *
+     */
     redirectUri: string;
+    /**
+     *
+     */
     authCodeResponse: AuthCodeResponse;
 }
 export interface RegisterUserHandlerRequest {
+    /**
+     *
+     */
     userRegistration: UserRegistration;
 }
 export interface SessionProjectHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 export interface SessionViewHandlerRequest {
+    /**
+     *
+     */
     sTRectangle: STRectangle;
 }
 /**

@@ -16,8 +16,6 @@
 export interface DataPathVolume {
     /**
      *
-     * @type {string}
-     * @memberof DataPathVolume
      */
     volume: string;
 }

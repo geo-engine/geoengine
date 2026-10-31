@@ -17,7 +17,7 @@
  * @export
  */
 export const WmsVersion = {
-    _130: '1.3.0'
+    _130: '1.3.0',
 } as const;
 export type WmsVersion = typeof WmsVersion[keyof typeof WmsVersion];
 

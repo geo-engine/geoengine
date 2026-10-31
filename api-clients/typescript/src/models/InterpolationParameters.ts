@@ -42,20 +42,14 @@ import {
 export interface InterpolationParameters {
     /**
      * Interpolation method.
-     * @type {InterpolationMethod}
-     * @memberof InterpolationParameters
      */
     interpolation: InterpolationMethod;
     /**
      * Target output resolution.
-     * @type {InterpolationResolution}
-     * @memberof InterpolationParameters
      */
     outputResolution: InterpolationResolution;
     /**
      * Optional reference point used to align the output grid origin.
-     * @type {Coordinate2D}
-     * @memberof InterpolationParameters
      */
     outputOriginReference?: Coordinate2D | null;
 }
@@ -83,7 +77,7 @@ export function InterpolationParametersFromJSONTyped(json: any, ignoreDiscrimina
         
         'interpolation': InterpolationMethodFromJSON(json['interpolation']),
         'outputResolution': InterpolationResolutionFromJSON(json['outputResolution']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
+        'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
     };
 }
 

@@ -35,7 +35,7 @@ function TimeDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bounds': json['bounds'] == null ? undefined : (0, TimeInterval_1.TimeIntervalFromJSON)(json['bounds']),
+        'bounds': json['bounds'] === undefined ? undefined : json['bounds'] === null ? null : (0, TimeInterval_1.TimeIntervalFromJSON)(json['bounds']),
         'dimension': (0, TimeDimension_1.TimeDimensionFromJSON)(json['dimension']),
     };
 }

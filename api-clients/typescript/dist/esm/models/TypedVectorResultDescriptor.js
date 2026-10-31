@@ -15,13 +15,15 @@ import { VectorResultDescriptorFromJSONTyped, VectorResultDescriptorToJSONTyped,
  * @export
  */
 export const TypedVectorResultDescriptorTypeEnum = {
-    Vector: 'vector'
+    Vector: 'vector',
 };
 /**
  * Check if a given object implements the TypedVectorResultDescriptor interface.
  */
 export function instanceOfTypedVectorResultDescriptor(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'vector')
         return false;
     return true;
 }

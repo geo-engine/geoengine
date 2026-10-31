@@ -19,8 +19,6 @@
 export interface Conformance {
     /**
      *
-     * @type {Array<string>}
-     * @memberof Conformance
      */
     conformsTo: Array<string>;
 }

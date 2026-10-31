@@ -23,13 +23,15 @@ const GdalSourceParameters_1 = require("./GdalSourceParameters");
  * @export
  */
 exports.GdalSourceTypeEnum = {
-    GdalSource: 'GdalSource'
+    GdalSource: 'GdalSource',
 };
 /**
  * Check if a given object implements the GdalSource interface.
  */
 function instanceOfGdalSource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalSource')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

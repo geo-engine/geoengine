@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface AggregationMin {
     /**
      * 
-     * @type {AggregationMinTypeEnum}
-     * @memberof AggregationMin
      */
     type: AggregationMinTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationMin
      */
     ignoreNoData: boolean;
 }
@@ -37,7 +33,7 @@ export interface AggregationMin {
  * @export
  */
 export const AggregationMinTypeEnum = {
-    Min: 'min'
+    Min: 'min',
 } as const;
 export type AggregationMinTypeEnum = typeof AggregationMinTypeEnum[keyof typeof AggregationMinTypeEnum];
 
@@ -47,6 +43,8 @@ export type AggregationMinTypeEnum = typeof AggregationMinTypeEnum[keyof typeof 
  */
 export function instanceOfAggregationMin(value: object): value is AggregationMin {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'min') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     return true;
 }

@@ -22,13 +22,15 @@ exports.OgrSourceDatasetTimeTypeNoneToJSONTyped = OgrSourceDatasetTimeTypeNoneTo
  * @export
  */
 exports.OgrSourceDatasetTimeTypeNoneTypeEnum = {
-    None: 'none'
+    None: 'none',
 };
 /**
  * Check if a given object implements the OgrSourceDatasetTimeTypeNone interface.
  */
 function instanceOfOgrSourceDatasetTimeTypeNone(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'none')
         return false;
     return true;
 }

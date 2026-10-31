@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { DerivedNumber } from './DerivedNumber';
 import {
     instanceOfDerivedNumber,
@@ -61,9 +62,9 @@ export function NumberParamToJSONTyped(value?: NumberParam | null, ignoreDiscrim
     }
     switch (value['type']) {
         case 'derived':
-            return Object.assign({}, DerivedNumberToJSON(value), { type: 'derived' } as const);
+            return Object.assign({}, DerivedNumberToJSON(value), { 'type': 'derived' } as const);
         case 'static':
-            return Object.assign({}, StaticNumberToJSON(value), { type: 'static' } as const);
+            return Object.assign({}, StaticNumberToJSON(value), { 'type': 'static' } as const);
         default:
             return value;
     }

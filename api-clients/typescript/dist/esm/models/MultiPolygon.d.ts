@@ -17,8 +17,6 @@ import type { Coordinate2D } from './Coordinate2D';
 export interface MultiPolygon {
     /**
      *
-     * @type {Array<Array<Array<Coordinate2D>>>}
-     * @memberof MultiPolygon
      */
     polygons: Array<Array<Array<Coordinate2D>>>;
 }

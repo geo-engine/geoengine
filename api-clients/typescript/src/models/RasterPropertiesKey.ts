@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface RasterPropertiesKey {
     /**
      * 
-     * @type {string}
-     * @memberof RasterPropertiesKey
      */
     domain?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof RasterPropertiesKey
      */
     key: string;
 }
@@ -50,7 +46,7 @@ export function RasterPropertiesKeyFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'domain': json['domain'] == null ? undefined : json['domain'],
+        'domain': json['domain'] === undefined ? undefined : json['domain'] === null ? null : json['domain'],
         'key': json['key'],
     };
 }

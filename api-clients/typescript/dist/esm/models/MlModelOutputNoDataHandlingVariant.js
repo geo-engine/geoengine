@@ -16,7 +16,7 @@
  */
 export const MlModelOutputNoDataHandlingVariant = {
     EncodedNoData: 'encodedNoData',
-    NanIsNoData: 'nanIsNoData'
+    NanIsNoData: 'nanIsNoData',
 };
 export function instanceOfMlModelOutputNoDataHandlingVariant(value) {
     for (const key in MlModelOutputNoDataHandlingVariant) {

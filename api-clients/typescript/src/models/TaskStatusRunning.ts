@@ -20,44 +20,30 @@ import { mapValues } from '../runtime';
 export interface TaskStatusRunning {
     /**
      * 
-     * @type {TaskStatusRunningStatusEnum}
-     * @memberof TaskStatusRunning
      */
     status: TaskStatusRunningStatusEnum;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusRunning
      */
     taskType: string;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusRunning
      */
     description?: string;
     /**
      * 
-     * @type {any}
-     * @memberof TaskStatusRunning
      */
     info?: any | null;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusRunning
      */
     pctComplete: string;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusRunning
      */
     estimatedTimeRemaining: string;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusRunning
      */
     timeStarted: string;
 }
@@ -67,7 +53,7 @@ export interface TaskStatusRunning {
  * @export
  */
 export const TaskStatusRunningStatusEnum = {
-    Running: 'running'
+    Running: 'running',
 } as const;
 export type TaskStatusRunningStatusEnum = typeof TaskStatusRunningStatusEnum[keyof typeof TaskStatusRunningStatusEnum];
 
@@ -77,6 +63,8 @@ export type TaskStatusRunningStatusEnum = typeof TaskStatusRunningStatusEnum[key
  */
 export function instanceOfTaskStatusRunning(value: object): value is TaskStatusRunning {
     if (!('status' in value) || value['status'] === undefined) return false;
+    if (value['status'] !== 'running') return false;
+    
     if (!('taskType' in value) || value['taskType'] === undefined) return false;
     if (!('pctComplete' in value) || value['pctComplete'] === undefined) return false;
     if (!('estimatedTimeRemaining' in value) || value['estimatedTimeRemaining'] === undefined) return false;
@@ -97,7 +85,7 @@ export function TaskStatusRunningFromJSONTyped(json: any, ignoreDiscriminator: b
         'status': json['status'],
         'taskType': json['taskType'],
         'description': json['description'] == null ? undefined : json['description'],
-        'info': json['info'] == null ? undefined : json['info'],
+        'info': json['info'] === undefined ? undefined : json['info'] === null ? null : json['info'],
         'pctComplete': json['pctComplete'],
         'estimatedTimeRemaining': json['estimatedTimeRemaining'],
         'timeStarted': json['timeStarted'],

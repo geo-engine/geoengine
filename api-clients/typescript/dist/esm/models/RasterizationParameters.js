@@ -33,7 +33,7 @@ export function RasterizationParametersFromJSONTyped(json, ignoreDiscriminator) 
     return {
         'spatialResolution': SpatialResolutionFromJSON(json['spatialResolution']),
         'originCoordinate': Coordinate2DFromJSON(json['originCoordinate']),
-        'densityParams': json['densityParams'] == null ? undefined : DensityParamsFromJSON(json['densityParams']),
+        'densityParams': json['densityParams'] === undefined ? undefined : json['densityParams'] === null ? null : DensityParamsFromJSON(json['densityParams']),
     };
 }
 export function RasterizationParametersToJSON(json) {

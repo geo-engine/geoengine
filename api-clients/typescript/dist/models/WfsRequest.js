@@ -24,7 +24,7 @@ exports.WfsRequestToJSONTyped = WfsRequestToJSONTyped;
  */
 exports.WfsRequest = {
     GetCapabilities: 'GetCapabilities',
-    GetFeature: 'GetFeature'
+    GetFeature: 'GetFeature',
 };
 function instanceOfWfsRequest(value) {
     for (const key in exports.WfsRequest) {

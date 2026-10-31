@@ -40,7 +40,7 @@ function RasterizationParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'spatialResolution': (0, SpatialResolution_1.SpatialResolutionFromJSON)(json['spatialResolution']),
         'originCoordinate': (0, Coordinate2D_1.Coordinate2DFromJSON)(json['originCoordinate']),
-        'densityParams': json['densityParams'] == null ? undefined : (0, DensityParams_1.DensityParamsFromJSON)(json['densityParams']),
+        'densityParams': json['densityParams'] === undefined ? undefined : json['densityParams'] === null ? null : (0, DensityParams_1.DensityParamsFromJSON)(json['densityParams']),
     };
 }
 function RasterizationParametersToJSON(json) {

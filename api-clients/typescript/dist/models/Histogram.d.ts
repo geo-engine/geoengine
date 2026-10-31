@@ -33,20 +33,14 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 export interface Histogram {
     /**
      *
-     * @type {HistogramTypeEnum}
-     * @memberof Histogram
      */
     type: HistogramTypeEnum;
     /**
      *
-     * @type {HistogramParameters}
-     * @memberof Histogram
      */
     params: HistogramParameters;
     /**
      *
-     * @type {SingleRasterOrVectorSource}
-     * @memberof Histogram
      */
     sources: SingleRasterOrVectorSource;
 }

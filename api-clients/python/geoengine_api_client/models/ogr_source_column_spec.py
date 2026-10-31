@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.format_specifics import FormatSpecifics
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class OgrSourceColumnSpec(BaseModel):
     """
@@ -39,7 +40,8 @@ class OgrSourceColumnSpec(BaseModel):
     __properties: ClassVar[List[str]] = ["formatSpecifics", "x", "y", "int", "float", "text", "bool", "datetime", "rename"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -51,8 +53,7 @@ class OgrSourceColumnSpec(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -89,6 +90,11 @@ class OgrSourceColumnSpec(BaseModel):
         # and model_fields_set contains the field
         if self.y is None and "y" in self.model_fields_set:
             _dict['y'] = None
+
+        # set to None if rename (nullable) is None
+        # and model_fields_set contains the field
+        if self.rename is None and "rename" in self.model_fields_set:
+            _dict['rename'] = None
 
         return _dict
 

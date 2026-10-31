@@ -20,7 +20,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { MlModelFromJSON, MlModelToJSON, MlModelNameResponseFromJSON, } from '../models/index';
+import { MlModelFromJSON, MlModelToJSON, } from '../models/MlModel';
+import { MlModelNameResponseFromJSON, } from '../models/MlModelNameResponse';
 /**
  *
  */
@@ -90,7 +91,7 @@ export class MLApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ml/models/{model_name}`;
-            urlPath = urlPath.replace(`{${"model_name"}}`, encodeURIComponent(String(requestParameters['modelName'])));
+            urlPath = urlPath.replace('{model_name}', encodeURIComponent(String(requestParameters['modelName'])));
             return {
                 path: urlPath,
                 method: 'GET',

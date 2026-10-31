@@ -14,13 +14,15 @@
  * @export
  */
 export const SlopeOffsetSelectionAutoTypeEnum = {
-    Auto: 'auto'
+    Auto: 'auto',
 };
 /**
  * Check if a given object implements the SlopeOffsetSelectionAuto interface.
  */
 export function instanceOfSlopeOffsetSelectionAuto(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'auto')
         return false;
     return true;
 }

@@ -16,14 +16,10 @@
 export interface AggregationMin {
     /**
      *
-     * @type {AggregationMinTypeEnum}
-     * @memberof AggregationMin
      */
     type: AggregationMinTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationMin
      */
     ignoreNoData: boolean;
 }

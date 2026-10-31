@@ -25,11 +25,11 @@ Name | Type | Description | Notes
 **max_tile_matrix** | Option<**String**> | [`TileMatrix`] identifier associated with the minScaleDenominator | [optional]
 **min_tile_matrix** | Option<**String**> | [`TileMatrix`] identifier associated with the maxScaleDenominator | [optional]
 **bounding_box** | Option<[**models::BoundingBox2D**](BoundingBox2D.md)> | Minimum bounding rectangle surrounding the layer | [optional]
-**created** | Option<**String**> | When the layer was first produced | [optional]
-**updated** | Option<**String**> | Last layer change/revision | [optional]
+**created** | Option<**chrono::DateTime<chrono::FixedOffset>**> | When the layer was first produced | [optional]
+**updated** | Option<**chrono::DateTime<chrono::FixedOffset>**> | Last layer change/revision | [optional]
 **style** | Option<[**models::Style**](Style.md)> | Style used to generate the layer in the tileset | [optional]
 **geo_data_classes** | Option<**Vec<String>**> | URI identifying a class of data contained in this layer (useful to determine compatibility with styles or processes) | [optional]
-**properties_schema** | Option<**serde_json::Value**> |  | [optional]
+**properties_schema** | Option<**serde_json::Value**> | Properties represented by the features in this layer. Can be the attributes of a feature dataset (datatype=geometries) or the rangeType of a coverage (datatype=coverage) | [optional]
 **links** | Option<[**Vec<models::Link>**](Link.md)> | Links related to this layer. Possible link 'rel' values are: 'geodata' for a URL pointing to the collection of geospatial data. | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

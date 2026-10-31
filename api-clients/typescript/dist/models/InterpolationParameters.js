@@ -40,7 +40,7 @@ function InterpolationParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'interpolation': (0, InterpolationMethod_1.InterpolationMethodFromJSON)(json['interpolation']),
         'outputResolution': (0, InterpolationResolution_1.InterpolationResolutionFromJSON)(json['outputResolution']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : (0, Coordinate2D_1.Coordinate2DFromJSON)(json['outputOriginReference']),
+        'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : (0, Coordinate2D_1.Coordinate2DFromJSON)(json['outputOriginReference']),
     };
 }
 function InterpolationParametersToJSON(json) {

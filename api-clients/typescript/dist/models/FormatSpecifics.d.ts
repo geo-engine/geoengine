@@ -17,8 +17,6 @@ import type { FormatSpecificsCsv } from './FormatSpecificsCsv';
 export interface FormatSpecifics {
     /**
      *
-     * @type {FormatSpecificsCsv}
-     * @memberof FormatSpecifics
      */
     csv: FormatSpecificsCsv;
 }

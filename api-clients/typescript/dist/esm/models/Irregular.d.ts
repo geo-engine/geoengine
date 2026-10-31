@@ -16,8 +16,6 @@
 export interface Irregular {
     /**
      *
-     * @type {IrregularTypeEnum}
-     * @memberof Irregular
      */
     type: IrregularTypeEnum;
 }

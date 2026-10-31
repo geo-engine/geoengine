@@ -19,11 +19,11 @@ import { SpatialPartition2DFromJSON, SpatialPartition2DToJSON, } from './Spatial
 export function instanceOfAddDatasetTile(value) {
     if (!('time' in value) || value['time'] === undefined)
         return false;
-    if (!('spatialPartition' in value) || value['spatialPartition'] === undefined)
+    if ((!('spatialPartition' in value) && !('spatial_partition' in value)) || (value['spatialPartition'] === undefined && value['spatial_partition'] === undefined))
         return false;
     if (!('band' in value) || value['band'] === undefined)
         return false;
-    if (!('zIndex' in value) || value['zIndex'] === undefined)
+    if ((!('zIndex' in value) && !('z_index' in value)) || (value['zIndex'] === undefined && value['z_index'] === undefined))
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

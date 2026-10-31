@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface VolumeFileLayersResponse {
     /**
      * 
-     * @type {Array<string>}
-     * @memberof VolumeFileLayersResponse
      */
     layers: Array<string>;
 }

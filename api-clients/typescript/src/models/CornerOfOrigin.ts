@@ -18,7 +18,7 @@
  */
 export const CornerOfOrigin = {
     TopLeft: 'topLeft',
-    BottomLeft: 'bottomLeft'
+    BottomLeft: 'bottomLeft',
 } as const;
 export type CornerOfOrigin = typeof CornerOfOrigin[keyof typeof CornerOfOrigin];
 

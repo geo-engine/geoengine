@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { LinearGradient } from './LinearGradient';
 import {
     instanceOfLinearGradient,
@@ -71,11 +72,11 @@ export function ColorizerToJSONTyped(value?: Colorizer | null, ignoreDiscriminat
     }
     switch (value['type']) {
         case 'linearGradient':
-            return Object.assign({}, LinearGradientToJSON(value), { type: 'linearGradient' } as const);
+            return Object.assign({}, LinearGradientToJSON(value), { 'type': 'linearGradient' } as const);
         case 'logarithmicGradient':
-            return Object.assign({}, LogarithmicGradientToJSON(value), { type: 'logarithmicGradient' } as const);
+            return Object.assign({}, LogarithmicGradientToJSON(value), { 'type': 'logarithmicGradient' } as const);
         case 'palette':
-            return Object.assign({}, PaletteColorizerToJSON(value), { type: 'palette' } as const);
+            return Object.assign({}, PaletteColorizerToJSON(value), { 'type': 'palette' } as const);
         default:
             return value;
     }

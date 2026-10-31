@@ -726,6 +726,8 @@ pub mod tile_point;
 pub use self::tile_point::TilePoint;
 pub mod tile_set;
 pub use self::tile_set::TileSet;
+pub mod tile_set_data_type;
+pub use self::tile_set_data_type::TileSetDataType;
 pub mod tile_set_item;
 pub use self::tile_set_item::TileSetItem;
 pub mod tile_sets;

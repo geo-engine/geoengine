@@ -28,20 +28,14 @@ import {
 export interface SingleBandRasterColorizer {
     /**
      * 
-     * @type {SingleBandRasterColorizerTypeEnum}
-     * @memberof SingleBandRasterColorizer
      */
     type: SingleBandRasterColorizerTypeEnum;
     /**
      * 
-     * @type {number}
-     * @memberof SingleBandRasterColorizer
      */
     band: number;
     /**
      * 
-     * @type {Colorizer}
-     * @memberof SingleBandRasterColorizer
      */
     bandColorizer: Colorizer;
 }
@@ -51,7 +45,7 @@ export interface SingleBandRasterColorizer {
  * @export
  */
 export const SingleBandRasterColorizerTypeEnum = {
-    SingleBand: 'singleBand'
+    SingleBand: 'singleBand',
 } as const;
 export type SingleBandRasterColorizerTypeEnum = typeof SingleBandRasterColorizerTypeEnum[keyof typeof SingleBandRasterColorizerTypeEnum];
 
@@ -61,6 +55,8 @@ export type SingleBandRasterColorizerTypeEnum = typeof SingleBandRasterColorizer
  */
 export function instanceOfSingleBandRasterColorizer(value: object): value is SingleBandRasterColorizer {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'singleBand') return false;
+    
     if (!('band' in value) || value['band'] === undefined) return false;
     if (!('bandColorizer' in value) || value['bandColorizer'] === undefined) return false;
     return true;

@@ -20,7 +20,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { CreateProjectToJSON, IdResponseFromJSON, ProjectFromJSON, ProjectListingFromJSON, ProjectVersionFromJSON, UpdateProjectToJSON, } from '../models/index';
+import { CreateProjectToJSON, } from '../models/CreateProject';
+import { IdResponseFromJSON, } from '../models/IdResponse';
+import { ProjectFromJSON, } from '../models/Project';
+import { ProjectListingFromJSON, } from '../models/ProjectListing';
+import { ProjectVersionFromJSON, } from '../models/ProjectVersion';
+import { UpdateProjectToJSON, } from '../models/UpdateProject';
 /**
  *
  */
@@ -90,7 +95,7 @@ export class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -141,9 +146,9 @@ export class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/projects`;
-            urlPath = urlPath.replace(`{${"order"}}`, encodeURIComponent(String(requestParameters['order'])));
-            urlPath = urlPath.replace(`{${"offset"}}`, encodeURIComponent(String(requestParameters['offset'])));
-            urlPath = urlPath.replace(`{${"limit"}}`, encodeURIComponent(String(requestParameters['limit'])));
+            urlPath = urlPath.replace('{order}', encodeURIComponent(String(requestParameters['order'])));
+            urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
+            urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -189,7 +194,7 @@ export class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -238,8 +243,8 @@ export class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}/{version}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
-            urlPath = urlPath.replace(`{${"version"}}`, encodeURIComponent(String(requestParameters['version'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{version}', encodeURIComponent(String(requestParameters['version'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -285,7 +290,7 @@ export class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}/versions`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -335,7 +340,7 @@ export class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'PATCH',

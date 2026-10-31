@@ -15,13 +15,15 @@ import { BreakpointFromJSON, BreakpointToJSON, } from './Breakpoint';
  * @export
  */
 export const LinearGradientTypeEnum = {
-    LinearGradient: 'linearGradient'
+    LinearGradient: 'linearGradient',
 };
 /**
  * Check if a given object implements the LinearGradient interface.
  */
 export function instanceOfLinearGradient(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'linearGradient')
         return false;
     if (!('breakpoints' in value) || value['breakpoints'] === undefined)
         return false;

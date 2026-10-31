@@ -26,6 +26,7 @@ from geoengine_api_client.models.tile_matrix_set_id import TileMatrixSetId
 from geoengine_api_client.models.tiles_crs import TilesCrs
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class TileMatrixSet(BaseModel):
     """
@@ -44,7 +45,8 @@ class TileMatrixSet(BaseModel):
     __properties: ClassVar[List[str]] = ["id", "title", "description", "keywords", "uri", "crs", "orderedAxes", "wellKnownScaleSet", "boundingBox", "tileMatrices"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -56,8 +58,7 @@ class TileMatrixSet(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -95,8 +96,7 @@ class TileMatrixSet(BaseModel):
         _items = []
         if self.tile_matrices:
             for _item_tile_matrices in self.tile_matrices:
-                if _item_tile_matrices:
-                    _items.append(_item_tile_matrices.to_dict())
+                _items.append(_item_tile_matrices.to_dict() if _item_tile_matrices is not None else None)
             _dict['tileMatrices'] = _items
         return _dict
 

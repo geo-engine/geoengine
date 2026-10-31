@@ -20,16 +20,12 @@ import { mapValues } from '../runtime';
 export interface GdalSourceParameters {
     /**
      * Dataset name or identifier to be loaded.
-     * @type {string}
-     * @memberof GdalSourceParameters
      */
     data: string;
     /**
      * *Optional*: overview level to use.
      * 
      * If not provided, the data source will determine the resolution, i.e., uses its native resolution.
-     * @type {number}
-     * @memberof GdalSourceParameters
      */
     overviewLevel?: number | null;
 }
@@ -53,7 +49,7 @@ export function GdalSourceParametersFromJSONTyped(json: any, ignoreDiscriminator
     return {
         
         'data': json['data'],
-        'overviewLevel': json['overviewLevel'] == null ? undefined : json['overviewLevel'],
+        'overviewLevel': json['overviewLevel'] === undefined ? undefined : json['overviewLevel'] === null ? null : json['overviewLevel'],
     };
 }
 

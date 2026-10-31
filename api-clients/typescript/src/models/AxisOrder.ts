@@ -18,7 +18,7 @@
  */
 export const AxisOrder = {
     NorthEast: 'northEast',
-    EastNorth: 'eastNorth'
+    EastNorth: 'eastNorth',
 } as const;
 export type AxisOrder = typeof AxisOrder[keyof typeof AxisOrder];
 

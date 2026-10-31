@@ -37,9 +37,9 @@ export function DownsamplingResolutionToJSONTyped(value, ignoreDiscriminator = f
     }
     switch (value['type']) {
         case 'fraction':
-            return Object.assign({}, DownsamplingResolutionFractionToJSON(value), { type: 'fraction' });
+            return Object.assign({}, DownsamplingResolutionFractionToJSON(value), { 'type': 'fraction' });
         case 'resolution':
-            return Object.assign({}, DownsamplingResolutionResolutionToJSON(value), { type: 'resolution' });
+            return Object.assign({}, DownsamplingResolutionResolutionToJSON(value), { 'type': 'resolution' });
         default:
             return value;
     }

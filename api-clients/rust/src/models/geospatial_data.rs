@@ -76,16 +76,17 @@ pub struct GeospatialData {
     pub bounding_box: Option<Box<models::BoundingBox2D>>,
     /// When the layer was first produced
     #[serde(rename = "created", skip_serializing_if = "Option::is_none")]
-    pub created: Option<String>,
+    pub created: Option<chrono::DateTime<chrono::FixedOffset>>,
     /// Last layer change/revision
     #[serde(rename = "updated", skip_serializing_if = "Option::is_none")]
-    pub updated: Option<String>,
+    pub updated: Option<chrono::DateTime<chrono::FixedOffset>>,
     /// Style used to generate the layer in the tileset
     #[serde(rename = "style", skip_serializing_if = "Option::is_none")]
     pub style: Option<Box<models::Style>>,
     /// URI identifying a class of data contained in this layer (useful to determine compatibility with styles or processes)
     #[serde(rename = "geoDataClasses", skip_serializing_if = "Option::is_none")]
     pub geo_data_classes: Option<Vec<String>>,
+    /// Properties represented by the features in this layer. Can be the attributes of a feature dataset (datatype=geometries) or the rangeType of a coverage (datatype=coverage)
     #[serde(rename = "propertiesSchema", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub properties_schema: Option<Option<serde_json::Value>>,
     /// Links related to this layer. Possible link 'rel' values are: 'geodata' for a URL pointing to the collection of geospatial data.

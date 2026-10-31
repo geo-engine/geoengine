@@ -16,13 +16,15 @@ import { SingleRasterSourceFromJSON, SingleRasterSourceToJSON, } from './SingleR
  * @export
  */
 export const TemporalRasterAggregationTypeEnum = {
-    TemporalRasterAggregation: 'TemporalRasterAggregation'
+    TemporalRasterAggregation: 'TemporalRasterAggregation',
 };
 /**
  * Check if a given object implements the TemporalRasterAggregation interface.
  */
 export function instanceOfTemporalRasterAggregation(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'TemporalRasterAggregation')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

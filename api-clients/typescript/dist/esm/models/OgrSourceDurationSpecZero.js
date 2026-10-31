@@ -14,13 +14,15 @@
  * @export
  */
 export const OgrSourceDurationSpecZeroTypeEnum = {
-    Zero: 'zero'
+    Zero: 'zero',
 };
 /**
  * Check if a given object implements the OgrSourceDurationSpecZero interface.
  */
 export function instanceOfOgrSourceDurationSpecZero(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'zero')
         return false;
     return true;
 }

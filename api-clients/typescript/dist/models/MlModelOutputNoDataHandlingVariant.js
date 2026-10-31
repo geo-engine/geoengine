@@ -24,7 +24,7 @@ exports.MlModelOutputNoDataHandlingVariantToJSONTyped = MlModelOutputNoDataHandl
  */
 exports.MlModelOutputNoDataHandlingVariant = {
     EncodedNoData: 'encodedNoData',
-    NanIsNoData: 'nanIsNoData'
+    NanIsNoData: 'nanIsNoData',
 };
 function instanceOfMlModelOutputNoDataHandlingVariant(value) {
     for (const key in exports.MlModelOutputNoDataHandlingVariant) {

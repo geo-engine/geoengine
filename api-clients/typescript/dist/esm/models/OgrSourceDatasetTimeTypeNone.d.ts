@@ -16,8 +16,6 @@
 export interface OgrSourceDatasetTimeTypeNone {
     /**
      *
-     * @type {OgrSourceDatasetTimeTypeNoneTypeEnum}
-     * @memberof OgrSourceDatasetTimeTypeNone
      */
     type: OgrSourceDatasetTimeTypeNoneTypeEnum;
 }

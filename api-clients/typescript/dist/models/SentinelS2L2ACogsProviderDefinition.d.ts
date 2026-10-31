@@ -18,62 +18,42 @@ import type { StacQueryBuffer } from './StacQueryBuffer';
 export interface SentinelS2L2ACogsProviderDefinition {
     /**
      *
-     * @type {SentinelS2L2ACogsProviderDefinitionTypeEnum}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     type: SentinelS2L2ACogsProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     apiUrl: string;
     /**
      *
-     * @type {StacApiRetries}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     stacApiRetries?: StacApiRetries;
     /**
      *
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     gdalRetries?: number;
     /**
      *
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     cacheTtl?: number | null;
     /**
      *
-     * @type {StacQueryBuffer}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     queryBuffer?: StacQueryBuffer;
 }

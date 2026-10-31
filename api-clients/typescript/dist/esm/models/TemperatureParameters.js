@@ -24,7 +24,7 @@ export function TemperatureParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'forceSatellite': json['forceSatellite'] == null ? undefined : json['forceSatellite'],
+        'forceSatellite': json['forceSatellite'] === undefined ? undefined : json['forceSatellite'] === null ? null : json['forceSatellite'],
     };
 }
 export function TemperatureParametersToJSON(json) {

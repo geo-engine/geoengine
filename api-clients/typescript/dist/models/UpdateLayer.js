@@ -42,7 +42,7 @@ function UpdateLayerFromJSONTyped(json, ignoreDiscriminator) {
         'name': json['name'],
         'description': json['description'],
         'processingGraph': (0, ProcessingGraph_1.ProcessingGraphFromJSON)(json['processingGraph']),
-        'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };

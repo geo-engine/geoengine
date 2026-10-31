@@ -49,44 +49,30 @@ import {
 export interface UpdateProject {
     /**
      * 
-     * @type {string}
-     * @memberof UpdateProject
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof UpdateProject
      */
     name?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof UpdateProject
      */
     description?: string | null;
     /**
      * 
-     * @type {Array<LayerUpdate>}
-     * @memberof UpdateProject
      */
     layers?: Array<LayerUpdate> | null;
     /**
      * 
-     * @type {Array<PlotUpdate>}
-     * @memberof UpdateProject
      */
     plots?: Array<PlotUpdate> | null;
     /**
      * 
-     * @type {STRectangle}
-     * @memberof UpdateProject
      */
     bounds?: STRectangle | null;
     /**
      * 
-     * @type {TimeStep}
-     * @memberof UpdateProject
      */
     timeStep?: TimeStep | null;
 }
@@ -110,12 +96,12 @@ export function UpdateProjectFromJSONTyped(json: any, ignoreDiscriminator: boole
     return {
         
         'id': json['id'],
-        'name': json['name'] == null ? undefined : json['name'],
-        'description': json['description'] == null ? undefined : json['description'],
-        'layers': json['layers'] == null ? undefined : ((json['layers'] as Array<any>).map(LayerUpdateFromJSON)),
-        'plots': json['plots'] == null ? undefined : ((json['plots'] as Array<any>).map(PlotUpdateFromJSON)),
-        'bounds': json['bounds'] == null ? undefined : STRectangleFromJSON(json['bounds']),
-        'timeStep': json['timeStep'] == null ? undefined : TimeStepFromJSON(json['timeStep']),
+        'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
+        'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
+        'layers': json['layers'] === undefined ? undefined : json['layers'] === null ? null : ((json['layers'] as Array<any>).map(LayerUpdateFromJSON)),
+        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : ((json['plots'] as Array<any>).map(PlotUpdateFromJSON)),
+        'bounds': json['bounds'] === undefined ? undefined : json['bounds'] === null ? null : STRectangleFromJSON(json['bounds']),
+        'timeStep': json['timeStep'] === undefined ? undefined : json['timeStep'] === null ? null : TimeStepFromJSON(json['timeStep']),
     };
 }
 

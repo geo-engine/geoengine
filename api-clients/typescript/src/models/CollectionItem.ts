@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { LayerCollectionListing } from './LayerCollectionListing';
 import {
     instanceOfLayerCollectionListing,
@@ -61,9 +62,9 @@ export function CollectionItemToJSONTyped(value?: CollectionItem | null, ignoreD
     }
     switch (value['type']) {
         case 'collection':
-            return Object.assign({}, LayerCollectionListingToJSON(value), { type: 'collection' } as const);
+            return Object.assign({}, LayerCollectionListingToJSON(value), { 'type': 'collection' } as const);
         case 'layer':
-            return Object.assign({}, LayerListingToJSON(value), { type: 'layer' } as const);
+            return Object.assign({}, LayerListingToJSON(value), { 'type': 'layer' } as const);
         default:
             return value;
     }

@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface LayerProviderListing {
     /**
      * 
-     * @type {string}
-     * @memberof LayerProviderListing
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof LayerProviderListing
      */
     name: string;
     /**
      * 
-     * @type {number}
-     * @memberof LayerProviderListing
      */
     priority: number;
 }

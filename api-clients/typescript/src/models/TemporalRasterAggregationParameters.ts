@@ -45,28 +45,20 @@ export interface TemporalRasterAggregationParameters {
      * 
      * Encountering NO DATA makes the aggregation result NO DATA unless
      * `ignoreNoData` is `true` for the selected aggregation variant.
-     * @type {Aggregation}
-     * @memberof TemporalRasterAggregationParameters
      */
     aggregation: Aggregation;
     /**
      * Window size and granularity for the output time series.
-     * @type {TimeStep}
-     * @memberof TemporalRasterAggregationParameters
      */
     window: TimeStep;
     /**
      * Optional reference timestamp used as the anchor for window boundaries.
      * 
      * If omitted, windows are anchored at `1970-01-01T00:00:00Z`.
-     * @type {number}
-     * @memberof TemporalRasterAggregationParameters
      */
     windowReference?: number | null;
     /**
      * Optional output raster data type.
-     * @type {RasterDataType}
-     * @memberof TemporalRasterAggregationParameters
      */
     outputType?: RasterDataType | null;
 }
@@ -94,8 +86,8 @@ export function TemporalRasterAggregationParametersFromJSONTyped(json: any, igno
         
         'aggregation': AggregationFromJSON(json['aggregation']),
         'window': TimeStepFromJSON(json['window']),
-        'windowReference': json['windowReference'] == null ? undefined : json['windowReference'],
-        'outputType': json['outputType'] == null ? undefined : RasterDataTypeFromJSON(json['outputType']),
+        'windowReference': json['windowReference'] === undefined ? undefined : json['windowReference'] === null ? null : json['windowReference'],
+        'outputType': json['outputType'] === undefined ? undefined : json['outputType'] === null ? null : RasterDataTypeFromJSON(json['outputType']),
     };
 }
 

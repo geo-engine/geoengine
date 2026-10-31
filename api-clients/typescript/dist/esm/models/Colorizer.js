@@ -40,11 +40,11 @@ export function ColorizerToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'linearGradient':
-            return Object.assign({}, LinearGradientToJSON(value), { type: 'linearGradient' });
+            return Object.assign({}, LinearGradientToJSON(value), { 'type': 'linearGradient' });
         case 'logarithmicGradient':
-            return Object.assign({}, LogarithmicGradientToJSON(value), { type: 'logarithmicGradient' });
+            return Object.assign({}, LogarithmicGradientToJSON(value), { 'type': 'logarithmicGradient' });
         case 'palette':
-            return Object.assign({}, PaletteColorizerToJSON(value), { type: 'palette' });
+            return Object.assign({}, PaletteColorizerToJSON(value), { 'type': 'palette' });
         default:
             return value;
     }

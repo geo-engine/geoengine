@@ -23,13 +23,15 @@ const GdalSourceParameters_1 = require("./GdalSourceParameters");
  * @export
  */
 exports.MultiBandGdalSourceTypeEnum = {
-    MultiBandGdalSource: 'MultiBandGdalSource'
+    MultiBandGdalSource: 'MultiBandGdalSource',
 };
 /**
  * Check if a given object implements the MultiBandGdalSource interface.
  */
 function instanceOfMultiBandGdalSource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'MultiBandGdalSource')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

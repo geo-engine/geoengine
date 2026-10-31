@@ -20,8 +20,6 @@ import type { TileMatrixSetItem } from './TileMatrixSetItem';
 export interface TileMatrixSets {
     /**
      *
-     * @type {Array<TileMatrixSetItem>}
-     * @memberof TileMatrixSets
      */
     tileMatrixSets: Array<TileMatrixSetItem>;
 }

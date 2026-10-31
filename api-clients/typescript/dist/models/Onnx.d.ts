@@ -18,20 +18,14 @@ import type { OnnxParameters } from './OnnxParameters';
 export interface Onnx {
     /**
      *
-     * @type {OnnxTypeEnum}
-     * @memberof Onnx
      */
     type: OnnxTypeEnum;
     /**
      *
-     * @type {OnnxParameters}
-     * @memberof Onnx
      */
     params: OnnxParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof Onnx
      */
     sources: SingleRasterSource;
 }

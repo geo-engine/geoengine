@@ -28,8 +28,6 @@ import {
 export interface SingleRasterOrVectorSource {
     /**
      * 
-     * @type {SingleRasterOrVectorOperator}
-     * @memberof SingleRasterOrVectorSource
      */
     source: SingleRasterOrVectorOperator;
 }

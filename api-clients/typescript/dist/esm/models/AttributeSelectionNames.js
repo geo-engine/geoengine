@@ -14,13 +14,15 @@
  * @export
  */
 export const AttributeSelectionNamesTypeEnum = {
-    Names: 'names'
+    Names: 'names',
 };
 /**
  * Check if a given object implements the AttributeSelectionNames interface.
  */
 export function instanceOfAttributeSelectionNames(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'names')
         return false;
     if (!('values' in value) || value['values'] === undefined)
         return false;

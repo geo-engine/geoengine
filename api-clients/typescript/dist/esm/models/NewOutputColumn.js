@@ -14,7 +14,7 @@
  * @export
  */
 export const NewOutputColumnTypeEnum = {
-    Column: 'column'
+    Column: 'column',
 };
 /**
  * Check if a given object implements the NewOutputColumn interface.
@@ -23,6 +23,8 @@ export function instanceOfNewOutputColumn(value) {
     if (!('value' in value) || value['value'] === undefined)
         return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'column')
         return false;
     return true;
 }

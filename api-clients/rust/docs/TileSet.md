@@ -7,7 +7,7 @@ Name | Type | Description | Notes
 **title** | Option<**String**> | A title for this tileset | [optional]
 **description** | Option<**String**> | Brief narrative description of this tile set | [optional]
 **keywords** | Option<**Vec<String>**> | Unordered list of one or more commonly used or formalized word(s) or phrase(s) used to describe a [`TileSet`] | [optional]
-**data_type** | [**models::GeospatialDataDataType**](GeospatialDataDataType.md) |  | 
+**data_type** | [**models::TileSetDataType**](TileSetDataType.md) |  | 
 **tile_matrix_set_uri** | Option<**String**> | Reference to a Tile Matrix Set on the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on the definition server. | [optional]
 **tile_matrix_set_limits** | Option<[**Vec<models::TileMatrixLimits>**](TileMatrixLimits.md)> | Limits for the [`TileRow`] and [`TileCol`] values for each [`TileMatrix`] in the [`TileMatrixSet`]. If missing, there are no limits other that the ones imposed by the [`TileMatrixSet`]. If present the tile matrices listed are limited and the rest not available at all | [optional]
 **crs** | [**models::TilesCrs**](TilesCrs.md) | Coordinate Reference System (CRS) | 
@@ -21,8 +21,8 @@ Name | Type | Description | Notes
 **license** | Option<**String**> | License applicable to the tiles | [optional]
 **access_constraints** | Option<[**models::AccessConstraints**](AccessConstraints.md)> | Restrictions on the availability of the Tile Set that the user needs to be aware of before using or redistributing the Tile Set | [optional]
 **version** | Option<**String**> | Version of the Tile Set. Changes if the data behind the tiles has been changed | [optional]
-**created** | Option<**String**> | When the Tile Set was first produced | [optional]
-**updated** | Option<**String**> | Last Tile Set change/revision | [optional]
+**created** | Option<**chrono::DateTime<chrono::FixedOffset>**> | When the Tile Set was first produced | [optional]
+**updated** | Option<**chrono::DateTime<chrono::FixedOffset>**> | Last Tile Set change/revision | [optional]
 **point_of_contact** | Option<**String**> | Useful information to contact the authors or custodians for the Tile Set | [optional]
 **media_types** | Option<**Vec<String>**> | Media types available for the tiles | [optional]
 

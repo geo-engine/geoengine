@@ -26,7 +26,7 @@ pub struct WildliveDataConnectorDefinition {
     #[serde(rename = "refreshToken", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub refresh_token: Option<Option<String>>,
     #[serde(rename = "expiryDate", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub expiry_date: Option<Option<String>>,
+    pub expiry_date: Option<Option<chrono::DateTime<chrono::FixedOffset>>>,
     #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub priority: Option<Option<i32>>,
 }

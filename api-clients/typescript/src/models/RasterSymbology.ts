@@ -28,20 +28,14 @@ import {
 export interface RasterSymbology {
     /**
      * 
-     * @type {RasterSymbologyTypeEnum}
-     * @memberof RasterSymbology
      */
     type: RasterSymbologyTypeEnum;
     /**
      * 
-     * @type {number}
-     * @memberof RasterSymbology
      */
     opacity: number;
     /**
      * 
-     * @type {RasterColorizer}
-     * @memberof RasterSymbology
      */
     rasterColorizer: RasterColorizer;
 }
@@ -51,7 +45,7 @@ export interface RasterSymbology {
  * @export
  */
 export const RasterSymbologyTypeEnum = {
-    Raster: 'raster'
+    Raster: 'raster',
 } as const;
 export type RasterSymbologyTypeEnum = typeof RasterSymbologyTypeEnum[keyof typeof RasterSymbologyTypeEnum];
 
@@ -61,6 +55,8 @@ export type RasterSymbologyTypeEnum = typeof RasterSymbologyTypeEnum[keyof typeo
  */
 export function instanceOfRasterSymbology(value: object): value is RasterSymbology {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'raster') return false;
+    
     if (!('opacity' in value) || value['opacity'] === undefined) return false;
     if (!('rasterColorizer' in value) || value['rasterColorizer'] === undefined) return false;
     return true;

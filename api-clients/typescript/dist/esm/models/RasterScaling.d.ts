@@ -41,20 +41,14 @@ import type { RasterScalingParameters } from './RasterScalingParameters';
 export interface RasterScaling {
     /**
      *
-     * @type {RasterScalingTypeEnum}
-     * @memberof RasterScaling
      */
     type: RasterScalingTypeEnum;
     /**
      *
-     * @type {RasterScalingParameters}
-     * @memberof RasterScaling
      */
     params: RasterScalingParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof RasterScaling
      */
     sources: SingleRasterSource;
 }

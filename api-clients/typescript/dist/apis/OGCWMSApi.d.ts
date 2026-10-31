@@ -9,28 +9,95 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { GetMapExceptionFormat, WmsRequest, WmsResponseFormat, WmsService, WmsVersion } from '../models/index';
+import { type GetMapExceptionFormat } from '../models/GetMapExceptionFormat';
+import { type WmsRequest } from '../models/WmsRequest';
+import { type WmsResponseFormat } from '../models/WmsResponseFormat';
+import { type WmsService } from '../models/WmsService';
+import { type WmsVersion } from '../models/WmsVersion';
 export interface WmsHandlerRequest {
+    /**
+     * Processing graph id
+     */
     processingGraph: string;
+    /**
+     * type of WMS request
+     */
     request: WmsRequest;
+    /**
+     *
+     */
     bbox?: string;
+    /**
+     *
+     */
     bgcolor?: string | null;
+    /**
+     *
+     */
     crs?: string | null;
+    /**
+     *
+     */
     elevation?: string | null;
+    /**
+     *
+     */
     exceptions?: GetMapExceptionFormat | null;
+    /**
+     *
+     */
     format?: WmsResponseFormat | null;
+    /**
+     *
+     */
     height?: number;
+    /**
+     *
+     */
     infoFormat?: string | null;
+    /**
+     *
+     */
     layer?: string;
+    /**
+     *
+     */
     layers?: string;
+    /**
+     *
+     */
     queryLayers?: string;
+    /**
+     *
+     */
     service?: WmsService;
+    /**
+     *
+     */
     sld?: string | null;
+    /**
+     *
+     */
     sldBody?: string | null;
+    /**
+     *
+     */
     styles?: string;
+    /**
+     *
+     */
     time?: string;
+    /**
+     *
+     */
     transparent?: boolean | null;
+    /**
+     *
+     */
     version?: WmsVersion | null;
+    /**
+     *
+     */
     width?: number;
 }
 /**
@@ -44,9 +111,9 @@ export declare class OGCWMSApi extends runtime.BaseAPI {
     /**
      * OGC WMS endpoint
      */
-    wmsHandlerRaw(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>>;
+    wmsHandlerRaw(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>>;
     /**
      * OGC WMS endpoint
      */
-    wmsHandler(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob>;
+    wmsHandler(requestParameters: WmsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile>;
 }

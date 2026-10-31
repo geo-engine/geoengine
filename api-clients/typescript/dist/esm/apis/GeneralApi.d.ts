@@ -9,7 +9,7 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { ServerInfo } from '../models/index';
+import { type ServerInfo } from '../models/ServerInfo';
 /**
  *
  */

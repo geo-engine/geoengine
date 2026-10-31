@@ -22,13 +22,15 @@ exports.DataProviderResourceToJSONTyped = DataProviderResourceToJSONTyped;
  * @export
  */
 exports.DataProviderResourceTypeEnum = {
-    Provider: 'provider'
+    Provider: 'provider',
 };
 /**
  * Check if a given object implements the DataProviderResource interface.
  */
 function instanceOfDataProviderResource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'provider')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

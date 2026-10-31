@@ -17,14 +17,10 @@ import type { TimeInterval } from './TimeInterval';
 export interface TimeShiftParametersAbsolute {
     /**
      *
-     * @type {TimeShiftParametersAbsoluteTypeEnum}
-     * @memberof TimeShiftParametersAbsolute
      */
     type: TimeShiftParametersAbsoluteTypeEnum;
     /**
      * Fixed time interval used as the shift target.
-     * @type {TimeInterval}
-     * @memberof TimeShiftParametersAbsolute
      */
     timeInterval: TimeInterval;
 }

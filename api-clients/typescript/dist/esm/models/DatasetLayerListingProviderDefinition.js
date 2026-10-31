@@ -15,13 +15,15 @@ import { DatasetLayerListingCollectionFromJSON, DatasetLayerListingCollectionToJ
  * @export
  */
 export const DatasetLayerListingProviderDefinitionTypeEnum = {
-    DatasetLayerListing: 'DatasetLayerListing'
+    DatasetLayerListing: 'DatasetLayerListing',
 };
 /**
  * Check if a given object implements the DatasetLayerListingProviderDefinition interface.
  */
 export function instanceOfDatasetLayerListingProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'DatasetLayerListing')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
@@ -45,7 +47,7 @@ export function DatasetLayerListingProviderDefinitionFromJSONTyped(json, ignoreD
         'id': json['id'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'collections': (json['collections'].map(DatasetLayerListingCollectionFromJSON)),
     };
 }

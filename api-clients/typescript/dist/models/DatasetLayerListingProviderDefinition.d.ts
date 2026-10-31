@@ -17,38 +17,26 @@ import type { DatasetLayerListingCollection } from './DatasetLayerListingCollect
 export interface DatasetLayerListingProviderDefinition {
     /**
      *
-     * @type {DatasetLayerListingProviderDefinitionTypeEnum}
-     * @memberof DatasetLayerListingProviderDefinition
      */
     type: DatasetLayerListingProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof DatasetLayerListingProviderDefinition
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof DatasetLayerListingProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof DatasetLayerListingProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof DatasetLayerListingProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {Array<DatasetLayerListingCollection>}
-     * @memberof DatasetLayerListingProviderDefinition
      */
     collections: Array<DatasetLayerListingCollection>;
 }

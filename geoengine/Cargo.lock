@@ -1689,7 +1689,7 @@ checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
 name = "crs-constants"
-version = "0.10.0"
+version = "0.10.1"
 
 [[package]]
 name = "crs-definitions"
@@ -2712,7 +2712,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-datatypes"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -2754,7 +2754,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-expression"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "geo",
  "geoengine-expression-deps",
@@ -2783,7 +2783,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-macros"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "pretty_assertions",
  "prettyplease",
@@ -2794,7 +2794,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-operators"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "approx",
  "arrow",
@@ -2854,7 +2854,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-services"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "actix-files",
  "actix-http",

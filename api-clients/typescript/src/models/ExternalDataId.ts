@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface ExternalDataId {
     /**
      * 
-     * @type {ExternalDataIdTypeEnum}
-     * @memberof ExternalDataId
      */
     type: ExternalDataIdTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof ExternalDataId
      */
     providerId: string;
     /**
      * 
-     * @type {string}
-     * @memberof ExternalDataId
      */
     layerId: string;
 }
@@ -43,7 +37,7 @@ export interface ExternalDataId {
  * @export
  */
 export const ExternalDataIdTypeEnum = {
-    External: 'external'
+    External: 'external',
 } as const;
 export type ExternalDataIdTypeEnum = typeof ExternalDataIdTypeEnum[keyof typeof ExternalDataIdTypeEnum];
 
@@ -53,6 +47,8 @@ export type ExternalDataIdTypeEnum = typeof ExternalDataIdTypeEnum[keyof typeof 
  */
 export function instanceOfExternalDataId(value: object): value is ExternalDataId {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'external') return false;
+    
     if (!('providerId' in value) || value['providerId'] === undefined) return false;
     if (!('layerId' in value) || value['layerId'] === undefined) return false;
     return true;

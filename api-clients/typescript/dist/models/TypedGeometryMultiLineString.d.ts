@@ -17,8 +17,6 @@ import type { MultiLineString } from './MultiLineString';
 export interface TypedGeometryMultiLineString {
     /**
      *
-     * @type {MultiLineString}
-     * @memberof TypedGeometryMultiLineString
      */
     multiLineString: MultiLineString;
 }

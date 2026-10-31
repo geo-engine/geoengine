@@ -27,7 +27,7 @@ exports.WmsRequest = {
     GetMap: 'GetMap',
     GetFeatureInfo: 'GetFeatureInfo',
     GetStyles: 'GetStyles',
-    GetLegendGraphic: 'GetLegendGraphic'
+    GetLegendGraphic: 'GetLegendGraphic',
 };
 function instanceOfWmsRequest(value) {
     for (const key in exports.WmsRequest) {

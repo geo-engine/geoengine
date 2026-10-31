@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { OgrSourceDurationSpecInfinite } from './OgrSourceDurationSpecInfinite';
 import {
     instanceOfOgrSourceDurationSpecInfinite,
@@ -70,11 +71,11 @@ export function OgrSourceDurationSpecToJSONTyped(value?: OgrSourceDurationSpec |
     }
     switch (value['type']) {
         case 'infinite':
-            return Object.assign({}, OgrSourceDurationSpecInfiniteToJSON(value), { type: 'infinite' } as const);
+            return Object.assign({}, OgrSourceDurationSpecInfiniteToJSON(value), { 'type': 'infinite' } as const);
         case 'value':
-            return Object.assign({}, OgrSourceDurationSpecValueToJSON(value), { type: 'value' } as const);
+            return Object.assign({}, OgrSourceDurationSpecValueToJSON(value), { 'type': 'value' } as const);
         case 'zero':
-            return Object.assign({}, OgrSourceDurationSpecZeroToJSON(value), { type: 'zero' } as const);
+            return Object.assign({}, OgrSourceDurationSpecZeroToJSON(value), { 'type': 'zero' } as const);
         default:
             return value;
     }

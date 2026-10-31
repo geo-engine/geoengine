@@ -16,14 +16,10 @@
 export interface AggregationMean {
     /**
      *
-     * @type {AggregationMeanTypeEnum}
-     * @memberof AggregationMean
      */
     type: AggregationMeanTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationMean
      */
     ignoreNoData: boolean;
 }

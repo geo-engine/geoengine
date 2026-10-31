@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**timestamp** | **String** |  | 
+**timestamp** | **chrono::DateTime<chrono::FixedOffset>** |  | 
 **data** | **String** |  | 
 **count** | **i64** |  | 
 

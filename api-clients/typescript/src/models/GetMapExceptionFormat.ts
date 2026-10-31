@@ -18,7 +18,7 @@
  */
 export const GetMapExceptionFormat = {
     Xml: 'XML',
-    Json: 'JSON'
+    Json: 'JSON',
 } as const;
 export type GetMapExceptionFormat = typeof GetMapExceptionFormat[keyof typeof GetMapExceptionFormat];
 

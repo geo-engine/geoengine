@@ -46,11 +46,11 @@ function ColorizerToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'linearGradient':
-            return Object.assign({}, (0, LinearGradient_1.LinearGradientToJSON)(value), { type: 'linearGradient' });
+            return Object.assign({}, (0, LinearGradient_1.LinearGradientToJSON)(value), { 'type': 'linearGradient' });
         case 'logarithmicGradient':
-            return Object.assign({}, (0, LogarithmicGradient_1.LogarithmicGradientToJSON)(value), { type: 'logarithmicGradient' });
+            return Object.assign({}, (0, LogarithmicGradient_1.LogarithmicGradientToJSON)(value), { 'type': 'logarithmicGradient' });
         case 'palette':
-            return Object.assign({}, (0, PaletteColorizer_1.PaletteColorizerToJSON)(value), { type: 'palette' });
+            return Object.assign({}, (0, PaletteColorizer_1.PaletteColorizerToJSON)(value), { 'type': 'palette' });
         default:
             return value;
     }

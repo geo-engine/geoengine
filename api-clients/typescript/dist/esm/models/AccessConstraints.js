@@ -19,7 +19,7 @@ export const AccessConstraints = {
     Restricted: 'restricted',
     Confidential: 'confidential',
     Secret: 'secret',
-    TopSecret: 'topSecret'
+    TopSecret: 'topSecret',
 };
 export function instanceOfAccessConstraints(value) {
     for (const key in AccessConstraints) {

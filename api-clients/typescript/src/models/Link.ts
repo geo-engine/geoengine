@@ -20,53 +20,37 @@ import { mapValues } from '../runtime';
 export interface Link {
     /**
      * Supplies the URI to a remote resource (or resource fragment).
-     * @type {string}
-     * @memberof Link
      */
     href: string;
     /**
      * The type or semantics of the relation.
-     * @type {string}
-     * @memberof Link
      */
     rel: string;
     /**
      * A hint indicating what the media type of the result of dereferencing
      * the link should be.
-     * @type {string}
-     * @memberof Link
      */
     type?: string;
     /**
      * This flag set to true if the link is a URL template.
-     * @type {boolean}
-     * @memberof Link
      */
     templated?: boolean;
     /**
      * A base path to retrieve semantic information about the variables used in URL template.
-     * @type {string}
-     * @memberof Link
      */
     varBase?: string;
     /**
      * A hint indicating what the language of the result of dereferencing the
      * link should be.
-     * @type {string}
-     * @memberof Link
      */
     hreflang?: string;
     /**
      * Used to label the destination of a link such that it can be used as a
      * human-readable identifier.
-     * @type {string}
-     * @memberof Link
      */
     title?: string;
     /**
      * 
-     * @type {number}
-     * @memberof Link
      */
     length?: number;
 }

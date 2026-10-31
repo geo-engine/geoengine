@@ -17,8 +17,6 @@ import type { Coordinate2D } from './Coordinate2D';
 export interface MockDatasetDataSourceLoadingInfo {
     /**
      *
-     * @type {Array<Coordinate2D>}
-     * @memberof MockDatasetDataSourceLoadingInfo
      */
     points: Array<Coordinate2D>;
 }

@@ -16,14 +16,10 @@
 export interface HistogramBucketsNumber {
     /**
      *
-     * @type {HistogramBucketsNumberTypeEnum}
-     * @memberof HistogramBucketsNumber
      */
     type: HistogramBucketsNumberTypeEnum;
     /**
      *
-     * @type {number}
-     * @memberof HistogramBucketsNumber
      */
     value: number;
 }

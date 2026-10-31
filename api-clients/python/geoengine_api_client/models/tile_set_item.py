@@ -19,25 +19,27 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
-from geoengine_api_client.models.geospatial_data_data_type import GeospatialDataDataType
 from geoengine_api_client.models.link import Link
+from geoengine_api_client.models.tile_set_data_type import TileSetDataType
 from geoengine_api_client.models.tiles_crs import TilesCrs
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class TileSetItem(BaseModel):
     """
     A minimal tileset element for use within a list of tilesets linking to full description of those tilesets.
     """ # noqa: E501
     title: Optional[StrictStr] = Field(default=None, description="A title for this tileset")
-    data_type: GeospatialDataDataType = Field(alias="dataType")
+    data_type: TileSetDataType = Field(alias="dataType")
     crs: TilesCrs = Field(description="Coordinate Reference System (CRS)")
     tile_matrix_set_uri: Optional[StrictStr] = Field(default=None, description="Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets such as the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on an open official source.", alias="tileMatrixSetURI")
     links: List[Link] = Field(description="Links to related resources. A 'self' link to the tileset as well as a <http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme> link to a definition of the [`TileMatrixSet`] are required.")
     __properties: ClassVar[List[str]] = ["title", "dataType", "crs", "tileMatrixSetURI", "links"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -49,8 +51,7 @@ class TileSetItem(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -85,8 +86,7 @@ class TileSetItem(BaseModel):
         _items = []
         if self.links:
             for _item_links in self.links:
-                if _item_links:
-                    _items.append(_item_links.to_dict())
+                _items.append(_item_links.to_dict() if _item_links is not None else None)
             _dict['links'] = _items
         return _dict
 
@@ -101,7 +101,7 @@ class TileSetItem(BaseModel):
 
         _obj = cls.model_validate({
             "title": obj.get("title"),
-            "dataType": GeospatialDataDataType.from_dict(obj["dataType"]) if obj.get("dataType") is not None else None,
+            "dataType": TileSetDataType.from_dict(obj["dataType"]) if obj.get("dataType") is not None else None,
             "crs": TilesCrs.from_dict(obj["crs"]) if obj.get("crs") is not None else None,
             "tileMatrixSetURI": obj.get("tileMatrixSetURI"),
             "links": [Link.from_dict(_item) for _item in obj["links"]] if obj.get("links") is not None else None

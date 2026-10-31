@@ -79,20 +79,14 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 export interface Statistics {
     /**
      *
-     * @type {StatisticsTypeEnum}
-     * @memberof Statistics
      */
     type: StatisticsTypeEnum;
     /**
      *
-     * @type {StatisticsParameters}
-     * @memberof Statistics
      */
     params: StatisticsParameters;
     /**
      *
-     * @type {SingleRasterOrVectorSource}
-     * @memberof Statistics
      */
     sources: SingleRasterOrVectorSource;
 }

@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface Plot {
     /**
      * 
-     * @type {string}
-     * @memberof Plot
      */
     processingGraph: string;
     /**
      * 
-     * @type {string}
-     * @memberof Plot
      */
     name: string;
 }

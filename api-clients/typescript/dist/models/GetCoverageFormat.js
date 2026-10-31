@@ -23,7 +23,7 @@ exports.GetCoverageFormatToJSONTyped = GetCoverageFormatToJSONTyped;
  * @export
  */
 exports.GetCoverageFormat = {
-    ImageTiff: 'image/tiff'
+    ImageTiff: 'image/tiff',
 };
 function instanceOfGetCoverageFormat(value) {
     for (const key in exports.GetCoverageFormat) {

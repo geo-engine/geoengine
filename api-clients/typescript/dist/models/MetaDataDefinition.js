@@ -58,19 +58,19 @@ function MetaDataDefinitionToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'GdalMetaDataList':
-            return Object.assign({}, (0, GdalMetaDataList_1.GdalMetaDataListToJSON)(value), { type: 'GdalMetaDataList' });
+            return Object.assign({}, (0, GdalMetaDataList_1.GdalMetaDataListToJSON)(value), { 'type': 'GdalMetaDataList' });
         case 'GdalMetaDataNetCdfCf':
-            return Object.assign({}, (0, GdalMetadataNetCdfCf_1.GdalMetadataNetCdfCfToJSON)(value), { type: 'GdalMetaDataNetCdfCf' });
+            return Object.assign({}, (0, GdalMetadataNetCdfCf_1.GdalMetadataNetCdfCfToJSON)(value), { 'type': 'GdalMetaDataNetCdfCf' });
         case 'GdalMetaDataRegular':
-            return Object.assign({}, (0, GdalMetaDataRegular_1.GdalMetaDataRegularToJSON)(value), { type: 'GdalMetaDataRegular' });
+            return Object.assign({}, (0, GdalMetaDataRegular_1.GdalMetaDataRegularToJSON)(value), { 'type': 'GdalMetaDataRegular' });
         case 'GdalMultiBand':
-            return Object.assign({}, (0, GdalMultiBand_1.GdalMultiBandToJSON)(value), { type: 'GdalMultiBand' });
+            return Object.assign({}, (0, GdalMultiBand_1.GdalMultiBandToJSON)(value), { 'type': 'GdalMultiBand' });
         case 'GdalStatic':
-            return Object.assign({}, (0, GdalMetaDataStatic_1.GdalMetaDataStaticToJSON)(value), { type: 'GdalStatic' });
+            return Object.assign({}, (0, GdalMetaDataStatic_1.GdalMetaDataStaticToJSON)(value), { 'type': 'GdalStatic' });
         case 'MockMetaData':
-            return Object.assign({}, (0, MockMetaData_1.MockMetaDataToJSON)(value), { type: 'MockMetaData' });
+            return Object.assign({}, (0, MockMetaData_1.MockMetaDataToJSON)(value), { 'type': 'MockMetaData' });
         case 'OgrMetaData':
-            return Object.assign({}, (0, OgrMetaData_1.OgrMetaDataToJSON)(value), { type: 'OgrMetaData' });
+            return Object.assign({}, (0, OgrMetaData_1.OgrMetaDataToJSON)(value), { 'type': 'OgrMetaData' });
         default:
             return value;
     }

@@ -8,8 +8,9 @@
  */
 
 
+pub use reqwest::Client;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Configuration {
     pub base_path: String,
     pub user_agent: Option<String>,
@@ -22,12 +23,37 @@ pub struct Configuration {
 
 pub type BasicAuth = (String, Option<String>);
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ApiKey {
     pub prefix: Option<String>,
     pub key: String,
 }
 
+impl std::fmt::Debug for ApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiKey")
+            .field("prefix", &self.prefix)
+            .field("key", &"[REDACTED]")
+            .finish()
+    }
+}
+
+
+impl std::fmt::Debug for Configuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug = f.debug_struct("Configuration");
+        debug
+            .field("base_path", &self.base_path)
+            .field("user_agent", &self.user_agent)
+            .field("client", &self.client);
+        debug
+            .field("basic_auth", &self.basic_auth.as_ref().map(|(username, password)| (username, password.as_ref().map(|_| "[REDACTED]"))))
+            .field("oauth_access_token", &self.oauth_access_token.as_ref().map(|_| "[REDACTED]"))
+            .field("bearer_access_token", &self.bearer_access_token.as_ref().map(|_| "[REDACTED]"))
+            .field("api_key", &self.api_key);
+        debug.finish()
+    }
+}
 
 impl Configuration {
     pub fn new() -> Configuration {
@@ -39,7 +65,7 @@ impl Default for Configuration {
     fn default() -> Self {
         Configuration {
             base_path: "https://geoengine.io/api".to_owned(),
-            user_agent: Some("OpenAPI-Generator/0.10.0/rust".to_owned()),
+            user_agent: Some("OpenAPI-Generator/0.10.1/rust".to_owned()),
             client: reqwest::Client::new(),
             basic_auth: None,
             oauth_access_token: None,

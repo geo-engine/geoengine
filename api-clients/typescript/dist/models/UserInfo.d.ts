@@ -16,20 +16,14 @@
 export interface UserInfo {
     /**
      *
-     * @type {string}
-     * @memberof UserInfo
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof UserInfo
      */
     email?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof UserInfo
      */
     realName?: string | null;
 }

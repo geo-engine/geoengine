@@ -17,20 +17,14 @@ import type { PlotOutputFormat } from './PlotOutputFormat';
 export interface WrappedPlotOutput {
     /**
      *
-     * @type {PlotOutputFormat}
-     * @memberof WrappedPlotOutput
      */
     outputFormat: PlotOutputFormat;
     /**
      *
-     * @type {string}
-     * @memberof WrappedPlotOutput
      */
     plotType: string;
     /**
      *
-     * @type {object}
-     * @memberof WrappedPlotOutput
      */
     data: object;
 }

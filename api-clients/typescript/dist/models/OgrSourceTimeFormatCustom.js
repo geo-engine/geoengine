@@ -22,13 +22,15 @@ exports.OgrSourceTimeFormatCustomToJSONTyped = OgrSourceTimeFormatCustomToJSONTy
  * @export
  */
 exports.OgrSourceTimeFormatCustomFormatEnum = {
-    Custom: 'custom'
+    Custom: 'custom',
 };
 /**
  * Check if a given object implements the OgrSourceTimeFormatCustom interface.
  */
 function instanceOfOgrSourceTimeFormatCustom(value) {
     if (!('format' in value) || value['format'] === undefined)
+        return false;
+    if (value['format'] !== 'custom')
         return false;
     if (!('customFormat' in value) || value['customFormat'] === undefined)
         return false;

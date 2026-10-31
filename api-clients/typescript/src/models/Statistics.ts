@@ -96,20 +96,14 @@ import {
 export interface Statistics {
     /**
      * 
-     * @type {StatisticsTypeEnum}
-     * @memberof Statistics
      */
     type: StatisticsTypeEnum;
     /**
      * 
-     * @type {StatisticsParameters}
-     * @memberof Statistics
      */
     params: StatisticsParameters;
     /**
      * 
-     * @type {SingleRasterOrVectorSource}
-     * @memberof Statistics
      */
     sources: SingleRasterOrVectorSource;
 }
@@ -119,7 +113,7 @@ export interface Statistics {
  * @export
  */
 export const StatisticsTypeEnum = {
-    Statistics: 'Statistics'
+    Statistics: 'Statistics',
 } as const;
 export type StatisticsTypeEnum = typeof StatisticsTypeEnum[keyof typeof StatisticsTypeEnum];
 
@@ -129,6 +123,8 @@ export type StatisticsTypeEnum = typeof StatisticsTypeEnum[keyof typeof Statisti
  */
 export function instanceOfStatistics(value: object): value is Statistics {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Statistics') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

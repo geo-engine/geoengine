@@ -16,8 +16,6 @@
 export interface TileMatrixSetIdOneOf {
     /**
      *
-     * @type {string}
-     * @memberof TileMatrixSetIdOneOf
      */
     custom: string;
 }

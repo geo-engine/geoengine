@@ -17,7 +17,7 @@
 export const MeanRasterPixelValuesOverTimePosition = {
     Start: 'start',
     Center: 'center',
-    End: 'end'
+    End: 'end',
 };
 export function instanceOfMeanRasterPixelValuesOverTimePosition(value) {
     for (const key in MeanRasterPixelValuesOverTimePosition) {

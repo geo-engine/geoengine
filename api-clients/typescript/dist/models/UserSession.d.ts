@@ -18,44 +18,30 @@ import type { UserInfo } from './UserInfo';
 export interface UserSession {
     /**
      *
-     * @type {string}
-     * @memberof UserSession
      */
     id: string;
     /**
      *
-     * @type {UserInfo}
-     * @memberof UserSession
      */
     user: UserInfo;
     /**
      *
-     * @type {Date}
-     * @memberof UserSession
      */
     created: Date;
     /**
      *
-     * @type {Date}
-     * @memberof UserSession
      */
     validUntil: Date;
     /**
      *
-     * @type {string}
-     * @memberof UserSession
      */
     project?: string | null;
     /**
      *
-     * @type {STRectangle}
-     * @memberof UserSession
      */
     view?: STRectangle | null;
     /**
      *
-     * @type {Array<string>}
-     * @memberof UserSession
      */
     roles: Array<string>;
 }

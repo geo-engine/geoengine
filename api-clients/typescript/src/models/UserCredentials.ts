@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface UserCredentials {
     /**
      * 
-     * @type {string}
-     * @memberof UserCredentials
      */
     email: string;
     /**
      * 
-     * @type {string}
-     * @memberof UserCredentials
      */
     password: string;
 }

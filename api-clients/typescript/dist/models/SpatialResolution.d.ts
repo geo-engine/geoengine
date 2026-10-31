@@ -16,14 +16,10 @@
 export interface SpatialResolution {
     /**
      *
-     * @type {number}
-     * @memberof SpatialResolution
      */
     x: number;
     /**
      *
-     * @type {number}
-     * @memberof SpatialResolution
      */
     y: number;
 }

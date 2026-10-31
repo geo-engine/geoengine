@@ -52,19 +52,19 @@ export function MetaDataDefinitionToJSONTyped(value, ignoreDiscriminator = false
     }
     switch (value['type']) {
         case 'GdalMetaDataList':
-            return Object.assign({}, GdalMetaDataListToJSON(value), { type: 'GdalMetaDataList' });
+            return Object.assign({}, GdalMetaDataListToJSON(value), { 'type': 'GdalMetaDataList' });
         case 'GdalMetaDataNetCdfCf':
-            return Object.assign({}, GdalMetadataNetCdfCfToJSON(value), { type: 'GdalMetaDataNetCdfCf' });
+            return Object.assign({}, GdalMetadataNetCdfCfToJSON(value), { 'type': 'GdalMetaDataNetCdfCf' });
         case 'GdalMetaDataRegular':
-            return Object.assign({}, GdalMetaDataRegularToJSON(value), { type: 'GdalMetaDataRegular' });
+            return Object.assign({}, GdalMetaDataRegularToJSON(value), { 'type': 'GdalMetaDataRegular' });
         case 'GdalMultiBand':
-            return Object.assign({}, GdalMultiBandToJSON(value), { type: 'GdalMultiBand' });
+            return Object.assign({}, GdalMultiBandToJSON(value), { 'type': 'GdalMultiBand' });
         case 'GdalStatic':
-            return Object.assign({}, GdalMetaDataStaticToJSON(value), { type: 'GdalStatic' });
+            return Object.assign({}, GdalMetaDataStaticToJSON(value), { 'type': 'GdalStatic' });
         case 'MockMetaData':
-            return Object.assign({}, MockMetaDataToJSON(value), { type: 'MockMetaData' });
+            return Object.assign({}, MockMetaDataToJSON(value), { 'type': 'MockMetaData' });
         case 'OgrMetaData':
-            return Object.assign({}, OgrMetaDataToJSON(value), { type: 'OgrMetaData' });
+            return Object.assign({}, OgrMetaDataToJSON(value), { 'type': 'OgrMetaData' });
         default:
             return value;
     }

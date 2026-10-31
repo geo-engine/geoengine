@@ -15,11 +15,11 @@ pub struct ProjectVersion {
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
     #[serde(rename = "changed")]
-    pub changed: String,
+    pub changed: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl ProjectVersion {
-    pub fn new(id: uuid::Uuid, changed: String) -> ProjectVersion {
+    pub fn new(id: uuid::Uuid, changed: chrono::DateTime<chrono::FixedOffset>) -> ProjectVersion {
         ProjectVersion {
             id,
             changed,

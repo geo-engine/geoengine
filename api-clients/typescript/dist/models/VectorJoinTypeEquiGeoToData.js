@@ -22,13 +22,15 @@ exports.VectorJoinTypeEquiGeoToDataToJSONTyped = VectorJoinTypeEquiGeoToDataToJS
  * @export
  */
 exports.VectorJoinTypeEquiGeoToDataTypeEnum = {
-    EquiGeoToData: 'equiGeoToData'
+    EquiGeoToData: 'equiGeoToData',
 };
 /**
  * Check if a given object implements the VectorJoinTypeEquiGeoToData interface.
  */
 function instanceOfVectorJoinTypeEquiGeoToData(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'equiGeoToData')
         return false;
     if (!('leftColumn' in value) || value['leftColumn'] === undefined)
         return false;
@@ -47,7 +49,7 @@ function VectorJoinTypeEquiGeoToDataFromJSONTyped(json, ignoreDiscriminator) {
         'type': json['type'],
         'leftColumn': json['leftColumn'],
         'rightColumn': json['rightColumn'],
-        'rightColumnSuffix': json['rightColumnSuffix'] == null ? undefined : json['rightColumnSuffix'],
+        'rightColumnSuffix': json['rightColumnSuffix'] === undefined ? undefined : json['rightColumnSuffix'] === null ? null : json['rightColumnSuffix'],
     };
 }
 function VectorJoinTypeEquiGeoToDataToJSON(json) {

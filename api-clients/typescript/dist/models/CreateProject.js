@@ -42,7 +42,7 @@ function CreateProjectFromJSONTyped(json, ignoreDiscriminator) {
         'name': json['name'],
         'description': json['description'],
         'bounds': (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
-        'timeStep': json['timeStep'] == null ? undefined : (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
+        'timeStep': json['timeStep'] === undefined ? undefined : json['timeStep'] === null ? null : (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
     };
 }
 function CreateProjectToJSON(json) {

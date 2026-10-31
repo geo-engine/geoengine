@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface IdResponse {
     /**
      * 
-     * @type {string}
-     * @memberof IdResponse
      */
     id: string;
 }

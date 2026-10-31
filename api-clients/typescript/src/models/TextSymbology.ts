@@ -35,20 +35,14 @@ import {
 export interface TextSymbology {
     /**
      * 
-     * @type {string}
-     * @memberof TextSymbology
      */
     attribute: string;
     /**
      * 
-     * @type {ColorParam}
-     * @memberof TextSymbology
      */
     fillColor: ColorParam;
     /**
      * 
-     * @type {StrokeParam}
-     * @memberof TextSymbology
      */
     stroke: StrokeParam;
 }

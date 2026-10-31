@@ -40,7 +40,7 @@ function DownsamplingParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'samplingMethod': (0, DownsamplingMethod_1.DownsamplingMethodFromJSON)(json['samplingMethod']),
         'outputResolution': (0, DownsamplingResolution_1.DownsamplingResolutionFromJSON)(json['outputResolution']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : (0, Coordinate2D_1.Coordinate2DFromJSON)(json['outputOriginReference']),
+        'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : (0, Coordinate2D_1.Coordinate2DFromJSON)(json['outputOriginReference']),
     };
 }
 function DownsamplingParametersToJSON(json) {

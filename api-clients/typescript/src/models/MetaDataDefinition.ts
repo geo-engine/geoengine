@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { GdalMetaDataList } from './GdalMetaDataList';
 import {
     instanceOfGdalMetaDataList,
@@ -106,19 +107,19 @@ export function MetaDataDefinitionToJSONTyped(value?: MetaDataDefinition | null,
     }
     switch (value['type']) {
         case 'GdalMetaDataList':
-            return Object.assign({}, GdalMetaDataListToJSON(value), { type: 'GdalMetaDataList' } as const);
+            return Object.assign({}, GdalMetaDataListToJSON(value), { 'type': 'GdalMetaDataList' } as const);
         case 'GdalMetaDataNetCdfCf':
-            return Object.assign({}, GdalMetadataNetCdfCfToJSON(value), { type: 'GdalMetaDataNetCdfCf' } as const);
+            return Object.assign({}, GdalMetadataNetCdfCfToJSON(value), { 'type': 'GdalMetaDataNetCdfCf' } as const);
         case 'GdalMetaDataRegular':
-            return Object.assign({}, GdalMetaDataRegularToJSON(value), { type: 'GdalMetaDataRegular' } as const);
+            return Object.assign({}, GdalMetaDataRegularToJSON(value), { 'type': 'GdalMetaDataRegular' } as const);
         case 'GdalMultiBand':
-            return Object.assign({}, GdalMultiBandToJSON(value), { type: 'GdalMultiBand' } as const);
+            return Object.assign({}, GdalMultiBandToJSON(value), { 'type': 'GdalMultiBand' } as const);
         case 'GdalStatic':
-            return Object.assign({}, GdalMetaDataStaticToJSON(value), { type: 'GdalStatic' } as const);
+            return Object.assign({}, GdalMetaDataStaticToJSON(value), { 'type': 'GdalStatic' } as const);
         case 'MockMetaData':
-            return Object.assign({}, MockMetaDataToJSON(value), { type: 'MockMetaData' } as const);
+            return Object.assign({}, MockMetaDataToJSON(value), { 'type': 'MockMetaData' } as const);
         case 'OgrMetaData':
-            return Object.assign({}, OgrMetaDataToJSON(value), { type: 'OgrMetaData' } as const);
+            return Object.assign({}, OgrMetaDataToJSON(value), { 'type': 'OgrMetaData' } as const);
         default:
             return value;
     }

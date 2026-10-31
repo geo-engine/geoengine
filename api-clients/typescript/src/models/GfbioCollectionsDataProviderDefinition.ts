@@ -28,56 +28,38 @@ import {
 export interface GfbioCollectionsDataProviderDefinition {
     /**
      * 
-     * @type {GfbioCollectionsDataProviderDefinitionTypeEnum}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     type: GfbioCollectionsDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     collectionApiUrl: string;
     /**
      * 
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     collectionApiAuthToken: string;
     /**
      * 
-     * @type {DatabaseConnectionConfig}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     abcdDbConfig: DatabaseConnectionConfig;
     /**
      * 
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     pangaeaUrl: string;
     /**
      * 
-     * @type {number}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     cacheTtl?: number | null;
 }
@@ -87,7 +69,7 @@ export interface GfbioCollectionsDataProviderDefinition {
  * @export
  */
 export const GfbioCollectionsDataProviderDefinitionTypeEnum = {
-    GfbioCollections: 'GfbioCollections'
+    GfbioCollections: 'GfbioCollections',
 } as const;
 export type GfbioCollectionsDataProviderDefinitionTypeEnum = typeof GfbioCollectionsDataProviderDefinitionTypeEnum[keyof typeof GfbioCollectionsDataProviderDefinitionTypeEnum];
 
@@ -97,6 +79,8 @@ export type GfbioCollectionsDataProviderDefinitionTypeEnum = typeof GfbioCollect
  */
 export function instanceOfGfbioCollectionsDataProviderDefinition(value: object): value is GfbioCollectionsDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GfbioCollections') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('collectionApiUrl' in value) || value['collectionApiUrl'] === undefined) return false;
@@ -119,12 +103,12 @@ export function GfbioCollectionsDataProviderDefinitionFromJSONTyped(json: any, i
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'collectionApiUrl': json['collectionApiUrl'],
         'collectionApiAuthToken': json['collectionApiAuthToken'],
         'abcdDbConfig': DatabaseConnectionConfigFromJSON(json['abcdDbConfig']),
         'pangaeaUrl': json['pangaeaUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

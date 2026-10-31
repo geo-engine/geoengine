@@ -14,13 +14,15 @@
  * @export
  */
 export const MlModelResourceTypeEnum = {
-    MlModel: 'mlModel'
+    MlModel: 'mlModel',
 };
 /**
  * Check if a given object implements the MlModelResource interface.
  */
 export function instanceOfMlModelResource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'mlModel')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

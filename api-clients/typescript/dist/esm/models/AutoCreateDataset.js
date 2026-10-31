@@ -36,8 +36,8 @@ export function AutoCreateDatasetFromJSONTyped(json, ignoreDiscriminator) {
         'datasetName': json['datasetName'],
         'datasetDescription': json['datasetDescription'],
         'mainFile': json['mainFile'],
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
-        'tags': json['tags'] == null ? undefined : json['tags'],
+        'layerName': json['layerName'] === undefined ? undefined : json['layerName'] === null ? null : json['layerName'],
+        'tags': json['tags'] === undefined ? undefined : json['tags'] === null ? null : json['tags'],
     };
 }
 export function AutoCreateDatasetToJSON(json) {

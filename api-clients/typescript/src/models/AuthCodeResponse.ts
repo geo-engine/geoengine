@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface AuthCodeResponse {
     /**
      * 
-     * @type {string}
-     * @memberof AuthCodeResponse
      */
     sessionState: string;
     /**
      * 
-     * @type {string}
-     * @memberof AuthCodeResponse
      */
     code: string;
     /**
      * 
-     * @type {string}
-     * @memberof AuthCodeResponse
      */
     state: string;
 }

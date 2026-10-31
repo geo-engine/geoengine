@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface TaskResponse {
     /**
      * 
-     * @type {string}
-     * @memberof TaskResponse
      */
     taskId: string;
 }

@@ -20,7 +20,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { AddLayerToJSON, AddLayerCollectionToJSON, IdResponseFromJSON, LayerFromJSON, LayerCollectionFromJSON, LayerProviderListingFromJSON, ProviderCapabilitiesFromJSON, TaskResponseFromJSON, TypedDataProviderDefinitionFromJSON, TypedDataProviderDefinitionToJSON, UpdateLayerToJSON, UpdateLayerCollectionToJSON, } from '../models/index';
+import { AddLayerToJSON, } from '../models/AddLayer';
+import { AddLayerCollectionToJSON, } from '../models/AddLayerCollection';
+import { IdResponseFromJSON, } from '../models/IdResponse';
+import { LayerFromJSON, } from '../models/Layer';
+import { LayerCollectionFromJSON, } from '../models/LayerCollection';
+import { LayerProviderListingFromJSON, } from '../models/LayerProviderListing';
+import { ProviderCapabilitiesFromJSON, } from '../models/ProviderCapabilities';
+import { TaskResponseFromJSON, } from '../models/TaskResponse';
+import { TypedDataProviderDefinitionFromJSON, TypedDataProviderDefinitionToJSON, } from '../models/TypedDataProviderDefinition';
+import { UpdateLayerToJSON, } from '../models/UpdateLayer';
+import { UpdateLayerCollectionToJSON, } from '../models/UpdateLayerCollection';
 /**
  *
  */
@@ -47,7 +57,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/collections`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -97,8 +107,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{parent}/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"parent"}}`, encodeURIComponent(String(requestParameters['parent'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{parent}', encodeURIComponent(String(requestParameters['parent'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -146,8 +156,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -196,7 +206,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/layers`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -317,8 +327,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/collections/search/autocomplete/{provider}/{collection}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -364,7 +374,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/providers/{provider}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -409,7 +419,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/providers/{provider}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -458,8 +468,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/{layer}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -508,8 +518,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/{layer}/dataset`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -558,8 +568,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/{layer}/processingGraphId`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -620,8 +630,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/collections/{provider}/{collection}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -775,7 +785,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/capabilities`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -819,7 +829,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -867,8 +877,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{parent}/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"parent"}}`, encodeURIComponent(String(requestParameters['parent'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{parent}', encodeURIComponent(String(requestParameters['parent'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -913,7 +923,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -961,8 +971,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -1034,8 +1044,8 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/collections/search/{provider}/{collection}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -1085,7 +1095,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'PUT',
@@ -1135,7 +1145,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'PUT',
@@ -1185,7 +1195,7 @@ export class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/providers/{provider}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'PUT',

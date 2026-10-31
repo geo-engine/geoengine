@@ -28,20 +28,14 @@ import {
 export interface Radiance {
     /**
      * 
-     * @type {RadianceTypeEnum}
-     * @memberof Radiance
      */
     type: RadianceTypeEnum;
     /**
      * 
-     * @type {object}
-     * @memberof Radiance
      */
     params: object;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof Radiance
      */
     sources: SingleRasterSource;
 }
@@ -51,7 +45,7 @@ export interface Radiance {
  * @export
  */
 export const RadianceTypeEnum = {
-    Radiance: 'Radiance'
+    Radiance: 'Radiance',
 } as const;
 export type RadianceTypeEnum = typeof RadianceTypeEnum[keyof typeof RadianceTypeEnum];
 
@@ -61,6 +55,8 @@ export type RadianceTypeEnum = typeof RadianceTypeEnum[keyof typeof RadianceType
  */
 export function instanceOfRadiance(value: object): value is Radiance {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Radiance') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -49,13 +49,13 @@ function TaskStatusToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['status']) {
         case 'aborted':
-            return Object.assign({}, (0, TaskStatusAborted_1.TaskStatusAbortedToJSON)(value), { status: 'aborted' });
+            return Object.assign({}, (0, TaskStatusAborted_1.TaskStatusAbortedToJSON)(value), { 'status': 'aborted' });
         case 'completed':
-            return Object.assign({}, (0, TaskStatusCompleted_1.TaskStatusCompletedToJSON)(value), { status: 'completed' });
+            return Object.assign({}, (0, TaskStatusCompleted_1.TaskStatusCompletedToJSON)(value), { 'status': 'completed' });
         case 'failed':
-            return Object.assign({}, (0, TaskStatusFailed_1.TaskStatusFailedToJSON)(value), { status: 'failed' });
+            return Object.assign({}, (0, TaskStatusFailed_1.TaskStatusFailedToJSON)(value), { 'status': 'failed' });
         case 'running':
-            return Object.assign({}, (0, TaskStatusRunning_1.TaskStatusRunningToJSON)(value), { status: 'running' });
+            return Object.assign({}, (0, TaskStatusRunning_1.TaskStatusRunningToJSON)(value), { 'status': 'running' });
         default:
             return value;
     }

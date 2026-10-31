@@ -28,8 +28,6 @@ import {
 export interface MultipleRasterSources {
     /**
      * 
-     * @type {Array<RasterOperator>}
-     * @memberof MultipleRasterSources
      */
     rasters: Array<RasterOperator>;
 }

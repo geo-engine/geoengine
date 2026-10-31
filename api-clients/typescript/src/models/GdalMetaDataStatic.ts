@@ -42,32 +42,22 @@ import {
 export interface GdalMetaDataStatic {
     /**
      * 
-     * @type {GdalMetaDataStaticTypeEnum}
-     * @memberof GdalMetaDataStatic
      */
     type: GdalMetaDataStaticTypeEnum;
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof GdalMetaDataStatic
      */
     time?: TimeInterval | null;
     /**
      * 
-     * @type {GdalDatasetParameters}
-     * @memberof GdalMetaDataStatic
      */
     params: GdalDatasetParameters;
     /**
      * 
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMetaDataStatic
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      * 
-     * @type {number}
-     * @memberof GdalMetaDataStatic
      */
     cacheTtl?: number | null;
 }
@@ -77,7 +67,7 @@ export interface GdalMetaDataStatic {
  * @export
  */
 export const GdalMetaDataStaticTypeEnum = {
-    GdalStatic: 'GdalStatic'
+    GdalStatic: 'GdalStatic',
 } as const;
 export type GdalMetaDataStaticTypeEnum = typeof GdalMetaDataStaticTypeEnum[keyof typeof GdalMetaDataStaticTypeEnum];
 
@@ -87,6 +77,8 @@ export type GdalMetaDataStaticTypeEnum = typeof GdalMetaDataStaticTypeEnum[keyof
  */
 export function instanceOfGdalMetaDataStatic(value: object): value is GdalMetaDataStatic {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GdalStatic') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     return true;
@@ -103,10 +95,10 @@ export function GdalMetaDataStaticFromJSONTyped(json: any, ignoreDiscriminator: 
     return {
         
         'type': json['type'],
-        'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
+        'time': json['time'] === undefined ? undefined : json['time'] === null ? null : TimeIntervalFromJSON(json['time']),
         'params': GdalDatasetParametersFromJSON(json['params']),
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

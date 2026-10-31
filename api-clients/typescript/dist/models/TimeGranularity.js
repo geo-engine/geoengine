@@ -29,7 +29,7 @@ exports.TimeGranularity = {
     Hours: 'hours',
     Days: 'days',
     Months: 'months',
-    Years: 'years'
+    Years: 'years',
 };
 function instanceOfTimeGranularity(value) {
     for (const key in exports.TimeGranularity) {

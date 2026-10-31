@@ -17,7 +17,7 @@
  * @export
  */
 export const WfsVersion = {
-    _200: '2.0.0'
+    _200: '2.0.0',
 } as const;
 export type WfsVersion = typeof WfsVersion[keyof typeof WfsVersion];
 

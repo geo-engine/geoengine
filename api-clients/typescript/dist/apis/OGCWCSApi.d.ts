@@ -9,22 +9,70 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { GetCoverageFormat, WcsRequest, WcsService, WcsVersion } from '../models/index';
+import { type GetCoverageFormat } from '../models/GetCoverageFormat';
+import { type WcsRequest } from '../models/WcsRequest';
+import { type WcsService } from '../models/WcsService';
+import { type WcsVersion } from '../models/WcsVersion';
 export interface WcsHandlerRequest {
+    /**
+     * Processing graph id
+     */
     processingGraph: string;
+    /**
+     * type of WCS request
+     */
     request: WcsRequest;
+    /**
+     *
+     */
     boundingbox?: string;
+    /**
+     *
+     */
     format?: GetCoverageFormat;
+    /**
+     *
+     */
     gridbasecrs?: string;
+    /**
+     *
+     */
     gridoffsets?: string;
+    /**
+     *
+     */
     gridorigin?: string;
+    /**
+     *
+     */
     identifier?: string;
+    /**
+     *
+     */
     identifiers?: string;
+    /**
+     *
+     */
     nodatavalue?: number | null;
+    /**
+     *
+     */
     resx?: number | null;
+    /**
+     *
+     */
     resy?: number | null;
+    /**
+     *
+     */
     service?: WcsService;
+    /**
+     *
+     */
     time?: string;
+    /**
+     *
+     */
     version?: WcsVersion | null;
 }
 /**

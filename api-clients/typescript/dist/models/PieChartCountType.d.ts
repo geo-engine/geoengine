@@ -16,20 +16,14 @@
 export interface PieChartCountType {
     /**
      *
-     * @type {PieChartCountTypeTypeEnum}
-     * @memberof PieChartCountType
      */
     type: PieChartCountTypeTypeEnum;
     /**
      * The names of the attribute to generate pies for.
-     * @type {string}
-     * @memberof PieChartCountType
      */
     columnName: string;
     /**
      * Whether to render the chart as a donut.
-     * @type {boolean}
-     * @memberof PieChartCountType
      */
     donut?: boolean;
 }

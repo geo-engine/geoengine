@@ -11,40 +11,88 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  GetCoverageFormat,
-  WcsRequest,
-  WcsService,
-  WcsVersion,
-} from '../models/index';
 import {
+    type GetCoverageFormat,
     GetCoverageFormatFromJSON,
     GetCoverageFormatToJSON,
+} from '../models/GetCoverageFormat';
+import {
+    type WcsRequest,
     WcsRequestFromJSON,
     WcsRequestToJSON,
+} from '../models/WcsRequest';
+import {
+    type WcsService,
     WcsServiceFromJSON,
     WcsServiceToJSON,
+} from '../models/WcsService';
+import {
+    type WcsVersion,
     WcsVersionFromJSON,
     WcsVersionToJSON,
-} from '../models/index';
+} from '../models/WcsVersion';
 
 export interface WcsHandlerRequest {
+    /**
+     * Processing graph id
+     */
     processingGraph: string;
+    /**
+     * type of WCS request
+     */
     request: WcsRequest;
+    /**
+     * 
+     */
     boundingbox?: string;
+    /**
+     * 
+     */
     format?: GetCoverageFormat;
+    /**
+     * 
+     */
     gridbasecrs?: string;
+    /**
+     * 
+     */
     gridoffsets?: string;
+    /**
+     * 
+     */
     gridorigin?: string;
+    /**
+     * 
+     */
     identifier?: string;
+    /**
+     * 
+     */
     identifiers?: string;
+    /**
+     * 
+     */
     nodatavalue?: number | null;
+    /**
+     * 
+     */
     resx?: number | null;
+    /**
+     * 
+     */
     resy?: number | null;
+    /**
+     * 
+     */
     service?: WcsService;
+    /**
+     * 
+     */
     time?: string;
+    /**
+     * 
+     */
     version?: WcsVersion | null;
 }
 
@@ -141,7 +189,7 @@ export class OGCWCSApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/wcs/{processingGraph}`;
-        urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
+        urlPath = urlPath.replace('{processingGraph}', encodeURIComponent(String(requestParameters['processingGraph'])));
 
         return {
             path: urlPath,

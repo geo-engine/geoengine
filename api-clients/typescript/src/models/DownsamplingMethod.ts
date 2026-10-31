@@ -17,7 +17,7 @@
  * @export
  */
 export const DownsamplingMethod = {
-    NearestNeighbor: 'nearestNeighbor'
+    NearestNeighbor: 'nearestNeighbor',
 } as const;
 export type DownsamplingMethod = typeof DownsamplingMethod[keyof typeof DownsamplingMethod];
 

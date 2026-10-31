@@ -21,7 +21,7 @@ export const UsageSummaryGranularity = {
     Hours: 'hours',
     Days: 'days',
     Months: 'months',
-    Years: 'years'
+    Years: 'years',
 } as const;
 export type UsageSummaryGranularity = typeof UsageSummaryGranularity[keyof typeof UsageSummaryGranularity];
 

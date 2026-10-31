@@ -16,7 +16,7 @@
  */
 export const InterpolationMethod = {
     NearestNeighbor: 'nearestNeighbor',
-    BiLinear: 'biLinear'
+    BiLinear: 'biLinear',
 };
 export function instanceOfInterpolationMethod(value) {
     for (const key in InterpolationMethod) {

@@ -18,27 +18,19 @@ import type { HistogramBuckets } from './HistogramBuckets';
 export interface HistogramParameters {
     /**
      * Name of the (numeric) vector attribute or raster band to compute the histogram on.
-     * @type {string}
-     * @memberof HistogramParameters
      */
     columnName: string;
     /**
      * If `data`, it computes the bounds of the underlying data.
      * If `{ "min": ..., "max": ... }`, one can specify custom bounds.
-     * @type {HistogramBounds}
-     * @memberof HistogramParameters
      */
     bounds: HistogramBounds;
     /**
      * The number of buckets. The value can be specified or calculated.
-     * @type {HistogramBuckets}
-     * @memberof HistogramParameters
      */
     buckets: HistogramBuckets;
     /**
      * Flag, if the histogram should have user interactions for a range selection. It is `false` by default.
-     * @type {boolean}
-     * @memberof HistogramParameters
      */
     interactive?: boolean;
 }

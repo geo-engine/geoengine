@@ -16,8 +16,6 @@
 export interface TaskResponse {
     /**
      *
-     * @type {string}
-     * @memberof TaskResponse
      */
     taskId: string;
 }

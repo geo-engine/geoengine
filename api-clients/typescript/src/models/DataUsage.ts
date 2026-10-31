@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 
-import { mapValues } from '../runtime';
+import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 /**
  * 
  * @export
@@ -20,32 +20,22 @@ import { mapValues } from '../runtime';
 export interface DataUsage {
     /**
      * 
-     * @type {Date}
-     * @memberof DataUsage
      */
     timestamp: Date;
     /**
      * 
-     * @type {string}
-     * @memberof DataUsage
      */
     userId: string;
     /**
      * 
-     * @type {string}
-     * @memberof DataUsage
      */
     computationId: string;
     /**
      * 
-     * @type {string}
-     * @memberof DataUsage
      */
     data: string;
     /**
      * 
-     * @type {number}
-     * @memberof DataUsage
      */
     count: number;
 }
@@ -72,7 +62,7 @@ export function DataUsageFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     }
     return {
         
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : parseDateTime(json['timestamp'])),
         'userId': json['userId'],
         'computationId': json['computationId'],
         'data': json['data'],
@@ -91,7 +81,7 @@ export function DataUsageToJSONTyped(value?: DataUsage | null, ignoreDiscriminat
 
     return {
         
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : serializeDateTime(value['timestamp']),
         'userId': value['userId'],
         'computationId': value['computationId'],
         'data': value['data'],

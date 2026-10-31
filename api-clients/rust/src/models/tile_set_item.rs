@@ -17,7 +17,7 @@ pub struct TileSetItem {
     #[serde(rename = "title", skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(rename = "dataType")]
-    pub data_type: Box<models::GeospatialDataDataType>,
+    pub data_type: Box<models::TileSetDataType>,
     /// Coordinate Reference System (CRS)
     #[serde(rename = "crs")]
     pub crs: Box<models::TilesCrs>,
@@ -31,7 +31,7 @@ pub struct TileSetItem {
 
 impl TileSetItem {
     /// A minimal tileset element for use within a list of tilesets linking to full description of those tilesets.
-    pub fn new(data_type: models::GeospatialDataDataType, crs: models::TilesCrs, links: Vec<models::Link>) -> TileSetItem {
+    pub fn new(data_type: models::TileSetDataType, crs: models::TilesCrs, links: Vec<models::Link>) -> TileSetItem {
         TileSetItem {
             title: None,
             data_type: Box::new(data_type),

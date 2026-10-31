@@ -16,7 +16,7 @@
  */
 export const ProjectUpdateToken = {
     None: 'none',
-    Delete: 'delete'
+    Delete: 'delete',
 };
 export function instanceOfProjectUpdateToken(value) {
     for (const key in ProjectUpdateToken) {

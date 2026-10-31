@@ -24,13 +24,14 @@ from geoengine_api_client.models.processing_graph import ProcessingGraph
 from geoengine_api_client.models.symbology import Symbology
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class AddLayer(BaseModel):
     """
     AddLayer
     """ # noqa: E501
-    name: StrictStr
-    description: StrictStr
+    name: StrictStr = Field(json_schema_extra={"examples": ["Example Layer"]})
+    description: StrictStr = Field(json_schema_extra={"examples": ["Example layer description"]})
     processing_graph: ProcessingGraph = Field(alias="processingGraph")
     symbology: Optional[Symbology] = None
     properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = Field(default=None, description="properties, for instance, to be rendered in the UI")
@@ -38,7 +39,8 @@ class AddLayer(BaseModel):
     __properties: ClassVar[List[str]] = ["name", "description", "processingGraph", "symbology", "properties", "metadata"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -50,8 +52,7 @@ class AddLayer(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:

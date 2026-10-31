@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface AuthCodeRequestURL {
     /**
      * 
-     * @type {string}
-     * @memberof AuthCodeRequestURL
      */
     url: string;
 }

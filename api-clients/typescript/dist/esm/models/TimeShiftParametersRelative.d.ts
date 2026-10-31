@@ -17,20 +17,14 @@ import type { TimeGranularity } from './TimeGranularity';
 export interface TimeShiftParametersRelative {
     /**
      *
-     * @type {TimeShiftParametersRelativeTypeEnum}
-     * @memberof TimeShiftParametersRelative
      */
     type: TimeShiftParametersRelativeTypeEnum;
     /**
      * Time granularity for the relative shift.
-     * @type {TimeGranularity}
-     * @memberof TimeShiftParametersRelative
      */
     granularity: TimeGranularity;
     /**
      * Signed time step for the relative shift.
-     * @type {number}
-     * @memberof TimeShiftParametersRelative
      */
     value: number;
 }

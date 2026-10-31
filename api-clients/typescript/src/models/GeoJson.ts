@@ -28,14 +28,10 @@ import {
 export interface GeoJson {
     /**
      * 
-     * @type {CollectionType}
-     * @memberof GeoJson
      */
     type: CollectionType;
     /**
      * 
-     * @type {Array<any>}
-     * @memberof GeoJson
      */
     features: Array<any>;
 }

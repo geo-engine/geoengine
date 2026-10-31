@@ -27,6 +27,7 @@ from geoengine_api_client.models.time_interval import TimeInterval
 from geoengine_api_client.models.time_step import TimeStep
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class GdalMetaDataRegular(BaseModel):
     """
@@ -49,7 +50,8 @@ class GdalMetaDataRegular(BaseModel):
         return value
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -61,8 +63,7 @@ class GdalMetaDataRegular(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -97,8 +98,7 @@ class GdalMetaDataRegular(BaseModel):
         _field_dict = {}
         if self.time_placeholders:
             for _key_time_placeholders in self.time_placeholders:
-                if self.time_placeholders[_key_time_placeholders]:
-                    _field_dict[_key_time_placeholders] = self.time_placeholders[_key_time_placeholders].to_dict()
+                _field_dict[_key_time_placeholders] = self.time_placeholders[_key_time_placeholders].to_dict() if self.time_placeholders[_key_time_placeholders] is not None else None
             _dict['timePlaceholders'] = _field_dict
         # override the default output from pydantic by calling `to_dict()` of data_time
         if self.data_time:

@@ -32,13 +32,13 @@ export function AddDatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'name': json['name'] == null ? undefined : json['name'],
+        'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
         'displayName': json['displayName'],
         'description': json['description'],
         'sourceOperator': json['sourceOperator'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(ProvenanceFromJSON)),
-        'tags': json['tags'] == null ? undefined : json['tags'],
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] === undefined ? undefined : json['provenance'] === null ? null : (json['provenance'].map(ProvenanceFromJSON)),
+        'tags': json['tags'] === undefined ? undefined : json['tags'] === null ? null : json['tags'],
     };
 }
 export function AddDatasetToJSON(json) {

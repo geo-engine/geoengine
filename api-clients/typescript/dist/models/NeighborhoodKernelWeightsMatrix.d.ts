@@ -16,14 +16,10 @@
 export interface NeighborhoodKernelWeightsMatrix {
     /**
      *
-     * @type {NeighborhoodKernelWeightsMatrixTypeEnum}
-     * @memberof NeighborhoodKernelWeightsMatrix
      */
     type: NeighborhoodKernelWeightsMatrixTypeEnum;
     /**
      * Explicit matrix of neighborhood weights.
-     * @type {Array<Array<number>>}
-     * @memberof NeighborhoodKernelWeightsMatrix
      */
     weights: Array<Array<number>>;
 }

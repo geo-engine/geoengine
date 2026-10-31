@@ -15,7 +15,7 @@
  * @export
  */
 export const WfsService = {
-    Wfs: 'WFS'
+    Wfs: 'WFS',
 };
 export function instanceOfWfsService(value) {
     for (const key in WfsService) {

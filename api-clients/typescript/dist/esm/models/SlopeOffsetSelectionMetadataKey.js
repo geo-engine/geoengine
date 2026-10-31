@@ -14,13 +14,15 @@
  * @export
  */
 export const SlopeOffsetSelectionMetadataKeyTypeEnum = {
-    MetadataKey: 'metadataKey'
+    MetadataKey: 'metadataKey',
 };
 /**
  * Check if a given object implements the SlopeOffsetSelectionMetadataKey interface.
  */
 export function instanceOfSlopeOffsetSelectionMetadataKey(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'metadataKey')
         return false;
     if (!('key' in value) || value['key'] === undefined)
         return false;
@@ -35,7 +37,7 @@ export function SlopeOffsetSelectionMetadataKeyFromJSONTyped(json, ignoreDiscrim
     }
     return {
         'type': json['type'],
-        'domain': json['domain'] == null ? undefined : json['domain'],
+        'domain': json['domain'] === undefined ? undefined : json['domain'] === null ? null : json['domain'],
         'key': json['key'],
     };
 }

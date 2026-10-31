@@ -19,20 +19,14 @@ import type { InterpolationResolution } from './InterpolationResolution';
 export interface InterpolationParameters {
     /**
      * Interpolation method.
-     * @type {InterpolationMethod}
-     * @memberof InterpolationParameters
      */
     interpolation: InterpolationMethod;
     /**
      * Target output resolution.
-     * @type {InterpolationResolution}
-     * @memberof InterpolationParameters
      */
     outputResolution: InterpolationResolution;
     /**
      * Optional reference point used to align the output grid origin.
-     * @type {Coordinate2D}
-     * @memberof InterpolationParameters
      */
     outputOriginReference?: Coordinate2D | null;
 }

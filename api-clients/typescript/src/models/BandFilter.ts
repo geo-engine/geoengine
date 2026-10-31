@@ -42,20 +42,14 @@ import {
 export interface BandFilter {
     /**
      * 
-     * @type {BandFilterTypeEnum}
-     * @memberof BandFilter
      */
     type: BandFilterTypeEnum;
     /**
      * 
-     * @type {BandFilterParameters}
-     * @memberof BandFilter
      */
     params: BandFilterParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof BandFilter
      */
     sources: SingleRasterSource;
 }
@@ -65,7 +59,7 @@ export interface BandFilter {
  * @export
  */
 export const BandFilterTypeEnum = {
-    BandFilter: 'BandFilter'
+    BandFilter: 'BandFilter',
 } as const;
 export type BandFilterTypeEnum = typeof BandFilterTypeEnum[keyof typeof BandFilterTypeEnum];
 
@@ -75,6 +69,8 @@ export type BandFilterTypeEnum = typeof BandFilterTypeEnum[keyof typeof BandFilt
  */
 export function instanceOfBandFilter(value: object): value is BandFilter {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'BandFilter') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

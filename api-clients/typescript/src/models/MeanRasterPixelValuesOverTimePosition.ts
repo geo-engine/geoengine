@@ -19,7 +19,7 @@
 export const MeanRasterPixelValuesOverTimePosition = {
     Start: 'start',
     Center: 'center',
-    End: 'end'
+    End: 'end',
 } as const;
 export type MeanRasterPixelValuesOverTimePosition = typeof MeanRasterPixelValuesOverTimePosition[keyof typeof MeanRasterPixelValuesOverTimePosition];
 

@@ -23,7 +23,7 @@ exports.RasterStreamWebsocketResultTypeToJSONTyped = RasterStreamWebsocketResult
  * @export
  */
 exports.RasterStreamWebsocketResultType = {
-    Arrow: 'arrow'
+    Arrow: 'arrow',
 };
 function instanceOfRasterStreamWebsocketResultType(value) {
     for (const key in exports.RasterStreamWebsocketResultType) {

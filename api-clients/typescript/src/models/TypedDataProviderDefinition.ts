@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { CopernicusDataspaceDataProviderDefinition } from './CopernicusDataspaceDataProviderDefinition';
 import {
     instanceOfCopernicusDataspaceDataProviderDefinition,
@@ -151,29 +152,29 @@ export function TypedDataProviderDefinitionToJSONTyped(value?: TypedDataProvider
     }
     switch (value['type']) {
         case 'CopernicusDataspace':
-            return Object.assign({}, CopernicusDataspaceDataProviderDefinitionToJSON(value), { type: 'CopernicusDataspace' } as const);
+            return Object.assign({}, CopernicusDataspaceDataProviderDefinitionToJSON(value), { 'type': 'CopernicusDataspace' } as const);
         case 'DatasetLayerListing':
-            return Object.assign({}, DatasetLayerListingProviderDefinitionToJSON(value), { type: 'DatasetLayerListing' } as const);
+            return Object.assign({}, DatasetLayerListingProviderDefinitionToJSON(value), { 'type': 'DatasetLayerListing' } as const);
         case 'EbvPortal':
-            return Object.assign({}, EbvPortalDataProviderDefinitionToJSON(value), { type: 'EbvPortal' } as const);
+            return Object.assign({}, EbvPortalDataProviderDefinitionToJSON(value), { 'type': 'EbvPortal' } as const);
         case 'Edr':
-            return Object.assign({}, EdrDataProviderDefinitionToJSON(value), { type: 'Edr' } as const);
+            return Object.assign({}, EdrDataProviderDefinitionToJSON(value), { 'type': 'Edr' } as const);
         case 'Gbif':
-            return Object.assign({}, GbifDataProviderDefinitionToJSON(value), { type: 'Gbif' } as const);
+            return Object.assign({}, GbifDataProviderDefinitionToJSON(value), { 'type': 'Gbif' } as const);
         case 'GfbioAbcd':
-            return Object.assign({}, GfbioAbcdDataProviderDefinitionToJSON(value), { type: 'GfbioAbcd' } as const);
+            return Object.assign({}, GfbioAbcdDataProviderDefinitionToJSON(value), { 'type': 'GfbioAbcd' } as const);
         case 'GfbioCollections':
-            return Object.assign({}, GfbioCollectionsDataProviderDefinitionToJSON(value), { type: 'GfbioCollections' } as const);
+            return Object.assign({}, GfbioCollectionsDataProviderDefinitionToJSON(value), { 'type': 'GfbioCollections' } as const);
         case 'NetCdfCf':
-            return Object.assign({}, NetCdfCfDataProviderDefinitionToJSON(value), { type: 'NetCdfCf' } as const);
+            return Object.assign({}, NetCdfCfDataProviderDefinitionToJSON(value), { 'type': 'NetCdfCf' } as const);
         case 'Pangaea':
-            return Object.assign({}, PangaeaDataProviderDefinitionToJSON(value), { type: 'Pangaea' } as const);
+            return Object.assign({}, PangaeaDataProviderDefinitionToJSON(value), { 'type': 'Pangaea' } as const);
         case 'SentinelS2L2ACogs':
-            return Object.assign({}, SentinelS2L2ACogsProviderDefinitionToJSON(value), { type: 'SentinelS2L2ACogs' } as const);
+            return Object.assign({}, SentinelS2L2ACogsProviderDefinitionToJSON(value), { 'type': 'SentinelS2L2ACogs' } as const);
         case 'StacProviderDefinition':
-            return Object.assign({}, StacDataProviderDefinitionToJSON(value), { type: 'StacProviderDefinition' } as const);
+            return Object.assign({}, StacDataProviderDefinitionToJSON(value), { 'type': 'StacProviderDefinition' } as const);
         case 'WildLIVE!':
-            return Object.assign({}, WildliveDataConnectorDefinitionToJSON(value), { type: 'WildLIVE!' } as const);
+            return Object.assign({}, WildliveDataConnectorDefinitionToJSON(value), { 'type': 'WildLIVE!' } as const);
         default:
             return value;
     }

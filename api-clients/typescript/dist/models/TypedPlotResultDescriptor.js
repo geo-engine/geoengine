@@ -23,13 +23,15 @@ const PlotResultDescriptor_1 = require("./PlotResultDescriptor");
  * @export
  */
 exports.TypedPlotResultDescriptorTypeEnum = {
-    Plot: 'plot'
+    Plot: 'plot',
 };
 /**
  * Check if a given object implements the TypedPlotResultDescriptor interface.
  */
 function instanceOfTypedPlotResultDescriptor(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'plot')
         return false;
     return true;
 }

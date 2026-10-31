@@ -28,14 +28,10 @@ import {
 export interface TimeStep {
     /**
      * 
-     * @type {TimeGranularity}
-     * @memberof TimeStep
      */
     granularity: TimeGranularity;
     /**
      * 
-     * @type {number}
-     * @memberof TimeStep
      */
     step: number;
 }

@@ -16,8 +16,6 @@
 export interface MlModelNameResponse {
     /**
      *
-     * @type {string}
-     * @memberof MlModelNameResponse
      */
     mlModelName: string;
 }

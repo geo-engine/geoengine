@@ -14,7 +14,7 @@
 """  # noqa: E501
 
 
-__version__ = "0.10.0"
+__version__ = "0.10.1"
 
 # Define package exports
 __all__ = [
@@ -409,6 +409,7 @@ __all__ = [
     "TileMatrixSets",
     "TilePoint",
     "TileSet",
+    "TileSetDataType",
     "TileSetItem",
     "TileSets",
     "TilesCrs",
@@ -880,6 +881,7 @@ from geoengine_api_client.models.tile_matrix_set_item import TileMatrixSetItem a
 from geoengine_api_client.models.tile_matrix_sets import TileMatrixSets as TileMatrixSets
 from geoengine_api_client.models.tile_point import TilePoint as TilePoint
 from geoengine_api_client.models.tile_set import TileSet as TileSet
+from geoengine_api_client.models.tile_set_data_type import TileSetDataType as TileSetDataType
 from geoengine_api_client.models.tile_set_item import TileSetItem as TileSetItem
 from geoengine_api_client.models.tile_sets import TileSets as TileSets
 from geoengine_api_client.models.tiles_crs import TilesCrs as TilesCrs

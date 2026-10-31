@@ -14,13 +14,15 @@
  * @export
  */
 export const NeighborhoodKernelWeightsMatrixTypeEnum = {
-    WeightsMatrix: 'weightsMatrix'
+    WeightsMatrix: 'weightsMatrix',
 };
 /**
  * Check if a given object implements the NeighborhoodKernelWeightsMatrix interface.
  */
 export function instanceOfNeighborhoodKernelWeightsMatrix(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'weightsMatrix')
         return false;
     if (!('weights' in value) || value['weights'] === undefined)
         return false;

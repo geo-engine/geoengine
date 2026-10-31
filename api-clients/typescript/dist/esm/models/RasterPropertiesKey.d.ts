@@ -16,14 +16,10 @@
 export interface RasterPropertiesKey {
     /**
      *
-     * @type {string}
-     * @memberof RasterPropertiesKey
      */
     domain?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof RasterPropertiesKey
      */
     key: string;
 }

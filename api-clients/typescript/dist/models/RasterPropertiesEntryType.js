@@ -24,7 +24,7 @@ exports.RasterPropertiesEntryTypeToJSONTyped = RasterPropertiesEntryTypeToJSONTy
  */
 exports.RasterPropertiesEntryType = {
     Number: 'Number',
-    String: 'String'
+    String: 'String',
 };
 function instanceOfRasterPropertiesEntryType(value) {
     for (const key in exports.RasterPropertiesEntryType) {

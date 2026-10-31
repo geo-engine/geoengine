@@ -42,20 +42,14 @@ import {
 export interface BandwiseExpression {
     /**
      * 
-     * @type {BandwiseExpressionTypeEnum}
-     * @memberof BandwiseExpression
      */
     type: BandwiseExpressionTypeEnum;
     /**
      * 
-     * @type {BandwiseExpressionParameters}
-     * @memberof BandwiseExpression
      */
     params: BandwiseExpressionParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof BandwiseExpression
      */
     sources: SingleRasterSource;
 }
@@ -65,7 +59,7 @@ export interface BandwiseExpression {
  * @export
  */
 export const BandwiseExpressionTypeEnum = {
-    BandwiseExpression: 'BandwiseExpression'
+    BandwiseExpression: 'BandwiseExpression',
 } as const;
 export type BandwiseExpressionTypeEnum = typeof BandwiseExpressionTypeEnum[keyof typeof BandwiseExpressionTypeEnum];
 
@@ -75,6 +69,8 @@ export type BandwiseExpressionTypeEnum = typeof BandwiseExpressionTypeEnum[keyof
  */
 export function instanceOfBandwiseExpression(value: object): value is BandwiseExpression {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'BandwiseExpression') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

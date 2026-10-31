@@ -18,14 +18,10 @@ import type { MockPointSourceParameters } from './MockPointSourceParameters';
 export interface MockPointSource {
     /**
      *
-     * @type {MockPointSourceTypeEnum}
-     * @memberof MockPointSource
      */
     type: MockPointSourceTypeEnum;
     /**
      *
-     * @type {MockPointSourceParameters}
-     * @memberof MockPointSource
      */
     params: MockPointSourceParameters;
 }

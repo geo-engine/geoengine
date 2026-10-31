@@ -16,26 +16,18 @@
 export interface VectorJoinParameters {
     /**
      *
-     * @type {VectorJoinParametersTypeEnum}
-     * @memberof VectorJoinParameters
      */
     type: VectorJoinParametersTypeEnum;
     /**
      * Column name of the left input used in the join.
-     * @type {string}
-     * @memberof VectorJoinParameters
      */
     leftColumn: string;
     /**
      * Column name of the right input used in the join.
-     * @type {string}
-     * @memberof VectorJoinParameters
      */
     rightColumn: string;
     /**
      * Optional suffix added to right-side columns to avoid collisions.
-     * @type {string}
-     * @memberof VectorJoinParameters
      */
     rightColumnSuffix?: string | null;
 }

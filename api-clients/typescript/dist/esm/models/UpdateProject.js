@@ -31,12 +31,12 @@ export function UpdateProjectFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'id': json['id'],
-        'name': json['name'] == null ? undefined : json['name'],
-        'description': json['description'] == null ? undefined : json['description'],
-        'layers': json['layers'] == null ? undefined : (json['layers'].map(LayerUpdateFromJSON)),
-        'plots': json['plots'] == null ? undefined : (json['plots'].map(PlotUpdateFromJSON)),
-        'bounds': json['bounds'] == null ? undefined : STRectangleFromJSON(json['bounds']),
-        'timeStep': json['timeStep'] == null ? undefined : TimeStepFromJSON(json['timeStep']),
+        'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
+        'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
+        'layers': json['layers'] === undefined ? undefined : json['layers'] === null ? null : (json['layers'].map(LayerUpdateFromJSON)),
+        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : (json['plots'].map(PlotUpdateFromJSON)),
+        'bounds': json['bounds'] === undefined ? undefined : json['bounds'] === null ? null : STRectangleFromJSON(json['bounds']),
+        'timeStep': json['timeStep'] === undefined ? undefined : json['timeStep'] === null ? null : TimeStepFromJSON(json['timeStep']),
     };
 }
 export function UpdateProjectToJSON(json) {

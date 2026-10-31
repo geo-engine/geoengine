@@ -17,7 +17,7 @@
 export const AttributeAggregateType = {
     MeanNumber: 'meanNumber',
     StringSample: 'stringSample',
-    Null: 'null'
+    Null: 'null',
 };
 export function instanceOfAttributeAggregateType(value) {
     for (const key in AttributeAggregateType) {

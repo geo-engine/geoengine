@@ -17,8 +17,6 @@ import type { RasterDataType } from './RasterDataType';
 export interface RasterTypeConversionParameters {
     /**
      * Output raster data type.
-     * @type {RasterDataType}
-     * @memberof RasterTypeConversionParameters
      */
     outputDataType: RasterDataType;
 }

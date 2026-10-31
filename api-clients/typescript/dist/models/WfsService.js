@@ -23,7 +23,7 @@ exports.WfsServiceToJSONTyped = WfsServiceToJSONTyped;
  * @export
  */
 exports.WfsService = {
-    Wfs: 'WFS'
+    Wfs: 'WFS',
 };
 function instanceOfWfsService(value) {
     for (const key in exports.WfsService) {

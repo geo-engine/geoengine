@@ -28,8 +28,6 @@ import {
 export interface MultiPoint {
     /**
      * 
-     * @type {Array<Coordinate2D>}
-     * @memberof MultiPoint
      */
     coordinates: Array<Coordinate2D>;
 }

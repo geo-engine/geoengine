@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface MlModelNameResponse {
     /**
      * 
-     * @type {string}
-     * @memberof MlModelNameResponse
      */
     mlModelName: string;
 }

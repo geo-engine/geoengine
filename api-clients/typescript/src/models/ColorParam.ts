@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { DerivedColor } from './DerivedColor';
 import {
     instanceOfDerivedColor,
@@ -61,9 +62,9 @@ export function ColorParamToJSONTyped(value?: ColorParam | null, ignoreDiscrimin
     }
     switch (value['type']) {
         case 'derived':
-            return Object.assign({}, DerivedColorToJSON(value), { type: 'derived' } as const);
+            return Object.assign({}, DerivedColorToJSON(value), { 'type': 'derived' } as const);
         case 'static':
-            return Object.assign({}, StaticColorToJSON(value), { type: 'static' } as const);
+            return Object.assign({}, StaticColorToJSON(value), { 'type': 'static' } as const);
         default:
             return value;
     }

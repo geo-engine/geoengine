@@ -15,13 +15,15 @@ import { DatabaseConnectionConfigFromJSON, DatabaseConnectionConfigToJSON, } fro
  * @export
  */
 export const GfbioCollectionsDataProviderDefinitionTypeEnum = {
-    GfbioCollections: 'GfbioCollections'
+    GfbioCollections: 'GfbioCollections',
 };
 /**
  * Check if a given object implements the GfbioCollectionsDataProviderDefinition interface.
  */
 export function instanceOfGfbioCollectionsDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GfbioCollections')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -48,12 +50,12 @@ export function GfbioCollectionsDataProviderDefinitionFromJSONTyped(json, ignore
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'collectionApiUrl': json['collectionApiUrl'],
         'collectionApiAuthToken': json['collectionApiAuthToken'],
         'abcdDbConfig': DatabaseConnectionConfigFromJSON(json['abcdDbConfig']),
         'pangaeaUrl': json['pangaeaUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function GfbioCollectionsDataProviderDefinitionToJSON(json) {

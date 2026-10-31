@@ -43,9 +43,9 @@ function HistogramBucketsToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'number':
-            return Object.assign({}, (0, HistogramBucketsNumber_1.HistogramBucketsNumberToJSON)(value), { type: 'number' });
+            return Object.assign({}, (0, HistogramBucketsNumber_1.HistogramBucketsNumberToJSON)(value), { 'type': 'number' });
         case 'squareRootChoiceRule':
-            return Object.assign({}, (0, HistogramBucketsSquareRootChoiceRule_1.HistogramBucketsSquareRootChoiceRuleToJSON)(value), { type: 'squareRootChoiceRule' });
+            return Object.assign({}, (0, HistogramBucketsSquareRootChoiceRule_1.HistogramBucketsSquareRootChoiceRuleToJSON)(value), { 'type': 'squareRootChoiceRule' });
         default:
             return value;
     }

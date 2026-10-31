@@ -16,7 +16,7 @@
  */
 export const DeriveOutRasterSpecsSource = {
     DataBounds: 'dataBounds',
-    ProjectionBounds: 'projectionBounds'
+    ProjectionBounds: 'projectionBounds',
 };
 export function instanceOfDeriveOutRasterSpecsSource(value) {
     for (const key in DeriveOutRasterSpecsSource) {

@@ -364,6 +364,7 @@ export * from './TileMatrixSetItem';
 export * from './TileMatrixSets';
 export * from './TilePoint';
 export * from './TileSet';
+export * from './TileSetDataType';
 export * from './TileSetItem';
 export * from './TileSets';
 export * from './TilesCrs';

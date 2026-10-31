@@ -16,8 +16,6 @@
 export interface DataPathUpload {
     /**
      *
-     * @type {string}
-     * @memberof DataPathUpload
      */
     upload: string;
 }

@@ -24,8 +24,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TextApiResponse = exports.BlobApiResponse = exports.VoidApiResponse = exports.JSONApiResponse = exports.COLLECTION_FORMATS = exports.RequiredError = exports.FetchError = exports.ResponseError = exports.BaseAPI = exports.DefaultConfig = exports.Configuration = exports.BASE_PATH = void 0;
 exports.querystring = querystring;
 exports.exists = exists;
+exports.serializeDateTime = serializeDateTime;
+exports.serializeDate = serializeDate;
+exports.parseDate = parseDate;
+exports.parseDateTime = parseDateTime;
 exports.mapValues = mapValues;
+exports.anyToJSON = anyToJSON;
 exports.canConsumeForm = canConsumeForm;
+exports.parseContentDispositionFilename = parseContentDispositionFilename;
 exports.BASE_PATH = "https://geoengine.io/api".replace(/\/+$/, "");
 class Configuration {
     constructor(configuration = {}) {
@@ -76,7 +82,7 @@ class Configuration {
 exports.Configuration = Configuration;
 exports.DefaultConfig = new Configuration({
     headers: {
-        'User-Agent': 'geoengine/api-client/typescript/0.10.0'
+        'User-Agent': 'geoengine/api-client/typescript/0.10.1'
     }
 });
 /**
@@ -222,7 +228,7 @@ class BaseAPI {
     }
 }
 exports.BaseAPI = BaseAPI;
-BaseAPI.jsonRegex = new RegExp('^(:?application\/json|[^;/ \t]+\/[^;/ \t]+[+]json)[ \t]*(:?;.*)?$', 'i');
+BaseAPI.jsonRegex = /^(:?application\/json|[^;/ \t]+\/[^;/ \t]+[+]json)[ \t]*(:?;.*)?$/i;
 ;
 function isBlob(value) {
     return typeof Blob !== 'undefined' && value instanceof Blob;
@@ -235,6 +241,11 @@ class ResponseError extends Error {
         super(msg);
         this.response = response;
         this.name = "ResponseError";
+        // restore prototype chain
+        const actualProto = new.target.prototype;
+        if (Object.setPrototypeOf) {
+            Object.setPrototypeOf(this, actualProto);
+        }
     }
 }
 exports.ResponseError = ResponseError;
@@ -243,6 +254,11 @@ class FetchError extends Error {
         super(msg);
         this.cause = cause;
         this.name = "FetchError";
+        // restore prototype chain
+        const actualProto = new.target.prototype;
+        if (Object.setPrototypeOf) {
+            Object.setPrototypeOf(this, actualProto);
+        }
     }
 }
 exports.FetchError = FetchError;
@@ -251,6 +267,11 @@ class RequiredError extends Error {
         super(msg);
         this.field = field;
         this.name = "RequiredError";
+        // restore prototype chain
+        const actualProto = new.target.prototype;
+        if (Object.setPrototypeOf) {
+            Object.setPrototypeOf(this, actualProto);
+        }
     }
 }
 exports.RequiredError = RequiredError;
@@ -278,7 +299,7 @@ function querystringSingleKey(key, value, keyPrefix = '') {
         return querystringSingleKey(key, valueAsArray, keyPrefix);
     }
     if (value instanceof Date) {
-        return `${encodeURIComponent(fullKey)}=${encodeURIComponent(value.toISOString())}`;
+        return `${encodeURIComponent(fullKey)}=${encodeURIComponent(serializeDateTime(value))}`;
     }
     if (value instanceof Object) {
         return querystring(value, fullKey);
@@ -289,6 +310,52 @@ function exists(json, key) {
     const value = json[key];
     return value !== null && value !== undefined;
 }
+/**
+ * Every generated date call site routes through these.
+ *
+ * `format: date` is a calendar date, with no time and no offset, so it is converted
+ * against the local calendar on both ends: they have to agree or the date shifts by
+ * a day. `format: date-time` is an instant and uses UTC.
+ */
+function serializeDateTime(value) {
+    return value.toISOString();
+}
+function serializeDate(value) {
+    if (isNaN(value.getTime())) {
+        throw new RangeError('Invalid time value');
+    }
+    const year = ('000' + value.getFullYear()).slice(-4);
+    const month = ('0' + (value.getMonth() + 1)).slice(-2);
+    const day = ('0' + value.getDate()).slice(-2);
+    return `${year}-${month}-${day}`;
+}
+function parseDate(value) {
+    if (value instanceof Date) {
+        return value;
+    }
+    // `new Date("2026-08-05")` would parse as UTC midnight: a different day west of UTC.
+    // Local midnight is the stated day everywhere. setFullYear avoids the 1900 offset the
+    // multi-argument constructor applies to years 0-99.
+    const fullDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+    if (fullDate) {
+        const year = Number(fullDate[1]);
+        const month = Number(fullDate[2]) - 1;
+        const day = Number(fullDate[3]);
+        const date = new Date(0);
+        date.setFullYear(year, month, day);
+        date.setHours(0, 0, 0, 0);
+        // Out-of-range components (or a day the local zone skipped) silently roll over,
+        // which would hand back a date the server never sent.
+        if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
+            return new Date(NaN);
+        }
+        return date;
+    }
+    return new Date(value);
+}
+function parseDateTime(value) {
+    return new Date(value);
+}
 function mapValues(data, fn) {
     const result = {};
     for (const key of Object.keys(data)) {
@@ -296,9 +363,14 @@ function mapValues(data, fn) {
     }
     return result;
 }
+// Pass-through serializer for `any`-typed properties in form data. See #1877.
+function anyToJSON(value) {
+    return value;
+}
 function canConsumeForm(consumes) {
+    var _a;
     for (const consume of consumes) {
-        if ('multipart/form-data' === consume.contentType) {
+        if (((_a = consume.contentType) === null || _a === void 0 ? void 0 : _a.startsWith('multipart/form-data')) == true) {
             return true;
         }
     }
@@ -331,14 +403,74 @@ class BlobApiResponse {
     constructor(raw) {
         this.raw = raw;
     }
+    /**
+     * The body named after the Content-Disposition header, so that a download keeps the name the
+     * server gave it. A File is built from a native Blob; the Blob itself is named where there is no
+     * global File (Node.js before 20), where File cannot be constructed, or where the Blob is not the
+     * native one, as returned by an injected fetch implementation such as node-fetch, which a File
+     * would stringify instead of wrapping.
+     */
     value() {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.raw.blob();
+            var _a;
+            const blob = yield this.raw.blob();
+            const name = (_a = parseContentDispositionFilename(this.raw.headers)) !== null && _a !== void 0 ? _a : '';
+            if (typeof File !== 'undefined' && blob instanceof Blob) {
+                try {
+                    return new File([blob], name, { type: blob.type });
+                }
+                catch (_b) {
+                    // File cannot be constructed: name the Blob itself
+                }
+            }
+            return Object.assign(blob, { name });
         });
     }
     ;
 }
 exports.BlobApiResponse = BlobApiResponse;
+/**
+ * The file name advertised by a Content-Disposition header (RFC 6266): the RFC 5987 encoded
+ * `filename*` parameter first, falling back to the plain `filename` when it is malformed, not UTF-8
+ * or has no usable name. Any directory part is dropped; undefined when no usable name is advertised.
+ */
+function parseContentDispositionFilename(headers) {
+    var _a, _b;
+    const params = parseHeaderParameters((_a = headers.get('Content-Disposition')) !== null && _a !== void 0 ? _a : '');
+    return (_b = basename(decodeExtValue(params.get('filename*')))) !== null && _b !== void 0 ? _b : basename(params.get('filename'));
+}
+/** The decoded RFC 5987 ext-value, or undefined when it is not UTF-8 or its percent-encoding is malformed. */
+function decodeExtValue(value) {
+    const match = value === undefined ? null : /^utf-8'[^']*'(.*)$/i.exec(value);
+    try {
+        return match ? decodeURIComponent(match[1]) : undefined;
+    }
+    catch (_a) {
+        return undefined;
+    }
+}
+/**
+ * The `name=value` parameters of a header value, consumed one at a time so that a quoted-string is
+ * taken whole, `;` included. Names are lower-cased, quoted-string values are unquoted with their
+ * backslash escapes resolved, and the first occurrence of a name wins.
+ */
+function parseHeaderParameters(value) {
+    const params = new Map();
+    const parameter = /(?:^|;)\s*([^=;]+?)\s*=\s*(?:"((?:[^"\\]|\\.)*)"?|([^;]*))/g;
+    let match;
+    while ((match = parameter.exec(value)) !== null) {
+        const name = match[1].toLowerCase();
+        if (!params.has(name)) {
+            params.set(name, match[2] !== undefined ? match[2].replace(/\\(.)/g, '$1') : match[3].trim());
+        }
+    }
+    return params;
+}
+/** The last `/` or `\` separated segment of a file name, or undefined when it is not a file name. */
+function basename(name) {
+    const base = name === null || name === void 0 ? void 0 : name.split(/[\\/]/).pop();
+    return !base || base === '.' || base === '..' ? undefined : base;
+}
 class TextApiResponse {
     constructor(raw) {
         this.raw = raw;

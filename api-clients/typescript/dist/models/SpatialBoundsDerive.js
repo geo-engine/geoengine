@@ -46,11 +46,11 @@ function SpatialBoundsDeriveToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'bounds':
-            return Object.assign({}, (0, SpatialBoundsDeriveBounds_1.SpatialBoundsDeriveBoundsToJSON)(value), { type: 'bounds' });
+            return Object.assign({}, (0, SpatialBoundsDeriveBounds_1.SpatialBoundsDeriveBoundsToJSON)(value), { 'type': 'bounds' });
         case 'derive':
-            return Object.assign({}, (0, SpatialBoundsDeriveDerive_1.SpatialBoundsDeriveDeriveToJSON)(value), { type: 'derive' });
+            return Object.assign({}, (0, SpatialBoundsDeriveDerive_1.SpatialBoundsDeriveDeriveToJSON)(value), { 'type': 'derive' });
         case 'none':
-            return Object.assign({}, (0, SpatialBoundsDeriveNone_1.SpatialBoundsDeriveNoneToJSON)(value), { type: 'none' });
+            return Object.assign({}, (0, SpatialBoundsDeriveNone_1.SpatialBoundsDeriveNoneToJSON)(value), { 'type': 'none' });
         default:
             return value;
     }

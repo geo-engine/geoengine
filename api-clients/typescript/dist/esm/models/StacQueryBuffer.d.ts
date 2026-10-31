@@ -16,14 +16,10 @@
 export interface StacQueryBuffer {
     /**
      *
-     * @type {number}
-     * @memberof StacQueryBuffer
      */
     startSeconds: number;
     /**
      *
-     * @type {number}
-     * @memberof StacQueryBuffer
      */
     endSeconds: number;
 }

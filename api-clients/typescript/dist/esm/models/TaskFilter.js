@@ -18,7 +18,7 @@ export const TaskFilter = {
     Running: 'running',
     Aborted: 'aborted',
     Failed: 'failed',
-    Completed: 'completed'
+    Completed: 'completed',
 };
 export function instanceOfTaskFilter(value) {
     for (const key in TaskFilter) {

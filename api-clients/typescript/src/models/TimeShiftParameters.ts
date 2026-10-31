@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { TimeShiftParametersAbsolute } from './TimeShiftParametersAbsolute';
 import {
     instanceOfTimeShiftParametersAbsolute,
@@ -61,9 +62,9 @@ export function TimeShiftParametersToJSONTyped(value?: TimeShiftParameters | nul
     }
     switch (value['type']) {
         case 'absolute':
-            return Object.assign({}, TimeShiftParametersAbsoluteToJSON(value), { type: 'absolute' } as const);
+            return Object.assign({}, TimeShiftParametersAbsoluteToJSON(value), { 'type': 'absolute' } as const);
         case 'relative':
-            return Object.assign({}, TimeShiftParametersRelativeToJSON(value), { type: 'relative' } as const);
+            return Object.assign({}, TimeShiftParametersRelativeToJSON(value), { 'type': 'relative' } as const);
         default:
             return value;
     }

@@ -11,7 +11,7 @@
 import type { GeospatialDataDataTypeOneOf } from './GeospatialDataDataTypeOneOf';
 /**
  * @type GeospatialDataDataType
- *
+ * Type of data represented in the layer
  * @export
  */
 export type GeospatialDataDataType = GeospatialDataDataTypeOneOf | string;

@@ -16,38 +16,26 @@
 export interface AutoCreateDataset {
     /**
      *
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     upload: string;
     /**
      *
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     datasetName: string;
     /**
      *
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     datasetDescription: string;
     /**
      *
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     mainFile: string;
     /**
      *
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     layerName?: string | null;
     /**
      *
-     * @type {Array<string>}
-     * @memberof AutoCreateDataset
      */
     tags?: Array<string> | null;
 }

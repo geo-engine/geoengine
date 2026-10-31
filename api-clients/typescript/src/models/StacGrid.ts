@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface StacGrid {
     /**
      * Target number of square cells; actual count may differ due to square geometry.
-     * @type {number}
-     * @memberof StacGrid
      */
     targetNumberOfCells: number;
 }

@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { ScalingModeMulSlopeAddOffset } from './ScalingModeMulSlopeAddOffset';
 import {
     instanceOfScalingModeMulSlopeAddOffset,
@@ -61,9 +62,9 @@ export function ScalingModeToJSONTyped(value?: ScalingMode | null, ignoreDiscrim
     }
     switch (value['type']) {
         case 'mulSlopeAddOffset':
-            return Object.assign({}, ScalingModeMulSlopeAddOffsetToJSON(value), { type: 'mulSlopeAddOffset' } as const);
+            return Object.assign({}, ScalingModeMulSlopeAddOffsetToJSON(value), { 'type': 'mulSlopeAddOffset' } as const);
         case 'subOffsetDivSlope':
-            return Object.assign({}, ScalingModeSubOffsetDivSlopeToJSON(value), { type: 'subOffsetDivSlope' } as const);
+            return Object.assign({}, ScalingModeSubOffsetDivSlopeToJSON(value), { 'type': 'subOffsetDivSlope' } as const);
         default:
             return value;
     }

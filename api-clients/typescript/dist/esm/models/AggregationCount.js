@@ -14,13 +14,15 @@
  * @export
  */
 export const AggregationCountTypeEnum = {
-    Count: 'count'
+    Count: 'count',
 };
 /**
  * Check if a given object implements the AggregationCount interface.
  */
 export function instanceOfAggregationCount(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'count')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

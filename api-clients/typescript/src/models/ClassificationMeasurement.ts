@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface ClassificationMeasurement {
     /**
      * 
-     * @type {ClassificationMeasurementTypeEnum}
-     * @memberof ClassificationMeasurement
      */
     type: ClassificationMeasurementTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof ClassificationMeasurement
      */
     measurement: string;
     /**
      * 
-     * @type {{ [key: string]: string; }}
-     * @memberof ClassificationMeasurement
      */
     classes: { [key: string]: string; };
 }
@@ -43,7 +37,7 @@ export interface ClassificationMeasurement {
  * @export
  */
 export const ClassificationMeasurementTypeEnum = {
-    Classification: 'classification'
+    Classification: 'classification',
 } as const;
 export type ClassificationMeasurementTypeEnum = typeof ClassificationMeasurementTypeEnum[keyof typeof ClassificationMeasurementTypeEnum];
 
@@ -53,6 +47,8 @@ export type ClassificationMeasurementTypeEnum = typeof ClassificationMeasurement
  */
 export function instanceOfClassificationMeasurement(value: object): value is ClassificationMeasurement {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'classification') return false;
+    
     if (!('measurement' in value) || value['measurement'] === undefined) return false;
     if (!('classes' in value) || value['classes'] === undefined) return false;
     return true;

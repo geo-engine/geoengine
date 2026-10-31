@@ -1,6 +1,7 @@
 
 # GeospatialDataDataType
 
+Type of data represented in the layer
 
 ## Properties
 

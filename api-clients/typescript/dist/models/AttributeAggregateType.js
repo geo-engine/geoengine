@@ -25,7 +25,7 @@ exports.AttributeAggregateTypeToJSONTyped = AttributeAggregateTypeToJSONTyped;
 exports.AttributeAggregateType = {
     MeanNumber: 'meanNumber',
     StringSample: 'stringSample',
-    Null: 'null'
+    Null: 'null',
 };
 function instanceOfAttributeAggregateType(value) {
     for (const key in exports.AttributeAggregateType) {

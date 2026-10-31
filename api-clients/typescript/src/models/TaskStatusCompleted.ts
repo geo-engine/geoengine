@@ -20,38 +20,26 @@ import { mapValues } from '../runtime';
 export interface TaskStatusCompleted {
     /**
      * 
-     * @type {TaskStatusCompletedStatusEnum}
-     * @memberof TaskStatusCompleted
      */
     status: TaskStatusCompletedStatusEnum;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusCompleted
      */
     taskType: string;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusCompleted
      */
     description?: string;
     /**
      * 
-     * @type {any}
-     * @memberof TaskStatusCompleted
      */
     info?: any | null;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusCompleted
      */
     timeTotal: string;
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusCompleted
      */
     timeStarted: string;
 }
@@ -61,7 +49,7 @@ export interface TaskStatusCompleted {
  * @export
  */
 export const TaskStatusCompletedStatusEnum = {
-    Completed: 'completed'
+    Completed: 'completed',
 } as const;
 export type TaskStatusCompletedStatusEnum = typeof TaskStatusCompletedStatusEnum[keyof typeof TaskStatusCompletedStatusEnum];
 
@@ -71,6 +59,8 @@ export type TaskStatusCompletedStatusEnum = typeof TaskStatusCompletedStatusEnum
  */
 export function instanceOfTaskStatusCompleted(value: object): value is TaskStatusCompleted {
     if (!('status' in value) || value['status'] === undefined) return false;
+    if (value['status'] !== 'completed') return false;
+    
     if (!('taskType' in value) || value['taskType'] === undefined) return false;
     if (!('timeTotal' in value) || value['timeTotal'] === undefined) return false;
     if (!('timeStarted' in value) || value['timeStarted'] === undefined) return false;
@@ -90,7 +80,7 @@ export function TaskStatusCompletedFromJSONTyped(json: any, ignoreDiscriminator:
         'status': json['status'],
         'taskType': json['taskType'],
         'description': json['description'] == null ? undefined : json['description'],
-        'info': json['info'] == null ? undefined : json['info'],
+        'info': json['info'] === undefined ? undefined : json['info'] === null ? null : json['info'],
         'timeTotal': json['timeTotal'],
         'timeStarted': json['timeStarted'],
     };

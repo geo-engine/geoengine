@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { AttributeSelectionAll } from './AttributeSelectionAll';
 import {
     instanceOfAttributeSelectionAll,
@@ -61,9 +62,9 @@ export function AttributeSelectionToJSONTyped(value?: AttributeSelection | null,
     }
     switch (value['type']) {
         case 'all':
-            return Object.assign({}, AttributeSelectionAllToJSON(value), { type: 'all' } as const);
+            return Object.assign({}, AttributeSelectionAllToJSON(value), { 'type': 'all' } as const);
         case 'names':
-            return Object.assign({}, AttributeSelectionNamesToJSON(value), { type: 'names' } as const);
+            return Object.assign({}, AttributeSelectionNamesToJSON(value), { 'type': 'names' } as const);
         default:
             return value;
     }

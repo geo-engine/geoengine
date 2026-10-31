@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface StaticColor {
     /**
      * 
-     * @type {StaticColorTypeEnum}
-     * @memberof StaticColor
      */
     type: StaticColorTypeEnum;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof StaticColor
      */
     color: Array<number>;
 }
@@ -37,7 +33,7 @@ export interface StaticColor {
  * @export
  */
 export const StaticColorTypeEnum = {
-    Static: 'static'
+    Static: 'static',
 } as const;
 export type StaticColorTypeEnum = typeof StaticColorTypeEnum[keyof typeof StaticColorTypeEnum];
 
@@ -47,6 +43,8 @@ export type StaticColorTypeEnum = typeof StaticColorTypeEnum[keyof typeof Static
  */
 export function instanceOfStaticColor(value: object): value is StaticColor {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'static') return false;
+    
     if (!('color' in value) || value['color'] === undefined) return false;
     return true;
 }

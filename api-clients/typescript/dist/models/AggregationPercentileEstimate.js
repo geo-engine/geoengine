@@ -22,13 +22,15 @@ exports.AggregationPercentileEstimateToJSONTyped = AggregationPercentileEstimate
  * @export
  */
 exports.AggregationPercentileEstimateTypeEnum = {
-    PercentileEstimate: 'percentileEstimate'
+    PercentileEstimate: 'percentileEstimate',
 };
 /**
  * Check if a given object implements the AggregationPercentileEstimate interface.
  */
 function instanceOfAggregationPercentileEstimate(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'percentileEstimate')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

@@ -24,7 +24,7 @@ exports.UnixTimeStampTypeToJSONTyped = UnixTimeStampTypeToJSONTyped;
  */
 exports.UnixTimeStampType = {
     EpochSeconds: 'epochSeconds',
-    EpochMilliseconds: 'epochMilliseconds'
+    EpochMilliseconds: 'epochMilliseconds',
 };
 function instanceOfUnixTimeStampType(value) {
     for (const key in exports.UnixTimeStampType) {

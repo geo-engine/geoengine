@@ -1,6 +1,6 @@
 --- python/geoengine_api_client/models/plot_result_descriptor.py
 +++ python/geoengine_api_client/models/plot_result_descriptor.py
-@@ -93,6 +93,6 @@
+@@ -94,6 +94,6 @@
  
      @classmethod
      def from_dict(cls, obj: Dict[str, Any]) -> Optional[Self]:

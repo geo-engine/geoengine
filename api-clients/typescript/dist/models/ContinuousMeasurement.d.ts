@@ -16,20 +16,14 @@
 export interface ContinuousMeasurement {
     /**
      *
-     * @type {ContinuousMeasurementTypeEnum}
-     * @memberof ContinuousMeasurement
      */
     type: ContinuousMeasurementTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof ContinuousMeasurement
      */
     measurement: string;
     /**
      *
-     * @type {string}
-     * @memberof ContinuousMeasurement
      */
     unit?: string | null;
 }

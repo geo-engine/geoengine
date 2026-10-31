@@ -1,13 +1,13 @@
 --- typescript/src/runtime.ts
 +++ typescript/src/runtime.ts
-@@ -84,7 +84,7 @@
+@@ -83,7 +83,7 @@
      }
  }
  
 -export const DefaultConfig = new Configuration();
 +export const DefaultConfig = new Configuration({
     headers: {
-        'User-Agent': 'geoengine/api-client/typescript/0.10.0'
+        'User-Agent': 'geoengine/api-client/typescript/0.10.1'
     }
 });
  

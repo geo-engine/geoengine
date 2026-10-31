@@ -2,7 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.10.0] - 2026-10-21
+## [0.10.1] - 2026-10-31
+
+### 🚀 Features
+
+- *(backend)* Coordinate STAC requests through channels ([#1366](https://github.com/geo-engine/geoengine/pull/1366))
+- *(backend)* Add admin endpoint to clear dataset access caches ([#1391](https://github.com/geo-engine/geoengine/pull/1391))
+- Query runtime decoupling ([#1364](https://github.com/geo-engine/geoengine/pull/1364))
+
+
+### 🐛 Bug Fixes
+
+- *(www)* Update dompurify to 3.4.17 (GHSA-cg2g-xh64-v4q7) ([#1392](https://github.com/geo-engine/geoengine/pull/1392))
+- Expression should not skip all empty if map_no_data ([#1370](https://github.com/geo-engine/geoengine/pull/1370))
+
+
+### 💼 Other
+
+- *(backend)* Update dependencies, Rust 1.99 and enforce Cargo.toml formatting ([#1371](https://github.com/geo-engine/geoengine/pull/1371))
+- *(python)* Update dependencies and add update recipes ([#1378](https://github.com/geo-engine/geoengine/pull/1378))
+- *(ui)* Update dependencies, Angular 22.2 and vitest 5 ([#1377](https://github.com/geo-engine/geoengine/pull/1377))
+- Update OpenAPI generator, UI and www dependencies ([#1374](https://github.com/geo-engine/geoengine/pull/1374))
+
+
+### 🚜 Refactor
+
+- *(backend)* Replace typetag with typed operator enums ([#1381](https://github.com/geo-engine/geoengine/pull/1381))
+- *(backend)* Rename workflow to processing graph ([#1383](https://github.com/geo-engine/geoengine/pull/1383))
+- *(backend)* Finish processing graph naming and simplify operator enums ([#1386](https://github.com/geo-engine/geoengine/pull/1386))
+- *(backend)* Run query endpoints end to end on the processing r… ([#1387](https://github.com/geo-engine/geoengine/pull/1387))
+
+
+### 📚 Documentation
+
+- Add update-dependencies skill for stacked update PRs ([#1380](https://github.com/geo-engine/geoengine/pull/1380))
+
+
+### ⚡ Performance
+
+- Make empty tiles less work ([#1360](https://github.com/geo-engine/geoengine/pull/1360))
+- Concurrent stack queries for loading_info ([#1354](https://github.com/geo-engine/geoengine/pull/1354))
+
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump the all group across 1 directory with 7 updates ([#1355](https://github.com/geo-engine/geoengine/pull/1355))
+- Add release PR workflow ([#1389](https://github.com/geo-engine/geoengine/pull/1389))
+- Fix release PR
+- Add input for release branch reference in release PR workflow
+- Enhance release PR workflow with additional volume mounts and disk space management
+
+
+### 🛡️ Security
+
+- *(ui)* Bump the security group across 1 directory with 4 updates ([#1382](https://github.com/geo-engine/geoengine/pull/1382))
+
+## [0.10.0] - 2026-10-22
 
 ### 🚀 Features
 

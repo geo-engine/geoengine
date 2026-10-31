@@ -11,39 +11,84 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  GeoJson,
-  WfsRequest,
-  WfsService,
-  WfsVersion,
-} from '../models/index';
 import {
+    type GeoJson,
     GeoJsonFromJSON,
     GeoJsonToJSON,
+} from '../models/GeoJson';
+import {
+    type WfsRequest,
     WfsRequestFromJSON,
     WfsRequestToJSON,
+} from '../models/WfsRequest';
+import {
+    type WfsService,
     WfsServiceFromJSON,
     WfsServiceToJSON,
+} from '../models/WfsService';
+import {
+    type WfsVersion,
     WfsVersionFromJSON,
     WfsVersionToJSON,
-} from '../models/index';
+} from '../models/WfsVersion';
 
 export interface WfsHandlerRequest {
+    /**
+     * Processing graph id
+     */
     processingGraph: string;
+    /**
+     * type of WFS request
+     */
     request: WfsRequest;
+    /**
+     * 
+     */
     bbox?: string;
+    /**
+     * 
+     */
     count?: number | null;
+    /**
+     * 
+     */
     filter?: string | null;
+    /**
+     * 
+     */
     namespaces?: string | null;
+    /**
+     * 
+     */
     propertyName?: string | null;
+    /**
+     * 
+     */
     resultType?: string | null;
+    /**
+     * 
+     */
     service?: WfsService;
+    /**
+     * 
+     */
     sortBy?: string | null;
+    /**
+     * 
+     */
     srsName?: string | null;
+    /**
+     * 
+     */
     time?: string;
+    /**
+     * 
+     */
     typeNames?: string;
+    /**
+     * 
+     */
     version?: WfsVersion | null;
 }
 
@@ -136,7 +181,7 @@ export class OGCWFSApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/wfs/{processingGraph}`;
-        urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
+        urlPath = urlPath.replace('{processingGraph}', encodeURIComponent(String(requestParameters['processingGraph'])));
 
         return {
             path: urlPath,

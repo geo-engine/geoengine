@@ -16,7 +16,7 @@
  */
 export const FileNotFoundHandling = {
     NoData: 'NoData',
-    Error: 'Error'
+    Error: 'Error',
 };
 export function instanceOfFileNotFoundHandling(value) {
     for (const key in FileNotFoundHandling) {

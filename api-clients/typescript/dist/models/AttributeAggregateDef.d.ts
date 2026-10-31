@@ -18,20 +18,14 @@ import type { AttributeAggregateType } from './AttributeAggregateType';
 export interface AttributeAggregateDef {
     /**
      * Name of the source column to aggregate.
-     * @type {string}
-     * @memberof AttributeAggregateDef
      */
     columnName: string;
     /**
      * Aggregation function applied to the source column.
-     * @type {AttributeAggregateType}
-     * @memberof AttributeAggregateDef
      */
     aggregateType: AttributeAggregateType;
     /**
      * Optional measurement metadata for the aggregated result.
-     * @type {Measurement}
-     * @memberof AttributeAggregateDef
      */
     measurement?: Measurement | null;
 }

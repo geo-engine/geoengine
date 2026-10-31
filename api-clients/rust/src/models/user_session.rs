@@ -17,9 +17,9 @@ pub struct UserSession {
     #[serde(rename = "user")]
     pub user: Box<models::UserInfo>,
     #[serde(rename = "created")]
-    pub created: String,
+    pub created: chrono::DateTime<chrono::FixedOffset>,
     #[serde(rename = "validUntil")]
-    pub valid_until: String,
+    pub valid_until: chrono::DateTime<chrono::FixedOffset>,
     #[serde(rename = "project", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub project: Option<Option<uuid::Uuid>>,
     #[serde(rename = "view", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
@@ -29,7 +29,7 @@ pub struct UserSession {
 }
 
 impl UserSession {
-    pub fn new(id: uuid::Uuid, user: models::UserInfo, created: String, valid_until: String, roles: Vec<uuid::Uuid>) -> UserSession {
+    pub fn new(id: uuid::Uuid, user: models::UserInfo, created: chrono::DateTime<chrono::FixedOffset>, valid_until: chrono::DateTime<chrono::FixedOffset>, roles: Vec<uuid::Uuid>) -> UserSession {
         UserSession {
             id,
             user: Box::new(user),

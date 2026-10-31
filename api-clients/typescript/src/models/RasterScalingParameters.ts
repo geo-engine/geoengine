@@ -42,26 +42,18 @@ import {
 export interface RasterScalingParameters {
     /**
      * The slope (multiplication factor) applied to each pixel value.
-     * @type {SlopeOffsetSelection}
-     * @memberof RasterScalingParameters
      */
     slope: SlopeOffsetSelection;
     /**
      * The offset (addition) applied to each pixel value.
-     * @type {SlopeOffsetSelection}
-     * @memberof RasterScalingParameters
      */
     offset: SlopeOffsetSelection;
     /**
      * *Optional:* output measurement of the result of the scaling operation.
-     * @type {Measurement}
-     * @memberof RasterScalingParameters
      */
     outputMeasurement?: Measurement | null;
     /**
      * Selects whether the values are scaled or unscaled.
-     * @type {ScalingMode}
-     * @memberof RasterScalingParameters
      */
     scalingMode: ScalingMode;
 }
@@ -88,7 +80,7 @@ export function RasterScalingParametersFromJSONTyped(json: any, ignoreDiscrimina
         
         'slope': SlopeOffsetSelectionFromJSON(json['slope']),
         'offset': SlopeOffsetSelectionFromJSON(json['offset']),
-        'outputMeasurement': json['outputMeasurement'] == null ? undefined : MeasurementFromJSON(json['outputMeasurement']),
+        'outputMeasurement': json['outputMeasurement'] === undefined ? undefined : json['outputMeasurement'] === null ? null : MeasurementFromJSON(json['outputMeasurement']),
         'scalingMode': ScalingModeFromJSON(json['scalingMode']),
     };
 }

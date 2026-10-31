@@ -40,11 +40,11 @@ export function MeasurementToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'classification':
-            return Object.assign({}, ClassificationMeasurementToJSON(value), { type: 'classification' });
+            return Object.assign({}, ClassificationMeasurementToJSON(value), { 'type': 'classification' });
         case 'continuous':
-            return Object.assign({}, ContinuousMeasurementToJSON(value), { type: 'continuous' });
+            return Object.assign({}, ContinuousMeasurementToJSON(value), { 'type': 'continuous' });
         case 'unitless':
-            return Object.assign({}, UnitlessMeasurementToJSON(value), { type: 'unitless' });
+            return Object.assign({}, UnitlessMeasurementToJSON(value), { 'type': 'unitless' });
         default:
             return value;
     }

@@ -22,13 +22,15 @@ exports.HistogramBucketsSquareRootChoiceRuleToJSONTyped = HistogramBucketsSquare
  * @export
  */
 exports.HistogramBucketsSquareRootChoiceRuleTypeEnum = {
-    SquareRootChoiceRule: 'squareRootChoiceRule'
+    SquareRootChoiceRule: 'squareRootChoiceRule',
 };
 /**
  * Check if a given object implements the HistogramBucketsSquareRootChoiceRule interface.
  */
 function instanceOfHistogramBucketsSquareRootChoiceRule(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'squareRootChoiceRule')
         return false;
     return true;
 }

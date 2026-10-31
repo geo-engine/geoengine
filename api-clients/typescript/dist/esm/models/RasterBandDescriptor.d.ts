@@ -17,14 +17,10 @@ import type { Measurement } from './Measurement';
 export interface RasterBandDescriptor {
     /**
      *
-     * @type {string}
-     * @memberof RasterBandDescriptor
      */
     name: string;
     /**
      *
-     * @type {Measurement}
-     * @memberof RasterBandDescriptor
      */
     measurement: Measurement;
 }

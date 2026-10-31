@@ -17,38 +17,26 @@ import type { MlModelMetadata } from './MlModelMetadata';
 export interface MlModel {
     /**
      *
-     * @type {string}
-     * @memberof MlModel
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof MlModel
      */
     displayName: string;
     /**
      *
-     * @type {string}
-     * @memberof MlModel
      */
     description: string;
     /**
      *
-     * @type {string}
-     * @memberof MlModel
      */
     upload: string;
     /**
      *
-     * @type {MlModelMetadata}
-     * @memberof MlModel
      */
     metadata: MlModelMetadata;
     /**
      *
-     * @type {string}
-     * @memberof MlModel
      */
     fileName: string;
 }

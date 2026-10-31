@@ -18,22 +18,16 @@ import type { AttributeSelection } from './AttributeSelection';
 export interface MeanRasterPixelValuesOverTimeParameters {
     /**
      * Where should the x-axis (time) tick be positioned? At either time start, time end or in the center.
-     * @type {MeanRasterPixelValuesOverTimePosition}
-     * @memberof MeanRasterPixelValuesOverTimeParameters
      */
     timePosition: MeanRasterPixelValuesOverTimePosition;
     /**
      * Whether to fill the area under the curve. Defaults to `true`.
      * Only applies to a single band, multiple bands are drawn as lines.
-     * @type {boolean}
-     * @memberof MeanRasterPixelValuesOverTimeParameters
      */
     area?: boolean;
     /**
      * _Optional_: The bands to compute the means for.
      * Defaults to `all`.
-     * @type {AttributeSelection}
-     * @memberof MeanRasterPixelValuesOverTimeParameters
      */
     attributes?: AttributeSelection;
 }

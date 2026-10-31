@@ -14,13 +14,15 @@
  * @export
  */
 export const TaskStatusCompletedStatusEnum = {
-    Completed: 'completed'
+    Completed: 'completed',
 };
 /**
  * Check if a given object implements the TaskStatusCompleted interface.
  */
 export function instanceOfTaskStatusCompleted(value) {
     if (!('status' in value) || value['status'] === undefined)
+        return false;
+    if (value['status'] !== 'completed')
         return false;
     if (!('taskType' in value) || value['taskType'] === undefined)
         return false;
@@ -41,7 +43,7 @@ export function TaskStatusCompletedFromJSONTyped(json, ignoreDiscriminator) {
         'status': json['status'],
         'taskType': json['taskType'],
         'description': json['description'] == null ? undefined : json['description'],
-        'info': json['info'] == null ? undefined : json['info'],
+        'info': json['info'] === undefined ? undefined : json['info'] === null ? null : json['info'],
         'timeTotal': json['timeTotal'],
         'timeStarted': json['timeStarted'],
     };

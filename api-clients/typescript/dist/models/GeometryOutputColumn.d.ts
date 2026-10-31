@@ -17,14 +17,10 @@ import type { VectorDataType } from './VectorDataType';
 export interface GeometryOutputColumn {
     /**
      * The expression will override the current geometry
-     * @type {VectorDataType}
-     * @memberof GeometryOutputColumn
      */
     value: VectorDataType;
     /**
      *
-     * @type {GeometryOutputColumnTypeEnum}
-     * @memberof GeometryOutputColumn
      */
     type: GeometryOutputColumnTypeEnum;
 }

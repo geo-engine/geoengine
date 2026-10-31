@@ -10,7 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { GeospatialDataDataTypeFromJSON, GeospatialDataDataTypeToJSON, } from './GeospatialDataDataType';
+import { TileSetDataTypeFromJSON, TileSetDataTypeToJSON, } from './TileSetDataType';
 import { LinkFromJSON, LinkToJSON, } from './Link';
 import { TilesCrsFromJSON, TilesCrsToJSON, } from './TilesCrs';
 /**
@@ -34,7 +34,7 @@ export function TileSetItemFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'title': json['title'] == null ? undefined : json['title'],
-        'dataType': GeospatialDataDataTypeFromJSON(json['dataType']),
+        'dataType': TileSetDataTypeFromJSON(json['dataType']),
         'crs': TilesCrsFromJSON(json['crs']),
         'tileMatrixSetURI': json['tileMatrixSetURI'] == null ? undefined : json['tileMatrixSetURI'],
         'links': (json['links'].map(LinkFromJSON)),
@@ -49,7 +49,7 @@ export function TileSetItemToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'title': value['title'],
-        'dataType': GeospatialDataDataTypeToJSON(value['dataType']),
+        'dataType': TileSetDataTypeToJSON(value['dataType']),
         'crs': TilesCrsToJSON(value['crs']),
         'tileMatrixSetURI': value['tileMatrixSetURI'],
         'links': (value['links'].map(LinkToJSON)),

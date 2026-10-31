@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { OgrSourceDatasetTimeTypeNone } from './OgrSourceDatasetTimeTypeNone';
 import {
     instanceOfOgrSourceDatasetTimeTypeNone,
@@ -79,13 +80,13 @@ export function OgrSourceDatasetTimeTypeToJSONTyped(value?: OgrSourceDatasetTime
     }
     switch (value['type']) {
         case 'none':
-            return Object.assign({}, OgrSourceDatasetTimeTypeNoneToJSON(value), { type: 'none' } as const);
+            return Object.assign({}, OgrSourceDatasetTimeTypeNoneToJSON(value), { 'type': 'none' } as const);
         case 'start':
-            return Object.assign({}, OgrSourceDatasetTimeTypeStartToJSON(value), { type: 'start' } as const);
+            return Object.assign({}, OgrSourceDatasetTimeTypeStartToJSON(value), { 'type': 'start' } as const);
         case 'start+duration':
-            return Object.assign({}, OgrSourceDatasetTimeTypeStartDurationToJSON(value), { type: 'start+duration' } as const);
+            return Object.assign({}, OgrSourceDatasetTimeTypeStartDurationToJSON(value), { 'type': 'start+duration' } as const);
         case 'start+end':
-            return Object.assign({}, OgrSourceDatasetTimeTypeStartEndToJSON(value), { type: 'start+end' } as const);
+            return Object.assign({}, OgrSourceDatasetTimeTypeStartEndToJSON(value), { 'type': 'start+end' } as const);
         default:
             return value;
     }

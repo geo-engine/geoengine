@@ -17,7 +17,7 @@
  * @export
  */
 export const WfsService = {
-    Wfs: 'WFS'
+    Wfs: 'WFS',
 } as const;
 export type WfsService = typeof WfsService[keyof typeof WfsService];
 

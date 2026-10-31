@@ -11,32 +11,45 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  IdResponse,
-  UploadFileLayersResponse,
-  UploadFilesResponse,
-} from '../models/index';
 import {
+    type IdResponse,
     IdResponseFromJSON,
     IdResponseToJSON,
+} from '../models/IdResponse';
+import {
+    type UploadFileLayersResponse,
     UploadFileLayersResponseFromJSON,
     UploadFileLayersResponseToJSON,
+} from '../models/UploadFileLayersResponse';
+import {
+    type UploadFilesResponse,
     UploadFilesResponseFromJSON,
     UploadFilesResponseToJSON,
-} from '../models/index';
+} from '../models/UploadFilesResponse';
 
 export interface ListUploadFileLayersHandlerRequest {
+    /**
+     * Upload id
+     */
     uploadId: string;
+    /**
+     * File name
+     */
     fileName: string;
 }
 
 export interface ListUploadFilesHandlerRequest {
+    /**
+     * Upload id
+     */
     uploadId: string;
 }
 
 export interface UploadHandlerRequest {
+    /**
+     * 
+     */
     files: Array<Blob>;
 }
 
@@ -77,8 +90,8 @@ export class UploadsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/uploads/{upload_id}/files/{file_name}/layers`;
-        urlPath = urlPath.replace(`{${"upload_id"}}`, encodeURIComponent(String(requestParameters['uploadId'])));
-        urlPath = urlPath.replace(`{${"file_name"}}`, encodeURIComponent(String(requestParameters['fileName'])));
+        urlPath = urlPath.replace('{upload_id}', encodeURIComponent(String(requestParameters['uploadId'])));
+        urlPath = urlPath.replace('{file_name}', encodeURIComponent(String(requestParameters['fileName'])));
 
         return {
             path: urlPath,
@@ -131,7 +144,7 @@ export class UploadsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/uploads/{upload_id}/files`;
-        urlPath = urlPath.replace(`{${"upload_id"}}`, encodeURIComponent(String(requestParameters['uploadId'])));
+        urlPath = urlPath.replace('{upload_id}', encodeURIComponent(String(requestParameters['uploadId'])));
 
         return {
             path: urlPath,

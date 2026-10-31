@@ -42,20 +42,14 @@ import {
 export interface ColumnRangeFilter {
     /**
      * 
-     * @type {ColumnRangeFilterTypeEnum}
-     * @memberof ColumnRangeFilter
      */
     type: ColumnRangeFilterTypeEnum;
     /**
      * 
-     * @type {ColumnRangeFilterParameters}
-     * @memberof ColumnRangeFilter
      */
     params: ColumnRangeFilterParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof ColumnRangeFilter
      */
     sources: SingleVectorSource;
 }
@@ -65,7 +59,7 @@ export interface ColumnRangeFilter {
  * @export
  */
 export const ColumnRangeFilterTypeEnum = {
-    ColumnRangeFilter: 'ColumnRangeFilter'
+    ColumnRangeFilter: 'ColumnRangeFilter',
 } as const;
 export type ColumnRangeFilterTypeEnum = typeof ColumnRangeFilterTypeEnum[keyof typeof ColumnRangeFilterTypeEnum];
 
@@ -75,6 +69,8 @@ export type ColumnRangeFilterTypeEnum = typeof ColumnRangeFilterTypeEnum[keyof t
  */
 export function instanceOfColumnRangeFilter(value: object): value is ColumnRangeFilter {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'ColumnRangeFilter') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

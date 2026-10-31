@@ -24,20 +24,14 @@ import type { RasterizationParameters } from './RasterizationParameters';
 export interface Rasterization {
     /**
      *
-     * @type {RasterizationTypeEnum}
-     * @memberof Rasterization
      */
     type: RasterizationTypeEnum;
     /**
      *
-     * @type {RasterizationParameters}
-     * @memberof Rasterization
      */
     params: RasterizationParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof Rasterization
      */
     sources: SingleVectorSource;
 }

@@ -16,7 +16,7 @@
  */
 export const WfsRequest = {
     GetCapabilities: 'GetCapabilities',
-    GetFeature: 'GetFeature'
+    GetFeature: 'GetFeature',
 };
 export function instanceOfWfsRequest(value) {
     for (const key in WfsRequest) {

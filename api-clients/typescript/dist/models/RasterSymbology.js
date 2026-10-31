@@ -23,13 +23,15 @@ const RasterColorizer_1 = require("./RasterColorizer");
  * @export
  */
 exports.RasterSymbologyTypeEnum = {
-    Raster: 'raster'
+    Raster: 'raster',
 };
 /**
  * Check if a given object implements the RasterSymbology interface.
  */
 function instanceOfRasterSymbology(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'raster')
         return false;
     if (!('opacity' in value) || value['opacity'] === undefined)
         return false;

@@ -16,8 +16,6 @@
 export interface AuthCodeRequestURL {
     /**
      *
-     * @type {string}
-     * @memberof AuthCodeRequestURL
      */
     url: string;
 }

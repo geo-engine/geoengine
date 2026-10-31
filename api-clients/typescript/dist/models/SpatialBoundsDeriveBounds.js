@@ -23,13 +23,15 @@ const BoundingBox2D_1 = require("./BoundingBox2D");
  * @export
  */
 exports.SpatialBoundsDeriveBoundsTypeEnum = {
-    Bounds: 'bounds'
+    Bounds: 'bounds',
 };
 /**
  * Check if a given object implements the SpatialBoundsDeriveBounds interface.
  */
 function instanceOfSpatialBoundsDeriveBounds(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'bounds')
         return false;
     return true;
 }

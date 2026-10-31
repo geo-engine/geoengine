@@ -29,8 +29,6 @@ export interface BoxPlotParameters {
      * The attributes to generate boxes for.
      * For vector data, these are numeric columns and must be given by name.
      * For raster data, these are bands and default to `all`.
-     * @type {AttributeSelection}
-     * @memberof BoxPlotParameters
      */
     attributes?: AttributeSelection;
 }

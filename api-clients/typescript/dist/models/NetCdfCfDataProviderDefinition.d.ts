@@ -16,44 +16,30 @@
 export interface NetCdfCfDataProviderDefinition {
     /**
      *
-     * @type {NetCdfCfDataProviderDefinitionTypeEnum}
-     * @memberof NetCdfCfDataProviderDefinition
      */
     type: NetCdfCfDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof NetCdfCfDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof NetCdfCfDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof NetCdfCfDataProviderDefinition
      */
     priority?: number | null;
     /**
      * Path were the `NetCDF` data can be found
-     * @type {string}
-     * @memberof NetCdfCfDataProviderDefinition
      */
     data: string;
     /**
      * Path were overview files are stored
-     * @type {string}
-     * @memberof NetCdfCfDataProviderDefinition
      */
     overviews: string;
     /**
      *
-     * @type {number}
-     * @memberof NetCdfCfDataProviderDefinition
      */
     cacheTtl?: number | null;
 }

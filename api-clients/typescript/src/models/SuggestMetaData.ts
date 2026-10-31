@@ -28,20 +28,14 @@ import {
 export interface SuggestMetaData {
     /**
      * 
-     * @type {DataPath}
-     * @memberof SuggestMetaData
      */
     dataPath: DataPath;
     /**
      * 
-     * @type {string}
-     * @memberof SuggestMetaData
      */
     mainFile?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof SuggestMetaData
      */
     layerName?: string | null;
 }
@@ -65,8 +59,8 @@ export function SuggestMetaDataFromJSONTyped(json: any, ignoreDiscriminator: boo
     return {
         
         'dataPath': DataPathFromJSON(json['dataPath']),
-        'mainFile': json['mainFile'] == null ? undefined : json['mainFile'],
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
+        'mainFile': json['mainFile'] === undefined ? undefined : json['mainFile'] === null ? null : json['mainFile'],
+        'layerName': json['layerName'] === undefined ? undefined : json['layerName'] === null ? null : json['layerName'],
     };
 }
 

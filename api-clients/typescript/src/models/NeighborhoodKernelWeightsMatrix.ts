@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface NeighborhoodKernelWeightsMatrix {
     /**
      * 
-     * @type {NeighborhoodKernelWeightsMatrixTypeEnum}
-     * @memberof NeighborhoodKernelWeightsMatrix
      */
     type: NeighborhoodKernelWeightsMatrixTypeEnum;
     /**
      * Explicit matrix of neighborhood weights.
-     * @type {Array<Array<number>>}
-     * @memberof NeighborhoodKernelWeightsMatrix
      */
     weights: Array<Array<number>>;
 }
@@ -37,7 +33,7 @@ export interface NeighborhoodKernelWeightsMatrix {
  * @export
  */
 export const NeighborhoodKernelWeightsMatrixTypeEnum = {
-    WeightsMatrix: 'weightsMatrix'
+    WeightsMatrix: 'weightsMatrix',
 } as const;
 export type NeighborhoodKernelWeightsMatrixTypeEnum = typeof NeighborhoodKernelWeightsMatrixTypeEnum[keyof typeof NeighborhoodKernelWeightsMatrixTypeEnum];
 
@@ -47,6 +43,8 @@ export type NeighborhoodKernelWeightsMatrixTypeEnum = typeof NeighborhoodKernelW
  */
 export function instanceOfNeighborhoodKernelWeightsMatrix(value: object): value is NeighborhoodKernelWeightsMatrix {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'weightsMatrix') return false;
+    
     if (!('weights' in value) || value['weights'] === undefined) return false;
     return true;
 }

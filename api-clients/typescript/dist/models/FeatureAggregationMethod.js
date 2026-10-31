@@ -24,7 +24,7 @@ exports.FeatureAggregationMethodToJSONTyped = FeatureAggregationMethodToJSONType
  */
 exports.FeatureAggregationMethod = {
     First: 'first',
-    Mean: 'mean'
+    Mean: 'mean',
 };
 function instanceOfFeatureAggregationMethod(value) {
     for (const key in exports.FeatureAggregationMethod) {

@@ -15,7 +15,7 @@
  * @export
  */
 export const WmsVersion = {
-    _130: '1.3.0'
+    _130: '1.3.0',
 };
 export function instanceOfWmsVersion(value) {
     for (const key in WmsVersion) {

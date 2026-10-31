@@ -39,20 +39,14 @@ import type { RasterVectorJoinParameters } from './RasterVectorJoinParameters';
 export interface RasterVectorJoin {
     /**
      *
-     * @type {RasterVectorJoinTypeEnum}
-     * @memberof RasterVectorJoin
      */
     type: RasterVectorJoinTypeEnum;
     /**
      *
-     * @type {RasterVectorJoinParameters}
-     * @memberof RasterVectorJoin
      */
     params: RasterVectorJoinParameters;
     /**
      *
-     * @type {SingleVectorMultipleRasterSources}
-     * @memberof RasterVectorJoin
      */
     sources: SingleVectorMultipleRasterSources;
 }

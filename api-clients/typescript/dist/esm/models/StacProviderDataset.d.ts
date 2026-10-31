@@ -20,44 +20,30 @@ import type { RasterDataType } from './RasterDataType';
 export interface StacProviderDataset {
     /**
      *
-     * @type {string}
-     * @memberof StacProviderDataset
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof StacProviderDataset
      */
     description: string;
     /**
      *
-     * @type {RasterDataType}
-     * @memberof StacProviderDataset
      */
     dataType: RasterDataType;
     /**
      *
-     * @type {SpatialResolution}
-     * @memberof StacProviderDataset
      */
     resolution: SpatialResolution;
     /**
      *
-     * @type {string}
-     * @memberof StacProviderDataset
      */
     projection: string;
     /**
      *
-     * @type {SpatialGridDescriptor}
-     * @memberof StacProviderDataset
      */
     spatialGrid: SpatialGridDescriptor;
     /**
      *
-     * @type {Array<StacProviderDatasetBand>}
-     * @memberof StacProviderDataset
      */
     bands: Array<StacProviderDatasetBand>;
 }

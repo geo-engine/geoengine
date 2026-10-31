@@ -16,8 +16,6 @@
 export interface Default {
     /**
      *
-     * @type {DefaultTypeEnum}
-     * @memberof Default
      */
     type: DefaultTypeEnum;
 }

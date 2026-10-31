@@ -22,28 +22,20 @@ export interface TemporalRasterAggregationParameters {
      *
      * Encountering NO DATA makes the aggregation result NO DATA unless
      * `ignoreNoData` is `true` for the selected aggregation variant.
-     * @type {Aggregation}
-     * @memberof TemporalRasterAggregationParameters
      */
     aggregation: Aggregation;
     /**
      * Window size and granularity for the output time series.
-     * @type {TimeStep}
-     * @memberof TemporalRasterAggregationParameters
      */
     window: TimeStep;
     /**
      * Optional reference timestamp used as the anchor for window boundaries.
      *
      * If omitted, windows are anchored at `1970-01-01T00:00:00Z`.
-     * @type {number}
-     * @memberof TemporalRasterAggregationParameters
      */
     windowReference?: number | null;
     /**
      * Optional output raster data type.
-     * @type {RasterDataType}
-     * @memberof TemporalRasterAggregationParameters
      */
     outputType?: RasterDataType | null;
 }

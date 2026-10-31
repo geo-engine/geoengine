@@ -36,8 +36,8 @@ function PlotResultDescriptorFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'spatialReference': json['spatialReference'],
-        'time': json['time'] == null ? undefined : (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
-        'bbox': json['bbox'] == null ? undefined : (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['bbox']),
+        'time': json['time'] === undefined ? undefined : json['time'] === null ? null : (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
+        'bbox': json['bbox'] === undefined ? undefined : json['bbox'] === null ? null : (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['bbox']),
     };
 }
 function PlotResultDescriptorToJSON(json) {

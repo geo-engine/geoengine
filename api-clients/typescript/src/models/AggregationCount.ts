@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface AggregationCount {
     /**
      * 
-     * @type {AggregationCountTypeEnum}
-     * @memberof AggregationCount
      */
     type: AggregationCountTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationCount
      */
     ignoreNoData: boolean;
 }
@@ -37,7 +33,7 @@ export interface AggregationCount {
  * @export
  */
 export const AggregationCountTypeEnum = {
-    Count: 'count'
+    Count: 'count',
 } as const;
 export type AggregationCountTypeEnum = typeof AggregationCountTypeEnum[keyof typeof AggregationCountTypeEnum];
 
@@ -47,6 +43,8 @@ export type AggregationCountTypeEnum = typeof AggregationCountTypeEnum[keyof typ
  */
 export function instanceOfAggregationCount(value: object): value is AggregationCount {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'count') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     return true;
 }

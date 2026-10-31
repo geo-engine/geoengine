@@ -18,7 +18,7 @@
  */
 export const ProjectUpdateToken = {
     None: 'none',
-    Delete: 'delete'
+    Delete: 'delete',
 } as const;
 export type ProjectUpdateToken = typeof ProjectUpdateToken[keyof typeof ProjectUpdateToken];
 

@@ -20,26 +20,18 @@ import { mapValues } from '../runtime';
 export interface VectorJoinTypeEquiGeoToData {
     /**
      * 
-     * @type {VectorJoinTypeEquiGeoToDataTypeEnum}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     type: VectorJoinTypeEquiGeoToDataTypeEnum;
     /**
      * Column name of the left input used in the join.
-     * @type {string}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     leftColumn: string;
     /**
      * Column name of the right input used in the join.
-     * @type {string}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     rightColumn: string;
     /**
      * Optional suffix added to right-side columns to avoid collisions.
-     * @type {string}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     rightColumnSuffix?: string | null;
 }
@@ -49,7 +41,7 @@ export interface VectorJoinTypeEquiGeoToData {
  * @export
  */
 export const VectorJoinTypeEquiGeoToDataTypeEnum = {
-    EquiGeoToData: 'equiGeoToData'
+    EquiGeoToData: 'equiGeoToData',
 } as const;
 export type VectorJoinTypeEquiGeoToDataTypeEnum = typeof VectorJoinTypeEquiGeoToDataTypeEnum[keyof typeof VectorJoinTypeEquiGeoToDataTypeEnum];
 
@@ -59,6 +51,8 @@ export type VectorJoinTypeEquiGeoToDataTypeEnum = typeof VectorJoinTypeEquiGeoTo
  */
 export function instanceOfVectorJoinTypeEquiGeoToData(value: object): value is VectorJoinTypeEquiGeoToData {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'equiGeoToData') return false;
+    
     if (!('leftColumn' in value) || value['leftColumn'] === undefined) return false;
     if (!('rightColumn' in value) || value['rightColumn'] === undefined) return false;
     return true;
@@ -77,7 +71,7 @@ export function VectorJoinTypeEquiGeoToDataFromJSONTyped(json: any, ignoreDiscri
         'type': json['type'],
         'leftColumn': json['leftColumn'],
         'rightColumn': json['rightColumn'],
-        'rightColumnSuffix': json['rightColumnSuffix'] == null ? undefined : json['rightColumnSuffix'],
+        'rightColumnSuffix': json['rightColumnSuffix'] === undefined ? undefined : json['rightColumnSuffix'] === null ? null : json['rightColumnSuffix'],
     };
 }
 

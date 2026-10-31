@@ -14,13 +14,15 @@
  * @export
  */
 export const SpatialBoundsDeriveDeriveTypeEnum = {
-    Derive: 'derive'
+    Derive: 'derive',
 };
 /**
  * Check if a given object implements the SpatialBoundsDeriveDerive interface.
  */
 export function instanceOfSpatialBoundsDeriveDerive(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'derive')
         return false;
     return true;
 }

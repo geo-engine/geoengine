@@ -46,11 +46,11 @@ function TypedResultDescriptorToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'plot':
-            return Object.assign({}, (0, TypedPlotResultDescriptor_1.TypedPlotResultDescriptorToJSON)(value), { type: 'plot' });
+            return Object.assign({}, (0, TypedPlotResultDescriptor_1.TypedPlotResultDescriptorToJSON)(value), { 'type': 'plot' });
         case 'raster':
-            return Object.assign({}, (0, TypedRasterResultDescriptor_1.TypedRasterResultDescriptorToJSON)(value), { type: 'raster' });
+            return Object.assign({}, (0, TypedRasterResultDescriptor_1.TypedRasterResultDescriptorToJSON)(value), { 'type': 'raster' });
         case 'vector':
-            return Object.assign({}, (0, TypedVectorResultDescriptor_1.TypedVectorResultDescriptorToJSON)(value), { type: 'vector' });
+            return Object.assign({}, (0, TypedVectorResultDescriptor_1.TypedVectorResultDescriptorToJSON)(value), { 'type': 'vector' });
         default:
             return value;
     }

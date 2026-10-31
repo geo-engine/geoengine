@@ -10,7 +10,7 @@ Name | Type
 `title` | string
 `description` | string
 `keywords` | Array&lt;string&gt;
-`dataType` | [GeospatialDataDataType](GeospatialDataDataType.md)
+`dataType` | [TileSetDataType](TileSetDataType.md)
 `tileMatrixSetURI` | string
 `tileMatrixSetLimits` | [Array&lt;TileMatrixLimits&gt;](TileMatrixLimits.md)
 `crs` | [TilesCrs](TilesCrs.md)

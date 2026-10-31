@@ -16,7 +16,7 @@
  */
 export const SearchType = {
     Fulltext: 'fulltext',
-    Prefix: 'prefix'
+    Prefix: 'prefix',
 };
 export function instanceOfSearchType(value) {
     for (const key in SearchType) {

@@ -17,14 +17,10 @@ import type { TimeStep } from './TimeStep';
 export interface TimeProjectionParameters {
     /**
      * Time granularity and size for the projection step.
-     * @type {TimeStep}
-     * @memberof TimeProjectionParameters
      */
     step: TimeStep;
     /**
      * Optional anchor point for the time step.
-     * @type {number}
-     * @memberof TimeProjectionParameters
      */
     stepReference?: number | null;
 }

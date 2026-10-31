@@ -23,13 +23,15 @@ const TimeStep_1 = require("./TimeStep");
  * @export
  */
 exports.OgrSourceDurationSpecValueTypeEnum = {
-    Value: 'value'
+    Value: 'value',
 };
 /**
  * Check if a given object implements the OgrSourceDurationSpecValue interface.
  */
 function instanceOfOgrSourceDurationSpecValue(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'value')
         return false;
     return true;
 }

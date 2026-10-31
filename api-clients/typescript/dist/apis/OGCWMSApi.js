@@ -108,7 +108,7 @@ class OGCWMSApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/wms/{processingGraph}`;
-            urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
+            urlPath = urlPath.replace('{processingGraph}', encodeURIComponent(String(requestParameters['processingGraph'])));
             return {
                 path: urlPath,
                 method: 'GET',

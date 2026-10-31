@@ -55,21 +55,21 @@ export function AggregationToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'count':
-            return Object.assign({}, AggregationCountToJSON(value), { type: 'count' });
+            return Object.assign({}, AggregationCountToJSON(value), { 'type': 'count' });
         case 'first':
-            return Object.assign({}, AggregationFirstToJSON(value), { type: 'first' });
+            return Object.assign({}, AggregationFirstToJSON(value), { 'type': 'first' });
         case 'last':
-            return Object.assign({}, AggregationLastToJSON(value), { type: 'last' });
+            return Object.assign({}, AggregationLastToJSON(value), { 'type': 'last' });
         case 'max':
-            return Object.assign({}, AggregationMaxToJSON(value), { type: 'max' });
+            return Object.assign({}, AggregationMaxToJSON(value), { 'type': 'max' });
         case 'mean':
-            return Object.assign({}, AggregationMeanToJSON(value), { type: 'mean' });
+            return Object.assign({}, AggregationMeanToJSON(value), { 'type': 'mean' });
         case 'min':
-            return Object.assign({}, AggregationMinToJSON(value), { type: 'min' });
+            return Object.assign({}, AggregationMinToJSON(value), { 'type': 'min' });
         case 'percentileEstimate':
-            return Object.assign({}, AggregationPercentileEstimateToJSON(value), { type: 'percentileEstimate' });
+            return Object.assign({}, AggregationPercentileEstimateToJSON(value), { 'type': 'percentileEstimate' });
         case 'sum':
-            return Object.assign({}, AggregationSumToJSON(value), { type: 'sum' });
+            return Object.assign({}, AggregationSumToJSON(value), { 'type': 'sum' });
         default:
             return value;
     }

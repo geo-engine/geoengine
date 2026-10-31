@@ -18,50 +18,34 @@ import type { TypedResultDescriptor } from './TypedResultDescriptor';
 export interface DatasetListing {
     /**
      *
-     * @type {string}
-     * @memberof DatasetListing
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof DatasetListing
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof DatasetListing
      */
     displayName: string;
     /**
      *
-     * @type {string}
-     * @memberof DatasetListing
      */
     description: string;
     /**
      *
-     * @type {Array<string>}
-     * @memberof DatasetListing
      */
     tags: Array<string>;
     /**
      *
-     * @type {string}
-     * @memberof DatasetListing
      */
     sourceOperator: string;
     /**
      *
-     * @type {TypedResultDescriptor}
-     * @memberof DatasetListing
      */
     resultDescriptor: TypedResultDescriptor;
     /**
      *
-     * @type {Symbology}
-     * @memberof DatasetListing
      */
     symbology?: Symbology | null;
 }

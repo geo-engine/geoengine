@@ -17,6 +17,7 @@ exports.DataUsageFromJSON = DataUsageFromJSON;
 exports.DataUsageFromJSONTyped = DataUsageFromJSONTyped;
 exports.DataUsageToJSON = DataUsageToJSON;
 exports.DataUsageToJSONTyped = DataUsageToJSONTyped;
+const runtime_1 = require("../runtime");
 /**
  * Check if a given object implements the DataUsage interface.
  */
@@ -41,7 +42,7 @@ function DataUsageFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : (0, runtime_1.parseDateTime)(json['timestamp'])),
         'userId': json['userId'],
         'computationId': json['computationId'],
         'data': json['data'],
@@ -56,7 +57,7 @@ function DataUsageToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : (0, runtime_1.serializeDateTime)(value['timestamp']),
         'userId': value['userId'],
         'computationId': value['computationId'],
         'data': value['data'],

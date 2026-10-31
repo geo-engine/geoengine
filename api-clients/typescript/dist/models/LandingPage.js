@@ -31,7 +31,7 @@ function LandingPageFromJSONTyped(json, ignoreDiscriminator) {
     if (json == null) {
         return json;
     }
-    return Object.assign(Object.assign({}, json), { 'title': json['title'] == null ? undefined : json['title'], 'description': json['description'] == null ? undefined : json['description'], 'attribution': json['attribution'] == null ? undefined : json['attribution'], 'links': json['links'] == null ? undefined : (json['links'].map(Link_1.LinkFromJSON)) });
+    return Object.assign(Object.assign({}, json), { 'title': json['title'] === undefined ? undefined : json['title'] === null ? null : json['title'], 'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'], 'attribution': json['attribution'] === undefined ? undefined : json['attribution'] === null ? null : json['attribution'], 'links': json['links'] == null ? undefined : (json['links'].map(Link_1.LinkFromJSON)) });
 }
 function LandingPageToJSON(json) {
     return LandingPageToJSONTyped(json, false);

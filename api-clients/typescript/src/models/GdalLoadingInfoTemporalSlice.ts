@@ -35,20 +35,14 @@ import {
 export interface GdalLoadingInfoTemporalSlice {
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof GdalLoadingInfoTemporalSlice
      */
     time: TimeInterval;
     /**
      * 
-     * @type {GdalDatasetParameters}
-     * @memberof GdalLoadingInfoTemporalSlice
      */
     params?: GdalDatasetParameters | null;
     /**
      * 
-     * @type {number}
-     * @memberof GdalLoadingInfoTemporalSlice
      */
     cacheTtl?: number | null;
 }
@@ -72,8 +66,8 @@ export function GdalLoadingInfoTemporalSliceFromJSONTyped(json: any, ignoreDiscr
     return {
         
         'time': TimeIntervalFromJSON(json['time']),
-        'params': json['params'] == null ? undefined : GdalDatasetParametersFromJSON(json['params']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'params': json['params'] === undefined ? undefined : json['params'] === null ? null : GdalDatasetParametersFromJSON(json['params']),
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

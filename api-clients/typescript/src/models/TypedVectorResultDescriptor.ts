@@ -56,8 +56,6 @@ import {
 export interface TypedVectorResultDescriptor extends VectorResultDescriptor {
     /**
      * 
-     * @type {TypedVectorResultDescriptorTypeEnum}
-     * @memberof TypedVectorResultDescriptor
      */
     type: TypedVectorResultDescriptorTypeEnum;
 }
@@ -67,7 +65,7 @@ export interface TypedVectorResultDescriptor extends VectorResultDescriptor {
  * @export
  */
 export const TypedVectorResultDescriptorTypeEnum = {
-    Vector: 'vector'
+    Vector: 'vector',
 } as const;
 export type TypedVectorResultDescriptorTypeEnum = typeof TypedVectorResultDescriptorTypeEnum[keyof typeof TypedVectorResultDescriptorTypeEnum];
 
@@ -77,6 +75,8 @@ export type TypedVectorResultDescriptorTypeEnum = typeof TypedVectorResultDescri
  */
 export function instanceOfTypedVectorResultDescriptor(value: object): value is TypedVectorResultDescriptor {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'vector') return false;
+    
     return true;
 }
 

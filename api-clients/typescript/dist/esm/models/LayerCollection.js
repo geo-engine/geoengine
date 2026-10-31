@@ -40,7 +40,7 @@ export function LayerCollectionFromJSONTyped(json, ignoreDiscriminator) {
         'name': json['name'],
         'description': json['description'],
         'items': (json['items'].map(CollectionItemFromJSON)),
-        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
+        'entryLabel': json['entryLabel'] === undefined ? undefined : json['entryLabel'] === null ? null : json['entryLabel'],
         'properties': json['properties'],
     };
 }

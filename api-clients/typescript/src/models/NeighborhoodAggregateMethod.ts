@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { NeighborhoodAggregateMethodStandardDeviation } from './NeighborhoodAggregateMethodStandardDeviation';
 import {
     instanceOfNeighborhoodAggregateMethodStandardDeviation,
@@ -61,9 +62,9 @@ export function NeighborhoodAggregateMethodToJSONTyped(value?: NeighborhoodAggre
     }
     switch (value['type']) {
         case 'standardDeviation':
-            return Object.assign({}, NeighborhoodAggregateMethodStandardDeviationToJSON(value), { type: 'standardDeviation' } as const);
+            return Object.assign({}, NeighborhoodAggregateMethodStandardDeviationToJSON(value), { 'type': 'standardDeviation' } as const);
         case 'sum':
-            return Object.assign({}, NeighborhoodAggregateMethodSumToJSON(value), { type: 'sum' } as const);
+            return Object.assign({}, NeighborhoodAggregateMethodSumToJSON(value), { 'type': 'sum' } as const);
         default:
             return value;
     }

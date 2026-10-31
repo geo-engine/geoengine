@@ -24,13 +24,15 @@ const LineSimplificationParameters_1 = require("./LineSimplificationParameters")
  * @export
  */
 exports.LineSimplificationTypeEnum = {
-    LineSimplification: 'LineSimplification'
+    LineSimplification: 'LineSimplification',
 };
 /**
  * Check if a given object implements the LineSimplification interface.
  */
 function instanceOfLineSimplification(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'LineSimplification')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

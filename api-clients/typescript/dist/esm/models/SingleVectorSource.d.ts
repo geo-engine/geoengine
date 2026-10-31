@@ -17,8 +17,6 @@ import type { VectorOperator } from './VectorOperator';
 export interface SingleVectorSource {
     /**
      *
-     * @type {VectorOperator}
-     * @memberof SingleVectorSource
      */
     vector: VectorOperator;
 }

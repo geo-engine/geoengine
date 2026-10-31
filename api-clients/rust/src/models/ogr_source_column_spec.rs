@@ -28,8 +28,8 @@ pub struct OgrSourceColumnSpec {
     pub bool: Option<Vec<String>>,
     #[serde(rename = "datetime", skip_serializing_if = "Option::is_none")]
     pub datetime: Option<Vec<String>>,
-    #[serde(rename = "rename", skip_serializing_if = "Option::is_none")]
-    pub rename: Option<std::collections::HashMap<String, String>>,
+    #[serde(rename = "rename", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub rename: Option<Option<std::collections::HashMap<String, String>>>,
 }
 
 impl OgrSourceColumnSpec {

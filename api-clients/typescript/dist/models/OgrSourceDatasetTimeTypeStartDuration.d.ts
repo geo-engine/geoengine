@@ -17,26 +17,18 @@ import type { OgrSourceTimeFormat } from './OgrSourceTimeFormat';
 export interface OgrSourceDatasetTimeTypeStartDuration {
     /**
      *
-     * @type {OgrSourceDatasetTimeTypeStartDurationTypeEnum}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     type: OgrSourceDatasetTimeTypeStartDurationTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     startField: string;
     /**
      *
-     * @type {OgrSourceTimeFormat}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     startFormat: OgrSourceTimeFormat;
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     durationField: string;
 }

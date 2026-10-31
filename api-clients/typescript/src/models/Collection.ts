@@ -36,62 +36,42 @@ export interface Collection {
     [key: string]: any | any;
     /**
      * 
-     * @type {string}
-     * @memberof Collection
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof Collection
      */
     title?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof Collection
      */
     description?: string | null;
     /**
      * Attribution for the collection.
-     * @type {string}
-     * @memberof Collection
      */
     attribution?: string | null;
     /**
      * 
-     * @type {Extent}
-     * @memberof Collection
      */
     extent?: Extent | null;
     /**
      * An indicator about the type of the items in the collection.
-     * @type {string}
-     * @memberof Collection
      */
     itemType?: string;
     /**
      * The list of coordinate reference systems supported by the API; the first item is the default coordinate reference system.
-     * @type {Array<string>}
-     * @memberof Collection
      */
     crs?: Array<string>;
     /**
      * 
-     * @type {string}
-     * @memberof Collection
      */
     storageCrs?: string;
     /**
      * 
-     * @type {number}
-     * @memberof Collection
      */
     storageCrsCoordinateEpoch?: number | null;
     /**
      * 
-     * @type {Array<Link>}
-     * @memberof Collection
      */
     links?: Array<Link>;
 }
@@ -116,14 +96,14 @@ export function CollectionFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         
             ...json,
         'id': json['id'],
-        'title': json['title'] == null ? undefined : json['title'],
-        'description': json['description'] == null ? undefined : json['description'],
-        'attribution': json['attribution'] == null ? undefined : json['attribution'],
-        'extent': json['extent'] == null ? undefined : ExtentFromJSON(json['extent']),
+        'title': json['title'] === undefined ? undefined : json['title'] === null ? null : json['title'],
+        'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
+        'attribution': json['attribution'] === undefined ? undefined : json['attribution'] === null ? null : json['attribution'],
+        'extent': json['extent'] === undefined ? undefined : json['extent'] === null ? null : ExtentFromJSON(json['extent']),
         'itemType': json['itemType'] == null ? undefined : json['itemType'],
         'crs': json['crs'] == null ? undefined : json['crs'],
         'storageCrs': json['storageCrs'] == null ? undefined : json['storageCrs'],
-        'storageCrsCoordinateEpoch': json['storageCrsCoordinateEpoch'] == null ? undefined : json['storageCrsCoordinateEpoch'],
+        'storageCrsCoordinateEpoch': json['storageCrsCoordinateEpoch'] === undefined ? undefined : json['storageCrsCoordinateEpoch'] === null ? null : json['storageCrsCoordinateEpoch'],
         'links': json['links'] == null ? undefined : ((json['links'] as Array<any>).map(LinkFromJSON)),
     };
 }

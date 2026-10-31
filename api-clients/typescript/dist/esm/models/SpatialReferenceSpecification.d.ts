@@ -19,38 +19,26 @@ import type { AxisOrder } from './AxisOrder';
 export interface SpatialReferenceSpecification {
     /**
      *
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
      */
     spatialReference: string;
     /**
      *
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
      */
     projString: string;
     /**
      *
-     * @type {BoundingBox2D}
-     * @memberof SpatialReferenceSpecification
      */
     extent: BoundingBox2D;
     /**
      *
-     * @type {Array<string>}
-     * @memberof SpatialReferenceSpecification
      */
     axisLabels?: Array<string> | null;
     /**
      *
-     * @type {AxisOrder}
-     * @memberof SpatialReferenceSpecification
      */
     axisOrder?: AxisOrder | null;
 }

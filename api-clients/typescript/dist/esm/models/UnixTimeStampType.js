@@ -16,7 +16,7 @@
  */
 export const UnixTimeStampType = {
     EpochSeconds: 'epochSeconds',
-    EpochMilliseconds: 'epochMilliseconds'
+    EpochMilliseconds: 'epochMilliseconds',
 };
 export function instanceOfUnixTimeStampType(value) {
     for (const key in UnixTimeStampType) {

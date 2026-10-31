@@ -14,13 +14,15 @@
  * @export
  */
 export const AggregationSumTypeEnum = {
-    Sum: 'sum'
+    Sum: 'sum',
 };
 /**
  * Check if a given object implements the AggregationSum interface.
  */
 export function instanceOfAggregationSum(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'sum')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

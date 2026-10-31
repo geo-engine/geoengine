@@ -14,13 +14,15 @@
  * @export
  */
 export const OgrSourceDatasetTimeTypeNoneTypeEnum = {
-    None: 'none'
+    None: 'none',
 };
 /**
  * Check if a given object implements the OgrSourceDatasetTimeTypeNone interface.
  */
 export function instanceOfOgrSourceDatasetTimeTypeNone(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'none')
         return false;
     return true;
 }

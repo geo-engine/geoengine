@@ -42,8 +42,6 @@ import {
 export interface TypedPlotResultDescriptor extends PlotResultDescriptor {
     /**
      * 
-     * @type {TypedPlotResultDescriptorTypeEnum}
-     * @memberof TypedPlotResultDescriptor
      */
     type: TypedPlotResultDescriptorTypeEnum;
 }
@@ -53,7 +51,7 @@ export interface TypedPlotResultDescriptor extends PlotResultDescriptor {
  * @export
  */
 export const TypedPlotResultDescriptorTypeEnum = {
-    Plot: 'plot'
+    Plot: 'plot',
 } as const;
 export type TypedPlotResultDescriptorTypeEnum = typeof TypedPlotResultDescriptorTypeEnum[keyof typeof TypedPlotResultDescriptorTypeEnum];
 
@@ -63,6 +61,8 @@ export type TypedPlotResultDescriptorTypeEnum = typeof TypedPlotResultDescriptor
  */
 export function instanceOfTypedPlotResultDescriptor(value: object): value is TypedPlotResultDescriptor {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'plot') return false;
+    
     return true;
 }
 

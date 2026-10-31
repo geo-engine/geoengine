@@ -17,12 +17,13 @@ exports.TileSetFromJSON = TileSetFromJSON;
 exports.TileSetFromJSONTyped = TileSetFromJSONTyped;
 exports.TileSetToJSON = TileSetToJSON;
 exports.TileSetToJSONTyped = TileSetToJSONTyped;
+const runtime_1 = require("../runtime");
 const TileMatrixLimits_1 = require("./TileMatrixLimits");
 const AccessConstraints_1 = require("./AccessConstraints");
-const GeospatialDataDataType_1 = require("./GeospatialDataDataType");
 const TilePoint_1 = require("./TilePoint");
 const BoundingBox2D_1 = require("./BoundingBox2D");
 const Style_1 = require("./Style");
+const TileSetDataType_1 = require("./TileSetDataType");
 const GeospatialData_1 = require("./GeospatialData");
 const Link_1 = require("./Link");
 const TilesCrs_1 = require("./TilesCrs");
@@ -49,7 +50,7 @@ function TileSetFromJSONTyped(json, ignoreDiscriminator) {
         'title': json['title'] == null ? undefined : json['title'],
         'description': json['description'] == null ? undefined : json['description'],
         'keywords': json['keywords'] == null ? undefined : json['keywords'],
-        'dataType': (0, GeospatialDataDataType_1.GeospatialDataDataTypeFromJSON)(json['dataType']),
+        'dataType': (0, TileSetDataType_1.TileSetDataTypeFromJSON)(json['dataType']),
         'tileMatrixSetURI': json['tileMatrixSetURI'] == null ? undefined : json['tileMatrixSetURI'],
         'tileMatrixSetLimits': json['tileMatrixSetLimits'] == null ? undefined : (json['tileMatrixSetLimits'].map(TileMatrixLimits_1.TileMatrixLimitsFromJSON)),
         'crs': (0, TilesCrs_1.TilesCrsFromJSON)(json['crs']),
@@ -63,8 +64,8 @@ function TileSetFromJSONTyped(json, ignoreDiscriminator) {
         'license': json['license'] == null ? undefined : json['license'],
         'accessConstraints': json['accessConstraints'] == null ? undefined : (0, AccessConstraints_1.AccessConstraintsFromJSON)(json['accessConstraints']),
         'version': json['version'] == null ? undefined : json['version'],
-        'created': json['created'] == null ? undefined : (new Date(json['created'])),
-        'updated': json['updated'] == null ? undefined : (new Date(json['updated'])),
+        'created': json['created'] == null ? undefined : ((0, runtime_1.parseDateTime)(json['created'])),
+        'updated': json['updated'] == null ? undefined : ((0, runtime_1.parseDateTime)(json['updated'])),
         'pointOfContact': json['pointOfContact'] == null ? undefined : json['pointOfContact'],
         'mediaTypes': json['mediaTypes'] == null ? undefined : json['mediaTypes'],
     };
@@ -80,7 +81,7 @@ function TileSetToJSONTyped(value, ignoreDiscriminator = false) {
         'title': value['title'],
         'description': value['description'],
         'keywords': value['keywords'],
-        'dataType': (0, GeospatialDataDataType_1.GeospatialDataDataTypeToJSON)(value['dataType']),
+        'dataType': (0, TileSetDataType_1.TileSetDataTypeToJSON)(value['dataType']),
         'tileMatrixSetURI': value['tileMatrixSetURI'],
         'tileMatrixSetLimits': value['tileMatrixSetLimits'] == null ? undefined : (value['tileMatrixSetLimits'].map(TileMatrixLimits_1.TileMatrixLimitsToJSON)),
         'crs': (0, TilesCrs_1.TilesCrsToJSON)(value['crs']),
@@ -94,8 +95,8 @@ function TileSetToJSONTyped(value, ignoreDiscriminator = false) {
         'license': value['license'],
         'accessConstraints': (0, AccessConstraints_1.AccessConstraintsToJSON)(value['accessConstraints']),
         'version': value['version'],
-        'created': value['created'] == null ? value['created'] : value['created'].toISOString(),
-        'updated': value['updated'] == null ? value['updated'] : value['updated'].toISOString(),
+        'created': value['created'] == null ? value['created'] : (0, runtime_1.serializeDateTime)(value['created']),
+        'updated': value['updated'] == null ? value['updated'] : (0, runtime_1.serializeDateTime)(value['updated']),
         'pointOfContact': value['pointOfContact'],
         'mediaTypes': value['mediaTypes'],
     };

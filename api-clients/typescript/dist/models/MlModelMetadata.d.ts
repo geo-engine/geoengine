@@ -20,38 +20,26 @@ import type { RasterDataType } from './RasterDataType';
 export interface MlModelMetadata {
     /**
      *
-     * @type {RasterDataType}
-     * @memberof MlModelMetadata
      */
     inputType: RasterDataType;
     /**
      *
-     * @type {RasterDataType}
-     * @memberof MlModelMetadata
      */
     outputType: RasterDataType;
     /**
      *
-     * @type {MlTensorShape3D}
-     * @memberof MlModelMetadata
      */
     inputShape: MlTensorShape3D;
     /**
      *
-     * @type {MlTensorShape3D}
-     * @memberof MlModelMetadata
      */
     outputShape: MlTensorShape3D;
     /**
      *
-     * @type {MlModelInputNoDataHandling}
-     * @memberof MlModelMetadata
      */
     inputNoDataHandling: MlModelInputNoDataHandling;
     /**
      *
-     * @type {MlModelOutputNoDataHandling}
-     * @memberof MlModelMetadata
      */
     outputNoDataHandling: MlModelOutputNoDataHandling;
 }

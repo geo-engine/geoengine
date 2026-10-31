@@ -41,20 +41,14 @@ import {
 export interface Rasterization {
     /**
      * 
-     * @type {RasterizationTypeEnum}
-     * @memberof Rasterization
      */
     type: RasterizationTypeEnum;
     /**
      * 
-     * @type {RasterizationParameters}
-     * @memberof Rasterization
      */
     params: RasterizationParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof Rasterization
      */
     sources: SingleVectorSource;
 }
@@ -64,7 +58,7 @@ export interface Rasterization {
  * @export
  */
 export const RasterizationTypeEnum = {
-    Rasterization: 'Rasterization'
+    Rasterization: 'Rasterization',
 } as const;
 export type RasterizationTypeEnum = typeof RasterizationTypeEnum[keyof typeof RasterizationTypeEnum];
 
@@ -74,6 +68,8 @@ export type RasterizationTypeEnum = typeof RasterizationTypeEnum[keyof typeof Ra
  */
 export function instanceOfRasterization(value: object): value is Rasterization {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Rasterization') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

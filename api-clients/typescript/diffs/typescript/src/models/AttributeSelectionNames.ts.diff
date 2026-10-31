@@ -1,15 +1,15 @@
 --- typescript/src/models/AttributeSelectionNames.ts
 +++ typescript/src/models/AttributeSelectionNames.ts
-@@ -35,7 +35,7 @@
-      * @type {Set<string>}
-      * @memberof AttributeSelectionNames
+@@ -31,7 +31,7 @@
+     /**
+      * 
       */
 -    values: Set<string>;
 +    values: Array<string>;
  }
  
  
-@@ -68,7 +68,7 @@
+@@ -66,7 +66,7 @@
      return {
          
          'type': json['type'],
@@ -18,7 +18,7 @@
      };
  }
  
-@@ -84,7 +84,7 @@
+@@ -82,7 +82,7 @@
      return {
          
          'type': value['type'],

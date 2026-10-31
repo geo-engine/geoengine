@@ -16,7 +16,7 @@
  */
 export const LineSimplificationAlgorithm = {
     DouglasPeucker: 'douglasPeucker',
-    Visvalingam: 'visvalingam'
+    Visvalingam: 'visvalingam',
 };
 export function instanceOfLineSimplificationAlgorithm(value) {
     for (const key in LineSimplificationAlgorithm) {

@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { DataPathUpload } from './DataPathUpload';
 import {
     instanceOfDataPathUpload,

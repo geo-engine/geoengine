@@ -23,7 +23,7 @@ const RasterOperator_1 = require("./RasterOperator");
  * @export
  */
 exports.TypedRasterOperatorTypeEnum = {
-    Raster: 'Raster'
+    Raster: 'Raster',
 };
 /**
  * Check if a given object implements the TypedRasterOperator interface.
@@ -32,6 +32,8 @@ function instanceOfTypedRasterOperator(value) {
     if (!('operator' in value) || value['operator'] === undefined)
         return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Raster')
         return false;
     return true;
 }

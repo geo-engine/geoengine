@@ -28,14 +28,10 @@ import {
 export interface VectorJoinSources {
     /**
      * 
-     * @type {VectorOperator}
-     * @memberof VectorJoinSources
      */
     left: VectorOperator;
     /**
      * 
-     * @type {VectorOperator}
-     * @memberof VectorJoinSources
      */
     right: VectorOperator;
 }

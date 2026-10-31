@@ -9,15 +9,29 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { IdResponse, UploadFileLayersResponse, UploadFilesResponse } from '../models/index';
+import { type IdResponse } from '../models/IdResponse';
+import { type UploadFileLayersResponse } from '../models/UploadFileLayersResponse';
+import { type UploadFilesResponse } from '../models/UploadFilesResponse';
 export interface ListUploadFileLayersHandlerRequest {
+    /**
+     * Upload id
+     */
     uploadId: string;
+    /**
+     * File name
+     */
     fileName: string;
 }
 export interface ListUploadFilesHandlerRequest {
+    /**
+     * Upload id
+     */
     uploadId: string;
 }
 export interface UploadHandlerRequest {
+    /**
+     *
+     */
     files: Array<Blob>;
 }
 /**

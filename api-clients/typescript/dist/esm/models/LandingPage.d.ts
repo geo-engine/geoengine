@@ -23,26 +23,18 @@ export interface LandingPage {
     [key: string]: any | any;
     /**
      * The title of the API.
-     * @type {string}
-     * @memberof LandingPage
      */
     title?: string | null;
     /**
      * A textual description of the API.
-     * @type {string}
-     * @memberof LandingPage
      */
     description?: string | null;
     /**
      * Attribution for the API.
-     * @type {string}
-     * @memberof LandingPage
      */
     attribution?: string | null;
     /**
      * Links to the resources exposed through this API
-     * @type {Array<Link>}
-     * @memberof LandingPage
      */
     links?: Array<Link>;
 }

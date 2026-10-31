@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 
-import { mapValues } from '../runtime';
+import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 /**
  * 
  * @export
@@ -20,26 +20,18 @@ import { mapValues } from '../runtime';
 export interface ComputationQuota {
     /**
      * 
-     * @type {Date}
-     * @memberof ComputationQuota
      */
     timestamp: Date;
     /**
      * 
-     * @type {string}
-     * @memberof ComputationQuota
      */
     computationId: string;
     /**
      * 
-     * @type {string}
-     * @memberof ComputationQuota
      */
     processingGraphId: string;
     /**
      * 
-     * @type {number}
-     * @memberof ComputationQuota
      */
     count: number;
 }
@@ -65,7 +57,7 @@ export function ComputationQuotaFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : parseDateTime(json['timestamp'])),
         'computationId': json['computationId'],
         'processingGraphId': json['processingGraphId'],
         'count': json['count'],
@@ -83,7 +75,7 @@ export function ComputationQuotaToJSONTyped(value?: ComputationQuota | null, ign
 
     return {
         
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : serializeDateTime(value['timestamp']),
         'computationId': value['computationId'],
         'processingGraphId': value['processingGraphId'],
         'count': value['count'],

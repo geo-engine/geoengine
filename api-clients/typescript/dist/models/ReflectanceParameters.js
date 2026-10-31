@@ -37,7 +37,7 @@ function ReflectanceParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'solarCorrection': json['solarCorrection'],
         'forceHRV': json['forceHRV'],
-        'forceSatellite': json['forceSatellite'] == null ? undefined : json['forceSatellite'],
+        'forceSatellite': json['forceSatellite'] === undefined ? undefined : json['forceSatellite'] === null ? null : json['forceSatellite'],
     };
 }
 function ReflectanceParametersToJSON(json) {

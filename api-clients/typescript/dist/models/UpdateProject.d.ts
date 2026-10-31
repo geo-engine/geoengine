@@ -20,44 +20,30 @@ import type { LayerUpdate } from './LayerUpdate';
 export interface UpdateProject {
     /**
      *
-     * @type {string}
-     * @memberof UpdateProject
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof UpdateProject
      */
     name?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof UpdateProject
      */
     description?: string | null;
     /**
      *
-     * @type {Array<LayerUpdate>}
-     * @memberof UpdateProject
      */
     layers?: Array<LayerUpdate> | null;
     /**
      *
-     * @type {Array<PlotUpdate>}
-     * @memberof UpdateProject
      */
     plots?: Array<PlotUpdate> | null;
     /**
      *
-     * @type {STRectangle}
-     * @memberof UpdateProject
      */
     bounds?: STRectangle | null;
     /**
      *
-     * @type {TimeStep}
-     * @memberof UpdateProject
      */
     timeStep?: TimeStep | null;
 }

@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface Default {
     /**
      * 
-     * @type {DefaultTypeEnum}
-     * @memberof Default
      */
     type: DefaultTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface Default {
  * @export
  */
 export const DefaultTypeEnum = {
-    Default: 'default'
+    Default: 'default',
 } as const;
 export type DefaultTypeEnum = typeof DefaultTypeEnum[keyof typeof DefaultTypeEnum];
 
@@ -41,6 +39,8 @@ export type DefaultTypeEnum = typeof DefaultTypeEnum[keyof typeof DefaultTypeEnu
  */
 export function instanceOfDefault(value: object): value is Default {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'default') return false;
+    
     return true;
 }
 

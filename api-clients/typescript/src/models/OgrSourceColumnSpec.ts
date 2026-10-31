@@ -28,58 +28,40 @@ import {
 export interface OgrSourceColumnSpec {
     /**
      * 
-     * @type {FormatSpecifics}
-     * @memberof OgrSourceColumnSpec
      */
     formatSpecifics?: FormatSpecifics | null;
     /**
      * 
-     * @type {string}
-     * @memberof OgrSourceColumnSpec
      */
     x: string;
     /**
      * 
-     * @type {string}
-     * @memberof OgrSourceColumnSpec
      */
     y?: string | null;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     _int?: Array<string>;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     _float?: Array<string>;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     text?: Array<string>;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     bool?: Array<string>;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     datetime?: Array<string>;
     /**
      * 
-     * @type {{ [key: string]: string; }}
-     * @memberof OgrSourceColumnSpec
      */
-    rename?: { [key: string]: string; };
+    rename?: { [key: string]: string; } | null;
 }
 
 /**
@@ -100,15 +82,15 @@ export function OgrSourceColumnSpecFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'formatSpecifics': json['formatSpecifics'] == null ? undefined : FormatSpecificsFromJSON(json['formatSpecifics']),
+        'formatSpecifics': json['formatSpecifics'] === undefined ? undefined : json['formatSpecifics'] === null ? null : FormatSpecificsFromJSON(json['formatSpecifics']),
         'x': json['x'],
-        'y': json['y'] == null ? undefined : json['y'],
+        'y': json['y'] === undefined ? undefined : json['y'] === null ? null : json['y'],
         '_int': json['int'] == null ? undefined : json['int'],
         '_float': json['float'] == null ? undefined : json['float'],
         'text': json['text'] == null ? undefined : json['text'],
         'bool': json['bool'] == null ? undefined : json['bool'],
         'datetime': json['datetime'] == null ? undefined : json['datetime'],
-        'rename': json['rename'] == null ? undefined : json['rename'],
+        'rename': json['rename'] === undefined ? undefined : json['rename'] === null ? null : json['rename'],
     };
 }
 

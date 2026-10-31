@@ -42,20 +42,14 @@ import {
 export interface LineSimplification {
     /**
      * 
-     * @type {LineSimplificationTypeEnum}
-     * @memberof LineSimplification
      */
     type: LineSimplificationTypeEnum;
     /**
      * 
-     * @type {LineSimplificationParameters}
-     * @memberof LineSimplification
      */
     params: LineSimplificationParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof LineSimplification
      */
     sources: SingleVectorSource;
 }
@@ -65,7 +59,7 @@ export interface LineSimplification {
  * @export
  */
 export const LineSimplificationTypeEnum = {
-    LineSimplification: 'LineSimplification'
+    LineSimplification: 'LineSimplification',
 } as const;
 export type LineSimplificationTypeEnum = typeof LineSimplificationTypeEnum[keyof typeof LineSimplificationTypeEnum];
 
@@ -75,6 +69,8 @@ export type LineSimplificationTypeEnum = typeof LineSimplificationTypeEnum[keyof
  */
 export function instanceOfLineSimplification(value: object): value is LineSimplification {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'LineSimplification') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

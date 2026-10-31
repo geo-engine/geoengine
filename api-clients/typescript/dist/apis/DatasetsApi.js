@@ -23,7 +23,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DatasetsApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const AddDatasetTile_1 = require("../models/AddDatasetTile");
+const AutoCreateDataset_1 = require("../models/AutoCreateDataset");
+const CreateDataset_1 = require("../models/CreateDataset");
+const Dataset_1 = require("../models/Dataset");
+const DatasetListing_1 = require("../models/DatasetListing");
+const DatasetNameResponse_1 = require("../models/DatasetNameResponse");
+const MetaDataDefinition_1 = require("../models/MetaDataDefinition");
+const MetaDataSuggestion_1 = require("../models/MetaDataSuggestion");
+const Provenances_1 = require("../models/Provenances");
+const SuggestMetaData_1 = require("../models/SuggestMetaData");
+const Symbology_1 = require("../models/Symbology");
+const UpdateDataset_1 = require("../models/UpdateDataset");
+const Volume_1 = require("../models/Volume");
+const VolumeFileLayersResponse_1 = require("../models/VolumeFileLayersResponse");
 /**
  *
  */
@@ -50,13 +63,13 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/tiles`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: requestParameters['addDatasetTile'].map(index_1.AddDatasetTileToJSON),
+                body: requestParameters['addDatasetTile'].map(AddDatasetTile_1.AddDatasetTileToJSON),
             };
         });
     }
@@ -102,7 +115,7 @@ class DatasetsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.AutoCreateDatasetToJSON)(requestParameters['autoCreateDataset']),
+                body: (0, AutoCreateDataset_1.AutoCreateDatasetToJSON)(requestParameters['autoCreateDataset']),
             };
         });
     }
@@ -113,7 +126,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.autoCreateDatasetHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.DatasetNameResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, DatasetNameResponse_1.DatasetNameResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -149,7 +162,7 @@ class DatasetsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.CreateDatasetToJSON)(requestParameters['createDataset']),
+                body: (0, CreateDataset_1.CreateDatasetToJSON)(requestParameters['createDataset']),
             };
         });
     }
@@ -160,7 +173,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.createDatasetHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.DatasetNameResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, DatasetNameResponse_1.DatasetNameResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -190,7 +203,7 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -235,7 +248,7 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -251,7 +264,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getDatasetHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.DatasetFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Dataset_1.DatasetFromJSON)(jsonValue));
         });
     }
     /**
@@ -281,7 +294,7 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/loadingInfo`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -297,7 +310,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getLoadingInfoHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.MetaDataDefinitionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, MetaDataDefinition_1.MetaDataDefinitionFromJSON)(jsonValue));
         });
     }
     /**
@@ -363,7 +376,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listDatasetsHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.DatasetListingFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(DatasetListing_1.DatasetListingFromJSON));
         });
     }
     /**
@@ -396,8 +409,8 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/volumes/{volume_name}/files/{file_name}/layers`;
-            urlPath = urlPath.replace(`{${"volume_name"}}`, encodeURIComponent(String(requestParameters['volumeName'])));
-            urlPath = urlPath.replace(`{${"file_name"}}`, encodeURIComponent(String(requestParameters['fileName'])));
+            urlPath = urlPath.replace('{volume_name}', encodeURIComponent(String(requestParameters['volumeName'])));
+            urlPath = urlPath.replace('{file_name}', encodeURIComponent(String(requestParameters['fileName'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -413,7 +426,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listVolumeFileLayersHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.VolumeFileLayersResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, VolumeFileLayersResponse_1.VolumeFileLayersResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -455,7 +468,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listVolumesHandlerRequestOpts();
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.VolumeFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(Volume_1.VolumeFromJSON));
         });
     }
     /**
@@ -491,7 +504,7 @@ class DatasetsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.SuggestMetaDataToJSON)(requestParameters['suggestMetaData']),
+                body: (0, SuggestMetaData_1.SuggestMetaDataToJSON)(requestParameters['suggestMetaData']),
             };
         });
     }
@@ -502,7 +515,7 @@ class DatasetsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.suggestMetaDataHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.MetaDataSuggestionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, MetaDataSuggestion_1.MetaDataSuggestionFromJSON)(jsonValue));
         });
     }
     /**
@@ -536,13 +549,13 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.UpdateDatasetToJSON)(requestParameters['updateDataset']),
+                body: (0, UpdateDataset_1.UpdateDatasetToJSON)(requestParameters['updateDataset']),
             };
         });
     }
@@ -586,13 +599,13 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/provenance`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.ProvenancesToJSON)(requestParameters['provenances']),
+                body: (0, Provenances_1.ProvenancesToJSON)(requestParameters['provenances']),
             };
         });
     }
@@ -634,13 +647,13 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/symbology`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.SymbologyToJSON)(requestParameters['symbology']),
+                body: (0, Symbology_1.SymbologyToJSON)(requestParameters['symbology']),
             };
         });
     }
@@ -684,13 +697,13 @@ class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/loadingInfo`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.MetaDataDefinitionToJSON)(requestParameters['metaDataDefinition']),
+                body: (0, MetaDataDefinition_1.MetaDataDefinitionToJSON)(requestParameters['metaDataDefinition']),
             };
         });
     }

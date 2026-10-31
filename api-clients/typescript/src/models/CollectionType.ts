@@ -17,7 +17,7 @@
  * @export
  */
 export const CollectionType = {
-    FeatureCollection: 'FeatureCollection'
+    FeatureCollection: 'FeatureCollection',
 } as const;
 export type CollectionType = typeof CollectionType[keyof typeof CollectionType];
 

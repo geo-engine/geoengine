@@ -28,20 +28,14 @@ import {
 export interface GdalMultiBand {
     /**
      * 
-     * @type {GdalMultiBandTypeEnum}
-     * @memberof GdalMultiBand
      */
     type: GdalMultiBandTypeEnum;
     /**
      * 
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMultiBand
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      * Dataset-level TTL fallback used when no tile-level TTL is provided.
-     * @type {number}
-     * @memberof GdalMultiBand
      */
     cacheTtl?: number | null;
 }
@@ -51,7 +45,7 @@ export interface GdalMultiBand {
  * @export
  */
 export const GdalMultiBandTypeEnum = {
-    GdalMultiBand: 'GdalMultiBand'
+    GdalMultiBand: 'GdalMultiBand',
 } as const;
 export type GdalMultiBandTypeEnum = typeof GdalMultiBandTypeEnum[keyof typeof GdalMultiBandTypeEnum];
 
@@ -61,6 +55,8 @@ export type GdalMultiBandTypeEnum = typeof GdalMultiBandTypeEnum[keyof typeof Gd
  */
 export function instanceOfGdalMultiBand(value: object): value is GdalMultiBand {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GdalMultiBand') return false;
+    
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     return true;
 }
@@ -77,7 +73,7 @@ export function GdalMultiBandFromJSONTyped(json: any, ignoreDiscriminator: boole
         
         'type': json['type'],
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

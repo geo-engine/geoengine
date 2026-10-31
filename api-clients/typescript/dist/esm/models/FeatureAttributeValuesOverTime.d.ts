@@ -44,20 +44,14 @@ import type { SingleVectorSource } from './SingleVectorSource';
 export interface FeatureAttributeValuesOverTime {
     /**
      *
-     * @type {FeatureAttributeValuesOverTimeTypeEnum}
-     * @memberof FeatureAttributeValuesOverTime
      */
     type: FeatureAttributeValuesOverTimeTypeEnum;
     /**
      *
-     * @type {FeatureAttributeValuesOverTimeParameters}
-     * @memberof FeatureAttributeValuesOverTime
      */
     params: FeatureAttributeValuesOverTimeParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof FeatureAttributeValuesOverTime
      */
     sources: SingleVectorSource;
 }

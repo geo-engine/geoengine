@@ -9,46 +9,112 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { AddRole, ComputationQuota, DataUsage, DataUsageSummary, IdResponse, OperatorQuota, Quota, RoleDescription, UpdateQuota, UsageSummaryGranularity } from '../models/index';
+import { type AddRole } from '../models/AddRole';
+import { type ComputationQuota } from '../models/ComputationQuota';
+import { type DataUsage } from '../models/DataUsage';
+import { type DataUsageSummary } from '../models/DataUsageSummary';
+import { type IdResponse } from '../models/IdResponse';
+import { type OperatorQuota } from '../models/OperatorQuota';
+import { type Quota } from '../models/Quota';
+import { type RoleDescription } from '../models/RoleDescription';
+import { type UpdateQuota } from '../models/UpdateQuota';
+import { type UsageSummaryGranularity } from '../models/UsageSummaryGranularity';
 export interface AddRoleHandlerRequest {
+    /**
+     *
+     */
     addRole: AddRole;
 }
 export interface AssignRoleHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
+    /**
+     * Role id
+     */
     role: string;
 }
 export interface ComputationQuotaHandlerRequest {
+    /**
+     * Computation id
+     */
     computation: string;
 }
 export interface ComputationsQuotaHandlerRequest {
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
 }
 export interface DataUsageHandlerRequest {
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
 }
 export interface DataUsageSummaryHandlerRequest {
+    /**
+     *
+     */
     granularity: UsageSummaryGranularity;
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
+    /**
+     *
+     */
     dataset?: string | null;
 }
 export interface GetRoleByNameHandlerRequest {
+    /**
+     * Role Name
+     */
     name: string;
 }
 export interface GetUserQuotaHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
 }
 export interface RemoveRoleHandlerRequest {
+    /**
+     * Role id
+     */
     role: string;
 }
 export interface RevokeRoleHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
+    /**
+     * Role id
+     */
     role: string;
 }
 export interface UpdateUserQuotaHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
+    /**
+     *
+     */
     updateQuota: UpdateQuota;
 }
 /**

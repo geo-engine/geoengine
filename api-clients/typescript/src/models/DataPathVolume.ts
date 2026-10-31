@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface DataPathVolume {
     /**
      * 
-     * @type {string}
-     * @memberof DataPathVolume
      */
     volume: string;
 }

@@ -16,8 +16,6 @@
 export interface UnitlessMeasurement {
     /**
      *
-     * @type {UnitlessMeasurementTypeEnum}
-     * @memberof UnitlessMeasurement
      */
     type: UnitlessMeasurementTypeEnum;
 }

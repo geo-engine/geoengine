@@ -28,8 +28,6 @@ import {
 export interface MockDatasetDataSourceLoadingInfo {
     /**
      * 
-     * @type {Array<Coordinate2D>}
-     * @memberof MockDatasetDataSourceLoadingInfo
      */
     points: Array<Coordinate2D>;
 }

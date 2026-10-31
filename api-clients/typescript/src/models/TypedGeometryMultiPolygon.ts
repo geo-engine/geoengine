@@ -28,8 +28,6 @@ import {
 export interface TypedGeometryMultiPolygon {
     /**
      * 
-     * @type {MultiPolygon}
-     * @memberof TypedGeometryMultiPolygon
      */
     multiPolygon: MultiPolygon;
 }
@@ -38,7 +36,7 @@ export interface TypedGeometryMultiPolygon {
  * Check if a given object implements the TypedGeometryMultiPolygon interface.
  */
 export function instanceOfTypedGeometryMultiPolygon(value: object): value is TypedGeometryMultiPolygon {
-    if (!('multiPolygon' in value) || value['multiPolygon'] === undefined) return false;
+    if ((!('multiPolygon' in (value as Record<string, any>)) && !('MultiPolygon' in (value as Record<string, any>))) || ((value as Record<string, any>)['multiPolygon'] === undefined && (value as Record<string, any>)['MultiPolygon'] === undefined)) return false;
     return true;
 }
 

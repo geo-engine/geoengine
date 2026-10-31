@@ -23,6 +23,7 @@ from geoengine_api_client.models.mean_raster_pixel_values_over_time_parameters i
 from geoengine_api_client.models.single_raster_source import SingleRasterSource
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class MeanRasterPixelValuesOverTime(BaseModel):
     """
@@ -41,7 +42,8 @@ class MeanRasterPixelValuesOverTime(BaseModel):
         return value
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -53,8 +55,7 @@ class MeanRasterPixelValuesOverTime(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:

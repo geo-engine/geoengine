@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 
-import { mapValues } from '../runtime';
+import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 /**
  * 
  * @export
@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface ProjectVersion {
     /**
      * 
-     * @type {string}
-     * @memberof ProjectVersion
      */
     id: string;
     /**
      * 
-     * @type {Date}
-     * @memberof ProjectVersion
      */
     changed: Date;
 }
@@ -52,7 +48,7 @@ export function ProjectVersionFromJSONTyped(json: any, ignoreDiscriminator: bool
     return {
         
         'id': json['id'],
-        'changed': (new Date(json['changed'])),
+        'changed': (json['changed'] == null ? json['changed'] : parseDateTime(json['changed'])),
     };
 }
 
@@ -68,7 +64,7 @@ export function ProjectVersionToJSONTyped(value?: ProjectVersion | null, ignoreD
     return {
         
         'id': value['id'],
-        'changed': value['changed'].toISOString(),
+        'changed': value['changed'] == null ? value['changed'] : serializeDateTime(value['changed']),
     };
 }
 

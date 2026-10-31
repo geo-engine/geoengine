@@ -24,7 +24,7 @@ exports.OgrSourceErrorSpecToJSONTyped = OgrSourceErrorSpecToJSONTyped;
  */
 exports.OgrSourceErrorSpec = {
     Ignore: 'ignore',
-    Abort: 'abort'
+    Abort: 'abort',
 };
 function instanceOfOgrSourceErrorSpec(value) {
     for (const key in exports.OgrSourceErrorSpec) {

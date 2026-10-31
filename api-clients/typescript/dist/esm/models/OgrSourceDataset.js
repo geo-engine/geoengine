@@ -37,16 +37,16 @@ export function OgrSourceDatasetFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'fileName': json['fileName'],
         'layerName': json['layerName'],
-        'dataType': json['dataType'] == null ? undefined : VectorDataTypeFromJSON(json['dataType']),
+        'dataType': json['dataType'] === undefined ? undefined : json['dataType'] === null ? null : VectorDataTypeFromJSON(json['dataType']),
         'time': json['time'] == null ? undefined : OgrSourceDatasetTimeTypeFromJSON(json['time']),
-        'defaultGeometry': json['defaultGeometry'] == null ? undefined : TypedGeometryFromJSON(json['defaultGeometry']),
-        'columns': json['columns'] == null ? undefined : OgrSourceColumnSpecFromJSON(json['columns']),
+        'defaultGeometry': json['defaultGeometry'] === undefined ? undefined : json['defaultGeometry'] === null ? null : TypedGeometryFromJSON(json['defaultGeometry']),
+        'columns': json['columns'] === undefined ? undefined : json['columns'] === null ? null : OgrSourceColumnSpecFromJSON(json['columns']),
         'forceOgrTimeFilter': json['forceOgrTimeFilter'] == null ? undefined : json['forceOgrTimeFilter'],
         'forceOgrSpatialFilter': json['forceOgrSpatialFilter'] == null ? undefined : json['forceOgrSpatialFilter'],
         'onError': OgrSourceErrorSpecFromJSON(json['onError']),
-        'sqlQuery': json['sqlQuery'] == null ? undefined : json['sqlQuery'],
-        'attributeQuery': json['attributeQuery'] == null ? undefined : json['attributeQuery'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'sqlQuery': json['sqlQuery'] === undefined ? undefined : json['sqlQuery'] === null ? null : json['sqlQuery'],
+        'attributeQuery': json['attributeQuery'] === undefined ? undefined : json['attributeQuery'] === null ? null : json['attributeQuery'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function OgrSourceDatasetToJSON(json) {

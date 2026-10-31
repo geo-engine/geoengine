@@ -15,13 +15,15 @@ import { DatabaseConnectionConfigFromJSON, DatabaseConnectionConfigToJSON, } fro
  * @export
  */
 export const GbifDataProviderDefinitionTypeEnum = {
-    Gbif: 'Gbif'
+    Gbif: 'Gbif',
 };
 /**
  * Check if a given object implements the GbifDataProviderDefinition interface.
  */
 export function instanceOfGbifDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Gbif')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -46,9 +48,9 @@ export function GbifDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
         'autocompleteTimeout': json['autocompleteTimeout'],
         'columns': json['columns'],
     };

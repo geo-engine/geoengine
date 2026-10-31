@@ -15,7 +15,7 @@
  * @export
  */
 export const WmsService = {
-    Wms: 'WMS'
+    Wms: 'WMS',
 };
 export function instanceOfWmsService(value) {
     for (const key in WmsService) {

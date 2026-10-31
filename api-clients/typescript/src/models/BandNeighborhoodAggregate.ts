@@ -61,20 +61,14 @@ import {
 export interface BandNeighborhoodAggregate {
     /**
      * 
-     * @type {BandNeighborhoodAggregateTypeEnum}
-     * @memberof BandNeighborhoodAggregate
      */
     type: BandNeighborhoodAggregateTypeEnum;
     /**
      * 
-     * @type {BandNeighborhoodAggregateParameters}
-     * @memberof BandNeighborhoodAggregate
      */
     params: BandNeighborhoodAggregateParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof BandNeighborhoodAggregate
      */
     sources: SingleRasterSource;
 }
@@ -84,7 +78,7 @@ export interface BandNeighborhoodAggregate {
  * @export
  */
 export const BandNeighborhoodAggregateTypeEnum = {
-    BandNeighborhoodAggregate: 'BandNeighborhoodAggregate'
+    BandNeighborhoodAggregate: 'BandNeighborhoodAggregate',
 } as const;
 export type BandNeighborhoodAggregateTypeEnum = typeof BandNeighborhoodAggregateTypeEnum[keyof typeof BandNeighborhoodAggregateTypeEnum];
 
@@ -94,6 +88,8 @@ export type BandNeighborhoodAggregateTypeEnum = typeof BandNeighborhoodAggregate
  */
 export function instanceOfBandNeighborhoodAggregate(value: object): value is BandNeighborhoodAggregate {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'BandNeighborhoodAggregate') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -44,20 +44,14 @@ import type { BandNeighborhoodAggregateParameters } from './BandNeighborhoodAggr
 export interface BandNeighborhoodAggregate {
     /**
      *
-     * @type {BandNeighborhoodAggregateTypeEnum}
-     * @memberof BandNeighborhoodAggregate
      */
     type: BandNeighborhoodAggregateTypeEnum;
     /**
      *
-     * @type {BandNeighborhoodAggregateParameters}
-     * @memberof BandNeighborhoodAggregate
      */
     params: BandNeighborhoodAggregateParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof BandNeighborhoodAggregate
      */
     sources: SingleRasterSource;
 }

@@ -17,14 +17,10 @@ import type { CollectionType } from './CollectionType';
 export interface GeoJson {
     /**
      *
-     * @type {CollectionType}
-     * @memberof GeoJson
      */
     type: CollectionType;
     /**
      *
-     * @type {Array<any>}
-     * @memberof GeoJson
      */
     features: Array<any>;
 }

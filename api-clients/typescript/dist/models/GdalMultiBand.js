@@ -23,13 +23,15 @@ const RasterResultDescriptor_1 = require("./RasterResultDescriptor");
  * @export
  */
 exports.GdalMultiBandTypeEnum = {
-    GdalMultiBand: 'GdalMultiBand'
+    GdalMultiBand: 'GdalMultiBand',
 };
 /**
  * Check if a given object implements the GdalMultiBand interface.
  */
 function instanceOfGdalMultiBand(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalMultiBand')
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -45,7 +47,7 @@ function GdalMultiBandFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'resultDescriptor': (0, RasterResultDescriptor_1.RasterResultDescriptorFromJSON)(json['resultDescriptor']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 function GdalMultiBandToJSON(json) {

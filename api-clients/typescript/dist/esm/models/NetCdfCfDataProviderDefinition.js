@@ -14,13 +14,15 @@
  * @export
  */
 export const NetCdfCfDataProviderDefinitionTypeEnum = {
-    NetCdfCf: 'NetCdfCf'
+    NetCdfCf: 'NetCdfCf',
 };
 /**
  * Check if a given object implements the NetCdfCfDataProviderDefinition interface.
  */
 export function instanceOfNetCdfCfDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'NetCdfCf')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -43,10 +45,10 @@ export function NetCdfCfDataProviderDefinitionFromJSONTyped(json, ignoreDiscrimi
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'data': json['data'],
         'overviews': json['overviews'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function NetCdfCfDataProviderDefinitionToJSON(json) {

@@ -17,34 +17,24 @@ import type { Link } from './Link';
 export interface Style {
     /**
      * An identifier for this style. Implementation of 'identifier'
-     * @type {string}
-     * @memberof Style
      */
     id: string;
     /**
      * A title for this style
-     * @type {string}
-     * @memberof Style
      */
     title?: string;
     /**
      * Brief narrative description of this style
-     * @type {string}
-     * @memberof Style
      */
     description?: string;
     /**
      * Keywords about this style
-     * @type {Array<string>}
-     * @memberof Style
      */
     keywords?: Array<string>;
     /**
      * Links to style related resources. Possible link 'rel' values are:
      * 'style' for a URL pointing to the style description, 'styleSpec' for a
      * URL pointing to the specification or standard used to define the style.
-     * @type {Array<Link>}
-     * @memberof Style
      */
     links?: Array<Link>;
 }

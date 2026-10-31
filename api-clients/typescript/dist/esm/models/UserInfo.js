@@ -27,8 +27,8 @@ export function UserInfoFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'id': json['id'],
-        'email': json['email'] == null ? undefined : json['email'],
-        'realName': json['realName'] == null ? undefined : json['realName'],
+        'email': json['email'] === undefined ? undefined : json['email'] === null ? null : json['email'],
+        'realName': json['realName'] === undefined ? undefined : json['realName'] === null ? null : json['realName'],
     };
 }
 export function UserInfoToJSON(json) {

@@ -25,20 +25,14 @@ import type { ColumnRangeFilterParameters } from './ColumnRangeFilterParameters'
 export interface ColumnRangeFilter {
     /**
      *
-     * @type {ColumnRangeFilterTypeEnum}
-     * @memberof ColumnRangeFilter
      */
     type: ColumnRangeFilterTypeEnum;
     /**
      *
-     * @type {ColumnRangeFilterParameters}
-     * @memberof ColumnRangeFilter
      */
     params: ColumnRangeFilterParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof ColumnRangeFilter
      */
     sources: SingleVectorSource;
 }

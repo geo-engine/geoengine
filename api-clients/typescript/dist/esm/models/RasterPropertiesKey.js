@@ -26,7 +26,7 @@ export function RasterPropertiesKeyFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'domain': json['domain'] == null ? undefined : json['domain'],
+        'domain': json['domain'] === undefined ? undefined : json['domain'] === null ? null : json['domain'],
         'key': json['key'],
     };
 }

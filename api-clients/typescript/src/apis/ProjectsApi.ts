@@ -11,63 +11,105 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  CreateProject,
-  IdResponse,
-  OrderBy,
-  Project,
-  ProjectListing,
-  ProjectVersion,
-  UpdateProject,
-} from '../models/index';
 import {
+    type CreateProject,
     CreateProjectFromJSON,
     CreateProjectToJSON,
+} from '../models/CreateProject';
+import {
+    type IdResponse,
     IdResponseFromJSON,
     IdResponseToJSON,
+} from '../models/IdResponse';
+import {
+    type OrderBy,
     OrderByFromJSON,
     OrderByToJSON,
+} from '../models/OrderBy';
+import {
+    type Project,
     ProjectFromJSON,
     ProjectToJSON,
+} from '../models/Project';
+import {
+    type ProjectListing,
     ProjectListingFromJSON,
     ProjectListingToJSON,
+} from '../models/ProjectListing';
+import {
+    type ProjectVersion,
     ProjectVersionFromJSON,
     ProjectVersionToJSON,
+} from '../models/ProjectVersion';
+import {
+    type UpdateProject,
     UpdateProjectFromJSON,
     UpdateProjectToJSON,
-} from '../models/index';
+} from '../models/UpdateProject';
 
 export interface CreateProjectHandlerRequest {
+    /**
+     * 
+     */
     createProject: CreateProject;
 }
 
 export interface DeleteProjectHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 
 export interface ListProjectsHandlerRequest {
+    /**
+     * 
+     */
     order: OrderBy;
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
 }
 
 export interface LoadProjectLatestHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 
 export interface LoadProjectVersionHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
+    /**
+     * Version id
+     */
     version: string;
 }
 
 export interface ProjectVersionsHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 
 export interface UpdateProjectHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
+    /**
+     * 
+     */
     updateProject: UpdateProject;
 }
 
@@ -156,7 +198,7 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/project/{project}`;
-        urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+        urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
 
         return {
             path: urlPath,
@@ -222,9 +264,9 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/projects`;
-        urlPath = urlPath.replace(`{${"order"}}`, encodeURIComponent(String(requestParameters['order'])));
-        urlPath = urlPath.replace(`{${"offset"}}`, encodeURIComponent(String(requestParameters['offset'])));
-        urlPath = urlPath.replace(`{${"limit"}}`, encodeURIComponent(String(requestParameters['limit'])));
+        urlPath = urlPath.replace('{order}', encodeURIComponent(String(requestParameters['order'])));
+        urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
+        urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
 
         return {
             path: urlPath,
@@ -277,7 +319,7 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/project/{project}`;
-        urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+        urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
 
         return {
             path: urlPath,
@@ -337,8 +379,8 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/project/{project}/{version}`;
-        urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
-        urlPath = urlPath.replace(`{${"version"}}`, encodeURIComponent(String(requestParameters['version'])));
+        urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
+        urlPath = urlPath.replace('{version}', encodeURIComponent(String(requestParameters['version'])));
 
         return {
             path: urlPath,
@@ -391,7 +433,7 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/project/{project}/versions`;
-        urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+        urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
 
         return {
             path: urlPath,
@@ -453,7 +495,7 @@ export class ProjectsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/project/{project}`;
-        urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+        urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
 
         return {
             path: urlPath,

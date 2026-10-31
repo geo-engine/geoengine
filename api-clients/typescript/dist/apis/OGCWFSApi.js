@@ -23,7 +23,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OGCWFSApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const GeoJson_1 = require("../models/GeoJson");
 /**
  *
  */
@@ -88,7 +88,7 @@ class OGCWFSApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/wfs/{processingGraph}`;
-            urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
+            urlPath = urlPath.replace('{processingGraph}', encodeURIComponent(String(requestParameters['processingGraph'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -104,7 +104,7 @@ class OGCWFSApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.wfsHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.GeoJsonFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, GeoJson_1.GeoJsonFromJSON)(jsonValue));
         });
     }
     /**

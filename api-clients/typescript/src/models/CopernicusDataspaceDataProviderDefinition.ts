@@ -20,62 +20,42 @@ import { mapValues } from '../runtime';
 export interface CopernicusDataspaceDataProviderDefinition {
     /**
      * 
-     * @type {CopernicusDataspaceDataProviderDefinitionTypeEnum}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     type: CopernicusDataspaceDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     stacUrl: string;
     /**
      * 
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     s3Url: string;
     /**
      * 
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     s3AccessKey: string;
     /**
      * 
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     s3SecretKey: string;
     /**
      * 
-     * @type {Array<Array<string>>}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     gdalConfig: Array<Array<string>>;
     /**
      * 
-     * @type {number}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     priority?: number | null;
 }
@@ -85,7 +65,7 @@ export interface CopernicusDataspaceDataProviderDefinition {
  * @export
  */
 export const CopernicusDataspaceDataProviderDefinitionTypeEnum = {
-    CopernicusDataspace: 'CopernicusDataspace'
+    CopernicusDataspace: 'CopernicusDataspace',
 } as const;
 export type CopernicusDataspaceDataProviderDefinitionTypeEnum = typeof CopernicusDataspaceDataProviderDefinitionTypeEnum[keyof typeof CopernicusDataspaceDataProviderDefinitionTypeEnum];
 
@@ -95,6 +75,8 @@ export type CopernicusDataspaceDataProviderDefinitionTypeEnum = typeof Copernicu
  */
 export function instanceOfCopernicusDataspaceDataProviderDefinition(value: object): value is CopernicusDataspaceDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'CopernicusDataspace') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
@@ -125,7 +107,7 @@ export function CopernicusDataspaceDataProviderDefinitionFromJSONTyped(json: any
         's3AccessKey': json['s3AccessKey'],
         's3SecretKey': json['s3SecretKey'],
         'gdalConfig': json['gdalConfig'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
     };
 }
 

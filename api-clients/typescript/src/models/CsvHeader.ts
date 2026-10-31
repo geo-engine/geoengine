@@ -19,7 +19,7 @@
 export const CsvHeader = {
     Yes: 'yes',
     No: 'no',
-    Auto: 'auto'
+    Auto: 'auto',
 } as const;
 export type CsvHeader = typeof CsvHeader[keyof typeof CsvHeader];
 

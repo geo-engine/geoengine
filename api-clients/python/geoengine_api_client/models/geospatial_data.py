@@ -28,6 +28,7 @@ from geoengine_api_client.models.style import Style
 from geoengine_api_client.models.tiles_crs import TilesCrs
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class GeospatialData(BaseModel):
     """
@@ -58,12 +59,13 @@ class GeospatialData(BaseModel):
     updated: Optional[datetime] = Field(default=None, description="Last layer change/revision")
     style: Optional[Style] = Field(default=None, description="Style used to generate the layer in the tileset")
     geo_data_classes: Optional[List[StrictStr]] = Field(default=None, description="URI identifying a class of data contained in this layer (useful to determine compatibility with styles or processes)", alias="geoDataClasses")
-    properties_schema: Optional[Any] = Field(default=None, alias="propertiesSchema")
+    properties_schema: Optional[Any] = Field(default=None, description="Properties represented by the features in this layer. Can be the attributes of a feature dataset (datatype=geometries) or the rangeType of a coverage (datatype=coverage)", alias="propertiesSchema")
     links: Optional[List[Link]] = Field(default=None, description="Links related to this layer. Possible link 'rel' values are: 'geodata' for a URL pointing to the collection of geospatial data.")
     __properties: ClassVar[List[str]] = ["id", "title", "description", "keywords", "dataType", "geometryDimension", "featureType", "attribution", "license", "pointOfContact", "publisher", "theme", "crs", "epoch", "minScaleDenominator", "maxScaleDenominator", "minCellSize", "maxCellSize", "maxTileMatrix", "minTileMatrix", "boundingBox", "created", "updated", "style", "geoDataClasses", "propertiesSchema", "links"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -75,8 +77,7 @@ class GeospatialData(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -117,8 +118,7 @@ class GeospatialData(BaseModel):
         _items = []
         if self.links:
             for _item_links in self.links:
-                if _item_links:
-                    _items.append(_item_links.to_dict())
+                _items.append(_item_links.to_dict() if _item_links is not None else None)
             _dict['links'] = _items
         # set to None if crs (nullable) is None
         # and model_fields_set contains the field

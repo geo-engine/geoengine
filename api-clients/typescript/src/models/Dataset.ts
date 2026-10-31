@@ -49,62 +49,42 @@ import {
 export interface Dataset {
     /**
      * 
-     * @type {string}
-     * @memberof Dataset
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof Dataset
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof Dataset
      */
     displayName: string;
     /**
      * 
-     * @type {string}
-     * @memberof Dataset
      */
     description: string;
     /**
      * 
-     * @type {TypedResultDescriptor}
-     * @memberof Dataset
      */
     resultDescriptor: TypedResultDescriptor;
     /**
      * 
-     * @type {string}
-     * @memberof Dataset
      */
     sourceOperator: string;
     /**
      * 
-     * @type {Symbology}
-     * @memberof Dataset
      */
     symbology?: Symbology | null;
     /**
      * 
-     * @type {Array<Provenance>}
-     * @memberof Dataset
      */
     provenance?: Array<Provenance> | null;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof Dataset
      */
     tags?: Array<string> | null;
     /**
      * 
-     * @type {DataPath}
-     * @memberof Dataset
      */
     dataPath?: DataPath | null;
 }
@@ -138,10 +118,10 @@ export function DatasetFromJSONTyped(json: any, ignoreDiscriminator: boolean): D
         'description': json['description'],
         'resultDescriptor': TypedResultDescriptorFromJSON(json['resultDescriptor']),
         'sourceOperator': json['sourceOperator'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
-        'provenance': json['provenance'] == null ? undefined : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
-        'tags': json['tags'] == null ? undefined : json['tags'],
-        'dataPath': json['dataPath'] == null ? undefined : DataPathFromJSON(json['dataPath']),
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] === undefined ? undefined : json['provenance'] === null ? null : ((json['provenance'] as Array<any>).map(ProvenanceFromJSON)),
+        'tags': json['tags'] === undefined ? undefined : json['tags'] === null ? null : json['tags'],
+        'dataPath': json['dataPath'] === undefined ? undefined : json['dataPath'] === null ? null : DataPathFromJSON(json['dataPath']),
     };
 }
 

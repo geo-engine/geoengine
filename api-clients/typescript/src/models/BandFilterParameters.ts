@@ -28,8 +28,6 @@ import {
 export interface BandFilterParameters {
     /**
      * Selected bands either by names (e.g. `["nir", "red"]`) or indices (e.g. `[0, 2]`).
-     * @type {BandsByNameOrIndex}
-     * @memberof BandFilterParameters
      */
     bands: BandsByNameOrIndex;
 }

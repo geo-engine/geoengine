@@ -17,7 +17,7 @@
 export const CsvHeader = {
     Yes: 'yes',
     No: 'no',
-    Auto: 'auto'
+    Auto: 'auto',
 };
 export function instanceOfCsvHeader(value) {
     for (const key in CsvHeader) {

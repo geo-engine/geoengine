@@ -23,7 +23,7 @@ exports.WcsServiceToJSONTyped = WcsServiceToJSONTyped;
  * @export
  */
 exports.WcsService = {
-    Wcs: 'WCS'
+    Wcs: 'WCS',
 };
 function instanceOfWcsService(value) {
     for (const key in exports.WcsService) {

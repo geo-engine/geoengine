@@ -14,7 +14,7 @@
  * @export
  */
 export const NamesTypeEnum = {
-    Names: 'names'
+    Names: 'names',
 };
 /**
  * Check if a given object implements the Names interface.
@@ -23,6 +23,8 @@ export function instanceOfNames(value) {
     if (!('values' in value) || value['values'] === undefined)
         return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'names')
         return false;
     return true;
 }

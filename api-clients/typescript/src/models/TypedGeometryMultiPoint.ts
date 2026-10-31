@@ -28,8 +28,6 @@ import {
 export interface TypedGeometryMultiPoint {
     /**
      * 
-     * @type {MultiPoint}
-     * @memberof TypedGeometryMultiPoint
      */
     multiPoint: MultiPoint;
 }
@@ -38,7 +36,7 @@ export interface TypedGeometryMultiPoint {
  * Check if a given object implements the TypedGeometryMultiPoint interface.
  */
 export function instanceOfTypedGeometryMultiPoint(value: object): value is TypedGeometryMultiPoint {
-    if (!('multiPoint' in value) || value['multiPoint'] === undefined) return false;
+    if ((!('multiPoint' in (value as Record<string, any>)) && !('MultiPoint' in (value as Record<string, any>))) || ((value as Record<string, any>)['multiPoint'] === undefined && (value as Record<string, any>)['MultiPoint'] === undefined)) return false;
     return true;
 }
 

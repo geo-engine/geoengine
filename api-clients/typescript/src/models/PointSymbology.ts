@@ -49,32 +49,22 @@ import {
 export interface PointSymbology {
     /**
      * 
-     * @type {PointSymbologyTypeEnum}
-     * @memberof PointSymbology
      */
     type: PointSymbologyTypeEnum;
     /**
      * 
-     * @type {NumberParam}
-     * @memberof PointSymbology
      */
     radius: NumberParam;
     /**
      * 
-     * @type {ColorParam}
-     * @memberof PointSymbology
      */
     fillColor: ColorParam;
     /**
      * 
-     * @type {StrokeParam}
-     * @memberof PointSymbology
      */
     stroke: StrokeParam;
     /**
      * 
-     * @type {TextSymbology}
-     * @memberof PointSymbology
      */
     text?: TextSymbology | null;
 }
@@ -84,7 +74,7 @@ export interface PointSymbology {
  * @export
  */
 export const PointSymbologyTypeEnum = {
-    Point: 'point'
+    Point: 'point',
 } as const;
 export type PointSymbologyTypeEnum = typeof PointSymbologyTypeEnum[keyof typeof PointSymbologyTypeEnum];
 
@@ -94,6 +84,8 @@ export type PointSymbologyTypeEnum = typeof PointSymbologyTypeEnum[keyof typeof 
  */
 export function instanceOfPointSymbology(value: object): value is PointSymbology {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'point') return false;
+    
     if (!('radius' in value) || value['radius'] === undefined) return false;
     if (!('fillColor' in value) || value['fillColor'] === undefined) return false;
     if (!('stroke' in value) || value['stroke'] === undefined) return false;
@@ -114,7 +106,7 @@ export function PointSymbologyFromJSONTyped(json: any, ignoreDiscriminator: bool
         'radius': NumberParamFromJSON(json['radius']),
         'fillColor': ColorParamFromJSON(json['fillColor']),
         'stroke': StrokeParamFromJSON(json['stroke']),
-        'text': json['text'] == null ? undefined : TextSymbologyFromJSON(json['text']),
+        'text': json['text'] === undefined ? undefined : json['text'] === null ? null : TextSymbologyFromJSON(json['text']),
     };
 }
 

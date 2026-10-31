@@ -24,13 +24,15 @@ const SingleRasterSource_1 = require("./SingleRasterSource");
  * @export
  */
 exports.TemporalRasterAggregationTypeEnum = {
-    TemporalRasterAggregation: 'TemporalRasterAggregation'
+    TemporalRasterAggregation: 'TemporalRasterAggregation',
 };
 /**
  * Check if a given object implements the TemporalRasterAggregation interface.
  */
 function instanceOfTemporalRasterAggregation(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'TemporalRasterAggregation')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

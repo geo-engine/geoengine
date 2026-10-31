@@ -17,8 +17,6 @@ import type { Coordinate2D } from './Coordinate2D';
 export interface MultiLineString {
     /**
      *
-     * @type {Array<Array<Coordinate2D>>}
-     * @memberof MultiLineString
      */
     coordinates: Array<Array<Coordinate2D>>;
 }

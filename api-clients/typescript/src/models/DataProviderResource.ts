@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface DataProviderResource {
     /**
      * 
-     * @type {DataProviderResourceTypeEnum}
-     * @memberof DataProviderResource
      */
     type: DataProviderResourceTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof DataProviderResource
      */
     id: string;
 }
@@ -37,7 +33,7 @@ export interface DataProviderResource {
  * @export
  */
 export const DataProviderResourceTypeEnum = {
-    Provider: 'provider'
+    Provider: 'provider',
 } as const;
 export type DataProviderResourceTypeEnum = typeof DataProviderResourceTypeEnum[keyof typeof DataProviderResourceTypeEnum];
 
@@ -47,6 +43,8 @@ export type DataProviderResourceTypeEnum = typeof DataProviderResourceTypeEnum[k
  */
 export function instanceOfDataProviderResource(value: object): value is DataProviderResource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'provider') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }

@@ -14,10 +14,10 @@ use serde::{Deserialize, Serialize};
 pub struct TypedPlotResultDescriptor {
     #[serde(rename = "spatialReference")]
     pub spatial_reference: String,
-    #[serde(rename = "time", skip_serializing_if = "Option::is_none")]
-    pub time: Option<Box<models::TimeInterval>>,
-    #[serde(rename = "bbox", skip_serializing_if = "Option::is_none")]
-    pub bbox: Option<Box<models::BoundingBox2D>>,
+    #[serde(rename = "time", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub time: Option<Option<Box<models::TimeInterval>>>,
+    #[serde(rename = "bbox", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub bbox: Option<Option<Box<models::BoundingBox2D>>>,
     #[serde(rename = "type")]
     pub r#type: Type,
 }

@@ -17,14 +17,10 @@ import type { Role } from './Role';
 export interface RoleDescription {
     /**
      *
-     * @type {Role}
-     * @memberof RoleDescription
      */
     role: Role;
     /**
      *
-     * @type {boolean}
-     * @memberof RoleDescription
      */
     individual: boolean;
 }

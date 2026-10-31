@@ -14,13 +14,15 @@
  * @export
  */
 export const UnitlessMeasurementTypeEnum = {
-    Unitless: 'unitless'
+    Unitless: 'unitless',
 };
 /**
  * Check if a given object implements the UnitlessMeasurement interface.
  */
 export function instanceOfUnitlessMeasurement(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'unitless')
         return false;
     return true;
 }

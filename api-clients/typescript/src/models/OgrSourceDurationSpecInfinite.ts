@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface OgrSourceDurationSpecInfinite {
     /**
      * 
-     * @type {OgrSourceDurationSpecInfiniteTypeEnum}
-     * @memberof OgrSourceDurationSpecInfinite
      */
     type: OgrSourceDurationSpecInfiniteTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface OgrSourceDurationSpecInfinite {
  * @export
  */
 export const OgrSourceDurationSpecInfiniteTypeEnum = {
-    Infinite: 'infinite'
+    Infinite: 'infinite',
 } as const;
 export type OgrSourceDurationSpecInfiniteTypeEnum = typeof OgrSourceDurationSpecInfiniteTypeEnum[keyof typeof OgrSourceDurationSpecInfiniteTypeEnum];
 
@@ -41,6 +39,8 @@ export type OgrSourceDurationSpecInfiniteTypeEnum = typeof OgrSourceDurationSpec
  */
 export function instanceOfOgrSourceDurationSpecInfinite(value: object): value is OgrSourceDurationSpecInfinite {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'infinite') return false;
+    
     return true;
 }
 

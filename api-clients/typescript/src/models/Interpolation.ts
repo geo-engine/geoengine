@@ -53,20 +53,14 @@ import {
 export interface Interpolation {
     /**
      * 
-     * @type {InterpolationTypeEnum}
-     * @memberof Interpolation
      */
     type: InterpolationTypeEnum;
     /**
      * 
-     * @type {InterpolationParameters}
-     * @memberof Interpolation
      */
     params: InterpolationParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof Interpolation
      */
     sources: SingleRasterSource;
 }
@@ -76,7 +70,7 @@ export interface Interpolation {
  * @export
  */
 export const InterpolationTypeEnum = {
-    Interpolation: 'Interpolation'
+    Interpolation: 'Interpolation',
 } as const;
 export type InterpolationTypeEnum = typeof InterpolationTypeEnum[keyof typeof InterpolationTypeEnum];
 
@@ -86,6 +80,8 @@ export type InterpolationTypeEnum = typeof InterpolationTypeEnum[keyof typeof In
  */
 export function instanceOfInterpolation(value: object): value is Interpolation {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Interpolation') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

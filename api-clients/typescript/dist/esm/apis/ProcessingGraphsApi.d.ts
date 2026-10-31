@@ -9,31 +9,74 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { IdResponse, ProcessingGraph, ProvenanceEntry, RasterDatasetFromProcessingGraph, RasterStreamWebsocketResultType, SpatialPartition2D, TaskResponse, TypedResultDescriptor } from '../models/index';
+import { type IdResponse } from '../models/IdResponse';
+import { type ProcessingGraph } from '../models/ProcessingGraph';
+import { type ProvenanceEntry } from '../models/ProvenanceEntry';
+import { type RasterDatasetFromProcessingGraph } from '../models/RasterDatasetFromProcessingGraph';
+import { type RasterStreamWebsocketResultType } from '../models/RasterStreamWebsocketResultType';
+import { type SpatialPartition2D } from '../models/SpatialPartition2D';
+import { type TaskResponse } from '../models/TaskResponse';
+import { type TypedResultDescriptor } from '../models/TypedResultDescriptor';
 export interface DatasetFromProcessingGraphHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
+    /**
+     *
+     */
     rasterDatasetFromProcessingGraph: RasterDatasetFromProcessingGraph;
 }
 export interface GetProcessingGraphAllMetadataZipHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 export interface GetProcessingGraphMetadataHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 export interface GetProcessingGraphProvenanceHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 export interface LoadProcessingGraphHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 export interface RasterStreamWebsocketRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
+    /**
+     *
+     */
     spatialBounds: SpatialPartition2D;
+    /**
+     *
+     */
     timeInterval: string;
+    /**
+     *
+     */
     attributes: string;
+    /**
+     *
+     */
     resultType: RasterStreamWebsocketResultType;
 }
 export interface RegisterProcessingGraphHandlerRequest {
+    /**
+     *
+     */
     processingGraph: ProcessingGraph;
 }
 /**
@@ -59,11 +102,11 @@ export declare class ProcessingGraphsApi extends runtime.BaseAPI {
     /**
      * Gets a ZIP archive of the processing graph, its provenance and the output metadata.
      */
-    getProcessingGraphAllMetadataZipHandlerRaw(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>>;
+    getProcessingGraphAllMetadataZipHandlerRaw(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>>;
     /**
      * Gets a ZIP archive of the processing graph, its provenance and the output metadata.
      */
-    getProcessingGraphAllMetadataZipHandler(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob>;
+    getProcessingGraphAllMetadataZipHandler(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile>;
     /**
      * Creates request options for getProcessingGraphMetadataHandler without sending the request
      */

@@ -15,7 +15,7 @@
  * @export
  */
 export const CollectionType = {
-    FeatureCollection: 'FeatureCollection'
+    FeatureCollection: 'FeatureCollection',
 };
 export function instanceOfCollectionType(value) {
     for (const key in CollectionType) {

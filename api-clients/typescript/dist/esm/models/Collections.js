@@ -29,9 +29,9 @@ export function CollectionsFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'links': json['links'] == null ? undefined : (json['links'].map(LinkFromJSON)),
-        'timeStamp': json['timeStamp'] == null ? undefined : json['timeStamp'],
-        'numberMatched': json['numberMatched'] == null ? undefined : json['numberMatched'],
-        'numberReturned': json['numberReturned'] == null ? undefined : json['numberReturned'],
+        'timeStamp': json['timeStamp'] === undefined ? undefined : json['timeStamp'] === null ? null : json['timeStamp'],
+        'numberMatched': json['numberMatched'] === undefined ? undefined : json['numberMatched'] === null ? null : json['numberMatched'],
+        'numberReturned': json['numberReturned'] === undefined ? undefined : json['numberReturned'] === null ? null : json['numberReturned'],
         'collections': (json['collections'].map(CollectionFromJSON)),
         'crs': json['crs'] == null ? undefined : json['crs'],
     };

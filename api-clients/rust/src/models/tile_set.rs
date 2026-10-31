@@ -23,7 +23,7 @@ pub struct TileSet {
     #[serde(rename = "keywords", skip_serializing_if = "Option::is_none")]
     pub keywords: Option<Vec<String>>,
     #[serde(rename = "dataType")]
-    pub data_type: Box<models::GeospatialDataDataType>,
+    pub data_type: Box<models::TileSetDataType>,
     /// Reference to a Tile Matrix Set on the OGC NA definition server (<http://www.opengis.net/def/tms/>). Required if the tile matrix set is registered on the definition server.
     #[serde(rename = "tileMatrixSetURI", skip_serializing_if = "Option::is_none")]
     pub tile_matrix_set_uri: Option<String>,
@@ -64,10 +64,10 @@ pub struct TileSet {
     pub version: Option<String>,
     /// When the Tile Set was first produced
     #[serde(rename = "created", skip_serializing_if = "Option::is_none")]
-    pub created: Option<String>,
+    pub created: Option<chrono::DateTime<chrono::FixedOffset>>,
     /// Last Tile Set change/revision
     #[serde(rename = "updated", skip_serializing_if = "Option::is_none")]
-    pub updated: Option<String>,
+    pub updated: Option<chrono::DateTime<chrono::FixedOffset>>,
     /// Useful information to contact the authors or custodians for the Tile Set
     #[serde(rename = "pointOfContact", skip_serializing_if = "Option::is_none")]
     pub point_of_contact: Option<String>,
@@ -78,7 +78,7 @@ pub struct TileSet {
 
 impl TileSet {
     /// A resource describing a tileset based on the OGC Two Dimensional Tile Matrix Set and Tile Set Metadata. At least one of the [`TileMatrixSet`], or a link with 'rel' tiling-scheme\"
-    pub fn new(data_type: models::GeospatialDataDataType, crs: models::TilesCrs, links: Vec<models::Link>) -> TileSet {
+    pub fn new(data_type: models::TileSetDataType, crs: models::TilesCrs, links: Vec<models::Link>) -> TileSet {
         TileSet {
             title: None,
             description: None,

@@ -14,13 +14,15 @@
  * @export
  */
 export const InterpolationResolutionResolutionTypeEnum = {
-    Resolution: 'resolution'
+    Resolution: 'resolution',
 };
 /**
  * Check if a given object implements the InterpolationResolutionResolution interface.
  */
 export function instanceOfInterpolationResolutionResolution(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'resolution')
         return false;
     if (!('x' in value) || value['x'] === undefined)
         return false;

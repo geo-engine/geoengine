@@ -18,14 +18,10 @@ import type { VectorOperator } from './VectorOperator';
 export interface SingleVectorMultipleRasterSources {
     /**
      *
-     * @type {VectorOperator}
-     * @memberof SingleVectorMultipleRasterSources
      */
     vector: VectorOperator;
     /**
      *
-     * @type {Array<RasterOperator>}
-     * @memberof SingleVectorMultipleRasterSources
      */
     rasters: Array<RasterOperator>;
 }

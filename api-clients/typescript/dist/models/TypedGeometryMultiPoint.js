@@ -22,7 +22,7 @@ const MultiPoint_1 = require("./MultiPoint");
  * Check if a given object implements the TypedGeometryMultiPoint interface.
  */
 function instanceOfTypedGeometryMultiPoint(value) {
-    if (!('multiPoint' in value) || value['multiPoint'] === undefined)
+    if ((!('multiPoint' in value) && !('MultiPoint' in value)) || (value['multiPoint'] === undefined && value['MultiPoint'] === undefined))
         return false;
     return true;
 }

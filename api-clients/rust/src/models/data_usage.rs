@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataUsage {
     #[serde(rename = "timestamp")]
-    pub timestamp: String,
+    pub timestamp: chrono::DateTime<chrono::FixedOffset>,
     #[serde(rename = "userId")]
     pub user_id: uuid::Uuid,
     #[serde(rename = "computationId")]
@@ -25,7 +25,7 @@ pub struct DataUsage {
 }
 
 impl DataUsage {
-    pub fn new(timestamp: String, user_id: uuid::Uuid, computation_id: uuid::Uuid, data: String, count: i64) -> DataUsage {
+    pub fn new(timestamp: chrono::DateTime<chrono::FixedOffset>, user_id: uuid::Uuid, computation_id: uuid::Uuid, data: String, count: i64) -> DataUsage {
         DataUsage {
             timestamp,
             user_id,

@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface HistogramBucketsNumber {
     /**
      * 
-     * @type {HistogramBucketsNumberTypeEnum}
-     * @memberof HistogramBucketsNumber
      */
     type: HistogramBucketsNumberTypeEnum;
     /**
      * 
-     * @type {number}
-     * @memberof HistogramBucketsNumber
      */
     value: number;
 }
@@ -37,7 +33,7 @@ export interface HistogramBucketsNumber {
  * @export
  */
 export const HistogramBucketsNumberTypeEnum = {
-    Number: 'number'
+    Number: 'number',
 } as const;
 export type HistogramBucketsNumberTypeEnum = typeof HistogramBucketsNumberTypeEnum[keyof typeof HistogramBucketsNumberTypeEnum];
 
@@ -47,6 +43,8 @@ export type HistogramBucketsNumberTypeEnum = typeof HistogramBucketsNumberTypeEn
  */
 export function instanceOfHistogramBucketsNumber(value: object): value is HistogramBucketsNumber {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'number') return false;
+    
     if (!('value' in value) || value['value'] === undefined) return false;
     return true;
 }

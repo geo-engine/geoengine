@@ -21,7 +21,7 @@ export const TimeGranularity = {
     Hours: 'hours',
     Days: 'days',
     Months: 'months',
-    Years: 'years'
+    Years: 'years',
 };
 export function instanceOfTimeGranularity(value) {
     for (const key in TimeGranularity) {

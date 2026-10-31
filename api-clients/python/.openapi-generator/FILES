@@ -383,6 +383,7 @@ docs/TileMatrixSetItem.md
 docs/TileMatrixSets.md
 docs/TilePoint.md
 docs/TileSet.md
+docs/TileSetDataType.md
 docs/TileSetItem.md
 docs/TileSets.md
 docs/TilesCrs.md
@@ -847,6 +848,7 @@ geoengine_api_client/models/tile_matrix_set_item.py
 geoengine_api_client/models/tile_matrix_sets.py
 geoengine_api_client/models/tile_point.py
 geoengine_api_client/models/tile_set.py
+geoengine_api_client/models/tile_set_data_type.py
 geoengine_api_client/models/tile_set_item.py
 geoengine_api_client/models/tile_sets.py
 geoengine_api_client/models/tiles_crs.py
@@ -1309,6 +1311,7 @@ test/test_tile_matrix_set_item.py
 test/test_tile_matrix_sets.py
 test/test_tile_point.py
 test/test_tile_set.py
+test/test_tile_set_data_type.py
 test/test_tile_set_item.py
 test/test_tile_sets.py
 test/test_tiles_crs.py

@@ -50,20 +50,14 @@ import {
 export interface Histogram {
     /**
      * 
-     * @type {HistogramTypeEnum}
-     * @memberof Histogram
      */
     type: HistogramTypeEnum;
     /**
      * 
-     * @type {HistogramParameters}
-     * @memberof Histogram
      */
     params: HistogramParameters;
     /**
      * 
-     * @type {SingleRasterOrVectorSource}
-     * @memberof Histogram
      */
     sources: SingleRasterOrVectorSource;
 }
@@ -73,7 +67,7 @@ export interface Histogram {
  * @export
  */
 export const HistogramTypeEnum = {
-    Histogram: 'Histogram'
+    Histogram: 'Histogram',
 } as const;
 export type HistogramTypeEnum = typeof HistogramTypeEnum[keyof typeof HistogramTypeEnum];
 
@@ -83,6 +77,8 @@ export type HistogramTypeEnum = typeof HistogramTypeEnum[keyof typeof HistogramT
  */
 export function instanceOfHistogram(value: object): value is Histogram {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Histogram') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

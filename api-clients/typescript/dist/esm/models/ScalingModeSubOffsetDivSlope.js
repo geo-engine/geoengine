@@ -14,13 +14,15 @@
  * @export
  */
 export const ScalingModeSubOffsetDivSlopeTypeEnum = {
-    SubOffsetDivSlope: 'subOffsetDivSlope'
+    SubOffsetDivSlope: 'subOffsetDivSlope',
 };
 /**
  * Check if a given object implements the ScalingModeSubOffsetDivSlope interface.
  */
 export function instanceOfScalingModeSubOffsetDivSlope(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'subOffsetDivSlope')
         return false;
     return true;
 }

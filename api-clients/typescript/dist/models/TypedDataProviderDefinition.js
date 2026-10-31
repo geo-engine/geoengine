@@ -73,29 +73,29 @@ function TypedDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fal
     }
     switch (value['type']) {
         case 'CopernicusDataspace':
-            return Object.assign({}, (0, CopernicusDataspaceDataProviderDefinition_1.CopernicusDataspaceDataProviderDefinitionToJSON)(value), { type: 'CopernicusDataspace' });
+            return Object.assign({}, (0, CopernicusDataspaceDataProviderDefinition_1.CopernicusDataspaceDataProviderDefinitionToJSON)(value), { 'type': 'CopernicusDataspace' });
         case 'DatasetLayerListing':
-            return Object.assign({}, (0, DatasetLayerListingProviderDefinition_1.DatasetLayerListingProviderDefinitionToJSON)(value), { type: 'DatasetLayerListing' });
+            return Object.assign({}, (0, DatasetLayerListingProviderDefinition_1.DatasetLayerListingProviderDefinitionToJSON)(value), { 'type': 'DatasetLayerListing' });
         case 'EbvPortal':
-            return Object.assign({}, (0, EbvPortalDataProviderDefinition_1.EbvPortalDataProviderDefinitionToJSON)(value), { type: 'EbvPortal' });
+            return Object.assign({}, (0, EbvPortalDataProviderDefinition_1.EbvPortalDataProviderDefinitionToJSON)(value), { 'type': 'EbvPortal' });
         case 'Edr':
-            return Object.assign({}, (0, EdrDataProviderDefinition_1.EdrDataProviderDefinitionToJSON)(value), { type: 'Edr' });
+            return Object.assign({}, (0, EdrDataProviderDefinition_1.EdrDataProviderDefinitionToJSON)(value), { 'type': 'Edr' });
         case 'Gbif':
-            return Object.assign({}, (0, GbifDataProviderDefinition_1.GbifDataProviderDefinitionToJSON)(value), { type: 'Gbif' });
+            return Object.assign({}, (0, GbifDataProviderDefinition_1.GbifDataProviderDefinitionToJSON)(value), { 'type': 'Gbif' });
         case 'GfbioAbcd':
-            return Object.assign({}, (0, GfbioAbcdDataProviderDefinition_1.GfbioAbcdDataProviderDefinitionToJSON)(value), { type: 'GfbioAbcd' });
+            return Object.assign({}, (0, GfbioAbcdDataProviderDefinition_1.GfbioAbcdDataProviderDefinitionToJSON)(value), { 'type': 'GfbioAbcd' });
         case 'GfbioCollections':
-            return Object.assign({}, (0, GfbioCollectionsDataProviderDefinition_1.GfbioCollectionsDataProviderDefinitionToJSON)(value), { type: 'GfbioCollections' });
+            return Object.assign({}, (0, GfbioCollectionsDataProviderDefinition_1.GfbioCollectionsDataProviderDefinitionToJSON)(value), { 'type': 'GfbioCollections' });
         case 'NetCdfCf':
-            return Object.assign({}, (0, NetCdfCfDataProviderDefinition_1.NetCdfCfDataProviderDefinitionToJSON)(value), { type: 'NetCdfCf' });
+            return Object.assign({}, (0, NetCdfCfDataProviderDefinition_1.NetCdfCfDataProviderDefinitionToJSON)(value), { 'type': 'NetCdfCf' });
         case 'Pangaea':
-            return Object.assign({}, (0, PangaeaDataProviderDefinition_1.PangaeaDataProviderDefinitionToJSON)(value), { type: 'Pangaea' });
+            return Object.assign({}, (0, PangaeaDataProviderDefinition_1.PangaeaDataProviderDefinitionToJSON)(value), { 'type': 'Pangaea' });
         case 'SentinelS2L2ACogs':
-            return Object.assign({}, (0, SentinelS2L2ACogsProviderDefinition_1.SentinelS2L2ACogsProviderDefinitionToJSON)(value), { type: 'SentinelS2L2ACogs' });
+            return Object.assign({}, (0, SentinelS2L2ACogsProviderDefinition_1.SentinelS2L2ACogsProviderDefinitionToJSON)(value), { 'type': 'SentinelS2L2ACogs' });
         case 'StacProviderDefinition':
-            return Object.assign({}, (0, StacDataProviderDefinition_1.StacDataProviderDefinitionToJSON)(value), { type: 'StacProviderDefinition' });
+            return Object.assign({}, (0, StacDataProviderDefinition_1.StacDataProviderDefinitionToJSON)(value), { 'type': 'StacProviderDefinition' });
         case 'WildLIVE!':
-            return Object.assign({}, (0, WildliveDataConnectorDefinition_1.WildliveDataConnectorDefinitionToJSON)(value), { type: 'WildLIVE!' });
+            return Object.assign({}, (0, WildliveDataConnectorDefinition_1.WildliveDataConnectorDefinitionToJSON)(value), { 'type': 'WildLIVE!' });
         default:
             return value;
     }

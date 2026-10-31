@@ -16,16 +16,12 @@
 export interface GdalSourceParameters {
     /**
      * Dataset name or identifier to be loaded.
-     * @type {string}
-     * @memberof GdalSourceParameters
      */
     data: string;
     /**
      * *Optional*: overview level to use.
      *
      * If not provided, the data source will determine the resolution, i.e., uses its native resolution.
-     * @type {number}
-     * @memberof GdalSourceParameters
      */
     overviewLevel?: number | null;
 }

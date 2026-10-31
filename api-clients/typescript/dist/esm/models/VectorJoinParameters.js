@@ -14,13 +14,15 @@
  * @export
  */
 export const VectorJoinParametersTypeEnum = {
-    EquiGeoToData: 'equiGeoToData'
+    EquiGeoToData: 'equiGeoToData',
 };
 /**
  * Check if a given object implements the VectorJoinParameters interface.
  */
 export function instanceOfVectorJoinParameters(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'equiGeoToData')
         return false;
     if (!('leftColumn' in value) || value['leftColumn'] === undefined)
         return false;
@@ -39,7 +41,7 @@ export function VectorJoinParametersFromJSONTyped(json, ignoreDiscriminator) {
         'type': json['type'],
         'leftColumn': json['leftColumn'],
         'rightColumn': json['rightColumn'],
-        'rightColumnSuffix': json['rightColumnSuffix'] == null ? undefined : json['rightColumnSuffix'],
+        'rightColumnSuffix': json['rightColumnSuffix'] === undefined ? undefined : json['rightColumnSuffix'] === null ? null : json['rightColumnSuffix'],
     };
 }
 export function VectorJoinParametersToJSON(json) {

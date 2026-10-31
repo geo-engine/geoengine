@@ -43,9 +43,9 @@ function NumberParamToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'derived':
-            return Object.assign({}, (0, DerivedNumber_1.DerivedNumberToJSON)(value), { type: 'derived' });
+            return Object.assign({}, (0, DerivedNumber_1.DerivedNumberToJSON)(value), { 'type': 'derived' });
         case 'static':
-            return Object.assign({}, (0, StaticNumber_1.StaticNumberToJSON)(value), { type: 'static' });
+            return Object.assign({}, (0, StaticNumber_1.StaticNumberToJSON)(value), { 'type': 'static' });
         default:
             return value;
     }

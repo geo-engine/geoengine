@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { AggregationCount } from './AggregationCount';
 import {
     instanceOfAggregationCount,
@@ -118,21 +119,21 @@ export function AggregationToJSONTyped(value?: Aggregation | null, ignoreDiscrim
     }
     switch (value['type']) {
         case 'count':
-            return Object.assign({}, AggregationCountToJSON(value), { type: 'count' } as const);
+            return Object.assign({}, AggregationCountToJSON(value), { 'type': 'count' } as const);
         case 'first':
-            return Object.assign({}, AggregationFirstToJSON(value), { type: 'first' } as const);
+            return Object.assign({}, AggregationFirstToJSON(value), { 'type': 'first' } as const);
         case 'last':
-            return Object.assign({}, AggregationLastToJSON(value), { type: 'last' } as const);
+            return Object.assign({}, AggregationLastToJSON(value), { 'type': 'last' } as const);
         case 'max':
-            return Object.assign({}, AggregationMaxToJSON(value), { type: 'max' } as const);
+            return Object.assign({}, AggregationMaxToJSON(value), { 'type': 'max' } as const);
         case 'mean':
-            return Object.assign({}, AggregationMeanToJSON(value), { type: 'mean' } as const);
+            return Object.assign({}, AggregationMeanToJSON(value), { 'type': 'mean' } as const);
         case 'min':
-            return Object.assign({}, AggregationMinToJSON(value), { type: 'min' } as const);
+            return Object.assign({}, AggregationMinToJSON(value), { 'type': 'min' } as const);
         case 'percentileEstimate':
-            return Object.assign({}, AggregationPercentileEstimateToJSON(value), { type: 'percentileEstimate' } as const);
+            return Object.assign({}, AggregationPercentileEstimateToJSON(value), { 'type': 'percentileEstimate' } as const);
         case 'sum':
-            return Object.assign({}, AggregationSumToJSON(value), { type: 'sum' } as const);
+            return Object.assign({}, AggregationSumToJSON(value), { 'type': 'sum' } as const);
         default:
             return value;
     }

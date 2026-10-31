@@ -23,13 +23,15 @@ const DatabaseConnectionConfig_1 = require("./DatabaseConnectionConfig");
  * @export
  */
 exports.GfbioCollectionsDataProviderDefinitionTypeEnum = {
-    GfbioCollections: 'GfbioCollections'
+    GfbioCollections: 'GfbioCollections',
 };
 /**
  * Check if a given object implements the GfbioCollectionsDataProviderDefinition interface.
  */
 function instanceOfGfbioCollectionsDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GfbioCollections')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -56,12 +58,12 @@ function GfbioCollectionsDataProviderDefinitionFromJSONTyped(json, ignoreDiscrim
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'collectionApiUrl': json['collectionApiUrl'],
         'collectionApiAuthToken': json['collectionApiAuthToken'],
         'abcdDbConfig': (0, DatabaseConnectionConfig_1.DatabaseConnectionConfigFromJSON)(json['abcdDbConfig']),
         'pangaeaUrl': json['pangaeaUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 function GfbioCollectionsDataProviderDefinitionToJSON(json) {

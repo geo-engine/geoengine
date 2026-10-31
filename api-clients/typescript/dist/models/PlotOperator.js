@@ -61,21 +61,21 @@ function PlotOperatorToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'BoxPlot':
-            return Object.assign({}, (0, BoxPlot_1.BoxPlotToJSON)(value), { type: 'BoxPlot' });
+            return Object.assign({}, (0, BoxPlot_1.BoxPlotToJSON)(value), { 'type': 'BoxPlot' });
         case 'ClassHistogram':
-            return Object.assign({}, (0, ClassHistogram_1.ClassHistogramToJSON)(value), { type: 'ClassHistogram' });
+            return Object.assign({}, (0, ClassHistogram_1.ClassHistogramToJSON)(value), { 'type': 'ClassHistogram' });
         case 'FeatureAttributeValuesOverTime':
-            return Object.assign({}, (0, FeatureAttributeValuesOverTime_1.FeatureAttributeValuesOverTimeToJSON)(value), { type: 'FeatureAttributeValuesOverTime' });
+            return Object.assign({}, (0, FeatureAttributeValuesOverTime_1.FeatureAttributeValuesOverTimeToJSON)(value), { 'type': 'FeatureAttributeValuesOverTime' });
         case 'Histogram':
-            return Object.assign({}, (0, Histogram_1.HistogramToJSON)(value), { type: 'Histogram' });
+            return Object.assign({}, (0, Histogram_1.HistogramToJSON)(value), { 'type': 'Histogram' });
         case 'MeanRasterPixelValuesOverTime':
-            return Object.assign({}, (0, MeanRasterPixelValuesOverTime_1.MeanRasterPixelValuesOverTimeToJSON)(value), { type: 'MeanRasterPixelValuesOverTime' });
+            return Object.assign({}, (0, MeanRasterPixelValuesOverTime_1.MeanRasterPixelValuesOverTimeToJSON)(value), { 'type': 'MeanRasterPixelValuesOverTime' });
         case 'PieChart':
-            return Object.assign({}, (0, PieChart_1.PieChartToJSON)(value), { type: 'PieChart' });
+            return Object.assign({}, (0, PieChart_1.PieChartToJSON)(value), { 'type': 'PieChart' });
         case 'ScatterPlot':
-            return Object.assign({}, (0, ScatterPlot_1.ScatterPlotToJSON)(value), { type: 'ScatterPlot' });
+            return Object.assign({}, (0, ScatterPlot_1.ScatterPlotToJSON)(value), { 'type': 'ScatterPlot' });
         case 'Statistics':
-            return Object.assign({}, (0, Statistics_1.StatisticsToJSON)(value), { type: 'Statistics' });
+            return Object.assign({}, (0, Statistics_1.StatisticsToJSON)(value), { 'type': 'Statistics' });
         default:
             return value;
     }

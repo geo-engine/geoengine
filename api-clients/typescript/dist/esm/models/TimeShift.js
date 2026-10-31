@@ -16,13 +16,15 @@ import { SingleRasterOrVectorSourceFromJSON, SingleRasterOrVectorSourceToJSON, }
  * @export
  */
 export const TimeShiftTypeEnum = {
-    TimeShift: 'TimeShift'
+    TimeShift: 'TimeShift',
 };
 /**
  * Check if a given object implements the TimeShift interface.
  */
 export function instanceOfTimeShift(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'TimeShift')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

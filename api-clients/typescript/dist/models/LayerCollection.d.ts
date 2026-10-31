@@ -18,38 +18,26 @@ import type { ProviderLayerCollectionId } from './ProviderLayerCollectionId';
 export interface LayerCollection {
     /**
      *
-     * @type {ProviderLayerCollectionId}
-     * @memberof LayerCollection
      */
     id: ProviderLayerCollectionId;
     /**
      *
-     * @type {string}
-     * @memberof LayerCollection
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof LayerCollection
      */
     description: string;
     /**
      *
-     * @type {Array<CollectionItem>}
-     * @memberof LayerCollection
      */
     items: Array<CollectionItem>;
     /**
      * a common label for the collection's entries, if there is any
-     * @type {string}
-     * @memberof LayerCollection
      */
     entryLabel?: string | null;
     /**
      *
-     * @type {Array<Array<string>>}
-     * @memberof LayerCollection
      */
     properties: Array<Array<string>>;
 }

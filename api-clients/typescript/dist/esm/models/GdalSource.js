@@ -15,13 +15,15 @@ import { GdalSourceParametersFromJSON, GdalSourceParametersToJSON, } from './Gda
  * @export
  */
 export const GdalSourceTypeEnum = {
-    GdalSource: 'GdalSource'
+    GdalSource: 'GdalSource',
 };
 /**
  * Check if a given object implements the GdalSource interface.
  */
 export function instanceOfGdalSource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalSource')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

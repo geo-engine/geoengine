@@ -35,7 +35,7 @@ function TimeProjectionParametersFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'step': (0, TimeStep_1.TimeStepFromJSON)(json['step']),
-        'stepReference': json['stepReference'] == null ? undefined : json['stepReference'],
+        'stepReference': json['stepReference'] === undefined ? undefined : json['stepReference'] === null ? null : json['stepReference'],
     };
 }
 function TimeProjectionParametersToJSON(json) {

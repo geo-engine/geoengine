@@ -33,7 +33,7 @@ export function InterpolationParametersFromJSONTyped(json, ignoreDiscriminator) 
     return {
         'interpolation': InterpolationMethodFromJSON(json['interpolation']),
         'outputResolution': InterpolationResolutionFromJSON(json['outputResolution']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
+        'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
     };
 }
 export function InterpolationParametersToJSON(json) {

@@ -28,26 +28,18 @@ import {
 export interface OgrSourceDatasetTimeTypeStartDuration {
     /**
      * 
-     * @type {OgrSourceDatasetTimeTypeStartDurationTypeEnum}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     type: OgrSourceDatasetTimeTypeStartDurationTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     startField: string;
     /**
      * 
-     * @type {OgrSourceTimeFormat}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     startFormat: OgrSourceTimeFormat;
     /**
      * 
-     * @type {string}
-     * @memberof OgrSourceDatasetTimeTypeStartDuration
      */
     durationField: string;
 }
@@ -57,7 +49,7 @@ export interface OgrSourceDatasetTimeTypeStartDuration {
  * @export
  */
 export const OgrSourceDatasetTimeTypeStartDurationTypeEnum = {
-    Startduration: 'start+duration'
+    Startduration: 'start+duration',
 } as const;
 export type OgrSourceDatasetTimeTypeStartDurationTypeEnum = typeof OgrSourceDatasetTimeTypeStartDurationTypeEnum[keyof typeof OgrSourceDatasetTimeTypeStartDurationTypeEnum];
 
@@ -67,6 +59,8 @@ export type OgrSourceDatasetTimeTypeStartDurationTypeEnum = typeof OgrSourceData
  */
 export function instanceOfOgrSourceDatasetTimeTypeStartDuration(value: object): value is OgrSourceDatasetTimeTypeStartDuration {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'start+duration') return false;
+    
     if (!('startField' in value) || value['startField'] === undefined) return false;
     if (!('startFormat' in value) || value['startFormat'] === undefined) return false;
     if (!('durationField' in value) || value['durationField'] === undefined) return false;

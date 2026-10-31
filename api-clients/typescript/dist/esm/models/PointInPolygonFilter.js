@@ -15,13 +15,15 @@ import { PointInPolygonFilterSourceFromJSON, PointInPolygonFilterSourceToJSON, }
  * @export
  */
 export const PointInPolygonFilterTypeEnum = {
-    PointInPolygonFilter: 'PointInPolygonFilter'
+    PointInPolygonFilter: 'PointInPolygonFilter',
 };
 /**
  * Check if a given object implements the PointInPolygonFilter interface.
  */
 export function instanceOfPointInPolygonFilter(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'PointInPolygonFilter')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

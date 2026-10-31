@@ -16,13 +16,15 @@ import { SingleVectorSourceFromJSON, SingleVectorSourceToJSON, } from './SingleV
  * @export
  */
 export const VectorExpressionTypeEnum = {
-    VectorExpression: 'VectorExpression'
+    VectorExpression: 'VectorExpression',
 };
 /**
  * Check if a given object implements the VectorExpression interface.
  */
 export function instanceOfVectorExpression(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'VectorExpression')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

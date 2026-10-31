@@ -28,7 +28,7 @@ export function MlModelOutputNoDataHandlingFromJSONTyped(json, ignoreDiscriminat
     }
     return {
         'variant': MlModelOutputNoDataHandlingVariantFromJSON(json['variant']),
-        'noDataValue': json['noDataValue'] == null ? undefined : json['noDataValue'],
+        'noDataValue': json['noDataValue'] === undefined ? undefined : json['noDataValue'] === null ? null : json['noDataValue'],
     };
 }
 export function MlModelOutputNoDataHandlingToJSON(json) {

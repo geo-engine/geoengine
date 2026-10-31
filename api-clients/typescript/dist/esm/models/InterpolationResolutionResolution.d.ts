@@ -16,20 +16,14 @@
 export interface InterpolationResolutionResolution {
     /**
      *
-     * @type {InterpolationResolutionResolutionTypeEnum}
-     * @memberof InterpolationResolutionResolution
      */
     type: InterpolationResolutionResolutionTypeEnum;
     /**
      * Explicit output resolution (`x`, `y`) in target coordinates.
-     * @type {number}
-     * @memberof InterpolationResolutionResolution
      */
     x: number;
     /**
      *
-     * @type {number}
-     * @memberof InterpolationResolutionResolution
      */
     y: number;
 }

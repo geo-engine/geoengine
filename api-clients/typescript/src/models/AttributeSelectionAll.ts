@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface AttributeSelectionAll {
     /**
      * 
-     * @type {AttributeSelectionAllTypeEnum}
-     * @memberof AttributeSelectionAll
      */
     type: AttributeSelectionAllTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface AttributeSelectionAll {
  * @export
  */
 export const AttributeSelectionAllTypeEnum = {
-    All: 'all'
+    All: 'all',
 } as const;
 export type AttributeSelectionAllTypeEnum = typeof AttributeSelectionAllTypeEnum[keyof typeof AttributeSelectionAllTypeEnum];
 
@@ -41,6 +39,8 @@ export type AttributeSelectionAllTypeEnum = typeof AttributeSelectionAllTypeEnum
  */
 export function instanceOfAttributeSelectionAll(value: object): value is AttributeSelectionAll {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'all') return false;
+    
     return true;
 }
 

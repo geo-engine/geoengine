@@ -23,13 +23,15 @@ const DatabaseConnectionConfig_1 = require("./DatabaseConnectionConfig");
  * @export
  */
 exports.GfbioAbcdDataProviderDefinitionTypeEnum = {
-    GfbioAbcd: 'GfbioAbcd'
+    GfbioAbcd: 'GfbioAbcd',
 };
 /**
  * Check if a given object implements the GfbioAbcdDataProviderDefinition interface.
  */
 function instanceOfGfbioAbcdDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GfbioAbcd')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -50,9 +52,9 @@ function GfbioAbcdDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator)
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'dbConfig': (0, DatabaseConnectionConfig_1.DatabaseConnectionConfigFromJSON)(json['dbConfig']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 function GfbioAbcdDataProviderDefinitionToJSON(json) {

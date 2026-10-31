@@ -14,13 +14,15 @@
  * @export
  */
 export const TaskStatusRunningStatusEnum = {
-    Running: 'running'
+    Running: 'running',
 };
 /**
  * Check if a given object implements the TaskStatusRunning interface.
  */
 export function instanceOfTaskStatusRunning(value) {
     if (!('status' in value) || value['status'] === undefined)
+        return false;
+    if (value['status'] !== 'running')
         return false;
     if (!('taskType' in value) || value['taskType'] === undefined)
         return false;
@@ -43,7 +45,7 @@ export function TaskStatusRunningFromJSONTyped(json, ignoreDiscriminator) {
         'status': json['status'],
         'taskType': json['taskType'],
         'description': json['description'] == null ? undefined : json['description'],
-        'info': json['info'] == null ? undefined : json['info'],
+        'info': json['info'] === undefined ? undefined : json['info'] === null ? null : json['info'],
         'pctComplete': json['pctComplete'],
         'estimatedTimeRemaining': json['estimatedTimeRemaining'],
         'timeStarted': json['timeStarted'],

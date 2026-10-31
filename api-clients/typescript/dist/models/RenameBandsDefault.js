@@ -22,13 +22,15 @@ exports.RenameBandsDefaultToJSONTyped = RenameBandsDefaultToJSONTyped;
  * @export
  */
 exports.RenameBandsDefaultTypeEnum = {
-    Default: 'default'
+    Default: 'default',
 };
 /**
  * Check if a given object implements the RenameBandsDefault interface.
  */
 function instanceOfRenameBandsDefault(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'default')
         return false;
     return true;
 }

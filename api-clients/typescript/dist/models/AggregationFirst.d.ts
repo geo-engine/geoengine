@@ -16,14 +16,10 @@
 export interface AggregationFirst {
     /**
      *
-     * @type {AggregationFirstTypeEnum}
-     * @memberof AggregationFirst
      */
     type: AggregationFirstTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationFirst
      */
     ignoreNoData: boolean;
 }

@@ -35,14 +35,10 @@ import {
 export interface TileSets {
     /**
      * 
-     * @type {Array<TileSetItem>}
-     * @memberof TileSets
      */
     tilesets: Array<TileSetItem>;
     /**
      * 
-     * @type {Array<Link>}
-     * @memberof TileSets
      */
     links?: Array<Link>;
 }

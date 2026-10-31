@@ -20,13 +20,15 @@ import { GdalDatasetParametersFromJSON, GdalDatasetParametersToJSON, } from './G
  * @export
  */
 export const GdalMetaDataRegularTypeEnum = {
-    GdalMetaDataRegular: 'GdalMetaDataRegular'
+    GdalMetaDataRegular: 'GdalMetaDataRegular',
 };
 /**
  * Check if a given object implements the GdalMetaDataRegular interface.
  */
 export function instanceOfGdalMetaDataRegular(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalMetaDataRegular')
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -54,7 +56,7 @@ export function GdalMetaDataRegularFromJSONTyped(json, ignoreDiscriminator) {
         'timePlaceholders': (mapValues(json['timePlaceholders'], GdalSourceTimePlaceholderFromJSON)),
         'dataTime': TimeIntervalFromJSON(json['dataTime']),
         'step': TimeStepFromJSON(json['step']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function GdalMetaDataRegularToJSON(json) {

@@ -16,20 +16,14 @@
 export interface ExternalDataId {
     /**
      *
-     * @type {ExternalDataIdTypeEnum}
-     * @memberof ExternalDataId
      */
     type: ExternalDataIdTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof ExternalDataId
      */
     providerId: string;
     /**
      *
-     * @type {string}
-     * @memberof ExternalDataId
      */
     layerId: string;
 }

@@ -17,8 +17,6 @@ import type { RegularTimeDimension } from './RegularTimeDimension';
 export interface Regular extends RegularTimeDimension {
     /**
      *
-     * @type {RegularTypeEnum}
-     * @memberof Regular
      */
     type: RegularTypeEnum;
 }

@@ -23,13 +23,15 @@ const Colorizer_1 = require("./Colorizer");
  * @export
  */
 exports.DerivedColorTypeEnum = {
-    Derived: 'derived'
+    Derived: 'derived',
 };
 /**
  * Check if a given object implements the DerivedColor interface.
  */
 function instanceOfDerivedColor(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'derived')
         return false;
     if (!('attribute' in value) || value['attribute'] === undefined)
         return false;

@@ -22,13 +22,15 @@ exports.InterpolationResolutionFractionToJSONTyped = InterpolationResolutionFrac
  * @export
  */
 exports.InterpolationResolutionFractionTypeEnum = {
-    Fraction: 'fraction'
+    Fraction: 'fraction',
 };
 /**
  * Check if a given object implements the InterpolationResolutionFraction interface.
  */
 function instanceOfInterpolationResolutionFraction(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'fraction')
         return false;
     if (!('x' in value) || value['x'] === undefined)
         return false;

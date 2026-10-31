@@ -23,13 +23,15 @@ const ProviderLayerId_1 = require("./ProviderLayerId");
  * @export
  */
 exports.LayerListingTypeEnum = {
-    Layer: 'layer'
+    Layer: 'layer',
 };
 /**
  * Check if a given object implements the LayerListing interface.
  */
 function instanceOfLayerListing(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'layer')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

@@ -24,13 +24,15 @@ const TemperatureParameters_1 = require("./TemperatureParameters");
  * @export
  */
 exports.TemperatureTypeEnum = {
-    Temperature: 'Temperature'
+    Temperature: 'Temperature',
 };
 /**
  * Check if a given object implements the Temperature interface.
  */
 function instanceOfTemperature(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Temperature')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

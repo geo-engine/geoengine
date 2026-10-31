@@ -16,20 +16,14 @@
 export interface DownsamplingResolutionFraction {
     /**
      *
-     * @type {DownsamplingResolutionFractionTypeEnum}
-     * @memberof DownsamplingResolutionFraction
      */
     type: DownsamplingResolutionFractionTypeEnum;
     /**
      * Scaling factor in x/y direction.
-     * @type {number}
-     * @memberof DownsamplingResolutionFraction
      */
     x: number;
     /**
      *
-     * @type {number}
-     * @memberof DownsamplingResolutionFraction
      */
     y: number;
 }

@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { SpatialBoundsDeriveBounds } from './SpatialBoundsDeriveBounds';
 import {
     instanceOfSpatialBoundsDeriveBounds,
@@ -70,11 +71,11 @@ export function SpatialBoundsDeriveToJSONTyped(value?: SpatialBoundsDerive | nul
     }
     switch (value['type']) {
         case 'bounds':
-            return Object.assign({}, SpatialBoundsDeriveBoundsToJSON(value), { type: 'bounds' } as const);
+            return Object.assign({}, SpatialBoundsDeriveBoundsToJSON(value), { 'type': 'bounds' } as const);
         case 'derive':
-            return Object.assign({}, SpatialBoundsDeriveDeriveToJSON(value), { type: 'derive' } as const);
+            return Object.assign({}, SpatialBoundsDeriveDeriveToJSON(value), { 'type': 'derive' } as const);
         case 'none':
-            return Object.assign({}, SpatialBoundsDeriveNoneToJSON(value), { type: 'none' } as const);
+            return Object.assign({}, SpatialBoundsDeriveNoneToJSON(value), { 'type': 'none' } as const);
         default:
             return value;
     }

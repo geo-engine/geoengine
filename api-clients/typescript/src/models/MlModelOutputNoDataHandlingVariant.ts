@@ -18,7 +18,7 @@
  */
 export const MlModelOutputNoDataHandlingVariant = {
     EncodedNoData: 'encodedNoData',
-    NanIsNoData: 'nanIsNoData'
+    NanIsNoData: 'nanIsNoData',
 } as const;
 export type MlModelOutputNoDataHandlingVariant = typeof MlModelOutputNoDataHandlingVariant[keyof typeof MlModelOutputNoDataHandlingVariant];
 

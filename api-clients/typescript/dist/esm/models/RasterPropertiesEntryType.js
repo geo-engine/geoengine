@@ -16,7 +16,7 @@
  */
 export const RasterPropertiesEntryType = {
     Number: 'Number',
-    String: 'String'
+    String: 'String',
 };
 export function instanceOfRasterPropertiesEntryType(value) {
     for (const key in RasterPropertiesEntryType) {

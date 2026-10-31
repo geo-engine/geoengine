@@ -43,9 +43,9 @@ function CollectionItemToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'collection':
-            return Object.assign({}, (0, LayerCollectionListing_1.LayerCollectionListingToJSON)(value), { type: 'collection' });
+            return Object.assign({}, (0, LayerCollectionListing_1.LayerCollectionListingToJSON)(value), { 'type': 'collection' });
         case 'layer':
-            return Object.assign({}, (0, LayerListing_1.LayerListingToJSON)(value), { type: 'layer' });
+            return Object.assign({}, (0, LayerListing_1.LayerListingToJSON)(value), { 'type': 'layer' });
         default:
             return value;
     }

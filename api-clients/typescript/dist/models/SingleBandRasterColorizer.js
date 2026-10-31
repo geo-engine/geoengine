@@ -23,13 +23,15 @@ const Colorizer_1 = require("./Colorizer");
  * @export
  */
 exports.SingleBandRasterColorizerTypeEnum = {
-    SingleBand: 'singleBand'
+    SingleBand: 'singleBand',
 };
 /**
  * Check if a given object implements the SingleBandRasterColorizer interface.
  */
 function instanceOfSingleBandRasterColorizer(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'singleBand')
         return false;
     if (!('band' in value) || value['band'] === undefined)
         return false;

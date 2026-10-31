@@ -23,13 +23,15 @@ const Breakpoint_1 = require("./Breakpoint");
  * @export
  */
 exports.LinearGradientTypeEnum = {
-    LinearGradient: 'linearGradient'
+    LinearGradient: 'linearGradient',
 };
 /**
  * Check if a given object implements the LinearGradient interface.
  */
 function instanceOfLinearGradient(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'linearGradient')
         return false;
     if (!('breakpoints' in value) || value['breakpoints'] === undefined)
         return false;

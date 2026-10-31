@@ -16,20 +16,14 @@
 export interface AggregationPercentileEstimate {
     /**
      *
-     * @type {AggregationPercentileEstimateTypeEnum}
-     * @memberof AggregationPercentileEstimate
      */
     type: AggregationPercentileEstimateTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationPercentileEstimate
      */
     ignoreNoData: boolean;
     /**
      *
-     * @type {number}
-     * @memberof AggregationPercentileEstimate
      */
     percentile: number;
 }

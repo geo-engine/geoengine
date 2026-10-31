@@ -16,13 +16,15 @@ import { NeighborhoodAggregateParametersFromJSON, NeighborhoodAggregateParameter
  * @export
  */
 export const NeighborhoodAggregateTypeEnum = {
-    NeighborhoodAggregate: 'NeighborhoodAggregate'
+    NeighborhoodAggregate: 'NeighborhoodAggregate',
 };
 /**
  * Check if a given object implements the NeighborhoodAggregate interface.
  */
 export function instanceOfNeighborhoodAggregate(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'NeighborhoodAggregate')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

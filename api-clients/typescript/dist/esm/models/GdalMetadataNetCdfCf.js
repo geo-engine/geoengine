@@ -17,13 +17,15 @@ import { GdalDatasetParametersFromJSON, GdalDatasetParametersToJSON, } from './G
  * @export
  */
 export const GdalMetadataNetCdfCfTypeEnum = {
-    GdalMetaDataNetCdfCf: 'GdalMetaDataNetCdfCf'
+    GdalMetaDataNetCdfCf: 'GdalMetaDataNetCdfCf',
 };
 /**
  * Check if a given object implements the GdalMetadataNetCdfCf interface.
  */
 export function instanceOfGdalMetadataNetCdfCf(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalMetaDataNetCdfCf')
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -54,7 +56,7 @@ export function GdalMetadataNetCdfCfFromJSONTyped(json, ignoreDiscriminator) {
         'end': json['end'],
         'step': TimeStepFromJSON(json['step']),
         'bandOffset': json['bandOffset'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function GdalMetadataNetCdfCfToJSON(json) {

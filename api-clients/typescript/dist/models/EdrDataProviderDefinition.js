@@ -24,13 +24,15 @@ const EdrVectorSpec_1 = require("./EdrVectorSpec");
  * @export
  */
 exports.EdrDataProviderDefinitionTypeEnum = {
-    Edr: 'Edr'
+    Edr: 'Edr',
 };
 /**
  * Check if a given object implements the EdrDataProviderDefinition interface.
  */
 function instanceOfEdrDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Edr')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -53,13 +55,13 @@ function EdrDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'id': json['id'],
         'baseUrl': json['baseUrl'],
-        'vectorSpec': json['vectorSpec'] == null ? undefined : (0, EdrVectorSpec_1.EdrVectorSpecFromJSON)(json['vectorSpec']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'vectorSpec': json['vectorSpec'] === undefined ? undefined : json['vectorSpec'] === null ? null : (0, EdrVectorSpec_1.EdrVectorSpecFromJSON)(json['vectorSpec']),
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
         'discreteVrs': json['discreteVrs'] == null ? undefined : json['discreteVrs'],
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
+        'provenance': json['provenance'] === undefined ? undefined : json['provenance'] === null ? null : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
     };
 }
 function EdrDataProviderDefinitionToJSON(json) {

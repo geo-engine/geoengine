@@ -16,87 +16,59 @@
 export interface MultiBandRasterColorizer {
     /**
      *
-     * @type {MultiBandRasterColorizerTypeEnum}
-     * @memberof MultiBandRasterColorizer
      */
     type: MultiBandRasterColorizerTypeEnum;
     /**
      * The band index of the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     redBand: number;
     /**
      * The minimum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     redMin: number;
     /**
      * The maximum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     redMax: number;
     /**
      * A scaling factor for the red channel between 0 and 1.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     redScale?: number;
     /**
      * The band index of the green channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     greenBand: number;
     /**
      * The minimum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     greenMin: number;
     /**
      * The maximum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     greenMax: number;
     /**
      * A scaling factor for the green channel between 0 and 1.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     greenScale?: number;
     /**
      * The band index of the blue channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     blueBand: number;
     /**
      * The minimum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     blueMin: number;
     /**
      * The maximum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     blueMax: number;
     /**
      * A scaling factor for the blue channel between 0 and 1.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
      */
     blueScale?: number;
     /**
      * The color to use for no data values.
      * If not specified, the no data values will be transparent.
-     * @type {Array<number>}
-     * @memberof MultiBandRasterColorizer
      */
     noDataColor?: Array<number>;
 }

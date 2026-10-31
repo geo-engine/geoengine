@@ -16,14 +16,10 @@
 export interface AggregationMax {
     /**
      *
-     * @type {AggregationMaxTypeEnum}
-     * @memberof AggregationMax
      */
     type: AggregationMaxTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationMax
      */
     ignoreNoData: boolean;
 }

@@ -28,7 +28,7 @@ exports.FeatureDataType = {
     Float: 'float',
     Text: 'text',
     Bool: 'bool',
-    DateTime: 'dateTime'
+    DateTime: 'dateTime',
 };
 function instanceOfFeatureDataType(value) {
     for (const key in exports.FeatureDataType) {

@@ -16,8 +16,6 @@
 export interface TilesCrsOneOf {
     /**
      *
-     * @type {string}
-     * @memberof TilesCrsOneOf
      */
     uri: string;
 }

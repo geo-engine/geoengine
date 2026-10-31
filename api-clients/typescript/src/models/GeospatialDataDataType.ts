@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { GeospatialDataDataTypeOneOf } from './GeospatialDataDataTypeOneOf';
 import {
     instanceOfGeospatialDataDataTypeOneOf,
@@ -21,7 +22,7 @@ import {
 
 /**
  * @type GeospatialDataDataType
- * 
+ * Type of data represented in the layer
  * @export
  */
 export type GeospatialDataDataType = GeospatialDataDataTypeOneOf | string;
@@ -40,13 +41,13 @@ export function GeospatialDataDataTypeFromJSONTyped(json: any, ignoreDiscriminat
     if (instanceOfGeospatialDataDataTypeOneOf(json)) {
         return GeospatialDataDataTypeOneOfFromJSONTyped(json, true);
     }
-    if (typeof json === 'string' && (json === 'coverage')) {
-        return json;
-    }
     if (typeof json === 'string' && (json === 'map')) {
         return json;
     }
     if (typeof json === 'string' && (json === 'vector')) {
+        return json;
+    }
+    if (typeof json === 'string' && (json === 'coverage')) {
         return json;
     }
     return {} as any;
@@ -66,13 +67,13 @@ export function GeospatialDataDataTypeToJSONTyped(value?: GeospatialDataDataType
     if (instanceOfGeospatialDataDataTypeOneOf(value)) {
         return GeospatialDataDataTypeOneOfToJSON(value as GeospatialDataDataTypeOneOf);
     }
-    if (typeof value === 'string' && (value === 'coverage')) {
-        return value;
-    }
     if (typeof value === 'string' && (value === 'map')) {
         return value;
     }
     if (typeof value === 'string' && (value === 'vector')) {
+        return value;
+    }
+    if (typeof value === 'string' && (value === 'coverage')) {
         return value;
     }
     return {};

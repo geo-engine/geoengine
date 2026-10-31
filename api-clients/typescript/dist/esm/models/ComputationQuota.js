@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 /**
  * Check if a given object implements the ComputationQuota interface.
  */
@@ -32,7 +33,7 @@ export function ComputationQuotaFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : parseDateTime(json['timestamp'])),
         'computationId': json['computationId'],
         'processingGraphId': json['processingGraphId'],
         'count': json['count'],
@@ -46,7 +47,7 @@ export function ComputationQuotaToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : serializeDateTime(value['timestamp']),
         'computationId': value['computationId'],
         'processingGraphId': value['processingGraphId'],
         'count': value['count'],

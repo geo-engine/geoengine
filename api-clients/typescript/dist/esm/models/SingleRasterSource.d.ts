@@ -17,8 +17,6 @@ import type { RasterOperator } from './RasterOperator';
 export interface SingleRasterSource {
     /**
      *
-     * @type {RasterOperator}
-     * @memberof SingleRasterSource
      */
     raster: RasterOperator;
 }

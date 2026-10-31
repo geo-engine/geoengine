@@ -35,14 +35,10 @@ import {
 export interface VectorColumnInfo {
     /**
      * 
-     * @type {FeatureDataType}
-     * @memberof VectorColumnInfo
      */
     dataType: FeatureDataType;
     /**
      * 
-     * @type {Measurement}
-     * @memberof VectorColumnInfo
      */
     measurement: Measurement;
 }

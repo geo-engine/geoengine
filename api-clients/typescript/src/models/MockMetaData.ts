@@ -35,20 +35,14 @@ import {
 export interface MockMetaData {
     /**
      * 
-     * @type {MockMetaDataTypeEnum}
-     * @memberof MockMetaData
      */
     type: MockMetaDataTypeEnum;
     /**
      * 
-     * @type {MockDatasetDataSourceLoadingInfo}
-     * @memberof MockMetaData
      */
     loadingInfo: MockDatasetDataSourceLoadingInfo;
     /**
      * 
-     * @type {VectorResultDescriptor}
-     * @memberof MockMetaData
      */
     resultDescriptor: VectorResultDescriptor;
 }
@@ -58,7 +52,7 @@ export interface MockMetaData {
  * @export
  */
 export const MockMetaDataTypeEnum = {
-    MockMetaData: 'MockMetaData'
+    MockMetaData: 'MockMetaData',
 } as const;
 export type MockMetaDataTypeEnum = typeof MockMetaDataTypeEnum[keyof typeof MockMetaDataTypeEnum];
 
@@ -68,6 +62,8 @@ export type MockMetaDataTypeEnum = typeof MockMetaDataTypeEnum[keyof typeof Mock
  */
 export function instanceOfMockMetaData(value: object): value is MockMetaData {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'MockMetaData') return false;
+    
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined) return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     return true;
