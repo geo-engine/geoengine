@@ -761,6 +761,7 @@ impl BrokerState {
             slot.active_count = slot.active_count.saturating_sub(1);
         }
         self.global_active_count = self.global_active_count.saturating_sub(1);
+        self.remove_slot_if_unused(dataset_hash);
     }
 
     fn report_and_reset_stats(&mut self) {
@@ -827,6 +828,19 @@ impl BrokerState {
         }
     }
 
+    /// Removes the dataset's slot when nothing is queued or read, so the registry does not keep
+    /// one entry for every dataset ever read. A new request creates the slot again.
+    /// An empty queue implies the dataset is not in `active_datasets`.
+    fn remove_slot_if_unused(&mut self, dataset_hash: u64) {
+        if self
+            .dataset_registry
+            .get(&dataset_hash)
+            .is_some_and(|slot| slot.queue.is_empty() && slot.active_count == 0)
+        {
+            self.dataset_registry.remove(&dataset_hash);
+        }
+    }
+
     /// Single-pass scheduler execution pass. Inlines scheduling decisions to prevent matrix re-scanning.
     #[allow(clippy::too_many_lines)]
     #[inline]
@@ -841,6 +855,7 @@ impl BrokerState {
             };
             if should_pop {
                 self.active_datasets.pop_front();
+                self.remove_slot_if_unused(front_hash);
             } else {
                 break;
             }
@@ -929,6 +944,7 @@ impl BrokerState {
             // Take the request before the worker: its callers may have given up since the scan
             let Some(req) = slot.pop_next_valid(&mut self.stats.cancelled_dropped) else {
                 self.active_datasets.remove(best_dataset_active_idx);
+                self.remove_slot_if_unused(best_dataset_hash);
                 continue;
             };
 
@@ -1480,7 +1496,7 @@ mod tests {
         state.release_read_capacity(second.dataset_hash);
         state.remove_worker(1);
         assert_eq!(state.global_active_count, 0);
-        assert_eq!(state.dataset_registry[&second.dataset_hash].active_count, 0);
+        assert!(!state.dataset_registry.contains_key(&second.dataset_hash));
     }
 
     #[tokio::test]
@@ -1914,6 +1930,10 @@ mod tests {
         assert_eq!(state.idle_workers[0], 0);
         assert_eq!(state.global_active_count, 0);
         assert!(state.workers[0].affinity.is_some());
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept after the last read"
+        );
     }
 
     #[test]
@@ -2084,6 +2104,10 @@ mod tests {
         assert!(rx0.try_recv().is_err(), "no job for a cancelled request");
         assert_eq!(state.stats.cancelled_dropped, 1);
         assert_eq!(state.global_active_count, 0);
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept for a dataset with no reads"
+        );
     }
 
     /// Callers can cancel between the scan (`peek_first_valid`) and the dispatch, so taking the
