@@ -32,7 +32,7 @@ use geoengine_operators::{
         raster_stream_to_png::raster_stream_to_png_bytes,
     },
 };
-use tracing::debug;
+use tracing::{Instrument, debug, debug_span};
 
 /// A raster processing graph, projected and resampled onto the requested grid
 pub struct RasterGridQuery {
@@ -129,29 +129,34 @@ async fn load_on_grid<C: SessionContext>(
     let operator = ctx
         .db()
         .load_processing_graph(&query.processing_graph)
+        .instrument(debug_span!("load_processing_graph"))
         .await?
         .operator
         .get_raster()?;
 
-    let initialized = operator
-        .clone()
-        .initialize(
-            ProcessingGraphOperatorPath::initialize_root(),
-            execution_context,
-        )
-        .await?;
-
-    // TODO: add a resammple operator for downsampling AND resample push down!
-    Ok(
-        WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
-            .wrap_with_projection_and_resample(
-                query.origin,
-                query.resolution,
-                query.crs,
+    async move {
+        let initialized = operator
+            .clone()
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
                 execution_context,
             )
-            .await?,
-    )
+            .await?;
+
+        // TODO: add a resammple operator for downsampling AND resample push down!
+        Ok(
+            WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
+                .wrap_with_projection_and_resample(
+                    query.origin,
+                    query.resolution,
+                    query.crs,
+                    execution_context,
+                )
+                .await?,
+        )
+    }
+    .instrument(debug_span!("initialize"))
+    .await
 }
 
 /// Whether the query lies outside the data in time or space, so the result is empty
