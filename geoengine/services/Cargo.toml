@@ -21,6 +21,10 @@ harness = false
 name = "map_tile"
 harness = false
 
+[[bench]]
+name = "wms_load"
+harness = false
+
 [[bin]]
 name = "geoengine-server"
 path = "src/bin/geoengine-server.rs"
