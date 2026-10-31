@@ -7,7 +7,8 @@
 
 //! One 256 px EPSG:3857 map tile from a UTM COG, along the WMS path (projection and resampling
 //! wrapper, PNG encoding) without loading the processing graph from the database.
-//! Prints the mean wall time per stage (the spans of the map path) for each zoom level.
+//! Prints the mean wall time per stage (the spans of the map path) for each zoom level, warm and
+//! cold (GDAL worker caches cleared before each tile).
 //!
 //! `cargo build --release --bin gdalsource-process && cargo bench --bench map_tile`
 
@@ -210,6 +211,13 @@ async fn render_tile(exec_ctx: &MockExecutionContext, source: TypedRasterOperato
     std::hint::black_box(png);
 }
 
+/// Cold: the GDAL workers close their datasets before each tile; the OS page cache stays warm
+async fn clear_caches(exec_ctx: &MockExecutionContext, cold: bool) {
+    if cold {
+        exec_ctx.gdal_process_pool.clear_caches().await.unwrap();
+    }
+}
+
 fn map_tile(c: &mut Criterion) {
     tracing_subscriber::registry()
         .with(StageTimes.with_filter(LevelFilter::DEBUG))
@@ -241,25 +249,43 @@ fn map_tile(c: &mut Criterion) {
         params: GdalSourceParameters::new(name),
     });
 
+    let (exec_ctx, source) = (&exec_ctx, &source);
     let mut group = c.benchmark_group("map_tile");
-    for zoom in ZOOM_LEVELS {
-        group.bench_function(format!("z{zoom}"), |b| {
-            b.to_async(&runtime)
-                .iter(|| render_tile(&exec_ctx, source.clone(), zoom));
-        });
+    for (cold, suffix) in [(false, ""), (true, "_cold")] {
+        for zoom in ZOOM_LEVELS {
+            group.bench_function(format!("z{zoom}{suffix}"), |b| {
+                b.to_async(&runtime).iter_custom(|iters| async move {
+                    let mut elapsed = Duration::ZERO;
+                    for _ in 0..iters {
+                        clear_caches(exec_ctx, cold).await;
+                        let start = Instant::now();
+                        render_tile(exec_ctx, source.clone(), zoom).await;
+                        elapsed += start.elapsed();
+                    }
+                    elapsed
+                });
+            });
 
-        STAGES.lock().unwrap().clear();
-        for _ in 0..STAGE_RUNS {
-            runtime.block_on(render_tile(&exec_ctx, source.clone(), zoom));
-        }
-        println!("map_tile/z{zoom}: mean wall time per tile over {STAGE_RUNS} tiles");
-        println!("  {:<32} {:>8} {:>12}", "span", "count", "ms");
-        for (name, (total, count)) in STAGES.lock().unwrap().iter() {
-            println!(
-                "  {name:<32} {:>8.1} {:>12.3}",
-                f64::from(*count) / f64::from(STAGE_RUNS),
-                total.as_secs_f64() * 1000. / f64::from(STAGE_RUNS)
-            );
+            let mut stages = BTreeMap::new();
+            for _ in 0..STAGE_RUNS {
+                runtime.block_on(clear_caches(exec_ctx, cold));
+                STAGES.lock().unwrap().clear();
+                runtime.block_on(render_tile(exec_ctx, source.clone(), zoom));
+                for (name, (total, count)) in STAGES.lock().unwrap().iter() {
+                    let entry: &mut (Duration, u32) = stages.entry(*name).or_default();
+                    entry.0 += *total;
+                    entry.1 += count;
+                }
+            }
+            println!("map_tile/z{zoom}{suffix}: mean wall time per tile over {STAGE_RUNS} tiles");
+            println!("  {:<32} {:>8} {:>12}", "span", "count", "ms");
+            for (name, (total, count)) in &stages {
+                println!(
+                    "  {name:<32} {:>8.1} {:>12.3}",
+                    f64::from(*count) / f64::from(STAGE_RUNS),
+                    total.as_secs_f64() * 1000. / f64::from(STAGE_RUNS)
+                );
+            }
         }
     }
     group.finish();
