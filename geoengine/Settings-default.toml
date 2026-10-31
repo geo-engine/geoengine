@@ -40,6 +40,8 @@ tile_shape_pixels_y = 512
 
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
+# threads of the Rayon pool for the CPU-heavy work of operators; 0 = one per core
+rayon_threads = 0
 
 [upload]
 path = "upload"

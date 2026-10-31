@@ -244,6 +244,7 @@ where
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        rayon_threads: usize,
         oidc_config: Oidc,
         cache_config: Cache,
         quota_config: Quota,
@@ -291,7 +292,7 @@ where
             task_manager: Arc::new(TypedTaskManagerBackend::new(
                 tokio::runtime::Handle::current(),
             )),
-            thread_pool: create_rayon_thread_pool(0),
+            thread_pool: create_rayon_thread_pool(rayon_threads),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             oidc_manager: OidcManager::from(oidc_config),
