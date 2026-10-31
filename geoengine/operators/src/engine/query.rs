@@ -30,30 +30,19 @@ pub struct ChunkByteSize(usize);
 
 /// The parallelism available to the sub-queries of a query.
 ///
-/// An adapter asks for a [`SubQueryHandout`] before each sub-query:
-/// - its first running sub-query is always handed out ([`SubQueryHandout::Guaranteed`]),
-///   which guarantees progress and avoids deadlocks;
-/// - every further one ([`SubQueryHandout::Parallel`]) takes one from the query's counter
-///   and is refused instead of waiting when none is left.
-///
-/// The counter is shared by all adapters of the query, so nested adapters add up instead of
-/// multiplying their fanout. It is a lock-free atomic, no semaphore.
+/// Each adapter runs one sub-query without a permit, its guaranteed one. Every further one
+/// needs a [`SubQueryPermit`] from this counter, which never waits: if none is left, the adapter
+/// starts no more until it yields a tile. The counter is shared by all adapters of the query,
+/// so nested adapters add up instead of multiplying their fanout. A minimum count would not
+/// replace the guaranteed one: the outer adapter can take all permits before its inner ones ask.
 pub struct SubQueryParallelism {
     available: Arc<AtomicUsize>,
 }
 
-/// Permission to run one more sub-query, held until its tile is yielded.
-pub enum SubQueryHandout {
-    /// The first running sub-query of an adapter, always handed out.
-    Guaranteed,
-    /// A sub-query running in parallel to the guaranteed one.
-    Parallel(ParallelSubQueryPermit),
-}
+/// One sub-query beyond an adapter's guaranteed one; gives it back to the counter when dropped.
+pub struct SubQueryPermit(Arc<AtomicUsize>);
 
-/// Gives its sub-query back to the query's counter when dropped.
-pub struct ParallelSubQueryPermit(Arc<AtomicUsize>);
-
-impl Drop for ParallelSubQueryPermit {
+impl Drop for SubQueryPermit {
     fn drop(&mut self) {
         self.0.fetch_add(1, Ordering::Relaxed);
     }
@@ -61,7 +50,7 @@ impl Drop for ParallelSubQueryPermit {
 
 impl SubQueryParallelism {
     /// Up to `available_per_query` sub-queries of the query run at once, counting the
-    /// guaranteed one, however deep adapters nest.
+    /// guaranteed one of each running adapter chain.
     pub fn new(available_per_query: usize) -> Self {
         Self {
             // the guaranteed sub-query takes nothing, so the counter holds the rest
@@ -69,30 +58,21 @@ impl SubQueryParallelism {
         }
     }
 
-    /// The handout for an adapter's next sub-query; the guaranteed one whenever the adapter's
-    /// guaranteed sub-query is not in flight, else a parallel one or `None` when all
-    /// parallelism is in use.
-    ///
-    /// Never waits: waiting deadlocks when outer sub-queries hold all of the parallelism.
-    pub fn handout(&self, guaranteed_in_flight: bool) -> Option<SubQueryHandout> {
-        if !guaranteed_in_flight {
-            return Some(SubQueryHandout::Guaranteed);
-        }
+    /// A permit, or `None` when the query's parallelism is in use.
+    pub fn try_acquire(&self) -> Option<SubQueryPermit> {
         // Relaxed: the counter guards no other data, it only bounds the number of sub-queries
         self.available
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
             .ok()?;
-        Some(SubQueryHandout::Parallel(ParallelSubQueryPermit(
-            self.available.clone(),
-        )))
+        Some(SubQueryPermit(self.available.clone()))
     }
 }
 
-/// Sequential, the behavior before sub-queries ran in parallel. Servers read
-/// `[query_context] available_subquery_parallelism_per_query` instead.
+/// Parallel, so tests exercise concurrent sub-queries; servers read
+/// `[query_context] available_subquery_parallelism_per_query` (default 1).
 impl TestDefault for SubQueryParallelism {
     fn test_default() -> Self {
-        Self::new(1)
+        Self::new(4)
     }
 }
 
@@ -486,30 +466,18 @@ mod tests {
         assert!(stream.next().await.is_none());
     }
 
-    fn is_parallel(handout: Option<&SubQueryHandout>) -> bool {
-        matches!(handout, Some(SubQueryHandout::Parallel(_)))
-    }
-
-    #[test]
-    fn it_always_hands_out_the_guaranteed_subquery() {
-        for parallelism in [SubQueryParallelism::new(0), SubQueryParallelism::new(1)] {
-            assert!(matches!(
-                parallelism.handout(false),
-                Some(SubQueryHandout::Guaranteed)
-            ));
-            assert!(parallelism.handout(true).is_none());
-        }
-    }
-
     #[test]
     fn it_hands_out_up_to_the_available_parallelism() {
+        assert!(SubQueryParallelism::new(0).try_acquire().is_none());
+        assert!(SubQueryParallelism::new(1).try_acquire().is_none());
+
         let parallelism = SubQueryParallelism::new(3);
-        let held = [parallelism.handout(true), parallelism.handout(true)];
-        assert!(held.iter().all(|h| is_parallel(h.as_ref())));
-        // the guaranteed one plus 2 parallel ones = 3
-        assert!(parallelism.handout(true).is_none());
+        // the guaranteed one plus 2 permits = 3
+        let held = [parallelism.try_acquire(), parallelism.try_acquire()];
+        assert!(held.iter().all(Option::is_some));
+        assert!(parallelism.try_acquire().is_none());
 
         drop(held);
-        assert!(is_parallel(parallelism.handout(true).as_ref()));
+        assert!(parallelism.try_acquire().is_some());
     }
 }

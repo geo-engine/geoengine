@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, RasterQueryProcessor, SubQueryHandout, SubQueryParallelism};
+use crate::engine::{QueryContext, RasterQueryProcessor, SubQueryParallelism, SubQueryPermit};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -130,26 +130,23 @@ impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
 impl<PixelType: Pixel> Stream for RasterSubQueryAdapter<'_, PixelType> {
     type Item = Result<RasterTile2D<PixelType>>;
 
-    fn poll_next(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.get_mut().stream.poll_next_unpin(cx)
     }
 }
 
-type TileWithHandout<P> = (RasterTile2D<P>, SubQueryHandout);
+/// `None`: the adapter's guaranteed sub-query.
+type TileWithPermit<P> = (RasterTile2D<P>, Option<SubQueryPermit>);
 
-/// Runs sub-queries in order, each with a [`SubQueryHandout`] from the query's
-/// [`SubQueryParallelism`]: the first running one is always handed out, so every adapter
-/// makes progress; parallel ones only while permits are free, so nested adapters share one
-/// pool and the outermost adapter (which asks first) gets most of the parallelism.
+/// Runs sub-queries in order: the guaranteed one always, so every adapter makes progress,
+/// further ones while the query's [`SubQueryParallelism`] has permits. The outermost adapter
+/// asks first and gets most of them.
 ///
-/// A handout is returned when its tile is yielded, not when the sub-query finishes, so
+/// A permit is returned when its tile is yielded, not when the sub-query finishes, so
 /// finished tiles waiting behind a slow one still count against the available parallelism.
 struct ParallelSubQueries<'a, P: Pixel> {
     descriptors: BoxStream<'a, Result<BoxFuture<'a, Result<RasterTile2D<P>>>>>,
-    in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithHandout<P>>>>,
+    in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithPermit<P>>>>,
     parallelism: &'a SubQueryParallelism,
     /// The guaranteed slot is reused as soon as its tile is yielded, not only once all
     /// parallel sub-queries are done; otherwise N parallelism would run at N - 1.
@@ -164,20 +161,22 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
         let this = self.get_mut();
 
         while !this.done {
-            let Some(handout) = this.parallelism.handout(this.guaranteed_in_flight) else {
-                break;
+            let permit = if !this.guaranteed_in_flight {
+                None
+            } else if let Some(permit) = this.parallelism.try_acquire() {
+                Some(permit)
+            } else {
+                break; // all of the query's parallelism is in use; our guaranteed sub-query wakes us
             };
-            // only marked in flight once pushed: a pending descriptor must not hold the slot,
-            // or nothing in flight would wake us to retry
-            let guaranteed = matches!(handout, SubQueryHandout::Guaranteed);
 
             match this.descriptors.poll_next_unpin(cx) {
-                // on an error the handout is returned before its tile is yielded, which is
+                // on an error the permit is returned before its tile is yielded, which is
                 // harmless: the stream ends with that error and starts no more sub-queries
                 Poll::Ready(Some(Ok(sub_query))) => {
-                    this.guaranteed_in_flight |= guaranteed;
+                    // only set once pushed: a pending descriptor must not hold the slot
+                    this.guaranteed_in_flight |= permit.is_none();
                     this.in_flight
-                        .push_back(sub_query.map_ok(|tile| (tile, handout)).boxed());
+                        .push_back(sub_query.map_ok(|tile| (tile, permit)).boxed());
                 }
                 Poll::Ready(Some(Err(e))) => {
                     // queued behind the running sub-queries to keep the output order
@@ -186,6 +185,7 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
                     this.done = true;
                 }
                 Poll::Ready(None) => this.done = true,
+                // no `return`: in-flight tiles may be ready; the descriptors hold our waker
                 Poll::Pending => break,
             }
         }
@@ -196,8 +196,8 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
                 this.in_flight = FuturesOrdered::new();
                 Poll::Ready(Some(Err(e)))
             }
-            Poll::Ready(Some(Ok((tile, handout)))) => {
-                if matches!(handout, SubQueryHandout::Guaranteed) {
+            Poll::Ready(Some(Ok((tile, permit)))) => {
+                if permit.is_none() {
                     this.guaranteed_in_flight = false;
                 }
                 Poll::Ready(Some(Ok(tile)))
@@ -580,20 +580,65 @@ mod tests {
         )
     }
 
+    /// Fails instead of hanging the test run when an adapter stops making progress.
+    async fn in_time<F: Future>(future: F) -> F::Output {
+        tokio::time::timeout(Duration::from_secs(10), future)
+            .await
+            .expect("the adapter hung")
+    }
+
     /// Runs `depth` nested adapters over a counting leaf, returning the output tile
     /// positions and the highest number of leaf queries that ran at once.
     async fn run_nested(depth: usize, parallelism: usize) -> (Vec<GridIdx2D>, usize) {
         let (processor, concurrency) = nested(depth, 4, false);
         let query_ctx = query_ctx(parallelism);
-        let tiles: Vec<_> = processor
+        let tiles = processor
             .raster_query(query(4), &query_ctx)
             .await
             .unwrap()
             .map(|tile| tile.unwrap().tile_position)
-            .collect()
-            .await;
+            .collect::<Vec<_>>();
 
-        (tiles, concurrency.max.load(Ordering::SeqCst))
+        (in_time(tiles).await, concurrency.max.load(Ordering::SeqCst))
+    }
+
+    /// Runs one adapter, each tile reading only its own pixels, at parallelism 1 over a
+    /// `source_size`×`source_size` counting leaf. Returns the tiles and the number of leaf queries.
+    async fn run_over_leaf<G>(
+        source_size: usize,
+        query_size: isize,
+        time_stream: G,
+    ) -> (Vec<RasterTile2D<u8>>, usize)
+    where
+        G: Stream<Item = Result<TimeInterval>> + Send + 'static,
+    {
+        let concurrency = Arc::new(Concurrency::default());
+        let source = CountingLeaf {
+            descriptor: descriptor(source_size),
+            concurrency: concurrency.clone(),
+        };
+        let query_ctx = query_ctx(1);
+        let tiling_strategy = descriptor(query_size.unsigned_abs())
+            .tiling_grid_definition(query_ctx.tiling_specification())
+            .generate_data_tiling_strategy();
+        let tiles = RasterSubQueryAdapter::new(
+            &source,
+            query(query_size),
+            tiling_strategy,
+            &query_ctx,
+            IdentitySubQuery {
+                slow_head: false,
+                own_tile_only: true,
+            },
+            time_stream,
+        )
+        .map(Result::unwrap)
+        .collect::<Vec<_>>();
+
+        (
+            in_time(tiles).await,
+            concurrency.started.load(Ordering::SeqCst),
+        )
     }
 
     #[tokio::test]
@@ -615,7 +660,7 @@ mod tests {
         let query_ctx = query_ctx(3);
         let mut tiles = processor.raster_query(query(8), &query_ctx).await.unwrap();
 
-        tiles.next().await.unwrap().unwrap();
+        in_time(tiles.next()).await.unwrap().unwrap();
 
         // the slow head plus 2 permits; releasing permits on completion instead of on
         // yield would keep starting sub-queries while the head is still running
@@ -633,11 +678,9 @@ mod tests {
         let query_ctx = query_ctx(3);
         let mut tiles = processor.raster_query(query(8), &query_ctx).await.unwrap();
 
-        tiles.next().await.unwrap().unwrap();
+        in_time(tiles.next()).await.unwrap().unwrap();
         concurrency.max.store(0, Ordering::SeqCst);
-        while let Some(tile) = tiles.next().await {
-            tile.unwrap();
-        }
+        in_time(tiles.map(Result::unwrap).collect::<Vec<_>>()).await;
 
         // the guaranteed slot is reused once its tile is yielded, so 3 still run at once
         assert_eq!(concurrency.max.load(Ordering::SeqCst), 3);
@@ -645,44 +688,17 @@ mod tests {
 
     #[tokio::test]
     async fn it_does_not_deadlock_with_little_parallelism() {
-        let result = tokio::time::timeout(Duration::from_secs(10), run_nested(3, 2)).await;
-        assert_eq!(result.expect("nested adapters deadlocked").0.len(), 4);
+        assert_eq!(run_nested(3, 2).await.0.len(), 4);
     }
 
     #[tokio::test]
     async fn it_does_not_query_the_source_outside_of_its_data_bounds() {
-        let concurrency = Arc::new(Concurrency::default());
-        let source = CountingLeaf {
-            descriptor: descriptor(4),
-            concurrency: concurrency.clone(),
-        };
-        let query_ctx = query_ctx(1);
-        let tiling_strategy = descriptor(8)
-            .tiling_grid_definition(query_ctx.tiling_specification())
-            .generate_data_tiling_strategy();
-        let time_stream = source
-            .time_query(query(8).time_interval(), &query_ctx)
-            .await
-            .unwrap();
-
-        let tiles: Vec<_> = RasterSubQueryAdapter::new(
-            &source,
-            query(8),
-            tiling_strategy,
-            &query_ctx,
-            IdentitySubQuery {
-                slow_head: false,
-                own_tile_only: true,
-            },
-            time_stream,
-        )
-        .map(|tile| tile.unwrap())
-        .collect()
-        .await;
+        let time_stream = futures::stream::once(ready(Ok(query(8).time_interval())));
+        let (tiles, started) = run_over_leaf(4, 8, time_stream).await;
 
         // 16 tiles of 2×2 pixels, of which the 4 inside the 4×4 source data are queried
         assert_eq!(tiles.len(), 16);
-        assert_eq!(concurrency.started.load(Ordering::SeqCst), 4);
+        assert_eq!(started, 4);
         // the others are empty and cacheable, unlike the source's `no_cache` tiles
         for tile in &tiles {
             let outside = tile.tile_position.x() >= 2 || tile.tile_position.y() >= 2;
@@ -698,36 +714,11 @@ mod tests {
 
     #[tokio::test]
     async fn it_does_not_hang_when_the_time_stream_is_pending() {
-        let source = CountingLeaf {
-            descriptor: descriptor(4),
-            concurrency: Arc::default(),
-        };
-        let query_ctx = query_ctx(1);
-        let tiling_strategy = descriptor(4)
-            .tiling_grid_definition(query_ctx.tiling_specification())
-            .generate_data_tiling_strategy();
         // pending once, like a time stream that waits on I/O
         let time_stream = futures::stream::once(async {
             tokio::task::yield_now().await;
             Ok(query(4).time_interval())
         });
-
-        let tiles = RasterSubQueryAdapter::new(
-            &source,
-            query(4),
-            tiling_strategy,
-            &query_ctx,
-            IdentitySubQuery {
-                slow_head: false,
-                own_tile_only: true,
-            },
-            time_stream,
-        )
-        .collect::<Vec<_>>();
-
-        let tiles = tokio::time::timeout(Duration::from_secs(10), tiles)
-            .await
-            .expect("the adapter hung on a pending time stream");
-        assert_eq!(tiles.len(), 4);
+        assert_eq!(run_over_leaf(4, 4, time_stream).await.0.len(), 4);
     }
 }
