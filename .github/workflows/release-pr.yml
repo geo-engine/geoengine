@@ -33,7 +33,15 @@ jobs:
     if: github.repository_owner == 'geo-engine'
 
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:latest
+    container:
+      image: quay.io/geoengine/devcontainer:latest
+      # mount the large host directories at their own paths, so that `free-disk-space` empties them on the host
+      volumes:
+        - /usr/share/dotnet:/usr/share/dotnet
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /opt/ghc:/opt/ghc
+        - /usr/local/.ghcup:/usr/local/.ghcup
+        - /opt/hostedtoolcache:/opt/hostedtoolcache
 
     permissions:
       contents: write # push the release branch
@@ -46,6 +54,21 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0 # git-cliff needs the full history and all tags
           fetch-tags: true
+
+      # `generate-openapi-spec` builds the backend, which does not fit on the runner's disk otherwise
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        env:
+          AGENT_TOOLSDIRECTORY: /opt/hostedtoolcache # only set on the host
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          preinstalled-runtimes: true
+          # these would only act on the container, not on the host
+          large-packages: false
+          docker-images: false
+          swap-storage: false
 
       - name: Configure git
         run: |
@@ -62,6 +85,11 @@ jobs:
         run: echo "version=$(just repo print-version-number)" >> "$GITHUB_OUTPUT"
 
       - name: Increase version number & update changelog
+        env:
+          # `generate-openapi-spec` builds the backend in debug mode only once,
+          # so it needs neither debug info nor incremental compilation, which saves disk space and time.
+          CARGO_PROFILE_DEV_DEBUG: 0
+          CARGO_INCREMENTAL: 0
         run: just repo increase-version-number ${{ inputs.bump == 'major' && '--major' || '' }}
 
       - name: Prepare commit message & PR body
