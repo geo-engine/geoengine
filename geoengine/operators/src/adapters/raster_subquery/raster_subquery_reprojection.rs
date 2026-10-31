@@ -189,6 +189,7 @@ fn projected_coordinate_grid_parallel(
     )
     .max(1);
 
+    let _span = tracing::debug_span!("reprojection_coordinate_grid").entered();
     let start = std::time::Instant::now();
 
     let parallelism = pool.current_num_threads();
@@ -301,6 +302,8 @@ where
     if tile.grid_array.is_empty() {
         return Ok(accu);
     }
+
+    let _span = tracing::debug_span!("reprojection_fold").entered();
 
     let TileWithProjectionCoordinates {
         mut accu_tile,
