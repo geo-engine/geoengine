@@ -111,6 +111,7 @@ impl From<&str> for ContentType {
     }
 }
 
+pub mod cache_api;
 pub mod datasets_api;
 pub mod general_api;
 pub mod layers_api;
