@@ -17,6 +17,10 @@ bench = false
 name = "stac_grid"
 harness = false
 
+[[bench]]
+name = "map_tile"
+harness = false
+
 [[bin]]
 name = "geoengine-server"
 path = "src/bin/geoengine-server.rs"
