@@ -376,57 +376,19 @@ impl GdalProcessPool {
     /// This function will panic if any of the worker processes fail to spawn successfully.
     /// It is designed to be called during application initialization, and assumes that the system has sufficient resources to spawn the specified number of worker processes.
     ///
-    #[allow(clippy::needless_pass_by_value)] // value is cloned into spawn block, ref would need lifetime workaround
     pub fn new(
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
-        let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
-        let b_tx_clone = broker_tx.clone();
-        let worker_config_clone = worker_config.clone();
-
-        tokio::spawn(async move {
-            let b_tx_clone_2 = b_tx_clone.clone();
-            let wc = worker_config_clone;
-            let wc2 = wc.clone();
-            let workers = tokio::task::spawn_blocking(move || {
-                let mut w = Vec::with_capacity(number_of_processes);
-                for id in 0..number_of_processes {
-                    let (child_guard, _join_handle, job_tx) =
-                        Self::create_worker_with_id(id, b_tx_clone_2.clone(), &wc)
-                            .expect("Failed to create worker");
-
-                    w.push(WorkerProcess {
-                        _id: id,
-                        job_tx,
-                        child_guard,
-                        affinity: None,
-                        pending_clears: 0,
-                    });
-                    std::thread::sleep(Duration::from_millis(INITIAL_SPAWN_DELAY_MS));
-                }
-                w
-            })
-            .await
-            .expect("Failed to initialize static GDAL worker processes");
-
-            Self::broker_loop(
-                broker_rx,
-                workers,
-                max_active_processes,
-                max_dataset_processes,
-                b_tx_clone,
-                wc2,
-            )
-            .await;
-        });
-
-        Arc::new(Self {
-            broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
-        })
+        Self::new_with_tokio_handle(
+            &tokio::runtime::Handle::current(),
+            number_of_processes,
+            max_active_processes,
+            max_dataset_processes,
+            worker_config,
+        )
     }
 
     fn create_worker_with_id(
