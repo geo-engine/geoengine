@@ -213,6 +213,7 @@ fn main() {
         16,
         16,
         8,
+        std::time::Duration::ZERO,
         WorkerConfig::default(),
     );
     let query_ctx = exe_ctx.mock_query_context_test_default();
