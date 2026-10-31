@@ -27,6 +27,10 @@ name = "geoengine-cli"
 path = "src/bin/geoengine-cli.rs"
 bench = false
 
+[features]
+# logs Tokio runtime metrics every second, see `README.md`
+runtime-metrics = ["dep:tokio-metrics"]
+
 [dependencies]
 actix-files = { workspace = true }
 actix-http = { workspace = true }
@@ -92,6 +96,7 @@ stac-extensions = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }
+tokio-metrics = { workspace = true, optional = true }
 tokio-postgres = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

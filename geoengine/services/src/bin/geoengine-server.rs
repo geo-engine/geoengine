@@ -77,6 +77,9 @@ pub async fn start_server() -> Result<()> {
     // initialize the registry as the global tracing subscriber
     registry.init();
 
+    #[cfg(feature = "runtime-metrics")]
+    spawn_runtime_metrics_logger();
+
     match geoengine_services::server::start_server(None).await {
         Ok(()) => tracing::info!("Server stopped successfully"),
         Err(err) => tracing::error!("Server stopped with error: {err}"),
@@ -183,6 +186,44 @@ where
         .with_writer(non_blocking_writer)
         .with_filter(filter);
     (layer, guard)
+}
+
+/// Logs the metrics of the current Tokio runtime every second at target `runtime_metrics`.
+/// Polls, local queue depths and blocking pool metrics need `RUSTFLAGS="--cfg tokio_unstable"`.
+#[cfg(feature = "runtime-metrics")]
+fn spawn_runtime_metrics_logger() {
+    let monitor = tokio_metrics::RuntimeMonitor::new(&tokio::runtime::Handle::current());
+    tokio::spawn(async move {
+        for m in monitor.intervals() {
+            #[cfg(not(tokio_unstable))]
+            tracing::info!(
+                target: "runtime_metrics",
+                workers = m.workers_count,
+                busy_ratio = m.busy_ratio(),
+                live_tasks = m.live_tasks_count,
+                global_queue_depth = m.global_queue_depth,
+                parks = m.total_park_count,
+            );
+            #[cfg(tokio_unstable)]
+            tracing::info!(
+                target: "runtime_metrics",
+                workers = m.workers_count,
+                busy_ratio = m.busy_ratio(),
+                live_tasks = m.live_tasks_count,
+                global_queue_depth = m.global_queue_depth,
+                parks = m.total_park_count,
+                polls = m.total_polls_count,
+                mean_poll_us = m.mean_poll_duration.as_micros(),
+                steals = m.total_steal_count,
+                local_queue_depth = m.total_local_queue_depth,
+                max_local_queue_depth = m.max_local_queue_depth,
+                blocking_threads = m.blocking_threads_count,
+                idle_blocking_threads = m.idle_blocking_threads_count,
+                blocking_queue_depth = m.blocking_queue_depth,
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    });
 }
 
 /// We install a GDAL error handler that logs all messages with our log macros.
