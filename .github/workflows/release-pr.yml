@@ -14,6 +14,11 @@ on:
         options:
           - minor
           - major
+      ref:
+        description: "Branch, tag or commit to release from. Use another one than `main` only for testing or in exceptional cases."
+        required: true
+        type: string
+        default: main
 
 concurrency:
   group: release-pr
@@ -28,7 +33,15 @@ jobs:
     if: github.repository_owner == 'geo-engine'
 
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:latest
+    container:
+      image: quay.io/geoengine/devcontainer:latest
+      # mount the large host directories at their own paths, so that `free-disk-space` empties them on the host
+      volumes:
+        - /usr/share/dotnet:/usr/share/dotnet
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /opt/ghc:/opt/ghc
+        - /usr/local/.ghcup:/usr/local/.ghcup
+        - /opt/hostedtoolcache:/opt/hostedtoolcache
 
     permissions:
       contents: write # push the release branch
@@ -38,9 +51,24 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ inputs.ref }}
           fetch-depth: 0 # git-cliff needs the full history and all tags
           fetch-tags: true
+
+      # `generate-openapi-spec` builds the backend, which does not fit on the runner's disk otherwise
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        env:
+          AGENT_TOOLSDIRECTORY: /opt/hostedtoolcache # only set on the host
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          preinstalled-runtimes: true
+          # these would only act on the container, not on the host
+          large-packages: false
+          docker-images: false
+          swap-storage: false
 
       - name: Configure git
         run: |
@@ -57,6 +85,11 @@ jobs:
         run: echo "version=$(just repo print-version-number)" >> "$GITHUB_OUTPUT"
 
       - name: Increase version number & update changelog
+        env:
+          # `generate-openapi-spec` builds the backend in debug mode only once,
+          # so it needs neither debug info nor incremental compilation, which saves disk space and time.
+          CARGO_PROFILE_DEV_DEBUG: 0
+          CARGO_INCREMENTAL: 0
         run: just repo increase-version-number ${{ inputs.bump == 'major' && '--major' || '' }}
 
       - name: Prepare commit message & PR body
@@ -65,39 +98,17 @@ jobs:
           OLD_VERSION: ${{ steps.old.outputs.version }}
           BUMP: ${{ inputs.bump }}
         run: |
-          NEW_VERSION="$(just repo print-version-number)"
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$(just repo print-version-number)" >> "$GITHUB_OUTPUT"
 
-          # release notes of this version only (the CHANGELOG.md section without its heading)
-          NOTES="$(git cliff --unreleased --tag "$NEW_VERSION" --strip all | sed '1{/^## /d}')"
-
-          # the commit is skipped by `cliff.toml`, so it never shows up in the changelog
           {
             echo "commit_message<<EOF_COMMIT"
-            echo "build: release $NEW_VERSION"
-            echo
-            echo "Increase the version from $OLD_VERSION to $NEW_VERSION ($BUMP) and update the"
-            echo "OpenAPI spec, API clients, Python library, UI and CHANGELOG.md accordingly."
+            just repo print-release-commit-message "$OLD_VERSION" "$BUMP"
             echo "EOF_COMMIT"
           } >> "$GITHUB_OUTPUT"
 
-          cat > "$RUNNER_TEMP/release-pr-body.md" <<EOF
-          Release **$NEW_VERSION** (previous version: $OLD_VERSION, bump: \`$BUMP\`).
-
-          This PR was created by the [Release PR workflow]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID).
-          It updates the version in Cargo, the OpenAPI spec, the API clients, the Python library and the UI, and regenerates \`CHANGELOG.md\`.
-
-          ## Checklist
-
-          - [ ] The changelog below is complete and correct (edit \`CHANGELOG.md\` on this branch if needed)
-          - [ ] CI is green
-
-          Merging this PR triggers the publish workflow: it publishes the packages and creates the tag \`v$NEW_VERSION\` and the GitHub release.
-
-          ## Changelog
-
-          $NOTES
-          EOF
+          just repo print-release-pr-body "$OLD_VERSION" "$BUMP" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            > "$RUNNER_TEMP/release-pr-body.md"
 
       - name: Create pull request
         id: pr
