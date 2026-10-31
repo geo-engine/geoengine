@@ -14,6 +14,11 @@ on:
         options:
           - minor
           - major
+      ref:
+        description: "Branch, tag or commit to release from. Use another one than `main` only for testing or in exceptional cases."
+        required: true
+        type: string
+        default: main
 
 concurrency:
   group: release-pr
@@ -38,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ inputs.ref }}
           fetch-depth: 0 # git-cliff needs the full history and all tags
           fetch-tags: true
 
