@@ -1,6 +1,5 @@
 #![allow(
     clippy::unwrap_used,
-    clippy::print_stdout,
     clippy::print_stderr,
     reason = "okay in benchmarks"
 )]
@@ -9,23 +8,25 @@
 //!
 //! Each case registers a processing graph on the local NDVI test dataset and times
 //! `GetMap` requests through the full actix app (handler, processing graph, operators, PNG encoding).
-//! Needs the Postgres from `Settings-default.toml`; every run uses its own temporary schema.
+//! Needs the Postgres from `Settings-default.toml` and must run from `geoengine/`; every run uses its own temporary schema.
 //!
-//! Env: `BENCH_ITERATIONS` (default 15), `BENCH_FILTER` (substring of the case name).
+//! Compare build settings with criterion baselines, e.g. `-- --save-baseline fat` on one build and `-- --baseline fat` on the other.
+//! The output hash printed per case must match between builds.
 
 use actix_web::http::header;
 use actix_web_httpauth::headers::authorization::Bearer;
+use criterion::{Criterion, SamplingMode, criterion_group, criterion_main};
 use geoengine_services::{
-    contexts::{ApplicationContext, Session, SessionContext},
+    contexts::{ApplicationContext, PostgresContext, Session, SessionContext},
     processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
+    users::UserSession,
     util::tests::{add_ndvi_to_datasets, admin_login, send_test_request, with_temp_context},
 };
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
-    time::{Duration, Instant},
+    time::Duration,
 };
-
-const WARMUP: usize = 3;
+use tokio_postgres::NoTls;
 
 /// lat/lon order for EPSG:4326 in WMS 1.3.0
 const EUROPE_AFRICA: &str = "-40,-20,80,100";
@@ -101,8 +102,8 @@ fn cases() -> Vec<Case> {
 }
 
 async fn register(
-    app_ctx: &geoengine_services::contexts::PostgresContext<tokio_postgres::NoTls>,
-    session: geoengine_services::users::UserSession,
+    app_ctx: &PostgresContext<NoTls>,
+    session: UserSession,
     operator: &str,
 ) -> String {
     let graph: ProcessingGraph =
@@ -116,69 +117,67 @@ async fn register(
         .to_string()
 }
 
-fn median(sorted: &[f64]) -> f64 {
-    let n = sorted.len();
-    if n % 2 == 1 {
-        sorted[n / 2]
-    } else {
-        f64::midpoint(sorted[n / 2 - 1], sorted[n / 2])
-    }
+/// Sends the request and returns the PNG.
+async fn get_map(app_ctx: PostgresContext<NoTls>, uri: &str, token: &str) -> actix_web::web::Bytes {
+    let req = actix_web::test::TestRequest::get()
+        .uri(uri)
+        .append_header((header::AUTHORIZATION, Bearer::new(token.to_string())));
+    let res = send_test_request(req, app_ctx).await;
+    let status = res.status();
+    let body = actix_web::test::read_body(res).await;
+    assert_eq!(status, 200, "{uri}: {}", String::from_utf8_lossy(&body));
+    body
 }
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() {
-    let iterations: usize = std::env::var("BENCH_ITERATIONS")
-        .ok()
-        .map_or(15, |s| s.parse().unwrap());
-    let filter = std::env::var("BENCH_FILTER").unwrap_or_default();
+fn query_pipelines(c: &mut Criterion) {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    with_temp_context(move |app_ctx, _| async move {
+    // `with_temp_context` needs a `'static` closure, so it runs as a task that keeps the schema
+    // alive until the benches are done and hands the context to criterion over a channel
+    let (setup_tx, setup_rx) = std::sync::mpsc::channel();
+    let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
+    let done_rx = std::panic::AssertUnwindSafe(done_rx);
+    let context = runtime.spawn(with_temp_context(move |app_ctx, _| async move {
         add_ndvi_to_datasets(&app_ctx).await;
         let session = admin_login(&app_ctx).await;
-        let token = session.id().to_string();
-
-        println!("case,median_ms,min_ms,mad_ms,iterations,bytes,output_hash");
-        for case in cases().into_iter().filter(|c| c.name.contains(&filter)) {
+        let mut uris = Vec::new();
+        for case in cases() {
             let id = register(&app_ctx, session.clone(), &case.operator).await;
             let (crs, bbox, width, height) = case.query;
-            let uri = format!(
+            uris.push((case.name, format!(
                 "/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox={bbox}&width={width}&height={height}&crs={crs}&styles=&format=image/png&time=2014-01-01T00:00:00.0Z"
-            );
-
-            let mut times = Vec::with_capacity(iterations);
-            let mut output = (0, 0);
-            for i in 0..WARMUP + iterations {
-                let req = actix_web::test::TestRequest::get()
-                    .uri(&uri)
-                    .append_header((header::AUTHORIZATION, Bearer::new(token.clone())));
-                let start = Instant::now();
-                let res = send_test_request(req, app_ctx.clone()).await;
-                let status = res.status();
-                let body = actix_web::test::read_body(res).await;
-                let elapsed = start.elapsed();
-                assert_eq!(status, 200, "{}: {}", case.name, String::from_utf8_lossy(&body));
-                let mut hasher = DefaultHasher::new();
-                body.hash(&mut hasher);
-                output = (body.len(), hasher.finish());
-                if i >= WARMUP {
-                    times.push(elapsed);
-                }
-            }
-
-            let mut ms: Vec<f64> = times.iter().map(Duration::as_secs_f64).map(|s| s * 1e3).collect();
-            ms.sort_by(f64::total_cmp);
-            let med = median(&ms);
-            let mut dev: Vec<f64> = ms.iter().map(|t| (t - med).abs()).collect();
-            dev.sort_by(f64::total_cmp);
-            println!(
-                "{},{med:.2},{:.2},{:.2},{iterations},{},{:016x}",
-                case.name,
-                ms[0],
-                median(&dev),
-                output.0,
-                output.1
-            );
+            )));
         }
-    })
-    .await;
+        setup_tx.send((app_ctx, session.id().to_string(), uris)).unwrap();
+        done_rx.await.unwrap();
+    }));
+    let (app_ctx, token, uris) = setup_rx.recv().unwrap();
+
+    let mut group = c.benchmark_group("query_pipelines");
+    group
+        .sampling_mode(SamplingMode::Flat)
+        .sample_size(20)
+        .measurement_time(Duration::from_secs(10));
+    for (name, uri) in &uris {
+        let body = runtime.block_on(get_map(app_ctx.clone(), uri, &token));
+        let mut hasher = DefaultHasher::new();
+        body.hash(&mut hasher);
+        eprintln!(
+            "{name}: output {} bytes, hash {:016x}",
+            body.len(),
+            hasher.finish()
+        );
+
+        group.bench_function(*name, |b| {
+            b.to_async(&runtime)
+                .iter(|| get_map(app_ctx.clone(), uri, &token));
+        });
+    }
+    group.finish();
+
+    done_tx.send(()).unwrap();
+    runtime.block_on(context).unwrap();
 }
+
+criterion_group!(services, query_pipelines);
+criterion_main!(services);

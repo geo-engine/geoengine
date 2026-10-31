@@ -215,6 +215,27 @@ Our CI checks if the OpenAPI spec is up to date.
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
 If you plan on optimizing a feature of Geo Engine, please confirm it this way.
 
+- `datatypes/benches`: raster grid operations, projections and vector collections.
+- `operators/benches`: `ci_operators` (raster vector join, tracked by the `cb.yml` CI workflow) and `no_data_tiles`.
+- `services/benches`: `stac_grid` and `query_pipelines`.
+  `query_pipelines` times WMS `GetMap` requests for typical processing graphs through the full app, so it covers code across all crates.
+  It needs the Postgres from `Settings-default.toml` and must run from `geoengine/`:
+
+  ```bash
+  cargo bench --profile bench -p geoengine-services --bench query_pipelines
+  ```
+
+To compare build settings such as LTO or codegen units, save a criterion baseline with one build and compare the other against it.
+The output hash that `query_pipelines` prints per case must be the same for both builds.
+
+```bash
+CARGO_PROFILE_BENCH_LTO=fat CARGO_PROFILE_BENCH_CODEGEN_UNITS=16 \
+  cargo bench --profile bench -p geoengine-services --bench query_pipelines -- --save-baseline fat
+cargo bench --profile bench -p geoengine-services --bench query_pipelines -- --baseline fat
+```
+
+The runs are sequential, so keep the machine idle: load changes between them show up as differences of a few percent.
+
 ### Expression dependencies
 
 We use the [`expression/deps-workspace`](expression/deps-workspace) crate to manage dependencies for compiling expressions at runtime.
