@@ -23,6 +23,9 @@ use tracing_subscriber::{
     registry::LookupSpan,
 };
 
+/// Wait for blocking tasks at shutdown, as long as actix waits for its workers by default
+const RUNTIME_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Starts the server.
 ///
 ///  # Panics
@@ -75,6 +78,13 @@ pub async fn start_server() -> Result<()> {
 
     // initialize the registry as the global tracing subscriber
     registry.init();
+
+    let runtime_config: config::ProcessingRuntime = get_config_element()?;
+    tracing::info!(
+        worker_threads = tokio::runtime::Handle::current().metrics().num_workers(),
+        max_blocking_threads = runtime_config.max_blocking_threads.get(),
+        "Processing runtime"
+    );
 
     #[cfg(feature = "runtime-metrics")]
     spawn_runtime_metrics_logger();
@@ -298,7 +308,10 @@ fn main() {
     // read before the runtime starts, since its sizes are fixed at build time
     let runtime_config: config::ProcessingRuntime =
         get_config_element().expect("the processing runtime config must be valid");
-    build_runtime(&runtime_config).block_on(async {
+    let runtime = build_runtime(&runtime_config);
+    runtime.block_on(async {
         start_server().await.expect("the server has to start");
     });
+    // `start_server` returns once actix has stopped; a hanging blocking task must not keep the process alive
+    runtime.shutdown_timeout(RUNTIME_SHUTDOWN_TIMEOUT);
 }
