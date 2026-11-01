@@ -1,10 +1,9 @@
 use actix_web::{FromRequest, HttpResponse, ResponseError, web};
 use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_operators::{
-    engine::ExecutionContext,
-    machine_learning::onnx_util::{
-        check_model_shape, check_onnx_model_matches_metadata, load_onnx_model_from_loading_info,
-    },
+use geoengine_operators::engine::ExecutionContext;
+use geoengine_operators::machine_learning::onnx_util::{
+    check_input_output_mapping_supported, check_onnx_model_matches_metadata,
+    load_onnx_model_from_loading_info,
 };
 
 use crate::{
@@ -70,20 +69,17 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     model: web::Json<MlModel>,
 ) -> Result<web::Json<MlModelNameResponse>, MachineLearningError> {
     let session_context = app_ctx.session_context(session);
-    let exe_context = session_context
-        .execution_context()
-        .expect("Execution Context must exist");
-
     // convert the payload from json to apy and then to backend type
     let model: crate::machine_learning::MlModel = model.into_inner().into();
 
     // This call also checks that the file is available!
+    let exe_context = session_context
+        .execution_context()
+        .expect("Execution Context must exist");
     let ml_model_metadata = model.loading_info()?;
-    // Check that the in/out shapes are ok
-    check_model_shape(
-        &ml_model_metadata.metadata,
-        exe_context.tiling_specification().tile_size.grid_shape(),
-    )?;
+    // tile shapes are source-specific, so only the shape-independent part is checked here;
+    // the `Onnx` operator checks the shapes against its input's tiles
+    check_input_output_mapping_supported(&ml_model_metadata.metadata)?;
     // initialize model
     let session = load_onnx_model_from_loading_info(
         exe_context.ort_environment().get().await?,

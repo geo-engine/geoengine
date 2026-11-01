@@ -122,17 +122,17 @@ pub async fn render_tile<C: ApplicationContext>(
         initialized_operator.result_descriptor(),
     );
 
-    let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
+    let tile_size = tms_spec.tile_size(query.tile_matrix);
     let (tile_width, tile_height) = (
-        u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
-        u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size.axis_size_x()).unwrap_or(u32::MAX),
+        u32::try_from(tile_size.axis_size_y()).unwrap_or(u32::MAX),
     );
 
     let query_rect = RasterQueryRectangle::new(
         tms_spec.tile_grid_bbox(
             &initialized_operator
                 .result_descriptor()
-                .tiling_grid_definition(tiling_specification),
+                .tiling_grid_definition(),
             query.tile_matrix,
             query.tile_row,
             query.tile_col,

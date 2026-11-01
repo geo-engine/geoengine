@@ -19,7 +19,7 @@ use geoengine_datatypes::primitives::{DateTimeParseFormat, RasterQueryRectangle,
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIntersection,
     GridOrEmpty, GridSize, MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D,
-    TilingSpecification, TilingStrategy,
+    TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
@@ -44,14 +44,13 @@ pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'stat
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
-    tiling_specification: TilingSpecification,
 ) -> Result<(Vec<u8>, CacheHint)>
 where
     T: Pixel + GdalType,
 {
     let result_descriptor = processor.raster_result_descriptor(); // TODO: we can now push the "real" data bounds to the GTiff?
-    let tiling_grid_def = result_descriptor.tiling_grid_definition(tiling_specification);
-    let tiling_strategy = tiling_grid_def.generate_data_tiling_strategy();
+    let tiling_grid_def = result_descriptor.tiling_grid_definition();
+    let tiling_strategy = tiling_grid_def.tiling_strategy();
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
     let runtime = query_ctx.processing_runtime();
@@ -387,8 +386,8 @@ where
     let tiling_strategy = processor
         .result_descriptor()
         .spatial_grid_descriptor()
-        .tiling_grid_definition(query_ctx.tiling_specification())
-        .generate_data_tiling_strategy();
+        .tiling_grid_definition()
+        .tiling_strategy();
 
     // TODO: create file path if it doesn't exist
 
@@ -712,6 +711,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let uncompressed_byte_size = intermediate_dataset_parameters.width
@@ -1130,12 +1130,15 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BandSelection, CacheHint, DateTime, Duration, SpatialPartition2D, TimeInterval,
     };
-    use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType, TileIdx};
+    use geoengine_datatypes::raster::{
+        Grid, GridBoundingBox2D, RasterDataType, TilingSpecification,
+    };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::{ImageFormat, assert_image_equals_with_format};
 
     use super::*;
+    use geoengine_datatypes::raster::TileIdx;
 
     #[tokio::test]
     async fn geotiff_with_no_data_from_stream() {
@@ -1148,7 +1151,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1176,14 +1179,10 @@ mod tests {
         .await
         .unwrap();
 
-        // geoengine_datatypes::util::test::save_test_bytes(
-        //    &bytes,
-        //    "../test_data/raster/geotiff_from_stream_compressed.tiff",
-        // );
-
         assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
+            include_bytes!(
+                "../../../test_data/raster/geotiff_with_no_data_from_stream_compressed.tiff"
+            ) as &[u8],
             bytes.as_slice()
         );
     }
@@ -1199,7 +1198,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1245,7 +1244,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1296,7 +1295,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1349,7 +1348,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1402,7 +1401,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1475,7 +1474,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1516,7 +1515,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1568,7 +1567,7 @@ mod tests {
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1609,10 +1608,6 @@ mod tests {
 
     #[tokio::test]
     async fn intermediate_dataset_is_removed_when_dropped() {
-        let ecx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            TileSize::new_unchecked(600, 600),
-        ));
-        let ctx = ecx.mock_query_context_test_default();
         let metadata = create_ndvi_meta_data();
 
         let query_rect = RasterQueryRectangle::new(
@@ -1623,8 +1618,8 @@ mod tests {
         let tiling_strategy = metadata
             .result_descriptor
             .spatial_grid_descriptor()
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
+            .tiling_grid_definition()
+            .tiling_strategy();
 
         let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
         let mut dataset_holder: GdalDatasetHolder<u8> = GdalDatasetHolder::new_with_tiling_strat(
@@ -1681,13 +1676,13 @@ mod tests {
 
         let query_grid_bounds = metadata
             .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .tiling_geo_transform()
+            .tiling_grid_definition()
+            .geo_transform
             .spatial_to_grid_bounds(&query_bbox);
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1898,11 +1893,9 @@ mod tests {
 
         let metadata = create_ndvi_meta_data();
 
-        let tiling_specification = TilingSpecification::new(TileSize::new_unchecked(512, 512));
-
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             metadata.result_descriptor.clone(),
-            ctx.tiling_specification(),
+            metadata.result_descriptor.tiling_grid_definition(),
             Box::new(metadata),
         );
 
@@ -1926,7 +1919,6 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
-            tiling_specification,
         )
         .await
         .unwrap();

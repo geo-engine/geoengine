@@ -22,6 +22,7 @@ pub use crate::contexts::migrations::{
     migration_0035_stac_grid::Migration0035StacGrid,
     migration_0036_remove_aruna_provider::Migration0036RemoveArunaProvider,
     migration_0037_rename_workflows_to_processing_graphs::Migration0037RenameWorkflowsToProcessingGraphs,
+    migration_0038_gdal_tile_size::Migration0038GdalTileSize,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -51,6 +52,7 @@ mod migration_0034_plots_single_raster_source;
 mod migration_0035_stac_grid;
 mod migration_0036_remove_aruna_provider;
 mod migration_0037_rename_workflows_to_processing_graphs;
+mod migration_0038_gdal_tile_size;
 
 #[cfg(test)]
 mod schema_info;
@@ -94,6 +96,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0035StacGrid),
         Box::new(Migration0036RemoveArunaProvider),
         Box::new(Migration0037RenameWorkflowsToProcessingGraphs),
+        Box::new(Migration0038GdalTileSize),
     ]
 }
 

@@ -134,9 +134,8 @@ async fn run_case(case: Case, exe_ctx: &MockExecutionContext, query_ctx: &dyn Qu
         .unwrap();
     let data = initialized
         .result_descriptor()
-        .tiling_grid_definition(exe_ctx.tiling_specification)
-        .tiling_spatial_grid_definition()
-        .grid_bounds();
+        .tiling_grid_definition()
+        .pixel_bounds;
     let processor = initialized.query_processor().unwrap();
 
     let margin_x = (case.extent_factor - 1) / 2 * (data.x_max() - data.x_min() + 1);

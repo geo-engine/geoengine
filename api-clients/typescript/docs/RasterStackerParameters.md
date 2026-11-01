@@ -8,6 +8,7 @@ Parameters for the `RasterStacker` operator.
 Name | Type
 ------------ | -------------
 `renameBands` | [RenameBands](RenameBands.md)
+`outputOrigin` | [Coordinate2D](Coordinate2D.md)
 
 ## Example
 
@@ -17,6 +18,7 @@ import type { RasterStackerParameters } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "renameBands": null,
+  "outputOrigin": null,
 } satisfies RasterStackerParameters
 
 console.log(example)

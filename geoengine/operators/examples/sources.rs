@@ -9,7 +9,8 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, TimeInterval},
     raster::{
-        GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+        GeoTransform, Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TilingGrid,
+        TilingSpecification,
     },
     util::test::TestDefault,
 };
@@ -30,7 +31,10 @@ fn setup_gdal_source(
 ) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
         produced_result_descriptor: meta_data.result_descriptor.clone(),
-        tiling_specification,
+        tiling_grid: TilingGrid::from_spatial_grid(
+            meta_data.result_descriptor.spatial_grid.spatial_grid,
+            tiling_specification.tile_size,
+        ),
         overview_level: 0,
         meta_data: Box::new(meta_data),
         original_resolution_spatial_grid: None,

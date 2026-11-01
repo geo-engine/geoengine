@@ -8,8 +8,9 @@ use crate::api::model::processing_graphs::{
     NeighborhoodKernel, Onnx, OnnxParameters, Radiance, RadianceParameters, RasterOperator,
     RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
     RasterTypeConversion, RasterTypeConversionParameters, Rasterization, RasterizationParameters,
-    Reflectance, ReflectanceParameters, RenameBands, Temperature, TemperatureParameters,
-    TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
+    ReTile, ReTileParameters, Reflectance, ReflectanceParameters, RenameBands, Temperature,
+    TemperatureParameters, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+    TimeShift, TimeShiftParameters,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
         AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum,
@@ -43,9 +44,9 @@ use geoengine_operators::{
         Radiance as OperatorsRadiance, RasterScaling as OperatorsRasterScaling,
         RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
-        Rasterization as OperatorsRasterization, Reflectance as OperatorsReflectance,
-        ScalingMode as OperatorsScalingMode, SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
-        Temperature as OperatorsTemperature,
+        Rasterization as OperatorsRasterization, ReTile as OperatorsReTile,
+        Reflectance as OperatorsReflectance, ScalingMode as OperatorsScalingMode,
+        SlopeOffsetSelection as OperatorsSlopeOffsetSelection, Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeShift as OperatorsTimeShift, TimeShiftParams as OperatorsTimeShiftParams,
     },
@@ -187,6 +188,7 @@ impl TryFrom<&OperatorsRasterStacker> for RasterStacker {
         Ok(Self {
             r#type: Default::default(),
             params: RasterStackerParameters {
+                output_origin: value.params.output_origin.map(Into::into),
                 rename_bands: RenameBands::from(&value.params.rename_bands),
             },
             sources:
@@ -550,6 +552,24 @@ impl TryFrom<&OperatorsRasterization> for Rasterization {
     }
 }
 
+impl TryFrom<&OperatorsReTile> for ReTile {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsReTile) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            params: ReTileParameters {
+                tile_size: value.params.tile_size.map(Into::into),
+                origin: value.params.origin.map(Into::into),
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
+            }
+            .into(),
+        })
+    }
+}
+
 impl TryFrom<&OperatorsReflectance> for Reflectance {
     type Error = anyhow::Error;
 
@@ -629,11 +649,12 @@ impl TryFrom<&OperatorsTimeShift> for TimeShift {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use geoengine_datatypes::{
         dataset::NamedData,
         machine_learning::MlModelName,
         primitives::{Coordinate2D, SpatialResolution, TimeGranularity, TimeStep},
-        raster::RenameBands as RuntimeRenameBands,
+        raster::{RenameBands as RuntimeRenameBands, TileSize},
     };
     use geoengine_operators::{
         engine::{
@@ -669,8 +690,8 @@ mod tests {
             RasterTypeConversionParams as OperatorsRasterTypeConversionParams,
             Rasterization as OperatorsRasterization,
             RasterizationParams as OperatorsRasterizationParams,
-            Reflectance as OperatorsReflectance, ReflectanceParams as OperatorsReflectanceParams,
-            Reprojection as OperatorsReprojection,
+            ReTileParams as OperatorsReTileParams, Reflectance as OperatorsReflectance,
+            ReflectanceParams as OperatorsReflectanceParams, Reprojection as OperatorsReprojection,
             ReprojectionParams as OperatorsReprojectionParams, ScalingMode as OperatorsScalingMode,
             SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
             Temperature as OperatorsTemperature, TemperatureParams as OperatorsTemperatureParams,
@@ -759,6 +780,7 @@ mod tests {
                 TypedRasterOperator::from(OperatorsRasterStacker {
                     params: OperatorsRasterStackerParams {
                         rename_bands: RuntimeRenameBands::Default,
+                        output_origin: None,
                     },
                     sources: MultipleRasterSources {
                         rasters: vec![raster_source(), raster_source()],
@@ -910,6 +932,18 @@ mod tests {
                     },
                 }),
                 |graph| matches!(graph, RasterOperator::Rasterization(_)),
+            ),
+            (
+                TypedRasterOperator::from(OperatorsReTile {
+                    params: OperatorsReTileParams {
+                        tile_size: Some(TileSize::new_unchecked(256, 256)),
+                        origin: Some(Coordinate2D::new(0.0, 0.0)),
+                    },
+                    sources: SingleRasterSource {
+                        raster: raster_source(),
+                    },
+                }),
+                |graph| matches!(graph, RasterOperator::ReTile(_)),
             ),
             (
                 TypedRasterOperator::from(OperatorsReflectance {

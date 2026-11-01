@@ -2485,6 +2485,15 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
+    fn tile_size_is_rows_columns_and_rejects_zero() {
+        let tile_size: super::TileSize = serde_json::from_str("[256, 512]").unwrap();
+        assert_eq!(serde_json::to_string(&tile_size).unwrap(), "[256,512]");
+        assert!(serde_json::from_str::<super::TileSize>("[0, 512]").is_err());
+        assert!(serde_json::from_str::<super::TileSize>("[4096, 4096]").is_ok());
+        assert!(serde_json::from_str::<super::TileSize>("[512, 4097]").is_err());
+    }
+
+    #[test]
     fn it_serializes_classification_measurement() -> Result<(), Error> {
         let measurement = ClassificationMeasurement {
             r#type: Default::default(),
@@ -2562,5 +2571,49 @@ mod tests {
             result.unwrap_err().to_string(),
             "The list must not contain duplicates"
         );
+    }
+}
+
+/// The largest tile size accepted from API users, per axis.
+/// Larger tiles let a single request allocate huge grids.
+pub const MAX_TILE_SIZE_AXIS: usize = 4096;
+
+/// A tile size in pixels `[rows, columns]`.
+/// Both axes must be greater than zero and at most 4096.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(try_from = "[usize; 2]", into = "[usize; 2]")]
+#[schema(value_type = Vec<usize>, examples(json!([512, 512])))]
+pub struct TileSize(geoengine_datatypes::raster::TileSize);
+
+impl TryFrom<[usize; 2]> for TileSize {
+    type Error = String;
+
+    fn try_from([y, x]: [usize; 2]) -> Result<Self, Self::Error> {
+        if y > MAX_TILE_SIZE_AXIS || x > MAX_TILE_SIZE_AXIS {
+            return Err(format!(
+                "tile size {y}x{x} exceeds the maximum of {MAX_TILE_SIZE_AXIS} pixels per axis"
+            ));
+        }
+        geoengine_datatypes::raster::TileSize::new(y, x)
+            .map(Self)
+            .map_err(|e| e.to_string())
+    }
+}
+
+impl From<TileSize> for [usize; 2] {
+    fn from(value: TileSize) -> Self {
+        value.0.into_inner()
+    }
+}
+
+impl From<geoengine_datatypes::raster::TileSize> for TileSize {
+    fn from(value: geoengine_datatypes::raster::TileSize) -> Self {
+        Self(value)
+    }
+}
+
+impl From<TileSize> for geoengine_datatypes::raster::TileSize {
+    fn from(value: TileSize) -> Self {
+        value.0
     }
 }

@@ -469,7 +469,7 @@ mod tests {
     use geoengine_datatypes::raster::{GridBoundingBox2D, TileSize, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::assert_image_equals;
-    use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
+    use geoengine_operators::engine::RasterQueryProcessor;
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
@@ -598,20 +598,18 @@ mod tests {
     async fn png_from_stream_non_full(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
-        let exe_ctx = ctx.execution_context().unwrap();
-
         let meta_data = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
             meta_data.result_descriptor.clone(),
-            exe_ctx.tiling_specification(),
+            meta_data.result_descriptor.tiling_grid_definition(),
             Box::new(meta_data),
         );
 
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
             RasterQueryRectangle::new(
-                GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
+                GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap(),
                 geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,
                     1_388_534_400_000 + 1000,
@@ -631,15 +629,12 @@ mod tests {
         .unwrap();
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small_22.png");
-
         assert_image_equals(test_data!("wms/raster_small.png"), &image_bytes);
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn get_map_test_helper_tiling_spec() -> TilingSpecification {
-        TilingSpecification {
-            tile_size: TileSize::new_unchecked(600, 600),
-        }
+        TilingSpecification::new(TileSize::new_unchecked(600, 600))
     }
 
     async fn get_map_test_helper(
@@ -708,7 +703,6 @@ mod tests {
         let image_bytes = actix_web::test::read_body(response).await;
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi_2.png");
-
         assert_image_equals(test_data!("wms/get_map_ndvi.png"), &image_bytes);
     }
 

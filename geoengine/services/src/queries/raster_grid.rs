@@ -13,7 +13,7 @@ use geoengine_datatypes::{
         BandSelection, CacheHint, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
         SpatialResolution, TimeInterval,
     },
-    raster::{GridBoundingBox2D, GridIntersection, TilingSpecification},
+    raster::{GridBoundingBox2D, GridIntersection},
     spatial_reference::SpatialReference,
     util::Identifier,
 };
@@ -66,15 +66,14 @@ pub async fn raster_grid<C: SessionContext>(
     encoding: RasterEncoding,
 ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
-    let tiling_spec = execution_context.tiling_specification();
 
     let wrapped = load_on_grid(&ctx, &query, &execution_context).await?;
 
     let grid_bounds = wrapped
         .result_descriptor
         .spatial_grid_descriptor()
-        .tiling_grid_definition(tiling_spec)
-        .tiling_spatial_grid_definition()
+        .tiling_grid_definition()
+        .to_spatial_grid()
         .spatial_bounds_to_compatible_spatial_grid(query.bounds)
         .grid_bounds();
 
@@ -85,12 +84,7 @@ pub async fn raster_grid<C: SessionContext>(
         height,
         colorizer,
     } = &encoding
-        && misses_data(
-            &wrapped.result_descriptor,
-            tiling_spec,
-            grid_bounds,
-            query.time,
-        )
+        && misses_data(&wrapped.result_descriptor, grid_bounds, query.time)
     {
         let empty_image =
             create_empty_no_data_color_png_bytes(*width, *height, colorizer.no_data_color())?;
@@ -107,15 +101,7 @@ pub async fn raster_grid<C: SessionContext>(
     let processor = wrapped.initialized_operator.query_processor()?;
     let query_ctx = ctx.query_context(query.processing_graph, computation_id)?;
 
-    let (bytes, cache_hint) = encode(
-        processor,
-        query_rect,
-        query_ctx,
-        encoding,
-        query.crs,
-        tiling_spec,
-    )
-    .await?;
+    let (bytes, cache_hint) = encode(processor, query_rect, query_ctx, encoding, query.crs).await?;
 
     Ok((bytes, cache_hint, computation_id))
 }
@@ -157,7 +143,6 @@ async fn load_on_grid<C: SessionContext>(
 /// Whether the query lies outside the data in time or space, so the result is empty
 fn misses_data(
     result_descriptor: &RasterResultDescriptor,
-    tiling_spec: TilingSpecification,
     grid_bounds: GridBoundingBox2D,
     time: TimeInterval,
 ) -> bool {
@@ -168,8 +153,8 @@ fn misses_data(
 
     let intersects_space = result_descriptor
         .spatial_grid
-        .tiling_grid_definition(tiling_spec)
-        .tiling_grid_bounds()
+        .tiling_grid_definition()
+        .pixel_bounds
         .intersects(&grid_bounds);
 
     if !intersects_time || !intersects_space {
@@ -188,7 +173,6 @@ async fn encode<Q: QueryContext + 'static>(
     query_ctx: Q,
     encoding: RasterEncoding,
     crs: SpatialReference,
-    tiling_spec: TilingSpecification,
 ) -> Result<(Vec<u8>, CacheHint)> {
     // cancellation is handled by the task that runs the query
     let not_canceled = Box::pin(futures::future::pending());
@@ -224,7 +208,6 @@ async fn encode<Q: QueryContext + 'static>(
                     },
                     Some(get_config_element::<config::Wcs>()?.tile_limit),
                     not_canceled,
-                    tiling_spec,
                 )
                 .await)??
         }

@@ -38,7 +38,7 @@ use geoengine_datatypes::{
         CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle, TimeInstance,
         VectorQueryRectangle,
     },
-    raster::{BoundedGrid, GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType},
+    raster::{BoundedGrid, GdalGeoTransform, GeoTransform, GridShape2D, RasterDataType, TileSize},
     spatial_reference::SpatialReference,
     util::{canonicalize_subpath, gdal::ResamplingMethod},
 };
@@ -536,6 +536,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let pixel_shape = GridShape2D::new_2d(params.height as usize, params.width as usize);
@@ -559,6 +560,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 pixel_shape.bounding_box(),
+                TileSize::default_512(),
             ),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
@@ -2013,6 +2015,7 @@ mod tests {
                         [9, 9]  // 10
                     )
                     .unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             }
@@ -2065,6 +2068,7 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                     retry: None,
+                    tile_size: None,
                 },),
                 cache_ttl: None,
             }
@@ -2148,6 +2152,7 @@ mod tests {
                         [9, 9]  // 10
                     )
                     .unwrap(),
+                    TileSize::default_512(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             }
@@ -2195,6 +2200,7 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                     retry: None,
+                    tile_size: None,
                 }),
                 cache_ttl: None,
             }
@@ -2332,6 +2338,7 @@ mod tests {
                 sources: SingleRasterSource {
                     raster: RasterStacker {
                         params: RasterStackerParams {
+                            output_origin: None,
                             rename_bands: RenameBands::Default,
                         },
                         sources: MultipleRasterSources {

@@ -19,8 +19,8 @@ use geoengine_datatypes::primitives::{
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
-    TileIdxBandCrossProductIter, TilingSpecification,
+    GridBoundingBox2D, GridOrEmpty, GridShapeAccess, Pixel, RasterTile2D,
+    TileIdxBandCrossProductIter, TileSize, TilingSpecification,
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -29,15 +29,15 @@ use snafu::Snafu;
 #[derive(Debug, Snafu)]
 pub enum MockRasterSourceError {
     #[snafu(display(
-        "A tile has a shape [y: {}, x: {}] which does not match the tiling speciications tile shape (y,x) [y: {}, x: {}].",
-        tiling_specification_yx.axis_size()[0],
-        tiling_specification_yx.axis_size()[1],
-        tile_size_yx.axis_size()[0],
-        tile_size_yx.axis_size()[1],
+        "A tile has a shape [y: {}, x: {}] which does not match the tiling specifications tile shape [y: {}, x: {}].",
+        tile_size.axis_size_y(),
+        tile_size.axis_size_x(),
+        tiling_specification.axis_size_y(),
+        tiling_specification.axis_size_x(),
     ))]
     TileSizeDiffersFromTilingSpecification {
-        tiling_specification_yx: GridShape2D,
-        tile_size_yx: GridShape2D,
+        tiling_specification: TileSize,
+        tile_size: TileSize,
     },
     #[snafu(display(
         "A tile has a time interval of {} with len {} which is not valid in the specified regular dimension {:?}",
@@ -85,8 +85,8 @@ where
         {
             return Err(
                 MockRasterSourceError::TileSizeDiffersFromTilingSpecification {
-                    tiling_specification_yx: tiling_specification.grid_shape(),
-                    tile_size_yx: tile_shape,
+                    tiling_specification: tiling_specification.tile_size,
+                    tile_size: tile_shape,
                 },
             );
         }
@@ -113,13 +113,16 @@ where
 fn first_tile_shape_not_matching_tiling_spec<T>(
     tiles: &[RasterTile2D<T>],
     tiling_spec: TilingSpecification,
-) -> Option<GridShape2D>
+) -> Option<TileSize>
 where
     T: Pixel,
 {
     for tile in tiles {
         if tile.grid_shape() != tiling_spec.grid_shape() {
-            return Some(tile.grid_shape());
+            return Some(TileSize::new_unchecked(
+                tiling_spec.tile_size.axis_size_y(),
+                tiling_spec.tile_size.axis_size_x(),
+            ));
         }
     }
 
@@ -143,8 +146,8 @@ where
     ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         let tiling_strat = self
             .result_descriptor
-            .tiling_grid_definition(ctx.tiling_specification())
-            .generate_data_tiling_strategy();
+            .tiling_grid_definition()
+            .tiling_strategy();
 
         let tiling_bounds = tiling_strat
             .global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_bounds())
@@ -308,17 +311,20 @@ where
         {
             return Err(
                 MockRasterSourceError::TileSizeDiffersFromTilingSpecification {
-                    tiling_specification_yx: tiling_specification.grid_shape(),
-                    tile_size_yx: tile_shape,
+                    tiling_specification: tiling_specification.tile_size,
+                    tile_size: tile_shape,
                 }
                 .into(),
             );
         }
 
+        let mut result_descriptor = self.params.result_descriptor;
+        result_descriptor.spatial_grid.tile_size = tiling_specification.tile_size;
+
         Ok(InitializedMockRasterSource {
             name,
             path,
-            result_descriptor: self.params.result_descriptor,
+            result_descriptor,
             data,
             tiling_specification,
         }
@@ -424,9 +430,10 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BandSelection, CacheHint, TimeInstance, TimeInterval, TimeStep,
     };
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::raster::{
-        BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, MaskedGrid, RasterDataType,
-        RasterProperties, TileIdx, TileInformation, TileSize,
+        BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, GridShape2D, MaskedGrid,
+        RasterDataType, RasterProperties, TileIdx, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -460,6 +467,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -530,6 +538,7 @@ mod tests {
                             }
                         },
                         "state": "source",
+                        "tileSize": {"shapeArray": [256, 256]},
                     },
                     "bands": [
                         {
@@ -547,7 +556,7 @@ mod tests {
         let deserialized: TypedRasterOperator = serde_json::from_value(serialized).unwrap();
 
         let tile_size = TileSize::new_unchecked(3, 2);
-        let tiling_specification = TilingSpecification { tile_size };
+        let tiling_specification = TilingSpecification::new(tile_size);
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
@@ -627,6 +636,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -759,6 +769,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
+                        TileSize::new_unchecked(256, 256),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
