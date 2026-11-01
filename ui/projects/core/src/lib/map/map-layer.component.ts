@@ -1,7 +1,9 @@
 import {
     ChangeDetectionStrategy,
     Component,
+    computed,
     Directive,
+    DestroyRef,
     OnChanges,
     OnDestroy,
     OnInit,
@@ -12,13 +14,15 @@ import {
     input,
     output,
     resource,
+    signal,
 } from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
 import type {EventsKey} from 'ol/events';
 import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {unByKey} from 'ol/Observable';
-import {get as olGetProj} from 'ol/proj';
+import {equivalent, get as olGetProj} from 'ol/proj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import TileGrid from 'ol/tilegrid/TileGrid';
 import {Observable, Subject, Subscription} from 'rxjs';
@@ -37,6 +41,7 @@ import {
 import {UUID} from '../backend/backend.model';
 import {CoreConfig} from '../config.service';
 import {AbortableTileLayer} from './abortable-tile-layer';
+import {MapService} from './map.service';
 import {
     TileDiagnostic,
     TileImageLike,
@@ -507,6 +512,13 @@ export class OlOgcApiMapTileLayerComponent
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
     readonly tmsId = input<TMSId>('Custom');
+    /** Minimum source matrix index. Ignored with a warning when source and view projections differ. */
+    readonly minTileMatrixIndex = input(0);
+    readonly zoomRequired = output<boolean>();
+    private readonly mapService = inject(MapService);
+    private readonly destroyRef = inject(DestroyRef);
+    private readonly viewport = toSignal(this.mapService.getViewportSizeStream(), {requireSync: true});
+    private readonly sourceMaxResolution = signal<number | undefined>(undefined);
 
     // Show tile debug info instead of the actual layer. This is useful for debugging tile loading issues.
     readonly debug = input(false);
@@ -524,8 +536,10 @@ export class OlOgcApiMapTileLayerComponent
             sessionToken: this.sessionToken(),
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
+            minTileMatrixIndex: this.minTileMatrixIndex(),
         }),
-        loader: async ({abortSignal}): Promise<OGCMapTile> => {
+        loader: async ({abortSignal, params}): Promise<OGCMapTile> => {
+            this.sourceMaxResolution.set(undefined);
             // `source` is assigned after the await below, so the closures that read it must only
             // run once the source exists. Hoisting avoids a temporal-dead-zone reference.
             // eslint-disable-next-line prefer-const -- assigned after the await; `const` would move it before the closures that need it
@@ -539,10 +553,17 @@ export class OlOgcApiMapTileLayerComponent
             // the abort signal covers both a changed set of params and the destruction of the layer
             const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
+                acceptsTile: (tile): boolean =>
+                    this.effectiveMaxResolution() === Infinity || tile.getTileCoord()[0] >= params.minTileMatrixIndex,
+                canLoad: (): boolean => {
+                    const view = this.mapService.view();
+                    return view.isDef() && this._mapLayer.isVisible(view);
+                },
                 authHeaders: (): Record<string, string> => ({Authorization: `Bearer ${this.sessionToken()}`}),
                 abortWhen: (): Observable<string> => this.projectService.createQueryAbortStream(this.layerId()),
                 onTileError: (tile): void => this.invalidateTileReprojection(tile),
                 onStateChange: (state): void => {
+                    if (this.destroyRef.destroyed) return;
                     if (state === 'loading') {
                         this.watchViewport(loader, sourceGrid());
                     } else {
@@ -573,8 +594,45 @@ export class OlOgcApiMapTileLayerComponent
                 tileLoadFunction: loader.load,
             });
 
+            source.once('change', () => {
+                // The grid is assigned before OGCMapTile emits its first successful change.
+                const grid = source.getTileGrid();
+                if (abortSignal.aborted || !grid) return;
+                const index = params.minTileMatrixIndex;
+                const resolution = grid.getResolution(index);
+                if (
+                    index !== 0 &&
+                    (!Number.isInteger(index) || index < grid.getMinZoom() || index > grid.getMaxZoom() || resolution === undefined)
+                ) {
+                    console.warn(
+                        `Invalid minTileMatrixIndex ${index}: expected 0 or a source matrix index from ${grid.getMinZoom()} to ${grid.getMaxZoom()}. Tile loading is disabled.`,
+                    );
+                    this.sourceMaxResolution.set(0);
+                    return;
+                }
+                // Deliberately use the matrix resolution as an exclusive cutoff. This can require
+                // one extra view zoom level; do not widen it to the nearest-matrix midpoint.
+                this.sourceMaxResolution.set(index === 0 ? Infinity : resolution);
+            });
+
             return source;
         },
+    });
+
+    private readonly effectiveMaxResolution = computed(() => {
+        const maxResolution = this.sourceMaxResolution();
+        const projection = this.tileSource.value()?.getProjection();
+        if (
+            maxResolution !== undefined &&
+            maxResolution > 0 &&
+            maxResolution !== Infinity &&
+            projection &&
+            !equivalent(projection, this.mapService.view().getProjection())
+        ) {
+            console.warn('Ignoring minTileMatrixIndex because source and view projections differ.');
+            return Infinity;
+        }
+        return maxResolution;
     });
 
     constructor() {
@@ -593,9 +651,15 @@ export class OlOgcApiMapTileLayerComponent
             this._mapLayer.setSource(this.source);
         });
 
-        effect(() => /* TODO: define in parent class */ {
-            const isVisible = this.isVisible();
-            this._mapLayer.setVisible(isVisible);
+        effect(() => {
+            const maxResolution = this.effectiveMaxResolution();
+            // The existing viewport stream emits at move end; canLoad gates queued requests live.
+            const valid = maxResolution !== undefined && maxResolution > 0;
+            const blocked = valid && this.viewport().resolution >= maxResolution;
+            this._mapLayer.setMaxResolution(maxResolution ?? 0);
+            this._mapLayer.setVisible(this.isVisible());
+            this.loader?.setEnabled(valid && this.isVisible() && !blocked);
+            this.zoomRequired.emit(blocked);
         });
 
         effect(() => {
@@ -611,18 +675,18 @@ export class OlOgcApiMapTileLayerComponent
      * source can read on its own. OpenLayers reads it without authentication headers, so it has
      * to be served as an object URL. The same applies to the tiling scheme it links to.
      */
-    private async tmsUrl(loader: TileLoader, signal: AbortSignal): Promise<string> {
+    private async tmsUrl(loader: TileLoader, abortSignal: AbortSignal): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();
         const tms = this.tmsId();
 
         const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 
-        return loader.jsonUrl(tmsUrl, signal, async (metadata) => {
+        return loader.jsonUrl(tmsUrl, abortSignal, async (metadata) => {
             const links = (metadata as {links?: Array<{rel: string; href: string}>}).links ?? [];
             for (const link of links) {
                 if (link.rel === 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme') {
-                    link.href = await loader.jsonUrl(link.href, signal);
+                    link.href = await loader.jsonUrl(link.href, abortSignal);
                 }
             }
         });
