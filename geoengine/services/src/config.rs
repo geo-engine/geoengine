@@ -232,6 +232,18 @@ impl From<Expression> for ExpressionCacheConfig {
     }
 }
 
+/// The Tokio runtime of the server, which runs the queries
+#[derive(Debug, Deserialize)]
+pub struct ProcessingRuntime {
+    /// Worker threads, `0` for one per core
+    pub worker_threads: usize,
+    pub max_blocking_threads: NonZeroUsize,
+}
+
+impl ConfigElement for ProcessingRuntime {
+    const KEY: &'static str = "processing_runtime";
+}
+
 #[derive(Debug, Deserialize)]
 pub struct DatasetService {
     pub list_limit: u32,
@@ -880,5 +892,31 @@ mod tests {
     fn it_accepts_limits_above_the_number_of_processes() {
         assert!(pool(8, 16, 8).validate().is_ok());
         assert!(pool(32, 8, 16).validate().is_ok());
+    }
+
+    fn default_element<T: ConfigElement + for<'a> Deserialize<'a>>() -> T {
+        default_settings().get(T::KEY).unwrap()
+    }
+
+    fn rejects<T: ConfigElement + for<'a> Deserialize<'a>>(key: &str, value: i64) -> bool {
+        Config::builder()
+            .add_source(default_settings())
+            .set_override(format!("{}.{key}", T::KEY), value)
+            .unwrap()
+            .build()
+            .unwrap()
+            .get::<T>(T::KEY)
+            .is_err()
+    }
+
+    #[test]
+    fn it_processing_runtime_defaults_are_the_tokio_defaults() {
+        let config: ProcessingRuntime = default_element();
+        // not set, so Tokio uses one per core
+        assert_eq!(config.worker_threads, 0);
+        assert_eq!(config.max_blocking_threads.get(), 512);
+
+        assert!(rejects::<ProcessingRuntime>("max_blocking_threads", 0));
+        assert!(!rejects::<ProcessingRuntime>("worker_threads", 0));
     }
 }

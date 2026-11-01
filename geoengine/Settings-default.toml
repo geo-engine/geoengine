@@ -57,6 +57,12 @@ workspace_path = "expression_workspace"
 # max. expressions to compile at the same time, further requests wait; each runs one `rustc` process
 max_concurrent_compilations = 8
 
+[processing_runtime]
+# Tokio worker threads of the runtime that runs the queries; 0 = one per core (or TOKIO_WORKER_THREADS)
+worker_threads = 0
+# max. threads of the Tokio blocking pool (spawn_blocking) of this runtime
+max_blocking_threads = 512
+
 [upload]
 path = "upload"
 
