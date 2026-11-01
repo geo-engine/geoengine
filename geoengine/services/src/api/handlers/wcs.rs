@@ -410,6 +410,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
+
     use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::ge_context;
@@ -419,15 +420,14 @@ mod tests {
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::raster::GridShape2D;
-    use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::raster::{TileSize, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::ImageFormat;
     use geoengine_datatypes::util::assert_image_equals_with_format;
     use tokio_postgres::NoTls;
 
     fn tiling_spec() -> TilingSpecification {
-        TilingSpecification::new(GridShape2D::new([600, 600]))
+        TilingSpecification::new(TileSize::new_unchecked(600, 600))
     }
 
     #[ge_context::test]
