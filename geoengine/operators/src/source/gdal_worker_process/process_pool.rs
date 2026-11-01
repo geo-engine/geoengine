@@ -217,6 +217,8 @@ struct DatasetSlot {
 
 impl DatasetSlot {
     /// Removes canceled requests from the front of the queue and returns how many were removed.
+    /// Canceled requests further back are skipped by `peek_first_valid` and removed once they
+    /// reach the front, so the queue is never scanned as a whole.
     #[inline]
     pub fn clean_canceled_front(&mut self) -> u64 {
         let mut removed = 0;
@@ -235,11 +237,22 @@ impl DatasetSlot {
     pub fn peek_first_valid(&self) -> Option<&QueuedRequest> {
         self.queue.iter().find(|req| !req.respond_to.is_closed())
     }
+
+    /// Takes the first request a caller still waits for, counting the canceled ones removed on
+    /// the way. Returns `None` if all callers gave up, which can happen after `peek_first_valid`
+    /// found a request, as callers cancel concurrently.
+    #[inline]
+    pub fn pop_next_valid(&mut self, cancelled_dropped: &mut u64) -> Option<QueuedRequest> {
+        *cancelled_dropped += self.clean_canceled_front();
+        self.queue.pop_front()
+    }
 }
 
 struct QueuedRequest {
     dataset_hash: u64,
     request: IpcChannelMessage,
+    /// Closed once the leader task drops its receiver because all callers gave up (see
+    /// `await_read_or_abandon`). The broker then drops the request instead of reading it.
     respond_to: oneshot::Sender<ReadResult>,
 }
 
@@ -286,9 +299,18 @@ type SharedResult = Option<
     )>,
 >;
 
+/// Sender of an in-flight read. Followers `subscribe()` to it while holding the `in_flight_tiles`
+/// lock, so its receiver count only changes under that lock. The map holds the sender, not a
+/// receiver: a stored receiver would keep the count at one or more, so the leader could not
+/// notice that all callers gave up.
+type InFlightTile = Arc<tokio::sync::watch::Sender<SharedResult>>;
+
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
-    in_flight_tiles: Mutex<FastHashMap<u64, tokio::sync::watch::Receiver<SharedResult>>>,
+    /// Reads in progress by tile, to deduplicate them. Used by the callers' tasks on any runtime
+    /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
+    /// held only briefly and never across an `.await`.
+    in_flight_tiles: Mutex<FastHashMap<u64, InFlightTile>>,
 }
 
 impl GdalProcessPool {
@@ -739,6 +761,7 @@ impl BrokerState {
             slot.active_count = slot.active_count.saturating_sub(1);
         }
         self.global_active_count = self.global_active_count.saturating_sub(1);
+        self.remove_slot_if_unused(dataset_hash);
     }
 
     fn report_and_reset_stats(&mut self) {
@@ -805,6 +828,19 @@ impl BrokerState {
         }
     }
 
+    /// Removes the dataset's slot when nothing is queued or read, so the registry does not keep
+    /// one entry for every dataset ever read. A new request creates the slot again.
+    /// An empty queue implies the dataset is not in `active_datasets`.
+    fn remove_slot_if_unused(&mut self, dataset_hash: u64) {
+        if self
+            .dataset_registry
+            .get(&dataset_hash)
+            .is_some_and(|slot| slot.queue.is_empty() && slot.active_count == 0)
+        {
+            self.dataset_registry.remove(&dataset_hash);
+        }
+    }
+
     /// Single-pass scheduler execution pass. Inlines scheduling decisions to prevent matrix re-scanning.
     #[allow(clippy::too_many_lines)]
     #[inline]
@@ -819,6 +855,7 @@ impl BrokerState {
             };
             if should_pop {
                 self.active_datasets.pop_front();
+                self.remove_slot_if_unused(front_hash);
             } else {
                 break;
             }
@@ -899,22 +936,23 @@ impl BrokerState {
             }
 
             // Perform atomic dispatch operation
-            let worker_id = self.idle_workers.swap_remove(best_w_matrix_idx);
-            let worker = self
-                .workers
-                .get_mut(worker_id)
-                .expect("Selected worker ID missing from registry - invariant broken");
             let slot = self
                 .dataset_registry
                 .get_mut(&best_dataset_hash)
                 .expect("Selected dataset missing from registry - invariant broken");
 
-            self.stats.cancelled_dropped += slot.clean_canceled_front();
+            // Take the request before the worker: its callers may have given up since the scan
+            let Some(req) = slot.pop_next_valid(&mut self.stats.cancelled_dropped) else {
+                self.active_datasets.remove(best_dataset_active_idx);
+                self.remove_slot_if_unused(best_dataset_hash);
+                continue;
+            };
 
-            let req = slot
-                .queue
-                .pop_front()
-                .expect("Selected request missing from dataset slot - invariant broken");
+            let worker_id = self.idle_workers.swap_remove(best_w_matrix_idx);
+            let worker = self
+                .workers
+                .get_mut(worker_id)
+                .expect("Selected worker ID missing from registry - invariant broken");
 
             self.global_active_count += 1;
             slot.active_count += 1;
@@ -983,6 +1021,7 @@ pub struct GdalPoolDispatcher {
 struct LeaderCleanupGuard {
     pool: std::sync::Arc<GdalProcessPool>,
     tile_key: u64,
+    tx: InFlightTile,
 }
 
 impl Drop for LeaderCleanupGuard {
@@ -990,9 +1029,67 @@ impl Drop for LeaderCleanupGuard {
         // This is guaranteed to run whether the function succeeds, errors,
         // panics, or is abruptly cancelled by Tokio.
         if let Ok(mut lock) = self.pool.in_flight_tiles.lock() {
-            lock.remove(&self.tile_key);
+            remove_in_flight(&mut lock, self.tile_key, &self.tx);
         }
     }
+}
+
+/// Removes the entry only if it still belongs to `tx`, never a newer leader's entry for the same key.
+fn remove_in_flight(map: &mut FastHashMap<u64, InFlightTile>, tile_key: u64, tx: &InFlightTile) {
+    if map.get(&tile_key).is_some_and(|t| Arc::ptr_eq(t, tx)) {
+        map.remove(&tile_key);
+    }
+}
+
+/// Waits for the broker's result. Returns `None` if all callers gave up first: dropping
+/// `oneshot_rx` then lets the broker discard the request if it is still queued.
+///
+/// Every caller, including the one that spawned the leader, holds a receiver of `tx`. A caller
+/// gives up when its future is dropped, e.g. when the client aborts the tile request after a
+/// pan. If the leader kept `oneshot_rx` until the read finished, the broker would never see a
+/// closed request and would read every abandoned tile before the visible ones.
+///
+/// Abandoning only helps while the request is queued. If a worker already reads it, the read
+/// runs to completion and its result is discarded.
+async fn await_read_or_abandon(
+    pool: &GdalProcessPool,
+    tile_key: u64,
+    tx: &InFlightTile,
+    mut oneshot_rx: oneshot::Receiver<ReadResult>,
+) -> Option<(
+    Result<GdalIpcBytePayload, GdalProcessPoolError>,
+    Option<tracing::Span>,
+)> {
+    let res = loop {
+        tokio::select! {
+            res = &mut oneshot_rx => break res,
+            () = tx.closed() => {
+                let Ok(mut lock) = pool.in_flight_tiles.lock() else {
+                    break (&mut oneshot_rx).await;
+                };
+                // A follower may have subscribed between `closed()` and taking the lock. Followers
+                // only subscribe under this lock, so the count is stable here: if it is 0, removing
+                // the entry guarantees that later callers start a new leader instead of joining
+                // this abandoned one. Otherwise, keep waiting for the result.
+                if tx.receiver_count() == 0 {
+                    remove_in_flight(&mut lock, tile_key, tx);
+                    tracing::trace!("All callers gave up on fetch: {tile_key}");
+                    return None;
+                }
+            }
+        }
+    };
+
+    Some(match res {
+        Ok(read_result) => (
+            read_result
+                .result
+                .map_err(|_| GdalProcessPoolError::WorkerPanic)
+                .and_then(|ipc_res| ipc_res.map_err(GdalProcessPoolError::from)),
+            read_result.companion_span,
+        ),
+        Err(_) => (Err(GdalProcessPoolError::WorkerPanic), None),
+    })
 }
 
 impl GdalPoolDispatcher {
@@ -1006,8 +1103,9 @@ impl GdalPoolDispatcher {
     /// first request spawns a detached background task that submits the read to the broker;
     /// later requests attach to a shared watch channel. Because the leader task is detached,
     /// cancelling the caller's HTTP request does not abort the leader, so followers still
-    /// receive the result. The `LeaderCleanupGuard` ensures the in-flight entry is removed
-    /// when the leader task finishes, succeeds, fails, or panics.
+    /// receive the result. Once all callers are gone, the leader abandons the read, so the
+    /// broker drops it if it is still queued. The `LeaderCleanupGuard` ensures the in-flight
+    /// entry is removed when the leader task finishes, succeeds, fails, or panics.
     ///
     /// # Panics
     /// This function will panic if a required channel is dropped unexpectedly.
@@ -1034,23 +1132,25 @@ impl GdalPoolDispatcher {
                 .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
 
             // test if data is already read
-            if let Some(rx) = lock.get(&tile_key) {
+            if let Some(tx) = lock.get(&tile_key) {
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
-                rx.clone()
+                tx.subscribe()
             } else {
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
                 let (tx, rx) = tokio::sync::watch::channel(None);
-                lock.insert(tile_key, rx.clone());
+                let tx = Arc::new(tx);
+                lock.insert(tile_key, tx.clone());
 
                 let pool_clone = self.pool.clone();
                 let request_clone = request.clone();
                 let parent_span = tracing::Span::current();
 
-                // DETACHED LEADER: Guaranteed to run to completion even if the parent stream is suspended or dropped!
+                // DETACHED LEADER: runs to completion as long as at least one caller waits for the result
                 tokio::spawn(async move {
                     let _cleanup_guard = LeaderCleanupGuard {
                         pool: pool_clone.clone(),
                         tile_key,
+                        tx: tx.clone(),
                     };
 
                     let mut s_routing = rustc_hash::FxHasher::default();
@@ -1069,18 +1169,12 @@ impl GdalPoolDispatcher {
                         .await;
 
                     let (leader_res, companion_span) = if dispatched.is_ok() {
-                        match oneshot_rx.await {
-                            Ok(read_result) => {
-                                let result = read_result
-                                    .result
-                                    .map_err(|_| GdalProcessPoolError::WorkerPanic)
-                                    .and_then(|ipc_res| {
-                                        ipc_res.map_err(GdalProcessPoolError::from)
-                                    });
-                                (result, read_result.companion_span)
-                            }
-                            Err(_) => (Err(GdalProcessPoolError::WorkerPanic), None),
-                        }
+                        let Some(res) =
+                            await_read_or_abandon(&pool_clone, tile_key, &tx, oneshot_rx).await
+                        else {
+                            return;
+                        };
+                        res
                     } else {
                         (Err(GdalProcessPoolError::WorkerPanic), None)
                     };
@@ -1402,7 +1496,7 @@ mod tests {
         state.release_read_capacity(second.dataset_hash);
         state.remove_worker(1);
         assert_eq!(state.global_active_count, 0);
-        assert_eq!(state.dataset_registry[&second.dataset_hash].active_count, 0);
+        assert!(!state.dataset_registry.contains_key(&second.dataset_hash));
     }
 
     #[tokio::test]
@@ -1836,6 +1930,10 @@ mod tests {
         assert_eq!(state.idle_workers[0], 0);
         assert_eq!(state.global_active_count, 0);
         assert!(state.workers[0].affinity.is_some());
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept after the last read"
+        );
     }
 
     #[test]
@@ -1916,6 +2014,134 @@ mod tests {
 
     // --- Leader/follower dedup test ---
 
+    fn empty_read_result() -> ReadResult {
+        ReadResult {
+            result: Ok(Ok(GdalIpcBytePayload {
+                dimensions: window([0, 0], [7, 7]),
+                properties: GdalIpcRasterProperties {
+                    offset: None,
+                    scale: None,
+                    description: None,
+                    properties_map: vec![],
+                },
+                data_variant: GdalDataGridByteVariant::Empty,
+            })),
+            companion_span: None,
+        }
+    }
+
+    /// A pool whose broker forwards every queued read to the returned receiver without answering.
+    fn pool_with_holding_broker() -> (
+        Arc<GdalProcessPool>,
+        mpsc::UnboundedReceiver<Box<QueuedRequest>>,
+    ) {
+        let (broker_tx, mut broker_rx) = mpsc::channel::<BrokerCommand>(64);
+        let (held_tx, held_rx) = mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Some(cmd) = broker_rx.recv().await {
+                if let BrokerCommand::Read(req) = cmd {
+                    let _ = held_tx.send(req);
+                }
+            }
+        });
+        let pool = Arc::new(GdalProcessPool {
+            broker_tx,
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        });
+        (pool, held_rx)
+    }
+
+    #[tokio::test]
+    async fn it_cancels_queued_read_when_all_callers_drop() {
+        let (pool, mut held) = pool_with_holding_broker();
+        let dispatcher = GdalPoolDispatcher::new(pool.clone());
+        let (msg, _) = make_request(42, 1, window([0, 0], [255, 255]));
+
+        let caller = tokio::spawn(async move { dispatcher.read_data::<u8>(msg.request).await });
+        let mut queued = held.recv().await.unwrap();
+        assert!(!queued.respond_to.is_closed());
+
+        caller.abort();
+        tokio::time::timeout(Duration::from_secs(1), queued.respond_to.closed())
+            .await
+            .expect("the leader should abandon the read once its only caller is gone");
+        assert!(pool.in_flight_tiles.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_keeps_read_alive_while_a_follower_waits() {
+        let (pool, mut held) = pool_with_holding_broker();
+        let dispatcher = GdalPoolDispatcher::new(pool);
+        let w = window([0, 0], [255, 255]);
+        let (msg_a, _) = make_request(42, 1, w);
+        let (msg_b, _) = make_request(42, 1, w);
+
+        let d1 = dispatcher.clone();
+        let leader = tokio::spawn(async move { d1.read_data::<u8>(msg_a.request).await });
+        let queued = held.recv().await.unwrap();
+        let follower = tokio::spawn(async move { dispatcher.read_data::<u8>(msg_b.request).await });
+        tokio::task::yield_now().await;
+
+        leader.abort();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(!queued.respond_to.is_closed(), "the follower still waits");
+
+        let _ = queued.respond_to.send(empty_read_result());
+        assert!(follower.await.unwrap().is_ok());
+    }
+
+    #[test]
+    fn it_purges_cancelled_requests_before_dispatch() {
+        let (w0, mut rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 4, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req, resp) = make_request(100, 1, w);
+
+        state.enqueue_request(req);
+        drop(resp);
+        state.try_dispatch();
+
+        assert!(rx0.try_recv().is_err(), "no job for a cancelled request");
+        assert_eq!(state.stats.cancelled_dropped, 1);
+        assert_eq!(state.global_active_count, 0);
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept for a dataset with no reads"
+        );
+    }
+
+    /// Callers can cancel between the scan (`peek_first_valid`) and the dispatch, so taking the
+    /// request must not assume that one is left.
+    #[test]
+    fn it_pops_only_requests_with_waiting_callers() {
+        let w = window([0, 0], [255, 255]);
+        let mut slot = DatasetSlot {
+            active_count: 0,
+            queue: VecDeque::new(),
+        };
+        let (cancelled_a, resp_a) = make_request(100, 1, w);
+        let (cancelled_b, resp_b) = make_request(100, 1, w);
+        slot.queue.push_back(*cancelled_a);
+        slot.queue.push_back(*cancelled_b);
+        drop((resp_a, resp_b));
+
+        let mut dropped = 0;
+        assert!(slot.pop_next_valid(&mut dropped).is_none());
+        assert_eq!(dropped, 2);
+
+        let (cancelled, resp_cancelled) = make_request(100, 1, w);
+        let (waiting, _resp_waiting) = make_request(100, 2, w);
+        slot.queue.push_back(*cancelled);
+        slot.queue.push_back(*waiting);
+        drop(resp_cancelled);
+
+        let req = slot
+            .pop_next_valid(&mut dropped)
+            .expect("the request with a waiting caller");
+        assert_eq!(req.request.0.dataset_params.rasterband_channel, 2);
+        assert_eq!(dropped, 3);
+    }
+
     #[tokio::test]
     async fn dedup_sends_only_one_broker_read() {
         let (broker_tx, mut broker_rx) = mpsc::channel::<BrokerCommand>(64);
@@ -1932,19 +2158,7 @@ mod tests {
             while let Some(cmd) = broker_rx.recv().await {
                 if let BrokerCommand::Read(req) = cmd {
                     read_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    let _ = req.respond_to.send(ReadResult {
-                        result: Ok(Ok(GdalIpcBytePayload {
-                            dimensions: window([0, 0], [7, 7]),
-                            properties: GdalIpcRasterProperties {
-                                offset: None,
-                                scale: None,
-                                description: None,
-                                properties_map: vec![],
-                            },
-                            data_variant: GdalDataGridByteVariant::Empty,
-                        })),
-                        companion_span: None,
-                    });
+                    let _ = req.respond_to.send(empty_read_result());
                 }
             }
         });
