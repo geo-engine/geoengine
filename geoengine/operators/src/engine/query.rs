@@ -1,6 +1,9 @@
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     task::{Context, Poll},
 };
 
@@ -24,6 +27,54 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 /// Defines the size in bytes of a vector data chunk
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
+
+/// The parallelism available to the sub-queries of a query.
+///
+/// Each adapter runs one sub-query without a permit, its guaranteed one. Every further one
+/// needs a [`SubQueryPermit`] from this counter, which never waits: if none is left, the adapter
+/// starts no more until it yields a tile. The counter is shared by all adapters of the query,
+/// so nested adapters add up instead of multiplying their fanout. A minimum count would not
+/// replace the guaranteed one: the outer adapter can take all permits before its inner ones ask.
+pub struct SubQueryParallelism {
+    available: Arc<AtomicUsize>,
+}
+
+/// One sub-query beyond an adapter's guaranteed one; gives it back to the counter when dropped.
+pub struct SubQueryPermit(Arc<AtomicUsize>);
+
+impl Drop for SubQueryPermit {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+impl SubQueryParallelism {
+    /// Up to `available_per_query` sub-queries of the query run at once, counting the
+    /// guaranteed one of each running adapter chain.
+    pub fn new(available_per_query: usize) -> Self {
+        Self {
+            // the guaranteed sub-query takes nothing, so the counter holds the rest
+            available: Arc::new(AtomicUsize::new(available_per_query.saturating_sub(1))),
+        }
+    }
+
+    /// A permit, or `None` when the query's parallelism is in use.
+    pub fn try_acquire(&self) -> Option<SubQueryPermit> {
+        // Relaxed: the counter guards no other data, it only bounds the number of sub-queries
+        self.available
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+            .ok()?;
+        Some(SubQueryPermit(self.available.clone()))
+    }
+}
+
+/// Parallel, so tests exercise concurrent sub-queries; servers read
+/// `[query_context] available_subquery_parallelism_per_query` (default 1).
+impl TestDefault for SubQueryParallelism {
+    fn test_default() -> Self {
+        Self::new(4)
+    }
+}
 
 impl ChunkByteSize {
     pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
@@ -61,6 +112,7 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
+    fn subquery_parallelism(&self) -> &SubQueryParallelism;
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 
@@ -192,6 +244,7 @@ pub struct MockQueryContext {
     pub chunk_byte_size: ChunkByteSize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
+    pub subquery_parallelism: SubQueryParallelism,
 
     pub cache: Option<Arc<SharedCache>>,
     pub quota_tracking: Option<QuotaTracking>,
@@ -220,6 +273,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache: None,
             quota_checker: None,
             quota_tracking: None,
@@ -248,6 +302,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             cache,
             quota_checker,
             quota_tracking,
@@ -274,6 +329,7 @@ impl MockQueryContext {
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
+            subquery_parallelism: SubQueryParallelism::test_default(),
             gdal_process_pool,
             cache: None,
             quota_checker: None,
@@ -303,6 +359,10 @@ impl QueryContext for MockQueryContext {
 
     fn default_cache_ttl(&self) -> CacheTtlSeconds {
         self.default_cache_ttl
+    }
+
+    fn subquery_parallelism(&self) -> &SubQueryParallelism {
+        &self.subquery_parallelism
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
@@ -404,5 +464,20 @@ mod tests {
             Some(Err(error::Error::QueryCanceled))
         ));
         assert!(stream.next().await.is_none());
+    }
+
+    #[test]
+    fn it_hands_out_up_to_the_available_parallelism() {
+        assert!(SubQueryParallelism::new(0).try_acquire().is_none());
+        assert!(SubQueryParallelism::new(1).try_acquire().is_none());
+
+        let parallelism = SubQueryParallelism::new(3);
+        // the guaranteed one plus 2 permits = 3
+        let held = [parallelism.try_acquire(), parallelism.try_acquire()];
+        assert!(held.iter().all(Option::is_some));
+        assert!(parallelism.try_acquire().is_none());
+
+        drop(held);
+        assert!(parallelism.try_acquire().is_some());
     }
 }
