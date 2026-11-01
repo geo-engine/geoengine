@@ -404,6 +404,7 @@ where
             reader_mode,
             ctx.get_gdal_worker(),
             self.default_cache_ttl,
+            ctx.gdal_read_ahead().gdal_source,
         );
 
         Ok(loaded_source_stream.boxed())
@@ -482,6 +483,7 @@ fn load_source_stream<P, S>(
     reader_mode: GdalReaderMode,
     gdal_worker: GdalPoolDispatcher,
     default_cache_ttl: CacheTtlSeconds,
+    read_ahead: usize,
 ) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
 where
     P: Pixel + GdalType + FromPrimitive,
@@ -500,7 +502,7 @@ where
             .map(Result::Ok)
         })
         .try_flatten()
-        .try_buffered(8) // TODO: make this configurable
+        .try_buffered(read_ahead)
 }
 
 #[async_trait]

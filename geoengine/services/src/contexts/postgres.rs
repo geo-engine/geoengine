@@ -34,7 +34,7 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     cache::{new_raster_cache::NewRasterCacheEnum, shared_cache::SharedCache},
-    engine::ChunkByteSize,
+    engine::{ChunkByteSize, GdalReadAhead},
     machine_learning::onnx_util::OrtEnvironment,
     meta::quota::QuotaChecker,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
@@ -72,6 +72,7 @@ where
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
     ort_environment: OrtEnvironment,
+    gdal_read_ahead: GdalReadAhead,
     /// runs query tasks, so they leave the single-threaded HTTP workers
     processing_runtime: tokio::runtime::Handle,
 }
@@ -154,6 +155,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
             processing_runtime: tokio::runtime::Handle::current(),
         })
     }
@@ -230,6 +232,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
             processing_runtime: tokio::runtime::Handle::current(),
         })
     }
@@ -315,6 +318,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
             // the server builds its context on the main runtime, which then runs all queries
             processing_runtime: tokio::runtime::Handle::current(),
         };
@@ -537,6 +541,7 @@ where
                 computation,
             )),
             Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
+            self.context.gdal_read_ahead,
             self.context.processing_runtime.clone(),
         ))
     }
