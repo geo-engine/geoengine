@@ -117,7 +117,7 @@ impl TileIdx {
         Self(idx)
     }
 
-    /// Access the underlying pixel-space grid index.
+    /// The tile index as a grid index in tile space.
     pub fn grid_idx(&self) -> GridIdx2D {
         self.0
     }
@@ -137,7 +137,7 @@ impl TileBounds {
     pub fn new(bounds: GridBoundingBox2D) -> Self {
         Self(bounds)
     }
-    /// Access the underlying pixel-space grid bounding box.
+    /// The tile bounds as a grid bounding box in tile space.
     pub fn grid_bounds(&self) -> GridBoundingBox2D {
         self.0
     }
@@ -281,12 +281,6 @@ impl TilingStrategy {
         let pixel_idx = self.tile_idx_to_global_pixel_idx(tile_idx);
         self.geo_transform
             .grid_idx_to_pixel_upper_left_coordinate_2d(pixel_idx)
-    }
-
-    /// Convert a spatial coordinate to the tile index that contains it.
-    pub fn spatial_to_tile_idx(&self, coord: Coordinate2D) -> TileIdx {
-        let pixel_idx = self.geo_transform.coordinate_to_grid_idx_2d(coord);
-        self.pixel_idx_to_tile_idx(pixel_idx)
     }
 
     /// Returns the tile grid bounds for the given `raster_spatial_query`.
@@ -502,14 +496,13 @@ pub struct TilingGrid {
 }
 
 impl TilingGrid {
-    /// Construct from a spatial grid and tile size.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the spatial grid is not aligned with its own origin.
+    /// Construct from a spatial grid and tile size, anchoring the tiles at the grid's origin.
     pub fn from_spatial_grid(grid: SpatialGridDefinition, tile_size: TileSize) -> Self {
-        Self::from_spatial_grid_with_origin(grid, grid.geo_transform().origin_coordinate, tile_size)
-            .expect("a spatial grid is aligned with its own origin")
+        Self {
+            geo_transform: grid.geo_transform(),
+            pixel_bounds: grid.grid_bounds(),
+            tile_size,
+        }
     }
 
     /// Construct a tiling grid with an explicit pixel-aligned origin.
