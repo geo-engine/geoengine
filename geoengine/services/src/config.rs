@@ -190,6 +190,8 @@ impl ConfigElement for TilingSpecification {
 #[derive(Debug, Deserialize)]
 pub struct QueryContext {
     pub chunk_byte_size: usize,
+    /// Threads of the Rayon pool for operators, `0` for one per core
+    pub rayon_threads: usize,
 }
 
 impl ConfigElement for QueryContext {

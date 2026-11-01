@@ -558,6 +558,7 @@ impl<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>> FoldTileAccu
         // now that we collected all the input tile pixels we perform the actual interpolation
 
         let output_tile = crate::util::spawn_blocking_with_thread_pool(self.pool, move || {
+            let _span = tracing::debug_span!("interpolate").entered();
             I::interpolate(
                 self.input_geo_transform,
                 &self.input_tile,
@@ -668,6 +669,8 @@ where
     accu.cache_hint.merge_with(&tile.cache_hint);
 
     // TODO: add a skip if both tiles are empty?
+
+    let _span = tracing::debug_span!("interpolation_fold").entered();
 
     // copy all input tiles into the accu to have all data for interpolation
     let in_tile = &tile.into_inner_positioned_grid();

@@ -566,6 +566,8 @@ pub fn fold_impl<T>(mut accu: DownsampleAccu<T>, tile: RasterTile2D<T>) -> Downs
 where
     T: Pixel,
 {
+    let _span = tracing::debug_span!("downsample_fold").entered();
+
     // get the time now because it is not known when the accu was created
     accu.set_time(tile.time);
     accu.cache_hint.merge_with(&tile.cache_hint);

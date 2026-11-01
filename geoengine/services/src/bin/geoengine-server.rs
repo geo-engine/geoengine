@@ -3,6 +3,10 @@ use geoengine_services::{
     config::{self, get_config_element},
     error::Result,
 };
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 use tracing::Subscriber;
 use tracing_appender::{
     non_blocking::WorkerGuard,
@@ -72,6 +76,9 @@ pub async fn start_server() -> Result<()> {
 
     // initialize the registry as the global tracing subscriber
     registry.init();
+
+    #[cfg(feature = "runtime-metrics")]
+    spawn_runtime_metrics_logger();
 
     match geoengine_services::server::start_server(None).await {
         Ok(()) => tracing::info!("Server stopped successfully"),
@@ -181,6 +188,44 @@ where
     (layer, guard)
 }
 
+/// Logs the metrics of the current Tokio runtime every second at target `runtime_metrics`.
+/// Polls, local queue depths and blocking pool metrics need `RUSTFLAGS="--cfg tokio_unstable"`.
+#[cfg(feature = "runtime-metrics")]
+fn spawn_runtime_metrics_logger() {
+    let monitor = tokio_metrics::RuntimeMonitor::new(&tokio::runtime::Handle::current());
+    tokio::spawn(async move {
+        for m in monitor.intervals() {
+            #[cfg(not(tokio_unstable))]
+            tracing::info!(
+                target: "runtime_metrics",
+                workers = m.workers_count,
+                busy_ratio = m.busy_ratio(),
+                live_tasks = m.live_tasks_count,
+                global_queue_depth = m.global_queue_depth,
+                parks = m.total_park_count,
+            );
+            #[cfg(tokio_unstable)]
+            tracing::info!(
+                target: "runtime_metrics",
+                workers = m.workers_count,
+                busy_ratio = m.busy_ratio(),
+                live_tasks = m.live_tasks_count,
+                global_queue_depth = m.global_queue_depth,
+                parks = m.total_park_count,
+                polls = m.total_polls_count,
+                mean_poll_us = m.mean_poll_duration.as_micros(),
+                steals = m.total_steal_count,
+                local_queue_depth = m.total_local_queue_depth,
+                max_local_queue_depth = m.max_local_queue_depth,
+                blocking_threads = m.blocking_threads_count,
+                idle_blocking_threads = m.idle_blocking_threads_count,
+                blocking_queue_depth = m.blocking_queue_depth,
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    });
+}
+
 /// We install a GDAL error handler that logs all messages with our log macros.
 fn reroute_gdal_logging() {
     gdal::config::set_error_handler(|error_type, error_num, error_msg| {
@@ -213,11 +258,44 @@ fn configure_error_report_formatting(logging_config: &config::Logging) {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    initialize_expression_dependencies()
-        .await
-        .expect("successful compilation process is necessary for expression operators to work");
+/// Builds the same runtime as `#[tokio::main]`, but names worker threads `ge-tokio-w-N` and blocking threads `ge-tokio-b-N`.
+fn build_runtime() -> tokio::runtime::Runtime {
+    // the builder spawns all worker threads inside `build()`, so names generated before it returns belong to workers
+    let building = Arc::new(AtomicBool::new(true));
+    let next_index = Arc::new(AtomicUsize::new(0));
 
-    start_server().await.expect("the server has to start");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_name_fn({
+            let building = building.clone();
+            let next_index = next_index.clone();
+            move || {
+                let index = next_index.fetch_add(1, Ordering::Relaxed);
+                if building.load(Ordering::Relaxed) {
+                    format!("ge-tokio-w-{index}")
+                } else {
+                    format!("ge-tokio-b-{index}")
+                }
+            }
+        })
+        .build()
+        .expect("the Tokio runtime must be buildable");
+    building.store(false, Ordering::Relaxed);
+
+    debug_assert_eq!(
+        next_index.load(Ordering::Relaxed),
+        runtime.metrics().num_workers()
+    );
+
+    runtime
+}
+
+fn main() {
+    build_runtime().block_on(async {
+        initialize_expression_dependencies()
+            .await
+            .expect("successful compilation process is necessary for expression operators to work");
+
+        start_server().await.expect("the server has to start");
+    });
 }

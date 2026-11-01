@@ -40,6 +40,10 @@ strip = "debuginfo"
 inherits = "bench"
 strip = "debuginfo"
 
+# `tokio_unstable` enables the unstable fields of the `runtime-metrics` feature
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tokio_unstable)"] }
+
 # configure default clippy lints
 [workspace.lints.clippy]
 cargo = { level = "warn", priority = 0 }
@@ -173,6 +177,7 @@ strum_macros = "0.28"
 syn = { version = "3.0", features = ["full", "extra-traits"] }
 tempfile = "3.27"
 tokio = { version = "1.54", features = ["fs", "io-std", "macros", "signal", "sync", "rt-multi-thread", "time"] }
+tokio-metrics = { version = "0.5", default-features = false, features = ["rt"] }
 tokio-postgres = "0.7"
 tokio-util = { version = "0.7", features = ["rt"] }
 toml = { version = "1.1", features = ["parse"] }

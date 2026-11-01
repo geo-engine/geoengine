@@ -215,6 +215,16 @@ Our CI checks if the OpenAPI spec is up to date.
 For performance-critical features, we aim to provide benchmarks in the `benches` directory.
 If you plan on optimizing a feature of Geo Engine, please confirm it this way.
 
+### Runtime metrics
+
+Build with `--features runtime-metrics` to log Tokio runtime metrics (worker busy ratio, global queue depth, …) every second at target `runtime_metrics`.
+Poll counts, local queue depths and blocking pool metrics also need the `tokio_unstable` cfg.
+`RUSTFLAGS` replaces the rustflags from `.cargo/config.toml`, so repeat them:
+
+```bash
+RUSTFLAGS="--cfg tokio_unstable -C link-arg=-fuse-ld=lld" cargo run --release --features runtime-metrics --bin geoengine-server
+```
+
 ### Expression dependencies
 
 We use the [`expression/deps-workspace`](expression/deps-workspace) crate to manage dependencies for compiling expressions at runtime.

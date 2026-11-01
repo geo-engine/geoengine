@@ -14,7 +14,7 @@ use geoengine_datatypes::{
 use num_traits::AsPrimitive;
 use snafu::Snafu;
 use std::convert::TryInto;
-use tracing::{Level, span};
+use tracing::{Instrument, Level, span};
 
 /// # Panics
 /// Panics if not three bands were queried.
@@ -135,6 +135,7 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     // the tile stream will allways produce tiles aligned to the tiling origin
     let tile_stream = processor
         .query_into_owned_boxed_stream(query_rect.clone(), Box::new(query_ctx))
+        .instrument(tracing::debug_span!("query_plan"))
         .await?;
     let output_cache_hint = CacheHint::max_duration();
 
@@ -160,10 +161,12 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
         }));
 
     let (result, ch) = output_tile.await?;
-    let png =
-        crate::util::spawn_blocking(move || result.unbounded().to_png(width, height, &colorizer))
-            .await
-            .boxed_context(error::UnexpectedComputational)??;
+    let png = crate::util::spawn_blocking(move || {
+        let _span = tracing::debug_span!("png_encode").entered();
+        result.unbounded().to_png(width, height, &colorizer)
+    })
+    .await
+    .boxed_context(error::UnexpectedComputational)??;
     Ok((png, ch))
 }
 
@@ -188,6 +191,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
     let tile_stream = processor
         .query_into_owned_boxed_stream(query_rect.clone(), Box::new(query_ctx))
+        .instrument(tracing::debug_span!("query_plan"))
         .await?;
     let accu = Ok((tile_template, output_cache_hint));
 
@@ -206,6 +210,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
             }
 
             let rgb_tile = crate::util::spawn_blocking(move || {
+                let _span = tracing::debug_span!("rgb_tile").entered();
                 compute_rgb_tile(
                     [
                         &chunk[red_band_index],
@@ -224,6 +229,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
     let (result, ch) = output_tile.await?;
     let png = crate::util::spawn_blocking(move || {
+        let _span = tracing::debug_span!("png_encode").entered();
         result
             .unbounded()
             .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)
@@ -240,6 +246,7 @@ fn blit_tile<T>(
 where
     T: Pixel,
 {
+    let _span = tracing::debug_span!("blit").entered();
     let result: Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)> = match (accu, tile) {
         (Ok((empty_grid, mut ch)), Ok(tile)) if tile.is_empty() => {
             ch.merge_with(&tile.cache_hint);
