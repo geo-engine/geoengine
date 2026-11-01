@@ -42,6 +42,17 @@ where
         calculate_max_blocking_threads_per_worker(workers)
     };
 
+    tracing::info!(
+        workers = if workers > 0 {
+            workers
+        } else {
+            // actix' default
+            std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get)
+        },
+        max_blocking_threads_per_worker,
+        "HTTP workers"
+    );
+
     let wrapped_ctx = web::Data::new(app_ctx);
 
     let openapi = ApiDoc::openapi();
@@ -146,6 +157,12 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
     let gdal_process_pool_config: crate::config::GdalProcessPool = get_config_element()?;
 
     let data_path_config: config::DataProvider = get_config_element()?;
+
+    let stac_config: config::Stac = get_config_element()?;
+    tracing::info!(
+        max_concurrent_cell_searches = stac_config.max_concurrent_cell_searches.get(),
+        "STAC searches per loading info"
+    );
 
     let query_context_config = config::get_config_element::<config::QueryContext>()?;
     let chunk_byte_size = query_context_config.chunk_byte_size.into();

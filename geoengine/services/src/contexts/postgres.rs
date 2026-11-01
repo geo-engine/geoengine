@@ -323,6 +323,22 @@ where
             processing_runtime: tokio::runtime::Handle::current(),
         };
 
+        info!(
+            threads = app_ctx.thread_pool.current_num_threads(),
+            "Rayon pool"
+        );
+        info!(
+            number_of_processes = gdal_process_pool_config.number_of_processes,
+            max_active_processes = gdal_process_pool_config.max_active_processes,
+            max_dataset_processes = gdal_process_pool_config.max_dataset_processes,
+            "GDAL process pool"
+        );
+        info!(
+            gdal_source = app_ctx.gdal_read_ahead.gdal_source,
+            multi_band_gdal_source = app_ctx.gdal_read_ahead.multi_band_gdal_source,
+            "GDAL read-ahead per query"
+        );
+
         if created_schema {
             info!("Populating database with initial data...");
 
