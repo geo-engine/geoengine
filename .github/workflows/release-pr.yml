@@ -36,7 +36,7 @@ jobs:
       actions: write # start CI on the release branch
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0 # git-cliff needs the full history and all tags
@@ -101,7 +101,7 @@ jobs:
 
       - name: Create pull request
         id: pr
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           base: main
           branch: release/v${{ steps.release.outputs.version }}
