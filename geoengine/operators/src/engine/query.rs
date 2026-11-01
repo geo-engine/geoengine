@@ -25,6 +25,22 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
 
+/// GDAL tile reads that a source keeps in flight per query
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct GdalReadAhead {
+    pub gdal_source: usize,
+    pub multi_band_gdal_source: usize,
+}
+
+impl Default for GdalReadAhead {
+    fn default() -> Self {
+        Self {
+            gdal_source: 8,
+            multi_band_gdal_source: 16,
+        }
+    }
+}
+
 impl ChunkByteSize {
     pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
     pub const MAX: ChunkByteSize = ChunkByteSize(usize::MAX);
@@ -61,6 +77,10 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
+
+    fn gdal_read_ahead(&self) -> GdalReadAhead {
+        GdalReadAhead::default()
+    }
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 

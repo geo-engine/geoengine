@@ -199,6 +199,19 @@ pub struct QueryContext {
     pub chunk_byte_size: usize,
     /// Threads of the Rayon pool for operators, `0` for one per core
     pub rayon_threads: usize,
+    /// GDAL tile reads a `GdalSource` query keeps in flight
+    pub gdal_source_read_ahead: NonZeroUsize,
+    /// GDAL tile reads a `MultiBandGdalSource` query keeps in flight
+    pub multi_band_gdal_source_read_ahead: NonZeroUsize,
+}
+
+impl QueryContext {
+    pub fn gdal_read_ahead(&self) -> geoengine_operators::engine::GdalReadAhead {
+        geoengine_operators::engine::GdalReadAhead {
+            gdal_source: self.gdal_source_read_ahead.get(),
+            multi_band_gdal_source: self.multi_band_gdal_source_read_ahead.get(),
+        }
+    }
 }
 
 impl ConfigElement for QueryContext {
@@ -922,6 +935,28 @@ mod tests {
 
         assert!(rejects::<ProcessingRuntime>("max_blocking_threads", 0));
         assert!(!rejects::<ProcessingRuntime>("worker_threads", 0));
+    }
+
+    #[test]
+    fn it_gdal_read_ahead_defaults_are_the_previous_values() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.gdal_read_ahead(),
+            geoengine_operators::engine::GdalReadAhead {
+                gdal_source: 8,
+                multi_band_gdal_source: 16,
+            }
+        );
+        assert_eq!(
+            config.gdal_read_ahead(),
+            geoengine_operators::engine::GdalReadAhead::default()
+        );
+
+        assert!(rejects::<QueryContext>("gdal_source_read_ahead", 0));
+        assert!(rejects::<QueryContext>(
+            "multi_band_gdal_source_read_ahead",
+            0
+        ));
     }
 
     #[test]

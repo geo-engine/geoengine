@@ -47,6 +47,10 @@ tile_shape_pixels_y = 512
 chunk_byte_size = 1048576 # TODO: find reasonable default
 # threads of the Rayon pool for the CPU-heavy work of operators; 0 = one per core
 rayon_threads = 0
+# GDAL tile reads a GdalSource query keeps in flight
+gdal_source_read_ahead = 8
+# GDAL tile reads a MultiBandGdalSource query keeps in flight
+multi_band_gdal_source_read_ahead = 16
 
 [expression]
 # seconds a compiled expression stays in the cache without being requested; running queries keep
