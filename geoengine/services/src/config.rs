@@ -126,6 +126,10 @@ pub struct Web {
     #[serde(deserialize_with = "deserialize_api_prefix")]
     pub api_prefix: String,
     pub version_api: bool,
+    /// HTTP worker threads, `0` for actix' default (one per core)
+    pub workers: usize,
+    /// Max. blocking threads of each HTTP worker, `0` for `max(512 / workers, 32)`
+    pub max_blocking_threads_per_worker: usize,
 }
 
 impl Web {
@@ -863,5 +867,12 @@ mod tests {
 
         assert!(rejects::<ProcessingRuntime>("max_blocking_threads", 0));
         assert!(!rejects::<ProcessingRuntime>("worker_threads", 0));
+    }
+
+    #[test]
+    fn it_web_pool_defaults_are_the_previous_values() {
+        let config: Web = default_element();
+        assert_eq!(config.workers, 0);
+        assert_eq!(config.max_blocking_threads_per_worker, 0);
     }
 }

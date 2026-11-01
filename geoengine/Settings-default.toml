@@ -8,6 +8,11 @@ api_prefix = "/api"
 
 version_api = true
 
+# HTTP worker threads, each with its own single-threaded Tokio runtime; 0 = one per core (actix default)
+workers = 0
+# max. blocking threads of each HTTP worker; 0 = max(512 / workers, 32)
+max_blocking_threads_per_worker = 0
+
 [project_service]
 list_limit = 20
 

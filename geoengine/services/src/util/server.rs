@@ -63,18 +63,23 @@ impl RootSpanBuilder for CustomRootSpanBuilder {
     fn on_request_end<B>(_span: Span, _outcome: &Result<ServiceResponse<B>, actix_web::Error>) {}
 }
 
-/// Calculate maximum number of blocking threads **per worker**.
+/// Calculate maximum number of blocking threads **per worker** for `workers` workers, `0` for
+/// actix' default.
 ///
 /// By default set to 512 / workers.
 ///
 /// TODO: use blocking threads globally instead of per worker.
 ///
-pub(crate) fn calculate_max_blocking_threads_per_worker() -> usize {
+pub(crate) fn calculate_max_blocking_threads_per_worker(workers: usize) -> usize {
     const MIN_BLOCKING_THREADS_PER_WORKER: usize = 32;
 
     // Taken from `actix_server::ServerBuilder`.
     // By default, server uses number of available logical CPU as thread count.
-    let number_of_workers = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    let number_of_workers = if workers > 0 {
+        workers
+    } else {
+        std::thread::available_parallelism().map_or(1, NonZeroUsize::get)
+    };
 
     // Taken from `actix_server::ServerWorkerConfig`.
     let max_blocking_threads = std::cmp::max(512 / number_of_workers, 1);
@@ -513,6 +518,17 @@ impl CacheControlHeader for CacheHint {
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn it_splits_512_blocking_threads_over_the_workers_with_a_minimum_of_32() {
+        let cores = std::thread::available_parallelism().map_or(1, NonZeroUsize::get);
+        assert_eq!(
+            calculate_max_blocking_threads_per_worker(0),
+            calculate_max_blocking_threads_per_worker(cores)
+        );
+        assert_eq!(calculate_max_blocking_threads_per_worker(4), 128);
+        assert_eq!(calculate_max_blocking_threads_per_worker(64), 32);
+    }
 
     #[test]
     fn it_does_not_block_when_peeking_an_idle_blocking_socket() {
