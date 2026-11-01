@@ -43,6 +43,12 @@ chunk_byte_size = 1048576 # TODO: find reasonable default
 # threads of the Rayon pool for the CPU-heavy work of operators; 0 = one per core
 rayon_threads = 0
 
+[processing_runtime]
+# Tokio worker threads of the runtime that runs the queries; 0 = one per core (or TOKIO_WORKER_THREADS)
+worker_threads = 0
+# max. threads of the Tokio blocking pool (spawn_blocking) of this runtime
+max_blocking_threads = 512
+
 [upload]
 path = "upload"
 

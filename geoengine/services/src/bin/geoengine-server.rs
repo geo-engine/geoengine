@@ -258,14 +258,19 @@ fn configure_error_report_formatting(logging_config: &config::Logging) {
     }
 }
 
-/// Builds the same runtime as `#[tokio::main]`, but names worker threads `ge-tokio-w-N` and blocking threads `ge-tokio-b-N`.
-fn build_runtime() -> tokio::runtime::Runtime {
+/// Builds the same runtime as `#[tokio::main]` with the sizes of `config`, but names worker threads `ge-tokio-w-N` and blocking threads `ge-tokio-b-N`.
+fn build_runtime(config: &config::ProcessingRuntime) -> tokio::runtime::Runtime {
     // the builder spawns all worker threads inside `build()`, so names generated before it returns belong to workers
     let building = Arc::new(AtomicBool::new(true));
     let next_index = Arc::new(AtomicUsize::new(0));
 
-    let runtime = tokio::runtime::Builder::new_multi_thread()
+    let mut builder = tokio::runtime::Builder::new_multi_thread();
+    if config.worker_threads > 0 {
+        builder.worker_threads(config.worker_threads);
+    }
+    let runtime = builder
         .enable_all()
+        .max_blocking_threads(config.max_blocking_threads.get())
         .thread_name_fn({
             let building = building.clone();
             let next_index = next_index.clone();
@@ -291,7 +296,10 @@ fn build_runtime() -> tokio::runtime::Runtime {
 }
 
 fn main() {
-    build_runtime().block_on(async {
+    // read before the runtime starts, since its sizes are fixed at build time
+    let runtime_config: config::ProcessingRuntime =
+        get_config_element().expect("the processing runtime config must be valid");
+    build_runtime(&runtime_config).block_on(async {
         initialize_expression_dependencies()
             .await
             .expect("successful compilation process is necessary for expression operators to work");
