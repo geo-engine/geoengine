@@ -778,6 +778,16 @@ impl ConfigElement for StacCache {
     const KEY: &'static str = "stac_cache";
 }
 
+#[derive(Debug, Deserialize)]
+pub struct Stac {
+    /// STAC searches one loading info request runs in parallel
+    pub max_concurrent_cell_searches: NonZeroUsize,
+}
+
+impl ConfigElement for Stac {
+    const KEY: &'static str = "stac";
+}
+
 #[derive(Debug, Deserialize, Clone, Copy)]
 pub struct ProviderCache {
     /// Maximum number of cached provider instances in the provider registry.
@@ -902,6 +912,14 @@ mod tests {
             "multi_band_gdal_source_read_ahead",
             0
         ));
+    }
+
+    #[test]
+    fn it_stac_defaults_are_the_previous_values() {
+        let config: Stac = default_element();
+        assert_eq!(config.max_concurrent_cell_searches.get(), 8);
+
+        assert!(rejects::<Stac>("max_concurrent_cell_searches", 0));
     }
 
     #[test]

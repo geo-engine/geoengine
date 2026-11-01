@@ -287,6 +287,10 @@ enable_new_raster_cache = false
 # vector and raster data and gets the full `size_in_mb`.
 raster_cache_size_ratio = 0.5
 
+[stac]
+# STAC searches (one per grid cell and time step) one loading info request runs in parallel
+max_concurrent_cell_searches = 8
+
 [stac_cache]
 # maximum size of the STAC query cache in MB
 size_in_mb = 100

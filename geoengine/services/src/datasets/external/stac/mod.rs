@@ -313,6 +313,8 @@ pub struct StacDataProvider {
     /// In-memory cache for complete STAC cell results, keyed by dataset, integer
     /// projected-grid index, and regular layer time step.
     query_cache: Arc<StacQueryCache>,
+    /// STAC searches one loading info request runs in parallel
+    max_concurrent_cell_searches: usize,
     grid: StacGrid,
 }
 
@@ -342,6 +344,7 @@ impl StacDataProvider {
             ))
             .build()?;
         let client = StacClient::new(client, &definition.api_url, request_registry)?;
+        let stac_config: crate::config::Stac = crate::config::get_config_element()?;
 
         Ok(Self {
             id: definition.id,
@@ -356,6 +359,7 @@ impl StacDataProvider {
             client,
             cache_ttl_secs: definition.cache_ttl_secs,
             query_cache: Arc::new(StacQueryCache::default()),
+            max_concurrent_cell_searches: stac_config.max_concurrent_cell_searches.get(),
             grid,
         })
     }
