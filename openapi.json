@@ -15688,7 +15688,7 @@
           ],
           "minimum": 0
         },
-        "description": "A tile size in pixels `[rows, columns]`. Both axes must be greater than zero."
+        "description": "A tile size in pixels `[rows, columns]`.\nBoth axes must be greater than zero and at most 4096."
       },
       "TilesCrs": {
         "oneOf": [

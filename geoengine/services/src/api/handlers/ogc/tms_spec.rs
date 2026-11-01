@@ -357,7 +357,12 @@ impl TileMatrixSetProvider for CustomNativeTMS {
         tile_row: u32,
         tile_col: u32,
     ) -> OgcApiResult<GridBoundingBox2D> {
-        tile_grid_bbox(tiling_grid, tile_matrix, tile_row, tile_col)
+        // the TMS tiles have the service tile size, not the layer's own tile size
+        let tiling_grid = TilingGrid {
+            tile_size: self.tiling_specification.tile_size,
+            ..*tiling_grid
+        };
+        tile_grid_bbox(&tiling_grid, tile_matrix, tile_row, tile_col)
     }
 
     fn max_matrix_id(&self) -> u32 {
@@ -1052,6 +1057,35 @@ mod tests {
         // Extent per axis must be `tile_size - 1` and NOT swapped: y = 3, x = 7.
         assert_eq!(bbox.y_max() - bbox.y_min(), 3);
         assert_eq!(bbox.x_max() - bbox.x_min(), 7);
+    }
+
+    #[test]
+    fn custom_native_tiles_use_the_service_tile_size() {
+        let mut result_descriptor = RasterResultDescriptor::with_datatype_and_num_bands(
+            geoengine_datatypes::raster::RasterDataType::U8,
+            1,
+            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([1023, 1023])).unwrap(),
+            GeoTransform::new_unchecked((0.0, 0.0).into(), 1.0, -1.0),
+            geoengine_operators::engine::TimeDescriptor::new_irregular(None),
+        );
+        result_descriptor.spatial_reference = SpatialReference::epsg_4326().into();
+        // the layer's own tiles are smaller than the service tiles
+        result_descriptor.spatial_grid.tile_size = TileSize::new_unchecked(256, 256);
+        let tms = CustomNativeTMS::new(
+            result_descriptor.clone(),
+            TilingSpecification::new(TileSize::new_unchecked(512, 512)),
+        )
+        .unwrap();
+
+        let bbox = tms
+            .tile_grid_bbox(&result_descriptor.tiling_grid_definition(), 0, 1, 1)
+            .unwrap();
+
+        assert_eq!(
+            bbox,
+            GridBoundingBox2D::new(GridIdx2D::new([512, 512]), GridIdx2D::new([1023, 1023]))
+                .unwrap()
+        );
     }
 
     #[ge_context::test]

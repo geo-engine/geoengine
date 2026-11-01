@@ -17,9 +17,9 @@ use geoengine_datatypes::primitives::{
     BandSelection, CacheHint, Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
-    GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TileSize, TilingGrid,
-    UpdateIndexedElementsParallel,
+    BoundedGrid, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds,
+    GridIdx2D, GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TileSize,
+    TilingGrid,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -370,8 +370,7 @@ where
 /// Accumulator for the fold-based re-tiling.
 ///
 /// Created for each output tile. Starts as an empty (no-data) grid of the output tile's
-/// size. Input tiles are folded into it by mapping each output pixel to its source pixel
-/// in the input tile and copying the value.
+/// size. Input tiles are blitted into it.
 #[derive(Clone, Debug)]
 pub struct ReTileAccu<T: Pixel> {
     pub output_tile_info: TileInformation,
@@ -413,18 +412,10 @@ impl<T: Pixel> FoldTileAccuMut for ReTileAccu<T> {
     }
 }
 
-/// Fold function that re-maps input tile data to the output grid.
+/// Fold function that copies an input tile into the output tile.
 ///
-/// For each pixel in the output accumulator, computes the corresponding input pixel
-/// coordinate by:
-/// 1. Getting the output pixel's center coordinate from `accu_geo_transform`.
-/// 2. Converting that coordinate to an input pixel index via `input_geo_transform`.
-/// 3. If the input tile contains that pixel, copying the value; otherwise keeping
-///    the current accumulator value (initially no-data).
-///
-/// This is a nearest-neighbor / identity mapping — no interpolation is performed.
-/// Since input and output have the same pixel size, each output pixel maps to
-/// exactly one input pixel (or nothing, at dataset edges).
+/// Input and output have the same pixel size and pixel-aligned origins, so this is a
+/// blit of the overlapping pixels after an integer index shift; no interpolation.
 pub fn re_tile_fold<T: Pixel>(
     mut accu: ReTileAccu<T>,
     tile: RasterTile2D<T>,
@@ -437,31 +428,23 @@ pub fn re_tile_fold<T: Pixel>(
             return accu;
         }
 
-        // Source tile is in input_geo_transform space.
-        // Output tile is in output_geo_transform space.
-        // Same pixel size, so mapping is a simple coordinate lookup.
-        let mut accu_tile = accu.output_grid.into_materialized_masked_grid();
-        let in_tile_grid = tile.into_inner_positioned_grid();
-        let accu_geo_transform = accu.output_tile_info.global_geo_transform;
-        let in_geo_transform = accu.input_geo_transform;
+        // Input and output grids are pixel-aligned (checked on initialization), so the
+        // output pixel `p` is the input pixel `p + shift` for one integer `shift`.
+        let shift = accu.input_geo_transform.coordinate_to_grid_idx_2d(
+            accu.output_tile_info
+                .global_geo_transform
+                .grid_idx_to_pixel_center_coordinate_2d(GridIdx2D::new([0, 0])),
+        );
+        let in_bounds = tile.bounding_box();
+        let in_tile_grid = tile
+            .into_inner_positioned_grid()
+            .set_grid_bounds(GridBoundingBox2D::new_unchecked(
+                in_bounds.min_index() - shift,
+                in_bounds.max_index() - shift,
+            ))
+            .expect("shifting valid bounds keeps them valid");
 
-        let map_fn = |grid_idx: GridIdx2D, current_value: Option<T>| -> Option<T> {
-            // `grid_idx` is the global pixel index of the output grid: the accumulator
-            // is positioned at `tile_info.global_pixel_bounds()`, so its indices are global.
-            let accu_pixel_coord =
-                accu_geo_transform.grid_idx_to_pixel_center_coordinate_2d(grid_idx);
-            let source_pixel_idx = in_geo_transform.coordinate_to_grid_idx_2d(accu_pixel_coord);
-
-            if in_tile_grid.contains(&source_pixel_idx) {
-                in_tile_grid.get_at_grid_index_unchecked(source_pixel_idx)
-            } else {
-                current_value
-            }
-        };
-
-        accu_tile.update_indexed_elements_parallel(map_fn);
-
-        accu.output_grid = accu_tile.into();
+        accu.output_grid.grid_blit_from(&in_tile_grid);
 
         accu
     })
