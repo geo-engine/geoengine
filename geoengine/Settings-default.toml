@@ -254,6 +254,8 @@ GDAL_CACHEMAX = "256"
 GDAL_HTTP_LOW_SPEED_LIMIT = "1024"
 GDAL_HTTP_LOW_SPEED_TIME = "30"
 GDAL_HTTP_CONNECTTIMEOUT = "10"
+# decode threads of a GDAL read in each worker (e.g. GTiff, JP2OpenJPEG); unset = the driver's default
+# GDAL_NUM_THREADS = "1"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
