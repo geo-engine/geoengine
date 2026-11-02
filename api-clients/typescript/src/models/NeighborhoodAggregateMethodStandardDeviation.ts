@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface NeighborhoodAggregateMethodStandardDeviation {
     /**
      * 
-     * @type {NeighborhoodAggregateMethodStandardDeviationTypeEnum}
-     * @memberof NeighborhoodAggregateMethodStandardDeviation
      */
     type: NeighborhoodAggregateMethodStandardDeviationTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface NeighborhoodAggregateMethodStandardDeviation {
  * @export
  */
 export const NeighborhoodAggregateMethodStandardDeviationTypeEnum = {
-    StandardDeviation: 'standardDeviation'
+    StandardDeviation: 'standardDeviation',
 } as const;
 export type NeighborhoodAggregateMethodStandardDeviationTypeEnum = typeof NeighborhoodAggregateMethodStandardDeviationTypeEnum[keyof typeof NeighborhoodAggregateMethodStandardDeviationTypeEnum];
 
@@ -41,6 +39,8 @@ export type NeighborhoodAggregateMethodStandardDeviationTypeEnum = typeof Neighb
  */
 export function instanceOfNeighborhoodAggregateMethodStandardDeviation(value: object): value is NeighborhoodAggregateMethodStandardDeviation {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'standardDeviation') return false;
+    
     return true;
 }
 

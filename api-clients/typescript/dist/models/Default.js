@@ -22,13 +22,15 @@ exports.DefaultToJSONTyped = DefaultToJSONTyped;
  * @export
  */
 exports.DefaultTypeEnum = {
-    Default: 'default'
+    Default: 'default',
 };
 /**
  * Check if a given object implements the Default interface.
  */
 function instanceOfDefault(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'default')
         return false;
     return true;
 }

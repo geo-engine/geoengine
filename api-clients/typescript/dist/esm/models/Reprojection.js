@@ -16,13 +16,15 @@ import { SingleRasterOrVectorSourceFromJSON, SingleRasterOrVectorSourceToJSON, }
  * @export
  */
 export const ReprojectionTypeEnum = {
-    Reprojection: 'Reprojection'
+    Reprojection: 'Reprojection',
 };
 /**
  * Check if a given object implements the Reprojection interface.
  */
 export function instanceOfReprojection(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Reprojection')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

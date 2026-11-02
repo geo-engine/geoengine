@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface HistogramBoundsValues {
     /**
      * 
-     * @type {number}
-     * @memberof HistogramBoundsValues
      */
     min: number;
     /**
      * 
-     * @type {number}
-     * @memberof HistogramBoundsValues
      */
     max: number;
 }

@@ -24,7 +24,7 @@ exports.MlModelInputNoDataHandlingVariantToJSONTyped = MlModelInputNoDataHandlin
  */
 exports.MlModelInputNoDataHandlingVariant = {
     EncodedNoData: 'encodedNoData',
-    SkipIfNoData: 'skipIfNoData'
+    SkipIfNoData: 'skipIfNoData',
 };
 function instanceOfMlModelInputNoDataHandlingVariant(value) {
     for (const key in exports.MlModelInputNoDataHandlingVariant) {

@@ -17,32 +17,22 @@ import type { ProviderLayerId } from './ProviderLayerId';
 export interface LayerListing {
     /**
      *
-     * @type {LayerListingTypeEnum}
-     * @memberof LayerListing
      */
     type: LayerListingTypeEnum;
     /**
      *
-     * @type {ProviderLayerId}
-     * @memberof LayerListing
      */
     id: ProviderLayerId;
     /**
      *
-     * @type {string}
-     * @memberof LayerListing
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof LayerListing
      */
     description: string;
     /**
      * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof LayerListing
      */
     properties?: Array<Array<string>>;
 }

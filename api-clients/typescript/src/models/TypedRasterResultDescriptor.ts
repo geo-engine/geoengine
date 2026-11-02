@@ -56,8 +56,6 @@ import {
 export interface TypedRasterResultDescriptor extends RasterResultDescriptor {
     /**
      * 
-     * @type {TypedRasterResultDescriptorTypeEnum}
-     * @memberof TypedRasterResultDescriptor
      */
     type: TypedRasterResultDescriptorTypeEnum;
 }
@@ -67,7 +65,7 @@ export interface TypedRasterResultDescriptor extends RasterResultDescriptor {
  * @export
  */
 export const TypedRasterResultDescriptorTypeEnum = {
-    Raster: 'raster'
+    Raster: 'raster',
 } as const;
 export type TypedRasterResultDescriptorTypeEnum = typeof TypedRasterResultDescriptorTypeEnum[keyof typeof TypedRasterResultDescriptorTypeEnum];
 
@@ -77,6 +75,8 @@ export type TypedRasterResultDescriptorTypeEnum = typeof TypedRasterResultDescri
  */
 export function instanceOfTypedRasterResultDescriptor(value: object): value is TypedRasterResultDescriptor {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'raster') return false;
+    
     return true;
 }
 

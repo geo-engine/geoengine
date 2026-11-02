@@ -17,8 +17,6 @@ import type { MultiPolygon } from './MultiPolygon';
 export interface TypedGeometryMultiPolygon {
     /**
      *
-     * @type {MultiPolygon}
-     * @memberof TypedGeometryMultiPolygon
      */
     multiPolygon: MultiPolygon;
 }

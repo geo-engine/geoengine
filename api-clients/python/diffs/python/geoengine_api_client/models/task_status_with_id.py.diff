@@ -1,6 +1,6 @@
 --- python/geoengine_api_client/models/task_status_with_id.py
 +++ python/geoengine_api_client/models/task_status_with_id.py
-@@ -73,17 +73,17 @@
+@@ -74,17 +74,17 @@
          )
          # set to None if info (nullable) is None
          # and model_fields_set contains the field
@@ -24,7 +24,7 @@
              _dict['error'] = None
  
          return _dict
-@@ -97,7 +97,7 @@
+@@ -98,7 +98,7 @@
          if not isinstance(obj, dict):
              return cls.model_validate(obj)
  

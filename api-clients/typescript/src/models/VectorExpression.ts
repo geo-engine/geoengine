@@ -132,20 +132,14 @@ import {
 export interface VectorExpression {
     /**
      * 
-     * @type {VectorExpressionTypeEnum}
-     * @memberof VectorExpression
      */
     type: VectorExpressionTypeEnum;
     /**
      * 
-     * @type {VectorExpressionParameters}
-     * @memberof VectorExpression
      */
     params: VectorExpressionParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof VectorExpression
      */
     sources: SingleVectorSource;
 }
@@ -155,7 +149,7 @@ export interface VectorExpression {
  * @export
  */
 export const VectorExpressionTypeEnum = {
-    VectorExpression: 'VectorExpression'
+    VectorExpression: 'VectorExpression',
 } as const;
 export type VectorExpressionTypeEnum = typeof VectorExpressionTypeEnum[keyof typeof VectorExpressionTypeEnum];
 
@@ -165,6 +159,8 @@ export type VectorExpressionTypeEnum = typeof VectorExpressionTypeEnum[keyof typ
  */
 export function instanceOfVectorExpression(value: object): value is VectorExpression {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'VectorExpression') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

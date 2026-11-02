@@ -19,7 +19,7 @@
 export const AttributeAggregateType = {
     MeanNumber: 'meanNumber',
     StringSample: 'stringSample',
-    Null: 'null'
+    Null: 'null',
 } as const;
 export type AttributeAggregateType = typeof AttributeAggregateType[keyof typeof AttributeAggregateType];
 

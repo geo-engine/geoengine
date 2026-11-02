@@ -34,20 +34,14 @@ import type { PieChartParameters } from './PieChartParameters';
 export interface PieChart {
     /**
      *
-     * @type {PieChartTypeEnum}
-     * @memberof PieChart
      */
     type: PieChartTypeEnum;
     /**
      *
-     * @type {PieChartParameters}
-     * @memberof PieChart
      */
     params: PieChartParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof PieChart
      */
     sources: SingleVectorSource;
 }

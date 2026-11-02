@@ -19,13 +19,15 @@ import { TimeDimensionFromJSON, TimeDimensionToJSON, } from './TimeDimension';
  * @export
  */
 export const StacDataProviderDefinitionTypeEnum = {
-    StacProviderDefinition: 'StacProviderDefinition'
+    StacProviderDefinition: 'StacProviderDefinition',
 };
 /**
  * Check if a given object implements the StacDataProviderDefinition interface.
  */
 export function instanceOfStacDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'StacProviderDefinition')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -55,17 +57,17 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'name': json['name'],
         'id': json['id'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'apiUrl': json['apiUrl'],
         'collectionName': json['collectionName'],
-        's3Config': json['s3Config'] == null ? undefined : StacProviderS3ConfigFromJSON(json['s3Config']),
-        'authentication': json['authentication'] == null ? undefined : StacProviderAuthenticationFromJSON(json['authentication']),
+        's3Config': json['s3Config'] === undefined ? undefined : json['s3Config'] === null ? null : StacProviderS3ConfigFromJSON(json['s3Config']),
+        'authentication': json['authentication'] === undefined ? undefined : json['authentication'] === null ? null : StacProviderAuthenticationFromJSON(json['authentication']),
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': (json['datasets'].map(StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
-        'cacheTtlSecs': json['cacheTtlSecs'] == null ? undefined : json['cacheTtlSecs'],
-        'stacGrid': json['stacGrid'] == null ? undefined : StacGridFromJSON(json['stacGrid']),
+        'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
+        'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {

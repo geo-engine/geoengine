@@ -17,38 +17,26 @@ import type { AttributeAggregateDef } from './AttributeAggregateDef';
 export interface VisualPointClusteringParameters {
     /**
      * Minimum circle radius in pixels.
-     * @type {number}
-     * @memberof VisualPointClusteringParameters
      */
     minRadiusPx: number;
     /**
      * Minimum circle-to-circle distance in pixels.
-     * @type {number}
-     * @memberof VisualPointClusteringParameters
      */
     deltaPx: number;
     /**
      * Spatial resolution used during clustering.
-     * @type {number}
-     * @memberof VisualPointClusteringParameters
      */
     resolution: number;
     /**
      * Column name used to store the cluster radius.
-     * @type {string}
-     * @memberof VisualPointClusteringParameters
      */
     radiusColumn: string;
     /**
      * Column name used to store the number of clustered points.
-     * @type {string}
-     * @memberof VisualPointClusteringParameters
      */
     countColumn: string;
     /**
      * Map of source columns to aggregation definitions used for clustered output attributes.
-     * @type {{ [key: string]: AttributeAggregateDef; }}
-     * @memberof VisualPointClusteringParameters
      */
     columnAggregates: {
         [key: string]: AttributeAggregateDef;

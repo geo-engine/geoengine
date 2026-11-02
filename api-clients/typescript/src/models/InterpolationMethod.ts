@@ -18,7 +18,7 @@
  */
 export const InterpolationMethod = {
     NearestNeighbor: 'nearestNeighbor',
-    BiLinear: 'biLinear'
+    BiLinear: 'biLinear',
 } as const;
 export type InterpolationMethod = typeof InterpolationMethod[keyof typeof InterpolationMethod];
 

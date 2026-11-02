@@ -35,14 +35,10 @@ import {
 export interface CreateDataset {
     /**
      * 
-     * @type {DataPath}
-     * @memberof CreateDataset
      */
     dataPath: DataPath;
     /**
      * 
-     * @type {DatasetDefinition}
-     * @memberof CreateDataset
      */
     definition: DatasetDefinition;
 }

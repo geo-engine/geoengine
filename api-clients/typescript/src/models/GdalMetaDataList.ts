@@ -35,20 +35,14 @@ import {
 export interface GdalMetaDataList {
     /**
      * 
-     * @type {GdalMetaDataListTypeEnum}
-     * @memberof GdalMetaDataList
      */
     type: GdalMetaDataListTypeEnum;
     /**
      * 
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMetaDataList
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      * 
-     * @type {Array<GdalLoadingInfoTemporalSlice>}
-     * @memberof GdalMetaDataList
      */
     params: Array<GdalLoadingInfoTemporalSlice>;
 }
@@ -58,7 +52,7 @@ export interface GdalMetaDataList {
  * @export
  */
 export const GdalMetaDataListTypeEnum = {
-    GdalMetaDataList: 'GdalMetaDataList'
+    GdalMetaDataList: 'GdalMetaDataList',
 } as const;
 export type GdalMetaDataListTypeEnum = typeof GdalMetaDataListTypeEnum[keyof typeof GdalMetaDataListTypeEnum];
 
@@ -68,6 +62,8 @@ export type GdalMetaDataListTypeEnum = typeof GdalMetaDataListTypeEnum[keyof typ
  */
 export function instanceOfGdalMetaDataList(value: object): value is GdalMetaDataList {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GdalMetaDataList') return false;
+    
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     return true;

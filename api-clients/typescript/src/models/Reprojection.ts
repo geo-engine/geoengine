@@ -57,20 +57,14 @@ import {
 export interface Reprojection {
     /**
      * 
-     * @type {ReprojectionTypeEnum}
-     * @memberof Reprojection
      */
     type: ReprojectionTypeEnum;
     /**
      * 
-     * @type {ReprojectionParameters}
-     * @memberof Reprojection
      */
     params: ReprojectionParameters;
     /**
      * 
-     * @type {SingleRasterOrVectorSource}
-     * @memberof Reprojection
      */
     sources: SingleRasterOrVectorSource;
 }
@@ -80,7 +74,7 @@ export interface Reprojection {
  * @export
  */
 export const ReprojectionTypeEnum = {
-    Reprojection: 'Reprojection'
+    Reprojection: 'Reprojection',
 } as const;
 export type ReprojectionTypeEnum = typeof ReprojectionTypeEnum[keyof typeof ReprojectionTypeEnum];
 
@@ -90,6 +84,8 @@ export type ReprojectionTypeEnum = typeof ReprojectionTypeEnum[keyof typeof Repr
  */
 export function instanceOfReprojection(value: object): value is Reprojection {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Reprojection') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -21,33 +21,23 @@ export interface TileMatrixSetItem {
     /**
      * Optional local tile matrix set identifier, e.g. for use as unspecified
      * `{tileMatrixSetId}` parameter. Implementation of 'identifier'
-     * @type {TileMatrixSetId}
-     * @memberof TileMatrixSetItem
      */
     id?: TileMatrixSetId;
     /**
      * Title of this tile matrix set, normally used for display to a human
-     * @type {string}
-     * @memberof TileMatrixSetItem
      */
     title?: string;
     /**
      * Reference to an official source for this tileMatrixSet
-     * @type {string}
-     * @memberof TileMatrixSetItem
      */
     uri?: string;
     /**
      *
-     * @type {TilesCrs}
-     * @memberof TileMatrixSetItem
      */
     crs?: TilesCrs;
     /**
      * Links to related resources. A 'self' link to the tile matrix set
      * definition is required.
-     * @type {Array<Link>}
-     * @memberof TileMatrixSetItem
      */
     links: Array<Link>;
 }

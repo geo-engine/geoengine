@@ -22,7 +22,7 @@ exports.SuffixToJSONTyped = SuffixToJSONTyped;
  * @export
  */
 exports.SuffixTypeEnum = {
-    Suffix: 'suffix'
+    Suffix: 'suffix',
 };
 /**
  * Check if a given object implements the Suffix interface.
@@ -31,6 +31,8 @@ function instanceOfSuffix(value) {
     if (!('values' in value) || value['values'] === undefined)
         return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'suffix')
         return false;
     return true;
 }

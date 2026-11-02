@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { TypedPlotResultDescriptor } from './TypedPlotResultDescriptor';
 import {
     instanceOfTypedPlotResultDescriptor,
@@ -70,11 +71,11 @@ export function TypedResultDescriptorToJSONTyped(value?: TypedResultDescriptor |
     }
     switch (value['type']) {
         case 'plot':
-            return Object.assign({}, TypedPlotResultDescriptorToJSON(value), { type: 'plot' } as const);
+            return Object.assign({}, TypedPlotResultDescriptorToJSON(value), { 'type': 'plot' } as const);
         case 'raster':
-            return Object.assign({}, TypedRasterResultDescriptorToJSON(value), { type: 'raster' } as const);
+            return Object.assign({}, TypedRasterResultDescriptorToJSON(value), { 'type': 'raster' } as const);
         case 'vector':
-            return Object.assign({}, TypedVectorResultDescriptorToJSON(value), { type: 'vector' } as const);
+            return Object.assign({}, TypedVectorResultDescriptorToJSON(value), { 'type': 'vector' } as const);
         default:
             return value;
     }

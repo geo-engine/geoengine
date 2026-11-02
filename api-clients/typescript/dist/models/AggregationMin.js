@@ -22,13 +22,15 @@ exports.AggregationMinToJSONTyped = AggregationMinToJSONTyped;
  * @export
  */
 exports.AggregationMinTypeEnum = {
-    Min: 'min'
+    Min: 'min',
 };
 /**
  * Check if a given object implements the AggregationMin interface.
  */
 function instanceOfAggregationMin(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'min')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

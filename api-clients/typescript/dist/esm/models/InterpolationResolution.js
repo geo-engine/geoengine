@@ -37,9 +37,9 @@ export function InterpolationResolutionToJSONTyped(value, ignoreDiscriminator = 
     }
     switch (value['type']) {
         case 'fraction':
-            return Object.assign({}, InterpolationResolutionFractionToJSON(value), { type: 'fraction' });
+            return Object.assign({}, InterpolationResolutionFractionToJSON(value), { 'type': 'fraction' });
         case 'resolution':
-            return Object.assign({}, InterpolationResolutionResolutionToJSON(value), { type: 'resolution' });
+            return Object.assign({}, InterpolationResolutionResolutionToJSON(value), { 'type': 'resolution' });
         default:
             return value;
     }

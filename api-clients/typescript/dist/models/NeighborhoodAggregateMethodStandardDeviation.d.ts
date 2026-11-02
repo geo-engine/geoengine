@@ -16,8 +16,6 @@
 export interface NeighborhoodAggregateMethodStandardDeviation {
     /**
      *
-     * @type {NeighborhoodAggregateMethodStandardDeviationTypeEnum}
-     * @memberof NeighborhoodAggregateMethodStandardDeviation
      */
     type: NeighborhoodAggregateMethodStandardDeviationTypeEnum;
 }

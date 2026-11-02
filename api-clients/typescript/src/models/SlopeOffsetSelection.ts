@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { SlopeOffsetSelectionAuto } from './SlopeOffsetSelectionAuto';
 import {
     instanceOfSlopeOffsetSelectionAuto,
@@ -70,11 +71,11 @@ export function SlopeOffsetSelectionToJSONTyped(value?: SlopeOffsetSelection | n
     }
     switch (value['type']) {
         case 'auto':
-            return Object.assign({}, SlopeOffsetSelectionAutoToJSON(value), { type: 'auto' } as const);
+            return Object.assign({}, SlopeOffsetSelectionAutoToJSON(value), { 'type': 'auto' } as const);
         case 'constant':
-            return Object.assign({}, SlopeOffsetSelectionConstantToJSON(value), { type: 'constant' } as const);
+            return Object.assign({}, SlopeOffsetSelectionConstantToJSON(value), { 'type': 'constant' } as const);
         case 'metadataKey':
-            return Object.assign({}, SlopeOffsetSelectionMetadataKeyToJSON(value), { type: 'metadataKey' } as const);
+            return Object.assign({}, SlopeOffsetSelectionMetadataKeyToJSON(value), { 'type': 'metadataKey' } as const);
         default:
             return value;
     }

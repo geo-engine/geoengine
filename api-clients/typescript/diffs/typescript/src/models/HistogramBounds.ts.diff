@@ -1,6 +1,6 @@
 --- typescript/src/models/HistogramBounds.ts
 +++ typescript/src/models/HistogramBounds.ts
-@@ -66,7 +66,7 @@
+@@ -67,7 +67,7 @@
          return value;
      }
      if (instanceOfData(value)) {

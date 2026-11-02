@@ -108,9 +108,10 @@ class TaskStatus(BaseModel):
         match = 0
 
         # use oneOf discriminator to lookup the data type
-        _data_type = json.loads(json_str).get("status")
+        _discriminator_property = "status"
+        _data_type = json.loads(json_str).get(_discriminator_property)
         if not _data_type:
-            raise ValueError("Failed to lookup data type from the field `status` in the input.")
+            raise ValueError(f"Failed to lookup data type from the field `{_discriminator_property}` in the input.")
 
         # check if data type is `TaskStatusAborted`
         if _data_type == "aborted":

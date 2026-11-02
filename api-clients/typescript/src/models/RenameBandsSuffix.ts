@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface RenameBandsSuffix {
     /**
      * 
-     * @type {RenameBandsSuffixTypeEnum}
-     * @memberof RenameBandsSuffix
      */
     type: RenameBandsSuffixTypeEnum;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof RenameBandsSuffix
      */
     values: Array<string>;
 }
@@ -37,7 +33,7 @@ export interface RenameBandsSuffix {
  * @export
  */
 export const RenameBandsSuffixTypeEnum = {
-    Suffix: 'suffix'
+    Suffix: 'suffix',
 } as const;
 export type RenameBandsSuffixTypeEnum = typeof RenameBandsSuffixTypeEnum[keyof typeof RenameBandsSuffixTypeEnum];
 
@@ -47,6 +43,8 @@ export type RenameBandsSuffixTypeEnum = typeof RenameBandsSuffixTypeEnum[keyof t
  */
 export function instanceOfRenameBandsSuffix(value: object): value is RenameBandsSuffix {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'suffix') return false;
+    
     if (!('values' in value) || value['values'] === undefined) return false;
     return true;
 }

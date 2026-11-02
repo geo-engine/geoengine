@@ -20,7 +20,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { AddDatasetTileToJSON, AutoCreateDatasetToJSON, CreateDatasetToJSON, DatasetFromJSON, DatasetListingFromJSON, DatasetNameResponseFromJSON, MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, MetaDataSuggestionFromJSON, ProvenancesToJSON, SuggestMetaDataToJSON, SymbologyToJSON, UpdateDatasetToJSON, VolumeFromJSON, VolumeFileLayersResponseFromJSON, } from '../models/index';
+import { AddDatasetTileToJSON, } from '../models/AddDatasetTile';
+import { AutoCreateDatasetToJSON, } from '../models/AutoCreateDataset';
+import { CreateDatasetToJSON, } from '../models/CreateDataset';
+import { DatasetFromJSON, } from '../models/Dataset';
+import { DatasetListingFromJSON, } from '../models/DatasetListing';
+import { DatasetNameResponseFromJSON, } from '../models/DatasetNameResponse';
+import { MetaDataDefinitionFromJSON, MetaDataDefinitionToJSON, } from '../models/MetaDataDefinition';
+import { MetaDataSuggestionFromJSON, } from '../models/MetaDataSuggestion';
+import { ProvenancesToJSON, } from '../models/Provenances';
+import { SuggestMetaDataToJSON, } from '../models/SuggestMetaData';
+import { SymbologyToJSON, } from '../models/Symbology';
+import { UpdateDatasetToJSON, } from '../models/UpdateDataset';
+import { VolumeFromJSON, } from '../models/Volume';
+import { VolumeFileLayersResponseFromJSON, } from '../models/VolumeFileLayersResponse';
 /**
  *
  */
@@ -47,7 +60,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/tiles`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -187,7 +200,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -232,7 +245,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -278,7 +291,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/loadingInfo`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -393,8 +406,8 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/volumes/{volume_name}/files/{file_name}/layers`;
-            urlPath = urlPath.replace(`{${"volume_name"}}`, encodeURIComponent(String(requestParameters['volumeName'])));
-            urlPath = urlPath.replace(`{${"file_name"}}`, encodeURIComponent(String(requestParameters['fileName'])));
+            urlPath = urlPath.replace('{volume_name}', encodeURIComponent(String(requestParameters['volumeName'])));
+            urlPath = urlPath.replace('{file_name}', encodeURIComponent(String(requestParameters['fileName'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -533,7 +546,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -583,7 +596,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/provenance`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'PUT',
@@ -631,7 +644,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/symbology`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'PUT',
@@ -681,7 +694,7 @@ export class DatasetsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/dataset/{dataset}/loadingInfo`;
-            urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+            urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
             return {
                 path: urlPath,
                 method: 'PUT',

@@ -23,13 +23,15 @@ const RegularTimeDimension_1 = require("./RegularTimeDimension");
  * @export
  */
 exports.RegularTypeEnum = {
-    Regular: 'regular'
+    Regular: 'regular',
 };
 /**
  * Check if a given object implements the Regular interface.
  */
 function instanceOfRegular(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'regular')
         return false;
     return true;
 }

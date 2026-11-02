@@ -16,14 +16,10 @@
 export interface Names {
     /**
      *
-     * @type {Array<string>}
-     * @memberof Names
      */
     values: Array<string>;
     /**
      *
-     * @type {NamesTypeEnum}
-     * @memberof Names
      */
     type: NamesTypeEnum;
 }

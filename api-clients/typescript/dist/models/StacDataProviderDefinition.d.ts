@@ -21,92 +21,62 @@ import type { TimeDimension } from './TimeDimension';
 export interface StacDataProviderDefinition {
     /**
      *
-     * @type {StacDataProviderDefinitionTypeEnum}
-     * @memberof StacDataProviderDefinition
      */
     type: StacDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     apiUrl: string;
     /**
      *
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     collectionName: string;
     /**
      *
-     * @type {StacProviderS3Config}
-     * @memberof StacDataProviderDefinition
      */
     s3Config?: StacProviderS3Config | null;
     /**
      *
-     * @type {StacProviderAuthentication}
-     * @memberof StacDataProviderDefinition
      */
     authentication?: StacProviderAuthentication | null;
     /**
      *
-     * @type {TimeDimension}
-     * @memberof StacDataProviderDefinition
      */
     timeDimension: TimeDimension;
     /**
      *
-     * @type {Array<StacProviderDataset>}
-     * @memberof StacDataProviderDefinition
      */
     datasets: Array<StacProviderDataset>;
     /**
      * Timeout in seconds for outgoing STAC API HTTP requests.
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     queryTimeoutSecs?: number;
     /**
      *
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     pageLimit?: number;
     /**
      * Optional output cache lifetime; omitted values use the global cache default.
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     cacheTtlSecs?: number | null;
     /**
      * Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
-     * @type {StacGrid}
-     * @memberof StacDataProviderDefinition
      */
     stacGrid?: StacGrid | null;
 }

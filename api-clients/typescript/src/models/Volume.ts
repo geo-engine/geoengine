@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface Volume {
     /**
      * 
-     * @type {string}
-     * @memberof Volume
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof Volume
      */
     path?: string | null;
 }
@@ -51,7 +47,7 @@ export function VolumeFromJSONTyped(json: any, ignoreDiscriminator: boolean): Vo
     return {
         
         'name': json['name'],
-        'path': json['path'] == null ? undefined : json['path'],
+        'path': json['path'] === undefined ? undefined : json['path'] === null ? null : json['path'],
     };
 }
 

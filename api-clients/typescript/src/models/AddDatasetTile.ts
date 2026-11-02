@@ -42,32 +42,22 @@ import {
 export interface AddDatasetTile {
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof AddDatasetTile
      */
     time: TimeInterval;
     /**
      * 
-     * @type {SpatialPartition2D}
-     * @memberof AddDatasetTile
      */
     spatialPartition: SpatialPartition2D;
     /**
      * 
-     * @type {number}
-     * @memberof AddDatasetTile
      */
     band: number;
     /**
      * 
-     * @type {number}
-     * @memberof AddDatasetTile
      */
     zIndex: number;
     /**
      * 
-     * @type {GdalDatasetParameters}
-     * @memberof AddDatasetTile
      */
     params: GdalDatasetParameters;
 }
@@ -77,9 +67,9 @@ export interface AddDatasetTile {
  */
 export function instanceOfAddDatasetTile(value: object): value is AddDatasetTile {
     if (!('time' in value) || value['time'] === undefined) return false;
-    if (!('spatialPartition' in value) || value['spatialPartition'] === undefined) return false;
+    if ((!('spatialPartition' in (value as Record<string, any>)) && !('spatial_partition' in (value as Record<string, any>))) || ((value as Record<string, any>)['spatialPartition'] === undefined && (value as Record<string, any>)['spatial_partition'] === undefined)) return false;
     if (!('band' in value) || value['band'] === undefined) return false;
-    if (!('zIndex' in value) || value['zIndex'] === undefined) return false;
+    if ((!('zIndex' in (value as Record<string, any>)) && !('z_index' in (value as Record<string, any>))) || ((value as Record<string, any>)['zIndex'] === undefined && (value as Record<string, any>)['z_index'] === undefined)) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }

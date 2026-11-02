@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface AggregationPercentileEstimate {
     /**
      * 
-     * @type {AggregationPercentileEstimateTypeEnum}
-     * @memberof AggregationPercentileEstimate
      */
     type: AggregationPercentileEstimateTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationPercentileEstimate
      */
     ignoreNoData: boolean;
     /**
      * 
-     * @type {number}
-     * @memberof AggregationPercentileEstimate
      */
     percentile: number;
 }
@@ -43,7 +37,7 @@ export interface AggregationPercentileEstimate {
  * @export
  */
 export const AggregationPercentileEstimateTypeEnum = {
-    PercentileEstimate: 'percentileEstimate'
+    PercentileEstimate: 'percentileEstimate',
 } as const;
 export type AggregationPercentileEstimateTypeEnum = typeof AggregationPercentileEstimateTypeEnum[keyof typeof AggregationPercentileEstimateTypeEnum];
 
@@ -53,6 +47,8 @@ export type AggregationPercentileEstimateTypeEnum = typeof AggregationPercentile
  */
 export function instanceOfAggregationPercentileEstimate(value: object): value is AggregationPercentileEstimate {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'percentileEstimate') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     if (!('percentile' in value) || value['percentile'] === undefined) return false;
     return true;

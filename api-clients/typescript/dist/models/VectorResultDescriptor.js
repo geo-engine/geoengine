@@ -45,8 +45,8 @@ function VectorResultDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         'dataType': (0, VectorDataType_1.VectorDataTypeFromJSON)(json['dataType']),
         'spatialReference': json['spatialReference'],
         'columns': ((0, runtime_1.mapValues)(json['columns'], VectorColumnInfo_1.VectorColumnInfoFromJSON)),
-        'time': json['time'] == null ? undefined : (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
-        'bbox': json['bbox'] == null ? undefined : (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['bbox']),
+        'time': json['time'] === undefined ? undefined : json['time'] === null ? null : (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
+        'bbox': json['bbox'] === undefined ? undefined : json['bbox'] === null ? null : (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['bbox']),
     };
 }
 function VectorResultDescriptorToJSON(json) {

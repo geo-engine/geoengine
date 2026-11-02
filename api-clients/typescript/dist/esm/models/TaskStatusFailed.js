@@ -14,13 +14,15 @@
  * @export
  */
 export const TaskStatusFailedStatusEnum = {
-    Failed: 'failed'
+    Failed: 'failed',
 };
 /**
  * Check if a given object implements the TaskStatusFailed interface.
  */
 export function instanceOfTaskStatusFailed(value) {
     if (!('status' in value) || value['status'] === undefined)
+        return false;
+    if (value['status'] !== 'failed')
         return false;
     if (!('error' in value) || value['error'] === undefined)
         return false;

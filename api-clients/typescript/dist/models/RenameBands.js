@@ -46,11 +46,11 @@ function RenameBandsToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'default':
-            return Object.assign({}, (0, RenameBandsDefault_1.RenameBandsDefaultToJSON)(value), { type: 'default' });
+            return Object.assign({}, (0, RenameBandsDefault_1.RenameBandsDefaultToJSON)(value), { 'type': 'default' });
         case 'rename':
-            return Object.assign({}, (0, RenameBandsRename_1.RenameBandsRenameToJSON)(value), { type: 'rename' });
+            return Object.assign({}, (0, RenameBandsRename_1.RenameBandsRenameToJSON)(value), { 'type': 'rename' });
         case 'suffix':
-            return Object.assign({}, (0, RenameBandsSuffix_1.RenameBandsSuffixToJSON)(value), { type: 'suffix' });
+            return Object.assign({}, (0, RenameBandsSuffix_1.RenameBandsSuffixToJSON)(value), { 'type': 'suffix' });
         default:
             return value;
     }

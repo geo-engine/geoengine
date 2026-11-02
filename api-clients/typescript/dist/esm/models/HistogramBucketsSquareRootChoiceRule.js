@@ -14,13 +14,15 @@
  * @export
  */
 export const HistogramBucketsSquareRootChoiceRuleTypeEnum = {
-    SquareRootChoiceRule: 'squareRootChoiceRule'
+    SquareRootChoiceRule: 'squareRootChoiceRule',
 };
 /**
  * Check if a given object implements the HistogramBucketsSquareRootChoiceRule interface.
  */
 export function instanceOfHistogramBucketsSquareRootChoiceRule(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'squareRootChoiceRule')
         return false;
     return true;
 }

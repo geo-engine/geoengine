@@ -15,13 +15,15 @@ import { DatabaseConnectionConfigFromJSON, DatabaseConnectionConfigToJSON, } fro
  * @export
  */
 export const GfbioAbcdDataProviderDefinitionTypeEnum = {
-    GfbioAbcd: 'GfbioAbcd'
+    GfbioAbcd: 'GfbioAbcd',
 };
 /**
  * Check if a given object implements the GfbioAbcdDataProviderDefinition interface.
  */
 export function instanceOfGfbioAbcdDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GfbioAbcd')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -42,9 +44,9 @@ export function GfbioAbcdDataProviderDefinitionFromJSONTyped(json, ignoreDiscrim
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function GfbioAbcdDataProviderDefinitionToJSON(json) {

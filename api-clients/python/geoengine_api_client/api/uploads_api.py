@@ -593,7 +593,7 @@ class UploadsApi:
 
 
         :param files: (required)
-        :type files: List[bytearray]
+        :type files: List[bytes]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -659,7 +659,7 @@ class UploadsApi:
 
 
         :param files: (required)
-        :type files: List[bytearray]
+        :type files: List[bytes]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -725,7 +725,7 @@ class UploadsApi:
 
 
         :param files: (required)
-        :type files: List[bytearray]
+        :type files: List[bytes]
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of

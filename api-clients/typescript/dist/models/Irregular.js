@@ -22,13 +22,15 @@ exports.IrregularToJSONTyped = IrregularToJSONTyped;
  * @export
  */
 exports.IrregularTypeEnum = {
-    Irregular: 'irregular'
+    Irregular: 'irregular',
 };
 /**
  * Check if a given object implements the Irregular interface.
  */
 function instanceOfIrregular(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'irregular')
         return false;
     return true;
 }

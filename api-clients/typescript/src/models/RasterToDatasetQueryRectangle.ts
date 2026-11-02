@@ -35,14 +35,10 @@ import {
 export interface RasterToDatasetQueryRectangle {
     /**
      * 
-     * @type {SpatialPartition2D}
-     * @memberof RasterToDatasetQueryRectangle
      */
     spatialBounds: SpatialPartition2D;
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof RasterToDatasetQueryRectangle
      */
     timeInterval: TimeInterval;
 }

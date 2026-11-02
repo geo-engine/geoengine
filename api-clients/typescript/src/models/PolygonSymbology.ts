@@ -42,32 +42,22 @@ import {
 export interface PolygonSymbology {
     /**
      * 
-     * @type {PolygonSymbologyTypeEnum}
-     * @memberof PolygonSymbology
      */
     type: PolygonSymbologyTypeEnum;
     /**
      * 
-     * @type {ColorParam}
-     * @memberof PolygonSymbology
      */
     fillColor: ColorParam;
     /**
      * 
-     * @type {StrokeParam}
-     * @memberof PolygonSymbology
      */
     stroke: StrokeParam;
     /**
      * 
-     * @type {TextSymbology}
-     * @memberof PolygonSymbology
      */
     text?: TextSymbology | null;
     /**
      * 
-     * @type {boolean}
-     * @memberof PolygonSymbology
      */
     autoSimplified: boolean;
 }
@@ -77,7 +67,7 @@ export interface PolygonSymbology {
  * @export
  */
 export const PolygonSymbologyTypeEnum = {
-    Polygon: 'polygon'
+    Polygon: 'polygon',
 } as const;
 export type PolygonSymbologyTypeEnum = typeof PolygonSymbologyTypeEnum[keyof typeof PolygonSymbologyTypeEnum];
 
@@ -87,6 +77,8 @@ export type PolygonSymbologyTypeEnum = typeof PolygonSymbologyTypeEnum[keyof typ
  */
 export function instanceOfPolygonSymbology(value: object): value is PolygonSymbology {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'polygon') return false;
+    
     if (!('fillColor' in value) || value['fillColor'] === undefined) return false;
     if (!('stroke' in value) || value['stroke'] === undefined) return false;
     if (!('autoSimplified' in value) || value['autoSimplified'] === undefined) return false;
@@ -106,7 +98,7 @@ export function PolygonSymbologyFromJSONTyped(json: any, ignoreDiscriminator: bo
         'type': json['type'],
         'fillColor': ColorParamFromJSON(json['fillColor']),
         'stroke': StrokeParamFromJSON(json['stroke']),
-        'text': json['text'] == null ? undefined : TextSymbologyFromJSON(json['text']),
+        'text': json['text'] === undefined ? undefined : json['text'] === null ? null : TextSymbologyFromJSON(json['text']),
         'autoSimplified': json['autoSimplified'],
     };
 }

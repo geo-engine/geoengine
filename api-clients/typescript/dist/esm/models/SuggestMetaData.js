@@ -28,8 +28,8 @@ export function SuggestMetaDataFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'dataPath': DataPathFromJSON(json['dataPath']),
-        'mainFile': json['mainFile'] == null ? undefined : json['mainFile'],
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
+        'mainFile': json['mainFile'] === undefined ? undefined : json['mainFile'] === null ? null : json['mainFile'],
+        'layerName': json['layerName'] === undefined ? undefined : json['layerName'] === null ? null : json['layerName'],
     };
 }
 export function SuggestMetaDataToJSON(json) {

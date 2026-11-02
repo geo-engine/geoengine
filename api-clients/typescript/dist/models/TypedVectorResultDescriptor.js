@@ -23,13 +23,15 @@ const VectorResultDescriptor_1 = require("./VectorResultDescriptor");
  * @export
  */
 exports.TypedVectorResultDescriptorTypeEnum = {
-    Vector: 'vector'
+    Vector: 'vector',
 };
 /**
  * Check if a given object implements the TypedVectorResultDescriptor interface.
  */
 function instanceOfTypedVectorResultDescriptor(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'vector')
         return false;
     return true;
 }

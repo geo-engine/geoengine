@@ -24,13 +24,15 @@ const DownsamplingParameters_1 = require("./DownsamplingParameters");
  * @export
  */
 exports.DownsamplingTypeEnum = {
-    Downsampling: 'Downsampling'
+    Downsampling: 'Downsampling',
 };
 /**
  * Check if a given object implements the Downsampling interface.
  */
 function instanceOfDownsampling(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Downsampling')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

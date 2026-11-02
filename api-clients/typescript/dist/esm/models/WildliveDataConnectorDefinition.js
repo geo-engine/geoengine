@@ -10,17 +10,20 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 /**
  * @export
  */
 export const WildliveDataConnectorDefinitionTypeEnum = {
-    WildLive: 'WildLIVE!'
+    WildLive: 'WildLIVE!',
 };
 /**
  * Check if a given object implements the WildliveDataConnectorDefinition interface.
  */
 export function instanceOfWildliveDataConnectorDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'WildLIVE!')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
@@ -42,10 +45,10 @@ export function WildliveDataConnectorDefinitionFromJSONTyped(json, ignoreDiscrim
         'id': json['id'],
         'name': json['name'],
         'description': json['description'],
-        'user': json['user'] == null ? undefined : json['user'],
-        'refreshToken': json['refreshToken'] == null ? undefined : json['refreshToken'],
-        'expiryDate': json['expiryDate'] == null ? undefined : (new Date(json['expiryDate'])),
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'user': json['user'] === undefined ? undefined : json['user'] === null ? null : json['user'],
+        'refreshToken': json['refreshToken'] === undefined ? undefined : json['refreshToken'] === null ? null : json['refreshToken'],
+        'expiryDate': json['expiryDate'] === undefined ? undefined : json['expiryDate'] === null ? null : (parseDateTime(json['expiryDate'])),
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
     };
 }
 export function WildliveDataConnectorDefinitionToJSON(json) {
@@ -62,7 +65,7 @@ export function WildliveDataConnectorDefinitionToJSONTyped(value, ignoreDiscrimi
         'description': value['description'],
         'user': value['user'],
         'refreshToken': value['refreshToken'],
-        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : value['expiryDate'].toISOString(),
+        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : serializeDateTime(value['expiryDate']),
         'priority': value['priority'],
     };
 }

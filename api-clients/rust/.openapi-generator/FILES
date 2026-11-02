@@ -382,6 +382,7 @@ docs/TileMatrixSetItem.md
 docs/TileMatrixSets.md
 docs/TilePoint.md
 docs/TileSet.md
+docs/TileSetDataType.md
 docs/TileSetItem.md
 docs/TileSets.md
 docs/TilesCrs.md
@@ -844,6 +845,7 @@ src/models/tile_matrix_set_item.rs
 src/models/tile_matrix_sets.rs
 src/models/tile_point.rs
 src/models/tile_set.rs
+src/models/tile_set_data_type.rs
 src/models/tile_set_item.rs
 src/models/tile_sets.rs
 src/models/tiles_crs.rs

@@ -18,20 +18,14 @@ import type { ReflectanceParameters } from './ReflectanceParameters';
 export interface Reflectance {
     /**
      *
-     * @type {ReflectanceTypeEnum}
-     * @memberof Reflectance
      */
     type: ReflectanceTypeEnum;
     /**
      *
-     * @type {ReflectanceParameters}
-     * @memberof Reflectance
      */
     params: ReflectanceParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof Reflectance
      */
     sources: SingleRasterSource;
 }

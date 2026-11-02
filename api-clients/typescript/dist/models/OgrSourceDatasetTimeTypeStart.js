@@ -24,13 +24,15 @@ const OgrSourceDurationSpec_1 = require("./OgrSourceDurationSpec");
  * @export
  */
 exports.OgrSourceDatasetTimeTypeStartTypeEnum = {
-    Start: 'start'
+    Start: 'start',
 };
 /**
  * Check if a given object implements the OgrSourceDatasetTimeTypeStart interface.
  */
 function instanceOfOgrSourceDatasetTimeTypeStart(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'start')
         return false;
     if (!('startField' in value) || value['startField'] === undefined)
         return false;

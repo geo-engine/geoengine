@@ -16,14 +16,10 @@
 export interface BandDistanceEquallySpaced {
     /**
      *
-     * @type {BandDistanceEquallySpacedTypeEnum}
-     * @memberof BandDistanceEquallySpaced
      */
     type: BandDistanceEquallySpacedTypeEnum;
     /**
      * Constant distance between consecutive bands.
-     * @type {number}
-     * @memberof BandDistanceEquallySpaced
      */
     distance: number;
 }

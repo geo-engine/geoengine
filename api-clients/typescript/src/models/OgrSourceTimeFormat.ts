@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { OgrSourceTimeFormatAuto } from './OgrSourceTimeFormatAuto';
 import {
     instanceOfOgrSourceTimeFormatAuto,
@@ -70,11 +71,11 @@ export function OgrSourceTimeFormatToJSONTyped(value?: OgrSourceTimeFormat | nul
     }
     switch (value['format']) {
         case 'auto':
-            return Object.assign({}, OgrSourceTimeFormatAutoToJSON(value), { format: 'auto' } as const);
+            return Object.assign({}, OgrSourceTimeFormatAutoToJSON(value), { 'format': 'auto' } as const);
         case 'custom':
-            return Object.assign({}, OgrSourceTimeFormatCustomToJSON(value), { format: 'custom' } as const);
+            return Object.assign({}, OgrSourceTimeFormatCustomToJSON(value), { 'format': 'custom' } as const);
         case 'unixTimeStamp':
-            return Object.assign({}, OgrSourceTimeFormatUnixTimeStampToJSON(value), { format: 'unixTimeStamp' } as const);
+            return Object.assign({}, OgrSourceTimeFormatUnixTimeStampToJSON(value), { 'format': 'unixTimeStamp' } as const);
         default:
             return value;
     }

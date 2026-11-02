@@ -23,6 +23,7 @@ from geoengine_api_client.models.extent import Extent
 from geoengine_api_client.models.link import Link
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class Collection(BaseModel):
     """
@@ -42,7 +43,8 @@ class Collection(BaseModel):
     __properties: ClassVar[List[str]] = ["id", "title", "description", "attribution", "extent", "itemType", "crs", "storageCrs", "storageCrsCoordinateEpoch", "links"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -54,8 +56,7 @@ class Collection(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -89,8 +90,7 @@ class Collection(BaseModel):
         _items = []
         if self.links:
             for _item_links in self.links:
-                if _item_links:
-                    _items.append(_item_links.to_dict())
+                _items.append(_item_links.to_dict() if _item_links is not None else None)
             _dict['links'] = _items
         # puts key-value pairs in additional_properties in the top level
         if self.additional_properties is not None:

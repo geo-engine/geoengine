@@ -53,20 +53,14 @@ import {
 export interface Downsampling {
     /**
      * 
-     * @type {DownsamplingTypeEnum}
-     * @memberof Downsampling
      */
     type: DownsamplingTypeEnum;
     /**
      * 
-     * @type {DownsamplingParameters}
-     * @memberof Downsampling
      */
     params: DownsamplingParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof Downsampling
      */
     sources: SingleRasterSource;
 }
@@ -76,7 +70,7 @@ export interface Downsampling {
  * @export
  */
 export const DownsamplingTypeEnum = {
-    Downsampling: 'Downsampling'
+    Downsampling: 'Downsampling',
 } as const;
 export type DownsamplingTypeEnum = typeof DownsamplingTypeEnum[keyof typeof DownsamplingTypeEnum];
 
@@ -86,6 +80,8 @@ export type DownsamplingTypeEnum = typeof DownsamplingTypeEnum[keyof typeof Down
  */
 export function instanceOfDownsampling(value: object): value is Downsampling {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Downsampling') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

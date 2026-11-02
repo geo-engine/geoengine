@@ -17,7 +17,7 @@
  * @export
  */
 export const WmsService = {
-    Wms: 'WMS'
+    Wms: 'WMS',
 } as const;
 export type WmsService = typeof WmsService[keyof typeof WmsService];
 

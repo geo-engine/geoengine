@@ -18,7 +18,7 @@
  */
 export const SearchType = {
     Fulltext: 'fulltext',
-    Prefix: 'prefix'
+    Prefix: 'prefix',
 } as const;
 export type SearchType = typeof SearchType[keyof typeof SearchType];
 

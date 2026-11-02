@@ -16,7 +16,7 @@
  */
 export const MlModelInputNoDataHandlingVariant = {
     EncodedNoData: 'encodedNoData',
-    SkipIfNoData: 'skipIfNoData'
+    SkipIfNoData: 'skipIfNoData',
 };
 export function instanceOfMlModelInputNoDataHandlingVariant(value) {
     for (const key in MlModelInputNoDataHandlingVariant) {

@@ -34,14 +34,10 @@ import {
 export interface OgrSource {
     /**
      * 
-     * @type {OgrSourceTypeEnum}
-     * @memberof OgrSource
      */
     type: OgrSourceTypeEnum;
     /**
      * 
-     * @type {OgrSourceParameters}
-     * @memberof OgrSource
      */
     params: OgrSourceParameters;
 }
@@ -51,7 +47,7 @@ export interface OgrSource {
  * @export
  */
 export const OgrSourceTypeEnum = {
-    OgrSource: 'OgrSource'
+    OgrSource: 'OgrSource',
 } as const;
 export type OgrSourceTypeEnum = typeof OgrSourceTypeEnum[keyof typeof OgrSourceTypeEnum];
 
@@ -61,6 +57,8 @@ export type OgrSourceTypeEnum = typeof OgrSourceTypeEnum[keyof typeof OgrSourceT
  */
 export function instanceOfOgrSource(value: object): value is OgrSource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'OgrSource') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }

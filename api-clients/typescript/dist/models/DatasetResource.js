@@ -22,13 +22,15 @@ exports.DatasetResourceToJSONTyped = DatasetResourceToJSONTyped;
  * @export
  */
 exports.DatasetResourceTypeEnum = {
-    Dataset: 'dataset'
+    Dataset: 'dataset',
 };
 /**
  * Check if a given object implements the DatasetResource interface.
  */
 function instanceOfDatasetResource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'dataset')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

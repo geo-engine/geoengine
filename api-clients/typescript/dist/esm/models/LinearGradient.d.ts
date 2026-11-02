@@ -17,32 +17,22 @@ import type { Breakpoint } from './Breakpoint';
 export interface LinearGradient {
     /**
      *
-     * @type {LinearGradientTypeEnum}
-     * @memberof LinearGradient
      */
     type: LinearGradientTypeEnum;
     /**
      *
-     * @type {Array<Breakpoint>}
-     * @memberof LinearGradient
      */
     breakpoints: Array<Breakpoint>;
     /**
      *
-     * @type {Array<number>}
-     * @memberof LinearGradient
      */
     noDataColor: Array<number>;
     /**
      *
-     * @type {Array<number>}
-     * @memberof LinearGradient
      */
     overColor: Array<number>;
     /**
      *
-     * @type {Array<number>}
-     * @memberof LinearGradient
      */
     underColor: Array<number>;
 }

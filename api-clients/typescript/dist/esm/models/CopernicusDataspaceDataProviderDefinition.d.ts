@@ -16,62 +16,42 @@
 export interface CopernicusDataspaceDataProviderDefinition {
     /**
      *
-     * @type {CopernicusDataspaceDataProviderDefinitionTypeEnum}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     type: CopernicusDataspaceDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     stacUrl: string;
     /**
      *
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     s3Url: string;
     /**
      *
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     s3AccessKey: string;
     /**
      *
-     * @type {string}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     s3SecretKey: string;
     /**
      *
-     * @type {Array<Array<string>>}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     gdalConfig: Array<Array<string>>;
     /**
      *
-     * @type {number}
-     * @memberof CopernicusDataspaceDataProviderDefinition
      */
     priority?: number | null;
 }

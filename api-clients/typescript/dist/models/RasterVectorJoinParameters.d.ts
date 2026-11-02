@@ -26,32 +26,22 @@ export interface RasterVectorJoinParameters {
      * - **suffix**: Specifies a suffix for each input, to be appended to the band names.
      * - **rename**: A list of names for each new column.
      *
-     * @type {ColumnNames}
-     * @memberof RasterVectorJoinParameters
      */
     names: ColumnNames;
     /**
      * The aggregation function to use for features covering multiple pixels.
-     * @type {FeatureAggregationMethod}
-     * @memberof RasterVectorJoinParameters
      */
     featureAggregation: FeatureAggregationMethod;
     /**
      * Whether to ignore no data values in the aggregation. Defaults to `false`.
-     * @type {boolean}
-     * @memberof RasterVectorJoinParameters
      */
     featureAggregationIgnoreNoData?: boolean;
     /**
      * The aggregation function to use for features covering multiple (raster) time steps.
-     * @type {TemporalAggregationMethod}
-     * @memberof RasterVectorJoinParameters
      */
     temporalAggregation: TemporalAggregationMethod;
     /**
      * Whether to ignore no data values in the aggregation. Defaults to `false`.
-     * @type {boolean}
-     * @memberof RasterVectorJoinParameters
      */
     temporalAggregationIgnoreNoData?: boolean;
 }

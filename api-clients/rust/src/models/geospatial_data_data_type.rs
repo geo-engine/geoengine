@@ -10,6 +10,8 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
+/// GeospatialDataDataType : Type of data represented in the layer
+/// Type of data represented in the layer
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GeospatialDataDataType {

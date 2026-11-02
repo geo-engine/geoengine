@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { LineSymbology } from './LineSymbology';
 import {
     instanceOfLineSymbology,
@@ -79,13 +80,13 @@ export function SymbologyToJSONTyped(value?: Symbology | null, ignoreDiscriminat
     }
     switch (value['type']) {
         case 'line':
-            return Object.assign({}, LineSymbologyToJSON(value), { type: 'line' } as const);
+            return Object.assign({}, LineSymbologyToJSON(value), { 'type': 'line' } as const);
         case 'point':
-            return Object.assign({}, PointSymbologyToJSON(value), { type: 'point' } as const);
+            return Object.assign({}, PointSymbologyToJSON(value), { 'type': 'point' } as const);
         case 'polygon':
-            return Object.assign({}, PolygonSymbologyToJSON(value), { type: 'polygon' } as const);
+            return Object.assign({}, PolygonSymbologyToJSON(value), { 'type': 'polygon' } as const);
         case 'raster':
-            return Object.assign({}, RasterSymbologyToJSON(value), { type: 'raster' } as const);
+            return Object.assign({}, RasterSymbologyToJSON(value), { 'type': 'raster' } as const);
         default:
             return value;
     }

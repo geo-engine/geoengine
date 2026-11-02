@@ -49,17 +49,17 @@ export function ResourceToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'dataset':
-            return Object.assign({}, DatasetResourceToJSON(value), { type: 'dataset' });
+            return Object.assign({}, DatasetResourceToJSON(value), { 'type': 'dataset' });
         case 'layer':
-            return Object.assign({}, LayerResourceToJSON(value), { type: 'layer' });
+            return Object.assign({}, LayerResourceToJSON(value), { 'type': 'layer' });
         case 'layerCollection':
-            return Object.assign({}, LayerCollectionResourceToJSON(value), { type: 'layerCollection' });
+            return Object.assign({}, LayerCollectionResourceToJSON(value), { 'type': 'layerCollection' });
         case 'mlModel':
-            return Object.assign({}, MlModelResourceToJSON(value), { type: 'mlModel' });
+            return Object.assign({}, MlModelResourceToJSON(value), { 'type': 'mlModel' });
         case 'project':
-            return Object.assign({}, ProjectResourceToJSON(value), { type: 'project' });
+            return Object.assign({}, ProjectResourceToJSON(value), { 'type': 'project' });
         case 'provider':
-            return Object.assign({}, DataProviderResourceToJSON(value), { type: 'provider' });
+            return Object.assign({}, DataProviderResourceToJSON(value), { 'type': 'provider' });
         default:
             return value;
     }

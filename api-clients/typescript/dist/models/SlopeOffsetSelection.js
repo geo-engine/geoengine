@@ -46,11 +46,11 @@ function SlopeOffsetSelectionToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'auto':
-            return Object.assign({}, (0, SlopeOffsetSelectionAuto_1.SlopeOffsetSelectionAutoToJSON)(value), { type: 'auto' });
+            return Object.assign({}, (0, SlopeOffsetSelectionAuto_1.SlopeOffsetSelectionAutoToJSON)(value), { 'type': 'auto' });
         case 'constant':
-            return Object.assign({}, (0, SlopeOffsetSelectionConstant_1.SlopeOffsetSelectionConstantToJSON)(value), { type: 'constant' });
+            return Object.assign({}, (0, SlopeOffsetSelectionConstant_1.SlopeOffsetSelectionConstantToJSON)(value), { 'type': 'constant' });
         case 'metadataKey':
-            return Object.assign({}, (0, SlopeOffsetSelectionMetadataKey_1.SlopeOffsetSelectionMetadataKeyToJSON)(value), { type: 'metadataKey' });
+            return Object.assign({}, (0, SlopeOffsetSelectionMetadataKey_1.SlopeOffsetSelectionMetadataKeyToJSON)(value), { 'type': 'metadataKey' });
         default:
             return value;
     }

@@ -40,20 +40,14 @@ import {
 export interface PointInPolygonFilter {
     /**
      * 
-     * @type {PointInPolygonFilterTypeEnum}
-     * @memberof PointInPolygonFilter
      */
     type: PointInPolygonFilterTypeEnum;
     /**
      * 
-     * @type {object}
-     * @memberof PointInPolygonFilter
      */
     params: object;
     /**
      * 
-     * @type {PointInPolygonFilterSource}
-     * @memberof PointInPolygonFilter
      */
     sources: PointInPolygonFilterSource;
 }
@@ -63,7 +57,7 @@ export interface PointInPolygonFilter {
  * @export
  */
 export const PointInPolygonFilterTypeEnum = {
-    PointInPolygonFilter: 'PointInPolygonFilter'
+    PointInPolygonFilter: 'PointInPolygonFilter',
 } as const;
 export type PointInPolygonFilterTypeEnum = typeof PointInPolygonFilterTypeEnum[keyof typeof PointInPolygonFilterTypeEnum];
 
@@ -73,6 +67,8 @@ export type PointInPolygonFilterTypeEnum = typeof PointInPolygonFilterTypeEnum[k
  */
 export function instanceOfPointInPolygonFilter(value: object): value is PointInPolygonFilter {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'PointInPolygonFilter') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

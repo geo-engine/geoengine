@@ -24,13 +24,15 @@ const SingleRasterOrVectorSource_1 = require("./SingleRasterOrVectorSource");
  * @export
  */
 exports.BoxPlotTypeEnum = {
-    BoxPlot: 'BoxPlot'
+    BoxPlot: 'BoxPlot',
 };
 /**
  * Check if a given object implements the BoxPlot interface.
  */
 function instanceOfBoxPlot(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'BoxPlot')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

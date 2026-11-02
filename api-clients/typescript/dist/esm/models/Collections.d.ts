@@ -18,38 +18,26 @@ import type { Link } from './Link';
 export interface Collections {
     /**
      *
-     * @type {Array<Link>}
-     * @memberof Collections
      */
     links?: Array<Link>;
     /**
      *
-     * @type {string}
-     * @memberof Collections
      */
     timeStamp?: string | null;
     /**
      *
-     * @type {number}
-     * @memberof Collections
      */
     numberMatched?: number | null;
     /**
      *
-     * @type {number}
-     * @memberof Collections
      */
     numberReturned?: number | null;
     /**
      *
-     * @type {Array<Collection>}
-     * @memberof Collections
      */
     collections: Array<Collection>;
     /**
      *
-     * @type {Array<string>}
-     * @memberof Collections
      */
     crs?: Array<string>;
 }

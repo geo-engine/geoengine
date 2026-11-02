@@ -15,7 +15,7 @@
  * @export
  */
 export const DownsamplingMethod = {
-    NearestNeighbor: 'nearestNeighbor'
+    NearestNeighbor: 'nearestNeighbor',
 };
 export function instanceOfDownsamplingMethod(value) {
     for (const key in DownsamplingMethod) {

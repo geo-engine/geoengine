@@ -35,14 +35,10 @@ import {
 export interface TimeDescriptor {
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof TimeDescriptor
      */
     bounds?: TimeInterval | null;
     /**
      * 
-     * @type {TimeDimension}
-     * @memberof TimeDescriptor
      */
     dimension: TimeDimension;
 }
@@ -65,7 +61,7 @@ export function TimeDescriptorFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'bounds': json['bounds'] == null ? undefined : TimeIntervalFromJSON(json['bounds']),
+        'bounds': json['bounds'] === undefined ? undefined : json['bounds'] === null ? null : TimeIntervalFromJSON(json['bounds']),
         'dimension': TimeDimensionFromJSON(json['dimension']),
     };
 }

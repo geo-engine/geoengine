@@ -26,7 +26,7 @@ exports.VectorDataType = {
     Data: 'Data',
     MultiPoint: 'MultiPoint',
     MultiLineString: 'MultiLineString',
-    MultiPolygon: 'MultiPolygon'
+    MultiPolygon: 'MultiPolygon',
 };
 function instanceOfVectorDataType(value) {
     for (const key in exports.VectorDataType) {

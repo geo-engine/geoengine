@@ -37,9 +37,9 @@ export function NeighborhoodAggregateMethodToJSONTyped(value, ignoreDiscriminato
     }
     switch (value['type']) {
         case 'standardDeviation':
-            return Object.assign({}, NeighborhoodAggregateMethodStandardDeviationToJSON(value), { type: 'standardDeviation' });
+            return Object.assign({}, NeighborhoodAggregateMethodStandardDeviationToJSON(value), { 'type': 'standardDeviation' });
         case 'sum':
-            return Object.assign({}, NeighborhoodAggregateMethodSumToJSON(value), { type: 'sum' });
+            return Object.assign({}, NeighborhoodAggregateMethodSumToJSON(value), { 'type': 'sum' });
         default:
             return value;
     }

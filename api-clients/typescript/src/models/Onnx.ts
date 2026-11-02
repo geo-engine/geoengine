@@ -35,20 +35,14 @@ import {
 export interface Onnx {
     /**
      * 
-     * @type {OnnxTypeEnum}
-     * @memberof Onnx
      */
     type: OnnxTypeEnum;
     /**
      * 
-     * @type {OnnxParameters}
-     * @memberof Onnx
      */
     params: OnnxParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof Onnx
      */
     sources: SingleRasterSource;
 }
@@ -58,7 +52,7 @@ export interface Onnx {
  * @export
  */
 export const OnnxTypeEnum = {
-    Onnx: 'Onnx'
+    Onnx: 'Onnx',
 } as const;
 export type OnnxTypeEnum = typeof OnnxTypeEnum[keyof typeof OnnxTypeEnum];
 
@@ -68,6 +62,8 @@ export type OnnxTypeEnum = typeof OnnxTypeEnum[keyof typeof OnnxTypeEnum];
  */
 export function instanceOfOnnx(value: object): value is Onnx {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Onnx') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { DownsamplingResolutionFraction } from './DownsamplingResolutionFraction';
 import {
     instanceOfDownsamplingResolutionFraction,
@@ -61,9 +62,9 @@ export function DownsamplingResolutionToJSONTyped(value?: DownsamplingResolution
     }
     switch (value['type']) {
         case 'fraction':
-            return Object.assign({}, DownsamplingResolutionFractionToJSON(value), { type: 'fraction' } as const);
+            return Object.assign({}, DownsamplingResolutionFractionToJSON(value), { 'type': 'fraction' } as const);
         case 'resolution':
-            return Object.assign({}, DownsamplingResolutionResolutionToJSON(value), { type: 'resolution' } as const);
+            return Object.assign({}, DownsamplingResolutionResolutionToJSON(value), { 'type': 'resolution' } as const);
         default:
             return value;
     }

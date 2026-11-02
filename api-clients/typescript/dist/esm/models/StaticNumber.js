@@ -14,13 +14,15 @@
  * @export
  */
 export const StaticNumberTypeEnum = {
-    Static: 'static'
+    Static: 'static',
 };
 /**
  * Check if a given object implements the StaticNumber interface.
  */
 export function instanceOfStaticNumber(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'static')
         return false;
     if (!('value' in value) || value['value'] === undefined)
         return false;

@@ -9,9 +9,12 @@ _clear:
 [group('ci')]
 check-no-changes-in-git-repo:
     #!/usr/bin/env bash
-    if [ -n "$(git status --porcelain)" ]; then
+    set -euo pipefail
+    # fail if `git status` itself fails (e.g. due to the ownership check), instead of treating its empty output as clean
+    changes="$(git status --porcelain)"
+    if [ -n "$changes" ]; then
       echo "Error: Uncommitted changes found in git repository."
-      git status --porcelain
+      echo "$changes"
       exit 1
     else
       echo "No uncommitted changes found in git repository."

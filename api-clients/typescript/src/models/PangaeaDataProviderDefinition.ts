@@ -20,38 +20,26 @@ import { mapValues } from '../runtime';
 export interface PangaeaDataProviderDefinition {
     /**
      * 
-     * @type {PangaeaDataProviderDefinitionTypeEnum}
-     * @memberof PangaeaDataProviderDefinition
      */
     type: PangaeaDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof PangaeaDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
      */
     baseUrl: string;
     /**
      * 
-     * @type {number}
-     * @memberof PangaeaDataProviderDefinition
      */
     cacheTtl?: number | null;
 }
@@ -61,7 +49,7 @@ export interface PangaeaDataProviderDefinition {
  * @export
  */
 export const PangaeaDataProviderDefinitionTypeEnum = {
-    Pangaea: 'Pangaea'
+    Pangaea: 'Pangaea',
 } as const;
 export type PangaeaDataProviderDefinitionTypeEnum = typeof PangaeaDataProviderDefinitionTypeEnum[keyof typeof PangaeaDataProviderDefinitionTypeEnum];
 
@@ -71,6 +59,8 @@ export type PangaeaDataProviderDefinitionTypeEnum = typeof PangaeaDataProviderDe
  */
 export function instanceOfPangaeaDataProviderDefinition(value: object): value is PangaeaDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Pangaea') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('baseUrl' in value) || value['baseUrl'] === undefined) return false;
@@ -90,9 +80,9 @@ export function PangaeaDataProviderDefinitionFromJSONTyped(json: any, ignoreDisc
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'baseUrl': json['baseUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

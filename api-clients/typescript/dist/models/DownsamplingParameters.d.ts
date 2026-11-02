@@ -19,20 +19,14 @@ import type { DownsamplingMethod } from './DownsamplingMethod';
 export interface DownsamplingParameters {
     /**
      * Downsampling method.
-     * @type {DownsamplingMethod}
-     * @memberof DownsamplingParameters
      */
     samplingMethod: DownsamplingMethod;
     /**
      * Target output resolution.
-     * @type {DownsamplingResolution}
-     * @memberof DownsamplingParameters
      */
     outputResolution: DownsamplingResolution;
     /**
      * Optional reference point used to align the output grid origin.
-     * @type {Coordinate2D}
-     * @memberof DownsamplingParameters
      */
     outputOriginReference?: Coordinate2D | null;
 }

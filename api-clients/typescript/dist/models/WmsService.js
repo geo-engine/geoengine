@@ -23,7 +23,7 @@ exports.WmsServiceToJSONTyped = WmsServiceToJSONTyped;
  * @export
  */
 exports.WmsService = {
-    Wms: 'WMS'
+    Wms: 'WMS',
 };
 function instanceOfWmsService(value) {
     for (const key in exports.WmsService) {

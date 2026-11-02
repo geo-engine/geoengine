@@ -22,13 +22,15 @@ exports.AggregationSumToJSONTyped = AggregationSumToJSONTyped;
  * @export
  */
 exports.AggregationSumTypeEnum = {
-    Sum: 'sum'
+    Sum: 'sum',
 };
 /**
  * Check if a given object implements the AggregationSum interface.
  */
 function instanceOfAggregationSum(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'sum')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

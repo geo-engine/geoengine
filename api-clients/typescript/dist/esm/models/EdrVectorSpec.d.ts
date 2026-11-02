@@ -16,20 +16,14 @@
 export interface EdrVectorSpec {
     /**
      *
-     * @type {string}
-     * @memberof EdrVectorSpec
      */
     x: string;
     /**
      *
-     * @type {string}
-     * @memberof EdrVectorSpec
      */
     y?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof EdrVectorSpec
      */
     time: string;
 }

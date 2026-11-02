@@ -28,32 +28,22 @@ import {
 export interface LayerListing {
     /**
      * 
-     * @type {LayerListingTypeEnum}
-     * @memberof LayerListing
      */
     type: LayerListingTypeEnum;
     /**
      * 
-     * @type {ProviderLayerId}
-     * @memberof LayerListing
      */
     id: ProviderLayerId;
     /**
      * 
-     * @type {string}
-     * @memberof LayerListing
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof LayerListing
      */
     description: string;
     /**
      * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof LayerListing
      */
     properties?: Array<Array<string>>;
 }
@@ -63,7 +53,7 @@ export interface LayerListing {
  * @export
  */
 export const LayerListingTypeEnum = {
-    Layer: 'layer'
+    Layer: 'layer',
 } as const;
 export type LayerListingTypeEnum = typeof LayerListingTypeEnum[keyof typeof LayerListingTypeEnum];
 
@@ -73,6 +63,8 @@ export type LayerListingTypeEnum = typeof LayerListingTypeEnum[keyof typeof Laye
  */
 export function instanceOfLayerListing(value: object): value is LayerListing {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'layer') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;

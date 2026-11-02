@@ -24,7 +24,7 @@ exports.LineSimplificationAlgorithmToJSONTyped = LineSimplificationAlgorithmToJS
  */
 exports.LineSimplificationAlgorithm = {
     DouglasPeucker: 'douglasPeucker',
-    Visvalingam: 'visvalingam'
+    Visvalingam: 'visvalingam',
 };
 function instanceOfLineSimplificationAlgorithm(value) {
     for (const key in exports.LineSimplificationAlgorithm) {

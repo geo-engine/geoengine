@@ -16,13 +16,15 @@ import { BandNeighborhoodAggregateParametersFromJSON, BandNeighborhoodAggregateP
  * @export
  */
 export const BandNeighborhoodAggregateTypeEnum = {
-    BandNeighborhoodAggregate: 'BandNeighborhoodAggregate'
+    BandNeighborhoodAggregate: 'BandNeighborhoodAggregate',
 };
 /**
  * Check if a given object implements the BandNeighborhoodAggregate interface.
  */
 export function instanceOfBandNeighborhoodAggregate(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'BandNeighborhoodAggregate')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

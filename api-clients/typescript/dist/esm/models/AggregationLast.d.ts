@@ -16,14 +16,10 @@
 export interface AggregationLast {
     /**
      *
-     * @type {AggregationLastTypeEnum}
-     * @memberof AggregationLast
      */
     type: AggregationLastTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationLast
      */
     ignoreNoData: boolean;
 }

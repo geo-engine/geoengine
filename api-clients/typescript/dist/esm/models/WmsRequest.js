@@ -19,7 +19,7 @@ export const WmsRequest = {
     GetMap: 'GetMap',
     GetFeatureInfo: 'GetFeatureInfo',
     GetStyles: 'GetStyles',
-    GetLegendGraphic: 'GetLegendGraphic'
+    GetLegendGraphic: 'GetLegendGraphic',
 };
 export function instanceOfWmsRequest(value) {
     for (const key in WmsRequest) {

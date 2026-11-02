@@ -17,14 +17,10 @@ import type { BandDistanceEquallySpaced } from './BandDistanceEquallySpaced';
 export interface BandNeighborhoodAggregateMethodFirstDerivative {
     /**
      *
-     * @type {BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum}
-     * @memberof BandNeighborhoodAggregateMethodFirstDerivative
      */
     type: BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum;
     /**
      * Distance between neighboring bands used to approximate the first derivative.
-     * @type {BandDistanceEquallySpaced}
-     * @memberof BandNeighborhoodAggregateMethodFirstDerivative
      */
     bandDistance: BandDistanceEquallySpaced;
 }

@@ -18,20 +18,14 @@ import type { MockDatasetDataSourceLoadingInfo } from './MockDatasetDataSourceLo
 export interface MockMetaData {
     /**
      *
-     * @type {MockMetaDataTypeEnum}
-     * @memberof MockMetaData
      */
     type: MockMetaDataTypeEnum;
     /**
      *
-     * @type {MockDatasetDataSourceLoadingInfo}
-     * @memberof MockMetaData
      */
     loadingInfo: MockDatasetDataSourceLoadingInfo;
     /**
      *
-     * @type {VectorResultDescriptor}
-     * @memberof MockMetaData
      */
     resultDescriptor: VectorResultDescriptor;
 }

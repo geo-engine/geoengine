@@ -43,9 +43,9 @@ function TimeShiftParametersToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'absolute':
-            return Object.assign({}, (0, TimeShiftParametersAbsolute_1.TimeShiftParametersAbsoluteToJSON)(value), { type: 'absolute' });
+            return Object.assign({}, (0, TimeShiftParametersAbsolute_1.TimeShiftParametersAbsoluteToJSON)(value), { 'type': 'absolute' });
         case 'relative':
-            return Object.assign({}, (0, TimeShiftParametersRelative_1.TimeShiftParametersRelativeToJSON)(value), { type: 'relative' });
+            return Object.assign({}, (0, TimeShiftParametersRelative_1.TimeShiftParametersRelativeToJSON)(value), { 'type': 'relative' });
         default:
             return value;
     }

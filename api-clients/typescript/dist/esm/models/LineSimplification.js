@@ -16,13 +16,15 @@ import { LineSimplificationParametersFromJSON, LineSimplificationParametersToJSO
  * @export
  */
 export const LineSimplificationTypeEnum = {
-    LineSimplification: 'LineSimplification'
+    LineSimplification: 'LineSimplification',
 };
 /**
  * Check if a given object implements the LineSimplification interface.
  */
 export function instanceOfLineSimplification(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'LineSimplification')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

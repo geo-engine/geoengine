@@ -19,12 +19,9 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     yield Path("src/apis/projects_api.rs"), projects_api_rs
     yield Path("src/apis/tasks_api.rs"), tasks_api_rs
     yield Path("src/models/default.rs"), default_rs
-    yield Path("src/models/geospatial_data_data_type.rs"), geospatial_data_data_type_rs
+    yield Path("src/models/geospatial_data_data_type.rs"), data_type_rs
+    yield Path("src/models/tile_set_data_type.rs"), data_type_rs
     yield Path("src/apis/ogcwfs_api.rs"), ogcwfs_api_rs
-    yield (
-        Path("src/models/multiple_raster_or_single_vector_operator.rs"),
-        multiple_raster_or_single_vector_operator_rs,
-    )
     yield Path("src/models/spatial_partition2_d.rs"), spatial_partition2_d_rs
 
     for file_path in [
@@ -56,20 +53,6 @@ def make_untagged(file_contents: list[str]) -> Generator[str, None, None]:
         dedented_line = dedent(line)
         if dedented_line.startswith('#[serde(tag = "type")]'):
             line = "#[serde(untagged)]" + "\n"
-
-        yield line
-
-
-def multiple_raster_or_single_vector_operator_rs(
-    file_contents: list[str],
-) -> Generator[str, None, None]:
-    """Modify the multiple_raster_or_single_vector_operator.rs file."""
-    for line in file_contents:
-        dedented_line = dedent(line)
-        if dedented_line.startswith("ArrayVecmodels::RasterOperator"):
-            line = indent("RasterOperator(Vec<models::RasterOperator>),", INDENT) + "\n"
-        elif dedented_line.startswith("Self::ArrayVecmodels::RasterOperator"):
-            line = indent("Self::RasterOperator(Default::default())", 2 * INDENT) + "\n"
 
         yield line
 
@@ -275,10 +258,10 @@ def default_rs(file_contents: list[str]) -> Generator[str, None, None]:
         yield line
 
 
-def geospatial_data_data_type_rs(
+def data_type_rs(
     file_contents: list[str],
 ) -> Generator[str, None, None]:
-    """Modify the geospatial_data_data_type.rs file."""
+    """Modify the geospatial_data_data_type.rs and tile_set_data_type.rs files."""
     already_found_string = False
     for line in file_contents:
         dedented_line = dedent(line)

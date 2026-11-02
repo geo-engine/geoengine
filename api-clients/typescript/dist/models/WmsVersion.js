@@ -23,7 +23,7 @@ exports.WmsVersionToJSONTyped = WmsVersionToJSONTyped;
  * @export
  */
 exports.WmsVersion = {
-    _130: '1.3.0'
+    _130: '1.3.0',
 };
 function instanceOfWmsVersion(value) {
     for (const key in exports.WmsVersion) {

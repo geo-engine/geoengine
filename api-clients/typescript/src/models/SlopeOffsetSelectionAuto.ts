@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface SlopeOffsetSelectionAuto {
     /**
      * 
-     * @type {SlopeOffsetSelectionAutoTypeEnum}
-     * @memberof SlopeOffsetSelectionAuto
      */
     type: SlopeOffsetSelectionAutoTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface SlopeOffsetSelectionAuto {
  * @export
  */
 export const SlopeOffsetSelectionAutoTypeEnum = {
-    Auto: 'auto'
+    Auto: 'auto',
 } as const;
 export type SlopeOffsetSelectionAutoTypeEnum = typeof SlopeOffsetSelectionAutoTypeEnum[keyof typeof SlopeOffsetSelectionAutoTypeEnum];
 
@@ -41,6 +39,8 @@ export type SlopeOffsetSelectionAutoTypeEnum = typeof SlopeOffsetSelectionAutoTy
  */
 export function instanceOfSlopeOffsetSelectionAuto(value: object): value is SlopeOffsetSelectionAuto {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'auto') return false;
+    
     return true;
 }
 

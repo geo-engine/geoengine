@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface AggregationMax {
     /**
      * 
-     * @type {AggregationMaxTypeEnum}
-     * @memberof AggregationMax
      */
     type: AggregationMaxTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationMax
      */
     ignoreNoData: boolean;
 }
@@ -37,7 +33,7 @@ export interface AggregationMax {
  * @export
  */
 export const AggregationMaxTypeEnum = {
-    Max: 'max'
+    Max: 'max',
 } as const;
 export type AggregationMaxTypeEnum = typeof AggregationMaxTypeEnum[keyof typeof AggregationMaxTypeEnum];
 
@@ -47,6 +43,8 @@ export type AggregationMaxTypeEnum = typeof AggregationMaxTypeEnum[keyof typeof 
  */
 export function instanceOfAggregationMax(value: object): value is AggregationMax {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'max') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     return true;
 }

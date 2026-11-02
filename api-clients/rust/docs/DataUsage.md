@@ -4,7 +4,7 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**timestamp** | **String** |  | 
+**timestamp** | **chrono::DateTime<chrono::FixedOffset>** |  | 
 **user_id** | **uuid::Uuid** |  | 
 **computation_id** | **uuid::Uuid** |  | 
 **data** | **String** |  | 

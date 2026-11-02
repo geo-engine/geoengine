@@ -35,20 +35,14 @@ import {
 export interface OgrMetaData {
     /**
      * 
-     * @type {OgrMetaDataTypeEnum}
-     * @memberof OgrMetaData
      */
     type: OgrMetaDataTypeEnum;
     /**
      * 
-     * @type {OgrSourceDataset}
-     * @memberof OgrMetaData
      */
     loadingInfo: OgrSourceDataset;
     /**
      * 
-     * @type {VectorResultDescriptor}
-     * @memberof OgrMetaData
      */
     resultDescriptor: VectorResultDescriptor;
 }
@@ -58,7 +52,7 @@ export interface OgrMetaData {
  * @export
  */
 export const OgrMetaDataTypeEnum = {
-    OgrMetaData: 'OgrMetaData'
+    OgrMetaData: 'OgrMetaData',
 } as const;
 export type OgrMetaDataTypeEnum = typeof OgrMetaDataTypeEnum[keyof typeof OgrMetaDataTypeEnum];
 
@@ -68,6 +62,8 @@ export type OgrMetaDataTypeEnum = typeof OgrMetaDataTypeEnum[keyof typeof OgrMet
  */
 export function instanceOfOgrMetaData(value: object): value is OgrMetaData {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'OgrMetaData') return false;
+    
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined) return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     return true;

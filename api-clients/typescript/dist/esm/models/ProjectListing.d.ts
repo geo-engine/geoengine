@@ -16,38 +16,26 @@
 export interface ProjectListing {
     /**
      *
-     * @type {string}
-     * @memberof ProjectListing
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof ProjectListing
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof ProjectListing
      */
     description: string;
     /**
      *
-     * @type {Array<string>}
-     * @memberof ProjectListing
      */
     layerNames: Array<string>;
     /**
      *
-     * @type {Array<string>}
-     * @memberof ProjectListing
      */
     plotNames: Array<string>;
     /**
      *
-     * @type {Date}
-     * @memberof ProjectListing
      */
     changed: Date;
 }

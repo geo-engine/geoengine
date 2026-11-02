@@ -38,7 +38,7 @@ function SearchCapabilitiesFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'searchTypes': (0, SearchTypes_1.SearchTypesFromJSON)(json['searchTypes']),
         'autocomplete': json['autocomplete'],
-        'filters': json['filters'] == null ? undefined : json['filters'],
+        'filters': json['filters'] === undefined ? undefined : json['filters'] === null ? null : json['filters'],
     };
 }
 function SearchCapabilitiesToJSON(json) {

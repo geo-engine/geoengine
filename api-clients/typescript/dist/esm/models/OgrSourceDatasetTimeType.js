@@ -43,13 +43,13 @@ export function OgrSourceDatasetTimeTypeToJSONTyped(value, ignoreDiscriminator =
     }
     switch (value['type']) {
         case 'none':
-            return Object.assign({}, OgrSourceDatasetTimeTypeNoneToJSON(value), { type: 'none' });
+            return Object.assign({}, OgrSourceDatasetTimeTypeNoneToJSON(value), { 'type': 'none' });
         case 'start':
-            return Object.assign({}, OgrSourceDatasetTimeTypeStartToJSON(value), { type: 'start' });
+            return Object.assign({}, OgrSourceDatasetTimeTypeStartToJSON(value), { 'type': 'start' });
         case 'start+duration':
-            return Object.assign({}, OgrSourceDatasetTimeTypeStartDurationToJSON(value), { type: 'start+duration' });
+            return Object.assign({}, OgrSourceDatasetTimeTypeStartDurationToJSON(value), { 'type': 'start+duration' });
         case 'start+end':
-            return Object.assign({}, OgrSourceDatasetTimeTypeStartEndToJSON(value), { type: 'start+end' });
+            return Object.assign({}, OgrSourceDatasetTimeTypeStartEndToJSON(value), { 'type': 'start+end' });
         default:
             return value;
     }

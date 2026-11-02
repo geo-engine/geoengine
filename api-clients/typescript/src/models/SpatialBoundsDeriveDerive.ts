@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface SpatialBoundsDeriveDerive {
     /**
      * 
-     * @type {SpatialBoundsDeriveDeriveTypeEnum}
-     * @memberof SpatialBoundsDeriveDerive
      */
     type: SpatialBoundsDeriveDeriveTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface SpatialBoundsDeriveDerive {
  * @export
  */
 export const SpatialBoundsDeriveDeriveTypeEnum = {
-    Derive: 'derive'
+    Derive: 'derive',
 } as const;
 export type SpatialBoundsDeriveDeriveTypeEnum = typeof SpatialBoundsDeriveDeriveTypeEnum[keyof typeof SpatialBoundsDeriveDeriveTypeEnum];
 
@@ -41,6 +39,8 @@ export type SpatialBoundsDeriveDeriveTypeEnum = typeof SpatialBoundsDeriveDerive
  */
 export function instanceOfSpatialBoundsDeriveDerive(value: object): value is SpatialBoundsDeriveDerive {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'derive') return false;
+    
     return true;
 }
 

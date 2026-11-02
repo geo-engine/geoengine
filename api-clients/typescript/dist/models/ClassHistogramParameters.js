@@ -31,7 +31,7 @@ function ClassHistogramParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'columnName': json['columnName'] == null ? undefined : json['columnName'],
+        'columnName': json['columnName'] === undefined ? undefined : json['columnName'] === null ? null : json['columnName'],
     };
 }
 function ClassHistogramParametersToJSON(json) {

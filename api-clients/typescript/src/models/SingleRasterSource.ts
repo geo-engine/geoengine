@@ -28,8 +28,6 @@ import {
 export interface SingleRasterSource {
     /**
      * 
-     * @type {RasterOperator}
-     * @memberof SingleRasterSource
      */
     raster: RasterOperator;
 }

@@ -23,34 +23,24 @@ export interface VectorExpressionParameters {
      * E.g., `precipitation.cm` becomes `precipitation_cm`.
      * If the column name starts with a number, an underscore is prepended.
      * E.g., `1column` becomes `_1column`.
-     * @type {Array<string>}
-     * @memberof VectorExpressionParameters
      */
     inputColumns: Array<string>;
     /**
      * The expression to evaluate.
-     * @type {string}
-     * @memberof VectorExpressionParameters
      */
     expression: string;
     /**
      * The type and name of the new column.
-     * @type {OutputColumn}
-     * @memberof VectorExpressionParameters
      */
     outputColumn: OutputColumn;
     /**
      * The variable name of the geometry column.
      * The default is `geom`.
-     * @type {string}
-     * @memberof VectorExpressionParameters
      */
     geometryColumnName?: string;
     /**
      * The measurement of the new column.
      * The default is unitless.
-     * @type {Measurement}
-     * @memberof VectorExpressionParameters
      */
     outputMeasurement?: Measurement;
 }

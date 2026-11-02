@@ -1,6 +1,6 @@
 --- typescript/src/runtime.ts
 +++ typescript/src/runtime.ts
-@@ -84,7 +84,7 @@
+@@ -83,7 +83,7 @@
      }
  }
  

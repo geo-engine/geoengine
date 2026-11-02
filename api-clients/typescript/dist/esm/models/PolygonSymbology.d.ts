@@ -19,32 +19,22 @@ import type { ColorParam } from './ColorParam';
 export interface PolygonSymbology {
     /**
      *
-     * @type {PolygonSymbologyTypeEnum}
-     * @memberof PolygonSymbology
      */
     type: PolygonSymbologyTypeEnum;
     /**
      *
-     * @type {ColorParam}
-     * @memberof PolygonSymbology
      */
     fillColor: ColorParam;
     /**
      *
-     * @type {StrokeParam}
-     * @memberof PolygonSymbology
      */
     stroke: StrokeParam;
     /**
      *
-     * @type {TextSymbology}
-     * @memberof PolygonSymbology
      */
     text?: TextSymbology | null;
     /**
      *
-     * @type {boolean}
-     * @memberof PolygonSymbology
      */
     autoSimplified: boolean;
 }

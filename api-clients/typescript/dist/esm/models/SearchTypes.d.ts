@@ -16,14 +16,10 @@
 export interface SearchTypes {
     /**
      *
-     * @type {boolean}
-     * @memberof SearchTypes
      */
     fulltext: boolean;
     /**
      *
-     * @type {boolean}
-     * @memberof SearchTypes
      */
     prefix: boolean;
 }

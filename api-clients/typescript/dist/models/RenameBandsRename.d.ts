@@ -16,14 +16,10 @@
 export interface RenameBandsRename {
     /**
      *
-     * @type {RenameBandsRenameTypeEnum}
-     * @memberof RenameBandsRename
      */
     type: RenameBandsRenameTypeEnum;
     /**
      *
-     * @type {Array<string>}
-     * @memberof RenameBandsRename
      */
     values: Array<string>;
 }

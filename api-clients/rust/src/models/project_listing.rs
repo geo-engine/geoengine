@@ -23,11 +23,11 @@ pub struct ProjectListing {
     #[serde(rename = "plotNames")]
     pub plot_names: Vec<String>,
     #[serde(rename = "changed")]
-    pub changed: String,
+    pub changed: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl ProjectListing {
-    pub fn new(id: uuid::Uuid, name: String, description: String, layer_names: Vec<String>, plot_names: Vec<String>, changed: String) -> ProjectListing {
+    pub fn new(id: uuid::Uuid, name: String, description: String, layer_names: Vec<String>, plot_names: Vec<String>, changed: chrono::DateTime<chrono::FixedOffset>) -> ProjectListing {
         ProjectListing {
             id,
             name,

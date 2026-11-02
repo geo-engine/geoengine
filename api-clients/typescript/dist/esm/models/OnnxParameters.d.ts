@@ -16,8 +16,6 @@
 export interface OnnxParameters {
     /**
      *
-     * @type {string}
-     * @memberof OnnxParameters
      */
     model: string;
 }

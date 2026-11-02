@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 import { STRectangleFromJSON, STRectangleToJSON, } from './STRectangle';
 import { UserInfoFromJSON, UserInfoToJSON, } from './UserInfo';
 /**
@@ -38,10 +39,10 @@ export function UserSessionFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'id': json['id'],
         'user': UserInfoFromJSON(json['user']),
-        'created': (new Date(json['created'])),
-        'validUntil': (new Date(json['validUntil'])),
-        'project': json['project'] == null ? undefined : json['project'],
-        'view': json['view'] == null ? undefined : STRectangleFromJSON(json['view']),
+        'created': (json['created'] == null ? json['created'] : parseDateTime(json['created'])),
+        'validUntil': (json['validUntil'] == null ? json['validUntil'] : parseDateTime(json['validUntil'])),
+        'project': json['project'] === undefined ? undefined : json['project'] === null ? null : json['project'],
+        'view': json['view'] === undefined ? undefined : json['view'] === null ? null : STRectangleFromJSON(json['view']),
         'roles': json['roles'],
     };
 }
@@ -55,8 +56,8 @@ export function UserSessionToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'id': value['id'],
         'user': UserInfoToJSON(value['user']),
-        'created': value['created'].toISOString(),
-        'validUntil': value['validUntil'].toISOString(),
+        'created': value['created'] == null ? value['created'] : serializeDateTime(value['created']),
+        'validUntil': value['validUntil'] == null ? value['validUntil'] : serializeDateTime(value['validUntil']),
         'project': value['project'],
         'view': STRectangleToJSON(value['view']),
         'roles': value['roles'],

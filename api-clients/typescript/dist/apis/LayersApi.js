@@ -23,7 +23,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LayersApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const AddLayer_1 = require("../models/AddLayer");
+const AddLayerCollection_1 = require("../models/AddLayerCollection");
+const IdResponse_1 = require("../models/IdResponse");
+const Layer_1 = require("../models/Layer");
+const LayerCollection_1 = require("../models/LayerCollection");
+const LayerProviderListing_1 = require("../models/LayerProviderListing");
+const ProviderCapabilities_1 = require("../models/ProviderCapabilities");
+const TaskResponse_1 = require("../models/TaskResponse");
+const TypedDataProviderDefinition_1 = require("../models/TypedDataProviderDefinition");
+const UpdateLayer_1 = require("../models/UpdateLayer");
+const UpdateLayerCollection_1 = require("../models/UpdateLayerCollection");
 /**
  *
  */
@@ -50,13 +60,13 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/collections`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.AddLayerCollectionToJSON)(requestParameters['addLayerCollection']),
+                body: (0, AddLayerCollection_1.AddLayerCollectionToJSON)(requestParameters['addLayerCollection']),
             };
         });
     }
@@ -67,7 +77,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.addCollectionRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -100,8 +110,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{parent}/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"parent"}}`, encodeURIComponent(String(requestParameters['parent'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{parent}', encodeURIComponent(String(requestParameters['parent'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -149,8 +159,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -199,13 +209,13 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/layers`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.AddLayerToJSON)(requestParameters['addLayer']),
+                body: (0, AddLayer_1.AddLayerToJSON)(requestParameters['addLayer']),
             };
         });
     }
@@ -216,7 +226,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.addLayerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -252,7 +262,7 @@ class LayersApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.TypedDataProviderDefinitionToJSON)(requestParameters['typedDataProviderDefinition']),
+                body: (0, TypedDataProviderDefinition_1.TypedDataProviderDefinitionToJSON)(requestParameters['typedDataProviderDefinition']),
             };
         });
     }
@@ -263,7 +273,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.addProviderRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -320,8 +330,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/collections/search/autocomplete/{provider}/{collection}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -367,7 +377,7 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/providers/{provider}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -412,7 +422,7 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/providers/{provider}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -428,7 +438,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getProviderDefinitionRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TypedDataProviderDefinitionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TypedDataProviderDefinition_1.TypedDataProviderDefinitionFromJSON)(jsonValue));
         });
     }
     /**
@@ -461,8 +471,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/{layer}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -478,7 +488,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.layerHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.LayerFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Layer_1.LayerFromJSON)(jsonValue));
         });
     }
     /**
@@ -511,8 +521,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/{layer}/dataset`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -528,7 +538,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.layerToDatasetRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TaskResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TaskResponse_1.TaskResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -561,8 +571,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/{layer}/processingGraphId`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -578,7 +588,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.layerToProcessingGraphIdHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -623,8 +633,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/collections/{provider}/{collection}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -640,7 +650,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listCollectionHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.LayerCollectionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, LayerCollection_1.LayerCollectionFromJSON)(jsonValue));
         });
     }
     /**
@@ -694,7 +704,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listProvidersRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.LayerProviderListingFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(LayerProviderListing_1.LayerProviderListingFromJSON));
         });
     }
     /**
@@ -748,7 +758,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listRootCollectionsHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.LayerCollectionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, LayerCollection_1.LayerCollectionFromJSON)(jsonValue));
         });
     }
     /**
@@ -778,7 +788,7 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/{provider}/capabilities`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -793,7 +803,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.providerCapabilitiesHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.ProviderCapabilitiesFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, ProviderCapabilities_1.ProviderCapabilitiesFromJSON)(jsonValue));
         });
     }
     /**
@@ -822,7 +832,7 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -870,8 +880,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{parent}/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"parent"}}`, encodeURIComponent(String(requestParameters['parent'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{parent}', encodeURIComponent(String(requestParameters['parent'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -916,7 +926,7 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -964,8 +974,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -1037,8 +1047,8 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layers/collections/search/{provider}/{collection}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -1054,7 +1064,7 @@ class LayersApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.searchHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.LayerCollectionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, LayerCollection_1.LayerCollectionFromJSON)(jsonValue));
         });
     }
     /**
@@ -1088,13 +1098,13 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/collections/{collection}`;
-            urlPath = urlPath.replace(`{${"collection"}}`, encodeURIComponent(String(requestParameters['collection'])));
+            urlPath = urlPath.replace('{collection}', encodeURIComponent(String(requestParameters['collection'])));
             return {
                 path: urlPath,
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.UpdateLayerCollectionToJSON)(requestParameters['updateLayerCollection']),
+                body: (0, UpdateLayerCollection_1.UpdateLayerCollectionToJSON)(requestParameters['updateLayerCollection']),
             };
         });
     }
@@ -1138,13 +1148,13 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/layers/{layer}`;
-            urlPath = urlPath.replace(`{${"layer"}}`, encodeURIComponent(String(requestParameters['layer'])));
+            urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
             return {
                 path: urlPath,
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.UpdateLayerToJSON)(requestParameters['updateLayer']),
+                body: (0, UpdateLayer_1.UpdateLayerToJSON)(requestParameters['updateLayer']),
             };
         });
     }
@@ -1188,13 +1198,13 @@ class LayersApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/layerDb/providers/{provider}`;
-            urlPath = urlPath.replace(`{${"provider"}}`, encodeURIComponent(String(requestParameters['provider'])));
+            urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
             return {
                 path: urlPath,
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.TypedDataProviderDefinitionToJSON)(requestParameters['typedDataProviderDefinition']),
+                body: (0, TypedDataProviderDefinition_1.TypedDataProviderDefinitionToJSON)(requestParameters['typedDataProviderDefinition']),
             };
         });
     }

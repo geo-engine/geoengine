@@ -15,7 +15,7 @@
  * @export
  */
 export const GetCoverageFormat = {
-    ImageTiff: 'image/tiff'
+    ImageTiff: 'image/tiff',
 };
 export function instanceOfGetCoverageFormat(value) {
     for (const key in GetCoverageFormat) {

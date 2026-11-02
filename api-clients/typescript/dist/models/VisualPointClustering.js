@@ -24,13 +24,15 @@ const VisualPointClusteringParameters_1 = require("./VisualPointClusteringParame
  * @export
  */
 exports.VisualPointClusteringTypeEnum = {
-    VisualPointClustering: 'VisualPointClustering'
+    VisualPointClustering: 'VisualPointClustering',
 };
 /**
  * Check if a given object implements the VisualPointClustering interface.
  */
 function instanceOfVisualPointClustering(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'VisualPointClustering')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

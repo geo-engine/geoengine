@@ -28,50 +28,34 @@ import {
 export interface GbifDataProviderDefinition {
     /**
      * 
-     * @type {GbifDataProviderDefinitionTypeEnum}
-     * @memberof GbifDataProviderDefinition
      */
     type: GbifDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof GbifDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof GbifDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof GbifDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {DatabaseConnectionConfig}
-     * @memberof GbifDataProviderDefinition
      */
     dbConfig: DatabaseConnectionConfig;
     /**
      * 
-     * @type {number}
-     * @memberof GbifDataProviderDefinition
      */
     cacheTtl?: number | null;
     /**
      * 
-     * @type {number}
-     * @memberof GbifDataProviderDefinition
      */
     autocompleteTimeout: number;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof GbifDataProviderDefinition
      */
     columns: Array<string>;
 }
@@ -81,7 +65,7 @@ export interface GbifDataProviderDefinition {
  * @export
  */
 export const GbifDataProviderDefinitionTypeEnum = {
-    Gbif: 'Gbif'
+    Gbif: 'Gbif',
 } as const;
 export type GbifDataProviderDefinitionTypeEnum = typeof GbifDataProviderDefinitionTypeEnum[keyof typeof GbifDataProviderDefinitionTypeEnum];
 
@@ -91,6 +75,8 @@ export type GbifDataProviderDefinitionTypeEnum = typeof GbifDataProviderDefiniti
  */
 export function instanceOfGbifDataProviderDefinition(value: object): value is GbifDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Gbif') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('dbConfig' in value) || value['dbConfig'] === undefined) return false;
@@ -112,9 +98,9 @@ export function GbifDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
         'autocompleteTimeout': json['autocompleteTimeout'],
         'columns': json['columns'],
     };

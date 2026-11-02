@@ -20,26 +20,18 @@ import { mapValues } from '../runtime';
 export interface UpdateDataset {
     /**
      * 
-     * @type {string}
-     * @memberof UpdateDataset
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof UpdateDataset
      */
     displayName: string;
     /**
      * 
-     * @type {string}
-     * @memberof UpdateDataset
      */
     description: string;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof UpdateDataset
      */
     tags: Array<string>;
 }
@@ -49,7 +41,7 @@ export interface UpdateDataset {
  */
 export function instanceOfUpdateDataset(value: object): value is UpdateDataset {
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('displayName' in value) || value['displayName'] === undefined) return false;
+    if ((!('displayName' in (value as Record<string, any>)) && !('display_name' in (value as Record<string, any>))) || ((value as Record<string, any>)['displayName'] === undefined && (value as Record<string, any>)['display_name'] === undefined)) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('tags' in value) || value['tags'] === undefined) return false;
     return true;

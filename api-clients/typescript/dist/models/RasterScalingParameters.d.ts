@@ -19,26 +19,18 @@ import type { ScalingMode } from './ScalingMode';
 export interface RasterScalingParameters {
     /**
      * The slope (multiplication factor) applied to each pixel value.
-     * @type {SlopeOffsetSelection}
-     * @memberof RasterScalingParameters
      */
     slope: SlopeOffsetSelection;
     /**
      * The offset (addition) applied to each pixel value.
-     * @type {SlopeOffsetSelection}
-     * @memberof RasterScalingParameters
      */
     offset: SlopeOffsetSelection;
     /**
      * *Optional:* output measurement of the result of the scaling operation.
-     * @type {Measurement}
-     * @memberof RasterScalingParameters
      */
     outputMeasurement?: Measurement | null;
     /**
      * Selects whether the values are scaled or unscaled.
-     * @type {ScalingMode}
-     * @memberof RasterScalingParameters
      */
     scalingMode: ScalingMode;
 }

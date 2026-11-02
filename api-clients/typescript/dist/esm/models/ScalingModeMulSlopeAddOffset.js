@@ -14,13 +14,15 @@
  * @export
  */
 export const ScalingModeMulSlopeAddOffsetTypeEnum = {
-    MulSlopeAddOffset: 'mulSlopeAddOffset'
+    MulSlopeAddOffset: 'mulSlopeAddOffset',
 };
 /**
  * Check if a given object implements the ScalingModeMulSlopeAddOffset interface.
  */
 export function instanceOfScalingModeMulSlopeAddOffset(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'mulSlopeAddOffset')
         return false;
     return true;
 }

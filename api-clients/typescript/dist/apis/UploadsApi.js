@@ -23,7 +23,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UploadsApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const IdResponse_1 = require("../models/IdResponse");
+const UploadFileLayersResponse_1 = require("../models/UploadFileLayersResponse");
+const UploadFilesResponse_1 = require("../models/UploadFilesResponse");
 /**
  *
  */
@@ -49,8 +51,8 @@ class UploadsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/uploads/{upload_id}/files/{file_name}/layers`;
-            urlPath = urlPath.replace(`{${"upload_id"}}`, encodeURIComponent(String(requestParameters['uploadId'])));
-            urlPath = urlPath.replace(`{${"file_name"}}`, encodeURIComponent(String(requestParameters['fileName'])));
+            urlPath = urlPath.replace('{upload_id}', encodeURIComponent(String(requestParameters['uploadId'])));
+            urlPath = urlPath.replace('{file_name}', encodeURIComponent(String(requestParameters['fileName'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -66,7 +68,7 @@ class UploadsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listUploadFileLayersHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.UploadFileLayersResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, UploadFileLayersResponse_1.UploadFileLayersResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -96,7 +98,7 @@ class UploadsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/uploads/{upload_id}/files`;
-            urlPath = urlPath.replace(`{${"upload_id"}}`, encodeURIComponent(String(requestParameters['uploadId'])));
+            urlPath = urlPath.replace('{upload_id}', encodeURIComponent(String(requestParameters['uploadId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -112,7 +114,7 @@ class UploadsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listUploadFilesHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.UploadFilesResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, UploadFilesResponse_1.UploadFilesResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -178,7 +180,7 @@ class UploadsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.uploadHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**

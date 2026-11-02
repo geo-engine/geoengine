@@ -20,62 +20,42 @@ import type { TypedResultDescriptor } from './TypedResultDescriptor';
 export interface Dataset {
     /**
      *
-     * @type {string}
-     * @memberof Dataset
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof Dataset
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof Dataset
      */
     displayName: string;
     /**
      *
-     * @type {string}
-     * @memberof Dataset
      */
     description: string;
     /**
      *
-     * @type {TypedResultDescriptor}
-     * @memberof Dataset
      */
     resultDescriptor: TypedResultDescriptor;
     /**
      *
-     * @type {string}
-     * @memberof Dataset
      */
     sourceOperator: string;
     /**
      *
-     * @type {Symbology}
-     * @memberof Dataset
      */
     symbology?: Symbology | null;
     /**
      *
-     * @type {Array<Provenance>}
-     * @memberof Dataset
      */
     provenance?: Array<Provenance> | null;
     /**
      *
-     * @type {Array<string>}
-     * @memberof Dataset
      */
     tags?: Array<string> | null;
     /**
      *
-     * @type {DataPath}
-     * @memberof Dataset
      */
     dataPath?: DataPath | null;
 }

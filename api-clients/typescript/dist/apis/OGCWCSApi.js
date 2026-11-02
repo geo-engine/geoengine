@@ -90,7 +90,7 @@ class OGCWCSApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/wcs/{processingGraph}`;
-            urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
+            urlPath = urlPath.replace('{processingGraph}', encodeURIComponent(String(requestParameters['processingGraph'])));
             return {
                 path: urlPath,
                 method: 'GET',

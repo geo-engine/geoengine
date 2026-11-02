@@ -316,6 +316,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+      - name: Configure git
+        run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install
         run: just www install
       - name: Check formatting and lints
@@ -398,6 +402,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Configure git
+        run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install Java (OpenAPI Generator requires Java to run)
         run: |
           # deleted in devcontainer image, but required by java installer
@@ -406,6 +414,8 @@ jobs:
           apt-get install -y openjdk-21-jre-headless
       - name: Lint OpenAPI specification
         run: just api-clients lint-openapi-spec
+      - name: Check OpenAPI Generator version of generated clients
+        run: just api-clients lint-generator-version
       - name: Generate API clients
         run: just api-clients build
       - name: Check for changes in git repo
@@ -491,6 +501,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+      - name: Configure git
+        run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Lint repository-wide formats & versions
         run: just ci repo
 

@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface BandDistanceEquallySpaced {
     /**
      * 
-     * @type {BandDistanceEquallySpacedTypeEnum}
-     * @memberof BandDistanceEquallySpaced
      */
     type: BandDistanceEquallySpacedTypeEnum;
     /**
      * Constant distance between consecutive bands.
-     * @type {number}
-     * @memberof BandDistanceEquallySpaced
      */
     distance: number;
 }
@@ -37,7 +33,7 @@ export interface BandDistanceEquallySpaced {
  * @export
  */
 export const BandDistanceEquallySpacedTypeEnum = {
-    EquallySpaced: 'equallySpaced'
+    EquallySpaced: 'equallySpaced',
 } as const;
 export type BandDistanceEquallySpacedTypeEnum = typeof BandDistanceEquallySpacedTypeEnum[keyof typeof BandDistanceEquallySpacedTypeEnum];
 
@@ -47,6 +43,8 @@ export type BandDistanceEquallySpacedTypeEnum = typeof BandDistanceEquallySpaced
  */
 export function instanceOfBandDistanceEquallySpaced(value: object): value is BandDistanceEquallySpaced {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'equallySpaced') return false;
+    
     if (!('distance' in value) || value['distance'] === undefined) return false;
     return true;
 }

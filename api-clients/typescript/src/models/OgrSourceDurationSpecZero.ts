@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface OgrSourceDurationSpecZero {
     /**
      * 
-     * @type {OgrSourceDurationSpecZeroTypeEnum}
-     * @memberof OgrSourceDurationSpecZero
      */
     type: OgrSourceDurationSpecZeroTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface OgrSourceDurationSpecZero {
  * @export
  */
 export const OgrSourceDurationSpecZeroTypeEnum = {
-    Zero: 'zero'
+    Zero: 'zero',
 } as const;
 export type OgrSourceDurationSpecZeroTypeEnum = typeof OgrSourceDurationSpecZeroTypeEnum[keyof typeof OgrSourceDurationSpecZeroTypeEnum];
 
@@ -41,6 +39,8 @@ export type OgrSourceDurationSpecZeroTypeEnum = typeof OgrSourceDurationSpecZero
  */
 export function instanceOfOgrSourceDurationSpecZero(value: object): value is OgrSourceDurationSpecZero {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'zero') return false;
+    
     return true;
 }
 

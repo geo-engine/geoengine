@@ -28,32 +28,22 @@ import {
 export interface LinearGradient {
     /**
      * 
-     * @type {LinearGradientTypeEnum}
-     * @memberof LinearGradient
      */
     type: LinearGradientTypeEnum;
     /**
      * 
-     * @type {Array<Breakpoint>}
-     * @memberof LinearGradient
      */
     breakpoints: Array<Breakpoint>;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof LinearGradient
      */
     noDataColor: Array<number>;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof LinearGradient
      */
     overColor: Array<number>;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof LinearGradient
      */
     underColor: Array<number>;
 }
@@ -63,7 +53,7 @@ export interface LinearGradient {
  * @export
  */
 export const LinearGradientTypeEnum = {
-    LinearGradient: 'linearGradient'
+    LinearGradient: 'linearGradient',
 } as const;
 export type LinearGradientTypeEnum = typeof LinearGradientTypeEnum[keyof typeof LinearGradientTypeEnum];
 
@@ -73,6 +63,8 @@ export type LinearGradientTypeEnum = typeof LinearGradientTypeEnum[keyof typeof 
  */
 export function instanceOfLinearGradient(value: object): value is LinearGradient {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'linearGradient') return false;
+    
     if (!('breakpoints' in value) || value['breakpoints'] === undefined) return false;
     if (!('noDataColor' in value) || value['noDataColor'] === undefined) return false;
     if (!('overColor' in value) || value['overColor'] === undefined) return false;

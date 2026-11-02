@@ -21,10 +21,8 @@ import { mapValues } from '../runtime';
 export interface TilesCrsOneOf1 {
     /**
      * 
-     * @type {{ [key: string]: any; }}
-     * @memberof TilesCrsOneOf1
      */
-    wkt: { [key: string]: any; };
+    wkt: { [key: string]: any | null; };
 }
 
 /**

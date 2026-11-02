@@ -11,21 +11,37 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  WrappedPlotOutput,
-} from '../models/index';
 import {
+    type WrappedPlotOutput,
     WrappedPlotOutputFromJSON,
     WrappedPlotOutputToJSON,
-} from '../models/index';
+} from '../models/WrappedPlotOutput';
 
 export interface GetPlotHandlerRequest {
+    /**
+     * 
+     */
     bbox: string;
+    /**
+     * 
+     */
     time: string;
+    /**
+     * Processing graph id
+     */
     id: string;
+    /**
+     * 
+     */
     crs?: string | null;
+    /**
+     * Optional resolution (in the units of `crs`) at which the plot may be computed.
+     * 
+     * If set, raster inputs are read at the coarsest overview level that is not coarser than
+     * this resolution, which speeds up plots of large areas at the cost of exactness.
+     * If omitted, raster inputs are read at their native resolution.
+     */
     spatialResolution?: string | null;
 }
 
@@ -89,7 +105,7 @@ export class PlotsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/plot/{id}`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,

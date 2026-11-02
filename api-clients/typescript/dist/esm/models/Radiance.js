@@ -15,13 +15,15 @@ import { SingleRasterSourceFromJSON, SingleRasterSourceToJSON, } from './SingleR
  * @export
  */
 export const RadianceTypeEnum = {
-    Radiance: 'Radiance'
+    Radiance: 'Radiance',
 };
 /**
  * Check if a given object implements the Radiance interface.
  */
 export function instanceOfRadiance(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Radiance')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

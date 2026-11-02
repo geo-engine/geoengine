@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface LayerResource {
     /**
      * 
-     * @type {LayerResourceTypeEnum}
-     * @memberof LayerResource
      */
     type: LayerResourceTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof LayerResource
      */
     id: string;
 }
@@ -37,7 +33,7 @@ export interface LayerResource {
  * @export
  */
 export const LayerResourceTypeEnum = {
-    Layer: 'layer'
+    Layer: 'layer',
 } as const;
 export type LayerResourceTypeEnum = typeof LayerResourceTypeEnum[keyof typeof LayerResourceTypeEnum];
 
@@ -47,6 +43,8 @@ export type LayerResourceTypeEnum = typeof LayerResourceTypeEnum[keyof typeof La
  */
 export function instanceOfLayerResource(value: object): value is LayerResource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'layer') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }

@@ -27,8 +27,8 @@ export function StacProviderS3ConfigFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'endpoint': json['endpoint'],
-        'accessKey': json['accessKey'] == null ? undefined : json['accessKey'],
-        'secretKey': json['secretKey'] == null ? undefined : json['secretKey'],
+        'accessKey': json['accessKey'] === undefined ? undefined : json['accessKey'] === null ? null : json['accessKey'],
+        'secretKey': json['secretKey'] === undefined ? undefined : json['secretKey'] === null ? null : json['secretKey'],
     };
 }
 export function StacProviderS3ConfigToJSON(json) {

@@ -16,7 +16,7 @@
  */
 export const TimeReference = {
     Start: 'start',
-    End: 'end'
+    End: 'end',
 };
 export function instanceOfTimeReference(value) {
     for (const key in TimeReference) {

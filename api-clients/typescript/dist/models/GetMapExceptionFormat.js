@@ -24,7 +24,7 @@ exports.GetMapExceptionFormatToJSONTyped = GetMapExceptionFormatToJSONTyped;
  */
 exports.GetMapExceptionFormat = {
     Xml: 'XML',
-    Json: 'JSON'
+    Json: 'JSON',
 };
 function instanceOfGetMapExceptionFormat(value) {
     for (const key in exports.GetMapExceptionFormat) {

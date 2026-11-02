@@ -35,20 +35,14 @@ import {
 export interface PlotResultDescriptor {
     /**
      * 
-     * @type {string}
-     * @memberof PlotResultDescriptor
      */
     spatialReference: string;
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof PlotResultDescriptor
      */
     time?: TimeInterval | null;
     /**
      * 
-     * @type {BoundingBox2D}
-     * @memberof PlotResultDescriptor
      */
     bbox?: BoundingBox2D | null;
 }
@@ -72,8 +66,8 @@ export function PlotResultDescriptorFromJSONTyped(json: any, ignoreDiscriminator
     return {
         
         'spatialReference': json['spatialReference'],
-        'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
-        'bbox': json['bbox'] == null ? undefined : BoundingBox2DFromJSON(json['bbox']),
+        'time': json['time'] === undefined ? undefined : json['time'] === null ? null : TimeIntervalFromJSON(json['time']),
+        'bbox': json['bbox'] === undefined ? undefined : json['bbox'] === null ? null : BoundingBox2DFromJSON(json['bbox']),
     };
 }
 

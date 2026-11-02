@@ -11,15 +11,12 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  ServerInfo,
-} from '../models/index';
 import {
+    type ServerInfo,
     ServerInfoFromJSON,
     ServerInfoToJSON,
-} from '../models/index';
+} from '../models/ServerInfo';
 
 /**
  * 

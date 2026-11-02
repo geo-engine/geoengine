@@ -102,13 +102,37 @@ _build-rust-postprocess:
 build-rust-dist: common::_clear
     cargo fetch
 
-lint: lint-openapi-spec
+lint: lint-openapi-spec lint-generator-version
 
 [group('config')]
 lint-openapi-spec: common::_clear
     {{ OPENAPI_GENERATOR_CLI }} validate \
         -i ../openapi.json \
         --recommend
+
+# Check that the generated clients were built with the generator version from openapitools.json.
+[group('config')]
+[script("python3")]
+lint-generator-version:
+    import json
+    import sys
+
+    with open('openapitools.json', 'r', encoding='utf-8') as f:
+        expected = json.load(f)['generator-cli']['version']
+
+    mismatches = []
+    for generator in ['python', 'rust', 'typescript']:
+        with open(f'{generator}/.openapi-generator/VERSION', 'r', encoding='utf-8') as f:
+            actual = f.read().strip()
+        if actual != expected:
+            mismatches.append(f"{generator} was generated with {actual}, but openapitools.json requires {expected}.")
+
+    if mismatches:
+        print("\n".join(mismatches), file=sys.stderr)
+        print("Regenerate the clients with `just api-clients build`.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"All API clients were generated with OpenAPI Generator {expected}.")
 
 # Generate the OpenAPI Generator configuration files from the config.ini.
 [group('config')]

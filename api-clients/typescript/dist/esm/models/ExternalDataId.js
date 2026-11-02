@@ -14,13 +14,15 @@
  * @export
  */
 export const ExternalDataIdTypeEnum = {
-    External: 'external'
+    External: 'external',
 };
 /**
  * Check if a given object implements the ExternalDataId interface.
  */
 export function instanceOfExternalDataId(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'external')
         return false;
     if (!('providerId' in value) || value['providerId'] === undefined)
         return false;

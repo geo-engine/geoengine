@@ -40,20 +40,14 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 export interface Reprojection {
     /**
      *
-     * @type {ReprojectionTypeEnum}
-     * @memberof Reprojection
      */
     type: ReprojectionTypeEnum;
     /**
      *
-     * @type {ReprojectionParameters}
-     * @memberof Reprojection
      */
     params: ReprojectionParameters;
     /**
      *
-     * @type {SingleRasterOrVectorSource}
-     * @memberof Reprojection
      */
     sources: SingleRasterOrVectorSource;
 }

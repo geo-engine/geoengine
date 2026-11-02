@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface TemperatureParameters {
     /**
      * 
-     * @type {number}
-     * @memberof TemperatureParameters
      */
     forceSatellite?: number | null;
 }
@@ -43,7 +41,7 @@ export function TemperatureParametersFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
         
-        'forceSatellite': json['forceSatellite'] == null ? undefined : json['forceSatellite'],
+        'forceSatellite': json['forceSatellite'] === undefined ? undefined : json['forceSatellite'] === null ? null : json['forceSatellite'],
     };
 }
 

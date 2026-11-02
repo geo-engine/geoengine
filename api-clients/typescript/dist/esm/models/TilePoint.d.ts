@@ -17,32 +17,22 @@ import type { TilesCrs } from './TilesCrs';
 export interface TilePoint {
     /**
      *
-     * @type {Array<number>}
-     * @memberof TilePoint
      */
     coordinates: Array<number>;
     /**
      *
-     * @type {TilesCrs}
-     * @memberof TilePoint
      */
     crs?: TilesCrs;
     /**
      * [`TileMatrix`] identifier associated with the scaleDenominator
-     * @type {string}
-     * @memberof TilePoint
      */
     tileMatrix?: string;
     /**
      * Scale denominator of the tile matrix selected
-     * @type {number}
-     * @memberof TilePoint
      */
     scaleDenominator?: number;
     /**
      * Cell size of the tile matrix selected
-     * @type {number}
-     * @memberof TilePoint
      */
     cellSize?: number;
 }

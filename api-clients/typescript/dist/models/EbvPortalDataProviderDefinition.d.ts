@@ -16,50 +16,34 @@
 export interface EbvPortalDataProviderDefinition {
     /**
      *
-     * @type {EbvPortalDataProviderDefinitionTypeEnum}
-     * @memberof EbvPortalDataProviderDefinition
      */
     type: EbvPortalDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof EbvPortalDataProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     baseUrl: string;
     /**
      * Path were the `NetCDF` data can be found
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     data: string;
     /**
      * Path were overview files are stored
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     overviews: string;
     /**
      *
-     * @type {number}
-     * @memberof EbvPortalDataProviderDefinition
      */
     cacheTtl?: number | null;
 }

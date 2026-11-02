@@ -43,9 +43,9 @@ function NeighborhoodAggregateMethodToJSONTyped(value, ignoreDiscriminator = fal
     }
     switch (value['type']) {
         case 'standardDeviation':
-            return Object.assign({}, (0, NeighborhoodAggregateMethodStandardDeviation_1.NeighborhoodAggregateMethodStandardDeviationToJSON)(value), { type: 'standardDeviation' });
+            return Object.assign({}, (0, NeighborhoodAggregateMethodStandardDeviation_1.NeighborhoodAggregateMethodStandardDeviationToJSON)(value), { 'type': 'standardDeviation' });
         case 'sum':
-            return Object.assign({}, (0, NeighborhoodAggregateMethodSum_1.NeighborhoodAggregateMethodSumToJSON)(value), { type: 'sum' });
+            return Object.assign({}, (0, NeighborhoodAggregateMethodSum_1.NeighborhoodAggregateMethodSumToJSON)(value), { 'type': 'sum' });
         default:
             return value;
     }

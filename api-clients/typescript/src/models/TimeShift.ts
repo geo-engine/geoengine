@@ -61,20 +61,14 @@ import {
 export interface TimeShift {
     /**
      * 
-     * @type {TimeShiftTypeEnum}
-     * @memberof TimeShift
      */
     type: TimeShiftTypeEnum;
     /**
      * 
-     * @type {TimeShiftParameters}
-     * @memberof TimeShift
      */
     params: TimeShiftParameters;
     /**
      * 
-     * @type {SingleRasterOrVectorSource}
-     * @memberof TimeShift
      */
     sources: SingleRasterOrVectorSource;
 }
@@ -84,7 +78,7 @@ export interface TimeShift {
  * @export
  */
 export const TimeShiftTypeEnum = {
-    TimeShift: 'TimeShift'
+    TimeShift: 'TimeShift',
 } as const;
 export type TimeShiftTypeEnum = typeof TimeShiftTypeEnum[keyof typeof TimeShiftTypeEnum];
 
@@ -94,6 +88,8 @@ export type TimeShiftTypeEnum = typeof TimeShiftTypeEnum[keyof typeof TimeShiftT
  */
 export function instanceOfTimeShift(value: object): value is TimeShift {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'TimeShift') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

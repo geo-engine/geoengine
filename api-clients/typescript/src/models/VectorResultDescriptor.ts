@@ -49,32 +49,22 @@ import {
 export interface VectorResultDescriptor {
     /**
      * 
-     * @type {VectorDataType}
-     * @memberof VectorResultDescriptor
      */
     dataType: VectorDataType;
     /**
      * 
-     * @type {string}
-     * @memberof VectorResultDescriptor
      */
     spatialReference: string;
     /**
      * 
-     * @type {{ [key: string]: VectorColumnInfo; }}
-     * @memberof VectorResultDescriptor
      */
     columns: { [key: string]: VectorColumnInfo; };
     /**
      * 
-     * @type {TimeInterval}
-     * @memberof VectorResultDescriptor
      */
     time?: TimeInterval | null;
     /**
      * 
-     * @type {BoundingBox2D}
-     * @memberof VectorResultDescriptor
      */
     bbox?: BoundingBox2D | null;
 }
@@ -104,8 +94,8 @@ export function VectorResultDescriptorFromJSONTyped(json: any, ignoreDiscriminat
         'dataType': VectorDataTypeFromJSON(json['dataType']),
         'spatialReference': json['spatialReference'],
         'columns': (mapValues(json['columns'], VectorColumnInfoFromJSON)),
-        'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
-        'bbox': json['bbox'] == null ? undefined : BoundingBox2DFromJSON(json['bbox']),
+        'time': json['time'] === undefined ? undefined : json['time'] === null ? null : TimeIntervalFromJSON(json['time']),
+        'bbox': json['bbox'] === undefined ? undefined : json['bbox'] === null ? null : BoundingBox2DFromJSON(json['bbox']),
     };
 }
 

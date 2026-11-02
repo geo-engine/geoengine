@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface DatasetResource {
     /**
      * 
-     * @type {DatasetResourceTypeEnum}
-     * @memberof DatasetResource
      */
     type: DatasetResourceTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof DatasetResource
      */
     id: string;
 }
@@ -37,7 +33,7 @@ export interface DatasetResource {
  * @export
  */
 export const DatasetResourceTypeEnum = {
-    Dataset: 'dataset'
+    Dataset: 'dataset',
 } as const;
 export type DatasetResourceTypeEnum = typeof DatasetResourceTypeEnum[keyof typeof DatasetResourceTypeEnum];
 
@@ -47,6 +43,8 @@ export type DatasetResourceTypeEnum = typeof DatasetResourceTypeEnum[keyof typeo
  */
 export function instanceOfDatasetResource(value: object): value is DatasetResource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'dataset') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }

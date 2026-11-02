@@ -9,7 +9,7 @@ Name | Type | Description | Notes
 **description** | **String** |  | 
 **layer_names** | **Vec<String>** |  | 
 **plot_names** | **Vec<String>** |  | 
-**changed** | **String** |  | 
+**changed** | **chrono::DateTime<chrono::FixedOffset>** |  | 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

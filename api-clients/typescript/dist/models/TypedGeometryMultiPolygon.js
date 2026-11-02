@@ -22,7 +22,7 @@ const MultiPolygon_1 = require("./MultiPolygon");
  * Check if a given object implements the TypedGeometryMultiPolygon interface.
  */
 function instanceOfTypedGeometryMultiPolygon(value) {
-    if (!('multiPolygon' in value) || value['multiPolygon'] === undefined)
+    if ((!('multiPolygon' in value) && !('MultiPolygon' in value)) || (value['multiPolygon'] === undefined && value['MultiPolygon'] === undefined))
         return false;
     return true;
 }

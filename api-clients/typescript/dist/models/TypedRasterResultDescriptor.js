@@ -23,13 +23,15 @@ const RasterResultDescriptor_1 = require("./RasterResultDescriptor");
  * @export
  */
 exports.TypedRasterResultDescriptorTypeEnum = {
-    Raster: 'raster'
+    Raster: 'raster',
 };
 /**
  * Check if a given object implements the TypedRasterResultDescriptor interface.
  */
 function instanceOfTypedRasterResultDescriptor(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'raster')
         return false;
     return true;
 }

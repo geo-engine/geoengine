@@ -24,13 +24,15 @@ const ReflectanceParameters_1 = require("./ReflectanceParameters");
  * @export
  */
 exports.ReflectanceTypeEnum = {
-    Reflectance: 'Reflectance'
+    Reflectance: 'Reflectance',
 };
 /**
  * Check if a given object implements the Reflectance interface.
  */
 function instanceOfReflectance(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Reflectance')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

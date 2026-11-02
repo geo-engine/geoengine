@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface DensityParams {
     /**
      * Cutoff percentage of maximum density, expressed as a fraction in [0, 1).
-     * @type {number}
-     * @memberof DensityParams
      */
     cutoff: number;
     /**
      * Standard deviation parameter for the Gaussian density function.
-     * @type {number}
-     * @memberof DensityParams
      */
     stddev: number;
 }

@@ -35,14 +35,10 @@ import {
 export interface ProvenanceEntry {
     /**
      * 
-     * @type {Provenance}
-     * @memberof ProvenanceEntry
      */
     provenance: Provenance;
     /**
      * 
-     * @type {Array<DataId>}
-     * @memberof ProvenanceEntry
      */
     data: Array<DataId>;
 }

@@ -16,14 +16,10 @@
 export interface StaticNumber {
     /**
      *
-     * @type {StaticNumberTypeEnum}
-     * @memberof StaticNumber
      */
     type: StaticNumberTypeEnum;
     /**
      *
-     * @type {number}
-     * @memberof StaticNumber
      */
     value: number;
 }

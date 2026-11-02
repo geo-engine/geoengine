@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { SpatialReferenceSpecificationFromJSON, } from '../models/index';
+import { SpatialReferenceSpecificationFromJSON, } from '../models/SpatialReferenceSpecification';
 /**
  *
  */
@@ -43,7 +43,7 @@ export class SpatialReferencesApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/spatialReferenceSpecification/{srsString}`;
-            urlPath = urlPath.replace(`{${"srsString"}}`, encodeURIComponent(String(requestParameters['srsString'])));
+            urlPath = urlPath.replace('{srsString}', encodeURIComponent(String(requestParameters['srsString'])));
             return {
                 path: urlPath,
                 method: 'GET',

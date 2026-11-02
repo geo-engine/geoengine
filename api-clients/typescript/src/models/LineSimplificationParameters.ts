@@ -28,14 +28,10 @@ import {
 export interface LineSimplificationParameters {
     /**
      * Simplification algorithm used to reduce the geometry complexity.
-     * @type {LineSimplificationAlgorithm}
-     * @memberof LineSimplificationParameters
      */
     algorithm: LineSimplificationAlgorithm;
     /**
      * Distance threshold for the simplification algorithm.
-     * @type {number}
-     * @memberof LineSimplificationParameters
      */
     epsilon: number;
 }

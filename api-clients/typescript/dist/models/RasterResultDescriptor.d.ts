@@ -20,32 +20,22 @@ import type { RasterDataType } from './RasterDataType';
 export interface RasterResultDescriptor {
     /**
      *
-     * @type {RasterDataType}
-     * @memberof RasterResultDescriptor
      */
     dataType: RasterDataType;
     /**
      *
-     * @type {string}
-     * @memberof RasterResultDescriptor
      */
     spatialReference: string;
     /**
      *
-     * @type {TimeDescriptor}
-     * @memberof RasterResultDescriptor
      */
     time: TimeDescriptor;
     /**
      *
-     * @type {SpatialGridDescriptor}
-     * @memberof RasterResultDescriptor
      */
     spatialGrid: SpatialGridDescriptor;
     /**
      *
-     * @type {Array<RasterBandDescriptor>}
-     * @memberof RasterResultDescriptor
      */
     bands: Array<RasterBandDescriptor>;
 }

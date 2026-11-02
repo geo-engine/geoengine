@@ -16,20 +16,14 @@
 export interface UserRegistration {
     /**
      *
-     * @type {string}
-     * @memberof UserRegistration
      */
     email: string;
     /**
      *
-     * @type {string}
-     * @memberof UserRegistration
      */
     password: string;
     /**
      *
-     * @type {string}
-     * @memberof UserRegistration
      */
     realName: string;
 }

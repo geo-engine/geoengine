@@ -10,12 +10,13 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 import { TileMatrixLimitsFromJSON, TileMatrixLimitsToJSON, } from './TileMatrixLimits';
 import { AccessConstraintsFromJSON, AccessConstraintsToJSON, } from './AccessConstraints';
-import { GeospatialDataDataTypeFromJSON, GeospatialDataDataTypeToJSON, } from './GeospatialDataDataType';
 import { TilePointFromJSON, TilePointToJSON, } from './TilePoint';
 import { BoundingBox2DFromJSON, BoundingBox2DToJSON, } from './BoundingBox2D';
 import { StyleFromJSON, StyleToJSON, } from './Style';
+import { TileSetDataTypeFromJSON, TileSetDataTypeToJSON, } from './TileSetDataType';
 import { GeospatialDataFromJSON, GeospatialDataToJSON, } from './GeospatialData';
 import { LinkFromJSON, LinkToJSON, } from './Link';
 import { TilesCrsFromJSON, TilesCrsToJSON, } from './TilesCrs';
@@ -42,7 +43,7 @@ export function TileSetFromJSONTyped(json, ignoreDiscriminator) {
         'title': json['title'] == null ? undefined : json['title'],
         'description': json['description'] == null ? undefined : json['description'],
         'keywords': json['keywords'] == null ? undefined : json['keywords'],
-        'dataType': GeospatialDataDataTypeFromJSON(json['dataType']),
+        'dataType': TileSetDataTypeFromJSON(json['dataType']),
         'tileMatrixSetURI': json['tileMatrixSetURI'] == null ? undefined : json['tileMatrixSetURI'],
         'tileMatrixSetLimits': json['tileMatrixSetLimits'] == null ? undefined : (json['tileMatrixSetLimits'].map(TileMatrixLimitsFromJSON)),
         'crs': TilesCrsFromJSON(json['crs']),
@@ -56,8 +57,8 @@ export function TileSetFromJSONTyped(json, ignoreDiscriminator) {
         'license': json['license'] == null ? undefined : json['license'],
         'accessConstraints': json['accessConstraints'] == null ? undefined : AccessConstraintsFromJSON(json['accessConstraints']),
         'version': json['version'] == null ? undefined : json['version'],
-        'created': json['created'] == null ? undefined : (new Date(json['created'])),
-        'updated': json['updated'] == null ? undefined : (new Date(json['updated'])),
+        'created': json['created'] == null ? undefined : (parseDateTime(json['created'])),
+        'updated': json['updated'] == null ? undefined : (parseDateTime(json['updated'])),
         'pointOfContact': json['pointOfContact'] == null ? undefined : json['pointOfContact'],
         'mediaTypes': json['mediaTypes'] == null ? undefined : json['mediaTypes'],
     };
@@ -73,7 +74,7 @@ export function TileSetToJSONTyped(value, ignoreDiscriminator = false) {
         'title': value['title'],
         'description': value['description'],
         'keywords': value['keywords'],
-        'dataType': GeospatialDataDataTypeToJSON(value['dataType']),
+        'dataType': TileSetDataTypeToJSON(value['dataType']),
         'tileMatrixSetURI': value['tileMatrixSetURI'],
         'tileMatrixSetLimits': value['tileMatrixSetLimits'] == null ? undefined : (value['tileMatrixSetLimits'].map(TileMatrixLimitsToJSON)),
         'crs': TilesCrsToJSON(value['crs']),
@@ -87,8 +88,8 @@ export function TileSetToJSONTyped(value, ignoreDiscriminator = false) {
         'license': value['license'],
         'accessConstraints': AccessConstraintsToJSON(value['accessConstraints']),
         'version': value['version'],
-        'created': value['created'] == null ? value['created'] : value['created'].toISOString(),
-        'updated': value['updated'] == null ? value['updated'] : value['updated'].toISOString(),
+        'created': value['created'] == null ? value['created'] : serializeDateTime(value['created']),
+        'updated': value['updated'] == null ? value['updated'] : serializeDateTime(value['updated']),
         'pointOfContact': value['pointOfContact'],
         'mediaTypes': value['mediaTypes'],
     };

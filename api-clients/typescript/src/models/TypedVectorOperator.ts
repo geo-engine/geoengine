@@ -28,14 +28,10 @@ import {
 export interface TypedVectorOperator {
     /**
      * 
-     * @type {VectorOperator}
-     * @memberof TypedVectorOperator
      */
     operator: VectorOperator;
     /**
      * 
-     * @type {TypedVectorOperatorTypeEnum}
-     * @memberof TypedVectorOperator
      */
     type: TypedVectorOperatorTypeEnum;
 }
@@ -45,7 +41,7 @@ export interface TypedVectorOperator {
  * @export
  */
 export const TypedVectorOperatorTypeEnum = {
-    Vector: 'Vector'
+    Vector: 'Vector',
 } as const;
 export type TypedVectorOperatorTypeEnum = typeof TypedVectorOperatorTypeEnum[keyof typeof TypedVectorOperatorTypeEnum];
 
@@ -56,6 +52,8 @@ export type TypedVectorOperatorTypeEnum = typeof TypedVectorOperatorTypeEnum[key
 export function instanceOfTypedVectorOperator(value: object): value is TypedVectorOperator {
     if (!('operator' in value) || value['operator'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Vector') return false;
+    
     return true;
 }
 

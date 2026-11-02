@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { ClassificationMeasurement } from './ClassificationMeasurement';
 import {
     instanceOfClassificationMeasurement,
@@ -70,11 +71,11 @@ export function MeasurementToJSONTyped(value?: Measurement | null, ignoreDiscrim
     }
     switch (value['type']) {
         case 'classification':
-            return Object.assign({}, ClassificationMeasurementToJSON(value), { type: 'classification' } as const);
+            return Object.assign({}, ClassificationMeasurementToJSON(value), { 'type': 'classification' } as const);
         case 'continuous':
-            return Object.assign({}, ContinuousMeasurementToJSON(value), { type: 'continuous' } as const);
+            return Object.assign({}, ContinuousMeasurementToJSON(value), { 'type': 'continuous' } as const);
         case 'unitless':
-            return Object.assign({}, UnitlessMeasurementToJSON(value), { type: 'unitless' } as const);
+            return Object.assign({}, UnitlessMeasurementToJSON(value), { 'type': 'unitless' } as const);
         default:
             return value;
     }

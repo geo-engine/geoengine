@@ -54,20 +54,14 @@ import {
 export interface VectorJoin {
     /**
      * 
-     * @type {VectorJoinTypeEnum}
-     * @memberof VectorJoin
      */
     type: VectorJoinTypeEnum;
     /**
      * 
-     * @type {VectorJoinParameters}
-     * @memberof VectorJoin
      */
     params: VectorJoinParameters;
     /**
      * 
-     * @type {VectorJoinSources}
-     * @memberof VectorJoin
      */
     sources: VectorJoinSources;
 }
@@ -77,7 +71,7 @@ export interface VectorJoin {
  * @export
  */
 export const VectorJoinTypeEnum = {
-    VectorJoin: 'VectorJoin'
+    VectorJoin: 'VectorJoin',
 } as const;
 export type VectorJoinTypeEnum = typeof VectorJoinTypeEnum[keyof typeof VectorJoinTypeEnum];
 
@@ -87,6 +81,8 @@ export type VectorJoinTypeEnum = typeof VectorJoinTypeEnum[keyof typeof VectorJo
  */
 export function instanceOfVectorJoin(value: object): value is VectorJoin {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'VectorJoin') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

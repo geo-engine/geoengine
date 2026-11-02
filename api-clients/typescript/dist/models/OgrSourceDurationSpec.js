@@ -46,11 +46,11 @@ function OgrSourceDurationSpecToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'infinite':
-            return Object.assign({}, (0, OgrSourceDurationSpecInfinite_1.OgrSourceDurationSpecInfiniteToJSON)(value), { type: 'infinite' });
+            return Object.assign({}, (0, OgrSourceDurationSpecInfinite_1.OgrSourceDurationSpecInfiniteToJSON)(value), { 'type': 'infinite' });
         case 'value':
-            return Object.assign({}, (0, OgrSourceDurationSpecValue_1.OgrSourceDurationSpecValueToJSON)(value), { type: 'value' });
+            return Object.assign({}, (0, OgrSourceDurationSpecValue_1.OgrSourceDurationSpecValueToJSON)(value), { 'type': 'value' });
         case 'zero':
-            return Object.assign({}, (0, OgrSourceDurationSpecZero_1.OgrSourceDurationSpecZeroToJSON)(value), { type: 'zero' });
+            return Object.assign({}, (0, OgrSourceDurationSpecZero_1.OgrSourceDurationSpecZeroToJSON)(value), { 'type': 'zero' });
         default:
             return value;
     }

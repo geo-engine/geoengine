@@ -16,8 +16,6 @@
 export interface ScalingModeMulSlopeAddOffset {
     /**
      *
-     * @type {ScalingModeMulSlopeAddOffsetTypeEnum}
-     * @memberof ScalingModeMulSlopeAddOffset
      */
     type: ScalingModeMulSlopeAddOffsetTypeEnum;
 }

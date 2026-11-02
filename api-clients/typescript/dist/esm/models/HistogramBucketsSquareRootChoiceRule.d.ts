@@ -16,14 +16,10 @@
 export interface HistogramBucketsSquareRootChoiceRule {
     /**
      *
-     * @type {HistogramBucketsSquareRootChoiceRuleTypeEnum}
-     * @memberof HistogramBucketsSquareRootChoiceRule
      */
     type: HistogramBucketsSquareRootChoiceRuleTypeEnum;
     /**
      *
-     * @type {number}
-     * @memberof HistogramBucketsSquareRootChoiceRule
      */
     maxNumberOfBuckets?: number;
 }

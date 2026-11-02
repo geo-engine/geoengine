@@ -42,44 +42,30 @@ import {
 export interface Layer {
     /**
      * 
-     * @type {ProviderLayerId}
-     * @memberof Layer
      */
     id: ProviderLayerId;
     /**
      * 
-     * @type {string}
-     * @memberof Layer
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof Layer
      */
     description: string;
     /**
      * 
-     * @type {ProcessingGraph}
-     * @memberof Layer
      */
     processingGraph: ProcessingGraph;
     /**
      * 
-     * @type {Symbology}
-     * @memberof Layer
      */
     symbology?: Symbology | null;
     /**
      * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof Layer
      */
     properties?: Array<Array<string>>;
     /**
      * metadata used for loading the data
-     * @type {{ [key: string]: string; }}
-     * @memberof Layer
      */
     metadata?: { [key: string]: string; };
 }
@@ -109,7 +95,7 @@ export function LayerFromJSONTyped(json: any, ignoreDiscriminator: boolean): Lay
         'name': json['name'],
         'description': json['description'],
         'processingGraph': ProcessingGraphFromJSON(json['processingGraph']),
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : SymbologyFromJSON(json['symbology']),
         'properties': json['properties'] == null ? undefined : json['properties'],
         'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };

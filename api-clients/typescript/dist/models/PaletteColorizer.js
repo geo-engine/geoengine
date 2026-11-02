@@ -22,13 +22,15 @@ exports.PaletteColorizerToJSONTyped = PaletteColorizerToJSONTyped;
  * @export
  */
 exports.PaletteColorizerTypeEnum = {
-    Palette: 'palette'
+    Palette: 'palette',
 };
 /**
  * Check if a given object implements the PaletteColorizer interface.
  */
 function instanceOfPaletteColorizer(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'palette')
         return false;
     if (!('colors' in value) || value['colors'] === undefined)
         return false;

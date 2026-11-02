@@ -43,9 +43,9 @@ function AttributeSelectionToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'all':
-            return Object.assign({}, (0, AttributeSelectionAll_1.AttributeSelectionAllToJSON)(value), { type: 'all' });
+            return Object.assign({}, (0, AttributeSelectionAll_1.AttributeSelectionAllToJSON)(value), { 'type': 'all' });
         case 'names':
-            return Object.assign({}, (0, AttributeSelectionNames_1.AttributeSelectionNamesToJSON)(value), { type: 'names' });
+            return Object.assign({}, (0, AttributeSelectionNames_1.AttributeSelectionNamesToJSON)(value), { 'type': 'names' });
         default:
             return value;
     }

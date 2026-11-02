@@ -29,9 +29,9 @@ export function RasterDatasetFromProcessingGraphFromJSONTyped(json, ignoreDiscri
         return json;
     }
     return {
-        'name': json['name'] == null ? undefined : json['name'],
+        'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
         'displayName': json['displayName'],
-        'description': json['description'] == null ? undefined : json['description'],
+        'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
         'query': RasterToDatasetQueryRectangleFromJSON(json['query']),
         'asCog': json['asCog'] == null ? undefined : json['asCog'],
     };

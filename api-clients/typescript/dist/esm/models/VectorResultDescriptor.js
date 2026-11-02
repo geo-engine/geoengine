@@ -38,8 +38,8 @@ export function VectorResultDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         'dataType': VectorDataTypeFromJSON(json['dataType']),
         'spatialReference': json['spatialReference'],
         'columns': (mapValues(json['columns'], VectorColumnInfoFromJSON)),
-        'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
-        'bbox': json['bbox'] == null ? undefined : BoundingBox2DFromJSON(json['bbox']),
+        'time': json['time'] === undefined ? undefined : json['time'] === null ? null : TimeIntervalFromJSON(json['time']),
+        'bbox': json['bbox'] === undefined ? undefined : json['bbox'] === null ? null : BoundingBox2DFromJSON(json['bbox']),
     };
 }
 export function VectorResultDescriptorToJSON(json) {

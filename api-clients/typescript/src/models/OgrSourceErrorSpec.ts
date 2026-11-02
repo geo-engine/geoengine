@@ -18,7 +18,7 @@
  */
 export const OgrSourceErrorSpec = {
     Ignore: 'ignore',
-    Abort: 'abort'
+    Abort: 'abort',
 } as const;
 export type OgrSourceErrorSpec = typeof OgrSourceErrorSpec[keyof typeof OgrSourceErrorSpec];
 

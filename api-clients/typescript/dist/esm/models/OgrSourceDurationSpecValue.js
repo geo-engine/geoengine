@@ -15,13 +15,15 @@ import { TimeStepFromJSONTyped, TimeStepToJSONTyped, } from './TimeStep';
  * @export
  */
 export const OgrSourceDurationSpecValueTypeEnum = {
-    Value: 'value'
+    Value: 'value',
 };
 /**
  * Check if a given object implements the OgrSourceDurationSpecValue interface.
  */
 export function instanceOfOgrSourceDurationSpecValue(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'value')
         return false;
     return true;
 }

@@ -17,20 +17,14 @@ import type { MetaDataDefinition } from './MetaDataDefinition';
 export interface MetaDataSuggestion {
     /**
      *
-     * @type {string}
-     * @memberof MetaDataSuggestion
      */
     mainFile: string;
     /**
      *
-     * @type {string}
-     * @memberof MetaDataSuggestion
      */
     layerName: string;
     /**
      *
-     * @type {MetaDataDefinition}
-     * @memberof MetaDataSuggestion
      */
     metaData: MetaDataDefinition;
 }

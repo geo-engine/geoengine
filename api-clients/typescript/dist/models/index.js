@@ -380,6 +380,7 @@ __exportStar(require("./TileMatrixSetItem"), exports);
 __exportStar(require("./TileMatrixSets"), exports);
 __exportStar(require("./TilePoint"), exports);
 __exportStar(require("./TileSet"), exports);
+__exportStar(require("./TileSetDataType"), exports);
 __exportStar(require("./TileSetItem"), exports);
 __exportStar(require("./TileSets"), exports);
 __exportStar(require("./TilesCrs"), exports);

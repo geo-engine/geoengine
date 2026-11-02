@@ -15,7 +15,7 @@ import { VectorOperatorFromJSON, VectorOperatorToJSON, } from './VectorOperator'
  * @export
  */
 export const TypedVectorOperatorTypeEnum = {
-    Vector: 'Vector'
+    Vector: 'Vector',
 };
 /**
  * Check if a given object implements the TypedVectorOperator interface.
@@ -24,6 +24,8 @@ export function instanceOfTypedVectorOperator(value) {
     if (!('operator' in value) || value['operator'] === undefined)
         return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Vector')
         return false;
     return true;
 }

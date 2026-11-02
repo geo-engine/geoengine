@@ -9,52 +9,148 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { Collection, Collections, CollectionsResponseFormat, Conformance, LandingPage, TileMatrixSet, TileMatrixSetId, TileMatrixSets, TileSet, TileSets } from '../models/index';
+import { type Collection } from '../models/Collection';
+import { type Collections } from '../models/Collections';
+import { type CollectionsResponseFormat } from '../models/CollectionsResponseFormat';
+import { type Conformance } from '../models/Conformance';
+import { type LandingPage } from '../models/LandingPage';
+import { type TileMatrixSet } from '../models/TileMatrixSet';
+import { type TileMatrixSetId } from '../models/TileMatrixSetId';
+import { type TileMatrixSets } from '../models/TileMatrixSets';
+import { type TileSet } from '../models/TileSet';
+import { type TileSets } from '../models/TileSets';
 export interface CollectionRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 export interface CollectionTilesetRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
     tileMatrixSetId: TileMatrixSetId;
 }
 export interface CollectionTilesetsRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 export interface CollectionsRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+     */
     datetime?: string;
+    /**
+     * Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).
+     */
     bbox?: string;
+    /**
+     * Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10).
+     */
     limit?: number | null;
+    /**
+     * Response format. If omitted, the `Accept` header is used.
+     */
     f?: CollectionsResponseFormat | null;
 }
 export interface ConformanceRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 export interface LandingPageRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 export interface TileRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
     tileMatrixSetId: TileMatrixSetId;
+    /**
+     * Tile matrix level
+     */
     tileMatrix: number;
+    /**
+     * Tile row
+     */
     tileRow: number;
+    /**
+     * Tile column
+     */
     tileCol: number;
+    /**
+     * Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+     */
     datetime?: string;
 }
 export interface TileMatrixSetRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
     tileMatrixSetId: TileMatrixSetId;
 }
 export interface TileMatrixSetsRequest {
+    /**
+     * ID of the data connector
+     */
     dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
     layerId: string;
 }
 /**
@@ -153,12 +249,12 @@ export declare class OGCAPIApi extends runtime.BaseAPI {
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```
      * OGC API Tile
      */
-    tileRaw(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>>;
+    tileRaw(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>>;
     /**
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```
      * OGC API Tile
      */
-    tile(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob>;
+    tile(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile>;
     /**
      * Creates request options for tileMatrixSet without sending the request
      */

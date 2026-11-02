@@ -25,7 +25,7 @@ exports.WcsRequestToJSONTyped = WcsRequestToJSONTyped;
 exports.WcsRequest = {
     GetCapabilities: 'GetCapabilities',
     DescribeCoverage: 'DescribeCoverage',
-    GetCoverage: 'GetCoverage'
+    GetCoverage: 'GetCoverage',
 };
 function instanceOfWcsRequest(value) {
     for (const key in exports.WcsRequest) {

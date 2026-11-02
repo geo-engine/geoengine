@@ -16,13 +16,15 @@ import { SingleRasterOrVectorSourceFromJSON, SingleRasterOrVectorSourceToJSON, }
  * @export
  */
 export const StatisticsTypeEnum = {
-    Statistics: 'Statistics'
+    Statistics: 'Statistics',
 };
 /**
  * Check if a given object implements the Statistics interface.
  */
 export function instanceOfStatistics(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Statistics')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

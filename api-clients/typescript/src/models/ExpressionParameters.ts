@@ -39,26 +39,18 @@ export interface ExpressionParameters {
      * Expression script
      * 
      * Example: `"(A - B) / (A + B)"`
-     * @type {string}
-     * @memberof ExpressionParameters
      */
     expression: string;
     /**
      * A raster data type for the output
-     * @type {RasterDataType}
-     * @memberof ExpressionParameters
      */
     outputType: RasterDataType;
     /**
      * Description about the output
-     * @type {RasterBandDescriptor}
-     * @memberof ExpressionParameters
      */
     outputBand?: RasterBandDescriptor;
     /**
      * Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
-     * @type {boolean}
-     * @memberof ExpressionParameters
      */
     mapNoData: boolean;
 }

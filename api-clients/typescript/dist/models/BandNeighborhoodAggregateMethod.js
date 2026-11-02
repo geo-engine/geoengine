@@ -43,9 +43,9 @@ function BandNeighborhoodAggregateMethodToJSONTyped(value, ignoreDiscriminator =
     }
     switch (value['type']) {
         case 'average':
-            return Object.assign({}, (0, BandNeighborhoodAggregateMethodAverage_1.BandNeighborhoodAggregateMethodAverageToJSON)(value), { type: 'average' });
+            return Object.assign({}, (0, BandNeighborhoodAggregateMethodAverage_1.BandNeighborhoodAggregateMethodAverageToJSON)(value), { 'type': 'average' });
         case 'firstDerivative':
-            return Object.assign({}, (0, BandNeighborhoodAggregateMethodFirstDerivative_1.BandNeighborhoodAggregateMethodFirstDerivativeToJSON)(value), { type: 'firstDerivative' });
+            return Object.assign({}, (0, BandNeighborhoodAggregateMethodFirstDerivative_1.BandNeighborhoodAggregateMethodFirstDerivativeToJSON)(value), { 'type': 'firstDerivative' });
         default:
             return value;
     }

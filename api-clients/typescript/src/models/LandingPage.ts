@@ -34,26 +34,18 @@ export interface LandingPage {
     [key: string]: any | any;
     /**
      * The title of the API.
-     * @type {string}
-     * @memberof LandingPage
      */
     title?: string | null;
     /**
      * A textual description of the API.
-     * @type {string}
-     * @memberof LandingPage
      */
     description?: string | null;
     /**
      * Attribution for the API.
-     * @type {string}
-     * @memberof LandingPage
      */
     attribution?: string | null;
     /**
      * Links to the resources exposed through this API
-     * @type {Array<Link>}
-     * @memberof LandingPage
      */
     links?: Array<Link>;
 }
@@ -76,9 +68,9 @@ export function LandingPageFromJSONTyped(json: any, ignoreDiscriminator: boolean
     return {
         
             ...json,
-        'title': json['title'] == null ? undefined : json['title'],
-        'description': json['description'] == null ? undefined : json['description'],
-        'attribution': json['attribution'] == null ? undefined : json['attribution'],
+        'title': json['title'] === undefined ? undefined : json['title'] === null ? null : json['title'],
+        'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
+        'attribution': json['attribution'] === undefined ? undefined : json['attribution'] === null ? null : json['attribution'],
         'links': json['links'] == null ? undefined : ((json['links'] as Array<any>).map(LinkFromJSON)),
     };
 }

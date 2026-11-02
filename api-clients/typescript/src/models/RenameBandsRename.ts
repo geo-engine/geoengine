@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface RenameBandsRename {
     /**
      * 
-     * @type {RenameBandsRenameTypeEnum}
-     * @memberof RenameBandsRename
      */
     type: RenameBandsRenameTypeEnum;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof RenameBandsRename
      */
     values: Array<string>;
 }
@@ -37,7 +33,7 @@ export interface RenameBandsRename {
  * @export
  */
 export const RenameBandsRenameTypeEnum = {
-    Rename: 'rename'
+    Rename: 'rename',
 } as const;
 export type RenameBandsRenameTypeEnum = typeof RenameBandsRenameTypeEnum[keyof typeof RenameBandsRenameTypeEnum];
 
@@ -47,6 +43,8 @@ export type RenameBandsRenameTypeEnum = typeof RenameBandsRenameTypeEnum[keyof t
  */
 export function instanceOfRenameBandsRename(value: object): value is RenameBandsRename {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'rename') return false;
+    
     if (!('values' in value) || value['values'] === undefined) return false;
     return true;
 }

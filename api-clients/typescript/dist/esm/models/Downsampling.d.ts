@@ -36,20 +36,14 @@ import type { DownsamplingParameters } from './DownsamplingParameters';
 export interface Downsampling {
     /**
      *
-     * @type {DownsamplingTypeEnum}
-     * @memberof Downsampling
      */
     type: DownsamplingTypeEnum;
     /**
      *
-     * @type {DownsamplingParameters}
-     * @memberof Downsampling
      */
     params: DownsamplingParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof Downsampling
      */
     sources: SingleRasterSource;
 }

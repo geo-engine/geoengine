@@ -19,20 +19,14 @@ import type { Resource } from './Resource';
 export interface PermissionListing {
     /**
      *
-     * @type {Resource}
-     * @memberof PermissionListing
      */
     resource: Resource;
     /**
      *
-     * @type {Role}
-     * @memberof PermissionListing
      */
     role: Role;
     /**
      *
-     * @type {Permission}
-     * @memberof PermissionListing
      */
     permission: Permission;
 }

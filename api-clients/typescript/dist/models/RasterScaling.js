@@ -24,13 +24,15 @@ const RasterScalingParameters_1 = require("./RasterScalingParameters");
  * @export
  */
 exports.RasterScalingTypeEnum = {
-    RasterScaling: 'RasterScaling'
+    RasterScaling: 'RasterScaling',
 };
 /**
  * Check if a given object implements the RasterScaling interface.
  */
 function instanceOfRasterScaling(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'RasterScaling')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

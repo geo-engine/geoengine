@@ -29,20 +29,14 @@ import type { PointInPolygonFilterSource } from './PointInPolygonFilterSource';
 export interface PointInPolygonFilter {
     /**
      *
-     * @type {PointInPolygonFilterTypeEnum}
-     * @memberof PointInPolygonFilter
      */
     type: PointInPolygonFilterTypeEnum;
     /**
      *
-     * @type {object}
-     * @memberof PointInPolygonFilter
      */
     params: object;
     /**
      *
-     * @type {PointInPolygonFilterSource}
-     * @memberof PointInPolygonFilter
      */
     sources: PointInPolygonFilterSource;
 }

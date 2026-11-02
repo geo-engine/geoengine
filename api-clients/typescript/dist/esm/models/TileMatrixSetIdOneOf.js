@@ -14,7 +14,7 @@
  * Check if a given object implements the TileMatrixSetIdOneOf interface.
  */
 export function instanceOfTileMatrixSetIdOneOf(value) {
-    if (!('custom' in value) || value['custom'] === undefined)
+    if ((!('custom' in value) && !('Custom' in value)) || (value['custom'] === undefined && value['Custom'] === undefined))
         return false;
     return true;
 }

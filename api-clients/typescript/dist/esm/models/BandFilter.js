@@ -16,13 +16,15 @@ import { BandFilterParametersFromJSON, BandFilterParametersToJSON, } from './Ban
  * @export
  */
 export const BandFilterTypeEnum = {
-    BandFilter: 'BandFilter'
+    BandFilter: 'BandFilter',
 };
 /**
  * Check if a given object implements the BandFilter interface.
  */
 export function instanceOfBandFilter(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'BandFilter')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

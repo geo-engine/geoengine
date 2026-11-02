@@ -18,14 +18,10 @@ import type { TimeDimension } from './TimeDimension';
 export interface TimeDescriptor {
     /**
      *
-     * @type {TimeInterval}
-     * @memberof TimeDescriptor
      */
     bounds?: TimeInterval | null;
     /**
      *
-     * @type {TimeDimension}
-     * @memberof TimeDescriptor
      */
     dimension: TimeDimension;
 }

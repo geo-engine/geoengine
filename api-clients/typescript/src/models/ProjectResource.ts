@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface ProjectResource {
     /**
      * 
-     * @type {ProjectResourceTypeEnum}
-     * @memberof ProjectResource
      */
     type: ProjectResourceTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof ProjectResource
      */
     id: string;
 }
@@ -37,7 +33,7 @@ export interface ProjectResource {
  * @export
  */
 export const ProjectResourceTypeEnum = {
-    Project: 'project'
+    Project: 'project',
 } as const;
 export type ProjectResourceTypeEnum = typeof ProjectResourceTypeEnum[keyof typeof ProjectResourceTypeEnum];
 
@@ -47,6 +43,8 @@ export type ProjectResourceTypeEnum = typeof ProjectResourceTypeEnum[keyof typeo
  */
 export function instanceOfProjectResource(value: object): value is ProjectResource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'project') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }

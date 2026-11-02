@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface NewOutputColumn {
     /**
      * The expression will append a new `Float` column
-     * @type {string}
-     * @memberof NewOutputColumn
      */
     value: string;
     /**
      * 
-     * @type {NewOutputColumnTypeEnum}
-     * @memberof NewOutputColumn
      */
     type: NewOutputColumnTypeEnum;
 }
@@ -37,7 +33,7 @@ export interface NewOutputColumn {
  * @export
  */
 export const NewOutputColumnTypeEnum = {
-    Column: 'column'
+    Column: 'column',
 } as const;
 export type NewOutputColumnTypeEnum = typeof NewOutputColumnTypeEnum[keyof typeof NewOutputColumnTypeEnum];
 
@@ -48,6 +44,8 @@ export type NewOutputColumnTypeEnum = typeof NewOutputColumnTypeEnum[keyof typeo
 export function instanceOfNewOutputColumn(value: object): value is NewOutputColumn {
     if (!('value' in value) || value['value'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'column') return false;
+    
     return true;
 }
 

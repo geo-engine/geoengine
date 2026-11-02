@@ -61,20 +61,14 @@ import {
 export interface FeatureAttributeValuesOverTime {
     /**
      * 
-     * @type {FeatureAttributeValuesOverTimeTypeEnum}
-     * @memberof FeatureAttributeValuesOverTime
      */
     type: FeatureAttributeValuesOverTimeTypeEnum;
     /**
      * 
-     * @type {FeatureAttributeValuesOverTimeParameters}
-     * @memberof FeatureAttributeValuesOverTime
      */
     params: FeatureAttributeValuesOverTimeParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof FeatureAttributeValuesOverTime
      */
     sources: SingleVectorSource;
 }
@@ -84,7 +78,7 @@ export interface FeatureAttributeValuesOverTime {
  * @export
  */
 export const FeatureAttributeValuesOverTimeTypeEnum = {
-    FeatureAttributeValuesOverTime: 'FeatureAttributeValuesOverTime'
+    FeatureAttributeValuesOverTime: 'FeatureAttributeValuesOverTime',
 } as const;
 export type FeatureAttributeValuesOverTimeTypeEnum = typeof FeatureAttributeValuesOverTimeTypeEnum[keyof typeof FeatureAttributeValuesOverTimeTypeEnum];
 
@@ -94,6 +88,8 @@ export type FeatureAttributeValuesOverTimeTypeEnum = typeof FeatureAttributeValu
  */
 export function instanceOfFeatureAttributeValuesOverTime(value: object): value is FeatureAttributeValuesOverTime {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'FeatureAttributeValuesOverTime') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

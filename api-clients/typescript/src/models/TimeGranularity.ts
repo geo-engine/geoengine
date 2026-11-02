@@ -23,7 +23,7 @@ export const TimeGranularity = {
     Hours: 'hours',
     Days: 'days',
     Months: 'months',
-    Years: 'years'
+    Years: 'years',
 } as const;
 export type TimeGranularity = typeof TimeGranularity[keyof typeof TimeGranularity];
 

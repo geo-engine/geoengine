@@ -16,13 +16,15 @@ import { RasterTypeConversionParametersFromJSON, RasterTypeConversionParametersT
  * @export
  */
 export const RasterTypeConversionTypeEnum = {
-    RasterTypeConversion: 'RasterTypeConversion'
+    RasterTypeConversion: 'RasterTypeConversion',
 };
 /**
  * Check if a given object implements the RasterTypeConversion interface.
  */
 export function instanceOfRasterTypeConversion(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'RasterTypeConversion')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

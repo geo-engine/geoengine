@@ -20,7 +20,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { CollectionFromJSON, CollectionsFromJSON, ConformanceFromJSON, LandingPageFromJSON, TileMatrixSetFromJSON, TileMatrixSetsFromJSON, TileSetFromJSON, TileSetsFromJSON, } from '../models/index';
+import { CollectionFromJSON, } from '../models/Collection';
+import { CollectionsFromJSON, } from '../models/Collections';
+import { ConformanceFromJSON, } from '../models/Conformance';
+import { LandingPageFromJSON, } from '../models/LandingPage';
+import { TileMatrixSetFromJSON, } from '../models/TileMatrixSet';
+import { TileMatrixSetsFromJSON, } from '../models/TileMatrixSets';
+import { TileSetFromJSON, } from '../models/TileSet';
+import { TileSetsFromJSON, } from '../models/TileSets';
 /**
  *
  */
@@ -46,8 +53,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -101,9 +108,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-            urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -154,8 +161,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -218,8 +225,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -270,8 +277,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/conformance`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -322,8 +329,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -389,12 +396,12 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-            urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
-            urlPath = urlPath.replace(`{${"tileMatrix"}}`, encodeURIComponent(String(requestParameters['tileMatrix'])));
-            urlPath = urlPath.replace(`{${"tileRow"}}`, encodeURIComponent(String(requestParameters['tileRow'])));
-            urlPath = urlPath.replace(`{${"tileCol"}}`, encodeURIComponent(String(requestParameters['tileCol'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+            urlPath = urlPath.replace('{tileMatrix}', encodeURIComponent(String(requestParameters['tileMatrix'])));
+            urlPath = urlPath.replace('{tileRow}', encodeURIComponent(String(requestParameters['tileRow'])));
+            urlPath = urlPath.replace('{tileCol}', encodeURIComponent(String(requestParameters['tileCol'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -448,9 +455,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-            urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -501,8 +508,8 @@ export class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',

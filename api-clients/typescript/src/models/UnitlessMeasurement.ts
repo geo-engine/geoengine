@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface UnitlessMeasurement {
     /**
      * 
-     * @type {UnitlessMeasurementTypeEnum}
-     * @memberof UnitlessMeasurement
      */
     type: UnitlessMeasurementTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface UnitlessMeasurement {
  * @export
  */
 export const UnitlessMeasurementTypeEnum = {
-    Unitless: 'unitless'
+    Unitless: 'unitless',
 } as const;
 export type UnitlessMeasurementTypeEnum = typeof UnitlessMeasurementTypeEnum[keyof typeof UnitlessMeasurementTypeEnum];
 
@@ -41,6 +39,8 @@ export type UnitlessMeasurementTypeEnum = typeof UnitlessMeasurementTypeEnum[key
  */
 export function instanceOfUnitlessMeasurement(value: object): value is UnitlessMeasurement {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'unitless') return false;
+    
     return true;
 }
 

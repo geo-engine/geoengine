@@ -20,7 +20,7 @@ export const FeatureDataType = {
     Float: 'float',
     Text: 'text',
     Bool: 'bool',
-    DateTime: 'dateTime'
+    DateTime: 'dateTime',
 };
 export function instanceOfFeatureDataType(value) {
     for (const key in FeatureDataType) {

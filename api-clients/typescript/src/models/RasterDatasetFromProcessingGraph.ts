@@ -28,32 +28,22 @@ import {
 export interface RasterDatasetFromProcessingGraph {
     /**
      * 
-     * @type {string}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     name?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     displayName: string;
     /**
      * 
-     * @type {string}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     description?: string | null;
     /**
      * 
-     * @type {RasterToDatasetQueryRectangle}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     query: RasterToDatasetQueryRectangle;
     /**
      * 
-     * @type {boolean}
-     * @memberof RasterDatasetFromProcessingGraph
      */
     asCog?: boolean;
 }
@@ -77,9 +67,9 @@ export function RasterDatasetFromProcessingGraphFromJSONTyped(json: any, ignoreD
     }
     return {
         
-        'name': json['name'] == null ? undefined : json['name'],
+        'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
         'displayName': json['displayName'],
-        'description': json['description'] == null ? undefined : json['description'],
+        'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
         'query': RasterToDatasetQueryRectangleFromJSON(json['query']),
         'asCog': json['asCog'] == null ? undefined : json['asCog'],
     };

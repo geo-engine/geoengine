@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface OnnxParameters {
     /**
      * 
-     * @type {string}
-     * @memberof OnnxParameters
      */
     model: string;
 }

@@ -24,7 +24,7 @@ exports.WcsVersionToJSONTyped = WcsVersionToJSONTyped;
  */
 exports.WcsVersion = {
     _110: '1.1.0',
-    _111: '1.1.1'
+    _111: '1.1.1',
 };
 function instanceOfWcsVersion(value) {
     for (const key in exports.WcsVersion) {

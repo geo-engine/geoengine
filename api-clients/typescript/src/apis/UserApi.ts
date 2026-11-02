@@ -11,92 +11,164 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  AddRole,
-  ComputationQuota,
-  DataUsage,
-  DataUsageSummary,
-  IdResponse,
-  OperatorQuota,
-  Quota,
-  RoleDescription,
-  UpdateQuota,
-  UsageSummaryGranularity,
-} from '../models/index';
 import {
+    type AddRole,
     AddRoleFromJSON,
     AddRoleToJSON,
+} from '../models/AddRole';
+import {
+    type ComputationQuota,
     ComputationQuotaFromJSON,
     ComputationQuotaToJSON,
+} from '../models/ComputationQuota';
+import {
+    type DataUsage,
     DataUsageFromJSON,
     DataUsageToJSON,
+} from '../models/DataUsage';
+import {
+    type DataUsageSummary,
     DataUsageSummaryFromJSON,
     DataUsageSummaryToJSON,
+} from '../models/DataUsageSummary';
+import {
+    type IdResponse,
     IdResponseFromJSON,
     IdResponseToJSON,
+} from '../models/IdResponse';
+import {
+    type OperatorQuota,
     OperatorQuotaFromJSON,
     OperatorQuotaToJSON,
+} from '../models/OperatorQuota';
+import {
+    type Quota,
     QuotaFromJSON,
     QuotaToJSON,
+} from '../models/Quota';
+import {
+    type RoleDescription,
     RoleDescriptionFromJSON,
     RoleDescriptionToJSON,
+} from '../models/RoleDescription';
+import {
+    type UpdateQuota,
     UpdateQuotaFromJSON,
     UpdateQuotaToJSON,
+} from '../models/UpdateQuota';
+import {
+    type UsageSummaryGranularity,
     UsageSummaryGranularityFromJSON,
     UsageSummaryGranularityToJSON,
-} from '../models/index';
+} from '../models/UsageSummaryGranularity';
 
 export interface AddRoleHandlerRequest {
+    /**
+     * 
+     */
     addRole: AddRole;
 }
 
 export interface AssignRoleHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
+    /**
+     * Role id
+     */
     role: string;
 }
 
 export interface ComputationQuotaHandlerRequest {
+    /**
+     * Computation id
+     */
     computation: string;
 }
 
 export interface ComputationsQuotaHandlerRequest {
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
 }
 
 export interface DataUsageHandlerRequest {
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
 }
 
 export interface DataUsageSummaryHandlerRequest {
+    /**
+     * 
+     */
     granularity: UsageSummaryGranularity;
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
+    /**
+     * 
+     */
     dataset?: string | null;
 }
 
 export interface GetRoleByNameHandlerRequest {
+    /**
+     * Role Name
+     */
     name: string;
 }
 
 export interface GetUserQuotaHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
 }
 
 export interface RemoveRoleHandlerRequest {
+    /**
+     * Role id
+     */
     role: string;
 }
 
 export interface RevokeRoleHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
+    /**
+     * Role id
+     */
     role: string;
 }
 
 export interface UpdateUserQuotaHandlerRequest {
+    /**
+     * User id
+     */
     user: string;
+    /**
+     * 
+     */
     updateQuota: UpdateQuota;
 }
 
@@ -192,8 +264,8 @@ export class UserApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/users/{user}/roles/{role}`;
-        urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
-        urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+        urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
+        urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
 
         return {
             path: urlPath,
@@ -245,7 +317,7 @@ export class UserApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/quota/computations/{computation}`;
-        urlPath = urlPath.replace(`{${"computation"}}`, encodeURIComponent(String(requestParameters['computation'])));
+        urlPath = urlPath.replace('{computation}', encodeURIComponent(String(requestParameters['computation'])));
 
         return {
             path: urlPath,
@@ -514,7 +586,7 @@ export class UserApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/roles/byName/{name}`;
-        urlPath = urlPath.replace(`{${"name"}}`, encodeURIComponent(String(requestParameters['name'])));
+        urlPath = urlPath.replace('{name}', encodeURIComponent(String(requestParameters['name'])));
 
         return {
             path: urlPath,
@@ -612,7 +684,7 @@ export class UserApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/quotas/{user}`;
-        urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
+        urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
 
         return {
             path: urlPath,
@@ -710,7 +782,7 @@ export class UserApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/roles/{role}`;
-        urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+        urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
 
         return {
             path: urlPath,
@@ -769,8 +841,8 @@ export class UserApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/users/{user}/roles/{role}`;
-        urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
-        urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+        urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
+        urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
 
         return {
             path: urlPath,
@@ -831,7 +903,7 @@ export class UserApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/quotas/{user}`;
-        urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
+        urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
 
         return {
             path: urlPath,

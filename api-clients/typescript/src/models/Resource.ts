@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { DataProviderResource } from './DataProviderResource';
 import {
     instanceOfDataProviderResource,
@@ -97,17 +98,17 @@ export function ResourceToJSONTyped(value?: Resource | null, ignoreDiscriminator
     }
     switch (value['type']) {
         case 'dataset':
-            return Object.assign({}, DatasetResourceToJSON(value), { type: 'dataset' } as const);
+            return Object.assign({}, DatasetResourceToJSON(value), { 'type': 'dataset' } as const);
         case 'layer':
-            return Object.assign({}, LayerResourceToJSON(value), { type: 'layer' } as const);
+            return Object.assign({}, LayerResourceToJSON(value), { 'type': 'layer' } as const);
         case 'layerCollection':
-            return Object.assign({}, LayerCollectionResourceToJSON(value), { type: 'layerCollection' } as const);
+            return Object.assign({}, LayerCollectionResourceToJSON(value), { 'type': 'layerCollection' } as const);
         case 'mlModel':
-            return Object.assign({}, MlModelResourceToJSON(value), { type: 'mlModel' } as const);
+            return Object.assign({}, MlModelResourceToJSON(value), { 'type': 'mlModel' } as const);
         case 'project':
-            return Object.assign({}, ProjectResourceToJSON(value), { type: 'project' } as const);
+            return Object.assign({}, ProjectResourceToJSON(value), { 'type': 'project' } as const);
         case 'provider':
-            return Object.assign({}, DataProviderResourceToJSON(value), { type: 'provider' } as const);
+            return Object.assign({}, DataProviderResourceToJSON(value), { 'type': 'provider' } as const);
         default:
             return value;
     }

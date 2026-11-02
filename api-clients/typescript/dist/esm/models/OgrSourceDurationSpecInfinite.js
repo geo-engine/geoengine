@@ -14,13 +14,15 @@
  * @export
  */
 export const OgrSourceDurationSpecInfiniteTypeEnum = {
-    Infinite: 'infinite'
+    Infinite: 'infinite',
 };
 /**
  * Check if a given object implements the OgrSourceDurationSpecInfinite interface.
  */
 export function instanceOfOgrSourceDurationSpecInfinite(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'infinite')
         return false;
     return true;
 }

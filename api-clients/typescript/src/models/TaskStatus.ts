@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { TaskStatusAborted } from './TaskStatusAborted';
 import {
     instanceOfTaskStatusAborted,
@@ -79,13 +80,13 @@ export function TaskStatusToJSONTyped(value?: TaskStatus | null, ignoreDiscrimin
     }
     switch (value['status']) {
         case 'aborted':
-            return Object.assign({}, TaskStatusAbortedToJSON(value), { status: 'aborted' } as const);
+            return Object.assign({}, TaskStatusAbortedToJSON(value), { 'status': 'aborted' } as const);
         case 'completed':
-            return Object.assign({}, TaskStatusCompletedToJSON(value), { status: 'completed' } as const);
+            return Object.assign({}, TaskStatusCompletedToJSON(value), { 'status': 'completed' } as const);
         case 'failed':
-            return Object.assign({}, TaskStatusFailedToJSON(value), { status: 'failed' } as const);
+            return Object.assign({}, TaskStatusFailedToJSON(value), { 'status': 'failed' } as const);
         case 'running':
-            return Object.assign({}, TaskStatusRunningToJSON(value), { status: 'running' } as const);
+            return Object.assign({}, TaskStatusRunningToJSON(value), { 'status': 'running' } as const);
         default:
             return value;
     }

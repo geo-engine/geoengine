@@ -32,7 +32,7 @@ export function AttributeAggregateDefFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'columnName': json['columnName'],
         'aggregateType': AttributeAggregateTypeFromJSON(json['aggregateType']),
-        'measurement': json['measurement'] == null ? undefined : MeasurementFromJSON(json['measurement']),
+        'measurement': json['measurement'] === undefined ? undefined : json['measurement'] === null ? null : MeasurementFromJSON(json['measurement']),
     };
 }
 export function AttributeAggregateDefToJSON(json) {

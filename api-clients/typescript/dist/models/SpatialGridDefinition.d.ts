@@ -18,14 +18,10 @@ import type { GeoTransform } from './GeoTransform';
 export interface SpatialGridDefinition {
     /**
      *
-     * @type {GeoTransform}
-     * @memberof SpatialGridDefinition
      */
     geoTransform: GeoTransform;
     /**
      *
-     * @type {GridBoundingBox2D}
-     * @memberof SpatialGridDefinition
      */
     gridBounds: GridBoundingBox2D;
 }

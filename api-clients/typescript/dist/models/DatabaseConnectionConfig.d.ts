@@ -16,38 +16,26 @@
 export interface DatabaseConnectionConfig {
     /**
      *
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
      */
     host: string;
     /**
      *
-     * @type {number}
-     * @memberof DatabaseConnectionConfig
      */
     port: number;
     /**
      *
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
      */
     database: string;
     /**
      *
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
      */
     schema: string;
     /**
      *
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
      */
     user: string;
     /**
      *
-     * @type {string}
-     * @memberof DatabaseConnectionConfig
      */
     password: string;
 }

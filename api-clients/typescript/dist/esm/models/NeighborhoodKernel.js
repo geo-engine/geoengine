@@ -37,9 +37,9 @@ export function NeighborhoodKernelToJSONTyped(value, ignoreDiscriminator = false
     }
     switch (value['type']) {
         case 'rectangle':
-            return Object.assign({}, NeighborhoodKernelRectangleToJSON(value), { type: 'rectangle' });
+            return Object.assign({}, NeighborhoodKernelRectangleToJSON(value), { 'type': 'rectangle' });
         case 'weightsMatrix':
-            return Object.assign({}, NeighborhoodKernelWeightsMatrixToJSON(value), { type: 'weightsMatrix' });
+            return Object.assign({}, NeighborhoodKernelWeightsMatrixToJSON(value), { 'type': 'weightsMatrix' });
         default:
             return value;
     }

@@ -28,8 +28,8 @@ export function OgrSourceParametersFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'data': json['data'],
-        'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
-        'attributeFilters': json['attributeFilters'] == null ? undefined : (json['attributeFilters'].map(AttributeFilterFromJSON)),
+        'attributeProjection': json['attributeProjection'] === undefined ? undefined : json['attributeProjection'] === null ? null : json['attributeProjection'],
+        'attributeFilters': json['attributeFilters'] === undefined ? undefined : json['attributeFilters'] === null ? null : (json['attributeFilters'].map(AttributeFilterFromJSON)),
     };
 }
 export function OgrSourceParametersToJSON(json) {

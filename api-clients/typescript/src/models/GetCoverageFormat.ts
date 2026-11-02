@@ -17,7 +17,7 @@
  * @export
  */
 export const GetCoverageFormat = {
-    ImageTiff: 'image/tiff'
+    ImageTiff: 'image/tiff',
 } as const;
 export type GetCoverageFormat = typeof GetCoverageFormat[keyof typeof GetCoverageFormat];
 

@@ -23,7 +23,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlotsApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const WrappedPlotOutput_1 = require("../models/WrappedPlotOutput");
 /**
  *
  */
@@ -64,7 +64,7 @@ class PlotsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/plot/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -81,7 +81,7 @@ class PlotsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getPlotHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.WrappedPlotOutputFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, WrappedPlotOutput_1.WrappedPlotOutputFromJSON)(jsonValue));
         });
     }
     /**

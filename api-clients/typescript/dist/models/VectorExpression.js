@@ -24,13 +24,15 @@ const SingleVectorSource_1 = require("./SingleVectorSource");
  * @export
  */
 exports.VectorExpressionTypeEnum = {
-    VectorExpression: 'VectorExpression'
+    VectorExpression: 'VectorExpression',
 };
 /**
  * Check if a given object implements the VectorExpression interface.
  */
 function instanceOfVectorExpression(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'VectorExpression')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

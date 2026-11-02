@@ -16,14 +16,10 @@
 export interface ProviderLayerCollectionId {
     /**
      *
-     * @type {string}
-     * @memberof ProviderLayerCollectionId
      */
     providerId: string;
     /**
      *
-     * @type {string}
-     * @memberof ProviderLayerCollectionId
      */
     collectionId: string;
 }

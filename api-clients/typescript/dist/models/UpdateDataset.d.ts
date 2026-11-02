@@ -16,26 +16,18 @@
 export interface UpdateDataset {
     /**
      *
-     * @type {string}
-     * @memberof UpdateDataset
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof UpdateDataset
      */
     displayName: string;
     /**
      *
-     * @type {string}
-     * @memberof UpdateDataset
      */
     description: string;
     /**
      *
-     * @type {Array<string>}
-     * @memberof UpdateDataset
      */
     tags: Array<string>;
 }

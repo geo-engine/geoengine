@@ -8,7 +8,7 @@ Coordinate Reference System (CRS)
 Name | Type
 ------------ | -------------
 `uri` | string
-`wkt` | { [key: string]: any; }
+`wkt` | { [key: string]: any | null; }
 `referenceSystem` | string
 
 ## Example

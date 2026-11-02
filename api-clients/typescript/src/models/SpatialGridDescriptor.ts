@@ -35,14 +35,10 @@ import {
 export interface SpatialGridDescriptor {
     /**
      * 
-     * @type {SpatialGridDefinition}
-     * @memberof SpatialGridDescriptor
      */
     spatialGrid: SpatialGridDefinition;
     /**
      * 
-     * @type {SpatialGridDescriptorState}
-     * @memberof SpatialGridDescriptor
      */
     descriptor: SpatialGridDescriptorState;
 }

@@ -34,20 +34,14 @@ import type { MeanRasterPixelValuesOverTimeParameters } from './MeanRasterPixelV
 export interface MeanRasterPixelValuesOverTime {
     /**
      *
-     * @type {MeanRasterPixelValuesOverTimeTypeEnum}
-     * @memberof MeanRasterPixelValuesOverTime
      */
     type: MeanRasterPixelValuesOverTimeTypeEnum;
     /**
      *
-     * @type {MeanRasterPixelValuesOverTimeParameters}
-     * @memberof MeanRasterPixelValuesOverTime
      */
     params: MeanRasterPixelValuesOverTimeParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof MeanRasterPixelValuesOverTime
      */
     sources: SingleRasterSource;
 }

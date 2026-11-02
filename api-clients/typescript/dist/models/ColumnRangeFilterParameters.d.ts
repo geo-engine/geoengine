@@ -17,21 +17,15 @@ import type { StringOrNumberRange } from './StringOrNumberRange';
 export interface ColumnRangeFilterParameters {
     /**
      * Column name to filter on.
-     * @type {string}
-     * @memberof ColumnRangeFilterParameters
      */
     column: string;
     /**
      * One or more inclusive ranges for the selected column values.
      * Numeric ranges use `[start, end]`; string ranges use `["a", "k"]`.
-     * @type {Array<StringOrNumberRange>}
-     * @memberof ColumnRangeFilterParameters
      */
     ranges: Array<StringOrNumberRange>;
     /**
      * Whether rows whose column value is NULL should be retained.
-     * @type {boolean}
-     * @memberof ColumnRangeFilterParameters
      */
     keepNulls: boolean;
 }

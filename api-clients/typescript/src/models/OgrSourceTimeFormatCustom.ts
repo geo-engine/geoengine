@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface OgrSourceTimeFormatCustom {
     /**
      * 
-     * @type {OgrSourceTimeFormatCustomFormatEnum}
-     * @memberof OgrSourceTimeFormatCustom
      */
     format: OgrSourceTimeFormatCustomFormatEnum;
     /**
      * 
-     * @type {string}
-     * @memberof OgrSourceTimeFormatCustom
      */
     customFormat: string;
 }
@@ -37,7 +33,7 @@ export interface OgrSourceTimeFormatCustom {
  * @export
  */
 export const OgrSourceTimeFormatCustomFormatEnum = {
-    Custom: 'custom'
+    Custom: 'custom',
 } as const;
 export type OgrSourceTimeFormatCustomFormatEnum = typeof OgrSourceTimeFormatCustomFormatEnum[keyof typeof OgrSourceTimeFormatCustomFormatEnum];
 
@@ -47,6 +43,8 @@ export type OgrSourceTimeFormatCustomFormatEnum = typeof OgrSourceTimeFormatCust
  */
 export function instanceOfOgrSourceTimeFormatCustom(value: object): value is OgrSourceTimeFormatCustom {
     if (!('format' in value) || value['format'] === undefined) return false;
+    if (value['format'] !== 'custom') return false;
+    
     if (!('customFormat' in value) || value['customFormat'] === undefined) return false;
     return true;
 }

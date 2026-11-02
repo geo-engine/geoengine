@@ -28,14 +28,10 @@ import {
 export interface BandNeighborhoodAggregateMethodFirstDerivative {
     /**
      * 
-     * @type {BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum}
-     * @memberof BandNeighborhoodAggregateMethodFirstDerivative
      */
     type: BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum;
     /**
      * Distance between neighboring bands used to approximate the first derivative.
-     * @type {BandDistanceEquallySpaced}
-     * @memberof BandNeighborhoodAggregateMethodFirstDerivative
      */
     bandDistance: BandDistanceEquallySpaced;
 }
@@ -45,7 +41,7 @@ export interface BandNeighborhoodAggregateMethodFirstDerivative {
  * @export
  */
 export const BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum = {
-    FirstDerivative: 'firstDerivative'
+    FirstDerivative: 'firstDerivative',
 } as const;
 export type BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum = typeof BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum[keyof typeof BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum];
 
@@ -55,6 +51,8 @@ export type BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum = typeof Band
  */
 export function instanceOfBandNeighborhoodAggregateMethodFirstDerivative(value: object): value is BandNeighborhoodAggregateMethodFirstDerivative {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'firstDerivative') return false;
+    
     if (!('bandDistance' in value) || value['bandDistance'] === undefined) return false;
     return true;
 }

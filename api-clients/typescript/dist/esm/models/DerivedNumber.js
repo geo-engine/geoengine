@@ -14,13 +14,15 @@
  * @export
  */
 export const DerivedNumberTypeEnum = {
-    Derived: 'derived'
+    Derived: 'derived',
 };
 /**
  * Check if a given object implements the DerivedNumber interface.
  */
 export function instanceOfDerivedNumber(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'derived')
         return false;
     if (!('attribute' in value) || value['attribute'] === undefined)
         return false;

@@ -49,20 +49,14 @@ import {
 export interface TimeProjection {
     /**
      * 
-     * @type {TimeProjectionTypeEnum}
-     * @memberof TimeProjection
      */
     type: TimeProjectionTypeEnum;
     /**
      * 
-     * @type {TimeProjectionParameters}
-     * @memberof TimeProjection
      */
     params: TimeProjectionParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof TimeProjection
      */
     sources: SingleVectorSource;
 }
@@ -72,7 +66,7 @@ export interface TimeProjection {
  * @export
  */
 export const TimeProjectionTypeEnum = {
-    TimeProjection: 'TimeProjection'
+    TimeProjection: 'TimeProjection',
 } as const;
 export type TimeProjectionTypeEnum = typeof TimeProjectionTypeEnum[keyof typeof TimeProjectionTypeEnum];
 
@@ -82,6 +76,8 @@ export type TimeProjectionTypeEnum = typeof TimeProjectionTypeEnum[keyof typeof 
  */
 export function instanceOfTimeProjection(value: object): value is TimeProjection {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'TimeProjection') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -1,6 +1,6 @@
 --- python/geoengine_api_client/models/time_step.py
 +++ python/geoengine_api_client/models/time_step.py
-@@ -76,6 +76,6 @@
+@@ -77,6 +77,6 @@
  
      @classmethod
      def from_dict(cls, obj: Dict[str, Any]) -> Optional[Self]:

@@ -45,10 +45,10 @@ export function GdalDatasetParametersFromJSONTyped(json, ignoreDiscriminator) {
         'width': json['width'],
         'height': json['height'],
         'fileNotFoundHandling': FileNotFoundHandlingFromJSON(json['fileNotFoundHandling']),
-        'noDataValue': json['noDataValue'] == null ? undefined : json['noDataValue'],
-        'propertiesMapping': json['propertiesMapping'] == null ? undefined : (json['propertiesMapping'].map(GdalMetadataMappingFromJSON)),
-        'gdalOpenOptions': json['gdalOpenOptions'] == null ? undefined : json['gdalOpenOptions'],
-        'gdalConfigOptions': json['gdalConfigOptions'] == null ? undefined : json['gdalConfigOptions'],
+        'noDataValue': json['noDataValue'] === undefined ? undefined : json['noDataValue'] === null ? null : json['noDataValue'],
+        'propertiesMapping': json['propertiesMapping'] === undefined ? undefined : json['propertiesMapping'] === null ? null : (json['propertiesMapping'].map(GdalMetadataMappingFromJSON)),
+        'gdalOpenOptions': json['gdalOpenOptions'] === undefined ? undefined : json['gdalOpenOptions'] === null ? null : json['gdalOpenOptions'],
+        'gdalConfigOptions': json['gdalConfigOptions'] === undefined ? undefined : json['gdalConfigOptions'] === null ? null : json['gdalConfigOptions'],
         'allowAlphabandAsMask': json['allowAlphabandAsMask'] == null ? undefined : json['allowAlphabandAsMask'],
     };
 }

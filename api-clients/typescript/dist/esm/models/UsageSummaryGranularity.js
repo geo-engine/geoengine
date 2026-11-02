@@ -19,7 +19,7 @@ export const UsageSummaryGranularity = {
     Hours: 'hours',
     Days: 'days',
     Months: 'months',
-    Years: 'years'
+    Years: 'years',
 };
 export function instanceOfUsageSummaryGranularity(value) {
     for (const key in UsageSummaryGranularity) {

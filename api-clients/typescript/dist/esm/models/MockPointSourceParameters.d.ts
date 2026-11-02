@@ -19,16 +19,12 @@ export interface MockPointSourceParameters {
     /**
      * Points to be output by the mock point source.
      *
-     * @type {Array<Coordinate2D>}
-     * @memberof MockPointSourceParameters
      */
     points: Array<Coordinate2D>;
     /**
      * Defines how the spatial bounds of the source are derived.
      *
      * Defaults to `None`.
-     * @type {SpatialBoundsDerive}
-     * @memberof MockPointSourceParameters
      */
     spatialBounds?: SpatialBoundsDerive;
 }

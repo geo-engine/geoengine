@@ -29,7 +29,7 @@ export function EdrVectorSpecFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'x': json['x'],
-        'y': json['y'] == null ? undefined : json['y'],
+        'y': json['y'] === undefined ? undefined : json['y'] === null ? null : json['y'],
         'time': json['time'],
     };
 }

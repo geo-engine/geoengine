@@ -11,53 +11,81 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  AuthCodeRequestURL,
-  AuthCodeResponse,
-  STRectangle,
-  UserCredentials,
-  UserRegistration,
-  UserSession,
-} from '../models/index';
 import {
+    type AuthCodeRequestURL,
     AuthCodeRequestURLFromJSON,
     AuthCodeRequestURLToJSON,
+} from '../models/AuthCodeRequestURL';
+import {
+    type AuthCodeResponse,
     AuthCodeResponseFromJSON,
     AuthCodeResponseToJSON,
+} from '../models/AuthCodeResponse';
+import {
+    type STRectangle,
     STRectangleFromJSON,
     STRectangleToJSON,
+} from '../models/STRectangle';
+import {
+    type UserCredentials,
     UserCredentialsFromJSON,
     UserCredentialsToJSON,
+} from '../models/UserCredentials';
+import {
+    type UserRegistration,
     UserRegistrationFromJSON,
     UserRegistrationToJSON,
+} from '../models/UserRegistration';
+import {
+    type UserSession,
     UserSessionFromJSON,
     UserSessionToJSON,
-} from '../models/index';
+} from '../models/UserSession';
 
 export interface LoginHandlerRequest {
+    /**
+     * 
+     */
     userCredentials: UserCredentials;
 }
 
 export interface OidcInitRequest {
+    /**
+     * 
+     */
     redirectUri: string;
 }
 
 export interface OidcLoginRequest {
+    /**
+     * 
+     */
     redirectUri: string;
+    /**
+     * 
+     */
     authCodeResponse: AuthCodeResponse;
 }
 
 export interface RegisterUserHandlerRequest {
+    /**
+     * 
+     */
     userRegistration: UserRegistration;
 }
 
 export interface SessionProjectHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 
 export interface SessionViewHandlerRequest {
+    /**
+     * 
+     */
     sTRectangle: STRectangle;
 }
 
@@ -425,7 +453,7 @@ export class SessionApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/session/project/{project}`;
-        urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+        urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
 
         return {
             path: urlPath,

@@ -35,38 +35,26 @@ import {
 export interface LayerCollection {
     /**
      * 
-     * @type {ProviderLayerCollectionId}
-     * @memberof LayerCollection
      */
     id: ProviderLayerCollectionId;
     /**
      * 
-     * @type {string}
-     * @memberof LayerCollection
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof LayerCollection
      */
     description: string;
     /**
      * 
-     * @type {Array<CollectionItem>}
-     * @memberof LayerCollection
      */
     items: Array<CollectionItem>;
     /**
      * a common label for the collection's entries, if there is any
-     * @type {string}
-     * @memberof LayerCollection
      */
     entryLabel?: string | null;
     /**
      * 
-     * @type {Array<Array<string>>}
-     * @memberof LayerCollection
      */
     properties: Array<Array<string>>;
 }
@@ -97,7 +85,7 @@ export function LayerCollectionFromJSONTyped(json: any, ignoreDiscriminator: boo
         'name': json['name'],
         'description': json['description'],
         'items': ((json['items'] as Array<any>).map(CollectionItemFromJSON)),
-        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
+        'entryLabel': json['entryLabel'] === undefined ? undefined : json['entryLabel'] === null ? null : json['entryLabel'],
         'properties': json['properties'],
     };
 }

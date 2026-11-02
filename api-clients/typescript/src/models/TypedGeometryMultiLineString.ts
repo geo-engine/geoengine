@@ -28,8 +28,6 @@ import {
 export interface TypedGeometryMultiLineString {
     /**
      * 
-     * @type {MultiLineString}
-     * @memberof TypedGeometryMultiLineString
      */
     multiLineString: MultiLineString;
 }
@@ -38,7 +36,7 @@ export interface TypedGeometryMultiLineString {
  * Check if a given object implements the TypedGeometryMultiLineString interface.
  */
 export function instanceOfTypedGeometryMultiLineString(value: object): value is TypedGeometryMultiLineString {
-    if (!('multiLineString' in value) || value['multiLineString'] === undefined) return false;
+    if ((!('multiLineString' in (value as Record<string, any>)) && !('MultiLineString' in (value as Record<string, any>))) || ((value as Record<string, any>)['multiLineString'] === undefined && (value as Record<string, any>)['MultiLineString'] === undefined)) return false;
     return true;
 }
 

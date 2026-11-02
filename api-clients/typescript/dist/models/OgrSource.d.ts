@@ -23,14 +23,10 @@ import type { OgrSourceParameters } from './OgrSourceParameters';
 export interface OgrSource {
     /**
      *
-     * @type {OgrSourceTypeEnum}
-     * @memberof OgrSource
      */
     type: OgrSourceTypeEnum;
     /**
      *
-     * @type {OgrSourceParameters}
-     * @memberof OgrSource
      */
     params: OgrSourceParameters;
 }

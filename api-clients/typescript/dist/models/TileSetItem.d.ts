@@ -8,7 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { GeospatialDataDataType } from './GeospatialDataDataType';
+import type { TileSetDataType } from './TileSetDataType';
 import type { Link } from './Link';
 import type { TilesCrs } from './TilesCrs';
 /**
@@ -20,36 +20,26 @@ import type { TilesCrs } from './TilesCrs';
 export interface TileSetItem {
     /**
      * A title for this tileset
-     * @type {string}
-     * @memberof TileSetItem
      */
     title?: string;
     /**
      *
-     * @type {GeospatialDataDataType}
-     * @memberof TileSetItem
      */
-    dataType: GeospatialDataDataType;
+    dataType: TileSetDataType;
     /**
      * Coordinate Reference System (CRS)
-     * @type {TilesCrs}
-     * @memberof TileSetItem
      */
     crs: TilesCrs;
     /**
      * Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets
      * such as the OGC NA definition server (<http://www.opengis.net/def/tms/>).
      * Required if the tile matrix set is registered on an open official source.
-     * @type {string}
-     * @memberof TileSetItem
      */
     tileMatrixSetURI?: string;
     /**
      * Links to related resources. A 'self' link to the tileset as well as a
      * <http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme> link to a
      * definition of the [`TileMatrixSet`] are required.
-     * @type {Array<Link>}
-     * @memberof TileSetItem
      */
     links: Array<Link>;
 }

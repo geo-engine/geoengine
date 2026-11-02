@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 /**
  * Check if a given object implements the DataUsageSummary interface.
  */
@@ -30,7 +31,7 @@ export function DataUsageSummaryFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : parseDateTime(json['timestamp'])),
         'data': json['data'],
         'count': json['count'],
     };
@@ -43,7 +44,7 @@ export function DataUsageSummaryToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : serializeDateTime(value['timestamp']),
         'data': value['data'],
         'count': value['count'],
     };

@@ -23,7 +23,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GeneralApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const ServerInfo_1 = require("../models/ServerInfo");
 /**
  *
  */
@@ -85,7 +85,7 @@ class GeneralApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.serverInfoHandlerRequestOpts();
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.ServerInfoFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, ServerInfo_1.ServerInfoFromJSON)(jsonValue));
         });
     }
     /**

@@ -16,13 +16,15 @@ import { MeanRasterPixelValuesOverTimeParametersFromJSON, MeanRasterPixelValuesO
  * @export
  */
 export const MeanRasterPixelValuesOverTimeTypeEnum = {
-    MeanRasterPixelValuesOverTime: 'MeanRasterPixelValuesOverTime'
+    MeanRasterPixelValuesOverTime: 'MeanRasterPixelValuesOverTime',
 };
 /**
  * Check if a given object implements the MeanRasterPixelValuesOverTime interface.
  */
 export function instanceOfMeanRasterPixelValuesOverTime(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'MeanRasterPixelValuesOverTime')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

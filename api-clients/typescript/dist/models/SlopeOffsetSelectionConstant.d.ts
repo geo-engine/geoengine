@@ -16,14 +16,10 @@
 export interface SlopeOffsetSelectionConstant {
     /**
      *
-     * @type {SlopeOffsetSelectionConstantTypeEnum}
-     * @memberof SlopeOffsetSelectionConstant
      */
     type: SlopeOffsetSelectionConstantTypeEnum;
     /**
      * Fixed slope or offset value.
-     * @type {number}
-     * @memberof SlopeOffsetSelectionConstant
      */
     value: number;
 }

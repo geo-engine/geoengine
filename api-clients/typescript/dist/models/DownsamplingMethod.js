@@ -23,7 +23,7 @@ exports.DownsamplingMethodToJSONTyped = DownsamplingMethodToJSONTyped;
  * @export
  */
 exports.DownsamplingMethod = {
-    NearestNeighbor: 'nearestNeighbor'
+    NearestNeighbor: 'nearestNeighbor',
 };
 function instanceOfDownsamplingMethod(value) {
     for (const key in exports.DownsamplingMethod) {

@@ -24,7 +24,7 @@ exports.DeriveOutRasterSpecsSourceToJSONTyped = DeriveOutRasterSpecsSourceToJSON
  */
 exports.DeriveOutRasterSpecsSource = {
     DataBounds: 'dataBounds',
-    ProjectionBounds: 'projectionBounds'
+    ProjectionBounds: 'projectionBounds',
 };
 function instanceOfDeriveOutRasterSpecsSource(value) {
     for (const key in exports.DeriveOutRasterSpecsSource) {

@@ -16,14 +16,10 @@
 export interface Volume {
     /**
      *
-     * @type {string}
-     * @memberof Volume
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof Volume
      */
     path?: string | null;
 }

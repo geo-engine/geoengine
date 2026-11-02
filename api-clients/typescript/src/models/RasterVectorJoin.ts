@@ -56,20 +56,14 @@ import {
 export interface RasterVectorJoin {
     /**
      * 
-     * @type {RasterVectorJoinTypeEnum}
-     * @memberof RasterVectorJoin
      */
     type: RasterVectorJoinTypeEnum;
     /**
      * 
-     * @type {RasterVectorJoinParameters}
-     * @memberof RasterVectorJoin
      */
     params: RasterVectorJoinParameters;
     /**
      * 
-     * @type {SingleVectorMultipleRasterSources}
-     * @memberof RasterVectorJoin
      */
     sources: SingleVectorMultipleRasterSources;
 }
@@ -79,7 +73,7 @@ export interface RasterVectorJoin {
  * @export
  */
 export const RasterVectorJoinTypeEnum = {
-    RasterVectorJoin: 'RasterVectorJoin'
+    RasterVectorJoin: 'RasterVectorJoin',
 } as const;
 export type RasterVectorJoinTypeEnum = typeof RasterVectorJoinTypeEnum[keyof typeof RasterVectorJoinTypeEnum];
 
@@ -89,6 +83,8 @@ export type RasterVectorJoinTypeEnum = typeof RasterVectorJoinTypeEnum[keyof typ
  */
 export function instanceOfRasterVectorJoin(value: object): value is RasterVectorJoin {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'RasterVectorJoin') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

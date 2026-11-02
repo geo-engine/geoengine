@@ -28,38 +28,26 @@ import {
 export interface GfbioAbcdDataProviderDefinition {
     /**
      * 
-     * @type {GfbioAbcdDataProviderDefinitionTypeEnum}
-     * @memberof GfbioAbcdDataProviderDefinition
      */
     type: GfbioAbcdDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof GfbioAbcdDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof GfbioAbcdDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof GfbioAbcdDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {DatabaseConnectionConfig}
-     * @memberof GfbioAbcdDataProviderDefinition
      */
     dbConfig: DatabaseConnectionConfig;
     /**
      * 
-     * @type {number}
-     * @memberof GfbioAbcdDataProviderDefinition
      */
     cacheTtl?: number | null;
 }
@@ -69,7 +57,7 @@ export interface GfbioAbcdDataProviderDefinition {
  * @export
  */
 export const GfbioAbcdDataProviderDefinitionTypeEnum = {
-    GfbioAbcd: 'GfbioAbcd'
+    GfbioAbcd: 'GfbioAbcd',
 } as const;
 export type GfbioAbcdDataProviderDefinitionTypeEnum = typeof GfbioAbcdDataProviderDefinitionTypeEnum[keyof typeof GfbioAbcdDataProviderDefinitionTypeEnum];
 
@@ -79,6 +67,8 @@ export type GfbioAbcdDataProviderDefinitionTypeEnum = typeof GfbioAbcdDataProvid
  */
 export function instanceOfGfbioAbcdDataProviderDefinition(value: object): value is GfbioAbcdDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'GfbioAbcd') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('dbConfig' in value) || value['dbConfig'] === undefined) return false;
@@ -98,9 +88,9 @@ export function GfbioAbcdDataProviderDefinitionFromJSONTyped(json: any, ignoreDi
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

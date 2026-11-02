@@ -35,26 +35,18 @@ import {
 export interface CreateProject {
     /**
      * 
-     * @type {string}
-     * @memberof CreateProject
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof CreateProject
      */
     description: string;
     /**
      * 
-     * @type {STRectangle}
-     * @memberof CreateProject
      */
     bounds: STRectangle;
     /**
      * 
-     * @type {TimeStep}
-     * @memberof CreateProject
      */
     timeStep?: TimeStep | null;
 }
@@ -82,7 +74,7 @@ export function CreateProjectFromJSONTyped(json: any, ignoreDiscriminator: boole
         'name': json['name'],
         'description': json['description'],
         'bounds': STRectangleFromJSON(json['bounds']),
-        'timeStep': json['timeStep'] == null ? undefined : TimeStepFromJSON(json['timeStep']),
+        'timeStep': json['timeStep'] === undefined ? undefined : json['timeStep'] === null ? null : TimeStepFromJSON(json['timeStep']),
     };
 }
 

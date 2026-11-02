@@ -24,13 +24,15 @@ const SingleRasterOrVectorSource_1 = require("./SingleRasterOrVectorSource");
  * @export
  */
 exports.ReprojectionTypeEnum = {
-    Reprojection: 'Reprojection'
+    Reprojection: 'Reprojection',
 };
 /**
  * Check if a given object implements the Reprojection interface.
  */
 function instanceOfReprojection(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Reprojection')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

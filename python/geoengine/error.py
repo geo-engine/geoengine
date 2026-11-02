@@ -218,7 +218,7 @@ class OGCXMLError(Exception):
 
     __xml: ET.Element
 
-    def __init__(self, xml: bytearray) -> None:
+    def __init__(self, xml: bytes) -> None:
         super().__init__()
 
         self.__xml = ET.fromstring(xml[1:])
@@ -233,5 +233,5 @@ class OGCXMLError(Exception):
         return f"OGC API error: {service_exception}"
 
     @classmethod
-    def is_ogc_error(cls, xml: bytearray) -> bool:
+    def is_ogc_error(cls, xml: bytes) -> bool:
         return xml.startswith(b"\n<?xml")

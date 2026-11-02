@@ -53,20 +53,14 @@ import {
 export interface ClassHistogram {
     /**
      * 
-     * @type {ClassHistogramTypeEnum}
-     * @memberof ClassHistogram
      */
     type: ClassHistogramTypeEnum;
     /**
      * 
-     * @type {ClassHistogramParameters}
-     * @memberof ClassHistogram
      */
     params: ClassHistogramParameters;
     /**
      * 
-     * @type {SingleRasterOrVectorSource}
-     * @memberof ClassHistogram
      */
     sources: SingleRasterOrVectorSource;
 }
@@ -76,7 +70,7 @@ export interface ClassHistogram {
  * @export
  */
 export const ClassHistogramTypeEnum = {
-    ClassHistogram: 'ClassHistogram'
+    ClassHistogram: 'ClassHistogram',
 } as const;
 export type ClassHistogramTypeEnum = typeof ClassHistogramTypeEnum[keyof typeof ClassHistogramTypeEnum];
 
@@ -86,6 +80,8 @@ export type ClassHistogramTypeEnum = typeof ClassHistogramTypeEnum[keyof typeof 
  */
 export function instanceOfClassHistogram(value: object): value is ClassHistogram {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'ClassHistogram') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

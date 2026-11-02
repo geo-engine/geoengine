@@ -25,13 +25,15 @@ const ColorParam_1 = require("./ColorParam");
  * @export
  */
 exports.PolygonSymbologyTypeEnum = {
-    Polygon: 'polygon'
+    Polygon: 'polygon',
 };
 /**
  * Check if a given object implements the PolygonSymbology interface.
  */
 function instanceOfPolygonSymbology(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'polygon')
         return false;
     if (!('fillColor' in value) || value['fillColor'] === undefined)
         return false;
@@ -52,7 +54,7 @@ function PolygonSymbologyFromJSONTyped(json, ignoreDiscriminator) {
         'type': json['type'],
         'fillColor': (0, ColorParam_1.ColorParamFromJSON)(json['fillColor']),
         'stroke': (0, StrokeParam_1.StrokeParamFromJSON)(json['stroke']),
-        'text': json['text'] == null ? undefined : (0, TextSymbology_1.TextSymbologyFromJSON)(json['text']),
+        'text': json['text'] === undefined ? undefined : json['text'] === null ? null : (0, TextSymbology_1.TextSymbologyFromJSON)(json['text']),
         'autoSimplified': json['autoSimplified'],
     };
 }

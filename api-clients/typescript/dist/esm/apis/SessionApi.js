@@ -20,7 +20,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { AuthCodeRequestURLFromJSON, AuthCodeResponseToJSON, STRectangleToJSON, UserCredentialsToJSON, UserRegistrationToJSON, UserSessionFromJSON, } from '../models/index';
+import { AuthCodeRequestURLFromJSON, } from '../models/AuthCodeRequestURL';
+import { AuthCodeResponseToJSON, } from '../models/AuthCodeResponse';
+import { STRectangleToJSON, } from '../models/STRectangle';
+import { UserCredentialsToJSON, } from '../models/UserCredentials';
+import { UserRegistrationToJSON, } from '../models/UserRegistration';
+import { UserSessionFromJSON, } from '../models/UserSession';
 /**
  *
  */
@@ -337,7 +342,7 @@ export class SessionApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/session/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'POST',

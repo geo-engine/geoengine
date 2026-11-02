@@ -22,169 +22,117 @@ import type { TilesCrs } from './TilesCrs';
 export interface GeospatialData {
     /**
      * Unique identifier of the Layer.
-     * @type {string}
-     * @memberof GeospatialData
      */
     id: string;
     /**
      * Title for this layer
-     * @type {string}
-     * @memberof GeospatialData
      */
     title?: string;
     /**
      * Brief narrative description of this layer
-     * @type {string}
-     * @memberof GeospatialData
      */
     description?: string;
     /**
      * Unordered list of one or more commonly used or formalized word(s) or
      * phrase(s) used to describe this layer
-     * @type {Array<string>}
-     * @memberof GeospatialData
      */
     keywords?: Array<string>;
     /**
      *
-     * @type {GeospatialDataDataType}
-     * @memberof GeospatialData
      */
     dataType: GeospatialDataDataType;
     /**
      * The geometry dimension of the features shown in this layer (0: points,
      * 1: curves, 2: surfaces, 3: solids), unspecified: mixed or unknown
-     * @type {GeometryDimension}
-     * @memberof GeospatialData
      */
     geometryDimension?: GeometryDimension;
     /**
      * Feature type identifier. Only applicable to layers of datatype 'geometries'
-     * @type {string}
-     * @memberof GeospatialData
      */
     featureType?: string;
     /**
      * Short reference to recognize the author or provider
-     * @type {string}
-     * @memberof GeospatialData
      */
     attribution?: string;
     /**
      * License applicable to the tiles
-     * @type {string}
-     * @memberof GeospatialData
      */
     license?: string;
     /**
      * Useful information to contact the authors or custodians for the layer
      * (e.g. e-mail address, a physical address,  phone numbers, etc)
-     * @type {string}
-     * @memberof GeospatialData
      */
     pointOfContact?: string;
     /**
      * Organization or individual responsible for making the layer available
-     * @type {string}
-     * @memberof GeospatialData
      */
     publisher?: string;
     /**
      * Category where the layer can be grouped
-     * @type {string}
-     * @memberof GeospatialData
      */
     theme?: string;
     /**
      * Coordinate Reference System (CRS)
-     * @type {TilesCrs}
-     * @memberof GeospatialData
      */
     crs?: TilesCrs | null;
     /**
      * Epoch of the Coordinate Reference System (CRS)
-     * @type {number}
-     * @memberof GeospatialData
      */
     epoch?: number;
     /**
      * Minimum scale denominator for usage of the layer
-     * @type {number}
-     * @memberof GeospatialData
      */
     minScaleDenominator?: number;
     /**
      * Maximum scale denominator for usage of the layer
-     * @type {number}
-     * @memberof GeospatialData
      */
     maxScaleDenominator?: number;
     /**
      * Minimum cell size for usage of the layer
-     * @type {number}
-     * @memberof GeospatialData
      */
     minCellSize?: number;
     /**
      * Maximum cell size for usage of the layer
-     * @type {number}
-     * @memberof GeospatialData
      */
     maxCellSize?: number;
     /**
      * [`TileMatrix`] identifier associated with the minScaleDenominator
-     * @type {string}
-     * @memberof GeospatialData
      */
     maxTileMatrix?: string;
     /**
      * [`TileMatrix`] identifier associated with the maxScaleDenominator
-     * @type {string}
-     * @memberof GeospatialData
      */
     minTileMatrix?: string;
     /**
      * Minimum bounding rectangle surrounding the layer
-     * @type {BoundingBox2D}
-     * @memberof GeospatialData
      */
     boundingBox?: BoundingBox2D;
     /**
      * When the layer was first produced
-     * @type {Date}
-     * @memberof GeospatialData
      */
     created?: Date;
     /**
      * Last layer change/revision
-     * @type {Date}
-     * @memberof GeospatialData
      */
     updated?: Date;
     /**
      * Style used to generate the layer in the tileset
-     * @type {Style}
-     * @memberof GeospatialData
      */
     style?: Style;
     /**
      * URI identifying a class of data contained in this layer (useful to
      * determine compatibility with styles or processes)
-     * @type {Array<string>}
-     * @memberof GeospatialData
      */
     geoDataClasses?: Array<string>;
     /**
-     *
-     * @type {any}
-     * @memberof GeospatialData
+     * Properties represented by the features in this layer. Can be the
+     * attributes of a feature dataset (datatype=geometries) or the rangeType
+     * of a coverage (datatype=coverage)
      */
     propertiesSchema?: any | null;
     /**
      * Links related to this layer. Possible link 'rel' values are:
      * 'geodata' for a URL pointing to the collection of geospatial data.
-     * @type {Array<Link>}
-     * @memberof GeospatialData
      */
     links?: Array<Link>;
 }

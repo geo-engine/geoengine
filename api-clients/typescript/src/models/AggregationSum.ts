@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface AggregationSum {
     /**
      * 
-     * @type {AggregationSumTypeEnum}
-     * @memberof AggregationSum
      */
     type: AggregationSumTypeEnum;
     /**
      * 
-     * @type {boolean}
-     * @memberof AggregationSum
      */
     ignoreNoData: boolean;
 }
@@ -37,7 +33,7 @@ export interface AggregationSum {
  * @export
  */
 export const AggregationSumTypeEnum = {
-    Sum: 'sum'
+    Sum: 'sum',
 } as const;
 export type AggregationSumTypeEnum = typeof AggregationSumTypeEnum[keyof typeof AggregationSumTypeEnum];
 
@@ -47,6 +43,8 @@ export type AggregationSumTypeEnum = typeof AggregationSumTypeEnum[keyof typeof 
  */
 export function instanceOfAggregationSum(value: object): value is AggregationSum {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'sum') return false;
+    
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined) return false;
     return true;
 }

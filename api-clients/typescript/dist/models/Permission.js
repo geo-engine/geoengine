@@ -24,7 +24,7 @@ exports.PermissionToJSONTyped = PermissionToJSONTyped;
  */
 exports.Permission = {
     Read: 'Read',
-    Owner: 'Owner'
+    Owner: 'Owner',
 };
 function instanceOfPermission(value) {
     for (const key in exports.Permission) {

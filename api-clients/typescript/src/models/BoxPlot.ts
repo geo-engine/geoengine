@@ -65,20 +65,14 @@ import {
 export interface BoxPlot {
     /**
      * 
-     * @type {BoxPlotTypeEnum}
-     * @memberof BoxPlot
      */
     type: BoxPlotTypeEnum;
     /**
      * 
-     * @type {BoxPlotParameters}
-     * @memberof BoxPlot
      */
     params: BoxPlotParameters;
     /**
      * 
-     * @type {SingleRasterOrVectorSource}
-     * @memberof BoxPlot
      */
     sources: SingleRasterOrVectorSource;
 }
@@ -88,7 +82,7 @@ export interface BoxPlot {
  * @export
  */
 export const BoxPlotTypeEnum = {
-    BoxPlot: 'BoxPlot'
+    BoxPlot: 'BoxPlot',
 } as const;
 export type BoxPlotTypeEnum = typeof BoxPlotTypeEnum[keyof typeof BoxPlotTypeEnum];
 
@@ -98,6 +92,8 @@ export type BoxPlotTypeEnum = typeof BoxPlotTypeEnum[keyof typeof BoxPlotTypeEnu
  */
 export function instanceOfBoxPlot(value: object): value is BoxPlot {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'BoxPlot') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

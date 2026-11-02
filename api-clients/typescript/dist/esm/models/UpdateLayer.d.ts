@@ -18,38 +18,26 @@ import type { ProcessingGraph } from './ProcessingGraph';
 export interface UpdateLayer {
     /**
      *
-     * @type {string}
-     * @memberof UpdateLayer
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof UpdateLayer
      */
     description: string;
     /**
      *
-     * @type {ProcessingGraph}
-     * @memberof UpdateLayer
      */
     processingGraph: ProcessingGraph;
     /**
      *
-     * @type {Symbology}
-     * @memberof UpdateLayer
      */
     symbology?: Symbology | null;
     /**
      * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof UpdateLayer
      */
     properties?: Array<Array<string>>;
     /**
      * metadata used for loading the data
-     * @type {{ [key: string]: string; }}
-     * @memberof UpdateLayer
      */
     metadata?: {
         [key: string]: string;

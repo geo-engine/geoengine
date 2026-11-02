@@ -15,13 +15,15 @@ import { ProviderLayerCollectionIdFromJSON, ProviderLayerCollectionIdToJSON, } f
  * @export
  */
 export const LayerCollectionListingTypeEnum = {
-    Collection: 'collection'
+    Collection: 'collection',
 };
 /**
  * Check if a given object implements the LayerCollectionListing interface.
  */
 export function instanceOfLayerCollectionListing(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'collection')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

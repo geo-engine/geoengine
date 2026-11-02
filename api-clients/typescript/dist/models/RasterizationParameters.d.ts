@@ -19,20 +19,14 @@ import type { DensityParams } from './DensityParams';
 export interface RasterizationParameters {
     /**
      * Spatial resolution of the output grid in x/y direction.
-     * @type {SpatialResolution}
-     * @memberof RasterizationParameters
      */
     spatialResolution: SpatialResolution;
     /**
      * Origin coordinate to which the raster grid is aligned.
-     * @type {Coordinate2D}
-     * @memberof RasterizationParameters
      */
     originCoordinate: Coordinate2D;
     /**
      * Optional density parameters for a Gaussian density rasterization.
-     * @type {DensityParams}
-     * @memberof RasterizationParameters
      */
     densityParams?: DensityParams | null;
 }

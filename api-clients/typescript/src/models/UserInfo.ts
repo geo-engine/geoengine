@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface UserInfo {
     /**
      * 
-     * @type {string}
-     * @memberof UserInfo
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof UserInfo
      */
     email?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof UserInfo
      */
     realName?: string | null;
 }
@@ -57,8 +51,8 @@ export function UserInfoFromJSONTyped(json: any, ignoreDiscriminator: boolean): 
     return {
         
         'id': json['id'],
-        'email': json['email'] == null ? undefined : json['email'],
-        'realName': json['realName'] == null ? undefined : json['realName'],
+        'email': json['email'] === undefined ? undefined : json['email'] === null ? null : json['email'],
+        'realName': json['realName'] === undefined ? undefined : json['realName'] === null ? null : json['realName'],
     };
 }
 

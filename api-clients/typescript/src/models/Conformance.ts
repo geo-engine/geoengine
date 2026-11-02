@@ -23,8 +23,6 @@ import { mapValues } from '../runtime';
 export interface Conformance {
     /**
      * 
-     * @type {Array<string>}
-     * @memberof Conformance
      */
     conformsTo: Array<string>;
 }

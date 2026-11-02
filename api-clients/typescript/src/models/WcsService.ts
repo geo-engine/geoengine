@@ -17,7 +17,7 @@
  * @export
  */
 export const WcsService = {
-    Wcs: 'WCS'
+    Wcs: 'WCS',
 } as const;
 export type WcsService = typeof WcsService[keyof typeof WcsService];
 

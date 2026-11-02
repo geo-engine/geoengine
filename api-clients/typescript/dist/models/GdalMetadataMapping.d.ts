@@ -18,20 +18,14 @@ import type { RasterPropertiesEntryType } from './RasterPropertiesEntryType';
 export interface GdalMetadataMapping {
     /**
      *
-     * @type {RasterPropertiesKey}
-     * @memberof GdalMetadataMapping
      */
     sourceKey: RasterPropertiesKey;
     /**
      *
-     * @type {RasterPropertiesKey}
-     * @memberof GdalMetadataMapping
      */
     targetKey: RasterPropertiesKey;
     /**
      *
-     * @type {RasterPropertiesEntryType}
-     * @memberof GdalMetadataMapping
      */
     targetType: RasterPropertiesEntryType;
 }

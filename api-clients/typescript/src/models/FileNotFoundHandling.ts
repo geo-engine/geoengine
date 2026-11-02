@@ -18,7 +18,7 @@
  */
 export const FileNotFoundHandling = {
     NoData: 'NoData',
-    Error: 'Error'
+    Error: 'Error',
 } as const;
 export type FileNotFoundHandling = typeof FileNotFoundHandling[keyof typeof FileNotFoundHandling];
 

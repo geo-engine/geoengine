@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface ReflectanceParameters {
     /**
      * 
-     * @type {boolean}
-     * @memberof ReflectanceParameters
      */
     solarCorrection: boolean;
     /**
      * 
-     * @type {boolean}
-     * @memberof ReflectanceParameters
      */
     forceHRV: boolean;
     /**
      * 
-     * @type {number}
-     * @memberof ReflectanceParameters
      */
     forceSatellite?: number | null;
 }
@@ -59,7 +53,7 @@ export function ReflectanceParametersFromJSONTyped(json: any, ignoreDiscriminato
         
         'solarCorrection': json['solarCorrection'],
         'forceHRV': json['forceHRV'],
-        'forceSatellite': json['forceSatellite'] == null ? undefined : json['forceSatellite'],
+        'forceSatellite': json['forceSatellite'] === undefined ? undefined : json['forceSatellite'] === null ? null : json['forceSatellite'],
     };
 }
 

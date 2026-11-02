@@ -28,14 +28,10 @@ import {
 export interface ProviderCapabilities {
     /**
      * 
-     * @type {boolean}
-     * @memberof ProviderCapabilities
      */
     listing: boolean;
     /**
      * 
-     * @type {SearchCapabilities}
-     * @memberof ProviderCapabilities
      */
     search: SearchCapabilities;
 }

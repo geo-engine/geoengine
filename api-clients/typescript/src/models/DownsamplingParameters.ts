@@ -42,20 +42,14 @@ import {
 export interface DownsamplingParameters {
     /**
      * Downsampling method.
-     * @type {DownsamplingMethod}
-     * @memberof DownsamplingParameters
      */
     samplingMethod: DownsamplingMethod;
     /**
      * Target output resolution.
-     * @type {DownsamplingResolution}
-     * @memberof DownsamplingParameters
      */
     outputResolution: DownsamplingResolution;
     /**
      * Optional reference point used to align the output grid origin.
-     * @type {Coordinate2D}
-     * @memberof DownsamplingParameters
      */
     outputOriginReference?: Coordinate2D | null;
 }
@@ -83,7 +77,7 @@ export function DownsamplingParametersFromJSONTyped(json: any, ignoreDiscriminat
         
         'samplingMethod': DownsamplingMethodFromJSON(json['samplingMethod']),
         'outputResolution': DownsamplingResolutionFromJSON(json['outputResolution']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
+        'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
     };
 }
 

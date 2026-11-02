@@ -17,14 +17,10 @@ import type { MlModelOutputNoDataHandlingVariant } from './MlModelOutputNoDataHa
 export interface MlModelOutputNoDataHandling {
     /**
      *
-     * @type {MlModelOutputNoDataHandlingVariant}
-     * @memberof MlModelOutputNoDataHandling
      */
     variant: MlModelOutputNoDataHandlingVariant;
     /**
      *
-     * @type {number}
-     * @memberof MlModelOutputNoDataHandling
      */
     noDataValue?: number | null;
 }

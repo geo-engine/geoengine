@@ -40,11 +40,11 @@ export function OgrSourceDurationSpecToJSONTyped(value, ignoreDiscriminator = fa
     }
     switch (value['type']) {
         case 'infinite':
-            return Object.assign({}, OgrSourceDurationSpecInfiniteToJSON(value), { type: 'infinite' });
+            return Object.assign({}, OgrSourceDurationSpecInfiniteToJSON(value), { 'type': 'infinite' });
         case 'value':
-            return Object.assign({}, OgrSourceDurationSpecValueToJSON(value), { type: 'value' });
+            return Object.assign({}, OgrSourceDurationSpecValueToJSON(value), { 'type': 'value' });
         case 'zero':
-            return Object.assign({}, OgrSourceDurationSpecZeroToJSON(value), { type: 'zero' });
+            return Object.assign({}, OgrSourceDurationSpecZeroToJSON(value), { 'type': 'zero' });
         default:
             return value;
     }

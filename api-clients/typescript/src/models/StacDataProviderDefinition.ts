@@ -56,92 +56,62 @@ import {
 export interface StacDataProviderDefinition {
     /**
      * 
-     * @type {StacDataProviderDefinitionTypeEnum}
-     * @memberof StacDataProviderDefinition
      */
     type: StacDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     apiUrl: string;
     /**
      * 
-     * @type {string}
-     * @memberof StacDataProviderDefinition
      */
     collectionName: string;
     /**
      * 
-     * @type {StacProviderS3Config}
-     * @memberof StacDataProviderDefinition
      */
     s3Config?: StacProviderS3Config | null;
     /**
      * 
-     * @type {StacProviderAuthentication}
-     * @memberof StacDataProviderDefinition
      */
     authentication?: StacProviderAuthentication | null;
     /**
      * 
-     * @type {TimeDimension}
-     * @memberof StacDataProviderDefinition
      */
     timeDimension: TimeDimension;
     /**
      * 
-     * @type {Array<StacProviderDataset>}
-     * @memberof StacDataProviderDefinition
      */
     datasets: Array<StacProviderDataset>;
     /**
      * Timeout in seconds for outgoing STAC API HTTP requests.
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     queryTimeoutSecs?: number;
     /**
      * 
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     pageLimit?: number;
     /**
      * Optional output cache lifetime; omitted values use the global cache default.
-     * @type {number}
-     * @memberof StacDataProviderDefinition
      */
     cacheTtlSecs?: number | null;
     /**
      * Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
-     * @type {StacGrid}
-     * @memberof StacDataProviderDefinition
      */
     stacGrid?: StacGrid | null;
 }
@@ -151,7 +121,7 @@ export interface StacDataProviderDefinition {
  * @export
  */
 export const StacDataProviderDefinitionTypeEnum = {
-    StacProviderDefinition: 'StacProviderDefinition'
+    StacProviderDefinition: 'StacProviderDefinition',
 } as const;
 export type StacDataProviderDefinitionTypeEnum = typeof StacDataProviderDefinitionTypeEnum[keyof typeof StacDataProviderDefinitionTypeEnum];
 
@@ -161,6 +131,8 @@ export type StacDataProviderDefinitionTypeEnum = typeof StacDataProviderDefiniti
  */
 export function instanceOfStacDataProviderDefinition(value: object): value is StacDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'StacProviderDefinition') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
@@ -185,17 +157,17 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'name': json['name'],
         'id': json['id'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'apiUrl': json['apiUrl'],
         'collectionName': json['collectionName'],
-        's3Config': json['s3Config'] == null ? undefined : StacProviderS3ConfigFromJSON(json['s3Config']),
-        'authentication': json['authentication'] == null ? undefined : StacProviderAuthenticationFromJSON(json['authentication']),
+        's3Config': json['s3Config'] === undefined ? undefined : json['s3Config'] === null ? null : StacProviderS3ConfigFromJSON(json['s3Config']),
+        'authentication': json['authentication'] === undefined ? undefined : json['authentication'] === null ? null : StacProviderAuthenticationFromJSON(json['authentication']),
         'timeDimension': TimeDimensionFromJSON(json['timeDimension']),
         'datasets': ((json['datasets'] as Array<any>).map(StacProviderDatasetFromJSON)),
         'queryTimeoutSecs': json['queryTimeoutSecs'] == null ? undefined : json['queryTimeoutSecs'],
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
-        'cacheTtlSecs': json['cacheTtlSecs'] == null ? undefined : json['cacheTtlSecs'],
-        'stacGrid': json['stacGrid'] == null ? undefined : StacGridFromJSON(json['stacGrid']),
+        'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
+        'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
     };
 }
 

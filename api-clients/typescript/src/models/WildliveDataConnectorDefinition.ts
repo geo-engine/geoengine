@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 
-import { mapValues } from '../runtime';
+import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 /**
  * 
  * @export
@@ -20,52 +20,36 @@ import { mapValues } from '../runtime';
 export interface WildliveDataConnectorDefinition {
     /**
      * 
-     * @type {WildliveDataConnectorDefinitionTypeEnum}
-     * @memberof WildliveDataConnectorDefinition
      */
     type: WildliveDataConnectorDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     description: string;
     /**
      * 
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     user?: string | null;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.
      * If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
      * This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     refreshToken?: string | null;
     /**
      * 
-     * @type {Date}
-     * @memberof WildliveDataConnectorDefinition
      */
     expiryDate?: Date | null;
     /**
      * 
-     * @type {number}
-     * @memberof WildliveDataConnectorDefinition
      */
     priority?: number | null;
 }
@@ -75,7 +59,7 @@ export interface WildliveDataConnectorDefinition {
  * @export
  */
 export const WildliveDataConnectorDefinitionTypeEnum = {
-    WildLive: 'WildLIVE!'
+    WildLive: 'WildLIVE!',
 } as const;
 export type WildliveDataConnectorDefinitionTypeEnum = typeof WildliveDataConnectorDefinitionTypeEnum[keyof typeof WildliveDataConnectorDefinitionTypeEnum];
 
@@ -85,6 +69,8 @@ export type WildliveDataConnectorDefinitionTypeEnum = typeof WildliveDataConnect
  */
 export function instanceOfWildliveDataConnectorDefinition(value: object): value is WildliveDataConnectorDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'WildLIVE!') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
@@ -105,10 +91,10 @@ export function WildliveDataConnectorDefinitionFromJSONTyped(json: any, ignoreDi
         'id': json['id'],
         'name': json['name'],
         'description': json['description'],
-        'user': json['user'] == null ? undefined : json['user'],
-        'refreshToken': json['refreshToken'] == null ? undefined : json['refreshToken'],
-        'expiryDate': json['expiryDate'] == null ? undefined : (new Date(json['expiryDate'])),
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'user': json['user'] === undefined ? undefined : json['user'] === null ? null : json['user'],
+        'refreshToken': json['refreshToken'] === undefined ? undefined : json['refreshToken'] === null ? null : json['refreshToken'],
+        'expiryDate': json['expiryDate'] === undefined ? undefined : json['expiryDate'] === null ? null : (parseDateTime(json['expiryDate'])),
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
     };
 }
 
@@ -129,7 +115,7 @@ export function WildliveDataConnectorDefinitionToJSONTyped(value?: WildliveDataC
         'description': value['description'],
         'user': value['user'],
         'refreshToken': value['refreshToken'],
-        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : value['expiryDate'].toISOString(),
+        'expiryDate': value['expiryDate'] == null ? value['expiryDate'] : serializeDateTime(value['expiryDate']),
         'priority': value['priority'],
     };
 }

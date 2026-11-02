@@ -23,7 +23,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OGCAPIApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const Collection_1 = require("../models/Collection");
+const Collections_1 = require("../models/Collections");
+const Conformance_1 = require("../models/Conformance");
+const LandingPage_1 = require("../models/LandingPage");
+const TileMatrixSet_1 = require("../models/TileMatrixSet");
+const TileMatrixSets_1 = require("../models/TileMatrixSets");
+const TileSet_1 = require("../models/TileSet");
+const TileSets_1 = require("../models/TileSets");
 /**
  *
  */
@@ -49,8 +56,8 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -67,7 +74,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.collectionRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.CollectionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Collection_1.CollectionFromJSON)(jsonValue));
         });
     }
     /**
@@ -104,9 +111,9 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-            urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -123,7 +130,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.collectionTilesetRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TileSetFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TileSet_1.TileSetFromJSON)(jsonValue));
         });
     }
     /**
@@ -157,8 +164,8 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -175,7 +182,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.collectionTilesetsRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TileSetsFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TileSets_1.TileSetsFromJSON)(jsonValue));
         });
     }
     /**
@@ -221,8 +228,8 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -239,7 +246,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.collectionsRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.CollectionsFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Collections_1.CollectionsFromJSON)(jsonValue));
         });
     }
     /**
@@ -273,8 +280,8 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/conformance`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -291,7 +298,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.conformanceRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.ConformanceFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Conformance_1.ConformanceFromJSON)(jsonValue));
         });
     }
     /**
@@ -325,8 +332,8 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -343,7 +350,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.landingPageRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.LandingPageFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, LandingPage_1.LandingPageFromJSON)(jsonValue));
         });
     }
     /**
@@ -392,12 +399,12 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-            urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
-            urlPath = urlPath.replace(`{${"tileMatrix"}}`, encodeURIComponent(String(requestParameters['tileMatrix'])));
-            urlPath = urlPath.replace(`{${"tileRow"}}`, encodeURIComponent(String(requestParameters['tileRow'])));
-            urlPath = urlPath.replace(`{${"tileCol"}}`, encodeURIComponent(String(requestParameters['tileCol'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+            urlPath = urlPath.replace('{tileMatrix}', encodeURIComponent(String(requestParameters['tileMatrix'])));
+            urlPath = urlPath.replace('{tileRow}', encodeURIComponent(String(requestParameters['tileRow'])));
+            urlPath = urlPath.replace('{tileCol}', encodeURIComponent(String(requestParameters['tileCol'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -451,9 +458,9 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
-            urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -470,7 +477,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.tileMatrixSetRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TileMatrixSetFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TileMatrixSet_1.TileMatrixSetFromJSON)(jsonValue));
         });
     }
     /**
@@ -504,8 +511,8 @@ class OGCAPIApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets`;
-            urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
-            urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
+            urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+            urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -522,7 +529,7 @@ class OGCAPIApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.tileMatrixSetsRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TileMatrixSetsFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TileMatrixSets_1.TileMatrixSetsFromJSON)(jsonValue));
         });
     }
     /**

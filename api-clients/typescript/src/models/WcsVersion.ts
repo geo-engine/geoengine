@@ -18,7 +18,7 @@
  */
 export const WcsVersion = {
     _110: '1.1.0',
-    _111: '1.1.1'
+    _111: '1.1.1',
 } as const;
 export type WcsVersion = typeof WcsVersion[keyof typeof WcsVersion];
 

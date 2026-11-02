@@ -16,32 +16,22 @@
 export interface DataUsage {
     /**
      *
-     * @type {Date}
-     * @memberof DataUsage
      */
     timestamp: Date;
     /**
      *
-     * @type {string}
-     * @memberof DataUsage
      */
     userId: string;
     /**
      *
-     * @type {string}
-     * @memberof DataUsage
      */
     computationId: string;
     /**
      *
-     * @type {string}
-     * @memberof DataUsage
      */
     data: string;
     /**
      *
-     * @type {number}
-     * @memberof DataUsage
      */
     count: number;
 }

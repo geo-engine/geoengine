@@ -28,32 +28,22 @@ import {
 export interface LogarithmicGradient {
     /**
      * 
-     * @type {LogarithmicGradientTypeEnum}
-     * @memberof LogarithmicGradient
      */
     type: LogarithmicGradientTypeEnum;
     /**
      * 
-     * @type {Array<Breakpoint>}
-     * @memberof LogarithmicGradient
      */
     breakpoints: Array<Breakpoint>;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof LogarithmicGradient
      */
     noDataColor: Array<number>;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof LogarithmicGradient
      */
     overColor: Array<number>;
     /**
      * 
-     * @type {Array<number>}
-     * @memberof LogarithmicGradient
      */
     underColor: Array<number>;
 }
@@ -63,7 +53,7 @@ export interface LogarithmicGradient {
  * @export
  */
 export const LogarithmicGradientTypeEnum = {
-    LogarithmicGradient: 'logarithmicGradient'
+    LogarithmicGradient: 'logarithmicGradient',
 } as const;
 export type LogarithmicGradientTypeEnum = typeof LogarithmicGradientTypeEnum[keyof typeof LogarithmicGradientTypeEnum];
 
@@ -73,6 +63,8 @@ export type LogarithmicGradientTypeEnum = typeof LogarithmicGradientTypeEnum[key
  */
 export function instanceOfLogarithmicGradient(value: object): value is LogarithmicGradient {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'logarithmicGradient') return false;
+    
     if (!('breakpoints' in value) || value['breakpoints'] === undefined) return false;
     if (!('noDataColor' in value) || value['noDataColor'] === undefined) return false;
     if (!('overColor' in value) || value['overColor'] === undefined) return false;

@@ -25,7 +25,7 @@ exports.MeanRasterPixelValuesOverTimePositionToJSONTyped = MeanRasterPixelValues
 exports.MeanRasterPixelValuesOverTimePosition = {
     Start: 'start',
     Center: 'center',
-    End: 'end'
+    End: 'end',
 };
 function instanceOfMeanRasterPixelValuesOverTimePosition(value) {
     for (const key in exports.MeanRasterPixelValuesOverTimePosition) {

@@ -18,7 +18,7 @@
  */
 export const RasterPropertiesEntryType = {
     Number: 'Number',
-    String: 'String'
+    String: 'String',
 } as const;
 export type RasterPropertiesEntryType = typeof RasterPropertiesEntryType[keyof typeof RasterPropertiesEntryType];
 

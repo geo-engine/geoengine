@@ -17,14 +17,10 @@ import type { PlotOperator } from './PlotOperator';
 export interface TypedPlotOperator {
     /**
      *
-     * @type {PlotOperator}
-     * @memberof TypedPlotOperator
      */
     operator: PlotOperator;
     /**
      *
-     * @type {TypedPlotOperatorTypeEnum}
-     * @memberof TypedPlotOperator
      */
     type: TypedPlotOperatorTypeEnum;
 }
