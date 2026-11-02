@@ -731,8 +731,22 @@ pub struct Cache {
     /// Ignored if `enable_new_raster_cache` is `false`, in which case the old cache holds both
     /// vector and raster data and gets the full `size_in_mb`.
     pub raster_cache_size_ratio: f64,
+    /// which raster operators the new raster cache wraps
+    #[serde(default)]
+    pub raster_levels: RasterCacheLevels,
     /// Default cache lifetime for values without an explicit cache TTL.
     pub default_ttl_seconds: u32,
+}
+
+/// Which raster operators of a processing graph the new raster cache wraps.
+#[derive(Debug, Deserialize, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RasterCacheLevels {
+    /// only the root of a processing graph, i.e. the tiles a query returns
+    #[default]
+    Outputs,
+    /// every raster operator, including intermediate results
+    All,
 }
 
 impl Cache {
@@ -781,6 +795,7 @@ impl TestDefault for Cache {
             landing_zone_ratio: 0.1, // 10% of cache size
             enable_new_raster_cache: false,
             raster_cache_size_ratio: 0.5,
+            raster_levels: RasterCacheLevels::Outputs,
             default_ttl_seconds: 0,
         }
     }

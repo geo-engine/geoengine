@@ -1,6 +1,6 @@
 use crate::{
     api::model::services::Volume,
-    config::{Cache, QuotaTrackingMode, get_config_element},
+    config::{Cache, QuotaTrackingMode, RasterCacheLevels, get_config_element},
     datasets::{
         external::{WildliveDbCache, netcdfcf::NetCdfCfProviderDb},
         storage::DatasetDb,
@@ -33,8 +33,9 @@ use geoengine_operators::{
     },
     engine::{
         ChunkByteSize, CreateSpan, ExecutionContext, GdalReadAhead, InitializedPlotOperator,
-        InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-        QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
+        InitializedVectorOperator, MetaData, MetaDataProvider, ProcessingGraphOperatorPath,
+        QueryAbortRegistration, QueryAbortTrigger, QueryContext, RasterResultDescriptor,
+        VectorResultDescriptor,
     },
     machine_learning::{MlModelLoadingInfo, onnx_util::OrtEnvironment},
     meta::{
@@ -364,6 +365,11 @@ where
             && cache_config.enable_new_raster_cache
             && self.new_raster_cache.is_some()
         {
+            if cache_config.raster_levels == RasterCacheLevels::Outputs
+                && wrapped.path() != ProcessingGraphOperatorPath::initialize_root()
+            {
+                return wrapped;
+            }
             return Box::new(RasterCacheOperator::wrap_operator(wrapped));
         }
 
