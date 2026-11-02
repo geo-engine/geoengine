@@ -1956,6 +1956,254 @@ mod tests {
         assert_overlap_mosaic(partition, partition, "right.tif", "left.tif", Some((1, 2))).await;
     }
 
+    /// Loads a fully valid mosaic of 2x2 files whose edges are not aligned to the overview grid.
+    /// Every overview pixel that lies completely inside the mosaic must be valid in the loaded tiles.
+    ///
+    /// Files with overviews are written with different values in the overviews and in the full resolution band.
+    /// So the test also checks that GDAL reads from the overviews, which requires aligned read windows.
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads_unaligned_mosaic_at_overview_levels_without_gaps() {
+        use futures::FutureExt;
+        use gdal::raster::Buffer;
+        use geoengine_datatypes::raster::GridIndexAccess;
+
+        const FILE_SIZE: isize = 101;
+        const TILE_SIZE: isize = 16;
+        // the value of every overview pixel, and of every full resolution pixel of files without overviews
+        const VALUE: u16 = 1;
+        // the value of the full resolution pixels of files with overviews
+        const FULL_RESOLUTION_VALUE: u16 = 2;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let time_interval = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+        );
+
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+
+        let mut failures = Vec::new();
+
+        // mosaic origins not aligned to the overview grid, with regular and flipped files, without and with overviews
+        for (origin_x, origin_y, flip_y, with_overviews) in [
+            (3_isize, 5_isize, false, false),
+            (3, -207, false, false),
+            (3, 5, false, true),
+            (3, -207, false, true),
+            (3, 5, true, true),
+            (-301, -207, true, true),
+        ] {
+            let config = format!(
+                "origin ({origin_x}, {origin_y}), flip {flip_y}, overviews {with_overviews}"
+            );
+
+            let mut files = Vec::new();
+            for file_y in 0..2 {
+                for file_x in 0..2 {
+                    let file_origin_x = (origin_x + file_x * FILE_SIZE) as f64;
+                    let file_top_y = (origin_y - file_y * FILE_SIZE) as f64;
+                    let file_bottom_y = file_top_y - FILE_SIZE as f64;
+                    // a flipped file has its origin at the bottom and a positive y pixel size
+                    let (file_origin_y, y_pixel_size) = if flip_y {
+                        (file_bottom_y, 1.)
+                    } else {
+                        (file_top_y, -1.)
+                    };
+
+                    let file_path = temp_dir.path().join(format!(
+                        "mosaic_{origin_x}_{origin_y}_{flip_y}_{with_overviews}_{file_x}_{file_y}.tif"
+                    ));
+
+                    let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+                    let mut dataset = driver
+                        .create_with_band_type::<u16, _>(
+                            &file_path,
+                            FILE_SIZE as usize,
+                            FILE_SIZE as usize,
+                            1,
+                        )
+                        .unwrap();
+                    dataset
+                        .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap())
+                        .unwrap();
+                    dataset
+                        .set_geo_transform(&[
+                            file_origin_x,
+                            1.,
+                            0.,
+                            file_origin_y,
+                            0.,
+                            y_pixel_size,
+                        ])
+                        .unwrap();
+                    let write_band = |dataset: &gdal::Dataset, value: u16| {
+                        let mut band = dataset.rasterband(1).unwrap();
+                        band.set_no_data_value(Some(0.)).unwrap();
+                        let mut buffer = Buffer::new(
+                            (FILE_SIZE as usize, FILE_SIZE as usize),
+                            vec![value; (FILE_SIZE * FILE_SIZE) as usize],
+                        );
+                        band.write(
+                            (0, 0),
+                            (FILE_SIZE as usize, FILE_SIZE as usize),
+                            &mut buffer,
+                        )
+                        .unwrap();
+                    };
+                    write_band(&dataset, VALUE);
+                    if with_overviews {
+                        // GDAL does not update the overviews when the full resolution band changes afterwards
+                        dataset.build_overviews("NEAREST", &[2, 4, 8], &[]).unwrap();
+                        write_band(&dataset, FULL_RESOLUTION_VALUE);
+                    }
+                    dataset.close().unwrap();
+
+                    files.push(TileFile {
+                        time: time_interval,
+                        spatial_partition: SpatialPartition2D::new_unchecked(
+                            (file_origin_x, file_top_y).into(),
+                            (file_origin_x + FILE_SIZE as f64, file_bottom_y).into(),
+                        ),
+                        band: 0,
+                        z_index: 0,
+                        params: GdalDatasetParameters {
+                            file_path,
+                            rasterband_channel: 1,
+                            geo_transform: GdalDatasetGeoTransform {
+                                origin_coordinate: (file_origin_x, file_origin_y).into(),
+                                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
+                                y_pixel_size: NonZeroFiniteF64::new_unchecked(y_pixel_size),
+                            },
+                            width: FILE_SIZE as usize,
+                            height: FILE_SIZE as usize,
+                            file_not_found_handling: FileNotFoundHandling::Error,
+                            no_data_value: Some(0.0),
+                            properties_mapping: None,
+                            gdal_open_options: None,
+                            gdal_config_options: None,
+                            allow_alphaband_as_mask: true,
+                            retry: None,
+                        },
+                    });
+                }
+            }
+
+            let mosaic_grid = SpatialGridDefinition::new(
+                GeoTransform::new_unchecked((origin_x as f64, origin_y as f64).into(), 1.0, -1.0),
+                GridBoundingBox2D::new([0, 0], [2 * FILE_SIZE - 1, 2 * FILE_SIZE - 1]).unwrap(),
+            );
+
+            for overview_level in [2_isize, 4, 8] {
+                let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                    original_dataset_grid: mosaic_grid,
+                    overview_level: overview_level as u32,
+                });
+
+                // overview pixels that lie completely inside the mosaic, the tiling origin is at (0, 0)
+                let x_min = -(-origin_x).div_euclid(overview_level);
+                let x_max = (origin_x + 2 * FILE_SIZE).div_euclid(overview_level) - 1;
+                let y_min = -origin_y.div_euclid(overview_level);
+                let y_max = (2 * FILE_SIZE - origin_y).div_euclid(overview_level) - 1;
+
+                let mut missing = Vec::new();
+                let mut full_resolution = Vec::new();
+
+                for tile_y in y_min.div_euclid(TILE_SIZE)..=y_max.div_euclid(TILE_SIZE) {
+                    for tile_x in x_min.div_euclid(TILE_SIZE)..=x_max.div_euclid(TILE_SIZE) {
+                        let tile_info = TileInformation::new(
+                            [tile_y, tile_x].into(),
+                            GridShape2D::new([TILE_SIZE as usize, TILE_SIZE as usize]),
+                            GeoTransform::new_unchecked(
+                                (0.0, 0.0).into(),
+                                overview_level as f64,
+                                -overview_level as f64,
+                            ),
+                        );
+
+                        let tile = std::panic::AssertUnwindSafe(
+                            GdalPoolReader::load_tile_from_files_async::<u16>(
+                                MultiBandGdalLoadingInfo::new(
+                                    vec![time_interval],
+                                    files.clone(),
+                                    None,
+                                ),
+                                reader_mode,
+                                tile_info,
+                                time_interval,
+                                0,
+                                gpp.get_gdal_worker(),
+                                CacheTtlSeconds::new(0),
+                            ),
+                        )
+                        .catch_unwind()
+                        .await;
+
+                        let tile = match tile {
+                            Ok(Ok(tile)) => tile,
+                            Ok(Err(error)) => {
+                                failures.push(format!(
+                                    "level {overview_level}, {config}: error for tile [{tile_y}, {tile_x}]: {error}"
+                                ));
+                                continue;
+                            }
+                            Err(_) => {
+                                failures.push(format!(
+                                    "level {overview_level}, {config}: panic for tile [{tile_y}, {tile_x}]"
+                                ));
+                                continue;
+                            }
+                        };
+
+                        for y in 0..TILE_SIZE {
+                            for x in 0..TILE_SIZE {
+                                let global_y = tile_y * TILE_SIZE + y;
+                                let global_x = tile_x * TILE_SIZE + x;
+                                if global_y < y_min
+                                    || global_y > y_max
+                                    || global_x < x_min
+                                    || global_x > x_max
+                                {
+                                    continue;
+                                }
+
+                                let value = tile
+                                    .grid_array
+                                    .get_at_grid_index_unchecked(GridIdx2D::new_y_x(y, x));
+                                match value {
+                                    Some(VALUE) => {}
+                                    Some(FULL_RESOLUTION_VALUE) => {
+                                        full_resolution.push((global_y, global_x));
+                                    }
+                                    _ => missing.push((global_y, global_x)),
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let pixel_count = (y_max - y_min + 1) * (x_max - x_min + 1);
+                if !missing.is_empty() {
+                    failures.push(format!(
+                        "level {overview_level}, {config}: {} of {pixel_count} overview pixels not valid, e.g. (y, x) {:?}",
+                        missing.len(),
+                        &missing[..missing.len().min(5)]
+                    ));
+                }
+                if !full_resolution.is_empty() {
+                    failures.push(format!(
+                        "level {overview_level}, {config}: {} of {pixel_count} overview pixels not read from the overviews, e.g. (y, x) {:?}",
+                        full_resolution.len(),
+                        &full_resolution[..full_resolution.len().min(5)]
+                    ));
+                }
+            }
+        }
+
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn assert_overlap_mosaic(
         partition_a: SpatialPartition2D,
