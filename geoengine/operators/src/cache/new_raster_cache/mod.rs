@@ -17,7 +17,7 @@ use geoengine_datatypes::primitives::{
     BandSelection, CacheHint, QueryRectangle, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridIdx2D, Pixel, RasterTile2D, TileInformation,
+    GridBoundingBox2D, GridIdx2D, Pixel, RasterDataType, RasterTile2D, TileInformation,
 };
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::util::test::TestDefault;
@@ -112,6 +112,27 @@ impl NewRasterCacheEnum {
                 cache.store.insert(key, tile).await
             }
         }
+    }
+
+    /// Reads a block cached with [`Self::insert_block`].
+    pub(crate) async fn get_block<T: SupportedRasterDataType>(
+        &self,
+        key: BlockKey,
+    ) -> Result<Option<RasterTile2D<T>>> {
+        match self.get(&CacheKey::Block(key)).await? {
+            Some(entry) => T::map_enum_to_tile(StorageFormat::load(entry).await?).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Caches a decoded file block, stored like a tile.
+    pub(crate) async fn insert_block<T: SupportedRasterDataType>(
+        &self,
+        key: BlockKey,
+        tile: RasterTile2D<T>,
+    ) -> Result<()> {
+        self.insert(CacheKey::Block(key), T::map_tile_to_enum(tile))
+            .await
     }
 
     pub fn stats(&self) -> CacheStats {
@@ -475,12 +496,12 @@ mod eviction_strategy_tests {
     }
 
     fn key(name: &str) -> CacheKey {
-        (
+        CacheKey::Tile((
             crate::engine::CanonicOperatorName::new(&name).expect("must serialize"),
             0u32,
             TimeInterval::default(),
             TileIndex::from([0, 0]),
-        )
+        ))
     }
 
     #[test]
@@ -707,12 +728,36 @@ impl<SF, ES> InMemoryCacheStore<SF, ES> {
     }
 }
 
-type CacheKey = (CanonicOperatorName, Band, TimeInterval, TileIndex);
+/// What the cache stores: the tiles of operators and the decoded blocks of files that GDAL
+/// sources read.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CacheKey {
+    Tile(TileKey),
+    Block(BlockKey),
+}
+
+type TileKey = (CanonicOperatorName, Band, TimeInterval, TileIndex);
 type Band = u32;
 type TileIndex = GridIdx2D;
 
+/// A block of one level of a file band, decoded as one data type.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct BlockKey {
+    /// the file and everything that changes how it is read, e.g. its band and no-data value
+    pub file: Arc<str>,
+    /// the level is this many times coarser than the full resolution
+    pub factor: usize,
+    /// block index, y then x
+    pub block: [usize; 2],
+    pub data_type: RasterDataType,
+}
+
 fn cache_key_byte_size(key: &CacheKey) -> usize {
-    std::mem::size_of_val(key) + key.0.heap_byte_size()
+    std::mem::size_of_val(key)
+        + match key {
+            CacheKey::Tile(tile) => tile.0.heap_byte_size(),
+            CacheKey::Block(block) => block.file.len(),
+        }
 }
 
 trait StorageFormat: Send + Sync + Sized + 'static {
@@ -729,7 +774,7 @@ trait StorageFormat: Send + Sync + Sized + 'static {
 }
 
 #[derive(Clone)]
-enum TypedRasterTile2D {
+pub enum TypedRasterTile2D {
     I8(RasterTile2D<i8>),
     I16(RasterTile2D<i16>),
     I32(RasterTile2D<i32>),
@@ -1134,12 +1179,12 @@ where
         time_interval: TimeInterval,
         ctx: &dyn QueryContext,
     ) -> Result<RasterTile2D<T>> {
-        let key = (
+        let key = CacheKey::Tile((
             self.canonic_operator_name.clone(),
             job.band,
             time_interval,
             job.tile_info.global_upper_left_pixel_idx(),
-        );
+        ));
 
         let cache_store = ctx
             .new_raster_cache()
@@ -1234,7 +1279,7 @@ where
     }
 }
 
-trait SupportedRasterDataType {
+pub trait SupportedRasterDataType {
     fn map_enum_to_tile(tile: TypedRasterTile2D) -> Result<RasterTile2D<Self>>
     where
         Self: Sized;
@@ -1284,7 +1329,7 @@ mod tests {
     use std::str::FromStr;
 
     fn make_cache_key(band: u32, idx: isize) -> CacheKey {
-        (
+        CacheKey::Tile((
             CanonicOperatorName::new(&"test_op").unwrap(),
             band,
             TimeInterval::new_unchecked(
@@ -1292,7 +1337,7 @@ mod tests {
                 TimeInstance::from_str("2014-01-02T00:00:00.000Z").unwrap(),
             ),
             GridIdx2D::new([idx, 0]),
-        )
+        ))
     }
 
     #[test]
@@ -1304,10 +1349,13 @@ mod tests {
     #[test]
     fn test_cache_key_byte_size_includes_operator_name_heap_size() {
         let key = make_cache_key(0, 0);
+        let CacheKey::Tile(tile_key) = &key else {
+            unreachable!("a tile key")
+        };
 
         assert_eq!(
             cache_key_byte_size(&key),
-            std::mem::size_of_val(&key) + key.0.heap_byte_size()
+            std::mem::size_of_val(&key) + tile_key.0.heap_byte_size()
         );
         assert!(cache_key_byte_size(&key) > std::mem::size_of_val(&key));
     }
@@ -1817,12 +1865,12 @@ mod tests {
             .await
             .unwrap();
         let cached_op = RasterCacheOperator::wrap_operator(initialized_source);
-        let cache_key = (
+        let cache_key = CacheKey::Tile((
             cached_op.canonic_name(),
             0u32,
             TimeInterval::default(),
             GridIdx2D::new([0, 0]),
-        );
+        ));
 
         let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
             ChunkByteSize::test_default(),
@@ -1885,12 +1933,12 @@ mod tests {
             .await
             .unwrap();
         let cached_op = RasterCacheOperator::wrap_operator(initialized_source);
-        let key = (
+        let key = CacheKey::Tile((
             cached_op.canonic_name(),
             0u32,
             TimeInterval::default(),
             GridIdx2D::new([0, 0]),
-        );
+        ));
 
         let poisoned_tile = make_tile(99, CacheHint::max_duration());
 

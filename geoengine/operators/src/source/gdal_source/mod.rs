@@ -1,7 +1,7 @@
-use super::gdal_worker_process::GdalPoolDispatcher;
+use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_read::{
-    TilePlan, ensure_overview_level_exists, overview_source, tile_stream,
+    BlockIo, TilePlan, ensure_overview_level_exists, overview_source, tile_stream,
 };
 use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::{
@@ -152,7 +152,7 @@ where
 #[async_trait]
 impl<P> QueryProcessor for GdalSourceProcessor<P>
 where
-    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+    P: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = GridBoundingBox2D;
@@ -273,9 +273,8 @@ where
             query.spatial_bounds(),
             tiling_strategy,
             reader_mode,
-            ctx.get_gdal_worker(),
             self.default_cache_ttl,
-            ctx.gdal_read_ahead().gdal_source,
+            ctx,
         ))
     }
 
@@ -287,7 +286,7 @@ where
 #[async_trait]
 impl<T> RasterQueryProcessor for GdalSourceProcessor<T>
 where
-    T: Pixel + gdal::raster::GdalType + FromPrimitive,
+    T: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type RasterType = T;
 
@@ -351,12 +350,11 @@ fn load_source_stream<'a, P, S>(
     spatial_query: GridBoundingBox2D,
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
-    gdal_worker: GdalPoolDispatcher,
     default_cache_ttl: CacheTtlSeconds,
-    read_ahead: usize,
+    ctx: &dyn crate::engine::QueryContext,
 ) -> BoxStream<'a, Result<RasterTile2D<P>>>
 where
-    P: Pixel + GdalType + FromPrimitive,
+    P: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>> + Send + 'a,
 {
     let plans = source_stream
@@ -376,9 +374,14 @@ where
         })
         .try_flatten();
 
-    tile_stream(plans, reader_mode, gdal_worker, read_ahead, |source| {
-        GdalSourceError::from(source).into()
-    })
+    tile_stream(
+        plans,
+        reader_mode,
+        ctx.get_gdal_worker(),
+        BlockIo::from_query_context(ctx),
+        ctx.gdal_read_ahead().gdal_source,
+        |source| GdalSourceError::from(source).into(),
+    )
 }
 
 #[async_trait]
@@ -710,6 +713,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::source::gdal_read::assemble_tile;
     use crate::source::gdal_worker_process::GdalDatasetParameters;
+    use crate::source::gdal_worker_process::GdalPoolDispatcher;
     use crate::source::gdal_worker_process::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference, WorkerConfig,
@@ -1159,6 +1163,7 @@ mod tests {
             },
             reader_mode,
             &gw,
+            None,
         )
         .await;
 
@@ -1353,6 +1358,7 @@ mod tests {
                 ),
             }),
             &gw,
+            None,
         )
         .await;
 

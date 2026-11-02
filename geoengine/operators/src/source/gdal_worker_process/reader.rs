@@ -20,6 +20,31 @@ pub enum GdalProcessReadResult<T: Pixel> {
     FileNotFoundAsNoData,
 }
 
+/// Reverses the rows of a grid (and its validity mask) if `flip_y` is set: upside-down datasets
+/// return data in stored row order, the caller flips it back to the tile (north-up) order.
+pub(crate) fn flip_grid_y_if_needed<T: Pixel>(
+    grid: GridOrEmpty<GridBoundingBox2D, T>,
+    flip_y: bool,
+) -> GridOrEmpty<GridBoundingBox2D, T> {
+    if !flip_y {
+        return grid;
+    }
+
+    match grid {
+        GridOrEmpty::Grid(MaskedGrid {
+            inner_grid,
+            validity_mask,
+        }) => GridOrEmpty::new_grid(
+            MaskedGrid::new(
+                inner_grid.reversed_y_axis_grid(),
+                validity_mask.reversed_y_axis_grid(),
+            )
+            .expect("The bounds of the input grid should be the same after reversing the y axis, so this should never fail"),
+        ),
+        GridOrEmpty::Empty(e) => GridOrEmpty::new_empty(e),
+    }
+}
+
 /// Reader that dispatches GDAL tile requests to the [`GdalProcessPool`].
 #[derive(Clone)]
 pub struct GdalPoolReader(GdalPoolDispatcher);
@@ -112,23 +137,7 @@ impl GdalPoolReader {
         };
 
         let GridAndProperties { grid, properties } = t.into();
-        let grid = if read_advise.flip_y {
-            match grid {
-                GridOrEmpty::Grid(MaskedGrid {
-                    inner_grid,
-                    validity_mask,
-                }) => GridOrEmpty::new_grid(
-                    MaskedGrid::new(
-                        inner_grid.reversed_y_axis_grid(),
-                        validity_mask.reversed_y_axis_grid(),
-                    )
-                    .expect("The bounds of the input grid should be the same after reversing the y axis, so this should never fail"),
-                ),
-                GridOrEmpty::Empty(e) => GridOrEmpty::new_empty(e),
-            }
-        } else {
-            grid
-        };
+        let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
         Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
             grid,
             properties,

@@ -1,10 +1,13 @@
+use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, ProcessingGraphOperatorPath,
     QueryContext, QueryProcessor, SpatialGridDescriptor, TypedRasterOperator,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::GdalDatasetParameters;
-use crate::source::gdal_read::{ensure_overview_level_exists, overview_source, tile_stream};
+use crate::source::gdal_read::{
+    BlockIo, ensure_overview_level_exists, overview_source, tile_stream,
+};
 use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::{
     engine::{
@@ -154,7 +157,7 @@ impl<T> GdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
 #[async_trait]
 impl<P> QueryProcessor for GdalSourceProcessor<P>
 where
-    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+    P: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = GridBoundingBox2D;
@@ -229,6 +232,7 @@ where
 
         let gdal_worker = ctx.get_gdal_worker();
         let read_ahead = ctx.gdal_read_ahead().multi_band_gdal_source;
+        let blocks = BlockIo::from_query_context(ctx);
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
         let spatial_tiles = tiling_strategy
@@ -258,6 +262,7 @@ where
             plans,
             reader_mode,
             gdal_worker,
+            blocks,
             read_ahead,
             |source| GdalSourceError::from(source).into(),
         ))
@@ -271,7 +276,7 @@ where
 #[async_trait]
 impl<P> RasterQueryProcessor for GdalSourceProcessor<P>
 where
-    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+    P: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type RasterType = P;
 
@@ -2148,6 +2153,7 @@ mod tests {
                                 .tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
                             reader_mode,
                             &gpp.get_gdal_worker(),
+                            None,
                         ))
                         .catch_unwind()
                         .await;
@@ -2316,6 +2322,7 @@ mod tests {
             loading_info.tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
             reader_mode,
             &gw,
+            None,
         )
         .await
         .unwrap();

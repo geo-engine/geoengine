@@ -2,6 +2,11 @@
 //! output tile, `assemble_tile` reads them through the process pool and composes the tile,
 //! and `tile_stream` drives the plans of a query in order with bounded read-ahead.
 
+mod blocks;
+
+pub use blocks::BlockIo;
+
+use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::engine::{RasterOperator, SingleRasterSource, TypedRasterOperator};
 use crate::error::Error;
 use crate::processing::{
@@ -41,9 +46,9 @@ pub struct TilePlan {
     pub cache_hint: CacheHint,
 }
 
-/// Reads the files of `plan` and composes its tile. Reads of a level the dataset declares read
-/// that level as it is, without resampling. Only overviews of datasets without declared levels
-/// are left to GDAL, which may resample.
+/// Reads the files of `plan` and composes its tile. Reads of a level the dataset declares go
+/// through `blocks` if given, else they read the level directly; neither resamples. Only
+/// overviews of datasets without declared levels are left to GDAL, which may resample.
 ///
 /// The highest z-index wins at each valid pixel. A file is read only where the files above it
 /// left pixels invalid, so files are read one after another. The properties come from the first
@@ -52,10 +57,11 @@ pub struct TilePlan {
 /// # Errors
 /// Returns an error if a pool read fails. A missing file counts as no data if its parameters
 /// say so.
-pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive>(
+pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType>(
     plan: TilePlan,
     reader_mode: GdalReaderMode,
     gdal_worker: &GdalPoolDispatcher,
+    blocks: Option<&BlockIo>,
 ) -> Result<RasterTile2D<T>, GdalProcessPoolError> {
     let tile_bounds = plan.tile.global_pixel_bounds();
     let tile_spatial_grid = plan.tile.spatial_grid_definition();
@@ -88,8 +94,13 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive>(
             continue;
         }
 
-        let read = match level_factor {
-            Some(factor) if factor > 1 => {
+        let read = match (level_factor, blocks) {
+            (Some(factor), Some(blocks)) => {
+                blocks
+                    .read::<T>(&params, read_advise, factor, plan.cache_hint)
+                    .await?
+            }
+            (Some(factor), None) if factor > 1 => {
                 let Some(level_advise) = level_read_advise(read_advise, factor) else {
                     return Err(misaligned_read(&params, factor));
                 };
@@ -229,17 +240,19 @@ pub fn tile_stream<'a, T>(
     plans: impl Stream<Item = Result<TilePlan>> + Send + 'a,
     reader_mode: GdalReaderMode,
     gdal_worker: GdalPoolDispatcher,
+    blocks: Option<BlockIo>,
     read_ahead: usize,
     into_error: fn(GdalProcessPoolError) -> Error,
 ) -> BoxStream<'a, Result<RasterTile2D<T>>>
 where
-    T: Pixel + GdalType + FromPrimitive,
+    T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
 {
     plans
         .map(move |plan| {
             let gdal_worker = gdal_worker.clone();
+            let blocks = blocks.clone();
             async move {
-                assemble_tile(plan?, reader_mode, &gdal_worker)
+                assemble_tile(plan?, reader_mode, &gdal_worker, blocks.as_ref())
                     .await
                     .map_err(into_error)
             }
@@ -251,6 +264,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cache::new_raster_cache::NewRasterCacheEnum;
     use crate::source::gdal_worker_process::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess, OverviewReaderState, ReaderState, WorkerConfig,
@@ -261,6 +275,7 @@ mod tests {
     };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::NonZeroFiniteF64;
+    use std::sync::Arc;
 
     fn ndvi_jan_2014_params() -> GdalDatasetParameters {
         GdalDatasetParameters {
@@ -332,6 +347,7 @@ mod tests {
             },
             reader_mode,
             &gpp.get_gdal_worker(),
+            None,
         )
         .await
         .unwrap();
@@ -451,12 +467,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn level_reads_equal_gdal_reads() {
+    async fn block_reads_equal_window_reads() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone());
 
         for (overview_level, tile_size) in [(0_u32, 8_usize), (0, 12), (2, 8), (2, 12), (4, 12)] {
             let reader_mode = |exact_level| {
@@ -491,19 +509,27 @@ mod tests {
 
                     // GDAL picks the overview itself; the sizes divide, so it reads the same pixels
                     let from_gdal =
-                        assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker)
+                        assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker, None)
                             .await
                             .unwrap();
-                    let from_level = assemble_tile::<u16>(plan, reader_mode(true), &gdal_worker)
-                        .await
-                        .unwrap();
+                    let from_level =
+                        assemble_tile::<u16>(plan.clone(), reader_mode(true), &gdal_worker, None)
+                            .await
+                            .unwrap();
+                    let from_blocks =
+                        assemble_tile::<u16>(plan, reader_mode(true), &gdal_worker, Some(&blocks))
+                            .await
+                            .unwrap();
 
-                    assert_eq!(
-                        from_level, from_gdal,
+                    let case = format!(
                         "overview {overview_level}, tile size {tile_size}, tile [{tile_y}, {tile_x}]"
                     );
+                    assert_eq!(from_level, from_gdal, "{case}");
+                    assert_eq!(from_blocks, from_gdal, "{case}");
                 }
             }
         }
+
+        assert!(cache.byte_size() > 0, "the reads went through the blocks");
     }
 }
