@@ -260,7 +260,9 @@ CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
 CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
 VSI_CACHE = "TRUE"
 VSI_CACHE_SIZE = "67108864" # 64mb per open file; a worker keeps one file open
-# block cache in mb per worker; without it, GDAL uses 5% of the RAM per worker process
+# block cache in mb per worker; without it, GDAL uses 5% of the RAM per worker process. With
+# `[cache] enable_new_raster_cache`, decoded blocks are cached once in the server instead of in
+# every worker, so this can be lowered, e.g. to "64".
 GDAL_CACHEMAX = "256"
 # Abort HTTP transfers that stall (below LIMIT bytes/s for TIME seconds), otherwise a hanging
 # remote blocks a worker forever. Unlike a total timeout (GDAL_HTTP_TIMEOUT), this does not abort
@@ -268,8 +270,9 @@ GDAL_CACHEMAX = "256"
 GDAL_HTTP_LOW_SPEED_LIMIT = "1024"
 GDAL_HTTP_LOW_SPEED_TIME = "30"
 GDAL_HTTP_CONNECTTIMEOUT = "10"
-# decode threads of a GDAL read in each worker (e.g. GTiff, JP2OpenJPEG); unset = the driver's default
-# GDAL_NUM_THREADS = "1"
+# Decode with one thread per worker: the pool already runs one read per worker in parallel, and
+# JP2OpenJPEG would otherwise start a thread per CPU in every worker.
+GDAL_NUM_THREADS = "1"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
