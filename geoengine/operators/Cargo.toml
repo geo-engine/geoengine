@@ -110,5 +110,9 @@ harness = false
 name = "bands_and_time"
 harness = false
 
+[[bench]]
+name = "block_reads"
+harness = false
+
 [lints]
 workspace = true
