@@ -36,6 +36,20 @@ impl Default for DataConnectorRegistry {
 }
 
 impl DataConnectorRegistry {
+    /// Clear provider-owned metadata caches, retaining initialized connectors.
+    pub async fn clear_caches(&self) {
+        let providers: Vec<_> = self
+            .entries
+            .lock()
+            .await
+            .values()
+            .map(|entry| entry.provider.clone())
+            .collect();
+        for provider in providers {
+            provider.clear_cache().await;
+        }
+    }
+
     /// Get a cached data connector, or initialise one and cache it.
     ///
     /// # TOCTOU race (known, acceptable)
@@ -142,12 +156,14 @@ mod tests {
     #[derive(Debug)]
     struct MockProvider {
         name: String,
+        clears: AtomicUsize,
     }
 
     impl MockProvider {
         fn new(name: &str) -> Self {
             Self {
                 name: name.to_string(),
+                clears: AtomicUsize::new(0),
             }
         }
     }
@@ -281,6 +297,10 @@ mod tests {
     #[async_trait]
     #[allow(clippy::unimplemented, reason = "ok in tests")]
     impl super::super::external::DataProvider for MockProvider {
+        async fn clear_cache(&self) {
+            self.clears.fetch_add(1, Ordering::SeqCst);
+        }
+
         async fn provenance(
             &self,
             _id: &DataId,
@@ -290,6 +310,28 @@ mod tests {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn it_clears_provider_caches_without_reinitializing() {
+        let registry = small_registry();
+        let provider = Arc::new(MockProvider::new("test"));
+        registry
+            .get_or_try_insert_with(make_id(1), || async {
+                Ok(provider.clone() as Arc<dyn DataProvider>)
+            })
+            .await
+            .unwrap();
+        registry.clear_caches().await;
+        assert_eq!(provider.clears.load(Ordering::SeqCst), 1);
+        let retained = registry
+            .get_or_try_insert_with(make_id(1), || async {
+                panic!("provider must remain initialized")
+            })
+            .await
+            .unwrap();
+        let original: Arc<dyn DataProvider> = provider;
+        assert!(Arc::ptr_eq(&retained, &original));
+    }
 
     fn make_id(n: u8) -> DataProviderId {
         DataProviderId::from_u128(u128::from(n))

@@ -673,6 +673,16 @@ pub struct SharedCache {
 }
 
 impl SharedCache {
+    /// Remove all results and pending queries while preserving configured capacities.
+    pub async fn clear(&self) {
+        let mut backend = self.backend.write().await;
+        backend.raster_caches.clear();
+        backend.vector_caches.clear();
+        backend.lru.clear();
+        backend.cache_size = CacheSize::new(backend.cache_size.total_byte_size());
+        backend.landing_zone_size = CacheSize::new(backend.landing_zone_size.total_byte_size());
+    }
+
     pub fn new(cache_size_in_mb: usize, landing_zone_ratio: f64) -> Result<Self> {
         if landing_zone_ratio <= 0.0 {
             return Err(crate::error::Error::QueryingProcessorFailed {
@@ -1063,6 +1073,107 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn it_clears_results_and_landing_zone() {
+        use geoengine_datatypes::{
+            collections::MultiPointCollection,
+            primitives::{BoundingBox2D, ColumnSelection, MultiPoint, VectorQueryRectangle},
+        };
+        let mut cache = SharedCache::new(1, 0.1).unwrap();
+        process_query_async(&mut cache, op(0)).await;
+        let vector_query = VectorQueryRectangle::new(
+            BoundingBox2D::new((-1., -1.).into(), (1., 1.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let vector_id = <SharedCache as AsyncCache<MultiPointCollection>>::insert_query(
+            &cache,
+            &op(2),
+            &vector_query,
+        )
+        .await
+        .unwrap();
+        let collection = MultiPointCollection::from_data(
+            vec![MultiPoint::new(vec![(0., 0.).into()]).unwrap()],
+            vec![TimeInterval::default()],
+            HashMap::default(),
+            CacheHint::max_duration(),
+        )
+        .unwrap();
+        cache
+            .insert_query_element(&op(2), &vector_id, collection)
+            .await
+            .unwrap();
+        <SharedCache as AsyncCache<MultiPointCollection>>::finish_query(&cache, &op(2), &vector_id)
+            .await
+            .unwrap();
+        let pending = <SharedCache as AsyncCache<RasterTile2D<u8>>>::insert_query(
+            &cache,
+            &op(1),
+            &query_rect(),
+        )
+        .await
+        .unwrap();
+        cache
+            .insert_query_element(&op(1), &pending, create_tile())
+            .await
+            .unwrap();
+        let capacities = {
+            let backend = cache.backend.read().await;
+            assert!(backend.cache_size.byte_size_used() > 0);
+            assert!(backend.landing_zone_size.byte_size_used() > 0);
+            (
+                backend.cache_size.total_byte_size(),
+                backend.landing_zone_size.total_byte_size(),
+            )
+        };
+        cache.clear().await;
+        {
+            let backend = cache.backend.read().await;
+            assert!(backend.raster_caches.is_empty());
+            assert!(backend.vector_caches.is_empty());
+            assert!(backend.lru.is_empty());
+            assert_eq!(backend.cache_size.byte_size_used(), 0);
+            assert_eq!(backend.landing_zone_size.byte_size_used(), 0);
+            assert_eq!(
+                capacities,
+                (
+                    backend.cache_size.total_byte_size(),
+                    backend.landing_zone_size.total_byte_size()
+                )
+            );
+        }
+        assert!(matches!(
+            <SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(
+                &cache,
+                &op(0),
+                &query_rect(),
+            )
+            .await,
+            Err(CacheError::OperatorCacheEntryNotFound)
+        ));
+        assert!(matches!(
+            <SharedCache as AsyncCache<MultiPointCollection>>::query_cache(
+                &cache,
+                &op(2),
+                &vector_query,
+            )
+            .await,
+            Err(CacheError::OperatorCacheEntryNotFound)
+        ));
+        process_query_async(&mut cache, op(0)).await;
+        assert!(
+            <SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(
+                &cache,
+                &op(0),
+                &query_rect(),
+            )
+            .await
+            .unwrap()
+            .is_some()
+        );
     }
 
     fn process_query(tile_cache: &mut CacheBackend, op_name: &CanonicOperatorName) {

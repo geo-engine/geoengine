@@ -18,6 +18,7 @@ __version__ = "0.10.0"
 
 # Define package exports
 __all__ = [
+    "CacheApi",
     "DatasetsApi",
     "GeneralApi",
     "LayersApi",
@@ -484,6 +485,7 @@ __all__ = [
 ]
 
 # import apis into sdk package
+from geoengine_api_client.api.cache_api import CacheApi as CacheApi
 from geoengine_api_client.api.datasets_api import DatasetsApi as DatasetsApi
 from geoengine_api_client.api.general_api import GeneralApi as GeneralApi
 from geoengine_api_client.api.layers_api import LayersApi as LayersApi

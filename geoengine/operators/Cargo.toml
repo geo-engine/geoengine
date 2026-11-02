@@ -72,6 +72,7 @@ criterion = { workspace = true }
 httptest = { workspace = true }
 rand = { workspace = true }
 serial_test = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber = { workspace = true, features = ["json"] }
 
 [[bench]]

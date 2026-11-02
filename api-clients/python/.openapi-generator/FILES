@@ -43,6 +43,7 @@ docs/BoundingBox2D.md
 docs/BoxPlot.md
 docs/BoxPlotParameters.md
 docs/Breakpoint.md
+docs/CacheApi.md
 docs/ClassHistogram.md
 docs/ClassHistogramParameters.md
 docs/ClassificationMeasurement.md
@@ -459,6 +460,7 @@ docs/WmsVersion.md
 docs/WrappedPlotOutput.md
 geoengine_api_client/__init__.py
 geoengine_api_client/api/__init__.py
+geoengine_api_client/api/cache_api.py
 geoengine_api_client/api/datasets_api.py
 geoengine_api_client/api/general_api.py
 geoengine_api_client/api/layers_api.py
@@ -967,6 +969,7 @@ test/test_bounding_box2_d.py
 test/test_box_plot.py
 test/test_box_plot_parameters.py
 test/test_breakpoint.py
+test/test_cache_api.py
 test/test_class_histogram.py
 test/test_class_histogram_parameters.py
 test/test_classification_measurement.py

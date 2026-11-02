@@ -83,10 +83,7 @@ increase-version-number major="false": common::_clear
 _increase-version-number version: backend::generate-openapi-spec (api-clients::update-config version)
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.version" "{{ version }}"
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.dependencies[0]" "geoengine-api-client == {{ version }}"
-    cd ui \
-    && jq '.version = "{{ version }}"' package.json > package.json.tmp \
-    && mv package.json.tmp package.json \
-    && npm run prettier -- --write package.json
+    cd ui && npm version "{{ version }}" --no-git-tag-version --allow-same-version
 
 # Print the current version number of Geo Engine. Usage: `just repo print-version-number`.
 print-version-number:
@@ -94,6 +91,47 @@ print-version-number:
 
 print-version-tag:
     @echo v`{{ VERSION_CMD }}`
+
+# Print the release notes of the current, not yet tagged version, i.e., its CHANGELOG.md section without the heading. Usage: `just repo print-release-notes`.
+print-release-notes:
+    @git cliff --unreleased --tag `{{ VERSION_CMD }}` --strip all | sed '1{/^## /d}'
+
+# Print the commit message of a release, after the version was increased. `cliff.toml` skips this commit, so it never shows up in the changelog. Usage: `just repo print-release-commit-message 0.10.0 minor`.
+[arg("bump", help="Version bump, `minor` or `major`.")]
+[arg("old-version", help="Version before the release.")]
+print-release-commit-message old-version bump:
+    @echo "build: release `{{ VERSION_CMD }}`"
+    @echo
+    @echo "Increase the version from {{ old-version }} to `{{ VERSION_CMD }}` ({{ bump }}) and update the"
+    @echo "OpenAPI spec, API clients, Python library, UI and CHANGELOG.md accordingly."
+
+# Print the body of the release PR, after the version was increased. Usage: `just repo print-release-pr-body 0.10.0 minor`.
+[arg("bump", help="Version bump, `minor` or `major`.")]
+[arg("run-url", help="URL of the workflow run that created the PR.")]
+[arg("old-version", help="Version before the release.")]
+[script("bash")]
+print-release-pr-body old-version bump run-url="":
+    set -euo pipefail
+
+    NEW_VERSION="$({{ VERSION_CMD }})"
+
+    echo "Release **$NEW_VERSION** (previous version: {{ old-version }}, bump: \`{{ bump }}\`)."
+    echo
+    if [ -n "{{ run-url }}" ]; then
+      echo "This PR was created by the [Release PR workflow]({{ run-url }})."
+    fi
+    echo "It updates the version in Cargo, the OpenAPI spec, the API clients, the Python library and the UI, and regenerates \`CHANGELOG.md\`."
+    echo
+    echo "## Checklist"
+    echo
+    echo "- [ ] The changelog below is complete and correct (edit \`CHANGELOG.md\` on this branch if needed)"
+    echo "- [ ] CI is green"
+    echo
+    echo "Merging this PR triggers the publish workflow: it publishes the packages and creates the tag \`v$NEW_VERSION\` and the GitHub release."
+    echo
+    echo "## Changelog"
+    echo
+    just repo print-release-notes
 
 # Print the current version number of the API client. Usage: `just repo print-api-client-version`.
 print-published-api-client-rust-version:

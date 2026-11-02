@@ -5,8 +5,8 @@ use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::gdal_worker_process::{
     OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
     process_common::{
-        GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-        IpcProcessRasterResult,
+        GdalIpcBytePayload, IpcChannelMessagePayload, IpcProcessError, WorkerRequest,
+        WorkerResponse,
     },
     process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
 };
@@ -257,7 +257,7 @@ fn main() {
 fn raster_type_dispatch(
     payload: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
-    sender: &IpcSender<IpcProcessRasterResult>,
+    sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
     match payload.data_type {
         geoengine_datatypes::raster::RasterDataType::U8 => {
@@ -297,8 +297,7 @@ fn raster_type_dispatch(
 
 #[allow(clippy::print_stderr)]
 fn run(token: Token) {
-    let (sender, receiver) = match setup_client::<IpcChannelMessage, IpcProcessRasterResult>(token)
-    {
+    let (sender, receiver) = match setup_client::<WorkerRequest, WorkerResponse>(token) {
         Ok(pair) => pair,
         Err(err) => exit_with_error(err),
     };
@@ -307,7 +306,16 @@ fn run(token: Token) {
 
     // Loop runs indefinitely, reusing the process and its GDAL dataset cache
     while let Ok(message) = receiver.recv() {
-        let payload = message.0;
+        let payload = match message {
+            WorkerRequest::Read(message) => message.0,
+            WorkerRequest::ClearCaches => {
+                dataset_cache.clear_caches();
+                if sender.send(WorkerResponse::CachesCleared).is_err() {
+                    break;
+                }
+                continue;
+            }
+        };
 
         let _span = tracing::debug_span!(
             "gdal_worker_read_tile",
@@ -333,7 +341,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         read_id: _,
     }: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetHolder,
-    sender: &IpcSender<IpcProcessRasterResult>,
+    sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
     let gp = GdalHandling::load_tile_data_with_dataset_retry::<T>(
         dataset_cache,
@@ -343,10 +351,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
 
     let byte_payload = gp.and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into));
     // Propagate channel send errors directly up out of the handler
-    match byte_payload {
-        Ok(td) => sender.send(Ok(td)),
-        Err(err) => sender.send(Err(err)),
-    }?;
+    sender.send(WorkerResponse::ReadResult(byte_payload))?;
 
     Ok(())
 }

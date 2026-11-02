@@ -26,6 +26,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*CacheApi* | [**clear_handler**](docs/CacheApi.md#clear_handler) | **POST** /cache/clear | Clear operator results, STAC query metadata and GDAL worker caches.
 *DatasetsApi* | [**add_dataset_tiles_handler**](docs/DatasetsApi.md#add_dataset_tiles_handler) | **POST** /dataset/{dataset}/tiles | Add a tile to a gdal dataset.
 *DatasetsApi* | [**auto_create_dataset_handler**](docs/DatasetsApi.md#auto_create_dataset_handler) | **POST** /dataset/auto | Creates a new dataset using previously uploaded files. The format of the files will be automatically detected when possible.
 *DatasetsApi* | [**create_dataset_handler**](docs/DatasetsApi.md#create_dataset_handler) | **POST** /dataset | Creates a new dataset referencing files. Users can reference previously uploaded files. Admins can reference files from a volume.

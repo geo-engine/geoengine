@@ -55,6 +55,14 @@ impl TestDefault for NewRasterCacheEnum {
 }
 
 impl NewRasterCacheEnum {
+    /// Remove all tiles and eviction records. Pinned tiles remain accounted for until released.
+    pub async fn clear(&self) {
+        match self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.store.clear().await,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.store.clear().await,
+        }
+    }
+
     pub fn new_fifo(capacity_bytes: usize) -> Self {
         Self::InMemoryCompressedRasterTile2DFifo(NewRasterCache {
             store: InMemoryCacheStore {
@@ -124,6 +132,7 @@ trait CacheStore: Send + Sync + 'static {
 }
 
 trait EvictionStrategy: Send + Sync + 'static {
+    fn clear(&mut self);
     fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint);
     fn record_removal(&mut self, key: &Arc<CacheKey>);
 
@@ -170,6 +179,10 @@ impl FifoEvictionStrategy {
 }
 
 impl EvictionStrategy for FifoEvictionStrategy {
+    fn clear(&mut self) {
+        self.queue.clear();
+    }
+
     fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint) {
         self.queue.push(EvictionStrategyItem {
             key: key.clone(),
@@ -323,6 +336,10 @@ impl LruEvictionStrategy {
 }
 
 impl EvictionStrategy for LruEvictionStrategy {
+    fn clear(&mut self) {
+        *self = Self::new(self.capacity);
+    }
+
     fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint) {
         let idx = match self.free.pop() {
             Some(idx) => idx,
@@ -594,6 +611,18 @@ pub struct InMemoryCacheStore<SF, ES> {
     cache: RwLock<HashMap<Arc<CacheKey>, Arc<SizeTrackedEntry<SF>>>>,
     eviction_strategy: Arc<RwLock<ES>>,
     total_size: Arc<AtomicUsize>,
+}
+
+impl<SF, ES> InMemoryCacheStore<SF, ES> {
+    async fn clear(&self)
+    where
+        ES: EvictionStrategy,
+    {
+        let mut cache = self.cache.write().await;
+        let mut strategy = self.eviction_strategy.write().await;
+        strategy.clear();
+        cache.clear();
+    }
 }
 
 type CacheKey = (CanonicOperatorName, Band, TimeInterval, TileIndex);
@@ -1237,6 +1266,35 @@ mod tests {
             grid,
             cache_hint,
         ))
+    }
+
+    #[tokio::test]
+    async fn it_clears_tiles_and_preserves_pinned_accounting() {
+        for cache in [
+            NewRasterCacheEnum::new_fifo(1_000_000),
+            NewRasterCacheEnum::new_lru(1_000_000),
+        ] {
+            let key = make_cache_key(0, 0);
+            cache
+                .insert(key.clone(), make_tile(1, CacheHint::max_duration()))
+                .await
+                .unwrap();
+            let pinned = cache.get(&key).await.unwrap().unwrap();
+            let size = cache.byte_size();
+            assert!(size > 0);
+            cache.clear().await;
+            assert!(cache.get(&key).await.unwrap().is_none());
+            assert_eq!(cache.byte_size(), size);
+            drop(pinned);
+            assert_eq!(cache.byte_size(), 0);
+            cache
+                .insert(key.clone(), make_tile(2, CacheHint::max_duration()))
+                .await
+                .unwrap();
+            assert!(cache.get(&key).await.unwrap().is_some());
+            cache.clear().await;
+            assert_eq!(cache.byte_size(), 0);
+        }
     }
 
     async fn tile_byte_size(tile: &TypedRasterTile2D) -> usize {

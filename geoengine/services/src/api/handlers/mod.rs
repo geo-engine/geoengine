@@ -5,6 +5,7 @@ use actix_web::http::header;
 use actix_web_httpauth::headers::authorization::{Bearer, Scheme};
 use std::str::FromStr;
 
+pub mod cache;
 pub mod datasets;
 pub mod ebv;
 pub mod layers;

@@ -78,6 +78,9 @@ pub trait DataProvider: LayerCollectionProvider
     + std::fmt::Debug
     + AsAny
 {
+    /// Clear dataset metadata caches without reinitializing the connector.
+    async fn clear_cache(&self) {}
+
     // TODO: unify provenance method for internal and external provider as a separate trait. We need to figure out session handling before, though.
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput>;
 }
@@ -225,6 +228,10 @@ impl
 
 #[async_trait]
 impl DataProvider for SharedDataConnector {
+    async fn clear_cache(&self) {
+        self.0.clear_cache().await;
+    }
+
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
         self.0.provenance(id).await
     }

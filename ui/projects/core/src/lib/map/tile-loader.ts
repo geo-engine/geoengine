@@ -68,6 +68,12 @@ export interface TileDiagnostic {
 }
 
 interface TileLoaderOptions {
+    /** Checks live visibility before a queued request or retry starts, including during animations. */
+    readonly canLoad?: () => boolean;
+
+    /** Permanently excludes source tiles, including fallback and preload tiles, before fetching. */
+    readonly acceptsTile?: (tile: ImageTile) => boolean;
+
     /** Aborts all pending requests and frees all object URLs. Aborted when the source is replaced or the layer is destroyed. */
     readonly signal?: AbortSignal;
 
@@ -236,6 +242,8 @@ export class TileLoader {
     /** Failed attempts per tile, so that a transient failure can be retried a few times. */
     private readonly attempts = new WeakMap<ImageTile, number>();
 
+    private enabled = true;
+
     private failures = 0;
     private lastError?: string;
 
@@ -255,6 +263,23 @@ export class TileLoader {
             // instead of firing a request that nobody would ever abort.
             this.options.onTileError?.(tile);
             tile.setState(TileState.ERROR);
+            return;
+        }
+
+        // Admission covers both queued tiles and retries. Keep state transitions and cleanup
+        // together so a rejected retry cannot retain loading state or an abort subscription.
+        if (this.options.acceptsTile?.(tile) === false) {
+            this.cancelRetry(tile);
+            tile.setState(TileState.EMPTY);
+            if (this.outstanding.has(tile)) this.settle(tile, false);
+            return;
+        }
+        if (!this.enabled || this.options.canLoad?.() === false) {
+            this.cancelRetry(tile);
+            this.options.onTileError?.(tile);
+            tile.setState(TileState.ERROR);
+            tile.setState(TileState.IDLE);
+            if (this.outstanding.has(tile)) this.settle(tile, false);
             return;
         }
 
@@ -386,6 +411,22 @@ export class TileLoader {
             if (currentZoom !== undefined && tile.getTileCoord()[0] < currentZoom) {
                 this.cancel(tile, 'zoom level was zoomed in');
             }
+        }
+    }
+
+    /**
+     * Suspends imagery while retaining loaded tiles and metadata. Also rejects tiles from an
+     * earlier frame's queue, which may drain after OpenLayers stops rendering the layer.
+     */
+    setEnabled(enabled: boolean): void {
+        this.enabled = enabled;
+        if (!enabled) this.cancelPending('layer is outside its visibility or resolution restriction');
+    }
+
+    /** Cancels requests and retries while retaining loaded tiles and metadata URLs for reuse. */
+    cancelPending(reason: string): void {
+        for (const tile of this.outstanding) {
+            this.cancel(tile, reason);
         }
     }
 
