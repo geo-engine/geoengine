@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn wrap_tile_outside_presented_extent_is_empty() {
         let advises = wrap_read_advises(&wrap_params(), &tile(1.0, ([-45, 200], [-36, 300])));
-        assert!(advises.is_empty());
+        assert_eq!(advises, []);
     }
 
     #[test]

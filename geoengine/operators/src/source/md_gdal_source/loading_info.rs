@@ -595,7 +595,7 @@ mod tests {
         let all_z = (0..8).collect::<Vec<_>>();
 
         let (slices, missing) = loading_info.z_slices(&all_z, 0);
-        assert!(missing.is_empty());
+        assert_eq!(missing, []);
         assert_eq!(slices.len(), 8);
         assert_eq!(
             slices[0],
@@ -619,7 +619,7 @@ mod tests {
         );
 
         let (slices, missing) = loading_info.z_slices(&all_z, 1);
-        assert!(missing.is_empty());
+        assert_eq!(missing, []);
         assert_eq!(
             slices[7],
             (
@@ -640,7 +640,7 @@ mod tests {
 
         let (slices, missing) = loading_info.z_slices(&(0..8).collect::<Vec<_>>(), 0);
 
-        assert!(missing.is_empty());
+        assert_eq!(missing, []);
         assert_eq!(
             slices[1],
             (

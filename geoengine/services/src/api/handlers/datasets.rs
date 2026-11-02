@@ -6822,7 +6822,7 @@ mod tests {
                 BandSelection::first(),
             )))
             .await?;
-        assert!(!with_files.files().is_empty());
+        assert_ne!(with_files.files(), []);
         assert_eq!(with_files.time_steps(), axis.as_slice());
 
         // a window inside a file reads only that file's steps it touches
