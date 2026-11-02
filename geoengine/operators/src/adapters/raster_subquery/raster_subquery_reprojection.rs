@@ -280,6 +280,8 @@ fn input_pixel_indices_parallel(
     let width = tile_info.tile_size_in_pixels.axis_size_x();
     let min_rows_in_par_chunk = num::integer::div_ceil(MIN_ELEMENTS_IN_PAR_CHUNK, width).max(1);
 
+    // the name of the stage this replaces, so that `map_tile` compares with the WP0 baseline
+    let _span = tracing::debug_span!("reprojection_coordinate_grid").entered();
     let start = std::time::Instant::now();
 
     let parallelism = pool.current_num_threads();
@@ -417,6 +419,8 @@ where
     let Some(input) = tile.grid_array.as_masked_grid() else {
         return accu;
     };
+
+    let _span = tracing::debug_span!("reprojection_fold").entered();
 
     debug_assert_eq!(tile.global_geo_transform, accu.spec.in_geo_transform);
 
