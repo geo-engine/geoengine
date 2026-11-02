@@ -239,6 +239,13 @@ impl DatasetSlot {
     }
 }
 
+/// Where `try_dispatch` starts the next read: indices into `active_datasets` and `idle_workers`.
+struct DispatchChoice {
+    dataset_hash: u64,
+    active_idx: usize,
+    idle_idx: usize,
+}
+
 struct QueuedRequest {
     dataset_hash: u64,
     request: IpcChannelMessage,
@@ -868,10 +875,53 @@ impl BrokerState {
         worker.affinity = affinity;
     }
 
-    /// Single-pass scheduler execution pass. Inlines scheduling decisions to prevent matrix re-scanning.
-    #[allow(clippy::too_many_lines)]
-    #[inline]
+    /// Dispatches queued requests to idle workers until either runs out or the active limit is
+    /// reached.
     pub fn try_dispatch(&mut self) {
+        self.drop_empty_front_datasets();
+
+        // Call the clock once per dispatch pass
+        let now = Instant::now();
+
+        while !self.idle_workers.is_empty()
+            && !self.active_datasets.is_empty()
+            && self.global_active_count < self.max_active_processes
+        {
+            let Some(choice) = self.choose_dispatch(now) else {
+                break;
+            };
+
+            let slot = self
+                .dataset_registry
+                .get_mut(&choice.dataset_hash)
+                .expect("Selected dataset missing from registry - invariant broken");
+
+            // Take the request before the worker: its callers may have given up since the scan
+            let Some(req) = slot.pop_next_valid(&mut self.stats.cancelled_dropped) else {
+                self.active_datasets.remove(choice.active_idx);
+                self.remove_slot_if_unused(choice.dataset_hash);
+                continue;
+            };
+            slot.active_count += 1;
+            self.stats.cancelled_dropped += slot.clean_canceled_front();
+            let has_more = !slot.queue.is_empty();
+
+            // Maintain FIFO/Round-Robin dataset cycling fairness
+            let tracked_hash = self
+                .active_datasets
+                .remove(choice.active_idx)
+                .expect("Best dataset hash missing from active queue - invariant broken");
+            if has_more {
+                self.active_datasets.push_back(tracked_hash);
+            }
+
+            let worker_id = self.idle_workers.swap_remove(choice.idle_idx);
+            self.start_read(worker_id, req, now);
+        }
+    }
+
+    /// Pops datasets without queued requests from the front of `active_datasets`.
+    fn drop_empty_front_datasets(&mut self) {
         while let Some(&front_hash) = self.active_datasets.front() {
             let should_pop = match self.dataset_registry.get_mut(&front_hash) {
                 Some(slot) => {
@@ -880,166 +930,138 @@ impl BrokerState {
                 }
                 None => true,
             };
-            if should_pop {
-                self.active_datasets.pop_front();
-                self.remove_slot_if_unused(front_hash);
-            } else {
+            if !should_pop {
                 break;
             }
+            self.active_datasets.pop_front();
+            self.remove_slot_if_unused(front_hash);
         }
+    }
 
-        // Call the clock precisely ONCE per batch processing window
-        let now = Instant::now();
+    /// Picks the queued dataset and idle worker with the best rank. Scans at most
+    /// `MAX_ELIGIBLE_SCAN_DEPTH` datasets that may start another read; ties go to the dataset
+    /// waiting longest.
+    fn choose_dispatch(&self, now: Instant) -> Option<DispatchChoice> {
+        let mut best: Option<(WorkerRank, DispatchChoice)> = None;
+        let mut datasets_scanned = 0;
 
-        while !self.idle_workers.is_empty() && !self.active_datasets.is_empty() {
-            if self.global_active_count >= self.max_active_processes {
-                break;
-            }
-
-            let mut best_rank: Option<WorkerRank> = None;
-            let mut best_w_matrix_idx = 0;
-            let mut best_dataset_hash = 0;
-            let mut best_dataset_active_idx = 0;
-            let mut datasets_scanned = 0;
-
-            for (idx, &hash) in self.active_datasets.iter().enumerate() {
-                let slot = self
-                    .dataset_registry
-                    .get(&hash)
-                    .expect("Active dataset missing from registry - invariant broken");
-                if slot.active_count >= self.max_dataset_processes {
-                    continue;
-                }
-
-                let Some(req) = slot.peek_first_valid() else {
-                    continue;
-                };
-
-                datasets_scanned += 1;
-                let window = &req.request.0.read_advise.read_window_bounds;
-                let band = req.request.0.dataset_params.rasterband_channel;
-
-                let mut current_best_w_idx = 0;
-                let mut current_best_rank: Option<WorkerRank> = None;
-
-                for (w_idx, &w_id) in self.idle_workers.iter().enumerate() {
-                    let w = self
-                        .workers
-                        .get(w_id)
-                        .expect("Idle worker ID missing from registry - invariant broken");
-                    let rank = w.rank_for_job(hash, band, window, now, &self.dataset_holders);
-
-                    if Some(rank) > current_best_rank {
-                        current_best_rank = Some(rank);
-                        current_best_w_idx = w_idx;
-                    }
-                    if rank == WorkerRank::BEST {
-                        break;
-                    }
-                }
-
-                if current_best_rank > best_rank {
-                    best_rank = current_best_rank;
-                    best_w_matrix_idx = current_best_w_idx;
-                    best_dataset_hash = hash;
-                    best_dataset_active_idx = idx;
-                }
-
-                if best_rank == Some(WorkerRank::BEST) {
-                    break;
-                }
-
-                if self.strategy == SchedulingStrategy::FifoGreedy && best_rank.is_some() {
-                    break;
-                }
-
-                if datasets_scanned >= MAX_ELIGIBLE_SCAN_DEPTH {
-                    break;
-                }
-            }
-
-            if best_rank.is_none() {
-                break;
-            }
-
-            // Perform atomic dispatch operation
+        for (active_idx, &dataset_hash) in self.active_datasets.iter().enumerate() {
             let slot = self
                 .dataset_registry
-                .get_mut(&best_dataset_hash)
-                .expect("Selected dataset missing from registry - invariant broken");
-
-            // Take the request before the worker: its callers may have given up since the scan
-            let Some(req) = slot.pop_next_valid(&mut self.stats.cancelled_dropped) else {
-                self.active_datasets.remove(best_dataset_active_idx);
-                self.remove_slot_if_unused(best_dataset_hash);
+                .get(&dataset_hash)
+                .expect("Active dataset missing from registry - invariant broken");
+            if slot.active_count >= self.max_dataset_processes {
+                continue;
+            }
+            let Some(req) = slot.peek_first_valid() else {
                 continue;
             };
+            datasets_scanned += 1;
 
-            let worker_id = self.idle_workers.swap_remove(best_w_matrix_idx);
-            let worker = self
-                .workers
-                .get_mut(worker_id)
-                .expect("Selected worker ID missing from registry - invariant broken");
-
-            self.global_active_count += 1;
-            slot.active_count += 1;
-
-            let affinity = match &worker.affinity {
-                None => {
-                    self.stats.fresh += 1;
-                    "fresh"
-                }
-                Some(a) if a.dataset_hash == best_dataset_hash => {
-                    self.stats.affinity_hits += 1;
-                    "hit"
-                }
-                Some(_) => {
-                    self.stats.evictions += 1;
-                    "evict"
-                }
+            let Some((idle_idx, rank)) = self.best_idle_worker(dataset_hash, req, now) else {
+                break;
             };
-            self.stats.dispatched += 1;
+            if best.as_ref().is_none_or(|(best_rank, _)| rank > *best_rank) {
+                best = Some((
+                    rank,
+                    DispatchChoice {
+                        dataset_hash,
+                        active_idx,
+                        idle_idx,
+                    },
+                ));
+            }
 
-            // The worker holds the requested dataset once the read starts, not its previous one.
-            // Recorded now, so that a busy worker switching datasets does not count as a holder of
-            // its old dataset when ranking duplicates; the release corrects it.
-            let busy_affinity = WorkerAffinity {
-                dataset_hash: req.dataset_hash,
-                band: req.request.0.dataset_params.rasterband_channel,
-                spatial_window: req.request.0.read_advise.read_window_bounds,
-                timestamp: now,
-            };
-
+            if rank == WorkerRank::BEST
+                || self.strategy == SchedulingStrategy::FifoGreedy
+                || datasets_scanned >= MAX_ELIGIBLE_SCAN_DEPTH
             {
-                let _span = tracing::debug_span!(
-                    "gdal_broker_dispatch",
-                    worker_id = worker_id,
-                    affinity = affinity,
-                    dataset = %req.request.0.dataset_params.file_path.display(),
-                    read_id = req.request.0.read_id.as_deref().unwrap_or(""),
-                )
-                .entered();
-
-                let _ = worker.job_tx.send(WorkerCommand::Read(Box::new(WorkerJob {
-                    request: req.request,
-                    respond_to: req.respond_to,
-                    dataset_hash: req.dataset_hash,
-                })));
+                break;
             }
-
-            self.stats.cancelled_dropped += slot.clean_canceled_front();
-
-            // Maintain FIFO/Round-Robin dataset cycling fairness
-            let tracked_hash = self
-                .active_datasets
-                .remove(best_dataset_active_idx)
-                .expect("Best dataset hash missing from active queue - invariant broken");
-            if !slot.queue.is_empty() {
-                self.active_datasets.push_back(tracked_hash);
-            }
-
-            self.set_affinity(worker_id, Some(busy_affinity));
         }
+
+        best.map(|(_, choice)| choice)
+    }
+
+    /// Returns the index into `idle_workers` of the best worker for the request, and its rank.
+    fn best_idle_worker(
+        &self,
+        dataset_hash: u64,
+        req: &QueuedRequest,
+        now: Instant,
+    ) -> Option<(usize, WorkerRank)> {
+        let window = &req.request.0.read_advise.read_window_bounds;
+        let band = req.request.0.dataset_params.rasterband_channel;
+
+        let mut best: Option<(usize, WorkerRank)> = None;
+        for (idle_idx, &worker_id) in self.idle_workers.iter().enumerate() {
+            let rank = self
+                .workers
+                .get(worker_id)
+                .expect("Idle worker ID missing from registry - invariant broken")
+                .rank_for_job(dataset_hash, band, window, now, &self.dataset_holders);
+            if best.is_none_or(|(_, best_rank)| rank > best_rank) {
+                best = Some((idle_idx, rank));
+            }
+            if rank == WorkerRank::BEST {
+                break;
+            }
+        }
+        best
+    }
+
+    /// Sends the request to the worker and records the worker as holding its dataset.
+    fn start_read(&mut self, worker_id: usize, req: QueuedRequest, now: Instant) {
+        let worker = self
+            .workers
+            .get(worker_id)
+            .expect("Selected worker ID missing from registry - invariant broken");
+
+        let affinity = match &worker.affinity {
+            None => {
+                self.stats.fresh += 1;
+                "fresh"
+            }
+            Some(a) if a.dataset_hash == req.dataset_hash => {
+                self.stats.affinity_hits += 1;
+                "hit"
+            }
+            Some(_) => {
+                self.stats.evictions += 1;
+                "evict"
+            }
+        };
+        self.stats.dispatched += 1;
+        self.global_active_count += 1;
+
+        // The worker holds the requested dataset once the read starts, not its previous one.
+        // Recorded now, so that a busy worker switching datasets does not count as a holder of
+        // its old dataset when ranking duplicates; the release corrects it.
+        let busy_affinity = WorkerAffinity {
+            dataset_hash: req.dataset_hash,
+            band: req.request.0.dataset_params.rasterband_channel,
+            spatial_window: req.request.0.read_advise.read_window_bounds,
+            timestamp: now,
+        };
+
+        {
+            let _span = tracing::debug_span!(
+                "gdal_broker_dispatch",
+                worker_id = worker_id,
+                affinity = affinity,
+                dataset = %req.request.0.dataset_params.file_path.display(),
+                read_id = req.request.0.read_id.as_deref().unwrap_or(""),
+            )
+            .entered();
+
+            let _ = worker.job_tx.send(WorkerCommand::Read(Box::new(WorkerJob {
+                request: req.request,
+                respond_to: req.respond_to,
+                dataset_hash: req.dataset_hash,
+            })));
+        }
+
+        self.set_affinity(worker_id, Some(busy_affinity));
     }
 }
 
