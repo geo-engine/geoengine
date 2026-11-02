@@ -2,11 +2,10 @@ use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, ProcessingGraphOperatorPath,
     QueryContext, QueryProcessor, SpatialGridDescriptor, TypedRasterOperator,
 };
-use crate::error::Error;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::GdalDatasetParameters;
+use crate::source::gdal_read::tile_stream;
 use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
-use crate::source::multi_band_gdal_source::reader::GdalPoolReader;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -16,7 +15,6 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use futures::TryFutureExt;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
@@ -40,7 +38,6 @@ use tracing::{debug, trace};
 
 mod error;
 mod loading_info;
-mod reader;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -249,23 +246,18 @@ where
             bands.into_iter(),
         );
 
-        let stream = stream::iter(time_tile_band_iter)
-            .map(move |(time_interval, tile_info, band_idx)| {
-                GdalPoolReader::load_tile_from_files_async::<P>(
-                    loading_info.clone(),
-                    reader_mode,
-                    tile_info,
-                    time_interval,
-                    band_idx,
-                    gdal_worker.clone(),
-                    self.default_cache_ttl,
-                )
-                .map_err(Error::from)
-            })
-            .buffered(read_ahead)
-            .boxed();
+        let default_cache_ttl = self.default_cache_ttl;
+        let plans = stream::iter(time_tile_band_iter).map(move |(time, tile, band)| {
+            Ok(loading_info.tile_plan(time, tile, band, default_cache_ttl))
+        });
 
-        return Ok(stream);
+        Ok(tile_stream(
+            plans,
+            reader_mode,
+            gdal_worker,
+            read_ahead,
+            |source| GdalSourceError::from(source).into(),
+        ))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -623,6 +615,7 @@ mod tests {
         ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
         TimeDescriptor,
     };
+    use crate::source::gdal_read::assemble_tile;
     use crate::source::gdal_worker_process::WorkerConfig;
     use crate::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
@@ -2123,21 +2116,12 @@ mod tests {
                             ),
                         );
 
-                        let tile = std::panic::AssertUnwindSafe(
-                            GdalPoolReader::load_tile_from_files_async::<u16>(
-                                MultiBandGdalLoadingInfo::new(
-                                    vec![time_interval],
-                                    files.clone(),
-                                    None,
-                                ),
-                                reader_mode,
-                                tile_info,
-                                time_interval,
-                                0,
-                                gpp.get_gdal_worker(),
-                                CacheTtlSeconds::new(0),
-                            ),
-                        )
+                        let tile = std::panic::AssertUnwindSafe(assemble_tile::<u16>(
+                            MultiBandGdalLoadingInfo::new(vec![time_interval], files.clone(), None)
+                                .tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
+                            reader_mode,
+                            &gpp.get_gdal_worker(),
+                        ))
                         .catch_unwind()
                         .await;
 
@@ -2301,14 +2285,10 @@ mod tests {
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gw = gpp.get_gdal_worker();
 
-        let tile = GdalPoolReader::load_tile_from_files_async::<u16>(
-            loading_info,
+        let tile = assemble_tile::<u16>(
+            loading_info.tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
             reader_mode,
-            tile_info,
-            time_interval,
-            0, // band
-            gw,
-            CacheTtlSeconds::new(0),
+            &gw,
         )
         .await
         .unwrap();

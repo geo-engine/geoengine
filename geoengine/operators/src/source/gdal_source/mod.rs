@@ -1,6 +1,6 @@
-use super::gdal_worker_process::{GdalDatasetParameters, GdalPoolDispatcher, GridAndProperties};
+use super::gdal_worker_process::GdalPoolDispatcher;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
-use crate::source::gdal_source::reader::GdalPoolReader;
+use crate::source::gdal_read::{TilePlan, tile_stream};
 use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::{
     engine::{
@@ -13,13 +13,12 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use futures::{Future, TryFutureExt, TryStreamExt};
+use futures::TryStreamExt;
 use futures::{
     Stream,
     stream::{self, BoxStream, StreamExt},
 };
 use gdal::raster::GdalType;
-use geoengine_datatypes::raster::ChangeGridBounds;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
@@ -28,8 +27,8 @@ use geoengine_datatypes::{
         find_next_best_overview_level,
     },
     raster::{
-        EmptyGrid, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties, RasterTile2D,
-        SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+        GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
+        TilingSpecification, TilingStrategy,
     },
 };
 use itertools::Itertools;
@@ -41,12 +40,11 @@ use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
-use tracing::{debug, warn};
+use tracing::warn;
 
 mod db_types;
 pub mod error;
 pub mod loading_info;
-mod reader;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -90,143 +88,11 @@ impl OperatorData for GdalSourceParameters {
 type GdalMetaData =
     Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
 
-pub struct GdalRasterLoader;
-
-impl GdalRasterLoader {
-    pub async fn load_tile_grid_props<T: Pixel + GdalType + FromPrimitive>(
-        dataset_params: GdalDatasetParameters,
-        reader_mode: GdalReaderMode,
-        tile_information: TileInformation,
-        gdal_worker: GdalPoolDispatcher,
-    ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalSourceError> {
-        tracing::trace!(
-            "Loading tile {:?}, from {}, band: {}",
-            &tile_information,
-            dataset_params.file_path.display(),
-            dataset_params.rasterband_channel
-        );
-
-        let ds_spatial_grid = dataset_params.spatial_grid_definition();
-        let tile_spatial_grid = tile_information.spatial_grid_definition();
-        tracing::trace!(
-            "ds_spatial_grid: {:?}, tile_spatial_grid {:?}",
-            ds_spatial_grid,
-            tile_spatial_grid
-        );
-        let gdal_read_advise =
-            reader_mode.tiling_to_dataset_read_advise(&ds_spatial_grid, &tile_spatial_grid);
-
-        let Some(gdal_read_advise) = gdal_read_advise else {
-            tracing::trace!(
-                "Tile {:?} not intersecting dataset grid or gdal grid {:?}",
-                &tile_information,
-                dataset_params.file_path
-            );
-            return Ok(None);
-        };
-
-        let res = GdalPoolReader::from(gdal_worker)
-            .load_tile_data_process(dataset_params, gdal_read_advise)
-            .await?;
-
-        Ok(Some(res))
-    }
-
-    /// Load a single tile using the process manager.
-    async fn load_tile_async<T: Pixel + GdalType + FromPrimitive>(
-        dataset_params: Option<GdalDatasetParameters>,
-        reader_mode: GdalReaderMode,
-        tile_information: TileInformation,
-        tile_time: TimeInterval,
-        cache_hint: CacheHint,
-        gdal_worker: GdalPoolDispatcher,
-    ) -> Result<RasterTile2D<T>, GdalSourceError> {
-        match dataset_params {
-            // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
-            Some(ds) => {
-                let grid_and_props =
-                    Self::load_tile_grid_props(ds, reader_mode, tile_information, gdal_worker)
-                        .await?;
-                let tile = match grid_and_props {
-                    Some(gp) => RasterTile2D::new_with_tile_info_and_properties(
-                        tile_time,
-                        tile_information,
-                        0,
-                        gp.grid.unbounded(),
-                        gp.properties,
-                        cache_hint,
-                    ),
-                    None => {
-                        debug!(
-                            "Tile {:?} not intersecting dataset grid or gdal grid",
-                            &tile_information.global_tile_position
-                        );
-                        Self::create_no_data_tile(tile_information, tile_time, cache_hint)
-                    }
-                };
-                Ok(tile)
-            }
-            _ => {
-                debug!(
-                    "Skipping tile without GdalDatasetParameters {:?}",
-                    &tile_information
-                );
-
-                Ok(Self::create_no_data_tile(
-                    tile_information,
-                    tile_time,
-                    cache_hint,
-                ))
-            }
-        }
-    }
-
-    fn create_no_data_tile<T: Pixel>(
-        tile_info: TileInformation,
-        tile_time: TimeInterval,
-        cache_hint: CacheHint,
-    ) -> RasterTile2D<T> {
-        RasterTile2D::new_with_tile_info_and_properties(
-            tile_time,
-            tile_info,
-            0,
-            EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
-            RasterProperties::default(),
-            cache_hint,
-        )
-    }
-}
-
 fn resolve_cache_ttl(
     cache_ttl: Option<CacheTtlSeconds>,
     default_cache_ttl: CacheTtlSeconds,
 ) -> CacheTtlSeconds {
     cache_ttl.unwrap_or(default_cache_ttl)
-}
-
-// This is where the source attaches!
-/// A stream of futures producing `RasterTile2D` for a single slice in time
-fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-    spatial_bounds: GridBoundingBox2D,
-    info: GdalLoadingInfoTemporalSlice,
-    tiling_strategy: TilingStrategy,
-    reader_mode: GdalReaderMode,
-    gdal_worker: GdalPoolDispatcher,
-    default_cache_ttl: CacheTtlSeconds,
-) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
-    stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_bounds)).map(
-        move |tile| {
-            GdalRasterLoader::load_tile_async(
-                info.params.clone(),
-                reader_mode,
-                tile,
-                info.time,
-                resolve_cache_ttl(info.cache_ttl, default_cache_ttl).into(),
-                gdal_worker.clone(),
-            )
-            .map_err(Into::into)
-        },
-    )
 }
 
 pub struct GdalSourceProcessor<T>
@@ -397,7 +263,7 @@ where
                             }
                         });
 
-        let loaded_source_stream = load_source_stream::<P, _>(
+        Ok(load_source_stream::<P, _>(
             stream,
             query.spatial_bounds(),
             tiling_strategy,
@@ -405,9 +271,7 @@ where
             ctx.get_gdal_worker(),
             self.default_cache_ttl,
             ctx.gdal_read_ahead().gdal_source,
-        );
-
-        Ok(loaded_source_stream.boxed())
+        ))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -476,7 +340,8 @@ impl OperatorName for GdalSource {
     const TYPE_NAME: &'static str = "GdalSource";
 }
 
-fn load_source_stream<P, S>(
+/// Plans one tile per spatial tile of each time slice and assembles them.
+fn load_source_stream<'a, P, S>(
     source_stream: S,
     spatial_query: GridBoundingBox2D,
     tiling_strategy: TilingStrategy,
@@ -484,25 +349,31 @@ fn load_source_stream<P, S>(
     gdal_worker: GdalPoolDispatcher,
     default_cache_ttl: CacheTtlSeconds,
     read_ahead: usize,
-) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
+) -> BoxStream<'a, Result<RasterTile2D<P>>>
 where
     P: Pixel + GdalType + FromPrimitive,
-    S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>>,
+    S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>> + Send + 'a,
 {
-    source_stream
+    let plans = source_stream
         .map_ok(move |info| {
-            temporal_slice_tile_future_stream(
-                spatial_query,
-                info,
-                tiling_strategy,
-                reader_mode,
-                gdal_worker.clone(),
-                default_cache_ttl,
-            )
-            .map(Result::Ok)
+            let cache_hint: CacheHint = resolve_cache_ttl(info.cache_ttl, default_cache_ttl).into();
+            stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_query))
+                .map(move |tile| {
+                    Ok(TilePlan {
+                        tile,
+                        time: info.time,
+                        band: 0,
+                        // a time slice without a file yields empty tiles
+                        files: info.params.clone().into_iter().collect(),
+                        cache_hint,
+                    })
+                })
         })
-        .try_flatten()
-        .try_buffered(read_ahead)
+        .try_flatten();
+
+    tile_stream(plans, reader_mode, gdal_worker, read_ahead, |source| {
+        GdalSourceError::from(source).into()
+    })
 }
 
 #[async_trait]
@@ -809,6 +680,8 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::source::gdal_read::assemble_tile;
+    use crate::source::gdal_worker_process::GdalDatasetParameters;
     use crate::source::gdal_worker_process::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference, WorkerConfig,
@@ -1238,7 +1111,6 @@ mod tests {
 
         let tile_info = tile_information_with_partition_and_shape(output_bounds, output_shape);
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
-        let params = None;
         let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
             dataset_spatial_grid: SpatialGridDefinition::new(
                 tile_info.global_geo_transform,
@@ -1249,13 +1121,16 @@ mod tests {
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
 
-        let tile = GdalRasterLoader::load_tile_async::<f64>(
-            params,
+        let tile = assemble_tile::<f64>(
+            TilePlan {
+                tile: tile_info,
+                time: time_interval,
+                band: 0,
+                files: vec![],
+                cache_hint: CacheHint::no_cache(),
+            },
             reader_mode,
-            tile_info,
-            time_interval,
-            CacheHint::no_cache(),
-            gw,
+            &gw,
         )
         .await;
 
@@ -1431,23 +1306,25 @@ mod tests {
 
         let tile_info = tile_information_with_partition_and_shape(output_bounds, output_shape);
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
-        let params = None;
 
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
 
-        let tile = GdalRasterLoader::load_tile_async::<f64>(
-            params,
+        let tile = assemble_tile::<f64>(
+            TilePlan {
+                tile: tile_info,
+                time: time_interval,
+                band: 0,
+                files: vec![],
+                cache_hint: CacheHint::seconds(1234),
+            },
             GdalReaderMode::OriginalResolution(ReaderState {
                 dataset_spatial_grid: SpatialGridDefinition::new(
                     tile_info.global_geo_transform,
                     GridShape2D::new([3600, 1800]).bounding_box(),
                 ),
             }),
-            tile_info,
-            time_interval,
-            CacheHint::seconds(1234),
-            gw,
+            &gw,
         )
         .await;
 
