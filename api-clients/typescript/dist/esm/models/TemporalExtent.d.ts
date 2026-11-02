@@ -20,8 +20,6 @@ export interface TemporalExtent {
      * interval end. In the Core only a single time interval is supported.
      * Extensions may support multiple intervals. If multiple intervals are
      * provided, the union of the intervals describes the temporal extent.
-     * @type {Array<Array<Date | null>>}
-     * @memberof TemporalExtent
      */
     interval: Array<Array<Date | null>>;
     /**
@@ -30,8 +28,6 @@ export interface TemporalExtent {
      * calendar. In the Core this is the only supported temporal coordinate
      * reference system. Extensions may support additional temporal coordinate
      * reference systems and add additional enum values.
-     * @type {string}
-     * @memberof TemporalExtent
      */
     trs?: string;
 }

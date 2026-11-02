@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface StacApiRetries {
     /**
      * 
-     * @type {number}
-     * @memberof StacApiRetries
      */
     numberOfRetries: number;
     /**
      * 
-     * @type {number}
-     * @memberof StacApiRetries
      */
     initialDelayMs: number;
     /**
      * 
-     * @type {number}
-     * @memberof StacApiRetries
      */
     exponentialBackoffFactor: number;
 }

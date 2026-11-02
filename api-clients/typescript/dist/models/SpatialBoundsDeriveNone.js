@@ -22,13 +22,15 @@ exports.SpatialBoundsDeriveNoneToJSONTyped = SpatialBoundsDeriveNoneToJSONTyped;
  * @export
  */
 exports.SpatialBoundsDeriveNoneTypeEnum = {
-    None: 'none'
+    None: 'none',
 };
 /**
  * Check if a given object implements the SpatialBoundsDeriveNone interface.
  */
 function instanceOfSpatialBoundsDeriveNone(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'none')
         return false;
     return true;
 }

@@ -37,9 +37,9 @@ export function CollectionItemToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'collection':
-            return Object.assign({}, LayerCollectionListingToJSON(value), { type: 'collection' });
+            return Object.assign({}, LayerCollectionListingToJSON(value), { 'type': 'collection' });
         case 'layer':
-            return Object.assign({}, LayerListingToJSON(value), { type: 'layer' });
+            return Object.assign({}, LayerListingToJSON(value), { 'type': 'layer' });
         default:
             return value;
     }

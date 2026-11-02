@@ -16,14 +16,10 @@
 export interface ProjectVersion {
     /**
      *
-     * @type {string}
-     * @memberof ProjectVersion
      */
     id: string;
     /**
      *
-     * @type {Date}
-     * @memberof ProjectVersion
      */
     changed: Date;
 }

@@ -15,7 +15,7 @@
  * @export
  */
 export const Data = {
-    Data: 'data'
+    Data: 'data',
 };
 export function instanceOfData(value) {
     for (const key in Data) {

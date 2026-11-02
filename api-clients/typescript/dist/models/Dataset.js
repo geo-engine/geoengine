@@ -53,10 +53,10 @@ function DatasetFromJSONTyped(json, ignoreDiscriminator) {
         'description': json['description'],
         'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorFromJSON)(json['resultDescriptor']),
         'sourceOperator': json['sourceOperator'],
-        'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
-        'tags': json['tags'] == null ? undefined : json['tags'],
-        'dataPath': json['dataPath'] == null ? undefined : (0, DataPath_1.DataPathFromJSON)(json['dataPath']),
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'provenance': json['provenance'] === undefined ? undefined : json['provenance'] === null ? null : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
+        'tags': json['tags'] === undefined ? undefined : json['tags'] === null ? null : json['tags'],
+        'dataPath': json['dataPath'] === undefined ? undefined : json['dataPath'] === null ? null : (0, DataPath_1.DataPathFromJSON)(json['dataPath']),
     };
 }
 function DatasetToJSON(json) {

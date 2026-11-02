@@ -37,20 +37,14 @@ import type { VectorJoinSources } from './VectorJoinSources';
 export interface VectorJoin {
     /**
      *
-     * @type {VectorJoinTypeEnum}
-     * @memberof VectorJoin
      */
     type: VectorJoinTypeEnum;
     /**
      *
-     * @type {VectorJoinParameters}
-     * @memberof VectorJoin
      */
     params: VectorJoinParameters;
     /**
      *
-     * @type {VectorJoinSources}
-     * @memberof VectorJoin
      */
     sources: VectorJoinSources;
 }

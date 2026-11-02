@@ -24,13 +24,15 @@ const NeighborhoodAggregateParameters_1 = require("./NeighborhoodAggregateParame
  * @export
  */
 exports.NeighborhoodAggregateTypeEnum = {
-    NeighborhoodAggregate: 'NeighborhoodAggregate'
+    NeighborhoodAggregate: 'NeighborhoodAggregate',
 };
 /**
  * Check if a given object implements the NeighborhoodAggregate interface.
  */
 function instanceOfNeighborhoodAggregate(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'NeighborhoodAggregate')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

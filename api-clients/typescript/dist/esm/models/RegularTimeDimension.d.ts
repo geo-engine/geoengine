@@ -17,14 +17,10 @@ import type { TimeStep } from './TimeStep';
 export interface RegularTimeDimension {
     /**
      *
-     * @type {number}
-     * @memberof RegularTimeDimension
      */
     origin: number;
     /**
      *
-     * @type {TimeStep}
-     * @memberof RegularTimeDimension
      */
     step: TimeStep;
 }

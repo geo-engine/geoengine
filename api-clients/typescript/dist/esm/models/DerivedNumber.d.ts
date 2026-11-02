@@ -16,26 +16,18 @@
 export interface DerivedNumber {
     /**
      *
-     * @type {DerivedNumberTypeEnum}
-     * @memberof DerivedNumber
      */
     type: DerivedNumberTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof DerivedNumber
      */
     attribute: string;
     /**
      *
-     * @type {number}
-     * @memberof DerivedNumber
      */
     factor: number;
     /**
      *
-     * @type {number}
-     * @memberof DerivedNumber
      */
     defaultValue: number;
 }

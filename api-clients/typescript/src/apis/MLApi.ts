@@ -11,24 +11,29 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  MlModel,
-  MlModelNameResponse,
-} from '../models/index';
 import {
+    type MlModel,
     MlModelFromJSON,
     MlModelToJSON,
+} from '../models/MlModel';
+import {
+    type MlModelNameResponse,
     MlModelNameResponseFromJSON,
     MlModelNameResponseToJSON,
-} from '../models/index';
+} from '../models/MlModelNameResponse';
 
 export interface AddMlModelRequest {
+    /**
+     * 
+     */
     mlModel: MlModel;
 }
 
 export interface GetMlModelRequest {
+    /**
+     * Ml Model Name
+     */
     modelName: string;
 }
 
@@ -117,7 +122,7 @@ export class MLApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/ml/models/{model_name}`;
-        urlPath = urlPath.replace(`{${"model_name"}}`, encodeURIComponent(String(requestParameters['modelName'])));
+        urlPath = urlPath.replace('{model_name}', encodeURIComponent(String(requestParameters['modelName'])));
 
         return {
             path: urlPath,

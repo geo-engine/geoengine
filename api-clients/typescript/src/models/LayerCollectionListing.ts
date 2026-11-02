@@ -28,32 +28,22 @@ import {
 export interface LayerCollectionListing {
     /**
      * 
-     * @type {LayerCollectionListingTypeEnum}
-     * @memberof LayerCollectionListing
      */
     type: LayerCollectionListingTypeEnum;
     /**
      * 
-     * @type {ProviderLayerCollectionId}
-     * @memberof LayerCollectionListing
      */
     id: ProviderLayerCollectionId;
     /**
      * 
-     * @type {string}
-     * @memberof LayerCollectionListing
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof LayerCollectionListing
      */
     description: string;
     /**
      * 
-     * @type {Array<Array<string>>}
-     * @memberof LayerCollectionListing
      */
     properties?: Array<Array<string>>;
 }
@@ -63,7 +53,7 @@ export interface LayerCollectionListing {
  * @export
  */
 export const LayerCollectionListingTypeEnum = {
-    Collection: 'collection'
+    Collection: 'collection',
 } as const;
 export type LayerCollectionListingTypeEnum = typeof LayerCollectionListingTypeEnum[keyof typeof LayerCollectionListingTypeEnum];
 
@@ -73,6 +63,8 @@ export type LayerCollectionListingTypeEnum = typeof LayerCollectionListingTypeEn
  */
 export function instanceOfLayerCollectionListing(value: object): value is LayerCollectionListing {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'collection') return false;
+    
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;

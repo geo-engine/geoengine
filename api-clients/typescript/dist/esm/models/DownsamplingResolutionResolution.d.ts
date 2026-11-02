@@ -16,20 +16,14 @@
 export interface DownsamplingResolutionResolution {
     /**
      *
-     * @type {DownsamplingResolutionResolutionTypeEnum}
-     * @memberof DownsamplingResolutionResolution
      */
     type: DownsamplingResolutionResolutionTypeEnum;
     /**
      * Explicit output resolution (`x`, `y`) in target coordinates.
-     * @type {number}
-     * @memberof DownsamplingResolutionResolution
      */
     x: number;
     /**
      *
-     * @type {number}
-     * @memberof DownsamplingResolutionResolution
      */
     y: number;
 }

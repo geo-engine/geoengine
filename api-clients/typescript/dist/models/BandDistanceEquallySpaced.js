@@ -22,13 +22,15 @@ exports.BandDistanceEquallySpacedToJSONTyped = BandDistanceEquallySpacedToJSONTy
  * @export
  */
 exports.BandDistanceEquallySpacedTypeEnum = {
-    EquallySpaced: 'equallySpaced'
+    EquallySpaced: 'equallySpaced',
 };
 /**
  * Check if a given object implements the BandDistanceEquallySpaced interface.
  */
 function instanceOfBandDistanceEquallySpaced(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'equallySpaced')
         return false;
     if (!('distance' in value) || value['distance'] === undefined)
         return false;

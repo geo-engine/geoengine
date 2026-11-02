@@ -15,7 +15,7 @@
  * @export
  */
 export const WcsService = {
-    Wcs: 'WCS'
+    Wcs: 'WCS',
 };
 export function instanceOfWcsService(value) {
     for (const key in WcsService) {

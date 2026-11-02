@@ -23,65 +23,45 @@ import type { TilesCrs } from './TilesCrs';
 export interface TileMatrixSet {
     /**
      * Tile matrix set identifier
-     * @type {TileMatrixSetId}
-     * @memberof TileMatrixSet
      */
     id: TileMatrixSetId;
     /**
      * Title of a tile matrix set, normally used for display to a human
-     * @type {string}
-     * @memberof TileMatrixSet
      */
     title?: string;
     /**
      * Brief narrative description of a tile matrix set, normally available
      * for display to a human
-     * @type {string}
-     * @memberof TileMatrixSet
      */
     description?: string;
     /**
      * Unordered list of one or more commonly used or formalized word(s) or
      * phrase(s) used to describe this resource entity
-     * @type {Array<string>}
-     * @memberof TileMatrixSet
      */
     keywords?: Array<string>;
     /**
      * Reference to an official source for this tile matrix set
-     * @type {string}
-     * @memberof TileMatrixSet
      */
     uri?: string;
     /**
      * Coordinate Reference System (CRS)
-     * @type {TilesCrs}
-     * @memberof TileMatrixSet
      */
     crs: TilesCrs;
     /**
      * Ordered list of names of the dimensions defined in the CRS
-     * @type {Array<string>}
-     * @memberof TileMatrixSet
      */
     orderedAxes?: Array<string>;
     /**
      * Reference to a well-known scale set
-     * @type {string}
-     * @memberof TileMatrixSet
      */
     wellKnownScaleSet?: string;
     /**
      * Minimum bounding rectangle surrounding the tile matrix set, in the
      * supported CRS
-     * @type {BoundingBox2D}
-     * @memberof TileMatrixSet
      */
     boundingBox?: BoundingBox2D;
     /**
      * Describes scale levels and its tile matrices
-     * @type {Array<TileMatrix>}
-     * @memberof TileMatrixSet
      */
     tileMatrices: Array<TileMatrix>;
 }

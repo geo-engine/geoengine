@@ -18,44 +18,30 @@ import type { Symbology } from './Symbology';
 export interface AddDataset {
     /**
      *
-     * @type {string}
-     * @memberof AddDataset
      */
     name?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof AddDataset
      */
     displayName: string;
     /**
      *
-     * @type {string}
-     * @memberof AddDataset
      */
     description: string;
     /**
      *
-     * @type {string}
-     * @memberof AddDataset
      */
     sourceOperator: string;
     /**
      *
-     * @type {Symbology}
-     * @memberof AddDataset
      */
     symbology?: Symbology | null;
     /**
      *
-     * @type {Array<Provenance>}
-     * @memberof AddDataset
      */
     provenance?: Array<Provenance> | null;
     /**
      *
-     * @type {Array<string>}
-     * @memberof AddDataset
      */
     tags?: Array<string> | null;
 }

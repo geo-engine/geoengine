@@ -15,7 +15,7 @@
  * @export
  */
 export const RasterStreamWebsocketResultType = {
-    Arrow: 'arrow'
+    Arrow: 'arrow',
 };
 export function instanceOfRasterStreamWebsocketResultType(value) {
     for (const key in RasterStreamWebsocketResultType) {

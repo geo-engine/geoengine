@@ -1,0 +1,11 @@
+--- rust/src/models/tile_set_data_type.rs
++++ rust/src/models/tile_set_data_type.rs
+@@ -17,8 +17,6 @@
+ #[serde(untagged)]
+ pub enum TileSetDataType {
+     String(String),
+-    String(String),
+-    String(String),
+     GeospatialDataDataTypeOneOf(Box<models::GeospatialDataDataTypeOneOf>),
+ }
+ 

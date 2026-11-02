@@ -15,13 +15,15 @@ import { RasterColorizerFromJSON, RasterColorizerToJSON, } from './RasterColoriz
  * @export
  */
 export const RasterSymbologyTypeEnum = {
-    Raster: 'raster'
+    Raster: 'raster',
 };
 /**
  * Check if a given object implements the RasterSymbology interface.
  */
 export function instanceOfRasterSymbology(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'raster')
         return false;
     if (!('opacity' in value) || value['opacity'] === undefined)
         return false;

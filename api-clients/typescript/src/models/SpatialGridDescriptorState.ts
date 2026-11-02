@@ -18,7 +18,7 @@
  */
 export const SpatialGridDescriptorState = {
     Source: 'source',
-    Derived: 'derived'
+    Derived: 'derived',
 } as const;
 export type SpatialGridDescriptorState = typeof SpatialGridDescriptorState[keyof typeof SpatialGridDescriptorState];
 

@@ -15,7 +15,7 @@
  * @export
  */
 export const WfsVersion = {
-    _200: '2.0.0'
+    _200: '2.0.0',
 };
 export function instanceOfWfsVersion(value) {
     for (const key in WfsVersion) {

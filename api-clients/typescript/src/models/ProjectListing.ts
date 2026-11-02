@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 
-import { mapValues } from '../runtime';
+import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 /**
  * 
  * @export
@@ -20,38 +20,26 @@ import { mapValues } from '../runtime';
 export interface ProjectListing {
     /**
      * 
-     * @type {string}
-     * @memberof ProjectListing
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof ProjectListing
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof ProjectListing
      */
     description: string;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof ProjectListing
      */
     layerNames: Array<string>;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof ProjectListing
      */
     plotNames: Array<string>;
     /**
      * 
-     * @type {Date}
-     * @memberof ProjectListing
      */
     changed: Date;
 }
@@ -84,7 +72,7 @@ export function ProjectListingFromJSONTyped(json: any, ignoreDiscriminator: bool
         'description': json['description'],
         'layerNames': json['layerNames'],
         'plotNames': json['plotNames'],
-        'changed': (new Date(json['changed'])),
+        'changed': (json['changed'] == null ? json['changed'] : parseDateTime(json['changed'])),
     };
 }
 
@@ -104,7 +92,7 @@ export function ProjectListingToJSONTyped(value?: ProjectListing | null, ignoreD
         'description': value['description'],
         'layerNames': value['layerNames'],
         'plotNames': value['plotNames'],
-        'changed': value['changed'].toISOString(),
+        'changed': value['changed'] == null ? value['changed'] : serializeDateTime(value['changed']),
     };
 }
 

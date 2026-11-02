@@ -11,7 +11,7 @@
  * Do not edit the class manually.
  */
 
-import { mapValues } from '../runtime';
+import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 /**
  * 
  * @export
@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface DataUsageSummary {
     /**
      * 
-     * @type {Date}
-     * @memberof DataUsageSummary
      */
     timestamp: Date;
     /**
      * 
-     * @type {string}
-     * @memberof DataUsageSummary
      */
     data: string;
     /**
      * 
-     * @type {number}
-     * @memberof DataUsageSummary
      */
     count: number;
 }
@@ -58,7 +52,7 @@ export function DataUsageSummaryFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'timestamp': (new Date(json['timestamp'])),
+        'timestamp': (json['timestamp'] == null ? json['timestamp'] : parseDateTime(json['timestamp'])),
         'data': json['data'],
         'count': json['count'],
     };
@@ -75,7 +69,7 @@ export function DataUsageSummaryToJSONTyped(value?: DataUsageSummary | null, ign
 
     return {
         
-        'timestamp': value['timestamp'].toISOString(),
+        'timestamp': value['timestamp'] == null ? value['timestamp'] : serializeDateTime(value['timestamp']),
         'data': value['data'],
         'count': value['count'],
     };

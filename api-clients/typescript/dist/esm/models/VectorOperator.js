@@ -67,29 +67,29 @@ export function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'ColumnRangeFilter':
-            return Object.assign({}, ColumnRangeFilterToJSON(value), { type: 'ColumnRangeFilter' });
+            return Object.assign({}, ColumnRangeFilterToJSON(value), { 'type': 'ColumnRangeFilter' });
         case 'LineSimplification':
-            return Object.assign({}, LineSimplificationToJSON(value), { type: 'LineSimplification' });
+            return Object.assign({}, LineSimplificationToJSON(value), { 'type': 'LineSimplification' });
         case 'MockPointSource':
-            return Object.assign({}, MockPointSourceToJSON(value), { type: 'MockPointSource' });
+            return Object.assign({}, MockPointSourceToJSON(value), { 'type': 'MockPointSource' });
         case 'OgrSource':
-            return Object.assign({}, OgrSourceToJSON(value), { type: 'OgrSource' });
+            return Object.assign({}, OgrSourceToJSON(value), { 'type': 'OgrSource' });
         case 'PointInPolygonFilter':
-            return Object.assign({}, PointInPolygonFilterToJSON(value), { type: 'PointInPolygonFilter' });
+            return Object.assign({}, PointInPolygonFilterToJSON(value), { 'type': 'PointInPolygonFilter' });
         case 'RasterVectorJoin':
-            return Object.assign({}, RasterVectorJoinToJSON(value), { type: 'RasterVectorJoin' });
+            return Object.assign({}, RasterVectorJoinToJSON(value), { 'type': 'RasterVectorJoin' });
         case 'Reprojection':
-            return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' });
+            return Object.assign({}, ReprojectionToJSON(value), { 'type': 'Reprojection' });
         case 'TimeProjection':
-            return Object.assign({}, TimeProjectionToJSON(value), { type: 'TimeProjection' });
+            return Object.assign({}, TimeProjectionToJSON(value), { 'type': 'TimeProjection' });
         case 'TimeShift':
-            return Object.assign({}, TimeShiftToJSON(value), { type: 'TimeShift' });
+            return Object.assign({}, TimeShiftToJSON(value), { 'type': 'TimeShift' });
         case 'VectorExpression':
-            return Object.assign({}, VectorExpressionToJSON(value), { type: 'VectorExpression' });
+            return Object.assign({}, VectorExpressionToJSON(value), { 'type': 'VectorExpression' });
         case 'VectorJoin':
-            return Object.assign({}, VectorJoinToJSON(value), { type: 'VectorJoin' });
+            return Object.assign({}, VectorJoinToJSON(value), { 'type': 'VectorJoin' });
         case 'VisualPointClustering':
-            return Object.assign({}, VisualPointClusteringToJSON(value), { type: 'VisualPointClustering' });
+            return Object.assign({}, VisualPointClusteringToJSON(value), { 'type': 'VisualPointClustering' });
         default:
             return value;
     }

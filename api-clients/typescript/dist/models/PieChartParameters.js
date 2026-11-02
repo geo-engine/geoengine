@@ -22,13 +22,15 @@ exports.PieChartParametersToJSONTyped = PieChartParametersToJSONTyped;
  * @export
  */
 exports.PieChartParametersTypeEnum = {
-    Count: 'count'
+    Count: 'count',
 };
 /**
  * Check if a given object implements the PieChartParameters interface.
  */
 function instanceOfPieChartParameters(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'count')
         return false;
     if (!('columnName' in value) || value['columnName'] === undefined)
         return false;

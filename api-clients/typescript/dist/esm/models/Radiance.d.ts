@@ -17,20 +17,14 @@ import type { SingleRasterSource } from './SingleRasterSource';
 export interface Radiance {
     /**
      *
-     * @type {RadianceTypeEnum}
-     * @memberof Radiance
      */
     type: RadianceTypeEnum;
     /**
      *
-     * @type {object}
-     * @memberof Radiance
      */
     params: object;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof Radiance
      */
     sources: SingleRasterSource;
 }

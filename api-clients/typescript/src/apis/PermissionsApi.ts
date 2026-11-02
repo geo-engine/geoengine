@@ -11,31 +11,48 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  PermissionListing,
-  PermissionRequest,
-} from '../models/index';
 import {
+    type PermissionListing,
     PermissionListingFromJSON,
     PermissionListingToJSON,
+} from '../models/PermissionListing';
+import {
+    type PermissionRequest,
     PermissionRequestFromJSON,
     PermissionRequestToJSON,
-} from '../models/index';
+} from '../models/PermissionRequest';
 
 export interface AddPermissionHandlerRequest {
+    /**
+     * 
+     */
     permissionRequest: PermissionRequest;
 }
 
 export interface GetResourcePermissionsHandlerRequest {
+    /**
+     * Resource Type
+     */
     resourceType: string;
+    /**
+     * Resource Id
+     */
     resourceId: string;
+    /**
+     * 
+     */
     limit: number;
+    /**
+     * 
+     */
     offset: number;
 }
 
 export interface RemovePermissionHandlerRequest {
+    /**
+     * 
+     */
     permissionRequest: PermissionRequest;
 }
 
@@ -152,8 +169,8 @@ export class PermissionsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/permissions/resources/{resource_type}/{resource_id}`;
-        urlPath = urlPath.replace(`{${"resource_type"}}`, encodeURIComponent(String(requestParameters['resourceType'])));
-        urlPath = urlPath.replace(`{${"resource_id"}}`, encodeURIComponent(String(requestParameters['resourceId'])));
+        urlPath = urlPath.replace('{resource_type}', encodeURIComponent(String(requestParameters['resourceType'])));
+        urlPath = urlPath.replace('{resource_id}', encodeURIComponent(String(requestParameters['resourceId'])));
 
         return {
             path: urlPath,

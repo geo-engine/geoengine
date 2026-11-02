@@ -28,13 +28,15 @@ const GdalDatasetParameters_1 = require("./GdalDatasetParameters");
  * @export
  */
 exports.GdalMetaDataRegularTypeEnum = {
-    GdalMetaDataRegular: 'GdalMetaDataRegular'
+    GdalMetaDataRegular: 'GdalMetaDataRegular',
 };
 /**
  * Check if a given object implements the GdalMetaDataRegular interface.
  */
 function instanceOfGdalMetaDataRegular(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalMetaDataRegular')
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -62,7 +64,7 @@ function GdalMetaDataRegularFromJSONTyped(json, ignoreDiscriminator) {
         'timePlaceholders': ((0, runtime_1.mapValues)(json['timePlaceholders'], GdalSourceTimePlaceholder_1.GdalSourceTimePlaceholderFromJSON)),
         'dataTime': (0, TimeInterval_1.TimeIntervalFromJSON)(json['dataTime']),
         'step': (0, TimeStep_1.TimeStepFromJSON)(json['step']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 function GdalMetaDataRegularToJSON(json) {

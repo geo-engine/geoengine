@@ -33,7 +33,7 @@ export function DownsamplingParametersFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'samplingMethod': DownsamplingMethodFromJSON(json['samplingMethod']),
         'outputResolution': DownsamplingResolutionFromJSON(json['outputResolution']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
+        'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
     };
 }
 export function DownsamplingParametersToJSON(json) {

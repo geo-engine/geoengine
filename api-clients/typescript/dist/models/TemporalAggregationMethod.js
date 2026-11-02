@@ -25,7 +25,7 @@ exports.TemporalAggregationMethodToJSONTyped = TemporalAggregationMethodToJSONTy
 exports.TemporalAggregationMethod = {
     None: 'none',
     First: 'first',
-    Mean: 'mean'
+    Mean: 'mean',
 };
 function instanceOfTemporalAggregationMethod(value) {
     for (const key in exports.TemporalAggregationMethod) {

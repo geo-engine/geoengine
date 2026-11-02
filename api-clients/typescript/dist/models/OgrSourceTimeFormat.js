@@ -46,11 +46,11 @@ function OgrSourceTimeFormatToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['format']) {
         case 'auto':
-            return Object.assign({}, (0, OgrSourceTimeFormatAuto_1.OgrSourceTimeFormatAutoToJSON)(value), { format: 'auto' });
+            return Object.assign({}, (0, OgrSourceTimeFormatAuto_1.OgrSourceTimeFormatAutoToJSON)(value), { 'format': 'auto' });
         case 'custom':
-            return Object.assign({}, (0, OgrSourceTimeFormatCustom_1.OgrSourceTimeFormatCustomToJSON)(value), { format: 'custom' });
+            return Object.assign({}, (0, OgrSourceTimeFormatCustom_1.OgrSourceTimeFormatCustomToJSON)(value), { 'format': 'custom' });
         case 'unixTimeStamp':
-            return Object.assign({}, (0, OgrSourceTimeFormatUnixTimeStamp_1.OgrSourceTimeFormatUnixTimeStampToJSON)(value), { format: 'unixTimeStamp' });
+            return Object.assign({}, (0, OgrSourceTimeFormatUnixTimeStamp_1.OgrSourceTimeFormatUnixTimeStampToJSON)(value), { 'format': 'unixTimeStamp' });
         default:
             return value;
     }

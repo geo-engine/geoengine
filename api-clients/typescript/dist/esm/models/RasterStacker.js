@@ -16,13 +16,15 @@ import { RasterStackerParametersFromJSON, RasterStackerParametersToJSON, } from 
  * @export
  */
 export const RasterStackerTypeEnum = {
-    RasterStacker: 'RasterStacker'
+    RasterStacker: 'RasterStacker',
 };
 /**
  * Check if a given object implements the RasterStacker interface.
  */
 export function instanceOfRasterStacker(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'RasterStacker')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

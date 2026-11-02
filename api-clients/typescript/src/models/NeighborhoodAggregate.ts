@@ -57,20 +57,14 @@ import {
 export interface NeighborhoodAggregate {
     /**
      * 
-     * @type {NeighborhoodAggregateTypeEnum}
-     * @memberof NeighborhoodAggregate
      */
     type: NeighborhoodAggregateTypeEnum;
     /**
      * 
-     * @type {NeighborhoodAggregateParameters}
-     * @memberof NeighborhoodAggregate
      */
     params: NeighborhoodAggregateParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof NeighborhoodAggregate
      */
     sources: SingleRasterSource;
 }
@@ -80,7 +74,7 @@ export interface NeighborhoodAggregate {
  * @export
  */
 export const NeighborhoodAggregateTypeEnum = {
-    NeighborhoodAggregate: 'NeighborhoodAggregate'
+    NeighborhoodAggregate: 'NeighborhoodAggregate',
 } as const;
 export type NeighborhoodAggregateTypeEnum = typeof NeighborhoodAggregateTypeEnum[keyof typeof NeighborhoodAggregateTypeEnum];
 
@@ -90,6 +84,8 @@ export type NeighborhoodAggregateTypeEnum = typeof NeighborhoodAggregateTypeEnum
  */
 export function instanceOfNeighborhoodAggregate(value: object): value is NeighborhoodAggregate {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'NeighborhoodAggregate') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

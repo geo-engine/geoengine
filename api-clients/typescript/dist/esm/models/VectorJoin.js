@@ -16,13 +16,15 @@ import { VectorJoinSourcesFromJSON, VectorJoinSourcesToJSON, } from './VectorJoi
  * @export
  */
 export const VectorJoinTypeEnum = {
-    VectorJoin: 'VectorJoin'
+    VectorJoin: 'VectorJoin',
 };
 /**
  * Check if a given object implements the VectorJoin interface.
  */
 export function instanceOfVectorJoin(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'VectorJoin')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

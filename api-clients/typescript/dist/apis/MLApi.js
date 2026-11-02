@@ -23,7 +23,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MLApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const MlModel_1 = require("../models/MlModel");
+const MlModelNameResponse_1 = require("../models/MlModelNameResponse");
 /**
  *
  */
@@ -52,7 +53,7 @@ class MLApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.MlModelToJSON)(requestParameters['mlModel']),
+                body: (0, MlModel_1.MlModelToJSON)(requestParameters['mlModel']),
             };
         });
     }
@@ -63,7 +64,7 @@ class MLApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.addMlModelRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.MlModelNameResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, MlModelNameResponse_1.MlModelNameResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -93,7 +94,7 @@ class MLApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/ml/models/{model_name}`;
-            urlPath = urlPath.replace(`{${"model_name"}}`, encodeURIComponent(String(requestParameters['modelName'])));
+            urlPath = urlPath.replace('{model_name}', encodeURIComponent(String(requestParameters['modelName'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -109,7 +110,7 @@ class MLApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getMlModelRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.MlModelFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, MlModel_1.MlModelFromJSON)(jsonValue));
         });
     }
     /**
@@ -151,7 +152,7 @@ class MLApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.listMlModelsRequestOpts();
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.MlModelFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(MlModel_1.MlModelFromJSON));
         });
     }
     /**

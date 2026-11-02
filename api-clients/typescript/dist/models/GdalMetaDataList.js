@@ -24,13 +24,15 @@ const GdalLoadingInfoTemporalSlice_1 = require("./GdalLoadingInfoTemporalSlice")
  * @export
  */
 exports.GdalMetaDataListTypeEnum = {
-    GdalMetaDataList: 'GdalMetaDataList'
+    GdalMetaDataList: 'GdalMetaDataList',
 };
 /**
  * Check if a given object implements the GdalMetaDataList interface.
  */
 function instanceOfGdalMetaDataList(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalMetaDataList')
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;

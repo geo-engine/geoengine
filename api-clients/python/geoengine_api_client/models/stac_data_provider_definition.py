@@ -28,6 +28,7 @@ from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Co
 from geoengine_api_client.models.time_dimension import TimeDimension
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class StacDataProviderDefinition(BaseModel):
     """
@@ -58,7 +59,8 @@ class StacDataProviderDefinition(BaseModel):
         return value
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -70,8 +72,7 @@ class StacDataProviderDefinition(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -109,8 +110,7 @@ class StacDataProviderDefinition(BaseModel):
         _items = []
         if self.datasets:
             for _item_datasets in self.datasets:
-                if _item_datasets:
-                    _items.append(_item_datasets.to_dict())
+                _items.append(_item_datasets.to_dict() if _item_datasets is not None else None)
             _dict['datasets'] = _items
         # override the default output from pydantic by calling `to_dict()` of stac_grid
         if self.stac_grid:

@@ -16,20 +16,14 @@
 export interface MlTensorShape3D {
     /**
      *
-     * @type {number}
-     * @memberof MlTensorShape3D
      */
     y: number;
     /**
      *
-     * @type {number}
-     * @memberof MlTensorShape3D
      */
     x: number;
     /**
      *
-     * @type {number}
-     * @memberof MlTensorShape3D
      */
     bands: number;
 }

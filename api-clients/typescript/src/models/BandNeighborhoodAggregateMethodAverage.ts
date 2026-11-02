@@ -20,15 +20,11 @@ import { mapValues } from '../runtime';
 export interface BandNeighborhoodAggregateMethodAverage {
     /**
      * 
-     * @type {BandNeighborhoodAggregateMethodAverageTypeEnum}
-     * @memberof BandNeighborhoodAggregateMethodAverage
      */
     type: BandNeighborhoodAggregateMethodAverageTypeEnum;
     /**
      * Number of neighboring bands to include in the moving average window.
      * The window size must be odd; at the raster borders the window is reduced.
-     * @type {number}
-     * @memberof BandNeighborhoodAggregateMethodAverage
      */
     windowSize: number;
 }
@@ -38,7 +34,7 @@ export interface BandNeighborhoodAggregateMethodAverage {
  * @export
  */
 export const BandNeighborhoodAggregateMethodAverageTypeEnum = {
-    Average: 'average'
+    Average: 'average',
 } as const;
 export type BandNeighborhoodAggregateMethodAverageTypeEnum = typeof BandNeighborhoodAggregateMethodAverageTypeEnum[keyof typeof BandNeighborhoodAggregateMethodAverageTypeEnum];
 
@@ -48,6 +44,8 @@ export type BandNeighborhoodAggregateMethodAverageTypeEnum = typeof BandNeighbor
  */
 export function instanceOfBandNeighborhoodAggregateMethodAverage(value: object): value is BandNeighborhoodAggregateMethodAverage {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'average') return false;
+    
     if (!('windowSize' in value) || value['windowSize'] === undefined) return false;
     return true;
 }

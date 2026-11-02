@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface StaticNumber {
     /**
      * 
-     * @type {StaticNumberTypeEnum}
-     * @memberof StaticNumber
      */
     type: StaticNumberTypeEnum;
     /**
      * 
-     * @type {number}
-     * @memberof StaticNumber
      */
     value: number;
 }
@@ -37,7 +33,7 @@ export interface StaticNumber {
  * @export
  */
 export const StaticNumberTypeEnum = {
-    Static: 'static'
+    Static: 'static',
 } as const;
 export type StaticNumberTypeEnum = typeof StaticNumberTypeEnum[keyof typeof StaticNumberTypeEnum];
 
@@ -47,6 +43,8 @@ export type StaticNumberTypeEnum = typeof StaticNumberTypeEnum[keyof typeof Stat
  */
 export function instanceOfStaticNumber(value: object): value is StaticNumber {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'static') return false;
+    
     if (!('value' in value) || value['value'] === undefined) return false;
     return true;
 }

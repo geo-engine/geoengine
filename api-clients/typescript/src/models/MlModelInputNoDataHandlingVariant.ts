@@ -18,7 +18,7 @@
  */
 export const MlModelInputNoDataHandlingVariant = {
     EncodedNoData: 'encodedNoData',
-    SkipIfNoData: 'skipIfNoData'
+    SkipIfNoData: 'skipIfNoData',
 } as const;
 export type MlModelInputNoDataHandlingVariant = typeof MlModelInputNoDataHandlingVariant[keyof typeof MlModelInputNoDataHandlingVariant];
 

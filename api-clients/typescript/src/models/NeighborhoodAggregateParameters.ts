@@ -36,14 +36,10 @@ export interface NeighborhoodAggregateParameters {
     /**
      * Neighborhood definition applied around each pixel.
      * This can be a rectangular neighborhood or a custom weights matrix.
-     * @type {NeighborhoodKernel}
-     * @memberof NeighborhoodAggregateParameters
      */
     neighborhood: NeighborhoodKernel;
     /**
      * Aggregate function applied across the neighborhood values.
-     * @type {NeighborhoodAggregateMethod}
-     * @memberof NeighborhoodAggregateParameters
      */
     aggregateFunction: NeighborhoodAggregateMethod;
 }

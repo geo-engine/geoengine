@@ -25,14 +25,10 @@ import { mapValues } from '../runtime';
 export interface AttributeSelectionNames {
     /**
      * 
-     * @type {AttributeSelectionNamesTypeEnum}
-     * @memberof AttributeSelectionNames
      */
     type: AttributeSelectionNamesTypeEnum;
     /**
      * 
-     * @type {Set<string>}
-     * @memberof AttributeSelectionNames
      */
     values: Array<string>;
 }
@@ -42,7 +38,7 @@ export interface AttributeSelectionNames {
  * @export
  */
 export const AttributeSelectionNamesTypeEnum = {
-    Names: 'names'
+    Names: 'names',
 } as const;
 export type AttributeSelectionNamesTypeEnum = typeof AttributeSelectionNamesTypeEnum[keyof typeof AttributeSelectionNamesTypeEnum];
 
@@ -52,6 +48,8 @@ export type AttributeSelectionNamesTypeEnum = typeof AttributeSelectionNamesType
  */
 export function instanceOfAttributeSelectionNames(value: object): value is AttributeSelectionNames {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'names') return false;
+    
     if (!('values' in value) || value['values'] === undefined) return false;
     return true;
 }

@@ -28,20 +28,14 @@ import {
 export interface AttributeFilter {
     /**
      * 
-     * @type {string}
-     * @memberof AttributeFilter
      */
     attribute: string;
     /**
      * 
-     * @type {Array<StringOrNumberRange>}
-     * @memberof AttributeFilter
      */
     ranges: Array<StringOrNumberRange>;
     /**
      * 
-     * @type {boolean}
-     * @memberof AttributeFilter
      */
     keepNulls: boolean;
 }

@@ -20,7 +20,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { AddRoleToJSON, ComputationQuotaFromJSON, DataUsageFromJSON, DataUsageSummaryFromJSON, IdResponseFromJSON, OperatorQuotaFromJSON, QuotaFromJSON, RoleDescriptionFromJSON, UpdateQuotaToJSON, } from '../models/index';
+import { AddRoleToJSON, } from '../models/AddRole';
+import { ComputationQuotaFromJSON, } from '../models/ComputationQuota';
+import { DataUsageFromJSON, } from '../models/DataUsage';
+import { DataUsageSummaryFromJSON, } from '../models/DataUsageSummary';
+import { IdResponseFromJSON, } from '../models/IdResponse';
+import { OperatorQuotaFromJSON, } from '../models/OperatorQuota';
+import { QuotaFromJSON, } from '../models/Quota';
+import { RoleDescriptionFromJSON, } from '../models/RoleDescription';
+import { UpdateQuotaToJSON, } from '../models/UpdateQuota';
 /**
  *
  */
@@ -93,8 +101,8 @@ export class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/users/{user}/roles/{role}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
-            urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -139,7 +147,7 @@ export class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/quota/computations/{computation}`;
-            urlPath = urlPath.replace(`{${"computation"}}`, encodeURIComponent(String(requestParameters['computation'])));
+            urlPath = urlPath.replace('{computation}', encodeURIComponent(String(requestParameters['computation'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -356,7 +364,7 @@ export class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/roles/byName/{name}`;
-            urlPath = urlPath.replace(`{${"name"}}`, encodeURIComponent(String(requestParameters['name'])));
+            urlPath = urlPath.replace('{name}', encodeURIComponent(String(requestParameters['name'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -444,7 +452,7 @@ export class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/quotas/{user}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -532,7 +540,7 @@ export class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/roles/{role}`;
-            urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+            urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -580,8 +588,8 @@ export class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/users/{user}/roles/{role}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
-            urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -630,7 +638,7 @@ export class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/quotas/{user}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
             return {
                 path: urlPath,
                 method: 'POST',

@@ -24,7 +24,7 @@ exports.SpatialGridDescriptorStateToJSONTyped = SpatialGridDescriptorStateToJSON
  */
 exports.SpatialGridDescriptorState = {
     Source: 'source',
-    Derived: 'derived'
+    Derived: 'derived',
 };
 function instanceOfSpatialGridDescriptorState(value) {
     for (const key in exports.SpatialGridDescriptorState) {

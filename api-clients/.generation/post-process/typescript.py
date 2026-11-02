@@ -17,7 +17,6 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
 
     yield Path("models/RasterOperator.ts"), raster_operator_ts
     yield Path("models/VectorOperator.ts"), vector_operator_ts
-    yield Path("models/TaskStatusWithId.ts"), task_status_with_id_ts
     yield Path("models/LayerUpdate.ts"), layer_update_ts
     yield Path("models/PlotUpdate.ts"), plot_update_ts
     yield Path("models/TypedOperator.ts"), typed_operator_ts
@@ -106,24 +105,6 @@ def runtime_ts(file_contents: list[str]) -> Generator[str, None, None]:
                     'User-Agent': 'geoengine/api-client/typescript/{version()}'
                 }}
             }});
-            """)
-
-        yield line
-
-
-# Fix: interface cannot inherit union type
-def task_status_with_id_ts(file_contents: list[str]) -> Generator[str, None, None]:
-    """Modify the TaskStatusWithId.ts file."""
-    for line in file_contents:
-        dedented_line = dedent(line)
-
-        if dedented_line.startswith(
-            "export interface TaskStatusWithId extends TaskStatus"
-        ):
-            line = dedent("""\
-            export type TaskStatusWithId = { taskId: string } & TaskStatus;
-                          
-            export interface _TaskStatusWithId /* extends TaskStatus */ {
             """)
 
         yield line

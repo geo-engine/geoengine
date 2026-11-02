@@ -29,8 +29,8 @@ export function GdalLoadingInfoTemporalSliceFromJSONTyped(json, ignoreDiscrimina
     }
     return {
         'time': TimeIntervalFromJSON(json['time']),
-        'params': json['params'] == null ? undefined : GdalDatasetParametersFromJSON(json['params']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'params': json['params'] === undefined ? undefined : json['params'] === null ? null : GdalDatasetParametersFromJSON(json['params']),
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function GdalLoadingInfoTemporalSliceToJSON(json) {

@@ -17,7 +17,7 @@
 export const WcsRequest = {
     GetCapabilities: 'GetCapabilities',
     DescribeCoverage: 'DescribeCoverage',
-    GetCoverage: 'GetCoverage'
+    GetCoverage: 'GetCoverage',
 };
 export function instanceOfWcsRequest(value) {
     for (const key in WcsRequest) {

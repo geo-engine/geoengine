@@ -20,26 +20,18 @@ import { mapValues } from '../runtime';
 export interface DerivedNumber {
     /**
      * 
-     * @type {DerivedNumberTypeEnum}
-     * @memberof DerivedNumber
      */
     type: DerivedNumberTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof DerivedNumber
      */
     attribute: string;
     /**
      * 
-     * @type {number}
-     * @memberof DerivedNumber
      */
     factor: number;
     /**
      * 
-     * @type {number}
-     * @memberof DerivedNumber
      */
     defaultValue: number;
 }
@@ -49,7 +41,7 @@ export interface DerivedNumber {
  * @export
  */
 export const DerivedNumberTypeEnum = {
-    Derived: 'derived'
+    Derived: 'derived',
 } as const;
 export type DerivedNumberTypeEnum = typeof DerivedNumberTypeEnum[keyof typeof DerivedNumberTypeEnum];
 
@@ -59,6 +51,8 @@ export type DerivedNumberTypeEnum = typeof DerivedNumberTypeEnum[keyof typeof De
  */
 export function instanceOfDerivedNumber(value: object): value is DerivedNumber {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'derived') return false;
+    
     if (!('attribute' in value) || value['attribute'] === undefined) return false;
     if (!('factor' in value) || value['factor'] === undefined) return false;
     if (!('defaultValue' in value) || value['defaultValue'] === undefined) return false;

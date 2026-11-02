@@ -37,14 +37,10 @@ import {
 export interface Extent {
     /**
      * 
-     * @type {SpatialExtent}
-     * @memberof Extent
      */
     spatial?: SpatialExtent | null;
     /**
      * 
-     * @type {TemporalExtent}
-     * @memberof Extent
      */
     temporal?: TemporalExtent | null;
 }
@@ -66,8 +62,8 @@ export function ExtentFromJSONTyped(json: any, ignoreDiscriminator: boolean): Ex
     }
     return {
         
-        'spatial': json['spatial'] == null ? undefined : SpatialExtentFromJSON(json['spatial']),
-        'temporal': json['temporal'] == null ? undefined : TemporalExtentFromJSON(json['temporal']),
+        'spatial': json['spatial'] === undefined ? undefined : json['spatial'] === null ? null : SpatialExtentFromJSON(json['spatial']),
+        'temporal': json['temporal'] === undefined ? undefined : json['temporal'] === null ? null : TemporalExtentFromJSON(json['temporal']),
     };
 }
 

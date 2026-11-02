@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface SlopeOffsetSelectionMetadataKey {
     /**
      * 
-     * @type {SlopeOffsetSelectionMetadataKeyTypeEnum}
-     * @memberof SlopeOffsetSelectionMetadataKey
      */
     type: SlopeOffsetSelectionMetadataKeyTypeEnum;
     /**
      * Optional metadata domain to look up the raster property.
-     * @type {string}
-     * @memberof SlopeOffsetSelectionMetadataKey
      */
     domain?: string | null;
     /**
      * Raster property key that contains the slope or offset value.
-     * @type {string}
-     * @memberof SlopeOffsetSelectionMetadataKey
      */
     key: string;
 }
@@ -43,7 +37,7 @@ export interface SlopeOffsetSelectionMetadataKey {
  * @export
  */
 export const SlopeOffsetSelectionMetadataKeyTypeEnum = {
-    MetadataKey: 'metadataKey'
+    MetadataKey: 'metadataKey',
 } as const;
 export type SlopeOffsetSelectionMetadataKeyTypeEnum = typeof SlopeOffsetSelectionMetadataKeyTypeEnum[keyof typeof SlopeOffsetSelectionMetadataKeyTypeEnum];
 
@@ -53,6 +47,8 @@ export type SlopeOffsetSelectionMetadataKeyTypeEnum = typeof SlopeOffsetSelectio
  */
 export function instanceOfSlopeOffsetSelectionMetadataKey(value: object): value is SlopeOffsetSelectionMetadataKey {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'metadataKey') return false;
+    
     if (!('key' in value) || value['key'] === undefined) return false;
     return true;
 }
@@ -68,7 +64,7 @@ export function SlopeOffsetSelectionMetadataKeyFromJSONTyped(json: any, ignoreDi
     return {
         
         'type': json['type'],
-        'domain': json['domain'] == null ? undefined : json['domain'],
+        'domain': json['domain'] === undefined ? undefined : json['domain'] === null ? null : json['domain'],
         'key': json['key'],
     };
 }

@@ -22,6 +22,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.attribute_filter import AttributeFilter
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class OgrSourceParameters(BaseModel):
     """
@@ -33,7 +34,8 @@ class OgrSourceParameters(BaseModel):
     __properties: ClassVar[List[str]] = ["data", "attributeProjection", "attributeFilters"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -45,8 +47,7 @@ class OgrSourceParameters(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -75,8 +76,7 @@ class OgrSourceParameters(BaseModel):
         _items = []
         if self.attribute_filters:
             for _item_attribute_filters in self.attribute_filters:
-                if _item_attribute_filters:
-                    _items.append(_item_attribute_filters.to_dict())
+                _items.append(_item_attribute_filters.to_dict() if _item_attribute_filters is not None else None)
             _dict['attributeFilters'] = _items
         # set to None if attribute_projection (nullable) is None
         # and model_fields_set contains the field

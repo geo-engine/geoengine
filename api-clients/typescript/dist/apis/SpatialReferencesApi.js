@@ -23,7 +23,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SpatialReferencesApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const SpatialReferenceSpecification_1 = require("../models/SpatialReferenceSpecification");
 /**
  *
  */
@@ -46,7 +46,7 @@ class SpatialReferencesApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/spatialReferenceSpecification/{srsString}`;
-            urlPath = urlPath.replace(`{${"srsString"}}`, encodeURIComponent(String(requestParameters['srsString'])));
+            urlPath = urlPath.replace('{srsString}', encodeURIComponent(String(requestParameters['srsString'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -61,7 +61,7 @@ class SpatialReferencesApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getSpatialReferenceSpecificationHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.SpatialReferenceSpecificationFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, SpatialReferenceSpecification_1.SpatialReferenceSpecificationFromJSON)(jsonValue));
         });
     }
     /**

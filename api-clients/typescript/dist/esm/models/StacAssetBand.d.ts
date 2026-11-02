@@ -16,14 +16,10 @@
 export interface StacAssetBand {
     /**
      *
-     * @type {string}
-     * @memberof StacAssetBand
      */
     assetTitle: string;
     /**
      *
-     * @type {string}
-     * @memberof StacAssetBand
      */
     bandName?: string | null;
 }

@@ -24,7 +24,7 @@ exports.OrderByToJSONTyped = OrderByToJSONTyped;
  */
 exports.OrderBy = {
     NameAsc: 'NameAsc',
-    NameDesc: 'NameDesc'
+    NameDesc: 'NameDesc',
 };
 function instanceOfOrderBy(value) {
     for (const key in exports.OrderBy) {

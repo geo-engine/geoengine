@@ -21,74 +21,50 @@ import type { OgrSourceDatasetTimeType } from './OgrSourceDatasetTimeType';
 export interface OgrSourceDataset {
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceDataset
      */
     fileName: string;
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceDataset
      */
     layerName: string;
     /**
      *
-     * @type {VectorDataType}
-     * @memberof OgrSourceDataset
      */
     dataType?: VectorDataType | null;
     /**
      *
-     * @type {OgrSourceDatasetTimeType}
-     * @memberof OgrSourceDataset
      */
     time?: OgrSourceDatasetTimeType;
     /**
      *
-     * @type {TypedGeometry}
-     * @memberof OgrSourceDataset
      */
     defaultGeometry?: TypedGeometry | null;
     /**
      *
-     * @type {OgrSourceColumnSpec}
-     * @memberof OgrSourceDataset
      */
     columns?: OgrSourceColumnSpec | null;
     /**
      *
-     * @type {boolean}
-     * @memberof OgrSourceDataset
      */
     forceOgrTimeFilter?: boolean;
     /**
      *
-     * @type {boolean}
-     * @memberof OgrSourceDataset
      */
     forceOgrSpatialFilter?: boolean;
     /**
      *
-     * @type {OgrSourceErrorSpec}
-     * @memberof OgrSourceDataset
      */
     onError: OgrSourceErrorSpec;
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceDataset
      */
     sqlQuery?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceDataset
      */
     attributeQuery?: string | null;
     /**
      *
-     * @type {number}
-     * @memberof OgrSourceDataset
      */
     cacheTtl?: number | null;
 }

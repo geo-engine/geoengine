@@ -23,7 +23,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProcessingGraphsApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const IdResponse_1 = require("../models/IdResponse");
+const ProcessingGraph_1 = require("../models/ProcessingGraph");
+const ProvenanceEntry_1 = require("../models/ProvenanceEntry");
+const RasterDatasetFromProcessingGraph_1 = require("../models/RasterDatasetFromProcessingGraph");
+const TaskResponse_1 = require("../models/TaskResponse");
+const TypedResultDescriptor_1 = require("../models/TypedResultDescriptor");
 /**
  *
  */
@@ -50,13 +55,13 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/datasetFromProcessingGraph/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.RasterDatasetFromProcessingGraphToJSON)(requestParameters['rasterDatasetFromProcessingGraph']),
+                body: (0, RasterDatasetFromProcessingGraph_1.RasterDatasetFromProcessingGraphToJSON)(requestParameters['rasterDatasetFromProcessingGraph']),
             };
         });
     }
@@ -67,7 +72,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.datasetFromProcessingGraphHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TaskResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TaskResponse_1.TaskResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -97,7 +102,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/allMetadata/zip`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -143,7 +148,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/metadata`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -159,7 +164,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getProcessingGraphMetadataHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.TypedResultDescriptorFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, TypedResultDescriptor_1.TypedResultDescriptorFromJSON)(jsonValue));
         });
     }
     /**
@@ -189,7 +194,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/provenance`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -205,7 +210,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getProcessingGraphProvenanceHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.ProvenanceEntryFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProvenanceEntry_1.ProvenanceEntryFromJSON));
         });
     }
     /**
@@ -235,7 +240,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -251,7 +256,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.loadProcessingGraphHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.ProcessingGraphFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, ProcessingGraph_1.ProcessingGraphFromJSON)(jsonValue));
         });
     }
     /**
@@ -305,7 +310,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/rasterStream`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -356,7 +361,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.ProcessingGraphToJSON)(requestParameters['processingGraph']),
+                body: (0, ProcessingGraph_1.ProcessingGraphToJSON)(requestParameters['processingGraph']),
             };
         });
     }
@@ -367,7 +372,7 @@ class ProcessingGraphsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.registerProcessingGraphHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**

@@ -23,12 +23,12 @@ export function StringOrNumberRangeFromJSONTyped(json, ignoreDiscriminator) {
         }
     }
     if (Array.isArray(json)) {
-        if (json.every(item => typeof item === 'string')) {
+        if (json.every(item => typeof item === 'number')) {
             return json;
         }
     }
     if (Array.isArray(json)) {
-        if (json.every(item => typeof item === 'number')) {
+        if (json.every(item => typeof item === 'string')) {
             return json;
         }
     }
@@ -47,12 +47,12 @@ export function StringOrNumberRangeToJSONTyped(value, ignoreDiscriminator = fals
         }
     }
     if (Array.isArray(value)) {
-        if (value.every(item => typeof item === 'string')) {
+        if (value.every(item => typeof item === 'number')) {
             return value;
         }
     }
     if (Array.isArray(value)) {
-        if (value.every(item => typeof item === 'number')) {
+        if (value.every(item => typeof item === 'string')) {
             return value;
         }
     }

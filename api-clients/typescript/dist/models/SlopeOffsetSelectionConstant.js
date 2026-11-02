@@ -22,13 +22,15 @@ exports.SlopeOffsetSelectionConstantToJSONTyped = SlopeOffsetSelectionConstantTo
  * @export
  */
 exports.SlopeOffsetSelectionConstantTypeEnum = {
-    Constant: 'constant'
+    Constant: 'constant',
 };
 /**
  * Check if a given object implements the SlopeOffsetSelectionConstant interface.
  */
 function instanceOfSlopeOffsetSelectionConstant(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'constant')
         return false;
     if (!('value' in value) || value['value'] === undefined)
         return false;

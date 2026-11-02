@@ -16,8 +16,6 @@
 export interface AddRole {
     /**
      *
-     * @type {string}
-     * @memberof AddRole
      */
     name: string;
 }

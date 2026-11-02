@@ -14,13 +14,15 @@
  * @export
  */
 export const PangaeaDataProviderDefinitionTypeEnum = {
-    Pangaea: 'Pangaea'
+    Pangaea: 'Pangaea',
 };
 /**
  * Check if a given object implements the PangaeaDataProviderDefinition interface.
  */
 export function instanceOfPangaeaDataProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Pangaea')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -41,9 +43,9 @@ export function PangaeaDataProviderDefinitionFromJSONTyped(json, ignoreDiscrimin
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'baseUrl': json['baseUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function PangaeaDataProviderDefinitionToJSON(json) {

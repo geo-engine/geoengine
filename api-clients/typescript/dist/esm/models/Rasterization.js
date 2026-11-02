@@ -16,13 +16,15 @@ import { RasterizationParametersFromJSON, RasterizationParametersToJSON, } from 
  * @export
  */
 export const RasterizationTypeEnum = {
-    Rasterization: 'Rasterization'
+    Rasterization: 'Rasterization',
 };
 /**
  * Check if a given object implements the Rasterization interface.
  */
 export function instanceOfRasterization(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Rasterization')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

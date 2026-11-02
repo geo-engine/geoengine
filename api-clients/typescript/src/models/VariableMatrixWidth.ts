@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface VariableMatrixWidth {
     /**
      * Number of tiles in width that coalesce in a single tile for these rows
-     * @type {number}
-     * @memberof VariableMatrixWidth
      */
     coalesce: number;
     /**
      * First tile row where the coalescence factor applies for this tilematrix
-     * @type {number}
-     * @memberof VariableMatrixWidth
      */
     minTileRow: number;
     /**
      * Last tile row where the coalescence factor applies for this tilematrix
-     * @type {number}
-     * @memberof VariableMatrixWidth
      */
     maxTileRow: number;
 }

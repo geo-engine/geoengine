@@ -16,20 +16,14 @@
 export interface InterpolationResolutionFraction {
     /**
      *
-     * @type {InterpolationResolutionFractionTypeEnum}
-     * @memberof InterpolationResolutionFraction
      */
     type: InterpolationResolutionFractionTypeEnum;
     /**
      * Scaling factor in x/y direction.
-     * @type {number}
-     * @memberof InterpolationResolutionFraction
      */
     x: number;
     /**
      *
-     * @type {number}
-     * @memberof InterpolationResolutionFraction
      */
     y: number;
 }

@@ -36,38 +36,26 @@ import {
 export interface SpatialReferenceSpecification {
     /**
      * 
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
      */
     spatialReference: string;
     /**
      * 
-     * @type {string}
-     * @memberof SpatialReferenceSpecification
      */
     projString: string;
     /**
      * 
-     * @type {BoundingBox2D}
-     * @memberof SpatialReferenceSpecification
      */
     extent: BoundingBox2D;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof SpatialReferenceSpecification
      */
     axisLabels?: Array<string> | null;
     /**
      * 
-     * @type {AxisOrder}
-     * @memberof SpatialReferenceSpecification
      */
     axisOrder?: AxisOrder | null;
 }
@@ -99,8 +87,8 @@ export function SpatialReferenceSpecificationFromJSONTyped(json: any, ignoreDisc
         'spatialReference': json['spatialReference'],
         'projString': json['projString'],
         'extent': BoundingBox2DFromJSON(json['extent']),
-        'axisLabels': json['axisLabels'] == null ? undefined : json['axisLabels'],
-        'axisOrder': json['axisOrder'] == null ? undefined : AxisOrderFromJSON(json['axisOrder']),
+        'axisLabels': json['axisLabels'] === undefined ? undefined : json['axisLabels'] === null ? null : json['axisLabels'],
+        'axisOrder': json['axisOrder'] === undefined ? undefined : json['axisOrder'] === null ? null : AxisOrderFromJSON(json['axisOrder']),
     };
 }
 

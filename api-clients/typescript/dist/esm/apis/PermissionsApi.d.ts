@@ -9,17 +9,36 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { PermissionListing, PermissionRequest } from '../models/index';
+import { type PermissionListing } from '../models/PermissionListing';
+import { type PermissionRequest } from '../models/PermissionRequest';
 export interface AddPermissionHandlerRequest {
+    /**
+     *
+     */
     permissionRequest: PermissionRequest;
 }
 export interface GetResourcePermissionsHandlerRequest {
+    /**
+     * Resource Type
+     */
     resourceType: string;
+    /**
+     * Resource Id
+     */
     resourceId: string;
+    /**
+     *
+     */
     limit: number;
+    /**
+     *
+     */
     offset: number;
 }
 export interface RemovePermissionHandlerRequest {
+    /**
+     *
+     */
     permissionRequest: PermissionRequest;
 }
 /**

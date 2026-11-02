@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface ScalingModeMulSlopeAddOffset {
     /**
      * 
-     * @type {ScalingModeMulSlopeAddOffsetTypeEnum}
-     * @memberof ScalingModeMulSlopeAddOffset
      */
     type: ScalingModeMulSlopeAddOffsetTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface ScalingModeMulSlopeAddOffset {
  * @export
  */
 export const ScalingModeMulSlopeAddOffsetTypeEnum = {
-    MulSlopeAddOffset: 'mulSlopeAddOffset'
+    MulSlopeAddOffset: 'mulSlopeAddOffset',
 } as const;
 export type ScalingModeMulSlopeAddOffsetTypeEnum = typeof ScalingModeMulSlopeAddOffsetTypeEnum[keyof typeof ScalingModeMulSlopeAddOffsetTypeEnum];
 
@@ -41,6 +39,8 @@ export type ScalingModeMulSlopeAddOffsetTypeEnum = typeof ScalingModeMulSlopeAdd
  */
 export function instanceOfScalingModeMulSlopeAddOffset(value: object): value is ScalingModeMulSlopeAddOffset {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'mulSlopeAddOffset') return false;
+    
     return true;
 }
 

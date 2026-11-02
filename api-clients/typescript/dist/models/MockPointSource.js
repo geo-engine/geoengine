@@ -23,13 +23,15 @@ const MockPointSourceParameters_1 = require("./MockPointSourceParameters");
  * @export
  */
 exports.MockPointSourceTypeEnum = {
-    MockPointSource: 'MockPointSource'
+    MockPointSource: 'MockPointSource',
 };
 /**
  * Check if a given object implements the MockPointSource interface.
  */
 function instanceOfMockPointSource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'MockPointSource')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

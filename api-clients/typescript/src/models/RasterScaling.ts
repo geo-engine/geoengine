@@ -58,20 +58,14 @@ import {
 export interface RasterScaling {
     /**
      * 
-     * @type {RasterScalingTypeEnum}
-     * @memberof RasterScaling
      */
     type: RasterScalingTypeEnum;
     /**
      * 
-     * @type {RasterScalingParameters}
-     * @memberof RasterScaling
      */
     params: RasterScalingParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof RasterScaling
      */
     sources: SingleRasterSource;
 }
@@ -81,7 +75,7 @@ export interface RasterScaling {
  * @export
  */
 export const RasterScalingTypeEnum = {
-    RasterScaling: 'RasterScaling'
+    RasterScaling: 'RasterScaling',
 } as const;
 export type RasterScalingTypeEnum = typeof RasterScalingTypeEnum[keyof typeof RasterScalingTypeEnum];
 
@@ -91,6 +85,8 @@ export type RasterScalingTypeEnum = typeof RasterScalingTypeEnum[keyof typeof Ra
  */
 export function instanceOfRasterScaling(value: object): value is RasterScaling {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'RasterScaling') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

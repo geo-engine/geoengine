@@ -18,26 +18,18 @@ import type { Symbology } from './Symbology';
 export interface ProjectLayer {
     /**
      *
-     * @type {string}
-     * @memberof ProjectLayer
      */
     processingGraph: string;
     /**
      *
-     * @type {string}
-     * @memberof ProjectLayer
      */
     name: string;
     /**
      *
-     * @type {LayerVisibility}
-     * @memberof ProjectLayer
      */
     visibility: LayerVisibility;
     /**
      *
-     * @type {Symbology}
-     * @memberof ProjectLayer
      */
     symbology: Symbology;
 }

@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 /**
  * Check if a given object implements the ProjectVersion interface.
  */
@@ -29,7 +30,7 @@ export function ProjectVersionFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'id': json['id'],
-        'changed': (new Date(json['changed'])),
+        'changed': (json['changed'] == null ? json['changed'] : parseDateTime(json['changed'])),
     };
 }
 export function ProjectVersionToJSON(json) {
@@ -41,6 +42,6 @@ export function ProjectVersionToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'id': value['id'],
-        'changed': value['changed'].toISOString(),
+        'changed': value['changed'] == null ? value['changed'] : serializeDateTime(value['changed']),
     };
 }

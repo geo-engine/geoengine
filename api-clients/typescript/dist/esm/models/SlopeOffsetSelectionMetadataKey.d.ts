@@ -16,20 +16,14 @@
 export interface SlopeOffsetSelectionMetadataKey {
     /**
      *
-     * @type {SlopeOffsetSelectionMetadataKeyTypeEnum}
-     * @memberof SlopeOffsetSelectionMetadataKey
      */
     type: SlopeOffsetSelectionMetadataKeyTypeEnum;
     /**
      * Optional metadata domain to look up the raster property.
-     * @type {string}
-     * @memberof SlopeOffsetSelectionMetadataKey
      */
     domain?: string | null;
     /**
      * Raster property key that contains the slope or offset value.
-     * @type {string}
-     * @memberof SlopeOffsetSelectionMetadataKey
      */
     key: string;
 }

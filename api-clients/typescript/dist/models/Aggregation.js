@@ -61,21 +61,21 @@ function AggregationToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'count':
-            return Object.assign({}, (0, AggregationCount_1.AggregationCountToJSON)(value), { type: 'count' });
+            return Object.assign({}, (0, AggregationCount_1.AggregationCountToJSON)(value), { 'type': 'count' });
         case 'first':
-            return Object.assign({}, (0, AggregationFirst_1.AggregationFirstToJSON)(value), { type: 'first' });
+            return Object.assign({}, (0, AggregationFirst_1.AggregationFirstToJSON)(value), { 'type': 'first' });
         case 'last':
-            return Object.assign({}, (0, AggregationLast_1.AggregationLastToJSON)(value), { type: 'last' });
+            return Object.assign({}, (0, AggregationLast_1.AggregationLastToJSON)(value), { 'type': 'last' });
         case 'max':
-            return Object.assign({}, (0, AggregationMax_1.AggregationMaxToJSON)(value), { type: 'max' });
+            return Object.assign({}, (0, AggregationMax_1.AggregationMaxToJSON)(value), { 'type': 'max' });
         case 'mean':
-            return Object.assign({}, (0, AggregationMean_1.AggregationMeanToJSON)(value), { type: 'mean' });
+            return Object.assign({}, (0, AggregationMean_1.AggregationMeanToJSON)(value), { 'type': 'mean' });
         case 'min':
-            return Object.assign({}, (0, AggregationMin_1.AggregationMinToJSON)(value), { type: 'min' });
+            return Object.assign({}, (0, AggregationMin_1.AggregationMinToJSON)(value), { 'type': 'min' });
         case 'percentileEstimate':
-            return Object.assign({}, (0, AggregationPercentileEstimate_1.AggregationPercentileEstimateToJSON)(value), { type: 'percentileEstimate' });
+            return Object.assign({}, (0, AggregationPercentileEstimate_1.AggregationPercentileEstimateToJSON)(value), { 'type': 'percentileEstimate' });
         case 'sum':
-            return Object.assign({}, (0, AggregationSum_1.AggregationSumToJSON)(value), { type: 'sum' });
+            return Object.assign({}, (0, AggregationSum_1.AggregationSumToJSON)(value), { 'type': 'sum' });
         default:
             return value;
     }

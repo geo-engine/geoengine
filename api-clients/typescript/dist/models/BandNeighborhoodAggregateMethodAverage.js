@@ -22,13 +22,15 @@ exports.BandNeighborhoodAggregateMethodAverageToJSONTyped = BandNeighborhoodAggr
  * @export
  */
 exports.BandNeighborhoodAggregateMethodAverageTypeEnum = {
-    Average: 'average'
+    Average: 'average',
 };
 /**
  * Check if a given object implements the BandNeighborhoodAggregateMethodAverage interface.
  */
 function instanceOfBandNeighborhoodAggregateMethodAverage(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'average')
         return false;
     if (!('windowSize' in value) || value['windowSize'] === undefined)
         return false;

@@ -22,13 +22,15 @@ exports.ClassificationMeasurementToJSONTyped = ClassificationMeasurementToJSONTy
  * @export
  */
 exports.ClassificationMeasurementTypeEnum = {
-    Classification: 'classification'
+    Classification: 'classification',
 };
 /**
  * Check if a given object implements the ClassificationMeasurement interface.
  */
 function instanceOfClassificationMeasurement(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'classification')
         return false;
     if (!('measurement' in value) || value['measurement'] === undefined)
         return false;

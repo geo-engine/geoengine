@@ -56,50 +56,34 @@ import {
 export interface Project {
     /**
      * 
-     * @type {string}
-     * @memberof Project
      */
     id: string;
     /**
      * 
-     * @type {ProjectVersion}
-     * @memberof Project
      */
     version: ProjectVersion;
     /**
      * 
-     * @type {string}
-     * @memberof Project
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof Project
      */
     description: string;
     /**
      * 
-     * @type {Array<ProjectLayer>}
-     * @memberof Project
      */
     layers: Array<ProjectLayer>;
     /**
      * 
-     * @type {Array<Plot>}
-     * @memberof Project
      */
     plots: Array<Plot>;
     /**
      * 
-     * @type {STRectangle}
-     * @memberof Project
      */
     bounds: STRectangle;
     /**
      * 
-     * @type {TimeStep}
-     * @memberof Project
      */
     timeStep: TimeStep;
 }

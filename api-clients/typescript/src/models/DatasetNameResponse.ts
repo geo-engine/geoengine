@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface DatasetNameResponse {
     /**
      * 
-     * @type {string}
-     * @memberof DatasetNameResponse
      */
     datasetName: string;
 }

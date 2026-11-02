@@ -43,20 +43,14 @@ import {
 export interface RasterTypeConversion {
     /**
      * 
-     * @type {RasterTypeConversionTypeEnum}
-     * @memberof RasterTypeConversion
      */
     type: RasterTypeConversionTypeEnum;
     /**
      * 
-     * @type {RasterTypeConversionParameters}
-     * @memberof RasterTypeConversion
      */
     params: RasterTypeConversionParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof RasterTypeConversion
      */
     sources: SingleRasterSource;
 }
@@ -66,7 +60,7 @@ export interface RasterTypeConversion {
  * @export
  */
 export const RasterTypeConversionTypeEnum = {
-    RasterTypeConversion: 'RasterTypeConversion'
+    RasterTypeConversion: 'RasterTypeConversion',
 } as const;
 export type RasterTypeConversionTypeEnum = typeof RasterTypeConversionTypeEnum[keyof typeof RasterTypeConversionTypeEnum];
 
@@ -76,6 +70,8 @@ export type RasterTypeConversionTypeEnum = typeof RasterTypeConversionTypeEnum[k
  */
 export function instanceOfRasterTypeConversion(value: object): value is RasterTypeConversion {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'RasterTypeConversion') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

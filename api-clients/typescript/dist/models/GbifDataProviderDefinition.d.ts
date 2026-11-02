@@ -17,50 +17,34 @@ import type { DatabaseConnectionConfig } from './DatabaseConnectionConfig';
 export interface GbifDataProviderDefinition {
     /**
      *
-     * @type {GbifDataProviderDefinitionTypeEnum}
-     * @memberof GbifDataProviderDefinition
      */
     type: GbifDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof GbifDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof GbifDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof GbifDataProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {DatabaseConnectionConfig}
-     * @memberof GbifDataProviderDefinition
      */
     dbConfig: DatabaseConnectionConfig;
     /**
      *
-     * @type {number}
-     * @memberof GbifDataProviderDefinition
      */
     cacheTtl?: number | null;
     /**
      *
-     * @type {number}
-     * @memberof GbifDataProviderDefinition
      */
     autocompleteTimeout: number;
     /**
      *
-     * @type {Array<string>}
-     * @memberof GbifDataProviderDefinition
      */
     columns: Array<string>;
 }

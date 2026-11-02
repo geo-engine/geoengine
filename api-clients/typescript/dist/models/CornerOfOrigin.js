@@ -24,7 +24,7 @@ exports.CornerOfOriginToJSONTyped = CornerOfOriginToJSONTyped;
  */
 exports.CornerOfOrigin = {
     TopLeft: 'topLeft',
-    BottomLeft: 'bottomLeft'
+    BottomLeft: 'bottomLeft',
 };
 function instanceOfCornerOfOrigin(value) {
     for (const key in exports.CornerOfOrigin) {

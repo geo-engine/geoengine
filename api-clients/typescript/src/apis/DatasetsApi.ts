@@ -11,120 +11,216 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  AddDatasetTile,
-  AutoCreateDataset,
-  CreateDataset,
-  Dataset,
-  DatasetListing,
-  DatasetNameResponse,
-  ErrorResponse,
-  MetaDataDefinition,
-  MetaDataSuggestion,
-  OrderBy,
-  Provenances,
-  SuggestMetaData,
-  Symbology,
-  UpdateDataset,
-  Volume,
-  VolumeFileLayersResponse,
-} from '../models/index';
 import {
+    type AddDatasetTile,
     AddDatasetTileFromJSON,
     AddDatasetTileToJSON,
+} from '../models/AddDatasetTile';
+import {
+    type AutoCreateDataset,
     AutoCreateDatasetFromJSON,
     AutoCreateDatasetToJSON,
+} from '../models/AutoCreateDataset';
+import {
+    type CreateDataset,
     CreateDatasetFromJSON,
     CreateDatasetToJSON,
+} from '../models/CreateDataset';
+import {
+    type Dataset,
     DatasetFromJSON,
     DatasetToJSON,
+} from '../models/Dataset';
+import {
+    type DatasetListing,
     DatasetListingFromJSON,
     DatasetListingToJSON,
+} from '../models/DatasetListing';
+import {
+    type DatasetNameResponse,
     DatasetNameResponseFromJSON,
     DatasetNameResponseToJSON,
+} from '../models/DatasetNameResponse';
+import {
+    type ErrorResponse,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
+} from '../models/ErrorResponse';
+import {
+    type MetaDataDefinition,
     MetaDataDefinitionFromJSON,
     MetaDataDefinitionToJSON,
+} from '../models/MetaDataDefinition';
+import {
+    type MetaDataSuggestion,
     MetaDataSuggestionFromJSON,
     MetaDataSuggestionToJSON,
+} from '../models/MetaDataSuggestion';
+import {
+    type OrderBy,
     OrderByFromJSON,
     OrderByToJSON,
+} from '../models/OrderBy';
+import {
+    type Provenances,
     ProvenancesFromJSON,
     ProvenancesToJSON,
+} from '../models/Provenances';
+import {
+    type SuggestMetaData,
     SuggestMetaDataFromJSON,
     SuggestMetaDataToJSON,
+} from '../models/SuggestMetaData';
+import {
+    type Symbology,
     SymbologyFromJSON,
     SymbologyToJSON,
+} from '../models/Symbology';
+import {
+    type UpdateDataset,
     UpdateDatasetFromJSON,
     UpdateDatasetToJSON,
+} from '../models/UpdateDataset';
+import {
+    type Volume,
     VolumeFromJSON,
     VolumeToJSON,
+} from '../models/Volume';
+import {
+    type VolumeFileLayersResponse,
     VolumeFileLayersResponseFromJSON,
     VolumeFileLayersResponseToJSON,
-} from '../models/index';
+} from '../models/VolumeFileLayersResponse';
 
 export interface AddDatasetTilesHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     * 
+     */
     addDatasetTile: Array<AddDatasetTile>;
 }
 
 export interface AutoCreateDatasetHandlerRequest {
+    /**
+     * 
+     */
     autoCreateDataset: AutoCreateDataset;
 }
 
 export interface CreateDatasetHandlerRequest {
+    /**
+     * 
+     */
     createDataset: CreateDataset;
 }
 
 export interface DeleteDatasetHandlerRequest {
+    /**
+     * Dataset id
+     */
     dataset: string;
 }
 
 export interface GetDatasetHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
 }
 
 export interface GetLoadingInfoHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
 }
 
 export interface ListDatasetsHandlerRequest {
+    /**
+     * 
+     */
     order: OrderBy;
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
+    /**
+     * 
+     */
     filter?: string;
+    /**
+     * 
+     */
     tags?: Array<string>;
 }
 
 export interface ListVolumeFileLayersHandlerRequest {
+    /**
+     * Volume name
+     */
     volumeName: string;
+    /**
+     * File name
+     */
     fileName: string;
 }
 
 export interface SuggestMetaDataHandlerRequest {
+    /**
+     * 
+     */
     suggestMetaData: SuggestMetaData;
 }
 
 export interface UpdateDatasetHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     * 
+     */
     updateDataset: UpdateDataset;
 }
 
 export interface UpdateDatasetProvenanceHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     * 
+     */
     provenances: Provenances;
 }
 
 export interface UpdateDatasetSymbologyHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     * 
+     */
     symbology: Symbology;
 }
 
 export interface UpdateLoadingInfoHandlerRequest {
+    /**
+     * Dataset Name
+     */
     dataset: string;
+    /**
+     * 
+     */
     metaDataDefinition: MetaDataDefinition;
 }
 
@@ -167,7 +263,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}/tiles`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,
@@ -330,7 +426,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,
@@ -382,7 +478,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,
@@ -435,7 +531,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}/loadingInfo`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,
@@ -581,8 +677,8 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/volumes/{volume_name}/files/{file_name}/layers`;
-        urlPath = urlPath.replace(`{${"volume_name"}}`, encodeURIComponent(String(requestParameters['volumeName'])));
-        urlPath = urlPath.replace(`{${"file_name"}}`, encodeURIComponent(String(requestParameters['fileName'])));
+        urlPath = urlPath.replace('{volume_name}', encodeURIComponent(String(requestParameters['volumeName'])));
+        urlPath = urlPath.replace('{file_name}', encodeURIComponent(String(requestParameters['fileName'])));
 
         return {
             path: urlPath,
@@ -744,7 +840,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,
@@ -806,7 +902,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}/provenance`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,
@@ -866,7 +962,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}/symbology`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,
@@ -928,7 +1024,7 @@ export class DatasetsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/dataset/{dataset}/loadingInfo`;
-        urlPath = urlPath.replace(`{${"dataset"}}`, encodeURIComponent(String(requestParameters['dataset'])));
+        urlPath = urlPath.replace('{dataset}', encodeURIComponent(String(requestParameters['dataset'])));
 
         return {
             path: urlPath,

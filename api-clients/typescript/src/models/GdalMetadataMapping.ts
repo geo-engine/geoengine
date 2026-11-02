@@ -35,20 +35,14 @@ import {
 export interface GdalMetadataMapping {
     /**
      * 
-     * @type {RasterPropertiesKey}
-     * @memberof GdalMetadataMapping
      */
     sourceKey: RasterPropertiesKey;
     /**
      * 
-     * @type {RasterPropertiesKey}
-     * @memberof GdalMetadataMapping
      */
     targetKey: RasterPropertiesKey;
     /**
      * 
-     * @type {RasterPropertiesEntryType}
-     * @memberof GdalMetadataMapping
      */
     targetType: RasterPropertiesEntryType;
 }
@@ -59,9 +53,9 @@ export interface GdalMetadataMapping {
  * Check if a given object implements the GdalMetadataMapping interface.
  */
 export function instanceOfGdalMetadataMapping(value: object): value is GdalMetadataMapping {
-    if (!('sourceKey' in value) || value['sourceKey'] === undefined) return false;
-    if (!('targetKey' in value) || value['targetKey'] === undefined) return false;
-    if (!('targetType' in value) || value['targetType'] === undefined) return false;
+    if ((!('sourceKey' in (value as Record<string, any>)) && !('source_key' in (value as Record<string, any>))) || ((value as Record<string, any>)['sourceKey'] === undefined && (value as Record<string, any>)['source_key'] === undefined)) return false;
+    if ((!('targetKey' in (value as Record<string, any>)) && !('target_key' in (value as Record<string, any>))) || ((value as Record<string, any>)['targetKey'] === undefined && (value as Record<string, any>)['target_key'] === undefined)) return false;
+    if ((!('targetType' in (value as Record<string, any>)) && !('target_type' in (value as Record<string, any>))) || ((value as Record<string, any>)['targetType'] === undefined && (value as Record<string, any>)['target_type'] === undefined)) return false;
     return true;
 }
 

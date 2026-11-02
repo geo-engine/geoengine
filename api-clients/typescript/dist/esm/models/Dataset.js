@@ -46,10 +46,10 @@ export function DatasetFromJSONTyped(json, ignoreDiscriminator) {
         'description': json['description'],
         'resultDescriptor': TypedResultDescriptorFromJSON(json['resultDescriptor']),
         'sourceOperator': json['sourceOperator'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(ProvenanceFromJSON)),
-        'tags': json['tags'] == null ? undefined : json['tags'],
-        'dataPath': json['dataPath'] == null ? undefined : DataPathFromJSON(json['dataPath']),
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] === undefined ? undefined : json['provenance'] === null ? null : (json['provenance'].map(ProvenanceFromJSON)),
+        'tags': json['tags'] === undefined ? undefined : json['tags'] === null ? null : json['tags'],
+        'dataPath': json['dataPath'] === undefined ? undefined : json['dataPath'] === null ? null : DataPathFromJSON(json['dataPath']),
     };
 }
 export function DatasetToJSON(json) {

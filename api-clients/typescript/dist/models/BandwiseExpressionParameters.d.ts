@@ -17,21 +17,15 @@ import type { RasterDataType } from './RasterDataType';
 export interface BandwiseExpressionParameters {
     /**
      * Scalar expression applied to each band value.
-     * @type {string}
-     * @memberof BandwiseExpressionParameters
      */
     expression: string;
     /**
      * Output raster data type for the computed band values.
-     * @type {RasterDataType}
-     * @memberof BandwiseExpressionParameters
      */
     outputType: RasterDataType;
     /**
      * Whether NO DATA values should be mapped with the expression.
      * Otherwise, they are mapped automatically to NO DATA.
-     * @type {boolean}
-     * @memberof BandwiseExpressionParameters
      */
     mapNoData: boolean;
 }

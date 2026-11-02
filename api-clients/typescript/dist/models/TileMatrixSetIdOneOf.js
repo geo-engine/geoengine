@@ -21,7 +21,7 @@ exports.TileMatrixSetIdOneOfToJSONTyped = TileMatrixSetIdOneOfToJSONTyped;
  * Check if a given object implements the TileMatrixSetIdOneOf interface.
  */
 function instanceOfTileMatrixSetIdOneOf(value) {
-    if (!('custom' in value) || value['custom'] === undefined)
+    if ((!('custom' in value) && !('Custom' in value)) || (value['custom'] === undefined && value['Custom'] === undefined))
         return false;
     return true;
 }

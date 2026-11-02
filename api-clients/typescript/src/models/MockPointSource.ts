@@ -29,14 +29,10 @@ import {
 export interface MockPointSource {
     /**
      * 
-     * @type {MockPointSourceTypeEnum}
-     * @memberof MockPointSource
      */
     type: MockPointSourceTypeEnum;
     /**
      * 
-     * @type {MockPointSourceParameters}
-     * @memberof MockPointSource
      */
     params: MockPointSourceParameters;
 }
@@ -46,7 +42,7 @@ export interface MockPointSource {
  * @export
  */
 export const MockPointSourceTypeEnum = {
-    MockPointSource: 'MockPointSource'
+    MockPointSource: 'MockPointSource',
 } as const;
 export type MockPointSourceTypeEnum = typeof MockPointSourceTypeEnum[keyof typeof MockPointSourceTypeEnum];
 
@@ -56,6 +52,8 @@ export type MockPointSourceTypeEnum = typeof MockPointSourceTypeEnum[keyof typeo
  */
 export function instanceOfMockPointSource(value: object): value is MockPointSource {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'MockPointSource') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }

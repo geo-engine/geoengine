@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface StacAssetBand {
     /**
      * 
-     * @type {string}
-     * @memberof StacAssetBand
      */
     assetTitle: string;
     /**
      * 
-     * @type {string}
-     * @memberof StacAssetBand
      */
     bandName?: string | null;
 }
@@ -51,7 +47,7 @@ export function StacAssetBandFromJSONTyped(json: any, ignoreDiscriminator: boole
     return {
         
         'assetTitle': json['assetTitle'],
-        'bandName': json['bandName'] == null ? undefined : json['bandName'],
+        'bandName': json['bandName'] === undefined ? undefined : json['bandName'] === null ? null : json['bandName'],
     };
 }
 

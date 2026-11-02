@@ -23,14 +23,10 @@ import type { GdalSourceParameters } from './GdalSourceParameters';
 export interface GdalSource {
     /**
      *
-     * @type {GdalSourceTypeEnum}
-     * @memberof GdalSource
      */
     type: GdalSourceTypeEnum;
     /**
      *
-     * @type {GdalSourceParameters}
-     * @memberof GdalSource
      */
     params: GdalSourceParameters;
 }

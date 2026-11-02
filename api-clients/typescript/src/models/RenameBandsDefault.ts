@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface RenameBandsDefault {
     /**
      * 
-     * @type {RenameBandsDefaultTypeEnum}
-     * @memberof RenameBandsDefault
      */
     type: RenameBandsDefaultTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface RenameBandsDefault {
  * @export
  */
 export const RenameBandsDefaultTypeEnum = {
-    Default: 'default'
+    Default: 'default',
 } as const;
 export type RenameBandsDefaultTypeEnum = typeof RenameBandsDefaultTypeEnum[keyof typeof RenameBandsDefaultTypeEnum];
 
@@ -41,6 +39,8 @@ export type RenameBandsDefaultTypeEnum = typeof RenameBandsDefaultTypeEnum[keyof
  */
 export function instanceOfRenameBandsDefault(value: object): value is RenameBandsDefault {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'default') return false;
+    
     return true;
 }
 

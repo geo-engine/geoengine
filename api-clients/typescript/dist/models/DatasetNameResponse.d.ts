@@ -16,8 +16,6 @@
 export interface DatasetNameResponse {
     /**
      *
-     * @type {string}
-     * @memberof DatasetNameResponse
      */
     datasetName: string;
 }

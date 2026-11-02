@@ -36,20 +36,14 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 export interface ClassHistogram {
     /**
      *
-     * @type {ClassHistogramTypeEnum}
-     * @memberof ClassHistogram
      */
     type: ClassHistogramTypeEnum;
     /**
      *
-     * @type {ClassHistogramParameters}
-     * @memberof ClassHistogram
      */
     params: ClassHistogramParameters;
     /**
      *
-     * @type {SingleRasterOrVectorSource}
-     * @memberof ClassHistogram
      */
     sources: SingleRasterOrVectorSource;
 }

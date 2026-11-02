@@ -17,13 +17,15 @@ import { GdalDatasetParametersFromJSON, GdalDatasetParametersToJSON, } from './G
  * @export
  */
 export const GdalMetaDataStaticTypeEnum = {
-    GdalStatic: 'GdalStatic'
+    GdalStatic: 'GdalStatic',
 };
 /**
  * Check if a given object implements the GdalMetaDataStatic interface.
  */
 export function instanceOfGdalMetaDataStatic(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'GdalStatic')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
@@ -40,10 +42,10 @@ export function GdalMetaDataStaticFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'type': json['type'],
-        'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
+        'time': json['time'] === undefined ? undefined : json['time'] === null ? null : TimeIntervalFromJSON(json['time']),
         'params': GdalDatasetParametersFromJSON(json['params']),
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 export function GdalMetaDataStaticToJSON(json) {

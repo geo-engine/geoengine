@@ -16,13 +16,15 @@ import { StacQueryBufferFromJSON, StacQueryBufferToJSON, } from './StacQueryBuff
  * @export
  */
 export const SentinelS2L2ACogsProviderDefinitionTypeEnum = {
-    SentinelS2L2ACogs: 'SentinelS2L2ACogs'
+    SentinelS2L2ACogs: 'SentinelS2L2ACogs',
 };
 /**
  * Check if a given object implements the SentinelS2L2ACogsProviderDefinition interface.
  */
 export function instanceOfSentinelS2L2ACogsProviderDefinition(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'SentinelS2L2ACogs')
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
@@ -46,11 +48,11 @@ export function SentinelS2L2ACogsProviderDefinitionFromJSONTyped(json, ignoreDis
         'name': json['name'],
         'id': json['id'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'apiUrl': json['apiUrl'],
         'stacApiRetries': json['stacApiRetries'] == null ? undefined : StacApiRetriesFromJSON(json['stacApiRetries']),
         'gdalRetries': json['gdalRetries'] == null ? undefined : json['gdalRetries'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
         'queryBuffer': json['queryBuffer'] == null ? undefined : StacQueryBufferFromJSON(json['queryBuffer']),
     };
 }

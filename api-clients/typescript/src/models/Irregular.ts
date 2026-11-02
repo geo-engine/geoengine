@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface Irregular {
     /**
      * 
-     * @type {IrregularTypeEnum}
-     * @memberof Irregular
      */
     type: IrregularTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface Irregular {
  * @export
  */
 export const IrregularTypeEnum = {
-    Irregular: 'irregular'
+    Irregular: 'irregular',
 } as const;
 export type IrregularTypeEnum = typeof IrregularTypeEnum[keyof typeof IrregularTypeEnum];
 
@@ -41,6 +39,8 @@ export type IrregularTypeEnum = typeof IrregularTypeEnum[keyof typeof IrregularT
  */
 export function instanceOfIrregular(value: object): value is Irregular {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'irregular') return false;
+    
     return true;
 }
 

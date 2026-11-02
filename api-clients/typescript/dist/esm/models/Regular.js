@@ -15,13 +15,15 @@ import { RegularTimeDimensionFromJSONTyped, RegularTimeDimensionToJSONTyped, } f
  * @export
  */
 export const RegularTypeEnum = {
-    Regular: 'regular'
+    Regular: 'regular',
 };
 /**
  * Check if a given object implements the Regular interface.
  */
 export function instanceOfRegular(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'regular')
         return false;
     return true;
 }

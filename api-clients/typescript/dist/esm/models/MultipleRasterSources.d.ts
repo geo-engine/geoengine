@@ -17,8 +17,6 @@ import type { RasterOperator } from './RasterOperator';
 export interface MultipleRasterSources {
     /**
      *
-     * @type {Array<RasterOperator>}
-     * @memberof MultipleRasterSources
      */
     rasters: Array<RasterOperator>;
 }

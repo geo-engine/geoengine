@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface GeospatialDataDataTypeOneOf {
     /**
      * 
-     * @type {string}
-     * @memberof GeospatialDataDataTypeOneOf
      */
     string: string;
 }

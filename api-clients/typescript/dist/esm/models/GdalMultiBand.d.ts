@@ -17,20 +17,14 @@ import type { RasterResultDescriptor } from './RasterResultDescriptor';
 export interface GdalMultiBand {
     /**
      *
-     * @type {GdalMultiBandTypeEnum}
-     * @memberof GdalMultiBand
      */
     type: GdalMultiBandTypeEnum;
     /**
      *
-     * @type {RasterResultDescriptor}
-     * @memberof GdalMultiBand
      */
     resultDescriptor: RasterResultDescriptor;
     /**
      * Dataset-level TTL fallback used when no tile-level TTL is provided.
-     * @type {number}
-     * @memberof GdalMultiBand
      */
     cacheTtl?: number | null;
 }

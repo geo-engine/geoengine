@@ -33,20 +33,14 @@ import type { VisualPointClusteringParameters } from './VisualPointClusteringPar
 export interface VisualPointClustering {
     /**
      *
-     * @type {VisualPointClusteringTypeEnum}
-     * @memberof VisualPointClustering
      */
     type: VisualPointClusteringTypeEnum;
     /**
      *
-     * @type {VisualPointClusteringParameters}
-     * @memberof VisualPointClustering
      */
     params: VisualPointClusteringParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof VisualPointClustering
      */
     sources: SingleVectorSource;
 }

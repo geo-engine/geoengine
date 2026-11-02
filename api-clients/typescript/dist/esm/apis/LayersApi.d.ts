@@ -9,101 +9,262 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { AddLayer, AddLayerCollection, IdResponse, Layer, LayerCollection, LayerProviderListing, ProviderCapabilities, SearchType, TaskResponse, TypedDataProviderDefinition, UpdateLayer, UpdateLayerCollection } from '../models/index';
+import { type AddLayer } from '../models/AddLayer';
+import { type AddLayerCollection } from '../models/AddLayerCollection';
+import { type IdResponse } from '../models/IdResponse';
+import { type Layer } from '../models/Layer';
+import { type LayerCollection } from '../models/LayerCollection';
+import { type LayerProviderListing } from '../models/LayerProviderListing';
+import { type ProviderCapabilities } from '../models/ProviderCapabilities';
+import { type SearchType } from '../models/SearchType';
+import { type TaskResponse } from '../models/TaskResponse';
+import { type TypedDataProviderDefinition } from '../models/TypedDataProviderDefinition';
+import { type UpdateLayer } from '../models/UpdateLayer';
+import { type UpdateLayerCollection } from '../models/UpdateLayerCollection';
 export interface AddCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     *
+     */
     addLayerCollection: AddLayerCollection;
 }
 export interface AddExistingCollectionToCollectionRequest {
+    /**
+     * Parent layer collection id
+     */
     parent: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
 }
 export interface AddExistingLayerToCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 export interface AddLayerRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     *
+     */
     addLayer: AddLayer;
 }
 export interface AddProviderRequest {
+    /**
+     *
+     */
     typedDataProviderDefinition: TypedDataProviderDefinition;
 }
 export interface AutocompleteHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     *
+     */
     searchType: SearchType;
+    /**
+     *
+     */
     searchString: string;
+    /**
+     *
+     */
     limit: number;
+    /**
+     *
+     */
     offset: number;
 }
 export interface DeleteProviderRequest {
+    /**
+     * Layer provider id
+     */
     provider: string;
 }
 export interface GetProviderDefinitionRequest {
+    /**
+     * Layer provider id
+     */
     provider: string;
 }
 export interface LayerHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 export interface LayerToDatasetRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 export interface LayerToProcessingGraphIdHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 export interface ListCollectionHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
 }
 export interface ListProvidersRequest {
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
 }
 export interface ListRootCollectionsHandlerRequest {
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
 }
 export interface ProviderCapabilitiesHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
 }
 export interface RemoveCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
 }
 export interface RemoveCollectionFromCollectionRequest {
+    /**
+     * Parent layer collection id
+     */
     parent: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
 }
 export interface RemoveLayerRequest {
+    /**
+     * Layer id
+     */
     layer: string;
 }
 export interface RemoveLayerFromCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     * Layer id
+     */
     layer: string;
 }
 export interface SearchHandlerRequest {
+    /**
+     * Data provider id
+     */
     provider: string;
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     *
+     */
     searchType: SearchType;
+    /**
+     *
+     */
     searchString: string;
+    /**
+     *
+     */
     limit: number;
+    /**
+     *
+     */
     offset: number;
 }
 export interface UpdateCollectionRequest {
+    /**
+     * Layer collection id
+     */
     collection: string;
+    /**
+     *
+     */
     updateLayerCollection: UpdateLayerCollection;
 }
 export interface UpdateLayerRequest {
+    /**
+     * Layer id
+     */
     layer: string;
+    /**
+     *
+     */
     updateLayer: UpdateLayer;
 }
 export interface UpdateProviderDefinitionRequest {
+    /**
+     * Layer provider id
+     */
     provider: string;
+    /**
+     *
+     */
     typedDataProviderDefinition: TypedDataProviderDefinition;
 }
 /**

@@ -22,13 +22,15 @@ exports.AggregationLastToJSONTyped = AggregationLastToJSONTyped;
  * @export
  */
 exports.AggregationLastTypeEnum = {
-    Last: 'last'
+    Last: 'last',
 };
 /**
  * Check if a given object implements the AggregationLast interface.
  */
 function instanceOfAggregationLast(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'last')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

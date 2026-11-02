@@ -16,8 +16,6 @@
 export interface SpatialBoundsDeriveNone {
     /**
      *
-     * @type {SpatialBoundsDeriveNoneTypeEnum}
-     * @memberof SpatialBoundsDeriveNone
      */
     type: SpatialBoundsDeriveNoneTypeEnum;
 }

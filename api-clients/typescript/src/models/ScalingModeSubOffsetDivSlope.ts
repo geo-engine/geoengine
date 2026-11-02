@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface ScalingModeSubOffsetDivSlope {
     /**
      * 
-     * @type {ScalingModeSubOffsetDivSlopeTypeEnum}
-     * @memberof ScalingModeSubOffsetDivSlope
      */
     type: ScalingModeSubOffsetDivSlopeTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface ScalingModeSubOffsetDivSlope {
  * @export
  */
 export const ScalingModeSubOffsetDivSlopeTypeEnum = {
-    SubOffsetDivSlope: 'subOffsetDivSlope'
+    SubOffsetDivSlope: 'subOffsetDivSlope',
 } as const;
 export type ScalingModeSubOffsetDivSlopeTypeEnum = typeof ScalingModeSubOffsetDivSlopeTypeEnum[keyof typeof ScalingModeSubOffsetDivSlopeTypeEnum];
 
@@ -41,6 +39,8 @@ export type ScalingModeSubOffsetDivSlopeTypeEnum = typeof ScalingModeSubOffsetDi
  */
 export function instanceOfScalingModeSubOffsetDivSlope(value: object): value is ScalingModeSubOffsetDivSlope {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'subOffsetDivSlope') return false;
+    
     return true;
 }
 

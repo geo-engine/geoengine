@@ -22,13 +22,15 @@ exports.UnitlessMeasurementToJSONTyped = UnitlessMeasurementToJSONTyped;
  * @export
  */
 exports.UnitlessMeasurementTypeEnum = {
-    Unitless: 'unitless'
+    Unitless: 'unitless',
 };
 /**
  * Check if a given object implements the UnitlessMeasurement interface.
  */
 function instanceOfUnitlessMeasurement(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'unitless')
         return false;
     return true;
 }

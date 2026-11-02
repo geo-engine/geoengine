@@ -24,6 +24,7 @@ from geoengine_api_client.models.collection_item import CollectionItem
 from geoengine_api_client.models.provider_layer_collection_id import ProviderLayerCollectionId
 from typing import Optional, Set
 from typing_extensions import Self
+from pydantic_core import to_jsonable_python
 
 class LayerCollection(BaseModel):
     """
@@ -38,7 +39,8 @@ class LayerCollection(BaseModel):
     __properties: ClassVar[List[str]] = ["id", "name", "description", "items", "entryLabel", "properties"]
 
     model_config = ConfigDict(
-        populate_by_name=True,
+        validate_by_name=True,
+        validate_by_alias=True,
         validate_assignment=True,
         protected_namespaces=(),
     )
@@ -50,8 +52,7 @@ class LayerCollection(BaseModel):
 
     def to_json(self) -> str:
         """Returns the JSON representation of the model using alias"""
-        # TODO: pydantic v2: use .model_dump_json(by_alias=True, exclude_unset=True) instead
-        return json.dumps(self.to_dict())
+        return json.dumps(to_jsonable_python(self.to_dict()))
 
     @classmethod
     def from_json(cls, json_str: str) -> Optional[Self]:
@@ -83,8 +84,7 @@ class LayerCollection(BaseModel):
         _items = []
         if self.items:
             for _item_items in self.items:
-                if _item_items:
-                    _items.append(_item_items.to_dict())
+                _items.append(_item_items.to_dict() if _item_items is not None else None)
             _dict['items'] = _items
         # set to None if entry_label (nullable) is None
         # and model_fields_set contains the field

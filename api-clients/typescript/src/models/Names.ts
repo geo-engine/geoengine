@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface Names {
     /**
      * 
-     * @type {Array<string>}
-     * @memberof Names
      */
     values: Array<string>;
     /**
      * 
-     * @type {NamesTypeEnum}
-     * @memberof Names
      */
     type: NamesTypeEnum;
 }
@@ -37,7 +33,7 @@ export interface Names {
  * @export
  */
 export const NamesTypeEnum = {
-    Names: 'names'
+    Names: 'names',
 } as const;
 export type NamesTypeEnum = typeof NamesTypeEnum[keyof typeof NamesTypeEnum];
 
@@ -48,6 +44,8 @@ export type NamesTypeEnum = typeof NamesTypeEnum[keyof typeof NamesTypeEnum];
 export function instanceOfNames(value: object): value is Names {
     if (!('values' in value) || value['values'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'names') return false;
+    
     return true;
 }
 

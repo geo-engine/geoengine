@@ -22,13 +22,15 @@ exports.ContinuousMeasurementToJSONTyped = ContinuousMeasurementToJSONTyped;
  * @export
  */
 exports.ContinuousMeasurementTypeEnum = {
-    Continuous: 'continuous'
+    Continuous: 'continuous',
 };
 /**
  * Check if a given object implements the ContinuousMeasurement interface.
  */
 function instanceOfContinuousMeasurement(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'continuous')
         return false;
     if (!('measurement' in value) || value['measurement'] === undefined)
         return false;
@@ -44,7 +46,7 @@ function ContinuousMeasurementFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'measurement': json['measurement'],
-        'unit': json['unit'] == null ? undefined : json['unit'],
+        'unit': json['unit'] === undefined ? undefined : json['unit'] === null ? null : json['unit'],
     };
 }
 function ContinuousMeasurementToJSON(json) {

@@ -28,8 +28,6 @@ import {
 export interface RasterTypeConversionParameters {
     /**
      * Output raster data type.
-     * @type {RasterDataType}
-     * @memberof RasterTypeConversionParameters
      */
     outputDataType: RasterDataType;
 }

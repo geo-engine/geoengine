@@ -15,7 +15,7 @@
  * @export
  */
 export const CollectionsResponseFormat = {
-    Json: 'json'
+    Json: 'json',
 };
 export function instanceOfCollectionsResponseFormat(value) {
     for (const key in CollectionsResponseFormat) {

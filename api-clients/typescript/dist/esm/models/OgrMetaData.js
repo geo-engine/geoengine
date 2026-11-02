@@ -16,13 +16,15 @@ import { OgrSourceDatasetFromJSON, OgrSourceDatasetToJSON, } from './OgrSourceDa
  * @export
  */
 export const OgrMetaDataTypeEnum = {
-    OgrMetaData: 'OgrMetaData'
+    OgrMetaData: 'OgrMetaData',
 };
 /**
  * Check if a given object implements the OgrMetaData interface.
  */
 export function instanceOfOgrMetaData(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'OgrMetaData')
         return false;
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined)
         return false;

@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface EdrVectorSpec {
     /**
      * 
-     * @type {string}
-     * @memberof EdrVectorSpec
      */
     x: string;
     /**
      * 
-     * @type {string}
-     * @memberof EdrVectorSpec
      */
     y?: string | null;
     /**
      * 
-     * @type {string}
-     * @memberof EdrVectorSpec
      */
     time: string;
 }
@@ -58,7 +52,7 @@ export function EdrVectorSpecFromJSONTyped(json: any, ignoreDiscriminator: boole
     return {
         
         'x': json['x'],
-        'y': json['y'] == null ? undefined : json['y'],
+        'y': json['y'] === undefined ? undefined : json['y'] === null ? null : json['y'],
         'time': json['time'],
     };
 }

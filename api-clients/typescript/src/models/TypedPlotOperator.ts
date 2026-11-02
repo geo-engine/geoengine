@@ -28,14 +28,10 @@ import {
 export interface TypedPlotOperator {
     /**
      * 
-     * @type {PlotOperator}
-     * @memberof TypedPlotOperator
      */
     operator: PlotOperator;
     /**
      * 
-     * @type {TypedPlotOperatorTypeEnum}
-     * @memberof TypedPlotOperator
      */
     type: TypedPlotOperatorTypeEnum;
 }
@@ -45,7 +41,7 @@ export interface TypedPlotOperator {
  * @export
  */
 export const TypedPlotOperatorTypeEnum = {
-    Plot: 'Plot'
+    Plot: 'Plot',
 } as const;
 export type TypedPlotOperatorTypeEnum = typeof TypedPlotOperatorTypeEnum[keyof typeof TypedPlotOperatorTypeEnum];
 
@@ -56,6 +52,8 @@ export type TypedPlotOperatorTypeEnum = typeof TypedPlotOperatorTypeEnum[keyof t
 export function instanceOfTypedPlotOperator(value: object): value is TypedPlotOperator {
     if (!('operator' in value) || value['operator'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Plot') return false;
+    
     return true;
 }
 

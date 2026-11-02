@@ -43,9 +43,9 @@ function ColorParamToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'derived':
-            return Object.assign({}, (0, DerivedColor_1.DerivedColorToJSON)(value), { type: 'derived' });
+            return Object.assign({}, (0, DerivedColor_1.DerivedColorToJSON)(value), { 'type': 'derived' });
         case 'static':
-            return Object.assign({}, (0, StaticColor_1.StaticColorToJSON)(value), { type: 'static' });
+            return Object.assign({}, (0, StaticColor_1.StaticColorToJSON)(value), { 'type': 'static' });
         default:
             return value;
     }

@@ -23,7 +23,7 @@ exports.UpdateDatasetToJSONTyped = UpdateDatasetToJSONTyped;
 function instanceOfUpdateDataset(value) {
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('displayName' in value) || value['displayName'] === undefined)
+    if ((!('displayName' in value) && !('display_name' in value)) || (value['displayName'] === undefined && value['display_name'] === undefined))
         return false;
     if (!('description' in value) || value['description'] === undefined)
         return false;

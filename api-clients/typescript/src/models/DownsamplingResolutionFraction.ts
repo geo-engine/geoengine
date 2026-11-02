@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface DownsamplingResolutionFraction {
     /**
      * 
-     * @type {DownsamplingResolutionFractionTypeEnum}
-     * @memberof DownsamplingResolutionFraction
      */
     type: DownsamplingResolutionFractionTypeEnum;
     /**
      * Scaling factor in x/y direction.
-     * @type {number}
-     * @memberof DownsamplingResolutionFraction
      */
     x: number;
     /**
      * 
-     * @type {number}
-     * @memberof DownsamplingResolutionFraction
      */
     y: number;
 }
@@ -43,7 +37,7 @@ export interface DownsamplingResolutionFraction {
  * @export
  */
 export const DownsamplingResolutionFractionTypeEnum = {
-    Fraction: 'fraction'
+    Fraction: 'fraction',
 } as const;
 export type DownsamplingResolutionFractionTypeEnum = typeof DownsamplingResolutionFractionTypeEnum[keyof typeof DownsamplingResolutionFractionTypeEnum];
 
@@ -53,6 +47,8 @@ export type DownsamplingResolutionFractionTypeEnum = typeof DownsamplingResoluti
  */
 export function instanceOfDownsamplingResolutionFraction(value: object): value is DownsamplingResolutionFraction {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'fraction') return false;
+    
     if (!('x' in value) || value['x'] === undefined) return false;
     if (!('y' in value) || value['y'] === undefined) return false;
     return true;

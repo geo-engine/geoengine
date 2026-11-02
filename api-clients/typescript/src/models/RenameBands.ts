@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { RenameBandsDefault } from './RenameBandsDefault';
 import {
     instanceOfRenameBandsDefault,
@@ -70,11 +71,11 @@ export function RenameBandsToJSONTyped(value?: RenameBands | null, ignoreDiscrim
     }
     switch (value['type']) {
         case 'default':
-            return Object.assign({}, RenameBandsDefaultToJSON(value), { type: 'default' } as const);
+            return Object.assign({}, RenameBandsDefaultToJSON(value), { 'type': 'default' } as const);
         case 'rename':
-            return Object.assign({}, RenameBandsRenameToJSON(value), { type: 'rename' } as const);
+            return Object.assign({}, RenameBandsRenameToJSON(value), { 'type': 'rename' } as const);
         case 'suffix':
-            return Object.assign({}, RenameBandsSuffixToJSON(value), { type: 'suffix' } as const);
+            return Object.assign({}, RenameBandsSuffixToJSON(value), { 'type': 'suffix' } as const);
         default:
             return value;
     }

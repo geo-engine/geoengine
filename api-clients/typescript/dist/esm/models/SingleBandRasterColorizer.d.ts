@@ -17,20 +17,14 @@ import type { Colorizer } from './Colorizer';
 export interface SingleBandRasterColorizer {
     /**
      *
-     * @type {SingleBandRasterColorizerTypeEnum}
-     * @memberof SingleBandRasterColorizer
      */
     type: SingleBandRasterColorizerTypeEnum;
     /**
      *
-     * @type {number}
-     * @memberof SingleBandRasterColorizer
      */
     band: number;
     /**
      *
-     * @type {Colorizer}
-     * @memberof SingleBandRasterColorizer
      */
     bandColorizer: Colorizer;
 }

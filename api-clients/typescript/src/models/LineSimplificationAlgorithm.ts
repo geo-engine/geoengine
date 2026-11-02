@@ -18,7 +18,7 @@
  */
 export const LineSimplificationAlgorithm = {
     DouglasPeucker: 'douglasPeucker',
-    Visvalingam: 'visvalingam'
+    Visvalingam: 'visvalingam',
 } as const;
 export type LineSimplificationAlgorithm = typeof LineSimplificationAlgorithm[keyof typeof LineSimplificationAlgorithm];
 

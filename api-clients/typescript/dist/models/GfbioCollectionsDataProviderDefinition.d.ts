@@ -17,56 +17,38 @@ import type { DatabaseConnectionConfig } from './DatabaseConnectionConfig';
 export interface GfbioCollectionsDataProviderDefinition {
     /**
      *
-     * @type {GfbioCollectionsDataProviderDefinitionTypeEnum}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     type: GfbioCollectionsDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     collectionApiUrl: string;
     /**
      *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     collectionApiAuthToken: string;
     /**
      *
-     * @type {DatabaseConnectionConfig}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     abcdDbConfig: DatabaseConnectionConfig;
     /**
      *
-     * @type {string}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     pangaeaUrl: string;
     /**
      *
-     * @type {number}
-     * @memberof GfbioCollectionsDataProviderDefinition
      */
     cacheTtl?: number | null;
 }

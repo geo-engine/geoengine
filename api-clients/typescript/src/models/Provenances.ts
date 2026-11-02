@@ -28,8 +28,6 @@ import {
 export interface Provenances {
     /**
      * 
-     * @type {Array<Provenance>}
-     * @memberof Provenances
      */
     provenances: Array<Provenance>;
 }

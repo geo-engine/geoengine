@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface LayerVisibility {
     /**
      * 
-     * @type {boolean}
-     * @memberof LayerVisibility
      */
     data: boolean;
     /**
      * 
-     * @type {boolean}
-     * @memberof LayerVisibility
      */
     legend: boolean;
 }

@@ -20,38 +20,26 @@ import { mapValues } from '../runtime';
 export interface AutoCreateDataset {
     /**
      * 
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     upload: string;
     /**
      * 
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     datasetName: string;
     /**
      * 
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     datasetDescription: string;
     /**
      * 
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     mainFile: string;
     /**
      * 
-     * @type {string}
-     * @memberof AutoCreateDataset
      */
     layerName?: string | null;
     /**
      * 
-     * @type {Array<string>}
-     * @memberof AutoCreateDataset
      */
     tags?: Array<string> | null;
 }
@@ -81,8 +69,8 @@ export function AutoCreateDatasetFromJSONTyped(json: any, ignoreDiscriminator: b
         'datasetName': json['datasetName'],
         'datasetDescription': json['datasetDescription'],
         'mainFile': json['mainFile'],
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
-        'tags': json['tags'] == null ? undefined : json['tags'],
+        'layerName': json['layerName'] === undefined ? undefined : json['layerName'] === null ? null : json['layerName'],
+        'tags': json['tags'] === undefined ? undefined : json['tags'] === null ? null : json['tags'],
     };
 }
 

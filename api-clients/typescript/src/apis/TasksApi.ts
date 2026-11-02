@@ -11,34 +11,53 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  TaskFilter,
-  TaskStatus,
-  TaskStatusWithId,
-} from '../models/index';
 import {
+    type TaskFilter,
     TaskFilterFromJSON,
     TaskFilterToJSON,
+} from '../models/TaskFilter';
+import {
+    type TaskStatus,
     TaskStatusFromJSON,
     TaskStatusToJSON,
+} from '../models/TaskStatus';
+import {
+    type TaskStatusWithId,
     TaskStatusWithIdFromJSON,
     TaskStatusWithIdToJSON,
-} from '../models/index';
+} from '../models/TaskStatusWithId';
 
 export interface AbortHandlerRequest {
+    /**
+     * Task id
+     */
     id: string;
+    /**
+     * 
+     */
     force?: boolean;
 }
 
 export interface ListHandlerRequest {
+    /**
+     * 
+     */
     filter: TaskFilter | null;
+    /**
+     * 
+     */
     offset: number;
+    /**
+     * 
+     */
     limit: number;
 }
 
 export interface StatusHandlerRequest {
+    /**
+     * Task id
+     */
     id: string;
 }
 
@@ -76,7 +95,7 @@ export class TasksApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/tasks/{id}`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,
@@ -144,9 +163,9 @@ export class TasksApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/tasks/list`;
-        urlPath = urlPath.replace(`{${"filter"}}`, encodeURIComponent(String(requestParameters['filter'])));
-        urlPath = urlPath.replace(`{${"offset"}}`, encodeURIComponent(String(requestParameters['offset'])));
-        urlPath = urlPath.replace(`{${"limit"}}`, encodeURIComponent(String(requestParameters['limit'])));
+        urlPath = urlPath.replace('{filter}', encodeURIComponent(String(requestParameters['filter'])));
+        urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
+        urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
 
         return {
             path: urlPath,
@@ -199,7 +218,7 @@ export class TasksApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/tasks/{id}/status`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,

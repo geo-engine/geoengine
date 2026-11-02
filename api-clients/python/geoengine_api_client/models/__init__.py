@@ -377,6 +377,7 @@ from geoengine_api_client.models.tile_matrix_set_item import TileMatrixSetItem
 from geoengine_api_client.models.tile_matrix_sets import TileMatrixSets
 from geoengine_api_client.models.tile_point import TilePoint
 from geoengine_api_client.models.tile_set import TileSet
+from geoengine_api_client.models.tile_set_data_type import TileSetDataType
 from geoengine_api_client.models.tile_set_item import TileSetItem
 from geoengine_api_client.models.tile_sets import TileSets
 from geoengine_api_client.models.tiles_crs import TilesCrs

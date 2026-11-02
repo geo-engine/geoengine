@@ -18,7 +18,7 @@
  */
 export const Permission = {
     Read: 'Read',
-    Owner: 'Owner'
+    Owner: 'Owner',
 } as const;
 export type Permission = typeof Permission[keyof typeof Permission];
 

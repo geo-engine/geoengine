@@ -23,7 +23,7 @@ exports.CollectionTypeToJSONTyped = CollectionTypeToJSONTyped;
  * @export
  */
 exports.CollectionType = {
-    FeatureCollection: 'FeatureCollection'
+    FeatureCollection: 'FeatureCollection',
 };
 function instanceOfCollectionType(value) {
     for (const key in exports.CollectionType) {

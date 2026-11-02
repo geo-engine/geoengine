@@ -20,7 +20,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { IdResponseFromJSON, ProcessingGraphFromJSON, ProcessingGraphToJSON, ProvenanceEntryFromJSON, RasterDatasetFromProcessingGraphToJSON, TaskResponseFromJSON, TypedResultDescriptorFromJSON, } from '../models/index';
+import { IdResponseFromJSON, } from '../models/IdResponse';
+import { ProcessingGraphFromJSON, ProcessingGraphToJSON, } from '../models/ProcessingGraph';
+import { ProvenanceEntryFromJSON, } from '../models/ProvenanceEntry';
+import { RasterDatasetFromProcessingGraphToJSON, } from '../models/RasterDatasetFromProcessingGraph';
+import { TaskResponseFromJSON, } from '../models/TaskResponse';
+import { TypedResultDescriptorFromJSON, } from '../models/TypedResultDescriptor';
 /**
  *
  */
@@ -47,7 +52,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/datasetFromProcessingGraph/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -94,7 +99,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/allMetadata/zip`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -140,7 +145,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/metadata`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -186,7 +191,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/provenance`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -232,7 +237,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -302,7 +307,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/processingGraphs/{id}/rasterStream`;
-            urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
             return {
                 path: urlPath,
                 method: 'GET',

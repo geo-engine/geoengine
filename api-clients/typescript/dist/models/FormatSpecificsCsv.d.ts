@@ -17,8 +17,6 @@ import type { CsvHeader } from './CsvHeader';
 export interface FormatSpecificsCsv {
     /**
      *
-     * @type {CsvHeader}
-     * @memberof FormatSpecificsCsv
      */
     header: CsvHeader;
 }

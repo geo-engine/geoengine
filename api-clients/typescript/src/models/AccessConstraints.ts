@@ -21,7 +21,7 @@ export const AccessConstraints = {
     Restricted: 'restricted',
     Confidential: 'confidential',
     Secret: 'secret',
-    TopSecret: 'topSecret'
+    TopSecret: 'topSecret',
 } as const;
 export type AccessConstraints = typeof AccessConstraints[keyof typeof AccessConstraints];
 

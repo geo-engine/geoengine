@@ -24,13 +24,15 @@ const SingleRasterOrVectorSource_1 = require("./SingleRasterOrVectorSource");
  * @export
  */
 exports.HistogramTypeEnum = {
-    Histogram: 'Histogram'
+    Histogram: 'Histogram',
 };
 /**
  * Check if a given object implements the Histogram interface.
  */
 function instanceOfHistogram(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Histogram')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

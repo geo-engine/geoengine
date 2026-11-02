@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { BandFilter } from './BandFilter';
 import {
     instanceOfBandFilter,
@@ -223,45 +224,45 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
     }
     switch (value['type']) {
         case 'BandFilter':
-            return Object.assign({}, BandFilterToJSON(value), { type: 'BandFilter' } as const);
+            return Object.assign({}, BandFilterToJSON(value), { 'type': 'BandFilter' } as const);
         case 'BandNeighborhoodAggregate':
-            return Object.assign({}, BandNeighborhoodAggregateToJSON(value), { type: 'BandNeighborhoodAggregate' } as const);
+            return Object.assign({}, BandNeighborhoodAggregateToJSON(value), { 'type': 'BandNeighborhoodAggregate' } as const);
         case 'BandwiseExpression':
-            return Object.assign({}, BandwiseExpressionToJSON(value), { type: 'BandwiseExpression' } as const);
+            return Object.assign({}, BandwiseExpressionToJSON(value), { 'type': 'BandwiseExpression' } as const);
         case 'Downsampling':
-            return Object.assign({}, DownsamplingToJSON(value), { type: 'Downsampling' } as const);
+            return Object.assign({}, DownsamplingToJSON(value), { 'type': 'Downsampling' } as const);
         case 'Expression':
-            return Object.assign({}, ExpressionToJSON(value), { type: 'Expression' } as const);
+            return Object.assign({}, ExpressionToJSON(value), { 'type': 'Expression' } as const);
         case 'GdalSource':
-            return Object.assign({}, GdalSourceToJSON(value), { type: 'GdalSource' } as const);
+            return Object.assign({}, GdalSourceToJSON(value), { 'type': 'GdalSource' } as const);
         case 'Interpolation':
-            return Object.assign({}, InterpolationToJSON(value), { type: 'Interpolation' } as const);
+            return Object.assign({}, InterpolationToJSON(value), { 'type': 'Interpolation' } as const);
         case 'MultiBandGdalSource':
-            return Object.assign({}, MultiBandGdalSourceToJSON(value), { type: 'MultiBandGdalSource' } as const);
+            return Object.assign({}, MultiBandGdalSourceToJSON(value), { 'type': 'MultiBandGdalSource' } as const);
         case 'NeighborhoodAggregate':
-            return Object.assign({}, NeighborhoodAggregateToJSON(value), { type: 'NeighborhoodAggregate' } as const);
+            return Object.assign({}, NeighborhoodAggregateToJSON(value), { 'type': 'NeighborhoodAggregate' } as const);
         case 'Onnx':
-            return Object.assign({}, OnnxToJSON(value), { type: 'Onnx' } as const);
+            return Object.assign({}, OnnxToJSON(value), { 'type': 'Onnx' } as const);
         case 'Radiance':
-            return Object.assign({}, RadianceToJSON(value), { type: 'Radiance' } as const);
+            return Object.assign({}, RadianceToJSON(value), { 'type': 'Radiance' } as const);
         case 'RasterScaling':
-            return Object.assign({}, RasterScalingToJSON(value), { type: 'RasterScaling' } as const);
+            return Object.assign({}, RasterScalingToJSON(value), { 'type': 'RasterScaling' } as const);
         case 'RasterStacker':
-            return Object.assign({}, RasterStackerToJSON(value), { type: 'RasterStacker' } as const);
+            return Object.assign({}, RasterStackerToJSON(value), { 'type': 'RasterStacker' } as const);
         case 'RasterTypeConversion':
-            return Object.assign({}, RasterTypeConversionToJSON(value), { type: 'RasterTypeConversion' } as const);
+            return Object.assign({}, RasterTypeConversionToJSON(value), { 'type': 'RasterTypeConversion' } as const);
         case 'Rasterization':
-            return Object.assign({}, RasterizationToJSON(value), { type: 'Rasterization' } as const);
+            return Object.assign({}, RasterizationToJSON(value), { 'type': 'Rasterization' } as const);
         case 'Reflectance':
-            return Object.assign({}, ReflectanceToJSON(value), { type: 'Reflectance' } as const);
+            return Object.assign({}, ReflectanceToJSON(value), { 'type': 'Reflectance' } as const);
         case 'Reprojection':
-            return Object.assign({}, ReprojectionToJSON(value), { type: 'Reprojection' } as const);
+            return Object.assign({}, ReprojectionToJSON(value), { 'type': 'Reprojection' } as const);
         case 'Temperature':
-            return Object.assign({}, TemperatureToJSON(value), { type: 'Temperature' } as const);
+            return Object.assign({}, TemperatureToJSON(value), { 'type': 'Temperature' } as const);
         case 'TemporalRasterAggregation':
-            return Object.assign({}, TemporalRasterAggregationToJSON(value), { type: 'TemporalRasterAggregation' } as const);
+            return Object.assign({}, TemporalRasterAggregationToJSON(value), { 'type': 'TemporalRasterAggregation' } as const);
         case 'TimeShift':
-            return Object.assign({}, TimeShiftToJSON(value), { type: 'TimeShift' } as const);
+            return Object.assign({}, TimeShiftToJSON(value), { 'type': 'TimeShift' } as const);
         default:
             return value;
     }

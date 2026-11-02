@@ -26,7 +26,7 @@ GEOSPATIALDATADATATYPE_ONE_OF_SCHEMAS = ["GeospatialDataDataTypeOneOf", "str"]
 
 class GeospatialDataDataType(BaseModel):
     """
-    GeospatialDataDataType
+    Type of data represented in the layer
     """
     # data type: str
     oneof_schema_1_validator: Optional[StrictStr] = None

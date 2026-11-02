@@ -16,14 +16,10 @@
 export interface AggregationSum {
     /**
      *
-     * @type {AggregationSumTypeEnum}
-     * @memberof AggregationSum
      */
     type: AggregationSumTypeEnum;
     /**
      *
-     * @type {boolean}
-     * @memberof AggregationSum
      */
     ignoreNoData: boolean;
 }

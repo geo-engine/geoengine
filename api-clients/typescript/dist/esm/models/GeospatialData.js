@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { parseDateTime, serializeDateTime } from '../runtime';
 import { GeometryDimensionFromJSON, GeometryDimensionToJSON, } from './GeometryDimension';
 import { GeospatialDataDataTypeFromJSON, GeospatialDataDataTypeToJSON, } from './GeospatialDataDataType';
 import { BoundingBox2DFromJSON, BoundingBox2DToJSON, } from './BoundingBox2D';
@@ -46,7 +47,7 @@ export function GeospatialDataFromJSONTyped(json, ignoreDiscriminator) {
         'pointOfContact': json['pointOfContact'] == null ? undefined : json['pointOfContact'],
         'publisher': json['publisher'] == null ? undefined : json['publisher'],
         'theme': json['theme'] == null ? undefined : json['theme'],
-        'crs': json['crs'] == null ? undefined : TilesCrsFromJSON(json['crs']),
+        'crs': json['crs'] === undefined ? undefined : json['crs'] === null ? null : TilesCrsFromJSON(json['crs']),
         'epoch': json['epoch'] == null ? undefined : json['epoch'],
         'minScaleDenominator': json['minScaleDenominator'] == null ? undefined : json['minScaleDenominator'],
         'maxScaleDenominator': json['maxScaleDenominator'] == null ? undefined : json['maxScaleDenominator'],
@@ -55,11 +56,11 @@ export function GeospatialDataFromJSONTyped(json, ignoreDiscriminator) {
         'maxTileMatrix': json['maxTileMatrix'] == null ? undefined : json['maxTileMatrix'],
         'minTileMatrix': json['minTileMatrix'] == null ? undefined : json['minTileMatrix'],
         'boundingBox': json['boundingBox'] == null ? undefined : BoundingBox2DFromJSON(json['boundingBox']),
-        'created': json['created'] == null ? undefined : (new Date(json['created'])),
-        'updated': json['updated'] == null ? undefined : (new Date(json['updated'])),
+        'created': json['created'] == null ? undefined : (parseDateTime(json['created'])),
+        'updated': json['updated'] == null ? undefined : (parseDateTime(json['updated'])),
         'style': json['style'] == null ? undefined : StyleFromJSON(json['style']),
         'geoDataClasses': json['geoDataClasses'] == null ? undefined : json['geoDataClasses'],
-        'propertiesSchema': json['propertiesSchema'] == null ? undefined : json['propertiesSchema'],
+        'propertiesSchema': json['propertiesSchema'] === undefined ? undefined : json['propertiesSchema'] === null ? null : json['propertiesSchema'],
         'links': json['links'] == null ? undefined : (json['links'].map(LinkFromJSON)),
     };
 }
@@ -92,8 +93,8 @@ export function GeospatialDataToJSONTyped(value, ignoreDiscriminator = false) {
         'maxTileMatrix': value['maxTileMatrix'],
         'minTileMatrix': value['minTileMatrix'],
         'boundingBox': BoundingBox2DToJSON(value['boundingBox']),
-        'created': value['created'] == null ? value['created'] : value['created'].toISOString(),
-        'updated': value['updated'] == null ? value['updated'] : value['updated'].toISOString(),
+        'created': value['created'] == null ? value['created'] : serializeDateTime(value['created']),
+        'updated': value['updated'] == null ? value['updated'] : serializeDateTime(value['updated']),
         'style': StyleToJSON(value['style']),
         'geoDataClasses': value['geoDataClasses'],
         'propertiesSchema': value['propertiesSchema'],

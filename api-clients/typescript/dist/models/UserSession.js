@@ -17,6 +17,7 @@ exports.UserSessionFromJSON = UserSessionFromJSON;
 exports.UserSessionFromJSONTyped = UserSessionFromJSONTyped;
 exports.UserSessionToJSON = UserSessionToJSON;
 exports.UserSessionToJSONTyped = UserSessionToJSONTyped;
+const runtime_1 = require("../runtime");
 const STRectangle_1 = require("./STRectangle");
 const UserInfo_1 = require("./UserInfo");
 /**
@@ -45,10 +46,10 @@ function UserSessionFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'id': json['id'],
         'user': (0, UserInfo_1.UserInfoFromJSON)(json['user']),
-        'created': (new Date(json['created'])),
-        'validUntil': (new Date(json['validUntil'])),
-        'project': json['project'] == null ? undefined : json['project'],
-        'view': json['view'] == null ? undefined : (0, STRectangle_1.STRectangleFromJSON)(json['view']),
+        'created': (json['created'] == null ? json['created'] : (0, runtime_1.parseDateTime)(json['created'])),
+        'validUntil': (json['validUntil'] == null ? json['validUntil'] : (0, runtime_1.parseDateTime)(json['validUntil'])),
+        'project': json['project'] === undefined ? undefined : json['project'] === null ? null : json['project'],
+        'view': json['view'] === undefined ? undefined : json['view'] === null ? null : (0, STRectangle_1.STRectangleFromJSON)(json['view']),
         'roles': json['roles'],
     };
 }
@@ -62,8 +63,8 @@ function UserSessionToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'id': value['id'],
         'user': (0, UserInfo_1.UserInfoToJSON)(value['user']),
-        'created': value['created'].toISOString(),
-        'validUntil': value['validUntil'].toISOString(),
+        'created': value['created'] == null ? value['created'] : (0, runtime_1.serializeDateTime)(value['created']),
+        'validUntil': value['validUntil'] == null ? value['validUntil'] : (0, runtime_1.serializeDateTime)(value['validUntil']),
         'project': value['project'],
         'view': (0, STRectangle_1.STRectangleToJSON)(value['view']),
         'roles': value['roles'],

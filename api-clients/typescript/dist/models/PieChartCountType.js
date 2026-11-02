@@ -22,13 +22,15 @@ exports.PieChartCountTypeToJSONTyped = PieChartCountTypeToJSONTyped;
  * @export
  */
 exports.PieChartCountTypeTypeEnum = {
-    Count: 'count'
+    Count: 'count',
 };
 /**
  * Check if a given object implements the PieChartCountType interface.
  */
 function instanceOfPieChartCountType(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'count')
         return false;
     if (!('columnName' in value) || value['columnName'] === undefined)
         return false;

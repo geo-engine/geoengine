@@ -7,7 +7,7 @@ An object defining the CRS using the JSON encoding for Well-known text represent
 
 Name | Type
 ------------ | -------------
-`wkt` | { [key: string]: any; }
+`wkt` | { [key: string]: any | null; }
 
 ## Example
 

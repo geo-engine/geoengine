@@ -19,32 +19,22 @@ import type { SpatialPartition2D } from './SpatialPartition2D';
 export interface AddDatasetTile {
     /**
      *
-     * @type {TimeInterval}
-     * @memberof AddDatasetTile
      */
     time: TimeInterval;
     /**
      *
-     * @type {SpatialPartition2D}
-     * @memberof AddDatasetTile
      */
     spatialPartition: SpatialPartition2D;
     /**
      *
-     * @type {number}
-     * @memberof AddDatasetTile
      */
     band: number;
     /**
      *
-     * @type {number}
-     * @memberof AddDatasetTile
      */
     zIndex: number;
     /**
      *
-     * @type {GdalDatasetParameters}
-     * @memberof AddDatasetTile
      */
     params: GdalDatasetParameters;
 }

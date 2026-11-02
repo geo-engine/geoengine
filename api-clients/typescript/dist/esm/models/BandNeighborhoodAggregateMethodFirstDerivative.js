@@ -15,13 +15,15 @@ import { BandDistanceEquallySpacedFromJSON, BandDistanceEquallySpacedToJSON, } f
  * @export
  */
 export const BandNeighborhoodAggregateMethodFirstDerivativeTypeEnum = {
-    FirstDerivative: 'firstDerivative'
+    FirstDerivative: 'firstDerivative',
 };
 /**
  * Check if a given object implements the BandNeighborhoodAggregateMethodFirstDerivative interface.
  */
 export function instanceOfBandNeighborhoodAggregateMethodFirstDerivative(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'firstDerivative')
         return false;
     if (!('bandDistance' in value) || value['bandDistance'] === undefined)
         return false;

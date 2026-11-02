@@ -16,8 +16,6 @@
 export interface AttributeSelectionAll {
     /**
      *
-     * @type {AttributeSelectionAllTypeEnum}
-     * @memberof AttributeSelectionAll
      */
     type: AttributeSelectionAllTypeEnum;
 }

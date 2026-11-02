@@ -20,24 +20,18 @@ import { mapValues } from '../runtime';
 export interface StacProviderS3Config {
     /**
      * 
-     * @type {string}
-     * @memberof StacProviderS3Config
      */
     endpoint: string;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.
      * If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
      * This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
-     * @type {string}
-     * @memberof StacProviderS3Config
      */
     accessKey?: string | null;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.
      * If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
      * This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
-     * @type {string}
-     * @memberof StacProviderS3Config
      */
     secretKey?: string | null;
 }
@@ -61,8 +55,8 @@ export function StacProviderS3ConfigFromJSONTyped(json: any, ignoreDiscriminator
     return {
         
         'endpoint': json['endpoint'],
-        'accessKey': json['accessKey'] == null ? undefined : json['accessKey'],
-        'secretKey': json['secretKey'] == null ? undefined : json['secretKey'],
+        'accessKey': json['accessKey'] === undefined ? undefined : json['accessKey'] === null ? null : json['accessKey'],
+        'secretKey': json['secretKey'] === undefined ? undefined : json['secretKey'] === null ? null : json['secretKey'],
     };
 }
 

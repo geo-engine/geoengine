@@ -22,13 +22,15 @@ exports.NeighborhoodAggregateMethodStandardDeviationToJSONTyped = NeighborhoodAg
  * @export
  */
 exports.NeighborhoodAggregateMethodStandardDeviationTypeEnum = {
-    StandardDeviation: 'standardDeviation'
+    StandardDeviation: 'standardDeviation',
 };
 /**
  * Check if a given object implements the NeighborhoodAggregateMethodStandardDeviation interface.
  */
 function instanceOfNeighborhoodAggregateMethodStandardDeviation(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'standardDeviation')
         return false;
     return true;
 }

@@ -20,7 +20,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { PermissionListingFromJSON, PermissionRequestToJSON, } from '../models/index';
+import { PermissionListingFromJSON, } from '../models/PermissionListing';
+import { PermissionRequestToJSON, } from '../models/PermissionRequest';
 /**
  *
  */
@@ -104,8 +105,8 @@ export class PermissionsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/permissions/resources/{resource_type}/{resource_id}`;
-            urlPath = urlPath.replace(`{${"resource_type"}}`, encodeURIComponent(String(requestParameters['resourceType'])));
-            urlPath = urlPath.replace(`{${"resource_id"}}`, encodeURIComponent(String(requestParameters['resourceId'])));
+            urlPath = urlPath.replace('{resource_type}', encodeURIComponent(String(requestParameters['resourceType'])));
+            urlPath = urlPath.replace('{resource_id}', encodeURIComponent(String(requestParameters['resourceId'])));
             return {
                 path: urlPath,
                 method: 'GET',

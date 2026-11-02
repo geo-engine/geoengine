@@ -19,7 +19,7 @@
 export const WcsRequest = {
     GetCapabilities: 'GetCapabilities',
     DescribeCoverage: 'DescribeCoverage',
-    GetCoverage: 'GetCoverage'
+    GetCoverage: 'GetCoverage',
 } as const;
 export type WcsRequest = typeof WcsRequest[keyof typeof WcsRequest];
 

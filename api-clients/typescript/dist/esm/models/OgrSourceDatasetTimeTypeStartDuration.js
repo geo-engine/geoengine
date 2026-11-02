@@ -15,13 +15,15 @@ import { OgrSourceTimeFormatFromJSON, OgrSourceTimeFormatToJSON, } from './OgrSo
  * @export
  */
 export const OgrSourceDatasetTimeTypeStartDurationTypeEnum = {
-    Startduration: 'start+duration'
+    Startduration: 'start+duration',
 };
 /**
  * Check if a given object implements the OgrSourceDatasetTimeTypeStartDuration interface.
  */
 export function instanceOfOgrSourceDatasetTimeTypeStartDuration(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'start+duration')
         return false;
     if (!('startField' in value) || value['startField'] === undefined)
         return false;

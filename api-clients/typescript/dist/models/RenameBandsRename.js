@@ -22,13 +22,15 @@ exports.RenameBandsRenameToJSONTyped = RenameBandsRenameToJSONTyped;
  * @export
  */
 exports.RenameBandsRenameTypeEnum = {
-    Rename: 'rename'
+    Rename: 'rename',
 };
 /**
  * Check if a given object implements the RenameBandsRename interface.
  */
 function instanceOfRenameBandsRename(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'rename')
         return false;
     if (!('values' in value) || value['values'] === undefined)
         return false;

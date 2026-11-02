@@ -22,13 +22,15 @@ exports.HistogramBucketsNumberToJSONTyped = HistogramBucketsNumberToJSONTyped;
  * @export
  */
 exports.HistogramBucketsNumberTypeEnum = {
-    Number: 'number'
+    Number: 'number',
 };
 /**
  * Check if a given object implements the HistogramBucketsNumber interface.
  */
 function instanceOfHistogramBucketsNumber(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'number')
         return false;
     if (!('value' in value) || value['value'] === undefined)
         return false;

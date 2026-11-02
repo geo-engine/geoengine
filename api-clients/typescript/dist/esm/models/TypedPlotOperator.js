@@ -15,7 +15,7 @@ import { PlotOperatorFromJSON, PlotOperatorToJSON, } from './PlotOperator';
  * @export
  */
 export const TypedPlotOperatorTypeEnum = {
-    Plot: 'Plot'
+    Plot: 'Plot',
 };
 /**
  * Check if a given object implements the TypedPlotOperator interface.
@@ -24,6 +24,8 @@ export function instanceOfTypedPlotOperator(value) {
     if (!('operator' in value) || value['operator'] === undefined)
         return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Plot')
         return false;
     return true;
 }

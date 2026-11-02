@@ -17,20 +17,14 @@ import type { DataPath } from './DataPath';
 export interface SuggestMetaData {
     /**
      *
-     * @type {DataPath}
-     * @memberof SuggestMetaData
      */
     dataPath: DataPath;
     /**
      *
-     * @type {string}
-     * @memberof SuggestMetaData
      */
     mainFile?: string | null;
     /**
      *
-     * @type {string}
-     * @memberof SuggestMetaData
      */
     layerName?: string | null;
 }

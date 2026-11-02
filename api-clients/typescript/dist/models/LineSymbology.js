@@ -24,13 +24,15 @@ const StrokeParam_1 = require("./StrokeParam");
  * @export
  */
 exports.LineSymbologyTypeEnum = {
-    Line: 'line'
+    Line: 'line',
 };
 /**
  * Check if a given object implements the LineSymbology interface.
  */
 function instanceOfLineSymbology(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'line')
         return false;
     if (!('stroke' in value) || value['stroke'] === undefined)
         return false;
@@ -48,7 +50,7 @@ function LineSymbologyFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'type': json['type'],
         'stroke': (0, StrokeParam_1.StrokeParamFromJSON)(json['stroke']),
-        'text': json['text'] == null ? undefined : (0, TextSymbology_1.TextSymbologyFromJSON)(json['text']),
+        'text': json['text'] === undefined ? undefined : json['text'] === null ? null : (0, TextSymbology_1.TextSymbologyFromJSON)(json['text']),
         'autoSimplified': json['autoSimplified'],
     };
 }

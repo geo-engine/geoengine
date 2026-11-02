@@ -16,14 +16,10 @@
 export interface MlModelResource {
     /**
      *
-     * @type {MlModelResourceTypeEnum}
-     * @memberof MlModelResource
      */
     type: MlModelResourceTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof MlModelResource
      */
     id: string;
 }

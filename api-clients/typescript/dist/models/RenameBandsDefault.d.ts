@@ -16,8 +16,6 @@
 export interface RenameBandsDefault {
     /**
      *
-     * @type {RenameBandsDefaultTypeEnum}
-     * @memberof RenameBandsDefault
      */
     type: RenameBandsDefaultTypeEnum;
 }

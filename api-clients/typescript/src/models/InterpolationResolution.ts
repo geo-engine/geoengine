@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { InterpolationResolutionFraction } from './InterpolationResolutionFraction';
 import {
     instanceOfInterpolationResolutionFraction,
@@ -61,9 +62,9 @@ export function InterpolationResolutionToJSONTyped(value?: InterpolationResoluti
     }
     switch (value['type']) {
         case 'fraction':
-            return Object.assign({}, InterpolationResolutionFractionToJSON(value), { type: 'fraction' } as const);
+            return Object.assign({}, InterpolationResolutionFractionToJSON(value), { 'type': 'fraction' } as const);
         case 'resolution':
-            return Object.assign({}, InterpolationResolutionResolutionToJSON(value), { type: 'resolution' } as const);
+            return Object.assign({}, InterpolationResolutionResolutionToJSON(value), { 'type': 'resolution' } as const);
         default:
             return value;
     }

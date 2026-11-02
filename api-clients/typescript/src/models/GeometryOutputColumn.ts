@@ -28,14 +28,10 @@ import {
 export interface GeometryOutputColumn {
     /**
      * The expression will override the current geometry
-     * @type {VectorDataType}
-     * @memberof GeometryOutputColumn
      */
     value: VectorDataType;
     /**
      * 
-     * @type {GeometryOutputColumnTypeEnum}
-     * @memberof GeometryOutputColumn
      */
     type: GeometryOutputColumnTypeEnum;
 }
@@ -45,7 +41,7 @@ export interface GeometryOutputColumn {
  * @export
  */
 export const GeometryOutputColumnTypeEnum = {
-    Geometry: 'geometry'
+    Geometry: 'geometry',
 } as const;
 export type GeometryOutputColumnTypeEnum = typeof GeometryOutputColumnTypeEnum[keyof typeof GeometryOutputColumnTypeEnum];
 
@@ -56,6 +52,8 @@ export type GeometryOutputColumnTypeEnum = typeof GeometryOutputColumnTypeEnum[k
 export function instanceOfGeometryOutputColumn(value: object): value is GeometryOutputColumn {
     if (!('value' in value) || value['value'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'geometry') return false;
+    
     return true;
 }
 

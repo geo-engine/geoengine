@@ -16,7 +16,7 @@
  */
 export const GetMapExceptionFormat = {
     Xml: 'XML',
-    Json: 'JSON'
+    Json: 'JSON',
 };
 export function instanceOfGetMapExceptionFormat(value) {
     for (const key in GetMapExceptionFormat) {

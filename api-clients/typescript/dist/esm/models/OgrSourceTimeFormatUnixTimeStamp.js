@@ -15,13 +15,15 @@ import { UnixTimeStampTypeFromJSON, UnixTimeStampTypeToJSON, } from './UnixTimeS
  * @export
  */
 export const OgrSourceTimeFormatUnixTimeStampFormatEnum = {
-    UnixTimeStamp: 'unixTimeStamp'
+    UnixTimeStamp: 'unixTimeStamp',
 };
 /**
  * Check if a given object implements the OgrSourceTimeFormatUnixTimeStamp interface.
  */
 export function instanceOfOgrSourceTimeFormatUnixTimeStamp(value) {
     if (!('format' in value) || value['format'] === undefined)
+        return false;
+    if (value['format'] !== 'unixTimeStamp')
         return false;
     if (!('timestampType' in value) || value['timestampType'] === undefined)
         return false;

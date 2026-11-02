@@ -24,13 +24,15 @@ const BandwiseExpressionParameters_1 = require("./BandwiseExpressionParameters")
  * @export
  */
 exports.BandwiseExpressionTypeEnum = {
-    BandwiseExpression: 'BandwiseExpression'
+    BandwiseExpression: 'BandwiseExpression',
 };
 /**
  * Check if a given object implements the BandwiseExpression interface.
  */
 function instanceOfBandwiseExpression(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'BandwiseExpression')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

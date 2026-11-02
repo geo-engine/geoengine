@@ -24,13 +24,15 @@ const PieChartParameters_1 = require("./PieChartParameters");
  * @export
  */
 exports.PieChartTypeEnum = {
-    PieChart: 'PieChart'
+    PieChart: 'PieChart',
 };
 /**
  * Check if a given object implements the PieChart interface.
  */
 function instanceOfPieChart(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'PieChart')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

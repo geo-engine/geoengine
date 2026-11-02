@@ -24,13 +24,15 @@ const BandFilterParameters_1 = require("./BandFilterParameters");
  * @export
  */
 exports.BandFilterTypeEnum = {
-    BandFilter: 'BandFilter'
+    BandFilter: 'BandFilter',
 };
 /**
  * Check if a given object implements the BandFilter interface.
  */
 function instanceOfBandFilter(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'BandFilter')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

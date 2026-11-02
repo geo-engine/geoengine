@@ -23,7 +23,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SessionApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const AuthCodeRequestURL_1 = require("../models/AuthCodeRequestURL");
+const AuthCodeResponse_1 = require("../models/AuthCodeResponse");
+const STRectangle_1 = require("../models/STRectangle");
+const UserCredentials_1 = require("../models/UserCredentials");
+const UserRegistration_1 = require("../models/UserRegistration");
+const UserSession_1 = require("../models/UserSession");
 /**
  *
  */
@@ -51,7 +56,7 @@ class SessionApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.anonymousHandlerRequestOpts();
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.UserSessionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, UserSession_1.UserSessionFromJSON)(jsonValue));
         });
     }
     /**
@@ -80,7 +85,7 @@ class SessionApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.UserCredentialsToJSON)(requestParameters['userCredentials']),
+                body: (0, UserCredentials_1.UserCredentialsToJSON)(requestParameters['userCredentials']),
             };
         });
     }
@@ -91,7 +96,7 @@ class SessionApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.loginHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.UserSessionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, UserSession_1.UserSessionFromJSON)(jsonValue));
         });
     }
     /**
@@ -174,7 +179,7 @@ class SessionApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.oidcInitRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.AuthCodeRequestURLFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, AuthCodeRequestURL_1.AuthCodeRequestURLFromJSON)(jsonValue));
         });
     }
     /**
@@ -210,7 +215,7 @@ class SessionApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.AuthCodeResponseToJSON)(requestParameters['authCodeResponse']),
+                body: (0, AuthCodeResponse_1.AuthCodeResponseToJSON)(requestParameters['authCodeResponse']),
             };
         });
     }
@@ -222,7 +227,7 @@ class SessionApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.oidcLoginRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.UserSessionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, UserSession_1.UserSessionFromJSON)(jsonValue));
         });
     }
     /**
@@ -252,7 +257,7 @@ class SessionApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.UserRegistrationToJSON)(requestParameters['userRegistration']),
+                body: (0, UserRegistration_1.UserRegistrationToJSON)(requestParameters['userRegistration']),
             };
         });
     }
@@ -310,7 +315,7 @@ class SessionApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.sessionHandlerRequestOpts();
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.UserSessionFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, UserSession_1.UserSessionFromJSON)(jsonValue));
         });
     }
     /**
@@ -340,7 +345,7 @@ class SessionApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/session/project/{project}`;
-            urlPath = urlPath.replace(`{${"project"}}`, encodeURIComponent(String(requestParameters['project'])));
+            urlPath = urlPath.replace('{project}', encodeURIComponent(String(requestParameters['project'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -391,7 +396,7 @@ class SessionApi extends runtime.BaseAPI {
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.STRectangleToJSON)(requestParameters['sTRectangle']),
+                body: (0, STRectangle_1.STRectangleToJSON)(requestParameters['sTRectangle']),
             };
         });
     }

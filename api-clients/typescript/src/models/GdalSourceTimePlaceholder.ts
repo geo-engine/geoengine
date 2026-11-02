@@ -28,14 +28,10 @@ import {
 export interface GdalSourceTimePlaceholder {
     /**
      * 
-     * @type {string}
-     * @memberof GdalSourceTimePlaceholder
      */
     format: string;
     /**
      * 
-     * @type {TimeReference}
-     * @memberof GdalSourceTimePlaceholder
      */
     reference: TimeReference;
 }

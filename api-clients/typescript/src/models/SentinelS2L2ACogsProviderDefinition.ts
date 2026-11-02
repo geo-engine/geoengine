@@ -35,62 +35,42 @@ import {
 export interface SentinelS2L2ACogsProviderDefinition {
     /**
      * 
-     * @type {SentinelS2L2ACogsProviderDefinitionTypeEnum}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     type: SentinelS2L2ACogsProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     id: string;
     /**
      * 
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {string}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     apiUrl: string;
     /**
      * 
-     * @type {StacApiRetries}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     stacApiRetries?: StacApiRetries;
     /**
      * 
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     gdalRetries?: number;
     /**
      * 
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     cacheTtl?: number | null;
     /**
      * 
-     * @type {StacQueryBuffer}
-     * @memberof SentinelS2L2ACogsProviderDefinition
      */
     queryBuffer?: StacQueryBuffer;
 }
@@ -100,7 +80,7 @@ export interface SentinelS2L2ACogsProviderDefinition {
  * @export
  */
 export const SentinelS2L2ACogsProviderDefinitionTypeEnum = {
-    SentinelS2L2ACogs: 'SentinelS2L2ACogs'
+    SentinelS2L2ACogs: 'SentinelS2L2ACogs',
 } as const;
 export type SentinelS2L2ACogsProviderDefinitionTypeEnum = typeof SentinelS2L2ACogsProviderDefinitionTypeEnum[keyof typeof SentinelS2L2ACogsProviderDefinitionTypeEnum];
 
@@ -110,6 +90,8 @@ export type SentinelS2L2ACogsProviderDefinitionTypeEnum = typeof SentinelS2L2ACo
  */
 export function instanceOfSentinelS2L2ACogsProviderDefinition(value: object): value is SentinelS2L2ACogsProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'SentinelS2L2ACogs') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
@@ -131,11 +113,11 @@ export function SentinelS2L2ACogsProviderDefinitionFromJSONTyped(json: any, igno
         'name': json['name'],
         'id': json['id'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'apiUrl': json['apiUrl'],
         'stacApiRetries': json['stacApiRetries'] == null ? undefined : StacApiRetriesFromJSON(json['stacApiRetries']),
         'gdalRetries': json['gdalRetries'] == null ? undefined : json['gdalRetries'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
         'queryBuffer': json['queryBuffer'] == null ? undefined : StacQueryBufferFromJSON(json['queryBuffer']),
     };
 }

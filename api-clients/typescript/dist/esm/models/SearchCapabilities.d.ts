@@ -17,20 +17,14 @@ import type { SearchTypes } from './SearchTypes';
 export interface SearchCapabilities {
     /**
      *
-     * @type {SearchTypes}
-     * @memberof SearchCapabilities
      */
     searchTypes: SearchTypes;
     /**
      *
-     * @type {boolean}
-     * @memberof SearchCapabilities
      */
     autocomplete: boolean;
     /**
      *
-     * @type {Array<string>}
-     * @memberof SearchCapabilities
      */
     filters?: Array<string> | null;
 }

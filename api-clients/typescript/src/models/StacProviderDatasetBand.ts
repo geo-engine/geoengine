@@ -36,14 +36,10 @@ export interface StacProviderDatasetBand {
     /**
      * The band inside the STAC asset that this dataset band reads from
      * (addressing: which asset file + which raster channel within it).
-     * @type {StacAssetBand}
-     * @memberof StacProviderDatasetBand
      */
     assetBand: StacAssetBand;
     /**
      * The band descriptor of the resulting geo engine dataset layer.
-     * @type {RasterBandDescriptor}
-     * @memberof StacProviderDatasetBand
      */
     bandDescriptor: RasterBandDescriptor;
 }

@@ -22,13 +22,15 @@ exports.OgrSourceDurationSpecInfiniteToJSONTyped = OgrSourceDurationSpecInfinite
  * @export
  */
 exports.OgrSourceDurationSpecInfiniteTypeEnum = {
-    Infinite: 'infinite'
+    Infinite: 'infinite',
 };
 /**
  * Check if a given object implements the OgrSourceDurationSpecInfinite interface.
  */
 function instanceOfOgrSourceDurationSpecInfinite(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'infinite')
         return false;
     return true;
 }

@@ -11,67 +11,114 @@
  * Do not edit the class manually.
  */
 
-
 import * as runtime from '../runtime';
-import type {
-  IdResponse,
-  ProcessingGraph,
-  ProvenanceEntry,
-  RasterDatasetFromProcessingGraph,
-  RasterStreamWebsocketResultType,
-  SpatialPartition2D,
-  TaskResponse,
-  TypedResultDescriptor,
-} from '../models/index';
 import {
+    type IdResponse,
     IdResponseFromJSON,
     IdResponseToJSON,
+} from '../models/IdResponse';
+import {
+    type ProcessingGraph,
     ProcessingGraphFromJSON,
     ProcessingGraphToJSON,
+} from '../models/ProcessingGraph';
+import {
+    type ProvenanceEntry,
     ProvenanceEntryFromJSON,
     ProvenanceEntryToJSON,
+} from '../models/ProvenanceEntry';
+import {
+    type RasterDatasetFromProcessingGraph,
     RasterDatasetFromProcessingGraphFromJSON,
     RasterDatasetFromProcessingGraphToJSON,
+} from '../models/RasterDatasetFromProcessingGraph';
+import {
+    type RasterStreamWebsocketResultType,
     RasterStreamWebsocketResultTypeFromJSON,
     RasterStreamWebsocketResultTypeToJSON,
+} from '../models/RasterStreamWebsocketResultType';
+import {
+    type SpatialPartition2D,
     SpatialPartition2DFromJSON,
     SpatialPartition2DToJSON,
+} from '../models/SpatialPartition2D';
+import {
+    type TaskResponse,
     TaskResponseFromJSON,
     TaskResponseToJSON,
+} from '../models/TaskResponse';
+import {
+    type TypedResultDescriptor,
     TypedResultDescriptorFromJSON,
     TypedResultDescriptorToJSON,
-} from '../models/index';
+} from '../models/TypedResultDescriptor';
 
 export interface DatasetFromProcessingGraphHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
+    /**
+     * 
+     */
     rasterDatasetFromProcessingGraph: RasterDatasetFromProcessingGraph;
 }
 
 export interface GetProcessingGraphAllMetadataZipHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 
 export interface GetProcessingGraphMetadataHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 
 export interface GetProcessingGraphProvenanceHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 
 export interface LoadProcessingGraphHandlerRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
 }
 
 export interface RasterStreamWebsocketRequest {
+    /**
+     * Processing graph id
+     */
     id: string;
+    /**
+     * 
+     */
     spatialBounds: SpatialPartition2D;
+    /**
+     * 
+     */
     timeInterval: string;
+    /**
+     * 
+     */
     attributes: string;
+    /**
+     * 
+     */
     resultType: RasterStreamWebsocketResultType;
 }
 
 export interface RegisterProcessingGraphHandlerRequest {
+    /**
+     * 
+     */
     processingGraph: ProcessingGraph;
 }
 
@@ -114,7 +161,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/datasetFromProcessingGraph/{id}`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,
@@ -168,7 +215,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/processingGraphs/{id}/allMetadata/zip`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,
@@ -181,7 +228,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
     /**
      * Gets a ZIP archive of the processing graph, its provenance and the output metadata.
      */
-    async getProcessingGraphAllMetadataZipHandlerRaw(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>> {
+    async getProcessingGraphAllMetadataZipHandlerRaw(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>> {
         const requestOptions = await this.getProcessingGraphAllMetadataZipHandlerRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -191,7 +238,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
     /**
      * Gets a ZIP archive of the processing graph, its provenance and the output metadata.
      */
-    async getProcessingGraphAllMetadataZipHandler(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob> {
+    async getProcessingGraphAllMetadataZipHandler(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile> {
         const response = await this.getProcessingGraphAllMetadataZipHandlerRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -221,7 +268,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/processingGraphs/{id}/metadata`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,
@@ -274,7 +321,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/processingGraphs/{id}/provenance`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,
@@ -327,7 +374,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/processingGraphs/{id}`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,
@@ -424,7 +471,7 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
         }
 
         let urlPath = `/processingGraphs/{id}/rasterStream`;
-        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
 
         return {
             path: urlPath,

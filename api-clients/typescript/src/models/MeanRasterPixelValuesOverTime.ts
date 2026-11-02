@@ -51,20 +51,14 @@ import {
 export interface MeanRasterPixelValuesOverTime {
     /**
      * 
-     * @type {MeanRasterPixelValuesOverTimeTypeEnum}
-     * @memberof MeanRasterPixelValuesOverTime
      */
     type: MeanRasterPixelValuesOverTimeTypeEnum;
     /**
      * 
-     * @type {MeanRasterPixelValuesOverTimeParameters}
-     * @memberof MeanRasterPixelValuesOverTime
      */
     params: MeanRasterPixelValuesOverTimeParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof MeanRasterPixelValuesOverTime
      */
     sources: SingleRasterSource;
 }
@@ -74,7 +68,7 @@ export interface MeanRasterPixelValuesOverTime {
  * @export
  */
 export const MeanRasterPixelValuesOverTimeTypeEnum = {
-    MeanRasterPixelValuesOverTime: 'MeanRasterPixelValuesOverTime'
+    MeanRasterPixelValuesOverTime: 'MeanRasterPixelValuesOverTime',
 } as const;
 export type MeanRasterPixelValuesOverTimeTypeEnum = typeof MeanRasterPixelValuesOverTimeTypeEnum[keyof typeof MeanRasterPixelValuesOverTimeTypeEnum];
 
@@ -84,6 +78,8 @@ export type MeanRasterPixelValuesOverTimeTypeEnum = typeof MeanRasterPixelValues
  */
 export function instanceOfMeanRasterPixelValuesOverTime(value: object): value is MeanRasterPixelValuesOverTime {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'MeanRasterPixelValuesOverTime') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -19,44 +19,30 @@ import type { ProcessingGraph } from './ProcessingGraph';
 export interface Layer {
     /**
      *
-     * @type {ProviderLayerId}
-     * @memberof Layer
      */
     id: ProviderLayerId;
     /**
      *
-     * @type {string}
-     * @memberof Layer
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof Layer
      */
     description: string;
     /**
      *
-     * @type {ProcessingGraph}
-     * @memberof Layer
      */
     processingGraph: ProcessingGraph;
     /**
      *
-     * @type {Symbology}
-     * @memberof Layer
      */
     symbology?: Symbology | null;
     /**
      * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
-     * @memberof Layer
      */
     properties?: Array<Array<string>>;
     /**
      * metadata used for loading the data
-     * @type {{ [key: string]: string; }}
-     * @memberof Layer
      */
     metadata?: {
         [key: string]: string;

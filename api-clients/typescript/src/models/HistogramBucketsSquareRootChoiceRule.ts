@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface HistogramBucketsSquareRootChoiceRule {
     /**
      * 
-     * @type {HistogramBucketsSquareRootChoiceRuleTypeEnum}
-     * @memberof HistogramBucketsSquareRootChoiceRule
      */
     type: HistogramBucketsSquareRootChoiceRuleTypeEnum;
     /**
      * 
-     * @type {number}
-     * @memberof HistogramBucketsSquareRootChoiceRule
      */
     maxNumberOfBuckets?: number;
 }
@@ -37,7 +33,7 @@ export interface HistogramBucketsSquareRootChoiceRule {
  * @export
  */
 export const HistogramBucketsSquareRootChoiceRuleTypeEnum = {
-    SquareRootChoiceRule: 'squareRootChoiceRule'
+    SquareRootChoiceRule: 'squareRootChoiceRule',
 } as const;
 export type HistogramBucketsSquareRootChoiceRuleTypeEnum = typeof HistogramBucketsSquareRootChoiceRuleTypeEnum[keyof typeof HistogramBucketsSquareRootChoiceRuleTypeEnum];
 
@@ -47,6 +43,8 @@ export type HistogramBucketsSquareRootChoiceRuleTypeEnum = typeof HistogramBucke
  */
 export function instanceOfHistogramBucketsSquareRootChoiceRule(value: object): value is HistogramBucketsSquareRootChoiceRule {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'squareRootChoiceRule') return false;
+    
     return true;
 }
 

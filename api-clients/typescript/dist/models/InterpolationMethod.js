@@ -24,7 +24,7 @@ exports.InterpolationMethodToJSONTyped = InterpolationMethodToJSONTyped;
  */
 exports.InterpolationMethod = {
     NearestNeighbor: 'nearestNeighbor',
-    BiLinear: 'biLinear'
+    BiLinear: 'biLinear',
 };
 function instanceOfInterpolationMethod(value) {
     for (const key in exports.InterpolationMethod) {

@@ -20,7 +20,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { GeoJsonFromJSON, } from '../models/index';
+import { GeoJsonFromJSON, } from '../models/GeoJson';
 /**
  *
  */
@@ -85,7 +85,7 @@ export class OGCWFSApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/wfs/{processingGraph}`;
-            urlPath = urlPath.replace(`{${"processingGraph"}}`, encodeURIComponent(String(requestParameters['processingGraph'])));
+            urlPath = urlPath.replace('{processingGraph}', encodeURIComponent(String(requestParameters['processingGraph'])));
             return {
                 path: urlPath,
                 method: 'GET',

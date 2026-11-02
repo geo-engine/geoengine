@@ -22,13 +22,15 @@ exports.ProjectResourceToJSONTyped = ProjectResourceToJSONTyped;
  * @export
  */
 exports.ProjectResourceTypeEnum = {
-    Project: 'project'
+    Project: 'project',
 };
 /**
  * Check if a given object implements the ProjectResource interface.
  */
 function instanceOfProjectResource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'project')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

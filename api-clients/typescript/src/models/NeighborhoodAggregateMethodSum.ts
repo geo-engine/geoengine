@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface NeighborhoodAggregateMethodSum {
     /**
      * 
-     * @type {NeighborhoodAggregateMethodSumTypeEnum}
-     * @memberof NeighborhoodAggregateMethodSum
      */
     type: NeighborhoodAggregateMethodSumTypeEnum;
 }
@@ -31,7 +29,7 @@ export interface NeighborhoodAggregateMethodSum {
  * @export
  */
 export const NeighborhoodAggregateMethodSumTypeEnum = {
-    Sum: 'sum'
+    Sum: 'sum',
 } as const;
 export type NeighborhoodAggregateMethodSumTypeEnum = typeof NeighborhoodAggregateMethodSumTypeEnum[keyof typeof NeighborhoodAggregateMethodSumTypeEnum];
 
@@ -41,6 +39,8 @@ export type NeighborhoodAggregateMethodSumTypeEnum = typeof NeighborhoodAggregat
  */
 export function instanceOfNeighborhoodAggregateMethodSum(value: object): value is NeighborhoodAggregateMethodSum {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'sum') return false;
+    
     return true;
 }
 

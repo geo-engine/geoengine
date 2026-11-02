@@ -24,13 +24,15 @@ const ColumnRangeFilterParameters_1 = require("./ColumnRangeFilterParameters");
  * @export
  */
 exports.ColumnRangeFilterTypeEnum = {
-    ColumnRangeFilter: 'ColumnRangeFilter'
+    ColumnRangeFilter: 'ColumnRangeFilter',
 };
 /**
  * Check if a given object implements the ColumnRangeFilter interface.
  */
 function instanceOfColumnRangeFilter(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'ColumnRangeFilter')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

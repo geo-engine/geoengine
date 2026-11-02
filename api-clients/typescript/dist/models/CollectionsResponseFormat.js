@@ -23,7 +23,7 @@ exports.CollectionsResponseFormatToJSONTyped = CollectionsResponseFormatToJSONTy
  * @export
  */
 exports.CollectionsResponseFormat = {
-    Json: 'json'
+    Json: 'json',
 };
 function instanceOfCollectionsResponseFormat(value) {
     for (const key in exports.CollectionsResponseFormat) {

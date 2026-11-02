@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface InterpolationResolutionResolution {
     /**
      * 
-     * @type {InterpolationResolutionResolutionTypeEnum}
-     * @memberof InterpolationResolutionResolution
      */
     type: InterpolationResolutionResolutionTypeEnum;
     /**
      * Explicit output resolution (`x`, `y`) in target coordinates.
-     * @type {number}
-     * @memberof InterpolationResolutionResolution
      */
     x: number;
     /**
      * 
-     * @type {number}
-     * @memberof InterpolationResolutionResolution
      */
     y: number;
 }
@@ -43,7 +37,7 @@ export interface InterpolationResolutionResolution {
  * @export
  */
 export const InterpolationResolutionResolutionTypeEnum = {
-    Resolution: 'resolution'
+    Resolution: 'resolution',
 } as const;
 export type InterpolationResolutionResolutionTypeEnum = typeof InterpolationResolutionResolutionTypeEnum[keyof typeof InterpolationResolutionResolutionTypeEnum];
 
@@ -53,6 +47,8 @@ export type InterpolationResolutionResolutionTypeEnum = typeof InterpolationReso
  */
 export function instanceOfInterpolationResolutionResolution(value: object): value is InterpolationResolutionResolution {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'resolution') return false;
+    
     if (!('x' in value) || value['x'] === undefined) return false;
     if (!('y' in value) || value['y'] === undefined) return false;
     return true;

@@ -17,7 +17,7 @@
  * @export
  */
 export const Data = {
-    Data: 'data'
+    Data: 'data',
 } as const;
 export type Data = typeof Data[keyof typeof Data];
 

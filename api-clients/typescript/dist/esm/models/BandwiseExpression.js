@@ -16,13 +16,15 @@ import { BandwiseExpressionParametersFromJSON, BandwiseExpressionParametersToJSO
  * @export
  */
 export const BandwiseExpressionTypeEnum = {
-    BandwiseExpression: 'BandwiseExpression'
+    BandwiseExpression: 'BandwiseExpression',
 };
 /**
  * Check if a given object implements the BandwiseExpression interface.
  */
 export function instanceOfBandwiseExpression(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'BandwiseExpression')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

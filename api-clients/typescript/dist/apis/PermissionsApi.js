@@ -23,7 +23,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PermissionsApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const PermissionListing_1 = require("../models/PermissionListing");
+const PermissionRequest_1 = require("../models/PermissionRequest");
 /**
  *
  */
@@ -52,7 +53,7 @@ class PermissionsApi extends runtime.BaseAPI {
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.PermissionRequestToJSON)(requestParameters['permissionRequest']),
+                body: (0, PermissionRequest_1.PermissionRequestToJSON)(requestParameters['permissionRequest']),
             };
         });
     }
@@ -107,8 +108,8 @@ class PermissionsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/permissions/resources/{resource_type}/{resource_id}`;
-            urlPath = urlPath.replace(`{${"resource_type"}}`, encodeURIComponent(String(requestParameters['resourceType'])));
-            urlPath = urlPath.replace(`{${"resource_id"}}`, encodeURIComponent(String(requestParameters['resourceId'])));
+            urlPath = urlPath.replace('{resource_type}', encodeURIComponent(String(requestParameters['resourceType'])));
+            urlPath = urlPath.replace('{resource_id}', encodeURIComponent(String(requestParameters['resourceId'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -124,7 +125,7 @@ class PermissionsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getResourcePermissionsHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.PermissionListingFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(PermissionListing_1.PermissionListingFromJSON));
         });
     }
     /**
@@ -160,7 +161,7 @@ class PermissionsApi extends runtime.BaseAPI {
                 method: 'DELETE',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.PermissionRequestToJSON)(requestParameters['permissionRequest']),
+                body: (0, PermissionRequest_1.PermissionRequestToJSON)(requestParameters['permissionRequest']),
             };
         });
     }

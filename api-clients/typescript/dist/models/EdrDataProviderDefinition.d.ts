@@ -18,62 +18,42 @@ import type { EdrVectorSpec } from './EdrVectorSpec';
 export interface EdrDataProviderDefinition {
     /**
      *
-     * @type {EdrDataProviderDefinitionTypeEnum}
-     * @memberof EdrDataProviderDefinition
      */
     type: EdrDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof EdrDataProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof EdrDataProviderDefinition
      */
     baseUrl: string;
     /**
      *
-     * @type {EdrVectorSpec}
-     * @memberof EdrDataProviderDefinition
      */
     vectorSpec?: EdrVectorSpec | null;
     /**
      *
-     * @type {number}
-     * @memberof EdrDataProviderDefinition
      */
     cacheTtl?: number | null;
     /**
      * List of vertical reference systems with a discrete scale
-     * @type {Array<string>}
-     * @memberof EdrDataProviderDefinition
      */
     discreteVrs?: Array<string>;
     /**
      *
-     * @type {Array<Provenance>}
-     * @memberof EdrDataProviderDefinition
      */
     provenance?: Array<Provenance> | null;
 }

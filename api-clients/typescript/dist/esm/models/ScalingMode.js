@@ -37,9 +37,9 @@ export function ScalingModeToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'mulSlopeAddOffset':
-            return Object.assign({}, ScalingModeMulSlopeAddOffsetToJSON(value), { type: 'mulSlopeAddOffset' });
+            return Object.assign({}, ScalingModeMulSlopeAddOffsetToJSON(value), { 'type': 'mulSlopeAddOffset' });
         case 'subOffsetDivSlope':
-            return Object.assign({}, ScalingModeSubOffsetDivSlopeToJSON(value), { type: 'subOffsetDivSlope' });
+            return Object.assign({}, ScalingModeSubOffsetDivSlopeToJSON(value), { 'type': 'subOffsetDivSlope' });
         default:
             return value;
     }

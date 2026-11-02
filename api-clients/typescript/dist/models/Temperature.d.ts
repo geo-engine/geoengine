@@ -18,20 +18,14 @@ import type { TemperatureParameters } from './TemperatureParameters';
 export interface Temperature {
     /**
      *
-     * @type {TemperatureTypeEnum}
-     * @memberof Temperature
      */
     type: TemperatureTypeEnum;
     /**
      *
-     * @type {TemperatureParameters}
-     * @memberof Temperature
      */
     params: TemperatureParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof Temperature
      */
     sources: SingleRasterSource;
 }

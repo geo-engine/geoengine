@@ -28,8 +28,6 @@ import {
 export interface MultiPolygon {
     /**
      * 
-     * @type {Array<Array<Array<Coordinate2D>>>}
-     * @memberof MultiPolygon
      */
     polygons: Array<Array<Array<Coordinate2D>>>;
 }

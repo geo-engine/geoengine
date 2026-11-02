@@ -17,60 +17,42 @@ import type { FormatSpecifics } from './FormatSpecifics';
 export interface OgrSourceColumnSpec {
     /**
      *
-     * @type {FormatSpecifics}
-     * @memberof OgrSourceColumnSpec
      */
     formatSpecifics?: FormatSpecifics | null;
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceColumnSpec
      */
     x: string;
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceColumnSpec
      */
     y?: string | null;
     /**
      *
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     _int?: Array<string>;
     /**
      *
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     _float?: Array<string>;
     /**
      *
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     text?: Array<string>;
     /**
      *
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     bool?: Array<string>;
     /**
      *
-     * @type {Array<string>}
-     * @memberof OgrSourceColumnSpec
      */
     datetime?: Array<string>;
     /**
      *
-     * @type {{ [key: string]: string; }}
-     * @memberof OgrSourceColumnSpec
      */
     rename?: {
         [key: string]: string;
-    };
+    } | null;
 }
 /**
  * Check if a given object implements the OgrSourceColumnSpec interface.

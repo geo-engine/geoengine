@@ -16,14 +16,10 @@
 export interface Breakpoint {
     /**
      *
-     * @type {number}
-     * @memberof Breakpoint
      */
     value: number;
     /**
      *
-     * @type {Array<number>}
-     * @memberof Breakpoint
      */
     color: Array<number>;
 }

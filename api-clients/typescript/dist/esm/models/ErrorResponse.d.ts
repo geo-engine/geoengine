@@ -16,14 +16,10 @@
 export interface ErrorResponse {
     /**
      *
-     * @type {string}
-     * @memberof ErrorResponse
      */
     error: string;
     /**
      *
-     * @type {string}
-     * @memberof ErrorResponse
      */
     message: string;
 }

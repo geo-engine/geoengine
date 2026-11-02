@@ -14,13 +14,15 @@
  * @export
  */
 export const NeighborhoodKernelRectangleTypeEnum = {
-    Rectangle: 'rectangle'
+    Rectangle: 'rectangle',
 };
 /**
  * Check if a given object implements the NeighborhoodKernelRectangle interface.
  */
 export function instanceOfNeighborhoodKernelRectangle(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'rectangle')
         return false;
     if (!('dimensions' in value) || value['dimensions'] === undefined)
         return false;

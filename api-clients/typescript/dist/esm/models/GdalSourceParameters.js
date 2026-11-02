@@ -27,7 +27,7 @@ export function GdalSourceParametersFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'data': json['data'],
-        'overviewLevel': json['overviewLevel'] == null ? undefined : json['overviewLevel'],
+        'overviewLevel': json['overviewLevel'] === undefined ? undefined : json['overviewLevel'] === null ? null : json['overviewLevel'],
     };
 }
 export function GdalSourceParametersToJSON(json) {

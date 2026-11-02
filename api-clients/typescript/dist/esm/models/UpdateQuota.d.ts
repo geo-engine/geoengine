@@ -16,8 +16,6 @@
 export interface UpdateQuota {
     /**
      *
-     * @type {number}
-     * @memberof UpdateQuota
      */
     available: number;
 }

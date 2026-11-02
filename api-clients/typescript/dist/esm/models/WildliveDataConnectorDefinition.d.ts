@@ -16,52 +16,36 @@
 export interface WildliveDataConnectorDefinition {
     /**
      *
-     * @type {WildliveDataConnectorDefinitionTypeEnum}
-     * @memberof WildliveDataConnectorDefinition
      */
     type: WildliveDataConnectorDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     id: string;
     /**
      *
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     description: string;
     /**
      *
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     user?: string | null;
     /**
      * A wrapper type that serializes to "*****" and can be deserialized from any string.
      * If the inner value is "*****", it is considered unknown and `as_option` returns `None`.
      * This is useful for secrets that should not be exposed in API responses, but can be set in API requests.
-     * @type {string}
-     * @memberof WildliveDataConnectorDefinition
      */
     refreshToken?: string | null;
     /**
      *
-     * @type {Date}
-     * @memberof WildliveDataConnectorDefinition
      */
     expiryDate?: Date | null;
     /**
      *
-     * @type {number}
-     * @memberof WildliveDataConnectorDefinition
      */
     priority?: number | null;
 }

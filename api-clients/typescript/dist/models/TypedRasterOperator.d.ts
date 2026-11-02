@@ -17,14 +17,10 @@ import type { RasterOperator } from './RasterOperator';
 export interface TypedRasterOperator {
     /**
      *
-     * @type {RasterOperator}
-     * @memberof TypedRasterOperator
      */
     operator: RasterOperator;
     /**
      *
-     * @type {TypedRasterOperatorTypeEnum}
-     * @memberof TypedRasterOperator
      */
     type: TypedRasterOperatorTypeEnum;
 }

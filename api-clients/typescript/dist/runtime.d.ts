@@ -123,9 +123,21 @@ export interface RequestOpts {
 }
 export declare function querystring(params: HTTPQuery, prefix?: string): string;
 export declare function exists(json: any, key: string): boolean;
+/**
+ * Every generated date call site routes through these.
+ *
+ * `format: date` is a calendar date, with no time and no offset, so it is converted
+ * against the local calendar on both ends: they have to agree or the date shifts by
+ * a day. `format: date-time` is an instant and uses UTC.
+ */
+export declare function serializeDateTime(value: Date): string;
+export declare function serializeDate(value: Date): string;
+export declare function parseDate(value: Date | string): Date;
+export declare function parseDateTime(value: any): Date;
 export declare function mapValues(data: any, fn: (item: any) => any): {
     [key: string]: any;
 };
+export declare function anyToJSON(value: any): any;
 export declare function canConsumeForm(consumes: Consume[]): boolean;
 export interface Consume {
     contentType: string;
@@ -171,11 +183,32 @@ export declare class VoidApiResponse {
     constructor(raw: Response);
     value(): Promise<void>;
 }
+/**
+ * A Blob carrying the file name the server advertised, empty when it did not send one. It is a File
+ * wherever one can be built, and the bare Blob given a name otherwise. Same name and shape as the
+ * `typescript` generator's browser HttpFile.
+ */
+export type HttpFile = Blob & {
+    readonly name: string;
+};
 export declare class BlobApiResponse {
     raw: Response;
     constructor(raw: Response);
-    value(): Promise<Blob>;
+    /**
+     * The body named after the Content-Disposition header, so that a download keeps the name the
+     * server gave it. A File is built from a native Blob; the Blob itself is named where there is no
+     * global File (Node.js before 20), where File cannot be constructed, or where the Blob is not the
+     * native one, as returned by an injected fetch implementation such as node-fetch, which a File
+     * would stringify instead of wrapping.
+     */
+    value(): Promise<HttpFile>;
 }
+/**
+ * The file name advertised by a Content-Disposition header (RFC 6266): the RFC 5987 encoded
+ * `filename*` parameter first, falling back to the plain `filename` when it is malformed, not UTF-8
+ * or has no usable name. Any directory part is dropped; undefined when no usable name is advertised.
+ */
+export declare function parseContentDispositionFilename(headers: Headers): string | undefined;
 export declare class TextApiResponse {
     raw: Response;
     constructor(raw: Response);

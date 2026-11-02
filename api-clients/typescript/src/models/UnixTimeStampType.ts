@@ -18,7 +18,7 @@
  */
 export const UnixTimeStampType = {
     EpochSeconds: 'epochSeconds',
-    EpochMilliseconds: 'epochMilliseconds'
+    EpochMilliseconds: 'epochMilliseconds',
 } as const;
 export type UnixTimeStampType = typeof UnixTimeStampType[keyof typeof UnixTimeStampType];
 

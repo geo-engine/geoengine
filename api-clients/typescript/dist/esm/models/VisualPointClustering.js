@@ -16,13 +16,15 @@ import { VisualPointClusteringParametersFromJSON, VisualPointClusteringParameter
  * @export
  */
 export const VisualPointClusteringTypeEnum = {
-    VisualPointClustering: 'VisualPointClustering'
+    VisualPointClustering: 'VisualPointClustering',
 };
 /**
  * Check if a given object implements the VisualPointClustering interface.
  */
 export function instanceOfVisualPointClustering(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'VisualPointClustering')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

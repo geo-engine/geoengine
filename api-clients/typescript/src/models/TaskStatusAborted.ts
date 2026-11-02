@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface TaskStatusAborted {
     /**
      * 
-     * @type {TaskStatusAbortedStatusEnum}
-     * @memberof TaskStatusAborted
      */
     status: TaskStatusAbortedStatusEnum;
     /**
      * 
-     * @type {any}
-     * @memberof TaskStatusAborted
      */
     cleanUp: any | null;
 }
@@ -37,7 +33,7 @@ export interface TaskStatusAborted {
  * @export
  */
 export const TaskStatusAbortedStatusEnum = {
-    Aborted: 'aborted'
+    Aborted: 'aborted',
 } as const;
 export type TaskStatusAbortedStatusEnum = typeof TaskStatusAbortedStatusEnum[keyof typeof TaskStatusAbortedStatusEnum];
 
@@ -47,6 +43,8 @@ export type TaskStatusAbortedStatusEnum = typeof TaskStatusAbortedStatusEnum[key
  */
 export function instanceOfTaskStatusAborted(value: object): value is TaskStatusAborted {
     if (!('status' in value) || value['status'] === undefined) return false;
+    if (value['status'] !== 'aborted') return false;
+    
     if (!('cleanUp' in value) || value['cleanUp'] === undefined) return false;
     return true;
 }

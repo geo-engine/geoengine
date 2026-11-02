@@ -28,14 +28,10 @@ import {
 export interface GridBoundingBox2D {
     /**
      * 
-     * @type {GridIdx2D}
-     * @memberof GridBoundingBox2D
      */
     topLeftIdx: GridIdx2D;
     /**
      * 
-     * @type {GridIdx2D}
-     * @memberof GridBoundingBox2D
      */
     bottomRightIdx: GridIdx2D;
 }

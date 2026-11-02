@@ -35,8 +35,6 @@ import {
 export interface SpatialBoundsDeriveBounds extends BoundingBox2D {
     /**
      * 
-     * @type {SpatialBoundsDeriveBoundsTypeEnum}
-     * @memberof SpatialBoundsDeriveBounds
      */
     type: SpatialBoundsDeriveBoundsTypeEnum;
 }
@@ -46,7 +44,7 @@ export interface SpatialBoundsDeriveBounds extends BoundingBox2D {
  * @export
  */
 export const SpatialBoundsDeriveBoundsTypeEnum = {
-    Bounds: 'bounds'
+    Bounds: 'bounds',
 } as const;
 export type SpatialBoundsDeriveBoundsTypeEnum = typeof SpatialBoundsDeriveBoundsTypeEnum[keyof typeof SpatialBoundsDeriveBoundsTypeEnum];
 
@@ -56,6 +54,8 @@ export type SpatialBoundsDeriveBoundsTypeEnum = typeof SpatialBoundsDeriveBounds
  */
 export function instanceOfSpatialBoundsDeriveBounds(value: object): value is SpatialBoundsDeriveBounds {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'bounds') return false;
+    
     return true;
 }
 

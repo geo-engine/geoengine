@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { BandNeighborhoodAggregateMethodAverage } from './BandNeighborhoodAggregateMethodAverage';
 import {
     instanceOfBandNeighborhoodAggregateMethodAverage,
@@ -61,9 +62,9 @@ export function BandNeighborhoodAggregateMethodToJSONTyped(value?: BandNeighborh
     }
     switch (value['type']) {
         case 'average':
-            return Object.assign({}, BandNeighborhoodAggregateMethodAverageToJSON(value), { type: 'average' } as const);
+            return Object.assign({}, BandNeighborhoodAggregateMethodAverageToJSON(value), { 'type': 'average' } as const);
         case 'firstDerivative':
-            return Object.assign({}, BandNeighborhoodAggregateMethodFirstDerivativeToJSON(value), { type: 'firstDerivative' } as const);
+            return Object.assign({}, BandNeighborhoodAggregateMethodFirstDerivativeToJSON(value), { 'type': 'firstDerivative' } as const);
         default:
             return value;
     }

@@ -19,68 +19,46 @@ import type { GeoTransform } from './GeoTransform';
 export interface GdalDatasetParameters {
     /**
      *
-     * @type {string}
-     * @memberof GdalDatasetParameters
      */
     filePath: string;
     /**
      *
-     * @type {number}
-     * @memberof GdalDatasetParameters
      */
     rasterbandChannel: number;
     /**
      *
-     * @type {GeoTransform}
-     * @memberof GdalDatasetParameters
      */
     geoTransform: GeoTransform;
     /**
      *
-     * @type {number}
-     * @memberof GdalDatasetParameters
      */
     width: number;
     /**
      *
-     * @type {number}
-     * @memberof GdalDatasetParameters
      */
     height: number;
     /**
      *
-     * @type {FileNotFoundHandling}
-     * @memberof GdalDatasetParameters
      */
     fileNotFoundHandling: FileNotFoundHandling;
     /**
      *
-     * @type {number}
-     * @memberof GdalDatasetParameters
      */
     noDataValue?: number | null;
     /**
      *
-     * @type {Array<GdalMetadataMapping>}
-     * @memberof GdalDatasetParameters
      */
     propertiesMapping?: Array<GdalMetadataMapping> | null;
     /**
      *
-     * @type {Array<string>}
-     * @memberof GdalDatasetParameters
      */
     gdalOpenOptions?: Array<string> | null;
     /**
      *
-     * @type {Array<Array<string>>}
-     * @memberof GdalDatasetParameters
      */
     gdalConfigOptions?: Array<Array<string>> | null;
     /**
      *
-     * @type {boolean}
-     * @memberof GdalDatasetParameters
      */
     allowAlphabandAsMask?: boolean;
 }

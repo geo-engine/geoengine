@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface Suffix {
     /**
      * 
-     * @type {Array<string>}
-     * @memberof Suffix
      */
     values: Array<string>;
     /**
      * 
-     * @type {SuffixTypeEnum}
-     * @memberof Suffix
      */
     type: SuffixTypeEnum;
 }
@@ -37,7 +33,7 @@ export interface Suffix {
  * @export
  */
 export const SuffixTypeEnum = {
-    Suffix: 'suffix'
+    Suffix: 'suffix',
 } as const;
 export type SuffixTypeEnum = typeof SuffixTypeEnum[keyof typeof SuffixTypeEnum];
 
@@ -48,6 +44,8 @@ export type SuffixTypeEnum = typeof SuffixTypeEnum[keyof typeof SuffixTypeEnum];
 export function instanceOfSuffix(value: object): value is Suffix {
     if (!('values' in value) || value['values'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'suffix') return false;
+    
     return true;
 }
 

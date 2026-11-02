@@ -28,20 +28,14 @@ import {
 export interface TimeShiftParametersRelative {
     /**
      * 
-     * @type {TimeShiftParametersRelativeTypeEnum}
-     * @memberof TimeShiftParametersRelative
      */
     type: TimeShiftParametersRelativeTypeEnum;
     /**
      * Time granularity for the relative shift.
-     * @type {TimeGranularity}
-     * @memberof TimeShiftParametersRelative
      */
     granularity: TimeGranularity;
     /**
      * Signed time step for the relative shift.
-     * @type {number}
-     * @memberof TimeShiftParametersRelative
      */
     value: number;
 }
@@ -51,7 +45,7 @@ export interface TimeShiftParametersRelative {
  * @export
  */
 export const TimeShiftParametersRelativeTypeEnum = {
-    Relative: 'relative'
+    Relative: 'relative',
 } as const;
 export type TimeShiftParametersRelativeTypeEnum = typeof TimeShiftParametersRelativeTypeEnum[keyof typeof TimeShiftParametersRelativeTypeEnum];
 
@@ -61,6 +55,8 @@ export type TimeShiftParametersRelativeTypeEnum = typeof TimeShiftParametersRela
  */
 export function instanceOfTimeShiftParametersRelative(value: object): value is TimeShiftParametersRelative {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'relative') return false;
+    
     if (!('granularity' in value) || value['granularity'] === undefined) return false;
     if (!('value' in value) || value['value'] === undefined) return false;
     return true;

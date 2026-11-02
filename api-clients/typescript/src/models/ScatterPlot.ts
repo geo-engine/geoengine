@@ -50,20 +50,14 @@ import {
 export interface ScatterPlot {
     /**
      * 
-     * @type {ScatterPlotTypeEnum}
-     * @memberof ScatterPlot
      */
     type: ScatterPlotTypeEnum;
     /**
      * 
-     * @type {ScatterPlotParameters}
-     * @memberof ScatterPlot
      */
     params: ScatterPlotParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof ScatterPlot
      */
     sources: SingleVectorSource;
 }
@@ -73,7 +67,7 @@ export interface ScatterPlot {
  * @export
  */
 export const ScatterPlotTypeEnum = {
-    ScatterPlot: 'ScatterPlot'
+    ScatterPlot: 'ScatterPlot',
 } as const;
 export type ScatterPlotTypeEnum = typeof ScatterPlotTypeEnum[keyof typeof ScatterPlotTypeEnum];
 
@@ -83,6 +77,8 @@ export type ScatterPlotTypeEnum = typeof ScatterPlotTypeEnum[keyof typeof Scatte
  */
 export function instanceOfScatterPlot(value: object): value is ScatterPlot {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'ScatterPlot') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

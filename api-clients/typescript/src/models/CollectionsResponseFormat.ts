@@ -17,7 +17,7 @@
  * @export
  */
 export const CollectionsResponseFormat = {
-    Json: 'json'
+    Json: 'json',
 } as const;
 export type CollectionsResponseFormat = typeof CollectionsResponseFormat[keyof typeof CollectionsResponseFormat];
 

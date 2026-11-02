@@ -16,8 +16,6 @@
 export interface TypedGeometryNoGeometry {
     /**
      *
-     * @type {any}
-     * @memberof TypedGeometryNoGeometry
      */
     data: any | null;
 }

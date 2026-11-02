@@ -20,50 +20,34 @@ import { mapValues } from '../runtime';
 export interface EbvPortalDataProviderDefinition {
     /**
      * 
-     * @type {EbvPortalDataProviderDefinitionTypeEnum}
-     * @memberof EbvPortalDataProviderDefinition
      */
     type: EbvPortalDataProviderDefinitionTypeEnum;
     /**
      * 
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     description: string;
     /**
      * 
-     * @type {number}
-     * @memberof EbvPortalDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     baseUrl: string;
     /**
      * Path were the `NetCDF` data can be found
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     data: string;
     /**
      * Path were overview files are stored
-     * @type {string}
-     * @memberof EbvPortalDataProviderDefinition
      */
     overviews: string;
     /**
      * 
-     * @type {number}
-     * @memberof EbvPortalDataProviderDefinition
      */
     cacheTtl?: number | null;
 }
@@ -73,7 +57,7 @@ export interface EbvPortalDataProviderDefinition {
  * @export
  */
 export const EbvPortalDataProviderDefinitionTypeEnum = {
-    EbvPortal: 'EbvPortal'
+    EbvPortal: 'EbvPortal',
 } as const;
 export type EbvPortalDataProviderDefinitionTypeEnum = typeof EbvPortalDataProviderDefinitionTypeEnum[keyof typeof EbvPortalDataProviderDefinitionTypeEnum];
 
@@ -83,6 +67,8 @@ export type EbvPortalDataProviderDefinitionTypeEnum = typeof EbvPortalDataProvid
  */
 export function instanceOfEbvPortalDataProviderDefinition(value: object): value is EbvPortalDataProviderDefinition {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'EbvPortal') return false;
+    
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('baseUrl' in value) || value['baseUrl'] === undefined) return false;
@@ -104,11 +90,11 @@ export function EbvPortalDataProviderDefinitionFromJSONTyped(json: any, ignoreDi
         'type': json['type'],
         'name': json['name'],
         'description': json['description'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
+        'priority': json['priority'] === undefined ? undefined : json['priority'] === null ? null : json['priority'],
         'baseUrl': json['baseUrl'],
         'data': json['data'],
         'overviews': json['overviews'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'cacheTtl': json['cacheTtl'] === undefined ? undefined : json['cacheTtl'] === null ? null : json['cacheTtl'],
     };
 }
 

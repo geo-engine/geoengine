@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { ExternalDataId } from './ExternalDataId';
 import {
     instanceOfExternalDataId,
@@ -62,9 +63,9 @@ export function DataIdToJSONTyped(value?: DataId | null, ignoreDiscriminator: bo
     }
     switch (value['type']) {
         case 'external':
-            return Object.assign({}, ExternalDataIdToJSON(value), { type: 'external' } as const);
+            return Object.assign({}, ExternalDataIdToJSON(value), { 'type': 'external' } as const);
         case 'internal':
-            return Object.assign({}, InternalDataIdToJSON(value), { type: 'internal' } as const);
+            return Object.assign({}, InternalDataIdToJSON(value), { 'type': 'internal' } as const);
         default:
             return value;
     }

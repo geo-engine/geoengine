@@ -35,14 +35,10 @@ import {
 export interface StrokeParam {
     /**
      * 
-     * @type {NumberParam}
-     * @memberof StrokeParam
      */
     width: NumberParam;
     /**
      * 
-     * @type {ColorParam}
-     * @memberof StrokeParam
      */
     color: ColorParam;
 }

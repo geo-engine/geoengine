@@ -16,14 +16,10 @@
 export interface Coordinate2D {
     /**
      *
-     * @type {number}
-     * @memberof Coordinate2D
      */
     x: number;
     /**
      *
-     * @type {number}
-     * @memberof Coordinate2D
      */
     y: number;
 }

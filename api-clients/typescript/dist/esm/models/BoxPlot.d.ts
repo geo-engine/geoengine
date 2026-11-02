@@ -48,20 +48,14 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 export interface BoxPlot {
     /**
      *
-     * @type {BoxPlotTypeEnum}
-     * @memberof BoxPlot
      */
     type: BoxPlotTypeEnum;
     /**
      *
-     * @type {BoxPlotParameters}
-     * @memberof BoxPlot
      */
     params: BoxPlotParameters;
     /**
      *
-     * @type {SingleRasterOrVectorSource}
-     * @memberof BoxPlot
      */
     sources: SingleRasterOrVectorSource;
 }

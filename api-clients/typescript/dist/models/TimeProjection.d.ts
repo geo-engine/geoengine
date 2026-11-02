@@ -32,20 +32,14 @@ import type { SingleVectorSource } from './SingleVectorSource';
 export interface TimeProjection {
     /**
      *
-     * @type {TimeProjectionTypeEnum}
-     * @memberof TimeProjection
      */
     type: TimeProjectionTypeEnum;
     /**
      *
-     * @type {TimeProjectionParameters}
-     * @memberof TimeProjection
      */
     params: TimeProjectionParameters;
     /**
      *
-     * @type {SingleVectorSource}
-     * @memberof TimeProjection
      */
     sources: SingleVectorSource;
 }

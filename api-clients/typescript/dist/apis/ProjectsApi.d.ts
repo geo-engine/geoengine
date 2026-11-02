@@ -9,30 +9,69 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { CreateProject, IdResponse, OrderBy, Project, ProjectListing, ProjectVersion, UpdateProject } from '../models/index';
+import { type CreateProject } from '../models/CreateProject';
+import { type IdResponse } from '../models/IdResponse';
+import { type OrderBy } from '../models/OrderBy';
+import { type Project } from '../models/Project';
+import { type ProjectListing } from '../models/ProjectListing';
+import { type ProjectVersion } from '../models/ProjectVersion';
+import { type UpdateProject } from '../models/UpdateProject';
 export interface CreateProjectHandlerRequest {
+    /**
+     *
+     */
     createProject: CreateProject;
 }
 export interface DeleteProjectHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 export interface ListProjectsHandlerRequest {
+    /**
+     *
+     */
     order: OrderBy;
+    /**
+     *
+     */
     offset: number;
+    /**
+     *
+     */
     limit: number;
 }
 export interface LoadProjectLatestHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 export interface LoadProjectVersionHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
+    /**
+     * Version id
+     */
     version: string;
 }
 export interface ProjectVersionsHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
 }
 export interface UpdateProjectHandlerRequest {
+    /**
+     * Project id
+     */
     project: string;
+    /**
+     *
+     */
     updateProject: UpdateProject;
 }
 /**

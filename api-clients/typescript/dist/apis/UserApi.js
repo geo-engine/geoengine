@@ -23,7 +23,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserApi = void 0;
 const runtime = require("../runtime");
-const index_1 = require("../models/index");
+const AddRole_1 = require("../models/AddRole");
+const ComputationQuota_1 = require("../models/ComputationQuota");
+const DataUsage_1 = require("../models/DataUsage");
+const DataUsageSummary_1 = require("../models/DataUsageSummary");
+const IdResponse_1 = require("../models/IdResponse");
+const OperatorQuota_1 = require("../models/OperatorQuota");
+const Quota_1 = require("../models/Quota");
+const RoleDescription_1 = require("../models/RoleDescription");
+const UpdateQuota_1 = require("../models/UpdateQuota");
 /**
  *
  */
@@ -52,7 +60,7 @@ class UserApi extends runtime.BaseAPI {
                 method: 'PUT',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.AddRoleToJSON)(requestParameters['addRole']),
+                body: (0, AddRole_1.AddRoleToJSON)(requestParameters['addRole']),
             };
         });
     }
@@ -63,7 +71,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.addRoleHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -96,8 +104,8 @@ class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/users/{user}/roles/{role}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
-            urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
             return {
                 path: urlPath,
                 method: 'POST',
@@ -142,7 +150,7 @@ class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/quota/computations/{computation}`;
-            urlPath = urlPath.replace(`{${"computation"}}`, encodeURIComponent(String(requestParameters['computation'])));
+            urlPath = urlPath.replace('{computation}', encodeURIComponent(String(requestParameters['computation'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -158,7 +166,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.computationQuotaHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.OperatorQuotaFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(OperatorQuota_1.OperatorQuotaFromJSON));
         });
     }
     /**
@@ -212,7 +220,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.computationsQuotaHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.ComputationQuotaFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ComputationQuota_1.ComputationQuotaFromJSON));
         });
     }
     /**
@@ -266,7 +274,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.dataUsageHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.DataUsageFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(DataUsage_1.DataUsageFromJSON));
         });
     }
     /**
@@ -329,7 +337,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.dataUsageSummaryHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.DataUsageSummaryFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(DataUsageSummary_1.DataUsageSummaryFromJSON));
         });
     }
     /**
@@ -359,7 +367,7 @@ class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/roles/byName/{name}`;
-            urlPath = urlPath.replace(`{${"name"}}`, encodeURIComponent(String(requestParameters['name'])));
+            urlPath = urlPath.replace('{name}', encodeURIComponent(String(requestParameters['name'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -375,7 +383,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getRoleByNameHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.IdResponseFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, IdResponse_1.IdResponseFromJSON)(jsonValue));
         });
     }
     /**
@@ -417,7 +425,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getRoleDescriptionsRequestOpts();
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(index_1.RoleDescriptionFromJSON));
+            return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(RoleDescription_1.RoleDescriptionFromJSON));
         });
     }
     /**
@@ -447,7 +455,7 @@ class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/quotas/{user}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -463,7 +471,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.getUserQuotaHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.QuotaFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Quota_1.QuotaFromJSON)(jsonValue));
         });
     }
     /**
@@ -505,7 +513,7 @@ class UserApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.quotaHandlerRequestOpts();
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.JSONApiResponse(response, (jsonValue) => (0, index_1.QuotaFromJSON)(jsonValue));
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Quota_1.QuotaFromJSON)(jsonValue));
         });
     }
     /**
@@ -535,7 +543,7 @@ class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/roles/{role}`;
-            urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+            urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -583,8 +591,8 @@ class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/users/{user}/roles/{role}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
-            urlPath = urlPath.replace(`{${"role"}}`, encodeURIComponent(String(requestParameters['role'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{role}', encodeURIComponent(String(requestParameters['role'])));
             return {
                 path: urlPath,
                 method: 'DELETE',
@@ -633,13 +641,13 @@ class UserApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/quotas/{user}`;
-            urlPath = urlPath.replace(`{${"user"}}`, encodeURIComponent(String(requestParameters['user'])));
+            urlPath = urlPath.replace('{user}', encodeURIComponent(String(requestParameters['user'])));
             return {
                 path: urlPath,
                 method: 'POST',
                 headers: headerParameters,
                 query: queryParameters,
-                body: (0, index_1.UpdateQuotaToJSON)(requestParameters['updateQuota']),
+                body: (0, UpdateQuota_1.UpdateQuotaToJSON)(requestParameters['updateQuota']),
             };
         });
     }

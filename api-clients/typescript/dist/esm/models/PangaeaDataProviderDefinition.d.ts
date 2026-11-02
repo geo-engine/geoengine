@@ -16,38 +16,26 @@
 export interface PangaeaDataProviderDefinition {
     /**
      *
-     * @type {PangaeaDataProviderDefinitionTypeEnum}
-     * @memberof PangaeaDataProviderDefinition
      */
     type: PangaeaDataProviderDefinitionTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
      */
     description: string;
     /**
      *
-     * @type {number}
-     * @memberof PangaeaDataProviderDefinition
      */
     priority?: number | null;
     /**
      *
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
      */
     baseUrl: string;
     /**
      *
-     * @type {number}
-     * @memberof PangaeaDataProviderDefinition
      */
     cacheTtl?: number | null;
 }

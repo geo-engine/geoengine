@@ -20,14 +20,10 @@ import { mapValues } from '../runtime';
 export interface NeighborhoodKernelRectangle {
     /**
      * 
-     * @type {NeighborhoodKernelRectangleTypeEnum}
-     * @memberof NeighborhoodKernelRectangle
      */
     type: NeighborhoodKernelRectangleTypeEnum;
     /**
      * Width and height of the rectangular neighborhood in pixels.
-     * @type {Array<number>}
-     * @memberof NeighborhoodKernelRectangle
      */
     dimensions: Array<number>;
 }
@@ -37,7 +33,7 @@ export interface NeighborhoodKernelRectangle {
  * @export
  */
 export const NeighborhoodKernelRectangleTypeEnum = {
-    Rectangle: 'rectangle'
+    Rectangle: 'rectangle',
 } as const;
 export type NeighborhoodKernelRectangleTypeEnum = typeof NeighborhoodKernelRectangleTypeEnum[keyof typeof NeighborhoodKernelRectangleTypeEnum];
 
@@ -47,6 +43,8 @@ export type NeighborhoodKernelRectangleTypeEnum = typeof NeighborhoodKernelRecta
  */
 export function instanceOfNeighborhoodKernelRectangle(value: object): value is NeighborhoodKernelRectangle {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'rectangle') return false;
+    
     if (!('dimensions' in value) || value['dimensions'] === undefined) return false;
     return true;
 }

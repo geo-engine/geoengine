@@ -16,13 +16,15 @@ import { InterpolationParametersFromJSON, InterpolationParametersToJSON, } from 
  * @export
  */
 export const InterpolationTypeEnum = {
-    Interpolation: 'Interpolation'
+    Interpolation: 'Interpolation',
 };
 /**
  * Check if a given object implements the Interpolation interface.
  */
 export function instanceOfInterpolation(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'Interpolation')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

@@ -23,13 +23,15 @@ const ProviderLayerCollectionId_1 = require("./ProviderLayerCollectionId");
  * @export
  */
 exports.LayerCollectionListingTypeEnum = {
-    Collection: 'collection'
+    Collection: 'collection',
 };
 /**
  * Check if a given object implements the LayerCollectionListing interface.
  */
 function instanceOfLayerCollectionListing(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'collection')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

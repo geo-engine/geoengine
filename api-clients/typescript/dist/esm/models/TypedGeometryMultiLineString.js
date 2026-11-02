@@ -15,7 +15,7 @@ import { MultiLineStringFromJSON, MultiLineStringToJSON, } from './MultiLineStri
  * Check if a given object implements the TypedGeometryMultiLineString interface.
  */
 export function instanceOfTypedGeometryMultiLineString(value) {
-    if (!('multiLineString' in value) || value['multiLineString'] === undefined)
+    if ((!('multiLineString' in value) && !('MultiLineString' in value)) || (value['multiLineString'] === undefined && value['MultiLineString'] === undefined))
         return false;
     return true;
 }

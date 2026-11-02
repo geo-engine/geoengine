@@ -17,6 +17,7 @@ exports.ProjectListingFromJSON = ProjectListingFromJSON;
 exports.ProjectListingFromJSONTyped = ProjectListingFromJSONTyped;
 exports.ProjectListingToJSON = ProjectListingToJSON;
 exports.ProjectListingToJSONTyped = ProjectListingToJSONTyped;
+const runtime_1 = require("../runtime");
 /**
  * Check if a given object implements the ProjectListing interface.
  */
@@ -48,7 +49,7 @@ function ProjectListingFromJSONTyped(json, ignoreDiscriminator) {
         'description': json['description'],
         'layerNames': json['layerNames'],
         'plotNames': json['plotNames'],
-        'changed': (new Date(json['changed'])),
+        'changed': (json['changed'] == null ? json['changed'] : (0, runtime_1.parseDateTime)(json['changed'])),
     };
 }
 function ProjectListingToJSON(json) {
@@ -64,6 +65,6 @@ function ProjectListingToJSONTyped(value, ignoreDiscriminator = false) {
         'description': value['description'],
         'layerNames': value['layerNames'],
         'plotNames': value['plotNames'],
-        'changed': value['changed'].toISOString(),
+        'changed': value['changed'] == null ? value['changed'] : (0, runtime_1.serializeDateTime)(value['changed']),
     };
 }

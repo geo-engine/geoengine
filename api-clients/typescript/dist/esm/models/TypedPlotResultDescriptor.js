@@ -15,13 +15,15 @@ import { PlotResultDescriptorFromJSONTyped, PlotResultDescriptorToJSONTyped, } f
  * @export
  */
 export const TypedPlotResultDescriptorTypeEnum = {
-    Plot: 'plot'
+    Plot: 'plot',
 };
 /**
  * Check if a given object implements the TypedPlotResultDescriptor interface.
  */
 export function instanceOfTypedPlotResultDescriptor(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'plot')
         return false;
     return true;
 }

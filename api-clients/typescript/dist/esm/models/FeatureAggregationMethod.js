@@ -16,7 +16,7 @@
  */
 export const FeatureAggregationMethod = {
     First: 'first',
-    Mean: 'mean'
+    Mean: 'mean',
 };
 export function instanceOfFeatureAggregationMethod(value) {
     for (const key in FeatureAggregationMethod) {

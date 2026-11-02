@@ -16,8 +16,6 @@
 export interface NeighborhoodAggregateMethodSum {
     /**
      *
-     * @type {NeighborhoodAggregateMethodSumTypeEnum}
-     * @memberof NeighborhoodAggregateMethodSum
      */
     type: NeighborhoodAggregateMethodSumTypeEnum;
 }

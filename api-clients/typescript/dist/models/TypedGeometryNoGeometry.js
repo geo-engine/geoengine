@@ -21,7 +21,7 @@ exports.TypedGeometryNoGeometryToJSONTyped = TypedGeometryNoGeometryToJSONTyped;
  * Check if a given object implements the TypedGeometryNoGeometry interface.
  */
 function instanceOfTypedGeometryNoGeometry(value) {
-    if (!('data' in value) || value['data'] === undefined)
+    if ((!('data' in value) && !('Data' in value)) || (value['data'] === undefined && value['Data'] === undefined))
         return false;
     return true;
 }

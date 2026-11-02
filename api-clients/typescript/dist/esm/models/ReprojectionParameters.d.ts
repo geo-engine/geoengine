@@ -17,8 +17,6 @@ import type { DeriveOutRasterSpecsSource } from './DeriveOutRasterSpecsSource';
 export interface ReprojectionParameters {
     /**
      * Target spatial reference system.
-     * @type {string}
-     * @memberof ReprojectionParameters
      */
     targetSpatialReference: string;
     /**
@@ -26,8 +24,6 @@ export interface ReprojectionParameters {
      *
      * The default `projectionBounds` usually keeps a projection-aligned target grid,
      * while `dataBounds` derives it directly from source data bounds.
-     * @type {DeriveOutRasterSpecsSource}
-     * @memberof ReprojectionParameters
      */
     deriveOutSpec?: DeriveOutRasterSpecsSource;
 }

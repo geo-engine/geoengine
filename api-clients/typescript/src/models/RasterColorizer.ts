@@ -11,6 +11,7 @@
  * Do not edit the class manually.
  */
 
+import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
 import type { MultiBandRasterColorizer } from './MultiBandRasterColorizer';
 import {
     instanceOfMultiBandRasterColorizer,
@@ -61,9 +62,9 @@ export function RasterColorizerToJSONTyped(value?: RasterColorizer | null, ignor
     }
     switch (value['type']) {
         case 'multiBand':
-            return Object.assign({}, MultiBandRasterColorizerToJSON(value), { type: 'multiBand' } as const);
+            return Object.assign({}, MultiBandRasterColorizerToJSON(value), { 'type': 'multiBand' } as const);
         case 'singleBand':
-            return Object.assign({}, SingleBandRasterColorizerToJSON(value), { type: 'singleBand' } as const);
+            return Object.assign({}, SingleBandRasterColorizerToJSON(value), { 'type': 'singleBand' } as const);
         default:
             return value;
     }

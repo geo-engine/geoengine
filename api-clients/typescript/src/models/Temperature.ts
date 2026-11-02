@@ -35,20 +35,14 @@ import {
 export interface Temperature {
     /**
      * 
-     * @type {TemperatureTypeEnum}
-     * @memberof Temperature
      */
     type: TemperatureTypeEnum;
     /**
      * 
-     * @type {TemperatureParameters}
-     * @memberof Temperature
      */
     params: TemperatureParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof Temperature
      */
     sources: SingleRasterSource;
 }
@@ -58,7 +52,7 @@ export interface Temperature {
  * @export
  */
 export const TemperatureTypeEnum = {
-    Temperature: 'Temperature'
+    Temperature: 'Temperature',
 } as const;
 export type TemperatureTypeEnum = typeof TemperatureTypeEnum[keyof typeof TemperatureTypeEnum];
 
@@ -68,6 +62,8 @@ export type TemperatureTypeEnum = typeof TemperatureTypeEnum[keyof typeof Temper
  */
 export function instanceOfTemperature(value: object): value is Temperature {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'Temperature') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

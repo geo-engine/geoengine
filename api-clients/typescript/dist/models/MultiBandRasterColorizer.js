@@ -22,13 +22,15 @@ exports.MultiBandRasterColorizerToJSONTyped = MultiBandRasterColorizerToJSONType
  * @export
  */
 exports.MultiBandRasterColorizerTypeEnum = {
-    MultiBand: 'multiBand'
+    MultiBand: 'multiBand',
 };
 /**
  * Check if a given object implements the MultiBandRasterColorizer interface.
  */
 function instanceOfMultiBandRasterColorizer(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'multiBand')
         return false;
     if (!('redBand' in value) || value['redBand'] === undefined)
         return false;

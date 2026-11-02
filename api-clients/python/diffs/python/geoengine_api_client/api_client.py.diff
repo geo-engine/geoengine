@@ -1,6 +1,6 @@
 --- python/geoengine_api_client/api_client.py
 +++ python/geoengine_api_client/api_client.py
-@@ -91,7 +91,7 @@
+@@ -92,7 +92,7 @@
              self.default_headers[header_name] = header_value
          self.cookie = cookie
          # Set default User-Agent.

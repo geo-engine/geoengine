@@ -18,7 +18,7 @@
  */
 export const OrderBy = {
     NameAsc: 'NameAsc',
-    NameDesc: 'NameDesc'
+    NameDesc: 'NameDesc',
 } as const;
 export type OrderBy = typeof OrderBy[keyof typeof OrderBy];
 

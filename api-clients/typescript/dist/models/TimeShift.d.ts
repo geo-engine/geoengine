@@ -44,20 +44,14 @@ import type { SingleRasterOrVectorSource } from './SingleRasterOrVectorSource';
 export interface TimeShift {
     /**
      *
-     * @type {TimeShiftTypeEnum}
-     * @memberof TimeShift
      */
     type: TimeShiftTypeEnum;
     /**
      *
-     * @type {TimeShiftParameters}
-     * @memberof TimeShift
      */
     params: TimeShiftParameters;
     /**
      *
-     * @type {SingleRasterOrVectorSource}
-     * @memberof TimeShift
      */
     sources: SingleRasterOrVectorSource;
 }

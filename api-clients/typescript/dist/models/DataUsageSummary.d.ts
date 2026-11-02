@@ -16,20 +16,14 @@
 export interface DataUsageSummary {
     /**
      *
-     * @type {Date}
-     * @memberof DataUsageSummary
      */
     timestamp: Date;
     /**
      *
-     * @type {string}
-     * @memberof DataUsageSummary
      */
     data: string;
     /**
      *
-     * @type {number}
-     * @memberof DataUsageSummary
      */
     count: number;
 }

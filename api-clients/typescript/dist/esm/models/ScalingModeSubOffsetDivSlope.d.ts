@@ -16,8 +16,6 @@
 export interface ScalingModeSubOffsetDivSlope {
     /**
      *
-     * @type {ScalingModeSubOffsetDivSlopeTypeEnum}
-     * @memberof ScalingModeSubOffsetDivSlope
      */
     type: ScalingModeSubOffsetDivSlopeTypeEnum;
 }

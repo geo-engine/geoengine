@@ -16,14 +16,10 @@
 export interface InternalDataId {
     /**
      *
-     * @type {InternalDataIdTypeEnum}
-     * @memberof InternalDataId
      */
     type: InternalDataIdTypeEnum;
     /**
      *
-     * @type {string}
-     * @memberof InternalDataId
      */
     datasetId: string;
 }

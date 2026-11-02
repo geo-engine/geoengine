@@ -16,8 +16,6 @@
 export interface SlopeOffsetSelectionAuto {
     /**
      *
-     * @type {SlopeOffsetSelectionAutoTypeEnum}
-     * @memberof SlopeOffsetSelectionAuto
      */
     type: SlopeOffsetSelectionAutoTypeEnum;
 }

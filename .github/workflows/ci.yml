@@ -406,6 +406,8 @@ jobs:
           apt-get install -y openjdk-21-jre-headless
       - name: Lint OpenAPI specification
         run: just api-clients lint-openapi-spec
+      - name: Check OpenAPI Generator version of generated clients
+        run: just api-clients lint-generator-version
       - name: Generate API clients
         run: just api-clients build
       - name: Check for changes in git repo

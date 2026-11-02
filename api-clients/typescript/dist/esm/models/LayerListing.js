@@ -15,13 +15,15 @@ import { ProviderLayerIdFromJSON, ProviderLayerIdToJSON, } from './ProviderLayer
  * @export
  */
 export const LayerListingTypeEnum = {
-    Layer: 'layer'
+    Layer: 'layer',
 };
 /**
  * Check if a given object implements the LayerListing interface.
  */
 export function instanceOfLayerListing(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'layer')
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;

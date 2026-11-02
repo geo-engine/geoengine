@@ -20,7 +20,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import * as runtime from '../runtime';
-import { IdResponseFromJSON, UploadFileLayersResponseFromJSON, UploadFilesResponseFromJSON, } from '../models/index';
+import { IdResponseFromJSON, } from '../models/IdResponse';
+import { UploadFileLayersResponseFromJSON, } from '../models/UploadFileLayersResponse';
+import { UploadFilesResponseFromJSON, } from '../models/UploadFilesResponse';
 /**
  *
  */
@@ -46,8 +48,8 @@ export class UploadsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/uploads/{upload_id}/files/{file_name}/layers`;
-            urlPath = urlPath.replace(`{${"upload_id"}}`, encodeURIComponent(String(requestParameters['uploadId'])));
-            urlPath = urlPath.replace(`{${"file_name"}}`, encodeURIComponent(String(requestParameters['fileName'])));
+            urlPath = urlPath.replace('{upload_id}', encodeURIComponent(String(requestParameters['uploadId'])));
+            urlPath = urlPath.replace('{file_name}', encodeURIComponent(String(requestParameters['fileName'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -93,7 +95,7 @@ export class UploadsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/uploads/{upload_id}/files`;
-            urlPath = urlPath.replace(`{${"upload_id"}}`, encodeURIComponent(String(requestParameters['uploadId'])));
+            urlPath = urlPath.replace('{upload_id}', encodeURIComponent(String(requestParameters['uploadId'])));
             return {
                 path: urlPath,
                 method: 'GET',

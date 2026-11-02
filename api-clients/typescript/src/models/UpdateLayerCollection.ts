@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface UpdateLayerCollection {
     /**
      * 
-     * @type {string}
-     * @memberof UpdateLayerCollection
      */
     name: string;
     /**
      * 
-     * @type {string}
-     * @memberof UpdateLayerCollection
      */
     description: string;
     /**
      * 
-     * @type {Array<Array<string>>}
-     * @memberof UpdateLayerCollection
      */
     properties?: Array<Array<string>>;
 }

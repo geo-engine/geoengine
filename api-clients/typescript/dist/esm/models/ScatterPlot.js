@@ -16,13 +16,15 @@ import { SingleVectorSourceFromJSON, SingleVectorSourceToJSON, } from './SingleV
  * @export
  */
 export const ScatterPlotTypeEnum = {
-    ScatterPlot: 'ScatterPlot'
+    ScatterPlot: 'ScatterPlot',
 };
 /**
  * Check if a given object implements the ScatterPlot interface.
  */
 export function instanceOfScatterPlot(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'ScatterPlot')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

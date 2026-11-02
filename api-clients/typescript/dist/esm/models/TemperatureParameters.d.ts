@@ -16,8 +16,6 @@
 export interface TemperatureParameters {
     /**
      *
-     * @type {number}
-     * @memberof TemperatureParameters
      */
     forceSatellite?: number | null;
 }

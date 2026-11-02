@@ -14,13 +14,15 @@
  * @export
  */
 export const AggregationMaxTypeEnum = {
-    Max: 'max'
+    Max: 'max',
 };
 /**
  * Check if a given object implements the AggregationMax interface.
  */
 export function instanceOfAggregationMax(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'max')
         return false;
     if (!('ignoreNoData' in value) || value['ignoreNoData'] === undefined)
         return false;

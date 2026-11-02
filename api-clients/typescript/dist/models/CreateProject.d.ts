@@ -18,26 +18,18 @@ import type { STRectangle } from './STRectangle';
 export interface CreateProject {
     /**
      *
-     * @type {string}
-     * @memberof CreateProject
      */
     name: string;
     /**
      *
-     * @type {string}
-     * @memberof CreateProject
      */
     description: string;
     /**
      *
-     * @type {STRectangle}
-     * @memberof CreateProject
      */
     bounds: STRectangle;
     /**
      *
-     * @type {TimeStep}
-     * @memberof CreateProject
      */
     timeStep?: TimeStep | null;
 }

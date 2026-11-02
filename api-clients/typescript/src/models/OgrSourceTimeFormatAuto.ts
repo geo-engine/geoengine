@@ -20,8 +20,6 @@ import { mapValues } from '../runtime';
 export interface OgrSourceTimeFormatAuto {
     /**
      * 
-     * @type {OgrSourceTimeFormatAutoFormatEnum}
-     * @memberof OgrSourceTimeFormatAuto
      */
     format: OgrSourceTimeFormatAutoFormatEnum;
 }
@@ -31,7 +29,7 @@ export interface OgrSourceTimeFormatAuto {
  * @export
  */
 export const OgrSourceTimeFormatAutoFormatEnum = {
-    Auto: 'auto'
+    Auto: 'auto',
 } as const;
 export type OgrSourceTimeFormatAutoFormatEnum = typeof OgrSourceTimeFormatAutoFormatEnum[keyof typeof OgrSourceTimeFormatAutoFormatEnum];
 
@@ -41,6 +39,8 @@ export type OgrSourceTimeFormatAutoFormatEnum = typeof OgrSourceTimeFormatAutoFo
  */
 export function instanceOfOgrSourceTimeFormatAuto(value: object): value is OgrSourceTimeFormatAuto {
     if (!('format' in value) || value['format'] === undefined) return false;
+    if (value['format'] !== 'auto') return false;
+    
     return true;
 }
 

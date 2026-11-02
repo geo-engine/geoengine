@@ -22,13 +22,15 @@ exports.OgrSourceDurationSpecZeroToJSONTyped = OgrSourceDurationSpecZeroToJSONTy
  * @export
  */
 exports.OgrSourceDurationSpecZeroTypeEnum = {
-    Zero: 'zero'
+    Zero: 'zero',
 };
 /**
  * Check if a given object implements the OgrSourceDurationSpecZero interface.
  */
 function instanceOfOgrSourceDurationSpecZero(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'zero')
         return false;
     return true;
 }

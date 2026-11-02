@@ -16,26 +16,18 @@
 export interface VectorJoinTypeEquiGeoToData {
     /**
      *
-     * @type {VectorJoinTypeEquiGeoToDataTypeEnum}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     type: VectorJoinTypeEquiGeoToDataTypeEnum;
     /**
      * Column name of the left input used in the join.
-     * @type {string}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     leftColumn: string;
     /**
      * Column name of the right input used in the join.
-     * @type {string}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     rightColumn: string;
     /**
      * Optional suffix added to right-side columns to avoid collisions.
-     * @type {string}
-     * @memberof VectorJoinTypeEquiGeoToData
      */
     rightColumnSuffix?: string | null;
 }

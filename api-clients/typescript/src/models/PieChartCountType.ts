@@ -20,20 +20,14 @@ import { mapValues } from '../runtime';
 export interface PieChartCountType {
     /**
      * 
-     * @type {PieChartCountTypeTypeEnum}
-     * @memberof PieChartCountType
      */
     type: PieChartCountTypeTypeEnum;
     /**
      * The names of the attribute to generate pies for.
-     * @type {string}
-     * @memberof PieChartCountType
      */
     columnName: string;
     /**
      * Whether to render the chart as a donut.
-     * @type {boolean}
-     * @memberof PieChartCountType
      */
     donut?: boolean;
 }
@@ -43,7 +37,7 @@ export interface PieChartCountType {
  * @export
  */
 export const PieChartCountTypeTypeEnum = {
-    Count: 'count'
+    Count: 'count',
 } as const;
 export type PieChartCountTypeTypeEnum = typeof PieChartCountTypeTypeEnum[keyof typeof PieChartCountTypeTypeEnum];
 
@@ -53,6 +47,8 @@ export type PieChartCountTypeTypeEnum = typeof PieChartCountTypeTypeEnum[keyof t
  */
 export function instanceOfPieChartCountType(value: object): value is PieChartCountType {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'count') return false;
+    
     if (!('columnName' in value) || value['columnName'] === undefined) return false;
     return true;
 }

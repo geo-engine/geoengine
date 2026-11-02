@@ -16,20 +16,14 @@
 export interface OperatorQuota {
     /**
      *
-     * @type {string}
-     * @memberof OperatorQuota
      */
     operatorName: string;
     /**
      *
-     * @type {string}
-     * @memberof OperatorQuota
      */
     operatorPath: string;
     /**
      *
-     * @type {number}
-     * @memberof OperatorQuota
      */
     count: number;
 }

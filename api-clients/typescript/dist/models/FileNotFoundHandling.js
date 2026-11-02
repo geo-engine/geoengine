@@ -24,7 +24,7 @@ exports.FileNotFoundHandlingToJSONTyped = FileNotFoundHandlingToJSONTyped;
  */
 exports.FileNotFoundHandling = {
     NoData: 'NoData',
-    Error: 'Error'
+    Error: 'Error',
 };
 function instanceOfFileNotFoundHandling(value) {
     for (const key in exports.FileNotFoundHandling) {

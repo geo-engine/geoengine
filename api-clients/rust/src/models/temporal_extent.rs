@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub struct TemporalExtent {
     /// One or more time intervals that describe the temporal extent of the dataset. The value `null` is supported and indicates an unbounded interval end. In the Core only a single time interval is supported. Extensions may support multiple intervals. If multiple intervals are provided, the union of the intervals describes the temporal extent.
     #[serde(rename = "interval")]
-    pub interval: Vec<Vec<String>>,
+    pub interval: Vec<Vec<chrono::DateTime<chrono::FixedOffset>>>,
     /// Coordinate reference system of the coordinates in the temporal extent (property `interval`). The default reference system is the Gregorian calendar. In the Core this is the only supported temporal coordinate reference system. Extensions may support additional temporal coordinate reference systems and add additional enum values.
     #[serde(rename = "trs", skip_serializing_if = "Option::is_none")]
     pub trs: Option<String>,
@@ -23,7 +23,7 @@ pub struct TemporalExtent {
 
 impl TemporalExtent {
     /// The temporal extent of the features in the collection.
-    pub fn new(interval: Vec<Vec<String>>) -> TemporalExtent {
+    pub fn new(interval: Vec<Vec<chrono::DateTime<chrono::FixedOffset>>>) -> TemporalExtent {
         TemporalExtent {
             interval,
             trs: None,

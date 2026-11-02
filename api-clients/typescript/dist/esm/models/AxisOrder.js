@@ -16,7 +16,7 @@
  */
 export const AxisOrder = {
     NorthEast: 'northEast',
-    EastNorth: 'eastNorth'
+    EastNorth: 'eastNorth',
 };
 export function instanceOfAxisOrder(value) {
     for (const key in AxisOrder) {

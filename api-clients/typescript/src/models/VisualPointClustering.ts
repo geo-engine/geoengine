@@ -50,20 +50,14 @@ import {
 export interface VisualPointClustering {
     /**
      * 
-     * @type {VisualPointClusteringTypeEnum}
-     * @memberof VisualPointClustering
      */
     type: VisualPointClusteringTypeEnum;
     /**
      * 
-     * @type {VisualPointClusteringParameters}
-     * @memberof VisualPointClustering
      */
     params: VisualPointClusteringParameters;
     /**
      * 
-     * @type {SingleVectorSource}
-     * @memberof VisualPointClustering
      */
     sources: SingleVectorSource;
 }
@@ -73,7 +67,7 @@ export interface VisualPointClustering {
  * @export
  */
 export const VisualPointClusteringTypeEnum = {
-    VisualPointClustering: 'VisualPointClustering'
+    VisualPointClustering: 'VisualPointClustering',
 } as const;
 export type VisualPointClusteringTypeEnum = typeof VisualPointClusteringTypeEnum[keyof typeof VisualPointClusteringTypeEnum];
 
@@ -83,6 +77,8 @@ export type VisualPointClusteringTypeEnum = typeof VisualPointClusteringTypeEnum
  */
 export function instanceOfVisualPointClustering(value: object): value is VisualPointClustering {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'VisualPointClustering') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

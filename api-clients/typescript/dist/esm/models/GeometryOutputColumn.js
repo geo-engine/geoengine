@@ -15,7 +15,7 @@ import { VectorDataTypeFromJSON, VectorDataTypeToJSON, } from './VectorDataType'
  * @export
  */
 export const GeometryOutputColumnTypeEnum = {
-    Geometry: 'geometry'
+    Geometry: 'geometry',
 };
 /**
  * Check if a given object implements the GeometryOutputColumn interface.
@@ -24,6 +24,8 @@ export function instanceOfGeometryOutputColumn(value) {
     if (!('value' in value) || value['value'] === undefined)
         return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'geometry')
         return false;
     return true;
 }

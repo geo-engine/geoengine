@@ -17,32 +17,22 @@
 export interface TileMatrixLimits {
     /**
      *
-     * @type {string}
-     * @memberof TileMatrixLimits
      */
     tileMatrix: string;
     /**
      *
-     * @type {number}
-     * @memberof TileMatrixLimits
      */
     minTileRow: number;
     /**
      *
-     * @type {number}
-     * @memberof TileMatrixLimits
      */
     maxTileRow: number;
     /**
      *
-     * @type {number}
-     * @memberof TileMatrixLimits
      */
     minTileCol: number;
     /**
      *
-     * @type {number}
-     * @memberof TileMatrixLimits
      */
     maxTileCol: number;
 }

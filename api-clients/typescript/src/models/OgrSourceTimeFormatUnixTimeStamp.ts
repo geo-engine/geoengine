@@ -28,14 +28,10 @@ import {
 export interface OgrSourceTimeFormatUnixTimeStamp {
     /**
      * 
-     * @type {OgrSourceTimeFormatUnixTimeStampFormatEnum}
-     * @memberof OgrSourceTimeFormatUnixTimeStamp
      */
     format: OgrSourceTimeFormatUnixTimeStampFormatEnum;
     /**
      * 
-     * @type {UnixTimeStampType}
-     * @memberof OgrSourceTimeFormatUnixTimeStamp
      */
     timestampType: UnixTimeStampType;
 }
@@ -45,7 +41,7 @@ export interface OgrSourceTimeFormatUnixTimeStamp {
  * @export
  */
 export const OgrSourceTimeFormatUnixTimeStampFormatEnum = {
-    UnixTimeStamp: 'unixTimeStamp'
+    UnixTimeStamp: 'unixTimeStamp',
 } as const;
 export type OgrSourceTimeFormatUnixTimeStampFormatEnum = typeof OgrSourceTimeFormatUnixTimeStampFormatEnum[keyof typeof OgrSourceTimeFormatUnixTimeStampFormatEnum];
 
@@ -55,6 +51,8 @@ export type OgrSourceTimeFormatUnixTimeStampFormatEnum = typeof OgrSourceTimeFor
  */
 export function instanceOfOgrSourceTimeFormatUnixTimeStamp(value: object): value is OgrSourceTimeFormatUnixTimeStamp {
     if (!('format' in value) || value['format'] === undefined) return false;
+    if (value['format'] !== 'unixTimeStamp') return false;
+    
     if (!('timestampType' in value) || value['timestampType'] === undefined) return false;
     return true;
 }

@@ -16,14 +16,10 @@
 export interface TimeInterval {
     /**
      *
-     * @type {number}
-     * @memberof TimeInterval
      */
     start: number;
     /**
      *
-     * @type {number}
-     * @memberof TimeInterval
      */
     end: number;
 }

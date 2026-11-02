@@ -54,7 +54,7 @@ function DatasetListingFromJSONTyped(json, ignoreDiscriminator) {
         'tags': json['tags'],
         'sourceOperator': json['sourceOperator'],
         'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorFromJSON)(json['resultDescriptor']),
-        'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
     };
 }
 function DatasetListingToJSON(json) {

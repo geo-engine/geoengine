@@ -23,13 +23,15 @@ const OgrSourceParameters_1 = require("./OgrSourceParameters");
  * @export
  */
 exports.OgrSourceTypeEnum = {
-    OgrSource: 'OgrSource'
+    OgrSource: 'OgrSource',
 };
 /**
  * Check if a given object implements the OgrSource interface.
  */
 function instanceOfOgrSource(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'OgrSource')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

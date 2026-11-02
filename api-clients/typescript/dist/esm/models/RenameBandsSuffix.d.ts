@@ -16,14 +16,10 @@
 export interface RenameBandsSuffix {
     /**
      *
-     * @type {RenameBandsSuffixTypeEnum}
-     * @memberof RenameBandsSuffix
      */
     type: RenameBandsSuffixTypeEnum;
     /**
      *
-     * @type {Array<string>}
-     * @memberof RenameBandsSuffix
      */
     values: Array<string>;
 }

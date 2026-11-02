@@ -35,14 +35,10 @@ import {
 export interface DatasetDefinition {
     /**
      * 
-     * @type {AddDataset}
-     * @memberof DatasetDefinition
      */
     properties: AddDataset;
     /**
      * 
-     * @type {MetaDataDefinition}
-     * @memberof DatasetDefinition
      */
     metaData: MetaDataDefinition;
 }

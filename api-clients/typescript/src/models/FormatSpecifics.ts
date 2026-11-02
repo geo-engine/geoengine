@@ -28,8 +28,6 @@ import {
 export interface FormatSpecifics {
     /**
      * 
-     * @type {FormatSpecificsCsv}
-     * @memberof FormatSpecifics
      */
     csv: FormatSpecificsCsv;
 }

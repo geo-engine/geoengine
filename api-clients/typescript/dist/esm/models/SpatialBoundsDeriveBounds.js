@@ -15,13 +15,15 @@ import { BoundingBox2DFromJSONTyped, BoundingBox2DToJSONTyped, } from './Boundin
  * @export
  */
 export const SpatialBoundsDeriveBoundsTypeEnum = {
-    Bounds: 'bounds'
+    Bounds: 'bounds',
 };
 /**
  * Check if a given object implements the SpatialBoundsDeriveBounds interface.
  */
 export function instanceOfSpatialBoundsDeriveBounds(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'bounds')
         return false;
     return true;
 }

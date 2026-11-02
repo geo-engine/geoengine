@@ -35,20 +35,14 @@ import {
 export interface AttributeAggregateDef {
     /**
      * Name of the source column to aggregate.
-     * @type {string}
-     * @memberof AttributeAggregateDef
      */
     columnName: string;
     /**
      * Aggregation function applied to the source column.
-     * @type {AttributeAggregateType}
-     * @memberof AttributeAggregateDef
      */
     aggregateType: AttributeAggregateType;
     /**
      * Optional measurement metadata for the aggregated result.
-     * @type {Measurement}
-     * @memberof AttributeAggregateDef
      */
     measurement?: Measurement | null;
 }
@@ -76,7 +70,7 @@ export function AttributeAggregateDefFromJSONTyped(json: any, ignoreDiscriminato
         
         'columnName': json['columnName'],
         'aggregateType': AttributeAggregateTypeFromJSON(json['aggregateType']),
-        'measurement': json['measurement'] == null ? undefined : MeasurementFromJSON(json['measurement']),
+        'measurement': json['measurement'] === undefined ? undefined : json['measurement'] === null ? null : MeasurementFromJSON(json['measurement']),
     };
 }
 

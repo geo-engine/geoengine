@@ -16,7 +16,7 @@
  */
 export const OgrSourceErrorSpec = {
     Ignore: 'ignore',
-    Abort: 'abort'
+    Abort: 'abort',
 };
 export function instanceOfOgrSourceErrorSpec(value) {
     for (const key in OgrSourceErrorSpec) {
