@@ -1958,6 +1958,9 @@ mod tests {
 
     /// Loads a fully valid mosaic of 2x2 files whose edges are not aligned to the overview grid.
     /// Every overview pixel that lies completely inside the mosaic must be valid in the loaded tiles.
+    ///
+    /// Files with overviews are written with different values in the overviews and in the full resolution band.
+    /// So the test also checks that GDAL reads from the overviews, which requires aligned read windows.
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_loads_unaligned_mosaic_at_overview_levels_without_gaps() {
@@ -1967,6 +1970,10 @@ mod tests {
 
         const FILE_SIZE: isize = 101;
         const TILE_SIZE: isize = 16;
+        // the value of every overview pixel, and of every full resolution pixel of files without overviews
+        const VALUE: u16 = 1;
+        // the value of the full resolution pixels of files with overviews
+        const FULL_RESOLUTION_VALUE: u16 = 2;
 
         let temp_dir = tempfile::tempdir().unwrap();
 
@@ -1979,15 +1986,34 @@ mod tests {
 
         let mut failures = Vec::new();
 
-        for (origin_x, origin_y) in [(3_isize, 5_isize), (3, -207)] {
+        // mosaic origins not aligned to the overview grid, with regular and flipped files, without and with overviews
+        for (origin_x, origin_y, flip_y, with_overviews) in [
+            (3_isize, 5_isize, false, false),
+            (3, -207, false, false),
+            (3, 5, false, true),
+            (3, -207, false, true),
+            (3, 5, true, true),
+            (-301, -207, true, true),
+        ] {
+            let config = format!(
+                "origin ({origin_x}, {origin_y}), flip {flip_y}, overviews {with_overviews}"
+            );
+
             let mut files = Vec::new();
             for file_y in 0..2 {
                 for file_x in 0..2 {
                     let file_origin_x = (origin_x + file_x * FILE_SIZE) as f64;
-                    let file_origin_y = (origin_y - file_y * FILE_SIZE) as f64;
+                    let file_top_y = (origin_y - file_y * FILE_SIZE) as f64;
+                    let file_bottom_y = file_top_y - FILE_SIZE as f64;
+                    // a flipped file has its origin at the bottom and a positive y pixel size
+                    let (file_origin_y, y_pixel_size) = if flip_y {
+                        (file_bottom_y, 1.)
+                    } else {
+                        (file_top_y, -1.)
+                    };
 
                     let file_path = temp_dir.path().join(format!(
-                        "mosaic_{origin_x}_{origin_y}_{file_x}_{file_y}.tif"
+                        "mosaic_{origin_x}_{origin_y}_{flip_y}_{with_overviews}_{file_x}_{file_y}.tif"
                     ));
 
                     let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
@@ -2003,31 +2029,42 @@ mod tests {
                         .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap())
                         .unwrap();
                     dataset
-                        .set_geo_transform(&[file_origin_x, 1., 0., file_origin_y, 0., -1.])
+                        .set_geo_transform(&[
+                            file_origin_x,
+                            1.,
+                            0.,
+                            file_origin_y,
+                            0.,
+                            y_pixel_size,
+                        ])
                         .unwrap();
-                    let mut band = dataset.rasterband(1).unwrap();
-                    band.set_no_data_value(Some(0.)).unwrap();
-                    let mut buffer = Buffer::new(
-                        (FILE_SIZE as usize, FILE_SIZE as usize),
-                        vec![1_u16; (FILE_SIZE * FILE_SIZE) as usize],
-                    );
-                    band.write(
-                        (0, 0),
-                        (FILE_SIZE as usize, FILE_SIZE as usize),
-                        &mut buffer,
-                    )
-                    .unwrap();
+                    let write_band = |dataset: &gdal::Dataset, value: u16| {
+                        let mut band = dataset.rasterband(1).unwrap();
+                        band.set_no_data_value(Some(0.)).unwrap();
+                        let mut buffer = Buffer::new(
+                            (FILE_SIZE as usize, FILE_SIZE as usize),
+                            vec![value; (FILE_SIZE * FILE_SIZE) as usize],
+                        );
+                        band.write(
+                            (0, 0),
+                            (FILE_SIZE as usize, FILE_SIZE as usize),
+                            &mut buffer,
+                        )
+                        .unwrap();
+                    };
+                    write_band(&dataset, VALUE);
+                    if with_overviews {
+                        // GDAL does not update the overviews when the full resolution band changes afterwards
+                        dataset.build_overviews("NEAREST", &[2, 4, 8], &[]).unwrap();
+                        write_band(&dataset, FULL_RESOLUTION_VALUE);
+                    }
                     dataset.close().unwrap();
 
                     files.push(TileFile {
                         time: time_interval,
                         spatial_partition: SpatialPartition2D::new_unchecked(
-                            (file_origin_x, file_origin_y).into(),
-                            (
-                                file_origin_x + FILE_SIZE as f64,
-                                file_origin_y - FILE_SIZE as f64,
-                            )
-                                .into(),
+                            (file_origin_x, file_top_y).into(),
+                            (file_origin_x + FILE_SIZE as f64, file_bottom_y).into(),
                         ),
                         band: 0,
                         z_index: 0,
@@ -2037,7 +2074,7 @@ mod tests {
                             geo_transform: GdalDatasetGeoTransform {
                                 origin_coordinate: (file_origin_x, file_origin_y).into(),
                                 x_pixel_size: NonZeroFiniteF64::new_unchecked(1.0),
-                                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.0),
+                                y_pixel_size: NonZeroFiniteF64::new_unchecked(y_pixel_size),
                             },
                             width: FILE_SIZE as usize,
                             height: FILE_SIZE as usize,
@@ -2071,6 +2108,7 @@ mod tests {
                 let y_max = (2 * FILE_SIZE - origin_y).div_euclid(overview_level) - 1;
 
                 let mut missing = Vec::new();
+                let mut full_resolution = Vec::new();
 
                 for tile_y in y_min.div_euclid(TILE_SIZE)..=y_max.div_euclid(TILE_SIZE) {
                     for tile_x in x_min.div_euclid(TILE_SIZE)..=x_max.div_euclid(TILE_SIZE) {
@@ -2106,13 +2144,13 @@ mod tests {
                             Ok(Ok(tile)) => tile,
                             Ok(Err(error)) => {
                                 failures.push(format!(
-                                    "level {overview_level}, origin ({origin_x}, {origin_y}): error for tile [{tile_y}, {tile_x}]: {error}"
+                                    "level {overview_level}, {config}: error for tile [{tile_y}, {tile_x}]: {error}"
                                 ));
                                 continue;
                             }
                             Err(_) => {
                                 failures.push(format!(
-                                    "level {overview_level}, origin ({origin_x}, {origin_y}): panic for tile [{tile_y}, {tile_x}]"
+                                    "level {overview_level}, {config}: panic for tile [{tile_y}, {tile_x}]"
                                 ));
                                 continue;
                             }
@@ -2133,20 +2171,31 @@ mod tests {
                                 let value = tile
                                     .grid_array
                                     .get_at_grid_index_unchecked(GridIdx2D::new_y_x(y, x));
-                                if value != Some(1) {
-                                    missing.push((global_y, global_x));
+                                match value {
+                                    Some(VALUE) => {}
+                                    Some(FULL_RESOLUTION_VALUE) => {
+                                        full_resolution.push((global_y, global_x));
+                                    }
+                                    _ => missing.push((global_y, global_x)),
                                 }
                             }
                         }
                     }
                 }
 
+                let pixel_count = (y_max - y_min + 1) * (x_max - x_min + 1);
                 if !missing.is_empty() {
                     failures.push(format!(
-                        "level {overview_level}, origin ({origin_x}, {origin_y}): {} of {} overview pixels not valid, e.g. (y, x) {:?}",
+                        "level {overview_level}, {config}: {} of {pixel_count} overview pixels not valid, e.g. (y, x) {:?}",
                         missing.len(),
-                        (y_max - y_min + 1) * (x_max - x_min + 1),
                         &missing[..missing.len().min(5)]
+                    ));
+                }
+                if !full_resolution.is_empty() {
+                    failures.push(format!(
+                        "level {overview_level}, {config}: {} of {pixel_count} overview pixels not read from the overviews, e.g. (y, x) {:?}",
+                        full_resolution.len(),
+                        &full_resolution[..full_resolution.len().min(5)]
                     ));
                 }
             }
