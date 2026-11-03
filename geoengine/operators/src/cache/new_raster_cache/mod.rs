@@ -893,6 +893,9 @@ where
     }
 }
 
+/// Tiles a query looks up or computes at the same time, like the read-ahead of the GDAL sources.
+const TILE_READ_AHEAD: usize = 16;
+
 pub struct RasterCacheOperator<Source>
 where
     Source: InitializedRasterOperator,
@@ -1027,76 +1030,62 @@ where
                     }
                 };
 
-                Box::pin(stream::unfold((work, 0), move |(work, idx)| async move {
-                    if idx >= work.len() {
-                        return None;
-                    }
-
-                    let job = &work[idx];
-
-                    let key = (
-                        self.canonic_operator_name.clone(),
-                        job.band,
-                        time_interval,
-                        job.tile_info.global_upper_left_pixel_idx(),
-                    );
-
-                    let cache_store = ctx
-                        .new_raster_cache()
-                        .expect("Cache should have been created for this operator");
-
-                    match cache_store.get(&key).await {
-                        Err(err) => Some((Err(err), (work, idx + 1))),
-                        Ok(Some(stored_tile)) => {
-                            tracing::trace!("Cache HIT for tile {:?}", key);
-                            let tile = stored_tile.load().await;
-
-                            let tile: Result<RasterTile2D<T>> = match tile {
-                                Ok(tile) => T::map_enum_to_tile(tile),
-                                Err(err) => Err(err)
-                            };
-
-                            Some((
-                                tile,
-                                (work, idx + 1),
-                            ))
-                        }
-                        Ok(None) => {
-                            tracing::trace!("Cache MISS for tile {:?}", key);
-
-                            let source_query = self.source.query(
-                                RasterQueryRectangle::new(
-                                    job.tile_info.global_pixel_bounds(),
-                                    time_interval,
-                                    BandSelection::new_single(job.band)
-                                ),
-                                ctx,
-                            ).await;
-
-                            let mut stream = match source_query {
-                                Ok(stream) => stream,
-                                Err(err) => return Some((Err(err), (work, idx + 1))),
-                            };
-
-                            match stream.next().await {
-                                Some(Ok(tile)) => {
-                                    let tile_to_cache = T::map_tile_to_enum(tile.clone());
-                                    if let Err(err) = cache_store.insert(key, tile_to_cache).await {
-                                        tracing::warn!("Failed to populate raster cache: {err}");
-                                    }
-                                    Some((Ok(tile), (work, idx + 1)))
-                                }
-                                Some(Err(err)) => Some((Err(err), (work, idx + 1))),
-                                None => Some((
-                                    Err(CacheError::SourceProducedNoTile.into()),
-                                    (work, idx + 1),
-                                )),
-                            }
-                        }
-                    }
-                }))
+                Box::pin(
+                    stream::iter(0..work.len())
+                        .map(move |idx| {
+                            let work = work.clone();
+                            async move { self.cached_tile(&work[idx], time_interval, ctx).await }
+                        })
+                        .buffered(TILE_READ_AHEAD),
+                )
             },
         ))
+    }
+
+    async fn cached_tile(
+        &self,
+        job: &WorkItem,
+        time_interval: TimeInterval,
+        ctx: &dyn QueryContext,
+    ) -> Result<RasterTile2D<T>> {
+        let key = (
+            self.canonic_operator_name.clone(),
+            job.band,
+            time_interval,
+            job.tile_info.global_upper_left_pixel_idx(),
+        );
+
+        let cache_store = ctx
+            .new_raster_cache()
+            .expect("Cache should have been created for this operator");
+
+        if let Some(stored_tile) = cache_store.get(&key).await? {
+            tracing::trace!("Cache HIT for tile {:?}", key);
+            return T::map_enum_to_tile(stored_tile.load().await?);
+        }
+        tracing::trace!("Cache MISS for tile {:?}", key);
+
+        let mut stream = self
+            .source
+            .query(
+                RasterQueryRectangle::new(
+                    job.tile_info.global_pixel_bounds(),
+                    time_interval,
+                    BandSelection::new_single(job.band),
+                ),
+                ctx,
+            )
+            .await?;
+        let tile = stream
+            .next()
+            .await
+            .ok_or(CacheError::SourceProducedNoTile)??;
+
+        let tile_to_cache = T::map_tile_to_enum(tile.clone());
+        if let Err(err) = cache_store.insert(key, tile_to_cache).await {
+            tracing::warn!("Failed to populate raster cache: {err}");
+        }
+        Ok(tile)
     }
 }
 #[async_trait]
