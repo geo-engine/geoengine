@@ -48,6 +48,7 @@ impl TestDefault for NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(8_589_934_592)),
                 total_size: Arc::new(AtomicUsize::new(0)),
+                storing: Mutex::default(),
             },
         })
     }
@@ -68,6 +69,7 @@ impl NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
+                storing: Mutex::default(),
             },
         })
     }
@@ -78,6 +80,7 @@ impl NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(LruEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
+                storing: Mutex::default(),
             },
         })
     }
@@ -604,6 +607,42 @@ pub struct InMemoryCacheStore<SF, ES> {
     cache: RwLock<HashMap<Arc<CacheKey>, Arc<SizeTrackedEntry<SF>>>>,
     eviction_strategy: Mutex<ES>,
     total_size: Arc<AtomicUsize>,
+    /// Keys whose value an insert is storing, so that concurrent inserts of the same key, e.g. of
+    /// callers that got the same result, store it once. Never locked together with the others.
+    storing: Mutex<HashSet<Arc<CacheKey>>>,
+}
+
+/// Claims a key in [`InMemoryCacheStore::storing`] and releases it when the insert ends, also if
+/// it is cancelled.
+struct StoringGuard<'a> {
+    storing: &'a Mutex<HashSet<Arc<CacheKey>>>,
+    key: Arc<CacheKey>,
+}
+
+impl<'a> StoringGuard<'a> {
+    /// `None` if another insert stores the key.
+    fn claim(
+        storing: &'a Mutex<HashSet<Arc<CacheKey>>>,
+        key: &Arc<CacheKey>,
+    ) -> Result<Option<Self>> {
+        let claimed = storing
+            .lock()
+            .map_err(|_| CacheError::LockPoisoned)?
+            .insert(key.clone());
+        Ok(claimed.then(|| Self {
+            storing,
+            key: key.clone(),
+        }))
+    }
+}
+
+impl Drop for StoringGuard<'_> {
+    fn drop(&mut self) {
+        self.storing
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&self.key);
+    }
 }
 
 impl<SF, ES> InMemoryCacheStore<SF, ES> {
@@ -846,6 +885,9 @@ where
                 return Ok(());
             }
         }
+        let Some(_storing) = StoringGuard::claim(&self.storing, &key)? else {
+            return Ok(());
+        };
 
         let cache_hint = tile.cache_hint();
         let value = SF::store(tile).await?;
@@ -1264,6 +1306,31 @@ mod tests {
             grid,
             cache_hint,
         ))
+    }
+
+    #[tokio::test]
+    async fn it_skips_storing_a_key_that_another_insert_stores() {
+        let cache = NewRasterCacheEnum::new_lru(1 << 20);
+        let NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(lru) = &cache else {
+            unreachable!("new_lru builds an LRU cache");
+        };
+        let key = make_cache_key(0, 0);
+
+        let other_insert = StoringGuard::claim(&lru.store.storing, &Arc::new(key.clone()))
+            .unwrap()
+            .unwrap();
+        cache
+            .insert(key.clone(), make_tile(1, CacheHint::max_duration()))
+            .await
+            .unwrap();
+        assert!(cache.get(&key).await.unwrap().is_none());
+
+        drop(other_insert);
+        cache
+            .insert(key.clone(), make_tile(1, CacheHint::max_duration()))
+            .await
+            .unwrap();
+        assert!(cache.get(&key).await.unwrap().is_some());
     }
 
     #[tokio::test]
