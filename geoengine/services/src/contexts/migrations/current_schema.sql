@@ -1453,7 +1453,7 @@ CREATE TABLE dataset_md_tiles (
     array_name text NOT NULL,
     array_group text,
     time_descriptor "TimeDescriptor" NOT NULL,
-    time_steps "TimeInterval" [] NOT NULL, -- noqa: rules.shorthands
+    time_steps "TimeInterval"[] NOT NULL, -- noqa: rules.shorthands
     gdal_params "GdalDatasetParameters" NOT NULL
 );
 
