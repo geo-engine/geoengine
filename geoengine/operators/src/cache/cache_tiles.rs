@@ -566,18 +566,6 @@ impl Lz4FlexCompression {
             std::slice::from_raw_parts(data.as_ptr().cast::<u8>(), std::mem::size_of_val(data))
         }
     }
-
-    fn cast_u8_slice_to_data_slice<T>(data: &[u8]) -> &[T]
-    where
-        T: Copy,
-    {
-        unsafe {
-            std::slice::from_raw_parts(
-                data.as_ptr().cast::<T>(),
-                data.len() / std::mem::size_of::<T>(),
-            )
-        }
-    }
 }
 
 impl TileCompression for Lz4FlexCompression {
@@ -594,11 +582,18 @@ impl TileCompression for Lz4FlexCompression {
         T: Copy,
     {
         let stored_bytes = elements * std::mem::size_of::<T>();
-        let decompressed_data = lz4_flex::decompress(data, stored_bytes)
+        let mut decompressed = Vec::<T>::with_capacity(elements);
+        // Safety: the buffer has this capacity and the zeroed bytes are valid pixels and masks
+        let bytes = unsafe {
+            let bytes = decompressed.as_mut_ptr().cast::<u8>();
+            bytes.write_bytes(0, stored_bytes);
+            std::slice::from_raw_parts_mut(bytes, stored_bytes)
+        };
+        let written = lz4_flex::block::decompress_into(data, bytes)
             .map_err(|source| CacheError::CouldNotDecompressElement { source })?;
-        let decompressed_data_as_t_slice =
-            Self::cast_u8_slice_to_data_slice(decompressed_data.as_slice());
-        Ok(decompressed_data_as_t_slice.to_vec())
+        // Safety: these elements were zeroed and then written
+        unsafe { decompressed.set_len(written / std::mem::size_of::<T>()) };
+        Ok(decompressed)
     }
 }
 
