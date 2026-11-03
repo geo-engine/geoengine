@@ -85,6 +85,10 @@ name = "no_data_tiles"
 harness = false
 
 [[bench]]
+name = "raster_cache"
+harness = false
+
+[[bench]]
 name = "core_scaling"
 harness = false
 
