@@ -566,7 +566,7 @@ pub async fn add_md_dataset_tiles_handler<C: ApplicationContext>(
             .context(CannotAddMdTilesToDataset)?
             .get_gdal_worker(),
     );
-    let mut keys = Vec::with_capacity(tiles.len());
+    let mut keys = Vec::new();
     let mut to_read = HashMap::new();
     for tile in &tiles {
         let absolute_path = validate_md_tile(

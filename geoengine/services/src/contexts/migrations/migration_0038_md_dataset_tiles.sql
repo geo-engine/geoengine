@@ -56,7 +56,7 @@ CREATE TABLE dataset_md_tiles (
     -- the compact form of `time_steps`, what the API advertises
     time_descriptor "TimeDescriptor" NOT NULL,
     -- one interval per z slice, always populated
-    time_steps "TimeInterval" [] NOT NULL,
+    time_steps "TimeInterval"[] NOT NULL,
     gdal_params "GdalDatasetParameters" NOT NULL
 );
 
