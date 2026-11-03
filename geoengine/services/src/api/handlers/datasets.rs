@@ -490,7 +490,7 @@ impl AddDatasetMdTile {
     path = "/dataset/{dataset}/md-tiles",
     request_body = Vec<AddDatasetMdTile>,
     responses(
-        (status = 200),
+        (status = 200, description = "Tiles were added to the dataset"),
         (status = 400, description = "Bad request", body = ErrorResponse),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
     ),
