@@ -760,7 +760,7 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Tiles were added to the dataset"
           },
           "400": {
             "description": "Bad request",
@@ -8830,11 +8830,11 @@
           "cacheTtl": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CacheTtlSeconds",
                 "description": "Dataset-level TTL fallback used when no tile-level TTL is provided."
+              },
+              {
+                "type": "null"
               }
             ]
           }

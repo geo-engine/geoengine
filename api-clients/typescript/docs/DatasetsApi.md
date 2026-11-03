@@ -163,7 +163,7 @@ example().catch(console.error);
 ### HTTP response details
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
-| **200** |  |  -  |
+| **200** | Tiles were added to the dataset |  -  |
 | **400** | Bad request |  -  |
 | **401** | Authorization failed |  -  |
 
