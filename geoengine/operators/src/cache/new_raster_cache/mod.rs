@@ -672,7 +672,10 @@ fn cache_key_byte_size(key: &CacheKey) -> usize {
 trait StorageFormat: Send + Sync + Sized + 'static {
     fn store(tile: TypedRasterTile2D) -> impl std::future::Future<Output = Result<Self>> + Send;
 
-    fn load(&self) -> impl std::future::Future<Output = Result<TypedRasterTile2D>> + Send;
+    /// Takes the entry, not a copy of its value, into the thread that decompresses it.
+    fn load(
+        entry: Arc<SizeTrackedEntry<Self>>,
+    ) -> impl std::future::Future<Output = Result<TypedRasterTile2D>> + Send;
 
     fn byte_size(&self) -> impl std::future::Future<Output = Result<usize>> + Send;
 
@@ -762,38 +765,37 @@ impl StorageFormat for TypedCompressedRasterTile2D {
         .map_err(|source| CacheError::CouldNotRunCompressionTask { source })?
     }
 
-    async fn load(&self) -> Result<TypedRasterTile2D> {
-        let compressed = self.clone();
-        tokio::task::spawn_blocking(move || match compressed {
+    async fn load(entry: Arc<SizeTrackedEntry<Self>>) -> Result<TypedRasterTile2D> {
+        tokio::task::spawn_blocking(move || match &entry.value {
             TypedCompressedRasterTile2D::I8(compressed) => Ok(TypedRasterTile2D::I8(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::I16(compressed) => Ok(TypedRasterTile2D::I16(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::I32(compressed) => Ok(TypedRasterTile2D::I32(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::I64(compressed) => Ok(TypedRasterTile2D::I64(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U8(compressed) => Ok(TypedRasterTile2D::U8(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U16(compressed) => Ok(TypedRasterTile2D::U16(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U32(compressed) => Ok(TypedRasterTile2D::U32(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U64(compressed) => Ok(TypedRasterTile2D::U64(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::F32(compressed) => Ok(TypedRasterTile2D::F32(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::F64(compressed) => Ok(TypedRasterTile2D::F64(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
         })
         .await
@@ -1103,7 +1105,7 @@ where
 
         if let Some(stored_tile) = cache_store.get(&key).await? {
             tracing::trace!("Cache HIT for tile {:?}", key);
-            return T::map_enum_to_tile(stored_tile.load().await?);
+            return T::map_enum_to_tile(StorageFormat::load(stored_tile).await?);
         }
         tracing::trace!("Cache MISS for tile {:?}", key);
 
@@ -1384,7 +1386,7 @@ mod tests {
             .await
             .unwrap()
             .expect("tile should be cached");
-        let loaded = entry.load().await.unwrap();
+        let loaded = StorageFormat::load(entry).await.unwrap();
 
         match (loaded, tile) {
             (TypedRasterTile2D::U8(loaded), TypedRasterTile2D::U8(original)) => {
@@ -1796,9 +1798,7 @@ mod tests {
             .expect("cache lookup should succeed")
             .expect("tile should be cached after query");
 
-        let cached_tile_typed = cached_compressed
-            .value
-            .load()
+        let cached_tile_typed = StorageFormat::load(cached_compressed)
             .await
             .expect("decompression should succeed");
         match cached_tile_typed {
