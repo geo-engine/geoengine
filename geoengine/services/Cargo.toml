@@ -14,6 +14,10 @@ default-run = "geoengine-server"
 bench = false
 
 [[bench]]
+name = "query_pipelines"
+harness = false
+
+[[bench]]
 name = "stac_grid"
 harness = false
 
