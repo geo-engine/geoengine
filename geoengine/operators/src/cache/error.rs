@@ -42,6 +42,8 @@ pub enum CacheError {
     },
     #[snafu(display("The type of the cached element does not match the requested type"))]
     InvalidTypeForRetrieval,
+    #[snafu(display("A lock of the raster cache was poisoned by a panic"))]
+    LockPoisoned,
     #[snafu(display("The wrapped operator did not produce a tile for the requested query"))]
     SourceProducedNoTile,
     #[snafu(display("Could not resolve the time query needed to look up the cache: {message}"))]

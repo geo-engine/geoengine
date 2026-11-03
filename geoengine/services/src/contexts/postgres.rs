@@ -494,7 +494,7 @@ where
         self.provider_registry.clear_caches().await;
         self.tile_cache.clear().await;
         if let Some(cache) = &self.new_raster_cache {
-            cache.clear().await;
+            cache.clear();
         }
         gdal_result.map_err(|source| Error::Operator {
             source: geoengine_operators::error::Error::QueryingProcessorFailed {

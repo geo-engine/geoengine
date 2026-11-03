@@ -25,9 +25,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::sync::RwLock;
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 pub struct NewRasterCache<Store> {
     store: Store,
@@ -47,7 +46,7 @@ impl TestDefault for NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DFifo(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: Arc::new(RwLock::new(FifoEvictionStrategy::new(8_589_934_592))),
+                eviction_strategy: Mutex::new(FifoEvictionStrategy::new(8_589_934_592)),
                 total_size: Arc::new(AtomicUsize::new(0)),
             },
         })
@@ -56,10 +55,10 @@ impl TestDefault for NewRasterCacheEnum {
 
 impl NewRasterCacheEnum {
     /// Remove all tiles and eviction records. Pinned tiles remain accounted for until released.
-    pub async fn clear(&self) {
+    pub fn clear(&self) {
         match self {
-            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.store.clear().await,
-            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.store.clear().await,
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.store.clear(),
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.store.clear(),
         }
     }
 
@@ -67,7 +66,7 @@ impl NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DFifo(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: Arc::new(RwLock::new(FifoEvictionStrategy::new(capacity_bytes))),
+                eviction_strategy: Mutex::new(FifoEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
             },
         })
@@ -77,7 +76,7 @@ impl NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DLru(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: Arc::new(RwLock::new(LruEvictionStrategy::new(capacity_bytes))),
+                eviction_strategy: Mutex::new(LruEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
             },
         })
@@ -136,10 +135,7 @@ trait EvictionStrategy: Send + Sync + 'static {
     fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint);
     fn record_removal(&mut self, key: &Arc<CacheKey>);
 
-    fn record_hit(
-        strategy: Arc<RwLock<Self>>,
-        key: &CacheKey,
-    ) -> impl std::future::Future<Output = ()> + Send;
+    fn record_hit(&mut self, key: &CacheKey);
 
     fn capacity(&self) -> usize;
 
@@ -200,7 +196,7 @@ impl EvictionStrategy for FifoEvictionStrategy {
         );
     }
 
-    async fn record_hit(_strategy: Arc<RwLock<Self>>, _key: &CacheKey) {
+    fn record_hit(&mut self, _key: &CacheKey) {
         // FIFO doesn't track hits
     }
 
@@ -371,11 +367,10 @@ impl EvictionStrategy for LruEvictionStrategy {
         self.free.push(idx);
     }
 
-    async fn record_hit(strategy: Arc<RwLock<Self>>, key: &CacheKey) {
-        let mut s = strategy.write().await;
-        if let Some(&idx) = s.index.get(key) {
-            s.detach(idx);
-            s.attach_front(idx);
+    fn record_hit(&mut self, key: &CacheKey) {
+        if let Some(&idx) = self.index.get(key) {
+            self.detach(idx);
+            self.attach_front(idx);
         }
     }
 
@@ -452,7 +447,6 @@ mod eviction_strategy_tests {
     use super::{CacheKey, EvictionStrategy, FifoEvictionStrategy, LruEvictionStrategy, TileIndex};
     use geoengine_datatypes::primitives::{CacheExpiration, CacheHint, TimeInterval};
     use std::sync::Arc;
-    use tokio::sync::RwLock;
 
     fn expired_hint() -> CacheHint {
         CacheHint::with_created_and_expires(
@@ -508,8 +502,8 @@ mod eviction_strategy_tests {
         assert_eq!(plan.freed_bytes, 40);
     }
 
-    #[tokio::test]
-    async fn lru_evicts_expired_pinned_key_without_counting_its_bytes_as_freed() {
+    #[test]
+    fn lru_evicts_expired_pinned_key_without_counting_its_bytes_as_freed() {
         let mut strategy = LruEvictionStrategy::new(100);
         let key_a = key("a");
         let key_b = key("b");
@@ -522,10 +516,8 @@ mod eviction_strategy_tests {
         strategy.record_access(&key_b_arc, 30, CacheHint::max_duration());
         strategy.record_access(&key_c_arc, 30, CacheHint::max_duration());
 
-        let strategy_arc = Arc::new(RwLock::new(strategy));
-        LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
+        strategy.record_hit(&key_c);
 
-        let strategy = strategy_arc.read().await;
         let plan = strategy
             .plan_eviction(100, 20, |k| k.as_ref() == &key_a)
             .unwrap();
@@ -551,8 +543,8 @@ mod eviction_strategy_tests {
         assert_eq!(plan.freed_bytes, 60);
     }
 
-    #[tokio::test]
-    async fn lru_correct_eviction_target_with_partial_cache() {
+    #[test]
+    fn lru_correct_eviction_target_with_partial_cache() {
         let mut strategy = LruEvictionStrategy::new(100);
         let key_a = key("a");
         let key_b = key("b");
@@ -565,10 +557,8 @@ mod eviction_strategy_tests {
         strategy.record_access(&key_b_arc, 20, CacheHint::max_duration());
         strategy.record_access(&key_c_arc, 10, CacheHint::max_duration());
 
-        let strategy_arc = Arc::new(RwLock::new(strategy));
-        LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
+        strategy.record_hit(&key_c);
 
-        let strategy = strategy_arc.read().await;
         let plan = strategy.plan_eviction(60, 70, |_| false).unwrap();
 
         assert_eq!(plan.keys_to_remove, vec![key_a_arc]);
@@ -607,19 +597,26 @@ impl<SF> Drop for SizeTrackedEntry<SF> {
     }
 }
 
+/// The entries and their eviction order. Both locks are taken in this order and never held
+/// across an `.await`: a future that is not polled again, e.g. in a stream nobody reads, must not
+/// keep the cache locked.
 pub struct InMemoryCacheStore<SF, ES> {
     cache: RwLock<HashMap<Arc<CacheKey>, Arc<SizeTrackedEntry<SF>>>>,
-    eviction_strategy: Arc<RwLock<ES>>,
+    eviction_strategy: Mutex<ES>,
     total_size: Arc<AtomicUsize>,
 }
 
 impl<SF, ES> InMemoryCacheStore<SF, ES> {
-    async fn clear(&self)
+    fn clear(&self)
     where
         ES: EvictionStrategy,
     {
-        let mut cache = self.cache.write().await;
-        let mut strategy = self.eviction_strategy.write().await;
+        // clearing leaves a consistent state even after a panic
+        let mut cache = self.cache.write().unwrap_or_else(PoisonError::into_inner);
+        let mut strategy = self
+            .eviction_strategy
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         strategy.clear();
         cache.clear();
     }
@@ -808,14 +805,17 @@ where
 
     async fn get(&self, key: &CacheKey) -> Result<Option<Arc<Self::SF>>> {
         let hit = {
-            let cache = self.cache.read().await;
+            let cache = self.cache.read().map_err(|_| CacheError::LockPoisoned)?;
             cache.get(key).map(Arc::clone)
         };
 
         if let Some(entry) = &hit {
             if entry.value.is_expired().await {
-                let mut cache = self.cache.write().await;
-                let mut eviction_strategy = self.eviction_strategy.write().await;
+                let mut cache = self.cache.write().map_err(|_| CacheError::LockPoisoned)?;
+                let mut eviction_strategy = self
+                    .eviction_strategy
+                    .lock()
+                    .map_err(|_| CacheError::LockPoisoned)?;
 
                 if cache.contains_key(key) {
                     let arc_key = Arc::new(key.clone());
@@ -826,7 +826,10 @@ where
                 return Ok(None);
             }
 
-            ES::record_hit(self.eviction_strategy.clone(), key).await;
+            self.eviction_strategy
+                .lock()
+                .map_err(|_| CacheError::LockPoisoned)?
+                .record_hit(key);
         }
 
         Ok(hit)
@@ -834,9 +837,12 @@ where
 
     async fn insert(&self, key: Arc<CacheKey>, tile: TypedRasterTile2D) -> Result<()> {
         {
-            let cache = self.cache.read().await;
+            let cache = self.cache.read().map_err(|_| CacheError::LockPoisoned)?;
             if cache.contains_key(&key) {
-                ES::record_hit(self.eviction_strategy.clone(), &key).await;
+                self.eviction_strategy
+                    .lock()
+                    .map_err(|_| CacheError::LockPoisoned)?
+                    .record_hit(&key);
                 return Ok(());
             }
         }
@@ -848,12 +854,15 @@ where
         let key_size = cache_key_byte_size(&key);
         let required_space = value_size + key_size;
 
-        let mut cache = self.cache.write().await;
+        let mut cache = self.cache.write().map_err(|_| CacheError::LockPoisoned)?;
         if cache.contains_key(&key) {
             return Ok(());
         }
 
-        let mut eviction_strategy = self.eviction_strategy.write().await;
+        let mut eviction_strategy = self
+            .eviction_strategy
+            .lock()
+            .map_err(|_| CacheError::LockPoisoned)?;
         let current_size = self.total_size.load(Ordering::SeqCst);
 
         let eviction_plan =
@@ -1282,7 +1291,7 @@ mod tests {
             let pinned = cache.get(&key).await.unwrap().unwrap();
             let size = cache.byte_size();
             assert!(size > 0);
-            cache.clear().await;
+            cache.clear();
             assert!(cache.get(&key).await.unwrap().is_none());
             assert_eq!(cache.byte_size(), size);
             drop(pinned);
@@ -1292,7 +1301,7 @@ mod tests {
                 .await
                 .unwrap();
             assert!(cache.get(&key).await.unwrap().is_some());
-            cache.clear().await;
+            cache.clear();
             assert_eq!(cache.byte_size(), 0);
         }
     }
