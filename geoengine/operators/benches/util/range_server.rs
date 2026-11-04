@@ -13,6 +13,7 @@ use std::time::Duration;
 #[derive(Default)]
 pub struct PathCounters {
     pub requests: AtomicU64,
+    pub gets: AtomicU64,
     pub bytes: AtomicU64,
 }
 
@@ -60,6 +61,16 @@ impl RangeServer {
                     bytes + c.bytes.load(Ordering::Relaxed),
                 )
             })
+    }
+
+    /// `GET` requests served for all paths since the last reset.
+    pub fn gets(&self) -> u64 {
+        self.counters
+            .lock()
+            .expect("counter lock")
+            .values()
+            .map(|c| c.gets.load(Ordering::Relaxed))
+            .sum()
     }
 
     pub fn reset(&self) {
@@ -128,6 +139,9 @@ fn serve_connection(
             .or_default()
             .clone();
         counter.requests.fetch_add(1, Ordering::Relaxed);
+        if method == "GET" {
+            counter.gets.fetch_add(1, Ordering::Relaxed);
+        }
 
         if method == "HEAD" {
             write!(

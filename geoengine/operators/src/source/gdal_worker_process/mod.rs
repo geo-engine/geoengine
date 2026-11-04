@@ -17,7 +17,9 @@ pub use gdal_dataset_params::{
 pub use grid_and_properties::GridAndProperties;
 pub use process_common::{RasterInfo, RasterLevelLayout};
 pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
-pub use process_pool::{GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError};
+pub use process_pool::{
+    GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError, PoolRequestStats,
+};
 pub use reader::{GdalPoolReader, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 

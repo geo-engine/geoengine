@@ -53,7 +53,7 @@ use geoengine_datatypes::{
     util::{Identifier, test::TestDefault},
 };
 use geoengine_operators::{
-    cache::new_raster_cache::NewRasterCacheEnum,
+    cache::new_raster_cache::{CacheStats, NewRasterCacheEnum},
     engine::{
         BoxRasterQueryProcessor, ChunkByteSize, InitializedRasterOperator, MetaData,
         MockExecutionContext, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
@@ -63,7 +63,8 @@ use geoengine_operators::{
     source::{
         GdalMetaDataStatic, GdalProcessPool, GdalSource, GdalSourceParameters,
         MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
-        MultiBandGdalSourceParameters, TileFile, gdal_worker_process::WorkerConfig,
+        MultiBandGdalSourceParameters, TileFile,
+        gdal_worker_process::{PoolRequestStats, WorkerConfig},
     },
     util::gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
 };
@@ -72,7 +73,10 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
     marker::PhantomData,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 use util::range_server::RangeServer;
@@ -294,6 +298,58 @@ fn multi_band_source(name: &NamedData) -> TypedRasterOperator {
 enum Query {
     Scene,
     Windows(Vec<GridBoundingBox2D>),
+}
+
+/// What runs asked of the server, the pool and the cache.
+#[derive(Clone, Copy)]
+struct Counts {
+    requests: u64,
+    gets: u64,
+    bytes: u64,
+    pool: PoolRequestStats,
+    cache: CacheStats,
+}
+
+impl Counts {
+    fn now(server: &RangeServer, pool: &GdalProcessPool, cache: &NewRasterCacheEnum) -> Self {
+        let (requests, bytes) = server.totals();
+        Self {
+            requests,
+            gets: server.gets(),
+            bytes,
+            pool: pool.request_stats(),
+            cache: cache.stats(),
+        }
+    }
+
+    fn since(self, earlier: Self) -> Self {
+        Self {
+            requests: self.requests - earlier.requests,
+            gets: self.gets - earlier.gets,
+            bytes: self.bytes - earlier.bytes,
+            pool: self.pool.since(earlier.pool),
+            cache: self.cache.since(earlier.cache),
+        }
+    }
+
+    fn print(self, id: &str, label: &str, iterations: u64) {
+        let per = |count: u64| count as f64 / iterations as f64;
+        println!(
+            "{id} {label}: {:.1} GET, {:.1} HEAD, {:.1} MB, pool {:.1} reads +{:.1} joined, \
+             {:.1} headers +{:.1} joined, cache {:.1} hits, {:.1} misses, {:.1} stored +{:.1} joined",
+            per(self.gets),
+            per(self.requests - self.gets),
+            per(self.bytes) / 1e6,
+            per(self.pool.reads),
+            per(self.pool.reads_joined),
+            per(self.pool.headers),
+            per(self.pool.headers_joined),
+            per(self.cache.hits),
+            per(self.cache.misses),
+            per(self.cache.stored),
+            per(self.cache.inserts_joined),
+        );
+    }
 }
 
 /// Runs the queries one after another and returns a hash of all tiles.
@@ -643,6 +699,7 @@ fn block_reads(c: &mut Criterion) {
                     pool.clear_caches().await.unwrap();
                     cache.clear();
                     server.reset();
+                    let before = Counts::now(server, pool, cache);
                     let hash = run(
                         exec_ctx,
                         source.clone(),
@@ -652,10 +709,10 @@ fn block_reads(c: &mut Criterion) {
                         true,
                     )
                     .await;
-                    let (requests, bytes) = server.totals();
+                    let run_counts = Counts::now(server, pool, cache).since(before);
+                    run_counts.print(&id, "untimed run", 1);
                     println!(
-                        "{id}: {requests} GET/HEAD, {:.1} MB, cache {:.1} MB, hash {hash:016x}",
-                        bytes as f64 / 1e6,
+                        "{id}: cache {:.1} MB, hash {hash:016x}",
                         cache.byte_size() as f64 / 1e6
                     );
                     let mut hashes = hashes.lock().unwrap();
@@ -663,10 +720,14 @@ fn block_reads(c: &mut Criterion) {
                     assert_eq!(hash, expected, "{id} differs from the other mode");
                 });
 
+                let before_timed = Counts::now(server, pool, cache);
+                let timed_iterations = AtomicU64::new(0);
                 group.bench_function(&id, |b| {
                     b.to_async(&runtime).iter_custom(|iters| {
                         let source = source.clone();
+                        let timed_iterations = &timed_iterations;
                         async move {
+                            timed_iterations.fetch_add(iters, Ordering::Relaxed);
                             let mut elapsed = Duration::ZERO;
                             for _ in 0..iters {
                                 if cold {
@@ -691,6 +752,11 @@ fn block_reads(c: &mut Criterion) {
                         }
                     });
                 });
+                Counts::now(server, pool, cache).since(before_timed).print(
+                    &id,
+                    "timed, per iteration",
+                    timed_iterations.into_inner(),
+                );
             }
         }
     }

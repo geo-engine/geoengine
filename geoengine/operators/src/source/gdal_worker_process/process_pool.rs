@@ -1,6 +1,7 @@
 use snafu::Snafu;
 use std::collections::VecDeque;
 use std::hash::{BuildHasherDefault, Hasher};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
@@ -13,7 +14,7 @@ use rustc_hash::FxHasher;
 use super::{
     GdalProcessPoolAccess,
     process_common::{
-        GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
+        GdalIpcPayload, GdalRequest, IpcChannelMessage, IpcChannelResult, IpcProcessError,
         IpcProcessRasterResult, WorkerRequest, WorkerResponse,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
@@ -320,9 +321,66 @@ pub struct GdalProcessPool {
     /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
     /// held only briefly and never across an `.await`.
     in_flight_tiles: Mutex<FastHashMap<u64, InFlightRead>>,
+    counters: PoolCounters,
+}
+
+#[derive(Default)]
+struct PoolCounters {
+    reads: AtomicU64,
+    reads_joined: AtomicU64,
+    headers: AtomicU64,
+    headers_joined: AtomicU64,
+}
+
+impl PoolCounters {
+    fn count(&self, request: &IpcChannelMessage, joined: bool) {
+        let is_header = matches!(request.0.request, GdalRequest::Header);
+        match (is_header, joined) {
+            (true, true) => &self.headers_joined,
+            (true, false) => &self.headers,
+            (false, true) => &self.reads_joined,
+            (false, false) => &self.reads,
+        }
+        .fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// What the pool was asked since it was created.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PoolRequestStats {
+    /// reads sent to a worker
+    pub reads: u64,
+    /// reads that joined an identical read in flight
+    pub reads_joined: u64,
+    /// header requests sent to a worker
+    pub headers: u64,
+    /// header requests that joined an identical one in flight
+    pub headers_joined: u64,
+}
+
+impl PoolRequestStats {
+    /// The counts since an earlier snapshot.
+    #[must_use]
+    pub fn since(self, earlier: Self) -> Self {
+        Self {
+            reads: self.reads - earlier.reads,
+            reads_joined: self.reads_joined - earlier.reads_joined,
+            headers: self.headers - earlier.headers,
+            headers_joined: self.headers_joined - earlier.headers_joined,
+        }
+    }
 }
 
 impl GdalProcessPool {
+    pub fn request_stats(&self) -> PoolRequestStats {
+        PoolRequestStats {
+            reads: self.counters.reads.load(Ordering::Relaxed),
+            reads_joined: self.counters.reads_joined.load(Ordering::Relaxed),
+            headers: self.counters.headers.load(Ordering::Relaxed),
+            headers_joined: self.counters.headers_joined.load(Ordering::Relaxed),
+        }
+    }
+
     /// Ask every worker to close its dataset and clear remote file caches.
     /// Waits for every worker acknowledgement, even if another worker fails.
     /// `CLEAR_CACHES_TIMEOUT` bounds the entire operation, including broker submission and response.
@@ -409,6 +467,7 @@ impl GdalProcessPool {
         Arc::new(Self {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            counters: PoolCounters::default(),
         })
     }
 
@@ -1257,8 +1316,10 @@ impl GdalPoolDispatcher {
             let in_flight = lock.get(&tile_key);
             if let Some(in_flight) = in_flight.filter(|r| same_read(&r.request, &request)) {
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
+                self.pool.counters.count(&request, true);
                 in_flight.tx.subscribe()
             } else {
+                self.pool.counters.count(&request, false);
                 // a different request with the same hash reads on its own, unregistered
                 let registered = in_flight.is_none();
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
@@ -1542,7 +1603,7 @@ mod tests {
     };
     use crate::source::gdal_worker_process::process_common::{
         GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
-        GdalReadKind, GdalReadWindow, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
+        GdalReadKind, GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload,
         IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
@@ -1580,6 +1641,7 @@ mod tests {
             GdalProcessPool {
                 broker_tx,
                 in_flight_tiles: Mutex::new(FastHashMap::default()),
+                counters: PoolCounters::default(),
             },
             broker_rx,
         )
@@ -2358,6 +2420,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            counters: PoolCounters::default(),
         });
         (pool, held_rx)
     }
@@ -2462,6 +2525,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            counters: PoolCounters::default(),
         });
 
         // Mock broker: respond to every Read with a fixed success result.
@@ -2474,7 +2538,7 @@ mod tests {
             }
         });
 
-        let dispatcher = GdalPoolDispatcher::new(pool);
+        let dispatcher = GdalPoolDispatcher::new(pool.clone());
 
         let w = window([0, 0], [255, 255]);
         let (msg_a, _) = make_request(42, 1, w);
@@ -2494,6 +2558,14 @@ mod tests {
             1,
             "only one BrokerCommand::Read should have been sent (dedup)"
         );
+        assert_eq!(
+            pool.request_stats(),
+            PoolRequestStats {
+                reads: 1,
+                reads_joined: 1,
+                ..Default::default()
+            }
+        );
     }
 
     #[tokio::test]
@@ -2505,6 +2577,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            counters: PoolCounters::default(),
         });
 
         // Mock broker: respond with a FileNotFound error.
