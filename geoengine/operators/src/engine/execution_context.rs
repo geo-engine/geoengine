@@ -14,8 +14,8 @@ use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess, WorkerConfig};
 use crate::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset,
+    GdalLoadingInfo, MdLoadingInfo, MdLoadingInfoQueryRectangle, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
 };
 use crate::util::test::test_ort_environment;
 use crate::util::{Result, create_rayon_thread_pool};
@@ -46,7 +46,8 @@ pub trait ExecutionContext: Send
         MultiBandGdalLoadingInfo,
         RasterResultDescriptor,
         MultiBandGdalLoadingInfoQueryRectangle,
-    > + GdalProcessPoolAccess
+    > + MetaDataProvider<MdLoadingInfo, RasterResultDescriptor, MdLoadingInfoQueryRectangle>
+    + GdalProcessPoolAccess
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
