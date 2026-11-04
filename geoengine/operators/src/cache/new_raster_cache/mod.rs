@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 pub struct NewRasterCache<Store> {
@@ -49,6 +49,7 @@ impl TestDefault for NewRasterCacheEnum {
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(8_589_934_592)),
                 total_size: Arc::new(AtomicUsize::new(0)),
                 storing: Mutex::default(),
+                counters: CacheCounters::default(),
             },
         })
     }
@@ -70,6 +71,7 @@ impl NewRasterCacheEnum {
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
                 storing: Mutex::default(),
+                counters: CacheCounters::default(),
             },
         })
     }
@@ -81,6 +83,7 @@ impl NewRasterCacheEnum {
                 eviction_strategy: Mutex::new(LruEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
                 storing: Mutex::default(),
+                counters: CacheCounters::default(),
             },
         })
     }
@@ -107,6 +110,17 @@ impl NewRasterCacheEnum {
             }
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => {
                 cache.store.insert(key, tile).await
+            }
+        }
+    }
+
+    pub fn stats(&self) -> CacheStats {
+        match self {
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
+                cache.store.counters.snapshot()
+            }
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => {
+                cache.store.counters.snapshot()
             }
         }
     }
@@ -610,6 +624,50 @@ pub struct InMemoryCacheStore<SF, ES> {
     /// Keys whose value an insert is storing, so that concurrent inserts of the same key, e.g. of
     /// callers that got the same result, store it once. Never locked together with the others.
     storing: Mutex<HashSet<Arc<CacheKey>>>,
+    counters: CacheCounters,
+}
+
+#[derive(Default)]
+struct CacheCounters {
+    hits: AtomicU64,
+    misses: AtomicU64,
+    stored: AtomicU64,
+    inserts_joined: AtomicU64,
+}
+
+/// What a cache was asked since it was created.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    /// inserts that stored their value
+    pub stored: u64,
+    /// inserts of a key that another insert stored or is storing
+    pub inserts_joined: u64,
+}
+
+impl CacheStats {
+    /// The counts since an earlier snapshot.
+    #[must_use]
+    pub fn since(self, earlier: Self) -> Self {
+        Self {
+            hits: self.hits - earlier.hits,
+            misses: self.misses - earlier.misses,
+            stored: self.stored - earlier.stored,
+            inserts_joined: self.inserts_joined - earlier.inserts_joined,
+        }
+    }
+}
+
+impl CacheCounters {
+    fn snapshot(&self) -> CacheStats {
+        CacheStats {
+            hits: self.hits.load(Ordering::Relaxed),
+            misses: self.misses.load(Ordering::Relaxed),
+            stored: self.stored.load(Ordering::Relaxed),
+            inserts_joined: self.inserts_joined.load(Ordering::Relaxed),
+        }
+    }
 }
 
 /// Claims a key in [`InMemoryCacheStore::storing`] and releases it when the insert ends, also if
@@ -864,6 +922,7 @@ where
                     eviction_strategy.record_removal(&arc_key);
                 }
 
+                self.counters.misses.fetch_add(1, Ordering::Relaxed);
                 return Ok(None);
             }
 
@@ -871,6 +930,9 @@ where
                 .lock()
                 .map_err(|_| CacheError::LockPoisoned)?
                 .record_hit(key);
+            self.counters.hits.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.counters.misses.fetch_add(1, Ordering::Relaxed);
         }
 
         Ok(hit)
@@ -884,10 +946,12 @@ where
                     .lock()
                     .map_err(|_| CacheError::LockPoisoned)?
                     .record_hit(&key);
+                self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
                 return Ok(());
             }
         }
         let Some(_storing) = StoringGuard::claim(&self.storing, &key)? else {
+            self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         };
 
@@ -900,6 +964,7 @@ where
 
         let mut cache = self.cache.write().map_err(|_| CacheError::LockPoisoned)?;
         if cache.contains_key(&key) {
+            self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         }
 
@@ -933,6 +998,7 @@ where
                 self.total_size.clone(),
             )),
         );
+        self.counters.stored.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 }
@@ -1395,6 +1461,28 @@ mod tests {
             _ => panic!("unexpected tile type"),
         }
         assert_eq!(cache.byte_size(), size);
+    }
+
+    #[tokio::test]
+    async fn it_counts_hits_misses_and_joined_inserts() {
+        let cache = NewRasterCacheEnum::new_lru(1 << 20);
+        let key = make_cache_key(0, 0);
+        let tile = make_tile(42, CacheHint::max_duration());
+
+        assert!(cache.get(&key).await.unwrap().is_none());
+        cache.insert(key.clone(), tile.clone()).await.unwrap();
+        cache.insert(key.clone(), tile).await.unwrap();
+        assert!(cache.get(&key).await.unwrap().is_some());
+
+        assert_eq!(
+            cache.stats(),
+            CacheStats {
+                hits: 1,
+                misses: 1,
+                stored: 1,
+                inserts_joined: 1,
+            }
+        );
     }
 
     #[tokio::test]
