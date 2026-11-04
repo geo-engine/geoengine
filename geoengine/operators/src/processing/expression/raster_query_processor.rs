@@ -41,7 +41,7 @@ where
     TO: Pixel,
 {
     pub fn new(
-        program: LinkedExpression,
+        program: Arc<LinkedExpression>,
         sources: Sources,
         result_descriptor: RasterResultDescriptor,
         map_no_data: bool,
@@ -49,7 +49,7 @@ where
         Self {
             sources,
             result_descriptor,
-            program: Arc::new(program),
+            program,
             phantom_data: PhantomData,
             map_no_data,
         }

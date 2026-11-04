@@ -2,6 +2,7 @@ use super::Result;
 use crate::{
     engine::{ExecutionContext, ProcessingGraphOperatorPath, QueryContext, TypedRasterOperator},
     machine_learning::onnx_util::{OrtEnvironment, create_ort_environment},
+    processing::{ExpressionCacheConfig, ExpressionEnvironment},
     util::gdal::gdal_open_dataset,
 };
 use futures::StreamExt;
@@ -28,6 +29,16 @@ static TEST_ORT_ENVIRONMENT: LazyLock<OrtEnvironment> = LazyLock::new(|| {
 /// Returns the ONNX Runtime environment shared by all tests of this process.
 pub fn test_ort_environment() -> OrtEnvironment {
     TEST_ORT_ENVIRONMENT.clone()
+}
+
+/// Compiling the expression dependencies takes a while, but tests create many contexts.
+/// Only for tests: the server creates one [`ExpressionEnvironment`] per application and passes it on.
+static TEST_EXPRESSION_ENVIRONMENT: LazyLock<ExpressionEnvironment> =
+    LazyLock::new(|| ExpressionEnvironment::new(ExpressionCacheConfig::default()));
+
+/// Returns the expression environment shared by all tests of this process.
+pub fn test_expression_environment() -> ExpressionEnvironment {
+    TEST_EXPRESSION_ENVIRONMENT.clone()
 }
 
 pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryContext>(

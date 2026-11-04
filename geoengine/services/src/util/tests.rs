@@ -80,7 +80,7 @@ use geoengine_operators::{
             create_ndvi_meta_data, create_ndvi_meta_data_with_cache_ttl, create_ports_meta_data,
         },
         input::RasterOrVectorOperator,
-        test::test_ort_environment,
+        test::{test_expression_environment, test_ort_environment},
     },
 };
 use rand::Rng;
@@ -1545,6 +1545,7 @@ where
                         oidc_manager: oidc_db(),
                         gdal_process_pool_config,
                         ort_environment: test_ort_environment(),
+                        expression_environment: test_expression_environment(),
                     })
                     .await
                     .unwrap();

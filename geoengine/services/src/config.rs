@@ -4,13 +4,16 @@ use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::processing::ExpressionCacheConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
 use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
+use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
+use std::time::Duration;
 use url::Url;
 
 static SETTINGS: LazyLock<RwLock<Config>> = LazyLock::new(init_settings);
@@ -194,6 +197,31 @@ pub struct QueryContext {
 
 impl ConfigElement for QueryContext {
     const KEY: &'static str = "query_context";
+}
+
+/// The compiled libraries of expression operators
+#[derive(Debug, Deserialize)]
+pub struct Expression {
+    /// Seconds a library stays loaded after its last use
+    pub library_idle_ttl_seconds: u64,
+    /// Seconds between cleanup runs
+    pub library_sweep_interval_seconds: NonZeroU64,
+    /// Max. number of unused libraries to keep
+    pub max_idle_libraries: usize,
+}
+
+impl ConfigElement for Expression {
+    const KEY: &'static str = "expression";
+}
+
+impl From<Expression> for ExpressionCacheConfig {
+    fn from(config: Expression) -> Self {
+        Self {
+            idle_ttl: Duration::from_secs(config.library_idle_ttl_seconds),
+            sweep_interval: Duration::from_secs(config.library_sweep_interval_seconds.get()),
+            max_idle_libraries: config.max_idle_libraries,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -736,4 +764,43 @@ pub struct WildliveOidc {
 
 impl ConfigElement for Wildlive {
     const KEY: &'static str = "wildlive";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `Settings-default.toml` alone, without the overrides of `Settings-test.toml`
+    fn default_settings() -> Config {
+        Config::builder()
+            .add_source(File::from(
+                retrieve_settings_dir()
+                    .unwrap()
+                    .join("Settings-default.toml"),
+            ))
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn it_expression_defaults_are_the_operator_defaults() {
+        let config: Expression = default_settings().get(Expression::KEY).unwrap();
+
+        assert_eq!(
+            ExpressionCacheConfig::from(config),
+            ExpressionCacheConfig::default()
+        );
+    }
+
+    #[test]
+    fn it_rejects_an_expression_sweep_interval_of_zero() {
+        let config = Config::builder()
+            .add_source(default_settings())
+            .set_override("expression.library_sweep_interval_seconds", 0)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        assert!(config.get::<Expression>(Expression::KEY).is_err());
+    }
 }

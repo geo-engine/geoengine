@@ -29,8 +29,8 @@ impl LinkedExpression {
         code: &str,
         dependencies: &ExpressionDependencies,
     ) -> Result<Self> {
-        let library_folder =
-            tempfile::tempdir().context(error::CannotGenerateSourceCodeDirectory)?;
+        let library_folder = tempfile::tempdir_in(dependencies.workspace_path())
+            .context(error::CannotGenerateSourceCodeDirectory)?;
 
         // format code in debug mode
         let mut code = Cow::from(code);

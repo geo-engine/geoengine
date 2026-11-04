@@ -1,4 +1,3 @@
-pub use geoengine_operators::processing::initialize_expression_dependencies;
 use geoengine_services::{
     config::{self, get_config_element},
     error::Result,
@@ -215,9 +214,5 @@ fn configure_error_report_formatting(logging_config: &config::Logging) {
 
 #[tokio::main]
 async fn main() {
-    initialize_expression_dependencies()
-        .await
-        .expect("successful compilation process is necessary for expression operators to work");
-
     start_server().await.expect("the server has to start");
 }

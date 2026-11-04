@@ -1,5 +1,5 @@
 use super::{
-    RasterExpressionError, get_expression_dependencies,
+    RasterExpressionError,
     raster_query_processor::{ExpressionInput, ExpressionQueryProcessor},
 };
 use crate::{
@@ -16,12 +16,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{primitives::SpatialResolution, raster::RasterDataType};
-use geoengine_expression::{
-    DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
-};
+use geoengine_expression::{DataType, ExpressionParser, LinkedExpression, Parameter};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
@@ -104,6 +102,12 @@ impl RasterOperator for Expression {
             )
             .map_err(RasterExpressionError::from)?;
 
+        let expression = context
+            .expression_environment()
+            .link(&expression)
+            .await
+            .map_err(RasterExpressionError::from)?;
+
         let result_descriptor = RasterResultDescriptor {
             data_type: self.params.output_type,
             spatial_reference: in_descriptor.spatial_reference,
@@ -143,7 +147,7 @@ pub struct InitializedExpression {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     expression_string: String,
-    expression: ExpressionAst,
+    expression: Arc<LinkedExpression>,
     map_no_data: bool,
 }
 
@@ -174,15 +178,7 @@ impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
 
-        // TODO: spawn a blocking task for the compilation process
-        let expression_dependencies = get_expression_dependencies()
-            .map_err(|source| RasterExpressionError::Dependencies { source })?;
-        let expression = LinkedExpression::new(
-            self.expression.name(),
-            &self.expression.code(),
-            expression_dependencies,
-        )
-        .map_err(RasterExpressionError::from)?;
+        let expression = self.expression.clone();
 
         let source_processor = self.source.query_processor()?.into_f64();
 

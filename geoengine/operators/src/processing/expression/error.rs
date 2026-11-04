@@ -1,6 +1,5 @@
 use geoengine_expression::error::{ExpressionExecutionError, ExpressionParserError};
 use snafu::Snafu;
-use std::sync::Arc;
 
 #[derive(Debug, Snafu)]
 #[snafu(
@@ -13,10 +12,8 @@ pub enum RasterExpressionError {
     #[snafu(display("{}", source), context(false))]
     Parser { source: ExpressionParserError },
 
-    #[snafu(display("Cannot generate dependencies: {source}."))]
-    Dependencies {
-        source: Arc<ExpressionExecutionError>,
-    },
+    #[snafu(display("{}", source), context(false))]
+    Link { source: LinkExpressionError },
 
     #[snafu(display("{}", source), context(false))]
     Execution { source: ExpressionExecutionError },
@@ -47,18 +44,13 @@ pub enum VectorExpressionError {
     #[snafu(display("Cannot create `DataCollection`."))]
     CannotGenerateDataOutput,
 
-    #[snafu(display("Cannot generate dependencies: {source}."))]
-    Dependencies {
-        source: Arc<geoengine_expression::error::ExpressionExecutionError>,
-    },
-
     #[snafu(display("Cannot parse expression: {source}"), context(false))]
     Parsing {
         source: geoengine_expression::error::ExpressionParserError,
     },
 
-    #[snafu(display("Compilation task failed"), context(false))]
-    CompilationTask { source: tokio::task::JoinError },
+    #[snafu(display("{}", source), context(false))]
+    Link { source: LinkExpressionError },
 
     #[snafu(display("Cannot call expression function: {source}."), context(false))]
     Executing {
@@ -84,14 +76,11 @@ pub enum VectorExpressionError {
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub), context(suffix(false)))]
-pub enum ExpressionDependenciesInitializationError {
-    #[snafu(
-        display("Could not compile expression dependencies: {source}"),
-        context(false)
-    )]
+pub enum LinkExpressionError {
+    #[snafu(display("Could not compile expression: {source}"), context(false))]
     Compilation { source: ExpressionExecutionError },
 
-    #[snafu(display("Could not execute initialization task"), context(false))]
+    #[snafu(display("Could not execute compilation task"), context(false))]
     Task { source: tokio::task::JoinError },
 }
 /// This module only ensures that the error types are `Send` and `Sync`.
@@ -105,5 +94,5 @@ mod send_sync_ensurance {
 
     impl SendSyncEnsurance for VectorExpressionError {}
 
-    impl SendSyncEnsurance for ExpressionDependenciesInitializationError {}
+    impl SendSyncEnsurance for LinkExpressionError {}
 }

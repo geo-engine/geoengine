@@ -38,8 +38,9 @@ pub use downsample::{
     DownsamplingResolution, Fraction, InitializedDownsampling,
 };
 pub use expression::{
-    Expression, ExpressionParams, OutputColumn, RasterExpressionError, VectorExpression,
-    VectorExpressionError, VectorExpressionParams, initialize_expression_dependencies,
+    Expression, ExpressionCacheConfig, ExpressionEnvironment, ExpressionParams,
+    LinkExpressionError, OutputColumn, RasterExpressionError, VectorExpression,
+    VectorExpressionError, VectorExpressionParams,
 };
 pub use interpolation::{
     InitializedInterpolation, Interpolation, InterpolationError, InterpolationMethod,
