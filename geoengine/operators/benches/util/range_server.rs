@@ -15,6 +15,7 @@ pub struct PathCounters {
     pub requests: AtomicU64,
     pub gets: AtomicU64,
     pub bytes: AtomicU64,
+    pub ranges: Mutex<Vec<(u64, u64)>>,
 }
 
 pub struct RangeServer {
@@ -71,6 +72,34 @@ impl RangeServer {
             .values()
             .map(|c| c.gets.load(Ordering::Relaxed))
             .sum()
+    }
+
+    /// Prints the bytes served and the distinct bytes per file.
+    pub fn print_coverage(&self, id: &str) {
+        for (path, counter) in self.counters.lock().expect("counter lock").iter() {
+            let mut ranges = counter.ranges.lock().expect("range lock").clone();
+            ranges.sort_unstable();
+            let served: u64 = ranges.iter().map(|(a, b)| b - a + 1).sum();
+            let mut distinct = 0;
+            let mut covered_to = 0;
+            for (start, end) in &ranges {
+                let from = (*start).max(covered_to);
+                if *end + 1 > from {
+                    distinct += *end + 1 - from;
+                    covered_to = *end + 1;
+                }
+            }
+            let mut lengths: Vec<u64> = ranges.iter().map(|(a, b)| b - a + 1).collect();
+            lengths.sort_unstable();
+            println!(
+                "{id} COVERAGE {path}: {} GET, served {:.1} MB, distinct {:.1} MB, median GET {:.2} MB, largest {:.2} MB",
+                ranges.len(),
+                served as f64 / 1e6,
+                distinct as f64 / 1e6,
+                lengths.get(lengths.len() / 2).copied().unwrap_or(0) as f64 / 1e6,
+                lengths.last().copied().unwrap_or(0) as f64 / 1e6,
+            );
+        }
     }
 
     pub fn reset(&self) {
@@ -179,6 +208,13 @@ fn serve_connection(
         file.seek(SeekFrom::Start(start))?;
         std::io::copy(&mut (&mut file).take(length), &mut writer)?;
         counter.bytes.fetch_add(length, Ordering::Relaxed);
+        if length > 0 {
+            counter
+                .ranges
+                .lock()
+                .expect("range lock")
+                .push((start, end));
+        }
     }
 }
 

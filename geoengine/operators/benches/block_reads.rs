@@ -21,10 +21,23 @@
 //!
 //! Multi-band cases read one file per band through the `MultiBandGdalSource`.
 //!
+//! `view` cases read like a map client: 8 x 5 tiles of 256 px, each its own query, center first and
+//! at most `VIEW_CONCURRENCY` at a time, the defaults of `OpenLayers`. `view_pan` then moves the view
+//! four times and reads only the tiles it has not seen, after the previous view is done.
+//! `view_overview_4` is a view four times further out. They print
+//! the time from the start of a view to its first tile and to the median, p99 and last tile.
+//!
+//! - `WP7_BENCH_CASES`: comma separated case names to run, default all. Use it rather than a
+//!   criterion filter, which still does the untimed run of every case.
+//! - `WP7_BENCH_POOL`: the worker pool as `processes,active,per dataset`, default `32,16,8`.
+//! - `WP7_BENCH_CHUNK_SIZE`: `CPL_VSIL_CURL_CHUNK_SIZE`, default `1048576`.
+//!
 //! Modes: `window` queries without the raster cache, `block` with it.
 //! Cold cases clear the GDAL workers and the raster cache before each iteration, untimed; warm
 //! cases keep both. The OS page cache is not cleared; with a local server its cost is small.
-//! Each case prints the GET requests and bytes of one untimed run and a hash of its tiles. The
+//! Each case prints the requests, bytes served and distinct bytes per file, and the pool and cache
+//! counts of one untimed run with a hash of its tiles, and the counts and worker CPU per timed
+//! iteration. The
 //! hashes must be equal across modes, the bench panics otherwise. Timed runs do not hash: on the
 //! one thread that reads the stream, hashing every pixel would take most of the time.
 //!
@@ -69,7 +82,7 @@ use geoengine_operators::{
     util::gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     hash::{DefaultHasher, Hash, Hasher},
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -89,6 +102,10 @@ const WRITE_ROWS: usize = 512;
 const RANDOM_WINDOWS: usize = 100;
 const WINDOW_SIZE: isize = 256;
 const PAN_TILES: usize = 200;
+const VIEW_TILE_SIZE: isize = 256;
+const VIEW_TILES: (isize, isize) = (5, 8);
+const VIEW_PAN_MOVES: isize = 4;
+const VIEW_CONCURRENCY: usize = 16;
 const CACHE_BYTES: usize = 2 << 30;
 
 fn file_size() -> usize {
@@ -298,6 +315,53 @@ fn multi_band_source(name: &NamedData) -> TypedRasterOperator {
 enum Query {
     Scene,
     Windows(Vec<GridBoundingBox2D>),
+    /// Views one after another, each a list of tile queries in the order a client starts them.
+    Views(Vec<Vec<GridBoundingBox2D>>),
+}
+
+/// When the tiles of the views were done, measured from the start of their view.
+#[derive(Default)]
+struct ViewTimes {
+    first: Vec<Duration>,
+    tiles: Vec<Duration>,
+}
+
+impl ViewTimes {
+    fn print_and_clear(&mut self, id: &str) {
+        if self.tiles.is_empty() {
+            return;
+        }
+        self.first.sort_unstable();
+        self.tiles.sort_unstable();
+        let at = |quantile: f64| self.tiles[((self.tiles.len() - 1) as f64 * quantile) as usize];
+        println!(
+            "{id}: first tile {:.1?}, median tile {:.1?}, p99 tile {:.1?}, last tile {:.1?}",
+            self.first[self.first.len() / 2],
+            at(0.5),
+            at(0.99),
+            at(1.),
+        );
+        *self = Self::default();
+    }
+}
+
+/// User and system time of the child processes.
+fn worker_cpu_seconds() -> f64 {
+    let me = std::process::id().to_string();
+    let mut ticks = 0_u64;
+    for entry in std::fs::read_dir("/proc").unwrap().flatten() {
+        let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
+            continue;
+        };
+        let Some((_, rest)) = stat.rsplit_once(") ") else {
+            continue;
+        };
+        let fields: Vec<&str> = rest.split(' ').collect();
+        if fields.get(1) == Some(&me.as_str()) {
+            ticks += fields[11].parse::<u64>().unwrap() + fields[12].parse::<u64>().unwrap();
+        }
+    }
+    ticks as f64 / 100.
 }
 
 /// What runs asked of the server, the pool and the cache.
@@ -333,6 +397,9 @@ impl Counts {
     }
 
     fn print(self, id: &str, label: &str, iterations: u64) {
+        if iterations == 0 {
+            return; // filtered out
+        }
         let per = |count: u64| count as f64 / iterations as f64;
         println!(
             "{id} {label}: {:.1} GET, {:.1} HEAD, {:.1} MB, pool {:.1} reads +{:.1} joined, \
@@ -360,6 +427,7 @@ async fn run(
     query: &Query,
     cache: Option<Arc<NewRasterCacheEnum>>,
     hash_tiles: bool,
+    view_times: &Mutex<ViewTimes>,
 ) -> u64 {
     let processor = source
         .initialize(ProcessingGraphOperatorPath::initialize_root(), exec_ctx)
@@ -371,17 +439,53 @@ async fn run(
         .tiling_grid_bounds();
     let processor = processor.query_processor().unwrap();
 
-    let windows = match query {
-        Query::Scene => vec![scene],
-        // the windows are relative to the file, the query is in the tiling grid
-        Query::Windows(windows) => windows
+    // the windows are relative to the file, the query is in the tiling grid
+    let in_grid = |windows: &[GridBoundingBox2D]| -> Vec<GridBoundingBox2D> {
+        windows
             .iter()
             .map(|window| window.shift_by_offset(scene.min_index()))
-            .collect(),
+            .collect()
+    };
+    let new_query_ctx = || {
+        let mut query_ctx = exec_ctx.mock_query_context(ChunkByteSize::test_default());
+        query_ctx.new_raster_cache.clone_from(&cache);
+        query_ctx
     };
 
-    let mut query_ctx = exec_ctx.mock_query_context(ChunkByteSize::test_default());
-    query_ctx.new_raster_cache = cache;
+    if let Query::Views(views) = query {
+        let views = views.iter().map(|view| in_grid(view)).collect();
+        return match processor {
+            TypedRasterQueryProcessor::U8(processor) => {
+                read_views(
+                    processor,
+                    views,
+                    bands,
+                    new_query_ctx,
+                    hash_tiles,
+                    view_times,
+                )
+                .await
+            }
+            TypedRasterQueryProcessor::U16(processor) => {
+                read_views(
+                    processor,
+                    views,
+                    bands,
+                    new_query_ctx,
+                    hash_tiles,
+                    view_times,
+                )
+                .await
+            }
+            _ => panic!("the bench data is u8 or u16"),
+        };
+    }
+
+    let windows = match query {
+        Query::Windows(windows) => in_grid(windows),
+        Query::Scene | Query::Views(_) => vec![scene],
+    };
+    let query_ctx = new_query_ctx();
 
     match processor {
         TypedRasterQueryProcessor::U8(processor) => {
@@ -392,6 +496,47 @@ async fn run(
         }
         _ => panic!("the bench data is u8 or u16"),
     }
+}
+
+/// Reads each view like a map client: every window is a query in its own task, as for a request
+/// to the server, and they start in order. The hash does not depend on which query ends first.
+async fn read_views<T: Pixel + Hash, C: QueryContext + 'static>(
+    processor: BoxRasterQueryProcessor<T>,
+    views: Vec<Vec<GridBoundingBox2D>>,
+    bands: u32,
+    new_query_ctx: impl Fn() -> C,
+    hash_tiles: bool,
+    view_times: &Mutex<ViewTimes>,
+) -> u64 {
+    let processor = Arc::new(processor);
+    let mut hasher = DefaultHasher::new();
+    for view in views {
+        let start = Instant::now();
+        let mut results: Vec<(usize, u64, Duration)> =
+            futures::stream::iter(view.into_iter().enumerate().map(|(index, window)| {
+                let (processor, query_ctx) = (processor.clone(), new_query_ctx());
+                tokio::spawn(async move {
+                    let hash =
+                        read_tiles(&processor, vec![window], bands, &query_ctx, hash_tiles).await;
+                    (index, hash, start.elapsed())
+                })
+            }))
+            .buffer_unordered(VIEW_CONCURRENCY)
+            .map(Result::unwrap)
+            .collect()
+            .await;
+
+        results.sort_unstable_by_key(|(index, ..)| *index);
+        let mut times = view_times.lock().unwrap();
+        times
+            .first
+            .extend(results.iter().map(|(.., done)| *done).min());
+        times.tiles.extend(results.iter().map(|(.., done)| *done));
+        for (_, hash, _) in results {
+            hash.hash(&mut hasher);
+        }
+    }
+    hasher.finish()
 }
 
 async fn read_tiles<T: Pixel + Hash>(
@@ -467,6 +612,47 @@ fn panning_windows(size: usize, tile_size: usize, count: usize) -> Vec<GridBound
         .collect()
 }
 
+/// A view around the center of a file with `size` pixels and the views after moving it, each with
+/// the tiles it has not seen, center first. The tiles do not line up with the blocks of the file.
+fn views(size: usize, moves: isize) -> Vec<Vec<GridBoundingBox2D>> {
+    let (rows, columns) = VIEW_TILES;
+    let center = size as isize / 2;
+    let mut seen = HashSet::new();
+    (0..=moves)
+        .map(|moved| {
+            let (center_y, center_x) = (
+                center + moved * VIEW_TILE_SIZE,
+                center + 2 * moved * VIEW_TILE_SIZE,
+            );
+            let (first_row, first_column) = (
+                (center_y - rows * VIEW_TILE_SIZE / 2) / VIEW_TILE_SIZE,
+                (center_x - columns * VIEW_TILE_SIZE / 2) / VIEW_TILE_SIZE,
+            );
+            let mut view: Vec<(isize, isize)> = (first_row..first_row + rows)
+                .flat_map(|row| {
+                    (first_column..first_column + columns).map(move |column| (row, column))
+                })
+                .filter(|tile| seen.insert(*tile))
+                .collect();
+            let distance = |(row, column): (isize, isize)| {
+                let y = row * VIEW_TILE_SIZE + VIEW_TILE_SIZE / 2 - center_y;
+                let x = column * VIEW_TILE_SIZE + VIEW_TILE_SIZE / 2 - center_x;
+                y * y + x * x
+            };
+            view.sort_by_key(|tile| distance(*tile));
+            view.into_iter()
+                .map(|(row, column)| {
+                    // the offsets are not multiples of a block size, like the grid of a client
+                    let (y, x) = (row * VIEW_TILE_SIZE + 137, column * VIEW_TILE_SIZE + 91);
+                    GridBoundingBox2D::new([y, x], [y + VIEW_TILE_SIZE - 1, x + VIEW_TILE_SIZE - 1])
+                        .unwrap()
+                })
+                .filter(|window| window.y_max() < size as isize && window.x_max() < size as isize)
+                .collect()
+        })
+        .collect()
+}
+
 struct Case {
     name: String,
     exec_ctx_idx: usize,
@@ -513,6 +699,15 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
             Query::Windows(random_windows(size, RANDOM_WINDOWS)),
         ),
     ];
+    cases.extend(view_cases(prefix, &source(data, None), size));
+    if max_overview_level >= 4 {
+        cases.push(Case::new(
+            format!("{prefix}/view_overview_4"),
+            512,
+            source(data, Some(4)),
+            Query::Views(views(size / 4, 0)),
+        ));
+    }
     // the COG driver builds overviews down to the block size, so small files have fewer
     for level in [2, 4]
         .into_iter()
@@ -530,7 +725,7 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
 
 /// A whole scene and a panning session, both in 512 px tiles.
 fn jp2_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Case> {
-    vec![
+    let mut cases = vec![
         Case::new(
             format!("{prefix}/scene_512"),
             512,
@@ -542,6 +737,26 @@ fn jp2_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Cas
             512,
             source.clone(),
             Query::Windows(panning_windows(size, 512, PAN_TILES)),
+        ),
+    ];
+    cases.extend(view_cases(prefix, source, size));
+    cases
+}
+
+/// A first view and a panning session of a map client.
+fn view_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Case> {
+    vec![
+        Case::new(
+            format!("{prefix}/view"),
+            512,
+            source.clone(),
+            Query::Views(views(size, 0)),
+        ),
+        Case::new(
+            format!("{prefix}/view_pan"),
+            512,
+            source.clone(),
+            Query::Views(views(size, VIEW_PAN_MOVES)),
         ),
     ]
 }
@@ -573,14 +788,20 @@ fn block_reads(c: &mut Criterion) {
     );
 
     // the server defaults of `[gdal_process_pool]` and `[gdal_process_pool.worker.gdal_config_options]`
+    let limits: Vec<usize> = std::env::var("WP7_BENCH_POOL")
+        .unwrap_or("32,16,8".into())
+        .split(',')
+        .map(|n| n.parse().unwrap())
+        .collect();
+    let chunk = std::env::var("WP7_BENCH_CHUNK_SIZE").unwrap_or("1048576".into());
     let pool = GdalProcessPool::new(
-        32,
-        16,
-        8,
+        limits[0],
+        limits[1],
+        limits[2],
         WorkerConfig {
             gdal_config_options: Some(vec![
                 ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
-                ("CPL_VSIL_CURL_CHUNK_SIZE".into(), "1048576".into()),
+                ("CPL_VSIL_CURL_CHUNK_SIZE".into(), chunk),
                 ("VSI_CACHE".into(), "TRUE".into()),
                 ("VSI_CACHE_SIZE".into(), "67108864".into()),
                 ("GDAL_NUM_THREADS".into(), "1".into()),
@@ -643,6 +864,12 @@ fn block_reads(c: &mut Criterion) {
                 &source(&jp2, None),
                 size,
             ));
+            cases.push(Case::new(
+                format!("s2_jp2_{suffix}/view_overview_4"),
+                512,
+                source(&jp2, Some(4)),
+                Query::Views(views(size / 4, 0)),
+            ));
         }
         let jp2_4band = multi_band_source(&add_multi_band_dataset(
             &mut exec_ctxs,
@@ -682,7 +909,12 @@ fn block_reads(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("block_reads");
     group.sample_size(10);
+    let only = std::env::var("WP7_BENCH_CASES").unwrap_or_default();
+    let view_times: Mutex<ViewTimes> = Mutex::default();
     for case in &cases {
+        if !only.is_empty() && !only.split(',').any(|name| case.name == name) {
+            continue;
+        }
         let exec_ctx = &exec_ctxs[case.exec_ctx_idx];
         for (mode, use_cache) in [("window", false), ("block", true)] {
             for cold in [true, false] {
@@ -692,6 +924,7 @@ fn block_reads(c: &mut Criterion) {
                     if cold { "_cold" } else { "_warm" }
                 );
                 let (server, cache, hashes, pool) = (&server, &cache, &hashes, &pool);
+                let view_times = &view_times;
                 let source = case.source.clone();
 
                 // one untimed run for the request counts and the hash
@@ -707,10 +940,13 @@ fn block_reads(c: &mut Criterion) {
                         &case.query,
                         use_cache.then(|| cache.clone()),
                         true,
+                        view_times,
                     )
                     .await;
+                    *view_times.lock().unwrap() = ViewTimes::default();
                     let run_counts = Counts::now(server, pool, cache).since(before);
                     run_counts.print(&id, "untimed run", 1);
+                    server.print_coverage(&id);
                     println!(
                         "{id}: cache {:.1} MB, hash {hash:016x}",
                         cache.byte_size() as f64 / 1e6
@@ -722,6 +958,7 @@ fn block_reads(c: &mut Criterion) {
 
                 let before_timed = Counts::now(server, pool, cache);
                 let timed_iterations = AtomicU64::new(0);
+                let cpu_before = worker_cpu_seconds();
                 group.bench_function(&id, |b| {
                     b.to_async(&runtime).iter_custom(|iters| {
                         let source = source.clone();
@@ -743,6 +980,7 @@ fn block_reads(c: &mut Criterion) {
                                         &case.query,
                                         use_cache.then(|| cache.clone()),
                                         false,
+                                        view_times,
                                     )
                                     .await,
                                 );
@@ -752,11 +990,19 @@ fn block_reads(c: &mut Criterion) {
                         }
                     });
                 });
+                let iterations = timed_iterations.into_inner();
                 Counts::now(server, pool, cache).since(before_timed).print(
                     &id,
                     "timed, per iteration",
-                    timed_iterations.into_inner(),
+                    iterations,
                 );
+                if iterations > 0 {
+                    println!(
+                        "{id}: worker CPU {:.2} s per iteration",
+                        (worker_cpu_seconds() - cpu_before) / iterations as f64
+                    );
+                }
+                view_times.lock().unwrap().print_and_clear(&id);
             }
         }
     }
