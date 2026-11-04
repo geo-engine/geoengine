@@ -67,6 +67,7 @@ impl GdalPoolReader {
 
 #[cfg(test)]
 mod tests {
+    use geoengine_datatypes::raster::TileIdx;
     use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         primitives::{AxisAlignedRectangle, CacheHint, SpatialPartition2D, TimeInterval},
@@ -83,6 +84,7 @@ mod tests {
     };
 
     use super::*;
+    use geoengine_datatypes::raster::TileSize;
 
     // TODO (low): name / test
     async fn load_ndvi_jan_2014_by_process(
@@ -158,8 +160,8 @@ mod tests {
         );
 
         TileInformation {
-            tile_size_in_pixels: shape,
-            global_tile_position: [0, 0].into(),
+            tile_size: TileSize::new_unchecked(shape.y(), shape.x()),
+            tile_position: TileIdx::new_y_x(0, 0),
             global_geo_transform: real_geotransform,
         }
     }

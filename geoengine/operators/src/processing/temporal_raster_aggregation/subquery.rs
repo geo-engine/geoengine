@@ -8,8 +8,8 @@ use futures::TryFuture;
 use geoengine_datatypes::{
     primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
-        EmptyGrid2D, GeoTransform, GridIdx2D, GridIndexAccess, GridOrEmpty, GridOrEmpty2D,
-        GridShapeAccess, Pixel, RasterTile2D, TileInformation, UpdateIndexedElementsParallel,
+        EmptyGrid2D, GeoTransform, GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
+        Pixel, RasterTile2D, TileIdx, TileInformation, UpdateIndexedElementsParallel,
     },
 };
 use rayon::ThreadPool;
@@ -48,7 +48,7 @@ pub async fn subquery_all_tiles_global_state_fold_fn<
 #[derive(Debug, Clone)]
 pub struct TileAccumulator<P: Pixel, F: TemporalRasterPixelAggregator<P>> {
     time: TimeInterval,
-    tile_position: GridIdx2D,
+    tile_position: TileIdx,
     global_geo_transform: GeoTransform,
     state_grid: GridOrEmpty2D<F::PixelState>,
     prestine: bool,
@@ -61,7 +61,7 @@ pub struct TileAccumulator<P: Pixel, F: TemporalRasterPixelAggregator<P>> {
 pub struct GlobalStateTileAccumulator<P: Pixel, F: GlobalStateTemporalRasterPixelAggregator<P>> {
     aggregator: Arc<F>,
     time: TimeInterval,
-    tile_position: GridIdx2D,
+    tile_position: TileIdx,
     global_geo_transform: GeoTransform,
     state_grid: GridOrEmpty2D<F::PixelState>,
     prestine: bool,
@@ -305,9 +305,9 @@ where
     ) -> Self::TileAccuFuture {
         let accu = TileAccumulator {
             time: query_rect.time_interval(),
-            tile_position: tile_info.global_tile_position,
+            tile_position: tile_info.tile_position,
             global_geo_transform: tile_info.global_geo_transform,
-            state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
+            state_grid: EmptyGrid2D::new(tile_info.tile_size.grid_shape()).into(),
             prestine: true,
             pool: pool.clone(),
             cache_hint: CacheHint::max_duration(),
@@ -363,9 +363,9 @@ where
         let accu = GlobalStateTileAccumulator {
             aggregator: self.aggregator.clone(),
             time: query_rect.time_interval(),
-            tile_position: tile_info.global_tile_position,
+            tile_position: tile_info.tile_position,
             global_geo_transform: tile_info.global_geo_transform,
-            state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
+            state_grid: EmptyGrid2D::new(tile_info.tile_size.grid_shape()).into(),
             prestine: true,
             pool: pool.clone(),
             cache_hint: CacheHint::max_duration(),

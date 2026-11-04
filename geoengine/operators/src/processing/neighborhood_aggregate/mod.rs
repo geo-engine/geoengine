@@ -141,11 +141,10 @@ impl RasterOperator for NeighborhoodAggregate {
         // dimensions must not be larger as the neighboring tiles
         let dimensions = self.params.neighborhood.dimensions();
         ensure!(
-            dimensions.axis_size_x() <= tiling_specification.tile_size_in_pixels.axis_size_x()
-                && dimensions.axis_size_y()
-                    <= tiling_specification.tile_size_in_pixels.axis_size_y(),
+            dimensions.axis_size_x() <= tiling_specification.tile_size.axis_size_x()
+                && dimensions.axis_size_y() <= tiling_specification.tile_size.axis_size_y(),
             error::NeighborhoodTooLarge {
-                limit: tiling_specification.tile_size_in_pixels,
+                limit: tiling_specification.tile_size.grid_shape(),
                 actual: dimensions
             }
         );
@@ -351,6 +350,7 @@ mod tests {
         util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
     };
     use futures::StreamExt;
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::{
         dataset::NamedData,
         operations::image::{Colorizer, RgbaColor},
@@ -475,8 +475,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let raster = make_raster();
 
@@ -535,8 +536,9 @@ mod tests {
 
     #[tokio::test]
     async fn check_make_raster() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let raster = make_raster();
 
@@ -565,8 +567,8 @@ mod tests {
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -578,8 +580,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -591,8 +593,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -604,8 +606,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -635,8 +637,8 @@ mod tests {
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -648,8 +650,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -661,8 +663,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 0),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -674,8 +676,8 @@ mod tests {
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
+                    tile_position: TileIdx::new_y_x(-1, 1),
+                    tile_size: TileSize::new_unchecked(3, 3),
                     global_geo_transform: TestDefault::test_default(),
                 },
                 0,
@@ -861,8 +863,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution_multi_bands() {
-        let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
+            TileSize::new_unchecked(3, 3),
+        ));
 
         let operator = NeighborhoodAggregate {
             params: NeighborhoodAggregateParams {
