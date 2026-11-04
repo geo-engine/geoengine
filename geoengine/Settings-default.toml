@@ -48,6 +48,8 @@ library_idle_ttl_seconds = 900
 library_sweep_interval_seconds = 30
 # max. unused compiled expressions to keep, each takes about 4.4 MB in the temp directory
 max_idle_libraries = 256
+# max. expressions to compile at the same time, further requests wait; each runs one `rustc` process
+max_concurrent_compilations = 8
 
 [upload]
 path = "upload"

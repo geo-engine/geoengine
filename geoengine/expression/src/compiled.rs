@@ -1,5 +1,5 @@
 use crate::{
-    ExpressionAst, ExpressionDependencies,
+    ExpressionDependencies,
     error::{self, CompilationFailed, Compiler, ExpressionExecutionError},
 };
 use libloading::{Library, Symbol, library_filename};
@@ -59,15 +59,6 @@ impl LinkedExpression {
             library: ManuallyDrop::new(library),
             function_name: function_name.to_string(),
         })
-    }
-
-    pub fn from_ast(ast: &ExpressionAst, dependencies: &ExpressionDependencies) -> Result<Self> {
-        let code = if std::cfg!(debug_assertions) {
-            ast.pretty_code()
-        } else {
-            ast.code()
-        };
-        Self::new(ast.name(), &code, dependencies)
     }
 
     /// Returns a function with 1 input parameters
@@ -253,7 +244,8 @@ mod tests {
         )
         .unwrap();
 
-        let linked_expression = LinkedExpression::from_ast(&ast, &dependencies).unwrap();
+        let linked_expression =
+            LinkedExpression::new(ast.name(), &ast.code(), &dependencies).unwrap();
 
         assert_eq!(
             unsafe {

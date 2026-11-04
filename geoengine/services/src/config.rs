@@ -10,7 +10,7 @@ use serde::Deserialize;
 use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::num::NonZeroU64;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
@@ -208,6 +208,8 @@ pub struct Expression {
     pub library_sweep_interval_seconds: NonZeroU64,
     /// Max. number of unused libraries to keep
     pub max_idle_libraries: usize,
+    /// Max. number of compilers running at the same time
+    pub max_concurrent_compilations: NonZeroUsize,
 }
 
 impl ConfigElement for Expression {
@@ -220,6 +222,7 @@ impl From<Expression> for ExpressionCacheConfig {
             idle_ttl: Duration::from_secs(config.library_idle_ttl_seconds),
             sweep_interval: Duration::from_secs(config.library_sweep_interval_seconds.get()),
             max_idle_libraries: config.max_idle_libraries,
+            max_concurrent_compilations: config.max_concurrent_compilations,
         }
     }
 }

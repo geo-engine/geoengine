@@ -4,8 +4,9 @@ use crate::{
 };
 use snafu::ResultExt;
 use std::{
-    fs::File,
+    fs::{File, Permissions},
     io::BufWriter,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -41,6 +42,8 @@ impl ExpressionDependencies {
     pub fn new() -> Result<Self> {
         let cargo_workspace = tempfile::Builder::new()
             .prefix(WORKSPACE_PREFIX)
+            // the server loads and runs the libraries in here, so nobody else may touch them
+            .permissions(Permissions::from_mode(0o700))
             .tempdir()
             .context(error::TempDir)?;
 
@@ -160,6 +163,11 @@ mod tests {
 
         assert!(deps.linker_path().exists());
         assert!(deps.linker_path().ends_with("target/release/deps/"));
+
+        let permissions = std::fs::metadata(deps.workspace_path())
+            .unwrap()
+            .permissions();
+        assert_eq!(permissions.mode() & 0o777, 0o700);
     }
 
     #[test]

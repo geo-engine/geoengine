@@ -1,11 +1,14 @@
 use super::error::LinkExpressionError;
-use geoengine_expression::{ExpressionAst, ExpressionDependencies, LinkedExpression};
+use geoengine_expression::{
+    ExpressionAst, ExpressionDependencies, LinkedExpression, error::ExpressionExecutionError,
+};
 use std::{
     collections::HashMap,
+    num::NonZeroUsize,
     sync::{Arc, Mutex, Once, PoisonError},
     time::{Duration, Instant},
 };
-use tokio::sync::OnceCell;
+use tokio::sync::{OnceCell, Semaphore};
 
 /// Limits for keeping compiled expressions.
 /// The default values are the same as in `Settings-default.toml`.
@@ -17,6 +20,8 @@ pub struct ExpressionCacheConfig {
     pub sweep_interval: Duration,
     /// How many unused libraries are kept
     pub max_idle_libraries: usize,
+    /// How many expressions are compiled at the same time
+    pub max_concurrent_compilations: NonZeroUsize,
 }
 
 impl Default for ExpressionCacheConfig {
@@ -25,6 +30,7 @@ impl Default for ExpressionCacheConfig {
             idle_ttl: Duration::from_mins(15),
             sweep_interval: Duration::from_secs(30),
             max_idle_libraries: 256,
+            max_concurrent_compilations: NonZeroUsize::new(8).expect("8 is not zero"),
         }
     }
 }
@@ -55,6 +61,7 @@ struct Inner {
     /// It contains the name and signature of the function, so the libraries of equal keys are interchangeable.
     libraries: Mutex<HashMap<String, Library>>,
     sweeper: Once,
+    compilations: Arc<Semaphore>,
 }
 
 impl Inner {
@@ -80,6 +87,20 @@ impl Inner {
         // unloading and deleting is slow, so it must not happen while holding the lock
         drop(removed);
     }
+
+    /// New libraries can arrive much faster than the regular sweeps.
+    fn sweep_if_above_limit(&self) {
+        let is_above_limit = self
+            .libraries
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len()
+            > self.config.max_idle_libraries;
+
+        if is_above_limit {
+            self.sweep();
+        }
+    }
 }
 
 /// Compiles expressions and shares the resulting libraries between all of their users.
@@ -97,6 +118,7 @@ impl ExpressionEnvironment {
             dependencies: OnceCell::new(),
             libraries: Mutex::default(),
             sweeper: Once::new(),
+            compilations: Arc::new(Semaphore::new(config.max_concurrent_compilations.get())),
         }))
     }
 
@@ -112,6 +134,11 @@ impl ExpressionEnvironment {
 
     /// Returns the library of the expression and compiles it if nobody did so before.
     /// Concurrent callers wait for the same compilation.
+    ///
+    /// # Panics
+    ///
+    /// Never, the semaphore limiting the compilations is not closed.
+    ///
     pub async fn link(
         &self,
         ast: &ExpressionAst,
@@ -138,8 +165,20 @@ impl ExpressionEnvironment {
             .get_or_try_init(|| async {
                 let dependencies = self.0.dependencies().await?.clone();
                 let name = ast.name().to_owned();
+                let inner = self.0.clone();
+                let permit = self
+                    .0
+                    .compilations
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .expect("the semaphore is never closed");
                 let library = crate::util::spawn_blocking(move || {
-                    LinkedExpression::new(&name, &code, &dependencies)
+                    // held until the compiler is done, even if the request gets cancelled
+                    let _permit = permit;
+                    let library = LinkedExpression::new(&name, &code, &dependencies)?;
+                    inner.sweep_if_above_limit();
+                    Ok::<_, ExpressionExecutionError>(library)
                 })
                 .await??;
                 Ok::<_, LinkExpressionError>(Arc::new(library))
@@ -233,7 +272,15 @@ mod tests {
             idle_ttl: TTL,
             sweep_interval: Duration::from_secs(1),
             max_idle_libraries,
+            max_concurrent_compilations: NonZeroUsize::MIN,
         }
+    }
+
+    fn parse(expression: &str) -> ExpressionAst {
+        ExpressionParser::new(&[Parameter::Number("A".into())], DataType::Number)
+            .unwrap()
+            .parse("expression", expression)
+            .unwrap()
     }
 
     fn library(last_used: Instant) -> Library {
@@ -297,10 +344,7 @@ mod tests {
     #[tokio::test]
     async fn it_shares_the_library_of_equal_expressions() {
         let environment = test_expression_environment();
-        let ast = ExpressionParser::new(&[Parameter::Number("A".into())], DataType::Number)
-            .unwrap()
-            .parse("expression", "A + 1")
-            .unwrap();
+        let ast = parse("A + 1");
 
         let (first, second) = tokio::join!(environment.link(&ast), environment.link(&ast));
         let (first, second) = (first.unwrap(), second.unwrap());
@@ -308,5 +352,53 @@ mod tests {
 
         let third = environment.link(&ast).await.unwrap();
         assert!(Arc::ptr_eq(&first, &third));
+    }
+
+    #[tokio::test]
+    async fn it_unloads_unused_libraries_with_the_sweep_thread() {
+        let environment = ExpressionEnvironment::new(ExpressionCacheConfig {
+            idle_ttl: Duration::ZERO,
+            sweep_interval: Duration::from_millis(10),
+            ..ExpressionCacheConfig::default()
+        });
+
+        let library = environment.link(&parse("A + 1")).await.unwrap();
+        let unloaded = Arc::downgrade(&library);
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(unloaded.upgrade().is_some(), "library is still in use");
+
+        drop(library);
+
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while unloaded.upgrade().is_some() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the sweep thread should unload the library");
+    }
+
+    #[tokio::test]
+    async fn it_enforces_the_limit_without_waiting_for_the_sweep_thread() {
+        let environment = ExpressionEnvironment::new(ExpressionCacheConfig {
+            idle_ttl: Duration::from_hours(1),
+            sweep_interval: Duration::from_hours(1),
+            ..config(1)
+        });
+
+        let first = environment.link(&parse("A + 1")).await.unwrap();
+        let unloaded = Arc::downgrade(&first);
+        drop(first);
+        drop(environment.link(&parse("A + 2")).await.unwrap());
+        assert!(unloaded.upgrade().is_some(), "one unused library may stay");
+
+        // a single compilation permit must not block concurrent callers forever
+        let (third, fourth) = (parse("A + 3"), parse("A + 4"));
+        let (third, fourth) = tokio::join!(environment.link(&third), environment.link(&fourth));
+        third.unwrap();
+        fourth.unwrap();
+
+        assert!(unloaded.upgrade().is_none());
     }
 }
