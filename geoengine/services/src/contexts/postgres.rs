@@ -319,6 +319,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            expression_environment,
             // the server builds its context on the main runtime, which then runs all queries
             processing_runtime: tokio::runtime::Handle::current(),
         };

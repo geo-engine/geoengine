@@ -22,7 +22,7 @@ pub struct ExpressionCacheConfig {
 impl Default for ExpressionCacheConfig {
     fn default() -> Self {
         Self {
-            idle_ttl: Duration::from_secs(15 * 60),
+            idle_ttl: Duration::from_mins(15),
             sweep_interval: Duration::from_secs(30),
             max_idle_libraries: 256,
         }

@@ -123,11 +123,7 @@ fn remove_stale_workspaces(temp_dir: &Path, min_age: Duration) {
             .starts_with(WORKSPACE_PREFIX)
             // does not follow symlinks
             && entry.file_type().is_ok_and(|t| t.is_dir());
-        let is_old_enough = entry
-            .metadata()
-            .and_then(|m| m.modified())
-            .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age >= min_age));
-        if !is_workspace || !is_old_enough {
+        if !is_workspace {
             continue;
         }
 
@@ -135,7 +131,12 @@ fn remove_stale_workspaces(temp_dir: &Path, min_age: Duration) {
         let Ok(lock) = File::open(entry.path().join(LOCK_FILE)) else {
             continue;
         };
-        if lock.try_lock().is_err() {
+        // the lock file's age, because the directory's changes with every library
+        let is_old_enough = lock
+            .metadata()
+            .and_then(|m| m.modified())
+            .is_ok_and(|modified| modified.elapsed().is_ok_and(|age| age >= min_age));
+        if !is_old_enough || lock.try_lock().is_err() {
             continue; // the owner is alive
         }
 
@@ -200,5 +201,17 @@ mod tests {
         let too_young = workspace("young");
         remove_stale_workspaces(temp_dir.path(), Duration::from_secs(3600));
         assert!(too_young.exists());
+
+        // the directory was just changed, e.g. by building a library, but the owner is long dead
+        let recently_changed = workspace("changed");
+        File::options()
+            .write(true)
+            .open(recently_changed.join(LOCK_FILE))
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() - Duration::from_secs(7200))
+            .unwrap();
+        std::fs::create_dir(recently_changed.join("library")).unwrap();
+        remove_stale_workspaces(temp_dir.path(), Duration::from_secs(3600));
+        assert!(!recently_changed.exists());
     }
 }
