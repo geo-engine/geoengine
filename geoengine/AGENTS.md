@@ -3,7 +3,7 @@
 Backend-specific guidance.
 Repo-wide context (generated-code chain, PR rules) is in the root `AGENTS.md`.
 
-Requires GDAL ≥ 3.8.4, PROJ ≥ 9.4 (dev headers), and PostgreSQL with PostGIS.
+Requires GDAL ≥ 3.12, PROJ ≥ 9.4 (dev headers), and PostgreSQL with PostGIS.
 Run cargo commands from this directory.
 The `just` recipes below are written for the repo root.
 Inside this directory, drop the module prefix (`just test` instead of `just backend test`).
