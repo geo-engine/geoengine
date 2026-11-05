@@ -257,8 +257,9 @@ async fn run_clients(
         .collect()
 }
 
-/// Exports the NDVI dataset for six months as a COG, again and again, until `stop` is set
-async fn export_loop(api: Api, graph: String, stop: Arc<AtomicBool>) {
+/// Exports the NDVI dataset for six months as a COG, again and again, until `stop` is set.
+/// Returns the number of completed exports and panics if one fails, since the load would be wrong.
+async fn export_loop(api: Api, graph: String, stop: Arc<AtomicBool>) -> u64 {
     let body = json!({
         "displayName": "wms_load export",
         "query": {
@@ -273,21 +274,25 @@ async fn export_loop(api: Api, graph: String, stop: Arc<AtomicBool>) {
         let task = api
             .post(&format!("/datasetFromProcessingGraph/{graph}"), &body)
             .await?;
-        let status = format!(
+        let path = format!(
             "/tasks/{}/status",
             task["taskId"].as_str().unwrap_or_default()
         );
-        while api.get(&status).await?["status"] == "running" {
+        loop {
+            let status = api.get(&path).await?;
+            if status["status"] != "running" {
+                return reqwest::Result::Ok(status);
+            }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-        reqwest::Result::Ok(())
     };
+    let mut completed = 0;
     while !stop.load(Ordering::Relaxed) {
-        if let Err(error) = export().await {
-            eprintln!("the background export failed, stopping it: {error}");
-            return;
-        }
+        let status = export().await.unwrap();
+        assert_eq!(status["status"], "completed", "export failed: {status}");
+        completed += 1;
     }
+    completed
 }
 
 #[derive(Default, Clone, Copy)]
@@ -449,27 +454,32 @@ fn wms_load(c: &mut Criterion) {
                 });
 
                 let latencies = Mutex::new(Vec::new());
-                let before = thread_groups(server.pid()).0;
-                let start = Instant::now();
+                // taken after each iteration, so that Criterion's analysis does not count
+                let end = Mutex::new(None);
+                let pid = server.pid();
+                let before = thread_groups(pid).0;
+                let case_start = Instant::now();
                 group.throughput(Throughput::Elements(clients as u64));
                 group.bench_function(
                     BenchmarkId::new(background, format!("clients_{clients}")),
                     |b| {
                         b.to_async(&runtime).iter_custom(|iters| {
-                            let (api, graph, next_tile, latencies) =
-                                (&api, &graph, &next_tile, &latencies);
+                            let (api, graph, next_tile, latencies, end) =
+                                (&api, &graph, &next_tile, &latencies, &end);
                             async move {
                                 let start = Instant::now();
                                 let results =
                                     run_clients(api, graph, clients, iters, next_tile).await;
                                 let elapsed = start.elapsed();
                                 latencies.lock().unwrap().extend(results);
+                                *end.lock().unwrap() =
+                                    Some((case_start.elapsed(), thread_groups(pid)));
                                 elapsed
                             }
                         });
                     },
                 );
-                let elapsed = start.elapsed();
+                let (elapsed, after) = end.into_inner().unwrap().unwrap();
                 let id = format!(
                     "wms_load/cores_{cores}{}/{background}/clients_{clients}",
                     if cold { "_cold" } else { "" }
@@ -479,12 +489,14 @@ fn wms_load(c: &mut Criterion) {
                     &latencies.into_inner().unwrap(),
                     elapsed,
                     &before,
-                    &thread_groups(server.pid()),
+                    &after,
                 );
 
                 stop.store(true, Ordering::Relaxed);
                 if let Some(export) = export {
-                    runtime.block_on(export).unwrap(); // finish the running export before the next case
+                    // finish the running export before the next case
+                    let completed = runtime.block_on(export).unwrap();
+                    println!("  {completed} exports completed");
                 }
             }
         }
