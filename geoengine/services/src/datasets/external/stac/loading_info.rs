@@ -422,6 +422,22 @@ impl StacMultiBandMetaData {
 
         while !matches!(state, StacQueryState::Finished) {
             let (collection, next_state) = query_stac_item_collection(&self.client, &state).await?;
+
+            // With `assets.*`, every item has assets unless the server ignored the wildcard.
+            // Without this check the dataset would silently look empty.
+            if self.asset_keys().is_none()
+                && !collection.items.is_empty()
+                && collection.items.iter().all(|item| item.assets.is_empty())
+            {
+                return Err(
+                    geoengine_operators::error::Error::InvalidDataProviderConfig {
+                        reason: "the STAC server returned items without assets, it may not \
+                            support `assets.*` in `fields`, set `assetKey` on the dataset bands"
+                            .to_owned(),
+                    },
+                );
+            }
+
             for item in collection.items {
                 self.process_stac_item(&item, &mut files).map_err(|error| {
                     geoengine_operators::error::Error::LoadingInfo {
@@ -433,6 +449,26 @@ impl StacMultiBandMetaData {
         }
 
         Ok(files)
+    }
+
+    /// The keys of the assets of this dataset, if all of its bands have one.
+    fn asset_keys(&self) -> Option<Vec<&str>> {
+        let mut keys = self
+            .dataset
+            .bands
+            .iter()
+            .map(|band| band.asset_band.asset_key.as_deref())
+            .collect::<Option<Vec<_>>>()?;
+        keys.sort_unstable();
+        keys.dedup();
+        Some(keys)
+    }
+
+    fn item_fields(&self) -> String {
+        self.asset_keys().map_or_else(
+            || common::STAC_ITEM_FIELDS.to_owned(),
+            |keys| common::stac_item_fields_of_assets(&keys),
+        )
     }
 
     fn create_stac_query_params(
@@ -470,7 +506,7 @@ impl StacMultiBandMetaData {
                 ),
             ),
             ("limit".to_owned(), self.page_limit.to_string()),
-            ("fields".to_owned(), common::STAC_ITEM_FIELDS.to_owned()),
+            ("fields".to_owned(), self.item_fields()),
         ];
 
         Ok(query_params)
@@ -958,6 +994,7 @@ mod tests {
                         asset_band: crate::datasets::external::stac::StacAssetBand {
                             asset_title: "NIR 1 (band 8) - 10m".to_owned(),
                             band_name: Some("B08".to_owned()),
+                            asset_key: None,
                         },
                         band_descriptor: RasterBandDescriptor::new_unitless("B08".to_owned()),
                     },
@@ -965,6 +1002,7 @@ mod tests {
                         asset_band: crate::datasets::external::stac::StacAssetBand {
                             asset_title: "Red (band 4) - 10m".to_owned(),
                             band_name: Some("B04".to_owned()),
+                            asset_key: None,
                         },
                         band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
                     },
@@ -1234,6 +1272,7 @@ mod tests {
                         asset_band: crate::datasets::external::stac::StacAssetBand {
                             asset_title: "Sentinel raster".to_owned(),
                             band_name: Some((*name).to_owned()),
+                            asset_key: None,
                         },
                         band_descriptor: RasterBandDescriptor::new_unitless((*name).to_owned()),
                     },
@@ -1742,6 +1781,7 @@ mod tests {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
                                 asset_title: "Blue (band 2) - 10m".to_owned(),
                                 band_name: Some("B02".to_owned()),
+                                asset_key: None,
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B02".to_owned()),
                         },
@@ -1749,6 +1789,7 @@ mod tests {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
                                 asset_title: "Green (band 3) - 10m".to_owned(),
                                 band_name: Some("B03".to_owned()),
+                                asset_key: None,
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B03".to_owned()),
                         },
@@ -1756,6 +1797,7 @@ mod tests {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
                                 asset_title: "Water vapour (WVP) - 10m".to_owned(),
                                 band_name: Some("WVP".to_owned()),
+                                asset_key: None,
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("WVP".to_owned()),
                         },
@@ -1763,6 +1805,7 @@ mod tests {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
                                 asset_title: "NIR 1 (band 8) - 10m".to_owned(),
                                 band_name: Some("B08".to_owned()),
+                                asset_key: None,
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B08".to_owned()),
                         },
@@ -1770,6 +1813,7 @@ mod tests {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
                                 asset_title: "Red (band 4) - 10m".to_owned(),
                                 band_name: Some("B04".to_owned()),
+                                asset_key: None,
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("B04".to_owned()),
                         },
@@ -1794,6 +1838,7 @@ mod tests {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
                                 asset_title: "Aerosol optical thickness (AOT) - 20m".to_owned(),
                                 band_name: Some("AOT".to_owned()),
+                                asset_key: None,
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("AOT".to_owned()),
                         },
@@ -1801,6 +1846,7 @@ mod tests {
                             asset_band: crate::datasets::external::stac::StacAssetBand {
                                 asset_title: "Scene classification map (SCL) - 20m".to_owned(),
                                 band_name: Some("SCL".to_owned()),
+                                asset_key: None,
                             },
                             band_descriptor: RasterBandDescriptor::new_unitless("SCL".to_owned()),
                         },
@@ -2033,6 +2079,7 @@ mod grid_request_tests {
             bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
                 asset_title: "data".to_owned(),
                 band_name: None,
+                asset_key: None,
             })],
         };
         let mut provider = StacDataProvider::from_definition_with_request_registry(
@@ -2072,6 +2119,97 @@ mod grid_request_tests {
             }))
             .await
             .unwrap()
+    }
+
+    fn one_item_search(server: &Server, fields: &str, features: &[Value]) {
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/collections/test/items"),
+                request::query(url_decoded(contains(("fields", fields.to_owned())))),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(collection(features, None))),
+        );
+    }
+
+    fn one_cell_grid() -> StacGrid {
+        StacGrid {
+            target_number_of_cells: 64_800,
+        }
+    }
+
+    #[tokio::test]
+    async fn bands_with_asset_keys_request_only_these_assets() {
+        let server = Server::run();
+        let mut provider = provider(&server, 1024 * 1024, one_cell_grid());
+        provider.datasets[0].bands[0].asset_band.asset_key = Some("data".to_owned());
+
+        let fields = crate::datasets::external::stac::common::stac_item_fields_of_assets(&["data"]);
+        assert!(fields.contains("assets.data.href"));
+        assert!(!fields.contains('*'));
+        one_item_search(&server, &fields, &[item("scene", 0.)]);
+
+        let info = metadata(&provider, 0)
+            .await
+            .loading_info(query(
+                SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap(),
+                interval(3),
+            ))
+            .await
+            .unwrap();
+
+        assert_file(&info, 0., "scene");
+    }
+
+    #[tokio::test]
+    async fn items_without_assets_are_an_error_with_the_wildcard() {
+        let server = Server::run();
+        let provider = provider(&server, 0, one_cell_grid());
+
+        let mut without_assets = item("scene", 0.);
+        without_assets["assets"] = json!({});
+        one_item_search(
+            &server,
+            crate::datasets::external::stac::common::STAC_ITEM_FIELDS,
+            &[without_assets],
+        );
+
+        let result = metadata(&provider, 0)
+            .await
+            .loading_info(query(
+                SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap(),
+                interval(3),
+            ))
+            .await;
+
+        let error = format!("{:?}", result.expect_err("should fail"));
+        assert!(error.contains("assetKey"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn items_without_the_asset_keys_are_no_error() {
+        let server = Server::run();
+        let mut provider = provider(&server, 0, one_cell_grid());
+        provider.datasets[0].bands[0].asset_band.asset_key = Some("data".to_owned());
+
+        let mut without_assets = item("scene", 0.);
+        without_assets["assets"] = json!({});
+        one_item_search(
+            &server,
+            &crate::datasets::external::stac::common::stac_item_fields_of_assets(&["data"]),
+            &[without_assets],
+        );
+
+        let info = metadata(&provider, 0)
+            .await
+            .loading_info(query(
+                SpatialPartition2D::new((0., 1.).into(), (1., 0.).into()).unwrap(),
+                interval(3),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 0);
     }
 
     #[tokio::test]

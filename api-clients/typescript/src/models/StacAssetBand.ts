@@ -26,6 +26,12 @@ export interface StacAssetBand {
      * 
      */
     bandName?: string | null;
+    /**
+     * The key of the asset in the `assets` of a STAC item, e.g. `B04_20m`. If all bands of a
+     * dataset have one, searches only request these assets. It is required for servers that do
+     * not support `assets.*` in `fields`, like CDSE.
+     */
+    assetKey?: string | null;
 }
 
 /**
@@ -48,6 +54,7 @@ export function StacAssetBandFromJSONTyped(json: any, ignoreDiscriminator: boole
         
         'assetTitle': json['assetTitle'],
         'bandName': json['bandName'] === undefined ? undefined : json['bandName'] === null ? null : json['bandName'],
+        'assetKey': json['assetKey'] === undefined ? undefined : json['assetKey'] === null ? null : json['assetKey'],
     };
 }
 
@@ -64,6 +71,7 @@ export function StacAssetBandToJSONTyped(value?: StacAssetBand | null, ignoreDis
         
         'assetTitle': value['assetTitle'],
         'bandName': value['bandName'],
+        'assetKey': value['assetKey'],
     };
 }
 

@@ -420,6 +420,7 @@ pub(super) fn provider(
         bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
             asset_title: "data".to_owned(),
             band_name: None,
+            asset_key: None,
         })],
     };
     let api_url = server.url_str("/").trim_end_matches('/').to_owned();

@@ -16,6 +16,9 @@ pub struct StacAssetBand {
     pub asset_title: String,
     #[serde(rename = "bandName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub band_name: Option<Option<String>>,
+    /// The key of the asset in the `assets` of a STAC item, e.g. `B04_20m`. If all bands of a dataset have one, searches only request these assets. It is required for servers that do not support `assets.*` in `fields`, like CDSE.
+    #[serde(rename = "assetKey", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub asset_key: Option<Option<String>>,
 }
 
 impl StacAssetBand {
@@ -23,6 +26,7 @@ impl StacAssetBand {
         StacAssetBand {
             asset_title,
             band_name: None,
+            asset_key: None,
         }
     }
 }

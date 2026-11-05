@@ -37,7 +37,8 @@ class TestStacProviderDatasetBand(unittest.TestCase):
             return StacProviderDatasetBand(
                 asset_band = geoengine_api_client.models.stac_asset_band.StacAssetBand(
                     asset_title = '', 
-                    band_name = '', ),
+                    band_name = '', 
+                    asset_key = '', ),
                 band_descriptor = geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
                     name = '', 
                     measurement = null, )
@@ -46,7 +47,8 @@ class TestStacProviderDatasetBand(unittest.TestCase):
             return StacProviderDatasetBand(
                 asset_band = geoengine_api_client.models.stac_asset_band.StacAssetBand(
                     asset_title = '', 
-                    band_name = '', ),
+                    band_name = '', 
+                    asset_key = '', ),
                 band_descriptor = geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
                     name = '', 
                     measurement = null, ),
