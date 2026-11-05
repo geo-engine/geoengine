@@ -1123,6 +1123,9 @@ pub struct StacDataProviderDefinition {
     /// Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stac_grid: Option<StacGrid>,
+    /// STAC searches one loading info request runs in parallel; omitted values use 8.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_cell_searches: Option<i32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -1161,6 +1164,7 @@ impl From<StacDataProviderDefinition>
             query_timeout_secs: value.query_timeout_secs,
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
             stac_grid: value.stac_grid.map(Into::into),
+            max_concurrent_cell_searches: value.max_concurrent_cell_searches,
         }
     }
 }
@@ -1185,6 +1189,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             query_timeout_secs: value.query_timeout_secs,
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
             stac_grid: value.stac_grid.map(Into::into),
+            max_concurrent_cell_searches: value.max_concurrent_cell_searches,
         }
     }
 }

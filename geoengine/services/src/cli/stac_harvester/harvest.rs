@@ -1714,8 +1714,7 @@ mod tests {
     /// from the element84 STAC API and contains no external dependencies.
     #[test]
     fn test_process_harvest_item_recovers_v1_0_0_item() {
-        use geoengine_datatypes::dataset::DataProviderId;
-        use geoengine_datatypes::util::Identifier;
+        use geoengine_datatypes::{dataset::DataProviderId, util::Identifier};
 
         let mapping = StacDataProviderDefinition {
             name: "element84-test".to_string(),
@@ -1753,6 +1752,7 @@ mod tests {
             page_limit: 10,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         };
 
         let items: stac::ItemCollection = serde_json::from_str(include_str!(
