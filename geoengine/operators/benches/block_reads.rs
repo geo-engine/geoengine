@@ -388,6 +388,7 @@ fn worker_cpu_seconds() -> f64 {
             ticks += fields[11].parse::<u64>().unwrap() + fields[12].parse::<u64>().unwrap();
         }
     }
+    // `CLK_TCK` is 100 on Linux, whatever the kernel's tick rate
     ticks as f64 / 100.
 }
 
@@ -677,7 +678,13 @@ fn views(size: usize, moves: isize) -> Vec<Vec<GridBoundingBox2D>> {
                     GridBoundingBox2D::new([y, x], [y + VIEW_TILE_SIZE - 1, x + VIEW_TILE_SIZE - 1])
                         .unwrap()
                 })
-                .filter(|window| window.y_max() < size as isize && window.x_max() < size as isize)
+                // a level smaller than the view only has the tiles inside of it
+                .filter(|window| {
+                    window.y_min() >= 0
+                        && window.x_min() >= 0
+                        && window.y_max() < size as isize
+                        && window.x_max() < size as isize
+                })
                 .collect()
         })
         .collect()

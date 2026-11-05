@@ -99,17 +99,31 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             (Some(factor), Some(blocks)) => {
                 blocks
                     .read::<T>(&params, read_advise, factor, plan.cache_hint)
-                    .await?
+                    .await
             }
             (Some(factor), None) if factor > 1 => {
                 let Some(level_advise) = level_read_advise(read_advise, factor) else {
                     return Err(misaligned_read(&params, factor));
                 };
                 reader
-                    .read_level_data::<T>(params, factor, level_advise)
-                    .await?
+                    .read_level_data::<T>(params.clone(), factor, level_advise)
+                    .await
             }
-            _ => reader.read_tile_data::<T>(params, read_advise).await?,
+            _ => {
+                reader
+                    .read_tile_data::<T>(params.clone(), read_advise)
+                    .await
+            }
+        };
+        let read = match read {
+            Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::MissingOverviewLevel { file, factor },
+            }) => {
+                // the dataset declares the level, but one of its files lacks it: GDAL picks another
+                tracing::warn!("{file} lacks the overview level {factor}, GDAL may resample it");
+                reader.read_tile_data::<T>(params, read_advise).await?
+            }
+            read => read?,
         };
         let file_data = match read {
             GdalProcessReadResult::Grid(grid_and_properties) => *grid_and_properties,
@@ -549,6 +563,47 @@ mod tests {
         gpp.clear_caches().await.unwrap();
         read().await.unwrap();
         assert_eq!(gpp.request_stats().headers, 2);
+    }
+
+    #[tokio::test]
+    async fn reads_of_a_level_the_file_lacks_fall_back_to_gdal() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff_with_overviews(dir.path());
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache, gdal_worker.clone(), CacheTtlSeconds::new(60));
+
+        let plan = TilePlan {
+            tile: TileInformation::new(
+                [0, 0].into(),
+                GridShape2D::new([8, 8]),
+                GeoTransform::new_unchecked((0., 64.).into(), 8., -8.),
+            ),
+            time: TimeInterval::default(),
+            band: 0,
+            files: vec![params.clone()],
+            cache_hint: CacheHint::max_duration(),
+        };
+        // the file has the overviews 2 and 4
+        let reader_mode = |exact_level| {
+            GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: file_grid,
+                overview_level: 8,
+                exact_level,
+            })
+        };
+
+        let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker, None)
+            .await
+            .unwrap();
+        for blocks in [None, Some(&blocks)] {
+            let tile = assemble_tile::<u16>(plan.clone(), reader_mode(true), &gdal_worker, blocks)
+                .await
+                .unwrap();
+            assert_eq!(tile, from_gdal);
+        }
     }
 
     #[tokio::test]
