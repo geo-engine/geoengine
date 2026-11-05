@@ -14194,6 +14194,13 @@
               "string",
               "null"
             ]
+          },
+          "assetKey": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The key of the asset in the `assets` of a STAC item, e.g. `B04_20m`. If all bands of a\ndataset have one, searches only request these assets. It is required for servers that do\nnot support `assets.*` in `fields`, like CDSE."
           }
         }
       },

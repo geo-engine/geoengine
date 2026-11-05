@@ -29,7 +29,8 @@ class StacAssetBand(BaseModel):
     """ # noqa: E501
     asset_title: StrictStr = Field(alias="assetTitle")
     band_name: Optional[StrictStr] = Field(default=None, alias="bandName")
-    __properties: ClassVar[List[str]] = ["assetTitle", "bandName"]
+    asset_key: Optional[StrictStr] = Field(default=None, description="The key of the asset in the `assets` of a STAC item, e.g. `B04_20m`. If all bands of a dataset have one, searches only request these assets. It is required for servers that do not support `assets.*` in `fields`, like CDSE.", alias="assetKey")
+    __properties: ClassVar[List[str]] = ["assetTitle", "bandName", "assetKey"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -75,6 +76,11 @@ class StacAssetBand(BaseModel):
         if self.band_name is None and "band_name" in self.model_fields_set:
             _dict['bandName'] = None
 
+        # set to None if asset_key (nullable) is None
+        # and model_fields_set contains the field
+        if self.asset_key is None and "asset_key" in self.model_fields_set:
+            _dict['assetKey'] = None
+
         return _dict
 
     @classmethod
@@ -88,7 +94,8 @@ class StacAssetBand(BaseModel):
 
         _obj = cls.model_validate({
             "assetTitle": obj.get("assetTitle"),
-            "bandName": obj.get("bandName")
+            "bandName": obj.get("bandName"),
+            "assetKey": obj.get("assetKey")
         })
         return _obj
 

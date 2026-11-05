@@ -300,6 +300,7 @@ mod tests {
             bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
                 asset_title: "a".into(),
                 band_name: None,
+                asset_key: None,
             })],
         }
     }

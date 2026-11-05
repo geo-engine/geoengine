@@ -36,7 +36,8 @@ class TestStacAssetBand(unittest.TestCase):
         if include_optional:
             return StacAssetBand(
                 asset_title = '',
-                band_name = ''
+                band_name = '',
+                asset_key = ''
             )
         else:
             return StacAssetBand(

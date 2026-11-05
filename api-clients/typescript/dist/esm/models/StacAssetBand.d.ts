@@ -22,6 +22,12 @@ export interface StacAssetBand {
      *
      */
     bandName?: string | null;
+    /**
+     * The key of the asset in the `assets` of a STAC item, e.g. `B04_20m`. If all bands of a
+     * dataset have one, searches only request these assets. It is required for servers that do
+     * not support `assets.*` in `fields`, like CDSE.
+     */
+    assetKey?: string | null;
 }
 /**
  * Check if a given object implements the StacAssetBand interface.
