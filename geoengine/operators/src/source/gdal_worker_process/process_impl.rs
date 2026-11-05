@@ -105,7 +105,7 @@ impl Drop for ChildProcessGuard {
 
 /// Configuration passed from the main process to each GDAL worker at spawn time via a JSON CLI argument.
 /// The worker binary deserializes this instead of reading config files from disk.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerConfig {
     #[serde(default)]
     pub gdal_config_options: Option<Vec<(String, String)>>,
@@ -113,6 +113,24 @@ pub struct WorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
+    /// Size of the `OpenBLAS` and OpenMP thread pools of a worker process.
+    #[serde(default = "default_blas_threads")]
+    pub blas_threads: usize,
+}
+
+fn default_blas_threads() -> usize {
+    1
+}
+
+impl Default for WorkerConfig {
+    fn default() -> Self {
+        Self {
+            gdal_config_options: None,
+            logging: WorkerLoggingConfig::default(),
+            open_telemetry: OpenTelemetryConfig::default(),
+            blas_threads: default_blas_threads(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,9 +203,15 @@ pub fn spawn_ipc_server_process<S, R>(
 
     let mut cmd = Command::new(exe_path);
 
+    let blas_threads = worker_config.blas_threads.to_string();
     cmd.arg(token)
         .arg(&config_json)
-        .stderr(std::process::Stdio::inherit());
+        .stderr(std::process::Stdio::inherit())
+        // GDAL links Armadillo, which links BLAS. A threaded OpenBLAS starts one idle thread per
+        // core as soon as it is loaded, i.e. dozens per worker, before any GDAL config applies.
+        // Both libraries read these variables only at load time, so they must be set here.
+        .env("OPENBLAS_NUM_THREADS", &blas_threads)
+        .env("OMP_NUM_THREADS", &blas_threads);
 
     if std::cfg!(debug_assertions) {
         // llcov inserts these env params. We need to remove them from the gdal-processor processes. Otherwise the processes overwrite the main process data and the files become corrupt.

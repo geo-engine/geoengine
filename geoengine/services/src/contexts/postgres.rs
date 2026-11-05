@@ -128,6 +128,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
+        gdal_process_pool_config.validate()?;
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
@@ -189,6 +190,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
+        gdal_process_pool_config.validate()?;
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
@@ -272,6 +274,7 @@ where
             quota_config.increment_quota_buffer_timeout_seconds,
         );
 
+        gdal_process_pool_config.validate()?;
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
