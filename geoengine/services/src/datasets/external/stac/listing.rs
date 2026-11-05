@@ -538,6 +538,7 @@ mod tests {
             query_timeout_secs: 60,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         })
         .unwrap()
     }
@@ -612,6 +613,7 @@ mod tests {
             query_timeout_secs: 60,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         })
         .unwrap()
     }

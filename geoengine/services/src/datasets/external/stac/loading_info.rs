@@ -974,6 +974,7 @@ mod tests {
             query_timeout_secs: 60,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         }
     }
 
@@ -1813,6 +1814,7 @@ mod tests {
             query_timeout_secs: 60,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         };
 
         admin_ctx
@@ -2058,6 +2060,7 @@ mod grid_request_tests {
                 query_timeout_secs: 5,
                 cache_ttl_secs: None,
                 stac_grid: Some(grid),
+                max_concurrent_cell_searches: None,
             },
             request_registry,
         )

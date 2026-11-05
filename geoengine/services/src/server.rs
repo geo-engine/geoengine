@@ -158,12 +158,6 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     let data_path_config: config::DataProvider = get_config_element()?;
 
-    let stac_config: config::Stac = get_config_element()?;
-    tracing::info!(
-        max_concurrent_cell_searches = stac_config.max_concurrent_cell_searches.get(),
-        "STAC searches per loading info"
-    );
-
     let query_context_config = config::get_config_element::<config::QueryContext>()?;
     let chunk_byte_size = query_context_config.chunk_byte_size.into();
 
