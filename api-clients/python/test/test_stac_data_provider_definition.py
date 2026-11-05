@@ -87,7 +87,8 @@ class TestStacDataProviderDefinition(unittest.TestCase):
                 page_limit = 56,
                 cache_ttl_secs = 0,
                 stac_grid = geoengine_api_client.models.stac_grid.StacGrid(
-                    target_number_of_cells = 1, )
+                    target_number_of_cells = 1, ),
+                max_concurrent_cell_searches = 56
             )
         else:
             return StacDataProviderDefinition(

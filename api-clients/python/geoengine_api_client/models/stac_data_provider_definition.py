@@ -49,7 +49,8 @@ class StacDataProviderDefinition(BaseModel):
     page_limit: Optional[StrictInt] = Field(default=None, alias="pageLimit")
     cache_ttl_secs: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="Optional output cache lifetime; omitted values use the global cache default.", alias="cacheTtlSecs")
     stac_grid: Optional[StacGrid] = Field(default=None, description="Target number of square search cells per dataset CRS projected area of use; omitted values use 512.", alias="stacGrid")
-    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs", "stacGrid"]
+    max_concurrent_cell_searches: Optional[StrictInt] = Field(default=None, description="STAC searches one loading info request runs in parallel; omitted values use 8.", alias="maxConcurrentCellSearches")
+    __properties: ClassVar[List[str]] = ["type", "name", "id", "description", "priority", "apiUrl", "collectionName", "s3Config", "authentication", "timeDimension", "datasets", "queryTimeoutSecs", "pageLimit", "cacheTtlSecs", "stacGrid", "maxConcurrentCellSearches"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -140,6 +141,11 @@ class StacDataProviderDefinition(BaseModel):
         if self.stac_grid is None and "stac_grid" in self.model_fields_set:
             _dict['stacGrid'] = None
 
+        # set to None if max_concurrent_cell_searches (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_concurrent_cell_searches is None and "max_concurrent_cell_searches" in self.model_fields_set:
+            _dict['maxConcurrentCellSearches'] = None
+
         return _dict
 
     @classmethod
@@ -166,7 +172,8 @@ class StacDataProviderDefinition(BaseModel):
             "queryTimeoutSecs": obj.get("queryTimeoutSecs"),
             "pageLimit": obj.get("pageLimit"),
             "cacheTtlSecs": obj.get("cacheTtlSecs"),
-            "stacGrid": StacGrid.from_dict(obj["stacGrid"]) if obj.get("stacGrid") is not None else None
+            "stacGrid": StacGrid.from_dict(obj["stacGrid"]) if obj.get("stacGrid") is not None else None,
+            "maxConcurrentCellSearches": obj.get("maxConcurrentCellSearches")
         })
         return _obj
 

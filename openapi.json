@@ -14297,6 +14297,14 @@
                 "type": "null"
               }
             ]
+          },
+          "maxConcurrentCellSearches": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "STAC searches one loading info request runs in parallel; omitted values use 8."
           }
         }
       },

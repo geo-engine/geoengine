@@ -114,6 +114,10 @@ export interface StacDataProviderDefinition {
      * Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
      */
     stacGrid?: StacGrid | null;
+    /**
+     * STAC searches one loading info request runs in parallel; omitted values use 8.
+     */
+    maxConcurrentCellSearches?: number | null;
 }
 
 
@@ -168,6 +172,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
         'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
+        'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
     };
 }
 
@@ -197,6 +202,7 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'pageLimit': value['pageLimit'],
         'cacheTtlSecs': value['cacheTtlSecs'],
         'stacGrid': StacGridToJSON(value['stacGrid']),
+        'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
     };
 }
 

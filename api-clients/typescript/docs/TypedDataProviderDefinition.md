@@ -44,6 +44,7 @@ Name | Type
 `pageLimit` | number
 `cacheTtlSecs` | number
 `stacGrid` | [StacGrid](StacGrid.md)
+`maxConcurrentCellSearches` | number
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -93,6 +94,7 @@ const example = {
   "pageLimit": null,
   "cacheTtlSecs": null,
   "stacGrid": null,
+  "maxConcurrentCellSearches": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,
