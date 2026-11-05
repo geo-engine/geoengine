@@ -76,6 +76,7 @@ function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminator) {
         'pageLimit': json['pageLimit'] == null ? undefined : json['pageLimit'],
         'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : (0, StacGrid_1.StacGridFromJSON)(json['stacGrid']),
+        'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
     };
 }
 function StacDataProviderDefinitionToJSON(json) {
@@ -101,5 +102,6 @@ function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator = fals
         'pageLimit': value['pageLimit'],
         'cacheTtlSecs': value['cacheTtlSecs'],
         'stacGrid': (0, StacGrid_1.StacGridToJSON)(value['stacGrid']),
+        'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
     };
 }

@@ -45,6 +45,9 @@ pub struct StacDataProviderDefinition {
     /// Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
     #[serde(rename = "stacGrid", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub stac_grid: Option<Option<Box<models::StacGrid>>>,
+    /// STAC searches one loading info request runs in parallel; omitted values use 8.
+    #[serde(rename = "maxConcurrentCellSearches", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_cell_searches: Option<Option<i32>>,
 }
 
 impl StacDataProviderDefinition {
@@ -65,6 +68,7 @@ impl StacDataProviderDefinition {
             page_limit: None,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         }
     }
 }
