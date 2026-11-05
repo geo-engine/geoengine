@@ -60,13 +60,18 @@ impl RasterOperator for BandwiseExpression {
 
         let parameters = vec![Parameter::Number("x".into())];
 
-        let expression = ExpressionParser::new(&parameters, DataType::Number)
-            .map_err(RasterExpressionError::from)?
-            .parse(
+        let code = self.params.expression.clone();
+
+        // users decide about the length of the expression, so it must not block a worker
+        let expression = crate::util::spawn_blocking(move || {
+            ExpressionParser::new(&parameters, DataType::Number)?.parse(
                 "expression", // TODO: what is the name used for?
-                &self.params.expression,
+                &code,
             )
-            .map_err(RasterExpressionError::from)?;
+        })
+        .await
+        .map_err(RasterExpressionError::from)?
+        .map_err(RasterExpressionError::from)?;
 
         let expression = context
             .expression_environment()

@@ -178,13 +178,22 @@ impl VectorOperator for VectorExpression {
             expression_input_names.push(variable_name);
         }
 
-        let expression_ast = parse_expression(
-            &self.params.expression,
-            self.params.geometry_column_name.clone(),
-            expression_geom_input_type,
-            &expression_input_names,
-            expression_output_type,
-        )?;
+        let code = self.params.expression.clone();
+        let geometry_column_name = self.params.geometry_column_name.clone();
+        let parameters = expression_input_names.clone();
+
+        // users decide about the length of the expression, so it must not block a worker
+        let expression_ast = crate::util::spawn_blocking(move || {
+            parse_expression(
+                &code,
+                geometry_column_name,
+                expression_geom_input_type,
+                &parameters,
+                expression_output_type,
+            )
+        })
+        .await
+        .map_err(VectorExpressionError::from)??;
 
         let expression = context
             .expression_environment()

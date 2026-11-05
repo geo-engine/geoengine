@@ -12,6 +12,9 @@ pub enum RasterExpressionError {
     #[snafu(display("{}", source), context(false))]
     Parser { source: ExpressionParserError },
 
+    #[snafu(display("Could not execute parsing task"), context(false))]
+    ParserTask { source: tokio::task::JoinError },
+
     #[snafu(display("{}", source), context(false))]
     Link { source: LinkExpressionError },
 
@@ -48,6 +51,9 @@ pub enum VectorExpressionError {
     Parsing {
         source: geoengine_expression::error::ExpressionParserError,
     },
+
+    #[snafu(display("Could not execute parsing task"), context(false))]
+    ParsingTask { source: tokio::task::JoinError },
 
     #[snafu(display("{}", source), context(false))]
     Link { source: LinkExpressionError },

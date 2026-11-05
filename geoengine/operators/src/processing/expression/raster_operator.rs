@@ -19,7 +19,7 @@ use geoengine_datatypes::{primitives::SpatialResolution, raster::RasterDataType}
 use geoengine_expression::{DataType, ExpressionParser, LinkedExpression, Parameter};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
@@ -87,20 +87,20 @@ impl RasterOperator for Expression {
             })
             .collect::<Vec<_>>();
 
-        let expression = ExpressionParser::new(&parameters, DataType::Number)
-            .map_err(RasterExpressionError::from)?
-            .parse(
-                self.params
-                    .output_band
-                    .as_ref()
-                    .map_or(Cow::Borrowed("expression"), |b| {
-                        // allow only idents
-                        Cow::Owned(canonicalize_name(&b.name))
-                    })
-                    .as_ref(),
-                &self.params.expression,
-            )
-            .map_err(RasterExpressionError::from)?;
+        let function_name = self.params.output_band.as_ref().map_or_else(
+            || "expression".to_owned(),
+            // allow only idents
+            |b| canonicalize_name(&b.name),
+        );
+        let code = self.params.expression.clone();
+
+        // users decide about the length of the expression, so it must not block a worker
+        let expression = crate::util::spawn_blocking(move || {
+            ExpressionParser::new(&parameters, DataType::Number)?.parse(&function_name, &code)
+        })
+        .await
+        .map_err(RasterExpressionError::from)?
+        .map_err(RasterExpressionError::from)?;
 
         let expression = context
             .expression_environment()

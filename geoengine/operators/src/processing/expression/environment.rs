@@ -35,14 +35,19 @@ impl Default for ExpressionCacheConfig {
     }
 }
 
+/// Empty until the compilation is done. All callers of an expression wait on the same slot.
 type LibrarySlot = Arc<OnceCell<Arc<LinkedExpression>>>;
 
+/// An entry of the cache: a compiled expression, i.e., a loaded shared library (`.so`) in the temp directory.
 struct Library {
     slot: LibrarySlot,
+    /// The start of the idle time, which ends in the removal of the library after the TTL
     last_used: Instant,
 }
 
 impl Library {
+    /// Tells if a caller waits for the compilation or a processor holds the library.
+    ///
     /// New references only come from the map, whose lock the caller holds.
     /// Thus, an unused library stays unused until the lock is released.
     fn is_in_use(&self) -> bool {
@@ -65,6 +70,8 @@ struct Inner {
 }
 
 impl Inner {
+    /// Returns the cargo workspace with the pre-built dependencies, which every compilation links against.
+    /// It is built by the first caller. A failed build is not stored, so the next caller tries again.
     async fn dependencies(&self) -> Result<&Arc<ExpressionDependencies>, LinkExpressionError> {
         self.dependencies
             .get_or_try_init(|| async {
@@ -75,6 +82,7 @@ impl Inner {
             .await
     }
 
+    /// Unloads and deletes the libraries that [`remove_unused`] selects.
     fn sweep(&self) {
         let removed = {
             let mut libraries = self
@@ -88,7 +96,9 @@ impl Inner {
         drop(removed);
     }
 
+    /// Sweeps right away if the map exceeds the limit of unused libraries.
     /// New libraries can arrive much faster than the regular sweeps.
+    /// The map also contains the libraries in use, so this can sweep without removing anything.
     fn sweep_if_above_limit(&self) {
         let is_above_limit = self
             .libraries
@@ -189,6 +199,7 @@ impl ExpressionEnvironment {
     }
 }
 
+/// Starts the thread that sweeps every `sweep_interval`, so that an idle server also cleans up.
 /// The thread only holds a weak reference and ends together with the environment.
 fn spawn_sweeper(inner: &Arc<Inner>) {
     let sweep_interval = inner.config.sweep_interval;
@@ -212,7 +223,11 @@ fn spawn_sweeper(inner: &Arc<Inner>) {
     }
 }
 
-/// Takes the libraries out of the map that should be unloaded.
+/// Takes the libraries out of the map that should be unloaded and returns them, so that the
+/// caller can drop them after releasing the lock of the map.
+///
+/// A library is never removed while it is in use.
+/// Otherwise, it is removed if it was idle for the TTL, or if it is one of the oldest above `max_idle_libraries`.
 fn remove_unused(
     libraries: &mut HashMap<String, Library>,
     now: Instant,
