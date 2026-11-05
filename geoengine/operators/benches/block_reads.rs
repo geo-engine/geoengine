@@ -30,7 +30,8 @@
 //! - `WP7_BENCH_CASES`: comma separated case names to run, default all. Use it rather than a
 //!   criterion filter, which still does the untimed run of every case.
 //! - `WP7_BENCH_POOL`: the worker pool as `processes,active,per dataset`, default `32,16,8`.
-//! - `WP7_BENCH_CHUNK_SIZE`: `CPL_VSIL_CURL_CHUNK_SIZE`, default `1048576`.
+//! - `WP7_BENCH_GDAL_CONFIG`: GDAL config options of the workers as `KEY=VALUE,KEY=VALUE`, set
+//!   after the server defaults, e.g. `CPL_VSIL_CURL_CHUNK_SIZE=262144`.
 //!
 //! Modes: `window` queries without the raster cache, `block` with it.
 //! Cold cases clear the GDAL workers and the raster cache before each iteration, untimed; warm
@@ -343,6 +344,21 @@ impl ViewTimes {
         );
         *self = Self::default();
     }
+}
+
+/// `WP7_BENCH_GDAL_CONFIG` as pairs.
+fn gdal_config_from_env() -> Vec<(String, String)> {
+    std::env::var("WP7_BENCH_GDAL_CONFIG")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|pair| !pair.is_empty())
+        .map(|pair| {
+            let (key, value) = pair
+                .split_once('=')
+                .expect("WP7_BENCH_GDAL_CONFIG pairs are KEY=VALUE");
+            (key.to_string(), value.to_string())
+        })
+        .collect()
 }
 
 /// User and system time of the child processes.
@@ -793,19 +809,24 @@ fn block_reads(c: &mut Criterion) {
         .split(',')
         .map(|n| n.parse().unwrap())
         .collect();
-    let chunk = std::env::var("WP7_BENCH_CHUNK_SIZE").unwrap_or("1048576".into());
     let pool = GdalProcessPool::new(
         limits[0],
         limits[1],
         limits[2],
         WorkerConfig {
-            gdal_config_options: Some(vec![
-                ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
-                ("CPL_VSIL_CURL_CHUNK_SIZE".into(), chunk),
-                ("VSI_CACHE".into(), "TRUE".into()),
-                ("VSI_CACHE_SIZE".into(), "67108864".into()),
-                ("GDAL_NUM_THREADS".into(), "1".into()),
-            ]),
+            gdal_config_options: Some(
+                vec![
+                    ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
+                    ("CPL_VSIL_CURL_CHUNK_SIZE".into(), "1048576".into()),
+                    ("GDAL_CACHEMAX".into(), "256".into()),
+                    ("VSI_CACHE".into(), "TRUE".into()),
+                    ("VSI_CACHE_SIZE".into(), "67108864".into()),
+                    ("GDAL_NUM_THREADS".into(), "1".into()),
+                ]
+                .into_iter()
+                .chain(gdal_config_from_env())
+                .collect(),
+            ),
             ..WorkerConfig::default()
         },
     );
