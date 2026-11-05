@@ -32,6 +32,11 @@
 //! - `WP7_BENCH_POOL`: the worker pool as `processes,active,per dataset`, default `32,16,8`.
 //! - `WP7_BENCH_GDAL_CONFIG`: GDAL config options of the workers as `KEY=VALUE,KEY=VALUE`, set
 //!   after the server defaults, e.g. `CPL_VSIL_CURL_CHUNK_SIZE=262144`.
+//! - `WP7_BENCH_REMOTE_JP2`, `WP7_BENCH_REMOTE_TIF`: read the files with that extension from this
+//!   base URL instead of the local server, with their metadata from the local copies. The local
+//!   server then counts no GETs and bytes for them.
+//! - `WP7_BENCH_ROUNDS`: run each mode this many times, cold and then warm, plus one cold run for
+//!   the hash, instead of letting criterion pick. For remote files, to bound the traffic.
 //!
 //! Modes: `window` queries without the raster cache, `block` with it.
 //! Cold cases clear the GDAL workers and the raster cache before each iteration, untimed; warm
@@ -194,6 +199,16 @@ fn jp2() -> PathBuf {
     )
 }
 
+/// The path of `file` on its remote server if one is set for its extension, else on `server`.
+fn vsicurl_path(server: &RangeServer, file: &Path) -> String {
+    let name = file.file_name().unwrap().to_str().unwrap();
+    let extension = file.extension().unwrap().to_str().unwrap().to_uppercase();
+    match std::env::var(format!("WP7_BENCH_REMOTE_{extension}")) {
+        Ok(base) => format!("/vsicurl/{base}/{name}"),
+        Err(_) => server.vsicurl_path(name),
+    }
+}
+
 /// Registers `file`, served by `server`, as a `GdalSource` dataset. Returns its name and the
 /// largest overview level it declares.
 fn add_dataset(
@@ -204,9 +219,7 @@ fn add_dataset(
 ) -> (NamedData, u32) {
     let dataset = gdal_open_dataset(file).unwrap();
     let mut params = gdal_parameters_from_dataset(&dataset, 1, file, None, open_options).unwrap();
-    params.file_path = server
-        .vsicurl_path(file.file_name().unwrap().to_str().unwrap())
-        .into();
+    params.file_path = vsicurl_path(server, file).into();
     let result_descriptor = raster_descriptor_from_dataset(&dataset, 1).unwrap();
     let max_overview_level = result_descriptor
         .spatial_grid
@@ -268,9 +281,7 @@ fn add_multi_band_dataset(
                 open_option.map(|option| vec![option.into()]),
             )
             .unwrap();
-            params.file_path = server
-                .vsicurl_path(file.file_name().unwrap().to_str().unwrap())
-                .into();
+            params.file_path = vsicurl_path(server, file).into();
             TileFile {
                 time: TimeInterval::default(),
                 spatial_partition,
@@ -934,6 +945,9 @@ fn block_reads(c: &mut Criterion) {
     let mut group = c.benchmark_group("block_reads");
     group.sample_size(10);
     let only = std::env::var("WP7_BENCH_CASES").unwrap_or_default();
+    let rounds: Option<u32> = std::env::var("WP7_BENCH_ROUNDS")
+        .ok()
+        .map(|rounds| rounds.parse().unwrap());
     let view_times: Mutex<ViewTimes> = Mutex::default();
     for case in &cases {
         if !only.is_empty() && !only.split(',').any(|name| case.name == name) {
@@ -950,6 +964,53 @@ fn block_reads(c: &mut Criterion) {
                 let (server, cache, hashes, pool) = (&server, &cache, &hashes, &pool);
                 let view_times = &view_times;
                 let source = case.source.clone();
+
+                if let Some(rounds) = rounds {
+                    runtime.block_on(async {
+                        let run_once = |hash_tiles| {
+                            run(
+                                exec_ctx,
+                                source.clone(),
+                                case.bands,
+                                &case.query,
+                                use_cache.then(|| cache.clone()),
+                                hash_tiles,
+                                view_times,
+                            )
+                        };
+                        let clear = || async {
+                            pool.clear_caches().await.unwrap();
+                            cache.clear();
+                        };
+                        if cold {
+                            clear().await;
+                            let hash = run_once(true).await;
+                            *view_times.lock().unwrap() = ViewTimes::default();
+                            println!("{id}: hash {hash:016x}");
+                            let mut hashes = hashes.lock().unwrap();
+                            let expected = *hashes.entry(case.name.clone()).or_insert(hash);
+                            assert_eq!(hash, expected, "{id} differs from the other mode");
+                        }
+                        let before = Counts::now(server, pool, cache);
+                        let mut seconds = Vec::new();
+                        for _ in 0..rounds {
+                            if cold {
+                                clear().await;
+                            }
+                            let start = Instant::now();
+                            run_once(false).await;
+                            seconds.push(start.elapsed().as_secs_f64());
+                        }
+                        println!("{id}: rounds {seconds:.3?} s");
+                        Counts::now(server, pool, cache).since(before).print(
+                            &id,
+                            "per round",
+                            u64::from(rounds),
+                        );
+                        view_times.lock().unwrap().print_and_clear(&id);
+                    });
+                    continue;
+                }
 
                 // one untimed run for the request counts and the hash
                 runtime.block_on(async {
