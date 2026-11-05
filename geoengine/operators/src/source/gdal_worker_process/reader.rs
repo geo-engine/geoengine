@@ -7,8 +7,8 @@ use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
     GridAndProperties,
     process_common::{
-        GdalReadAdvise, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
-        IpcProcessError, IpcProcessGdalErrorKind, RasterInfo,
+        GdalReadAdvise, GdalReadKind, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
+        IpcChannelResult, IpcProcessError, IpcProcessGdalErrorKind, RasterInfo,
     },
 };
 
@@ -53,6 +53,29 @@ impl GdalPoolReader {
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
+        self.read_raster(dataset_params, read_advise, GdalReadKind::Raster)
+            .await
+    }
+
+    /// Reads `read_advise` from the level `factor` times coarser than the full resolution, at
+    /// native size and without resampling: `gdal_read_widow` is in the level's pixel space and
+    /// has the size of `read_window_bounds`. A missing level is an error.
+    pub async fn read_level_data<T: Pixel + GdalType + FromPrimitive>(
+        &self,
+        dataset_params: GdalDatasetParameters,
+        factor: usize,
+        read_advise: GdalReadAdvise,
+    ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
+        self.read_raster(dataset_params, read_advise, GdalReadKind::Level { factor })
+            .await
+    }
+
+    async fn read_raster<T: Pixel + GdalType + FromPrimitive>(
+        &self,
+        dataset_params: GdalDatasetParameters,
+        read_advise: GdalReadAdvise,
+        kind: GdalReadKind,
+    ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
 
@@ -77,6 +100,7 @@ impl GdalPoolReader {
                     request: GdalRequest::Read {
                         read_advise,
                         data_type: T::TYPE,
+                        kind,
                     },
                 },
             ))
@@ -129,6 +153,26 @@ impl GdalPoolReader {
                     msg: "the worker answered a header read with a raster".to_string(),
                 },
             }),
+        }
+    }
+
+    /// Like [`Self::read_raster_info`], but `None` if the file is missing and its parameters say
+    /// to treat that as no data.
+    pub async fn read_raster_info_or_no_data(
+        &self,
+        dataset_params: GdalDatasetParameters,
+    ) -> Result<Option<RasterInfo>, GdalProcessPoolError> {
+        let file_not_found_as_no_data =
+            dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
+        let res = self.read_header(dataset_params).await;
+        match read_result_or_no_data(res, file_not_found_as_no_data)? {
+            Some(IpcChannelResult::RasterInfo(info)) => Ok(Some(info)),
+            Some(IpcChannelResult::Raster(_)) => Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "the worker answered a header read with a raster".to_string(),
+                },
+            }),
+            None => Ok(None),
         }
     }
 

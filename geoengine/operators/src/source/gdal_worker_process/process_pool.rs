@@ -295,6 +295,12 @@ enum BrokerCommand {
     },
 }
 
+/// A read in flight and its request, which followers compare in full: the hash alone may collide.
+struct InFlightRead {
+    request: IpcChannelMessage,
+    tx: InFlightTile,
+}
+
 type SharedResult = Option<
     Arc<(
         Result<IpcChannelResult, GdalProcessPoolError>,
@@ -313,7 +319,7 @@ pub struct GdalProcessPool {
     /// Reads in progress by tile, to deduplicate them. Used by the callers' tasks on any runtime
     /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
     /// held only briefly and never across an `.await`.
-    in_flight_tiles: Mutex<FastHashMap<u64, InFlightTile>>,
+    in_flight_tiles: Mutex<FastHashMap<u64, InFlightRead>>,
 }
 
 impl GdalProcessPool {
@@ -1106,8 +1112,8 @@ impl Drop for LeaderCleanupGuard {
 }
 
 /// Removes the entry only if it still belongs to `tx`, never a newer leader's entry for the same key.
-fn remove_in_flight(map: &mut FastHashMap<u64, InFlightTile>, tile_key: u64, tx: &InFlightTile) {
-    if map.get(&tile_key).is_some_and(|t| Arc::ptr_eq(t, tx)) {
+fn remove_in_flight(map: &mut FastHashMap<u64, InFlightRead>, tile_key: u64, tx: &InFlightTile) {
+    if map.get(&tile_key).is_some_and(|r| Arc::ptr_eq(&r.tx, tx)) {
         map.remove(&tile_key);
     }
 }
@@ -1248,14 +1254,25 @@ impl GdalPoolDispatcher {
                 .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
 
             // test if data is already read
-            if let Some(tx) = lock.get(&tile_key) {
+            let in_flight = lock.get(&tile_key);
+            if let Some(in_flight) = in_flight.filter(|r| same_read(&r.request, &request)) {
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
-                tx.subscribe()
+                in_flight.tx.subscribe()
             } else {
+                // a different request with the same hash reads on its own, unregistered
+                let registered = in_flight.is_none();
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
                 let (tx, rx) = tokio::sync::watch::channel(None);
                 let tx = Arc::new(tx);
-                lock.insert(tile_key, tx.clone());
+                if registered {
+                    lock.insert(
+                        tile_key,
+                        InFlightRead {
+                            request: request.clone(),
+                            tx: tx.clone(),
+                        },
+                    );
+                }
 
                 let pool_clone = self.pool.clone();
                 let request_clone = request.clone();
@@ -1333,6 +1350,11 @@ impl GdalPoolDispatcher {
     }
 }
 
+/// Whether two requests read the same data. The tracing id differs per request.
+fn same_read(a: &IpcChannelMessage, b: &IpcChannelMessage) -> bool {
+    a.0.dataset_params == b.0.dataset_params && a.0.request == b.0.request
+}
+
 impl GdalProcessPoolAccess for Arc<GdalProcessPool> {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool> {
         self
@@ -1377,6 +1399,25 @@ mod tests {
         let a = window([0, 0], [7, 7]);
         let b = window([50, 0], [57, 7]);
         assert_eq!(calculate_grid_distance(&a, &b), 50);
+    }
+
+    #[test]
+    fn same_read_ignores_the_tracing_id_but_not_what_the_hash_leaves_out() {
+        let w = window([0, 0], [255, 255]);
+        let a = make_request(42, 1, w).0.request;
+        let mut b = make_request(42, 1, w).0.request;
+        b.0.read_id = Some("another-read".to_string());
+        assert!(same_read(&a, &b));
+
+        // not part of `full_hash`, but changes the returned properties
+        b.0.dataset_params.properties_mapping = Some(vec![]);
+        let hash_of = |msg: &IpcChannelMessage| {
+            let mut hasher = rustc_hash::FxHasher::default();
+            msg.full_hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(hash_of(&a), hash_of(&b));
+        assert!(!same_read(&a, &b));
     }
 
     // --- WorkerAffinity::rank ---
@@ -1501,7 +1542,8 @@ mod tests {
     };
     use crate::source::gdal_worker_process::process_common::{
         GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
-        GdalReadWindow, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+        GdalReadKind, GdalReadWindow, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
+        IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
@@ -2036,6 +2078,7 @@ mod tests {
                     flip_y: false,
                 },
                 data_type: RasterDataType::U8,
+                kind: GdalReadKind::Raster,
             },
         });
         let req = Box::new(QueuedRequest {
