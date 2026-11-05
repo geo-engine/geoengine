@@ -15,7 +15,8 @@
 //!
 //! Tiles that miss the same unit share one read of it: the cache runs it once, stores its pieces
 //! once and hands all of them the same decoded unit, which they copy only their pixels from. The
-//! pool joins concurrent requests for the file headers that give the levels and block sizes.
+//! pool joins concurrent requests for the file headers that give the levels and block sizes, and
+//! reuses them for a short time.
 
 use super::level_read_advise;
 use crate::cache::new_raster_cache::{BlockKey, NewRasterCacheEnum, SupportedRasterDataType};
@@ -134,11 +135,9 @@ impl BlockIo {
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
         let file = file_id(params);
-        // shortcut: the header is read for every tile and file, one IPC round trip on a file
-        // the worker keeps open; cache it in the query context if benches show the cost
         let Some(info) = self
             .reader
-            .read_raster_info_or_no_data(params.clone())
+            .remembered_raster_info_or_no_data(&file, params.clone())
             .await?
         else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);

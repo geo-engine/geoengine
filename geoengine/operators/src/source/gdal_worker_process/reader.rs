@@ -1,6 +1,7 @@
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel};
 use num::FromPrimitive;
+use std::sync::Arc;
 use tracing::Instrument;
 
 use crate::source::gdal_worker_process::{
@@ -183,6 +184,24 @@ impl GdalPoolReader {
             }),
             None => Ok(None),
         }
+    }
+
+    /// Like [`Self::read_raster_info_or_no_data`], but reuses the header if `file`, which must
+    /// identify `dataset_params`, was read recently.
+    pub async fn remembered_raster_info_or_no_data(
+        &self,
+        file: &Arc<str>,
+        dataset_params: GdalDatasetParameters,
+    ) -> Result<Option<RasterInfo>, GdalProcessPoolError> {
+        if let Some(info) = self.dispatcher().remembered_raster_info(file) {
+            return Ok(Some(info));
+        }
+        let info = self.read_raster_info_or_no_data(dataset_params).await?;
+        if let Some(info) = &info {
+            self.dispatcher()
+                .remember_raster_info(file.clone(), info.clone());
+        }
+        Ok(info)
     }
 
     async fn read_header(

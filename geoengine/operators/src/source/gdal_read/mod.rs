@@ -514,6 +514,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn block_reads_reuse_the_header_until_caches_are_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff_with_overviews(dir.path());
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache, gdal_worker.clone());
+
+        let read = || {
+            let plan = TilePlan {
+                tile: TileInformation::new(
+                    [0, 0].into(),
+                    GridShape2D::new([32, 32]),
+                    GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
+                ),
+                time: TimeInterval::default(),
+                band: 0,
+                files: vec![params.clone()],
+                cache_hint: CacheHint::max_duration(),
+            };
+            let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
+                dataset_spatial_grid: file_grid,
+            });
+            assemble_tile::<u16>(plan, reader_mode, &gdal_worker, Some(&blocks))
+        };
+
+        read().await.unwrap();
+        read().await.unwrap();
+        assert_eq!(gpp.request_stats().headers, 1);
+
+        gpp.clear_caches().await.unwrap();
+        read().await.unwrap();
+        assert_eq!(gpp.request_stats().headers, 2);
+    }
+
+    #[tokio::test]
     async fn block_reads_equal_window_reads() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());

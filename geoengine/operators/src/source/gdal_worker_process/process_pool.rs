@@ -1,8 +1,10 @@
+use lru::LruCache;
 use snafu::Snafu;
 use std::collections::VecDeque;
 use std::hash::{BuildHasherDefault, Hasher};
+use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
@@ -15,7 +17,7 @@ use super::{
     GdalProcessPoolAccess,
     process_common::{
         GdalIpcPayload, GdalRequest, IpcChannelMessage, IpcChannelResult, IpcProcessError,
-        IpcProcessRasterResult, WorkerRequest, WorkerResponse,
+        IpcProcessRasterResult, RasterInfo, WorkerRequest, WorkerResponse,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
@@ -321,7 +323,44 @@ pub struct GdalProcessPool {
     /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
     /// held only briefly and never across an `.await`.
     in_flight_tiles: Mutex<FastHashMap<u64, InFlightRead>>,
+    raster_infos: RasterInfos,
     counters: PoolCounters,
+}
+
+/// How long a file's header is reused. It changes only if the file is replaced.
+const RASTER_INFO_TTL: Duration = Duration::from_secs(60);
+const RASTER_INFO_CAPACITY: NonZeroUsize = NonZeroUsize::new(4096).expect("not zero");
+
+/// Recently read headers by file, so that a tile does not queue behind the workers that decode for
+/// one on every read.
+struct RasterInfos(Mutex<LruCache<Arc<str>, (Instant, RasterInfo)>>);
+
+impl Default for RasterInfos {
+    fn default() -> Self {
+        Self(Mutex::new(LruCache::new(RASTER_INFO_CAPACITY)))
+    }
+}
+
+impl RasterInfos {
+    fn get(&self, file: &str) -> Option<RasterInfo> {
+        let mut infos = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let (read_at, info) = infos.get(file)?;
+        (read_at.elapsed() < RASTER_INFO_TTL).then(|| info.clone())
+    }
+
+    fn put(&self, file: Arc<str>, info: RasterInfo) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .put(file, (Instant::now(), info));
+    }
+
+    fn clear(&self) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
 }
 
 #[derive(Default)]
@@ -386,6 +425,7 @@ impl GdalProcessPool {
     /// `CLEAR_CACHES_TIMEOUT` bounds the entire operation, including broker submission and response.
     /// Queued clears may still run after a timeout, and concurrent queries may refill caches.
     pub async fn clear_caches(&self) -> Result<(), GdalProcessPoolError> {
+        self.raster_infos.clear();
         tokio::time::timeout(CLEAR_CACHES_TIMEOUT, async {
             let (tx, rx) = oneshot::channel();
             self.broker_tx
@@ -467,6 +507,7 @@ impl GdalProcessPool {
         Arc::new(Self {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            raster_infos: RasterInfos::default(),
             counters: PoolCounters::default(),
         })
     }
@@ -1276,6 +1317,15 @@ impl GdalPoolDispatcher {
         Ok(payload)
     }
 
+    /// The header of `file` if it was read recently, see [`RasterInfos`].
+    pub fn remembered_raster_info(&self, file: &str) -> Option<RasterInfo> {
+        self.pool.raster_infos.get(file)
+    }
+
+    pub fn remember_raster_info(&self, file: Arc<str>, info: RasterInfo) {
+        self.pool.raster_infos.put(file, info);
+    }
+
     /// Read a header (`GdalRequest::Header`) without pixel
     /// data. Uses the same leader/follower deduplication as [`Self::read_data`].
     ///
@@ -1641,6 +1691,7 @@ mod tests {
             GdalProcessPool {
                 broker_tx,
                 in_flight_tiles: Mutex::new(FastHashMap::default()),
+                raster_infos: RasterInfos::default(),
                 counters: PoolCounters::default(),
             },
             broker_rx,
@@ -2420,6 +2471,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            raster_infos: RasterInfos::default(),
             counters: PoolCounters::default(),
         });
         (pool, held_rx)
@@ -2525,6 +2577,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            raster_infos: RasterInfos::default(),
             counters: PoolCounters::default(),
         });
 
@@ -2577,6 +2630,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
+            raster_infos: RasterInfos::default(),
             counters: PoolCounters::default(),
         });
 
