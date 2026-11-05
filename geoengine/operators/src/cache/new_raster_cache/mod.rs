@@ -1,12 +1,14 @@
 use crate::cache::cache_tiles::CompressedRasterTile2D;
 use crate::cache::cache_tiles::CompressedRasterTileExt;
 use crate::cache::error::CacheError;
+use crate::cache::single_read::SingleRead;
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator,
     ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterQueryProcessor,
     RasterResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
+use crate::source::gdal_read::{UnitRead, UnitResult};
 use crate::util::{Result, safe_lock_mutex, safe_read_rwlock, safe_write_rwlock};
 use async_trait::async_trait;
 use futures::Stream;
@@ -49,6 +51,7 @@ impl TestDefault for NewRasterCacheEnum {
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(8_589_934_592)),
                 total_size: Arc::new(AtomicUsize::new(0)),
                 storing: Mutex::default(),
+                block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
         })
@@ -71,6 +74,7 @@ impl NewRasterCacheEnum {
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
                 storing: Mutex::default(),
+                block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
         })
@@ -83,6 +87,7 @@ impl NewRasterCacheEnum {
                 eviction_strategy: Mutex::new(LruEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
                 storing: Mutex::default(),
+                block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
         })
@@ -135,14 +140,22 @@ impl NewRasterCacheEnum {
             .await
     }
 
-    pub fn stats(&self) -> CacheStats {
+    /// The reads of block units that callers share: tiles that miss the same unit read it once.
+    pub(crate) fn block_reads(&self) -> &SingleRead<BlockKey, UnitRead> {
         match self {
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
-                cache.store.counters.snapshot()
+                &cache.store.block_reads
             }
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => {
-                cache.store.counters.snapshot()
+                &cache.store.block_reads
             }
+        }
+    }
+
+    pub fn stats(&self) -> CacheStats {
+        match self {
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => cache.store.stats(),
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => cache.store.stats(),
         }
     }
 
@@ -645,6 +658,8 @@ pub struct InMemoryCacheStore<SF, ES> {
     /// Keys whose value an insert is storing, so that concurrent inserts of the same key, e.g. of
     /// callers that got the same result, store it once. Never locked together with the others.
     storing: Mutex<HashSet<Arc<CacheKey>>>,
+    /// See [`NewRasterCacheEnum::block_reads`].
+    block_reads: SingleRead<BlockKey, UnitRead>,
     counters: CacheCounters,
 }
 
@@ -665,6 +680,8 @@ pub struct CacheStats {
     pub stored: u64,
     /// inserts of a key that another insert stored or is storing
     pub inserts_joined: u64,
+    /// block reads that waited for a read of the same unit another caller had started
+    pub reads_joined: u64,
 }
 
 impl CacheStats {
@@ -676,17 +693,20 @@ impl CacheStats {
             misses: self.misses - earlier.misses,
             stored: self.stored - earlier.stored,
             inserts_joined: self.inserts_joined - earlier.inserts_joined,
+            reads_joined: self.reads_joined - earlier.reads_joined,
         }
     }
 }
 
-impl CacheCounters {
-    fn snapshot(&self) -> CacheStats {
+impl<SF, ES> InMemoryCacheStore<SF, ES> {
+    fn stats(&self) -> CacheStats {
+        let counters = &self.counters;
         CacheStats {
-            hits: self.hits.load(Ordering::Relaxed),
-            misses: self.misses.load(Ordering::Relaxed),
-            stored: self.stored.load(Ordering::Relaxed),
-            inserts_joined: self.inserts_joined.load(Ordering::Relaxed),
+            hits: counters.hits.load(Ordering::Relaxed),
+            misses: counters.misses.load(Ordering::Relaxed),
+            stored: counters.stored.load(Ordering::Relaxed),
+            inserts_joined: counters.inserts_joined.load(Ordering::Relaxed),
+            reads_joined: self.block_reads.joined(),
         }
     }
 }
@@ -1287,6 +1307,17 @@ pub trait SupportedRasterDataType {
     fn map_tile_to_enum(tile: RasterTile2D<Self>) -> TypedRasterTile2D
     where
         Self: Sized;
+
+    fn map_unit_to_enum(unit: UnitResult<Self>) -> UnitRead
+    where
+        Self: Sized + Pixel;
+
+    /// # Errors
+    /// Returns an error if the unit has another pixel type; unreachable for units read under a
+    /// [`BlockKey`], whose data type is the pixel type.
+    fn map_enum_to_unit(unit: UnitRead) -> Result<UnitResult<Self>>
+    where
+        Self: Sized + Pixel;
 }
 
 macro_rules! supported_raster_data_type_impl {
@@ -1302,6 +1333,17 @@ macro_rules! supported_raster_data_type_impl {
 
                 fn map_tile_to_enum(tile: RasterTile2D<Self>) -> TypedRasterTile2D {
                     return TypedRasterTile2D::$variant(tile);
+                }
+
+                fn map_unit_to_enum(unit: UnitResult<Self>) -> UnitRead {
+                    UnitRead::$variant(unit)
+                }
+
+                fn map_enum_to_unit(unit: UnitRead) -> Result<UnitResult<Self>> {
+                    match unit {
+                        UnitRead::$variant(unit) => Ok(unit),
+                        _ => Err(CacheError::InvalidTypeForRetrieval.into()),
+                    }
                 }
             }
         )*
@@ -1503,6 +1545,7 @@ mod tests {
                 misses: 1,
                 stored: 1,
                 inserts_joined: 1,
+                reads_joined: 0,
             }
         );
     }

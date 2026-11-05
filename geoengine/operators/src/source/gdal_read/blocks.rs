@@ -13,10 +13,9 @@
 //! Larger units are cached in pieces of `PIECE_SIZE`, because a hit decodes a whole entry: a tile
 //! then decodes less than a whole unit per unit it touches.
 //!
-//! Each unit a tile misses is one worker request. Every tile asks for a unit with the same
-//! request, and the pool joins identical concurrent requests, so tiles that share a unit read and
-//! decode it once, without any locking in the cache. The same holds for the file headers that
-//! give the levels and block sizes.
+//! Tiles that miss the same unit share one read of it: the cache runs it once, stores its pieces
+//! once and hands all of them the same decoded unit, which they copy only their pixels from. The
+//! pool joins concurrent requests for the file headers that give the levels and block sizes.
 
 use super::level_read_advise;
 use crate::cache::new_raster_cache::{BlockKey, NewRasterCacheEnum, SupportedRasterDataType};
@@ -62,6 +61,7 @@ pub struct BlockIo {
 }
 
 /// The part of one level of a file that a read covers at native size.
+#[derive(Clone, Copy)]
 struct LevelWindow {
     /// the level is this many times coarser than the full resolution
     factor: usize,
@@ -76,9 +76,28 @@ struct LevelWindow {
 }
 
 /// A decoded block, bounded in the pixel space of its level.
-struct Block<T: Pixel> {
+pub struct Block<T: Pixel> {
     grid: GridOrEmpty<GridBoundingBox2D, T>,
     properties: RasterProperties,
+}
+
+/// The read of a unit: `None` if the file is missing and counts as no data.
+pub type UnitResult<T> = Result<Option<Arc<Block<T>>>, GdalProcessPoolError>;
+
+/// The read of a unit of any pixel type, so that the reads of all of them share one
+/// [`crate::cache::single_read::SingleRead`].
+#[derive(Clone)]
+pub enum UnitRead {
+    I8(UnitResult<i8>),
+    I16(UnitResult<i16>),
+    I32(UnitResult<i32>),
+    I64(UnitResult<i64>),
+    U8(UnitResult<u8>),
+    U16(UnitResult<u16>),
+    U32(UnitResult<u32>),
+    U64(UnitResult<u64>),
+    F32(UnitResult<f32>),
+    F64(UnitResult<f64>),
 }
 
 impl BlockIo {
@@ -148,16 +167,23 @@ impl BlockIo {
                 .map(|piece| self.piece::<T>(params, &file, &level_window, piece, cache_hint)),
         )
         .await?;
-        let Some(blocks) = blocks.into_iter().collect::<Option<Vec<_>>>() else {
+        let Some(pieces) = blocks.into_iter().collect::<Option<Vec<_>>>() else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
+        // pieces of a unit that was just read are that unit, which is composed only once
+        let mut blocks: Vec<Arc<Block<T>>> = Vec::with_capacity(pieces.len());
+        for piece in pieces {
+            if !blocks.iter().any(|block| Arc::ptr_eq(block, &piece)) {
+                blocks.push(piece);
+            }
+        }
 
         // the blocks are in the file's row order, south-up files are flipped afterwards
         // off the task that polls all tiles of the query, so that tiles compose in parallel
         let window = level_window.window;
         let (grid, properties) = crate::util::spawn_blocking(move || {
             let grid = compose(window, &blocks);
-            let properties = blocks.into_iter().next().map(|block| block.properties);
+            let properties = blocks.first().map(|block| block.properties.clone());
             let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
                 .set_grid_bounds(read_advise.read_window_bounds)
                 .expect("the level window has the size of the read");
@@ -174,8 +200,8 @@ impl BlockIo {
         })))
     }
 
-    /// One piece, from the cache or read with its unit, whose pieces are then all cached. `None`
-    /// if the file is missing and counts as no data.
+    /// One piece from the cache, or else the whole unit it is in. `None` if the file is missing
+    /// and counts as no data.
     async fn piece<T>(
         &self,
         params: &GdalDatasetParameters,
@@ -183,26 +209,63 @@ impl BlockIo {
         level_window: &LevelWindow,
         piece: [usize; 2],
         cache_hint: CacheHint,
-    ) -> Result<Option<Block<T>>, GdalProcessPoolError>
+    ) -> UnitResult<T>
     where
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
-        let key = block_key::<T>(file, level_window, piece);
-        let bounds = level_window.piece_bounds(piece);
-
-        match self.cache.get_block::<T>(key).await {
+        match self
+            .cache
+            .get_block::<T>(block_key::<T>(file, level_window, piece))
+            .await
+        {
             Ok(Some(tile)) => {
-                if let Ok(grid) = tile.grid_array.set_grid_bounds(bounds) {
-                    return Ok(Some(Block {
+                if let Ok(grid) = tile
+                    .grid_array
+                    .set_grid_bounds(level_window.piece_bounds(piece))
+                {
+                    return Ok(Some(Arc::new(Block {
                         grid,
                         properties: tile.properties,
-                    }));
+                    })));
                 }
             }
             Ok(None) => {}
             Err(err) => tracing::warn!("Failed to load a cached file block: {err}"),
         }
 
+        let this = self.clone();
+        let (params, file_id, level_window) = (params.clone(), file.clone(), *level_window);
+        let unit_key = block_key::<T>(file, &level_window, level_window.unit_of(piece));
+        let unit = self
+            .cache
+            .block_reads()
+            .read(unit_key, async move {
+                T::map_unit_to_enum(
+                    this.read_unit::<T>(params, file_id, level_window, piece, cache_hint)
+                        .await,
+                )
+            })
+            .await
+            .map_err(|source| IpcProcessError::IpcOther {
+                msg: source.to_string(),
+            })?;
+        T::map_enum_to_unit(unit).map_err(|source| IpcProcessError::IpcOther {
+            msg: source.to_string(),
+        })?
+    }
+
+    /// Reads the unit of `piece` and caches all its pieces.
+    async fn read_unit<T>(
+        self,
+        params: GdalDatasetParameters,
+        file: Arc<str>,
+        level_window: LevelWindow,
+        piece: [usize; 2],
+        cache_hint: CacheHint,
+    ) -> UnitResult<T>
+    where
+        T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
+    {
         let unit_bounds = level_window.unit_bounds(piece);
         let read_advise = GdalReadAdvise {
             gdal_read_widow: GdalReadWindow::new(unit_bounds.min_index(), unit_bounds.grid_shape()),
@@ -212,29 +275,30 @@ impl BlockIo {
         };
         let data = match self
             .reader
-            .read_level_data::<T>(params.clone(), level_window.factor, read_advise)
+            .read_level_data::<T>(params, level_window.factor, read_advise)
             .await?
         {
             GdalProcessReadResult::Grid(data) => *data,
             GdalProcessReadResult::FileNotFoundAsNoData => return Ok(None),
         };
-        let unit = [Block {
+        let unit = Arc::new(Block {
             grid: data.grid,
             properties: data.properties,
-        }];
+        });
 
+        let units = std::slice::from_ref(&unit);
         let inserts = level_window.pieces_in(unit_bounds).map(|other| {
             let tile = RasterTile2D::new_with_properties(
                 TimeInterval::default(),
                 GridIdx2D::new([0, 0]),
                 0,
                 GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
-                compose(level_window.piece_bounds(other), &unit).unbounded(),
-                unit[0].properties.clone(),
+                compose(level_window.piece_bounds(other), units).unbounded(),
+                unit.properties.clone(),
                 block_cache_hint(cache_hint),
             );
             self.cache
-                .insert_block(block_key::<T>(file, level_window, other), tile)
+                .insert_block(block_key::<T>(&file, &level_window, other), tile)
         });
         for inserted in join_all(inserts).await {
             if let Err(err) = inserted {
@@ -242,12 +306,7 @@ impl BlockIo {
             }
         }
 
-        let grid = compose(bounds, &unit);
-        let [unit] = unit;
-        Ok(Some(Block {
-            grid,
-            properties: unit.properties,
-        }))
+        Ok(Some(unit))
     }
 }
 
@@ -265,14 +324,16 @@ impl LevelWindow {
         self.clipped_cell(self.piece_size, [y, x])
     }
 
-    /// The pixels of the unit of a piece, clipped to the level.
-    fn unit_bounds(&self, [y, x]: [usize; 2]) -> GridBoundingBox2D {
+    /// The index of the unit of a piece.
+    fn unit_of(&self, [y, x]: [usize; 2]) -> [usize; 2] {
         let [piece_y, piece_x] = self.piece_size;
         let [unit_y, unit_x] = self.block_size;
-        self.clipped_cell(
-            self.block_size,
-            [y * piece_y / unit_y, x * piece_x / unit_x],
-        )
+        [y * piece_y / unit_y, x * piece_x / unit_x]
+    }
+
+    /// The pixels of the unit of a piece, clipped to the level.
+    fn unit_bounds(&self, piece: [usize; 2]) -> GridBoundingBox2D {
+        self.clipped_cell(self.block_size, self.unit_of(piece))
     }
 
     fn clipped_cell(&self, [cell_y, cell_x]: [usize; 2], [y, x]: [usize; 2]) -> GridBoundingBox2D {
@@ -291,7 +352,7 @@ impl LevelWindow {
 /// empty, also if its blocks have valid pixels elsewhere.
 fn compose<T: Pixel>(
     window: GridBoundingBox2D,
-    blocks: &[Block<T>],
+    blocks: &[Arc<Block<T>>],
 ) -> GridOrEmpty<GridBoundingBox2D, T> {
     let mut grid = GridOrEmpty::from(EmptyGrid::new(window));
     for block in blocks {
@@ -431,7 +492,7 @@ mod tests {
             ),
             properties: RasterProperties::default(),
         };
-        let blocks = [block];
+        let blocks = [Arc::new(block)];
 
         let with_valid_pixel = compose(GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(), &blocks);
         assert_eq!(with_valid_pixel.get_at_grid_index([0, 0]).unwrap(), Some(7));

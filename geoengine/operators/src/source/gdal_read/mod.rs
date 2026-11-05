@@ -5,6 +5,7 @@
 mod blocks;
 
 pub use blocks::BlockIo;
+pub use blocks::{UnitRead, UnitResult};
 
 use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::engine::{RasterOperator, SingleRasterSource, TypedRasterOperator};
@@ -464,6 +465,52 @@ mod tests {
         assert!(ensure_overview_level_exists(&data, 0, Some(1)).is_ok());
         assert!(ensure_overview_level_exists(&data, 8, Some(4)).is_err());
         assert!(ensure_overview_level_exists(&data, 3, Some(4)).is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tiles_that_share_a_unit_read_and_store_it_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff_with_overviews(dir.path());
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone());
+
+        // the 64 px file is one unit, and one piece, of the 16 px blocks grouped to 512 px
+        let tiles = (0..2)
+            .flat_map(|y| (0..2).map(move |x| [y, x]))
+            .map(|position| {
+                let plan = TilePlan {
+                    tile: TileInformation::new(
+                        position.into(),
+                        GridShape2D::new([32, 32]),
+                        GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
+                    ),
+                    time: TimeInterval::default(),
+                    band: 0,
+                    files: vec![params.clone()],
+                    cache_hint: CacheHint::max_duration(),
+                };
+                let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
+                    dataset_spatial_grid: file_grid,
+                });
+                let (gdal_worker, blocks) = (gdal_worker.clone(), blocks.clone());
+                tokio::spawn(async move {
+                    assemble_tile::<u16>(plan, reader_mode, &gdal_worker, Some(&blocks)).await
+                })
+            });
+        for tile in futures::future::join_all(tiles.collect::<Vec<_>>()).await {
+            tile.unwrap().unwrap();
+        }
+
+        let stats = cache.stats();
+        assert_eq!(stats.stored, 1);
+        assert_eq!(stats.inserts_joined, 0);
+        assert_eq!(
+            gpp.request_stats().reads + gpp.request_stats().reads_joined,
+            1
+        );
     }
 
     #[tokio::test]

@@ -419,7 +419,7 @@ impl Counts {
         let per = |count: u64| count as f64 / iterations as f64;
         println!(
             "{id} {label}: {:.1} GET, {:.1} HEAD, {:.1} MB, pool {:.1} reads +{:.1} joined, \
-             {:.1} headers +{:.1} joined, cache {:.1} hits, {:.1} misses, {:.1} stored +{:.1} joined",
+             {:.1} headers +{:.1} joined, cache {:.1} hits, {:.1} misses, {:.1} stored +{:.1} joined, {:.1} block reads joined",
             per(self.gets),
             per(self.requests - self.gets),
             per(self.bytes) / 1e6,
@@ -431,6 +431,7 @@ impl Counts {
             per(self.cache.misses),
             per(self.cache.stored),
             per(self.cache.inserts_joined),
+            per(self.cache.reads_joined),
         );
     }
 }
