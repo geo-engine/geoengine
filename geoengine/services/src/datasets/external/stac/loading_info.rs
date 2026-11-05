@@ -41,9 +41,6 @@ use tracing::debug;
 use typed_floats::tf64::NonNaN;
 use url::Url;
 
-/// Upper bound of STAC cell searches one loading info request runs in parallel.
-const MAX_CONCURRENT_CELL_SEARCHES: usize = 8;
-
 /// Multi-band raster metadata queried from a STAC provider.
 #[derive(Debug, Clone)]
 pub struct StacMultiBandMetaData {
@@ -57,6 +54,8 @@ pub struct StacMultiBandMetaData {
     cache_ttl_secs: Option<CacheTtlSeconds>,
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
+    /// Upper bound of STAC cell searches one loading info request runs in parallel.
+    max_concurrent_cell_searches: usize,
     grid: StacGrid,
 }
 
@@ -235,7 +234,7 @@ impl
                     move || async move { metadata.search_bbox(url, bbox, step).await },
                 )
             })
-            .buffer_unordered(MAX_CONCURRENT_CELL_SEARCHES)
+            .buffer_unordered(self.max_concurrent_cell_searches)
             .map_err(
                 |error| geoengine_operators::error::Error::QueryingProcessorFailed {
                     source: Box::new(error),
@@ -364,6 +363,7 @@ impl StacMultiBandMetaData {
             client: provider.client.clone(),
             cache_ttl_secs: provider.cache_ttl_secs,
             query_cache: provider.query_cache.clone(),
+            max_concurrent_cell_searches: provider.max_concurrent_cell_searches,
             grid: provider.grid,
         }
     }
@@ -974,6 +974,7 @@ mod tests {
             query_timeout_secs: 60,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         }
     }
 
@@ -1282,6 +1283,7 @@ mod tests {
                 )
                 .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+                max_concurrent_cell_searches: 8,
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
             };
@@ -1340,6 +1342,7 @@ mod tests {
             )
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+            max_concurrent_cell_searches: 8,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -1811,6 +1814,7 @@ mod tests {
             query_timeout_secs: 60,
             cache_ttl_secs: None,
             stac_grid: None,
+            max_concurrent_cell_searches: None,
         };
 
         admin_ctx
@@ -2056,6 +2060,7 @@ mod grid_request_tests {
                 query_timeout_secs: 5,
                 cache_ttl_secs: None,
                 stac_grid: Some(grid),
+                max_concurrent_cell_searches: None,
             },
             request_registry,
         )

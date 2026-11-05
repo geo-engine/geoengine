@@ -228,6 +228,7 @@ where
         }
 
         let gdal_worker = ctx.get_gdal_worker();
+        let read_ahead = ctx.gdal_read_ahead().multi_band_gdal_source;
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
         let spatial_tiles = tiling_strategy
@@ -261,7 +262,7 @@ where
                 )
                 .map_err(Error::from)
             })
-            .buffered(16) // TODO: make configurable
+            .buffered(read_ahead)
             .boxed();
 
         return Ok(stream);
