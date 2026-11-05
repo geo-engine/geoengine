@@ -14446,6 +14446,15 @@
           },
           "descriptor": {
             "$ref": "#/components/schemas/SpatialGridDescriptorState"
+          },
+          "maxOverviewLevel": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset.\nSources read only these and downsample further themselves. Unset: the levels are unknown\nand GDAL chooses, which may resample.",
+            "minimum": 0
           }
         }
       },

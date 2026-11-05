@@ -32,6 +32,7 @@ export function SpatialGridDescriptorFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'spatialGrid': SpatialGridDefinitionFromJSON(json['spatialGrid']),
         'descriptor': SpatialGridDescriptorStateFromJSON(json['descriptor']),
+        'maxOverviewLevel': json['maxOverviewLevel'] === undefined ? undefined : json['maxOverviewLevel'] === null ? null : json['maxOverviewLevel'],
     };
 }
 export function SpatialGridDescriptorToJSON(json) {
@@ -44,5 +45,6 @@ export function SpatialGridDescriptorToJSONTyped(value, ignoreDiscriminator = fa
     return {
         'spatialGrid': SpatialGridDefinitionToJSON(value['spatialGrid']),
         'descriptor': SpatialGridDescriptorStateToJSON(value['descriptor']),
+        'maxOverviewLevel': value['maxOverviewLevel'],
     };
 }

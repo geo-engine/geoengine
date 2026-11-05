@@ -4,7 +4,7 @@ use crate::engine::{
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::GdalDatasetParameters;
-use crate::source::gdal_read::tile_stream;
+use crate::source::gdal_read::{ensure_overview_level_exists, overview_source, tile_stream};
 use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
 use crate::{
     engine::{
@@ -20,7 +20,7 @@ use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
         BandSelection, CacheTtlSeconds, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeInterval, find_next_best_overview_level,
+        SpatialResolution, TimeInterval,
     },
     raster::{
         GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
@@ -143,6 +143,8 @@ where
     pub meta_data: MultiBandGdalMetaData,
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    /// the dataset declares `overview_level`, so it is read as is and never resampled
+    pub exact_level: bool,
     pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
@@ -206,6 +208,7 @@ where
                 GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: original_resolution_spatial_grid,
                     overview_level: self.overview_level,
+                    exact_level: self.exact_level,
                 })
             }
         };
@@ -330,6 +333,16 @@ impl RasterOperator for MultiBandGdalSource {
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
+        if let Some(overview_level) = self.params.overview_level {
+            ensure_overview_level_exists(
+                &self.params.data,
+                overview_level,
+                meta_data_result_descriptor
+                    .spatial_grid
+                    .max_overview_level(),
+            )?;
+        }
+
         let op_name = CanonicOperatorName::from(&self);
         let op = if self.params.overview_level.is_none() {
             InitializedGdalSourceOperator::initialize_original_resolution(
@@ -371,6 +384,8 @@ pub struct InitializedGdalSourceOperator {
     // the overview level to use. 0/1 means the highest resolution
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    /// the overview levels the dataset declares, see [`SpatialGridDescriptor::max_overview_level`]
+    pub max_overview_level: Option<u32>,
     pub default_cache_ttl: CacheTtlSeconds,
 }
 
@@ -388,6 +403,7 @@ impl InitializedGdalSourceOperator {
             name,
             path,
             data_name,
+            max_overview_level: result_descriptor.spatial_grid.max_overview_level(),
             produced_result_descriptor: result_descriptor,
             meta_data,
             tiling_specification,
@@ -408,6 +424,7 @@ impl InitializedGdalSourceOperator {
         overview_level: u32,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
+        let max_overview_level = result_descriptor.spatial_grid.max_overview_level();
         let source_resolution_spatial_grid = result_descriptor
             .spatial_grid_descriptor()
             .source_spatial_grid_definition()
@@ -436,6 +453,7 @@ impl InitializedGdalSourceOperator {
             tiling_specification,
             overview_level,
             original_resolution_spatial_grid: original_grid,
+            max_overview_level,
             default_cache_ttl,
         }
     }
@@ -456,6 +474,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    exact_level: self.max_overview_level.is_some(),
                     default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
@@ -468,6 +487,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    exact_level: self.max_overview_level.is_some(),
                     default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
@@ -480,6 +500,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    exact_level: self.max_overview_level.is_some(),
                     default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
@@ -502,6 +523,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    exact_level: self.max_overview_level.is_some(),
                     default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
@@ -514,6 +536,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    exact_level: self.max_overview_level.is_some(),
                     default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
@@ -531,6 +554,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    exact_level: self.max_overview_level.is_some(),
                     default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
@@ -543,6 +567,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     meta_data: self.meta_data.clone(),
                     overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+                    exact_level: self.max_overview_level.is_some(),
                     default_cache_ttl: self.default_cache_ttl,
                     _phantom_data: PhantomData,
                 }
@@ -589,19 +614,20 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             .spatial_grid
             .spatial_resolution();
 
-        // TODO: get available overviews levels from the dataset metadata (not available yet) and only load these.
-        //       Then, we might have to prepend a Resampling operator to match the target resolution.
-        //       For now, we just load the overview level regardless and let gdal handle the resamṕling.
-        let next_best_overview_level =
-            find_next_best_overview_level(native_resolution, target_resolution);
-
-        Ok(MultiBandGdalSource {
-            params: GdalSourceParameters {
-                data: self.data_name.clone(),
-                overview_level: Some(next_best_overview_level),
+        Ok(overview_source(
+            native_resolution,
+            target_resolution,
+            self.max_overview_level,
+            |overview_level| {
+                MultiBandGdalSource {
+                    params: GdalSourceParameters {
+                        data: self.data_name.clone(),
+                        overview_level: Some(overview_level),
+                    },
+                }
+                .typed()
             },
-        }
-        .typed())
+        ))
     }
 }
 
@@ -2093,6 +2119,7 @@ mod tests {
                 let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: mosaic_grid,
                     overview_level: overview_level as u32,
+                    exact_level: false,
                 });
 
                 // overview pixels that lie completely inside the mosaic, the tiling origin is at (0, 0)

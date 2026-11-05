@@ -210,6 +210,15 @@ pub enum Error {
         source: arrow::error::ArrowError,
     },
 
+    #[snafu(display(
+        "Dataset '{data}' has no overview level {overview_level}, it declares the levels 2 to {max_overview_level}"
+    ))]
+    OverviewLevelNotAvailable {
+        data: String,
+        overview_level: u32,
+        max_overview_level: u32,
+    },
+
     #[snafu(display("There is no data with id '{id:?}'"))]
     NoDataWithGivenId {
         id: DataId,

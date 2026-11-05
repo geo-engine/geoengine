@@ -13,6 +13,7 @@ use crate::{
     test_data,
     util::Result,
 };
+use gdal::raster::RasterBand;
 use gdal::{Dataset, DatasetOptions, DriverManager, errors::GdalError};
 use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_datatypes::{
@@ -436,7 +437,8 @@ pub fn raster_descriptor_from_dataset(
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             data_geo_transfrom,
             data_shape.bounding_box(),
-        ),
+        )
+        .with_max_overview_level(Some(max_overview_level(rasterband)?)),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO: derive better name?
             measurement_from_rasterband(dataset, band)?,
@@ -465,12 +467,34 @@ pub fn raster_descriptor_from_dataset_and_sref(
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             data_geo_transfrom,
             data_shape.bounding_box(),
-        ),
+        )
+        .with_max_overview_level(Some(max_overview_level(rasterband)?)),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO derive better name?
             measurement_from_rasterband(dataset, band)?,
         )])?,
     })
+}
+
+/// The largest power-of-two overview level `f` such that the band has all the overviews
+/// `2, 4, …, f`, each of size `ceil(size / level)`. 1 if it has none.
+pub fn max_overview_level(band: &RasterBand) -> Result<u32> {
+    let (size_x, size_y) = band.size();
+    let mut sizes = Vec::new();
+    for index in 0..usize::try_from(band.overview_count()?).unwrap_or(0) {
+        sizes.push(band.overview(index)?.size());
+    }
+
+    let mut max_level: u32 = 1;
+    while let Some(level) = max_level.checked_mul(2)
+        && sizes.contains(&(
+            size_x.div_ceil(level as usize),
+            size_y.div_ceil(level as usize),
+        ))
+    {
+        max_level = level;
+    }
+    Ok(max_level)
 }
 
 pub fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {

@@ -2,7 +2,14 @@
 //! output tile, `assemble_tile` reads them through the process pool and composes the tile,
 //! and `tile_stream` drives the plans of a query in order with bounded read-ahead.
 
+use crate::engine::{RasterOperator, SingleRasterSource, TypedRasterOperator};
 use crate::error::Error;
+use crate::processing::{
+    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
+};
+use crate::source::gdal_worker_process::process_common::{
+    GdalReadAdvise, GdalReadWindow, IpcProcessError,
+};
 use crate::source::gdal_worker_process::reader::GdalPoolReader;
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
@@ -12,10 +19,13 @@ use crate::util::Result;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use gdal::raster::GdalType;
-use geoengine_datatypes::primitives::{CacheHint, TimeInterval};
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::{
+    CacheHint, SpatialResolution, TimeInterval, find_next_best_overview_level,
+};
 use geoengine_datatypes::raster::{
-    BoundedGrid, ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridOrEmpty, Pixel, RasterTile2D,
-    TileInformation,
+    BoundedGrid, ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridIdx2D, GridOrEmpty,
+    GridShapeAccess, Pixel, RasterTile2D, TileInformation,
 };
 use num::FromPrimitive;
 use tracing::trace;
@@ -31,7 +41,9 @@ pub struct TilePlan {
     pub cache_hint: CacheHint,
 }
 
-/// Reads the files of `plan` and composes its tile.
+/// Reads the files of `plan` and composes its tile. Reads of a level the dataset declares read
+/// that level as it is, without resampling. Only overviews of datasets without declared levels
+/// are left to GDAL, which may resample.
 ///
 /// The highest z-index wins at each valid pixel. A file is read only where the files above it
 /// left pixels invalid, so files are read one after another. The properties come from the first
@@ -51,6 +63,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive>(
         GridOrEmpty::from(EmptyGrid::new(tile_bounds));
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
+    let level_factor = reader_mode.level_factor();
 
     for params in plan.files {
         let Some(read_advise) = reader_mode
@@ -75,7 +88,17 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive>(
             continue;
         }
 
-        let read = reader.read_tile_data::<T>(params, read_advise).await?;
+        let read = match level_factor {
+            Some(factor) if factor > 1 => {
+                let Some(level_advise) = level_read_advise(read_advise, factor) else {
+                    return Err(misaligned_read(&params, factor));
+                };
+                reader
+                    .read_level_data::<T>(params, factor, level_advise)
+                    .await?
+            }
+            _ => reader.read_tile_data::<T>(params, read_advise).await?,
+        };
         let file_data = match read {
             GdalProcessReadResult::Grid(grid_and_properties) => *grid_and_properties,
             GdalProcessReadResult::FileNotFoundAsNoData => continue,
@@ -99,6 +122,105 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive>(
         properties.unwrap_or_default(),
         plan.cache_hint,
     ))
+}
+
+/// Checks the overview level a processing graph asks for against the levels its dataset
+/// declares. Datasets without declared levels accept any level, GDAL then picks one.
+///
+/// # Errors
+/// Returns an error if the dataset declares its levels and `overview_level` is not one of them.
+pub(crate) fn ensure_overview_level_exists(
+    data: &NamedData,
+    overview_level: u32,
+    max_overview_level: Option<u32>,
+) -> Result<()> {
+    match max_overview_level {
+        Some(max_overview_level)
+            if overview_level > 1
+                && (!overview_level.is_power_of_two() || overview_level > max_overview_level) =>
+        {
+            Err(Error::OverviewLevelNotAvailable {
+                data: data.to_string(),
+                overview_level,
+                max_overview_level,
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The source for `target_resolution`: `source(level)` reads the coarsest power-of-two overview
+/// level not coarser than the target. If the dataset declares fewer levels, the source reads its
+/// coarsest one and a `Downsampling` produces the resolution of the missing level, so GDAL never
+/// resamples.
+pub(crate) fn overview_source(
+    native_resolution: SpatialResolution,
+    target_resolution: SpatialResolution,
+    max_overview_level: Option<u32>,
+    source: impl FnOnce(u32) -> TypedRasterOperator,
+) -> TypedRasterOperator {
+    let wanted = find_next_best_overview_level(native_resolution, target_resolution);
+    let available = match max_overview_level {
+        // the largest declared power of two; 0 reads the full resolution
+        Some(max) if wanted > 1 => match wanted.min(1 << max.max(1).ilog2()) {
+            1 => 0,
+            level => level,
+        },
+        _ => wanted,
+    };
+    let source = source(available);
+    if available >= wanted {
+        return source;
+    }
+
+    let resolution = SpatialResolution::with_native_resolution_and_gdal_overview_level(
+        native_resolution,
+        wanted,
+    )
+    .unwrap_or(target_resolution);
+    Downsampling {
+        params: DownsamplingParams {
+            sampling_method: DownsamplingMethod::NearestNeighbor,
+            output_resolution: DownsamplingResolution::Resolution(resolution),
+            output_origin_reference: None,
+        },
+        sources: SingleRasterSource { raster: source },
+    }
+    .typed()
+}
+
+/// `read_advise` in the pixel space of the level `factor` times coarser than the full
+/// resolution, where its window has the size of its output. `None` if it does not start at a
+/// pixel of the level.
+pub(crate) fn level_read_advise(
+    read_advise: GdalReadAdvise,
+    factor: usize,
+) -> Option<GdalReadAdvise> {
+    let (start_x, start_y) = read_advise.gdal_read_widow.gdal_window_start();
+    let (start_x, start_y) = (
+        usize::try_from(start_x).ok()?,
+        usize::try_from(start_y).ok()?,
+    );
+    if start_x % factor != 0 || start_y % factor != 0 {
+        return None;
+    }
+    Some(GdalReadAdvise {
+        gdal_read_widow: GdalReadWindow::new(
+            GridIdx2D::new([(start_y / factor) as isize, (start_x / factor) as isize]),
+            read_advise.read_window_bounds.grid_shape(),
+        ),
+        ..read_advise
+    })
+}
+
+fn misaligned_read(params: &GdalDatasetParameters, factor: usize) -> GdalProcessPoolError {
+    IpcProcessError::IpcOther {
+        msg: format!(
+            "a read of {} does not start at a pixel of its level {factor}",
+            params.file_path.display()
+        ),
+    }
+    .into()
 }
 
 /// Assembles the tiles of `plans` in their order, with up to `read_ahead` tiles in flight.
@@ -131,10 +253,11 @@ mod tests {
     use super::*;
     use crate::source::gdal_worker_process::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
-        GdalProcessPoolAccess, ReaderState, WorkerConfig,
+        GdalProcessPoolAccess, OverviewReaderState, ReaderState, WorkerConfig,
     };
     use geoengine_datatypes::raster::{
-        GeoTransform, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
+        GeoTransform, GridShape2D, RasterPropertiesEntry, RasterPropertiesEntryType,
+        RasterPropertiesKey,
     };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::NonZeroFiniteF64;
@@ -235,5 +358,152 @@ mod tests {
             }),
             Some(&RasterPropertiesEntry::String("Area".to_string()))
         );
+    }
+
+    /// A 64x64 u16 `GeoTIFF` in 16x16 blocks with overviews 2 and 4, every pixel distinct.
+    fn tiled_tiff_with_overviews(dir: &std::path::Path) -> GdalDatasetParameters {
+        let file_path = dir.join("blocks.tif");
+        let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+        let options: gdal::cpl::CslStringList = ["TILED=YES", "BLOCKXSIZE=16", "BLOCKYSIZE=16"]
+            .into_iter()
+            .collect();
+        let mut dataset = driver
+            .create_with_band_type_with_options::<u16, _>(&file_path, 64, 64, 1, &options)
+            .unwrap();
+        dataset
+            .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap())
+            .unwrap();
+        dataset
+            .set_geo_transform(&[0., 1., 0., 64., 0., -1.])
+            .unwrap();
+        let mut buffer =
+            gdal::raster::Buffer::new((64, 64), (0..64 * 64).map(|v| v as u16).collect());
+        dataset
+            .rasterband(1)
+            .unwrap()
+            .write((0, 0), (64, 64), &mut buffer)
+            .unwrap();
+        dataset.build_overviews("NEAREST", &[2, 4], &[]).unwrap();
+        dataset.close().unwrap();
+
+        GdalDatasetParameters {
+            file_path,
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (0., 64.).into(),
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
+            },
+            width: 64,
+            height: 64,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        }
+    }
+
+    #[test]
+    fn it_reads_only_declared_overviews_and_downsamples_the_rest() {
+        let native = SpatialResolution::new_unchecked(10., 10.);
+        let target = SpatialResolution::new_unchecked(80., 80.);
+        let source = |level: u32| {
+            crate::source::GdalSource {
+                params: crate::source::GdalSourceParameters::new(NamedData::with_system_name(
+                    "data",
+                ))
+                .with_overview_level(Some(level)),
+            }
+            .typed()
+        };
+        let json = |operator: &TypedRasterOperator| serde_json::to_value(operator).unwrap();
+
+        assert_eq!(
+            json(&overview_source(native, target, None, source)),
+            json(&source(8)),
+            "unknown levels: as before"
+        );
+        assert_eq!(
+            json(&overview_source(native, target, Some(16), source)),
+            json(&source(8))
+        );
+
+        let downsampled = json(&overview_source(native, target, Some(4), source));
+        assert_eq!(downsampled["type"], "Downsampling");
+        assert_eq!(downsampled["params"]["outputResolution"]["x"], 80.);
+        assert_eq!(downsampled["sources"]["raster"], json(&source(4)));
+
+        let full = json(&overview_source(native, target, Some(1), source));
+        assert_eq!(full["sources"]["raster"], json(&source(0)));
+    }
+
+    #[test]
+    fn it_rejects_undeclared_overview_levels() {
+        let data = NamedData::with_system_name("data");
+        assert!(ensure_overview_level_exists(&data, 8, None).is_ok());
+        assert!(ensure_overview_level_exists(&data, 4, Some(4)).is_ok());
+        assert!(ensure_overview_level_exists(&data, 0, Some(1)).is_ok());
+        assert!(ensure_overview_level_exists(&data, 8, Some(4)).is_err());
+        assert!(ensure_overview_level_exists(&data, 3, Some(4)).is_err());
+    }
+
+    #[tokio::test]
+    async fn level_reads_equal_gdal_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff_with_overviews(dir.path());
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gdal_worker = gpp.get_gdal_worker();
+
+        for (overview_level, tile_size) in [(0_u32, 8_usize), (0, 12), (2, 8), (2, 12), (4, 12)] {
+            let reader_mode = |exact_level| {
+                if overview_level == 0 {
+                    GdalReaderMode::OriginalResolution(ReaderState {
+                        dataset_spatial_grid: file_grid,
+                    })
+                } else {
+                    GdalReaderMode::OverviewLevel(OverviewReaderState {
+                        original_dataset_grid: file_grid,
+                        overview_level,
+                        exact_level,
+                    })
+                }
+            };
+            let pixel_size = f64::from(overview_level.max(1));
+            let tiles_per_axis = (64 / overview_level.max(1) as usize).div_ceil(tile_size);
+
+            for tile_y in 0..tiles_per_axis {
+                for tile_x in 0..tiles_per_axis {
+                    let plan = TilePlan {
+                        tile: TileInformation::new(
+                            [tile_y as isize, tile_x as isize].into(),
+                            GridShape2D::new([tile_size, tile_size]),
+                            GeoTransform::new_unchecked((0., 64.).into(), pixel_size, -pixel_size),
+                        ),
+                        time: TimeInterval::default(),
+                        band: 0,
+                        files: vec![params.clone()],
+                        cache_hint: CacheHint::max_duration(),
+                    };
+
+                    // GDAL picks the overview itself; the sizes divide, so it reads the same pixels
+                    let from_gdal =
+                        assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker)
+                            .await
+                            .unwrap();
+                    let from_level = assemble_tile::<u16>(plan, reader_mode(true), &gdal_worker)
+                        .await
+                        .unwrap();
+
+                    assert_eq!(
+                        from_level, from_gdal,
+                        "overview {overview_level}, tile size {tile_size}, tile [{tile_y}, {tile_x}]"
+                    );
+                }
+            }
+        }
     }
 }

@@ -146,6 +146,13 @@ impl RasterInfo {
             .position(|level| (level.size_x, level.size_y) == size)
             .map(|index| index + 1)
     }
+
+    /// The first of the power-of-two overview levels `2..=max_overview_level` the band lacks.
+    pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<u32> {
+        std::iter::successors(Some(2_u32), |level| level.checked_mul(2))
+            .take_while(|level| *level <= max_overview_level)
+            .find(|level| self.level_of_factor(*level as usize).is_none())
+    }
 }
 
 /// The size and the natural block size of one level of a band, in pixels.

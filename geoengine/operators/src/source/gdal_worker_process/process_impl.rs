@@ -2112,6 +2112,9 @@ mod tests {
             (16, 16)
         );
 
+        assert_eq!(layout.missing_overview_level(4), None);
+        assert_eq!(layout.missing_overview_level(8), Some(8));
+
         let window = GridBoundingBox2D::new([0, 0], [7, 7]).unwrap();
         let read_advise = GdalReadAdvise {
             gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
