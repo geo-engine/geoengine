@@ -211,6 +211,7 @@ impl MockQueryContext {
     pub(super) fn new(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
+        thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
@@ -219,7 +220,7 @@ impl MockQueryContext {
             chunk_byte_size,
             tiling_specification,
             default_cache_ttl,
-            thread_pool: create_rayon_thread_pool(0),
+            thread_pool,
             cache: None,
             quota_checker: None,
             quota_tracking: None,
