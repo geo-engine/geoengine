@@ -24,6 +24,8 @@ pub enum CacheError {
         source: lz4_flex::block::DecompressError,
     },
     BlockingElementConversion,
+    #[snafu(display("A shared read panicked"))]
+    SharedReadFailed,
     #[snafu(display("Could not run compression task"))]
     CouldNotRunCompressionTask {
         source: tokio::task::JoinError,
