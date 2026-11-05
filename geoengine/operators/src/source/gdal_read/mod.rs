@@ -270,6 +270,7 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess, OverviewReaderState, ReaderState, WorkerConfig,
     };
+    use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{
         GeoTransform, GridShape2D, RasterPropertiesEntry, RasterPropertiesEntryType,
         RasterPropertiesKey,
@@ -475,7 +476,7 @@ mod tests {
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
-        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone());
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
 
         // the 64 px file is one unit, and one piece, of the 16 px blocks grouped to 512 px
         let tiles = (0..2)
@@ -521,7 +522,7 @@ mod tests {
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
-        let blocks = BlockIo::new(cache, gdal_worker.clone());
+        let blocks = BlockIo::new(cache, gdal_worker.clone(), CacheTtlSeconds::new(60));
 
         let read = || {
             let plan = TilePlan {
@@ -558,7 +559,7 @@ mod tests {
         let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
-        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone());
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
 
         for (overview_level, tile_size) in [(0_u32, 8_usize), (0, 12), (2, 8), (2, 12), (4, 12)] {
             let reader_mode = |exact_level| {

@@ -292,8 +292,10 @@ volumes = { test_data = "test_data/" }
 
 [cache]
 enabled = false
-# Default cache lifetime in seconds for values without an explicit TTL (0 disables caching).
-default_ttl_seconds = 0
+# Default cache lifetime in seconds for values without an explicit TTL. With the new raster cache it
+# must be at least 60: file blocks and headers then live at least this long, also for datasets whose
+# TTL is shorter or 0 (which logs a warning), so that the tiles of a view share them.
+default_ttl_seconds = 60
 # storage limit for the cache
 size_in_mb = 1_000 # 1 GB
 # storage limit for collecting query results before insertion into the cache in

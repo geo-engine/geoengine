@@ -770,7 +770,18 @@ impl Cache {
         if self.default_ttl_seconds > MAX_CACHE_TTL_SECONDS {
             return Err(crate::error::Error::InvalidConfig {
                 reason: format!(
-                    "default_ttl_seconds must be between 0 and {MAX_CACHE_TTL_SECONDS}, got {}",
+                    "default_ttl_seconds must be at most {MAX_CACHE_TTL_SECONDS}, got {}",
+                    self.default_ttl_seconds
+                ),
+            });
+        }
+        if self.enabled
+            && self.enable_new_raster_cache
+            && self.default_ttl_seconds < MIN_BLOCK_CACHE_TTL_SECONDS
+        {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "default_ttl_seconds must be at least {MIN_BLOCK_CACHE_TTL_SECONDS} with the new raster cache, got {}",
                     self.default_ttl_seconds
                 ),
             });
@@ -796,10 +807,14 @@ impl TestDefault for Cache {
             enable_new_raster_cache: false,
             raster_cache_size_ratio: 0.5,
             raster_levels: RasterCacheLevels::Outputs,
-            default_ttl_seconds: 0,
+            default_ttl_seconds: MIN_BLOCK_CACHE_TTL_SECONDS,
         }
     }
 }
+
+/// The new raster cache keeps file blocks for at least the default TTL, so that the tiles of a view
+/// share them. Shorter than this, they would be read again within a view.
+const MIN_BLOCK_CACHE_TTL_SECONDS: u32 = 60;
 
 impl ConfigElement for Cache {
     const KEY: &'static str = "cache";
@@ -979,5 +994,32 @@ mod tests {
         let config: Web = default_element();
         assert_eq!(config.workers, 0);
         assert_eq!(config.max_blocking_threads_per_worker, 0);
+    }
+
+    #[test]
+    fn it_requires_a_minimum_default_cache_ttl_only_with_the_new_raster_cache() {
+        let cache = |enabled, enable_new_raster_cache, default_ttl_seconds| Cache {
+            enabled,
+            enable_new_raster_cache,
+            default_ttl_seconds,
+            ..Cache::test_default()
+        };
+        assert!(
+            cache(true, true, MIN_BLOCK_CACHE_TTL_SECONDS)
+                .validate()
+                .is_ok()
+        );
+        assert!(
+            cache(true, true, MIN_BLOCK_CACHE_TTL_SECONDS - 1)
+                .validate()
+                .is_err()
+        );
+        assert!(cache(true, false, 0).validate().is_ok());
+        assert!(cache(false, true, 0).validate().is_ok());
+        assert!(
+            cache(false, false, MAX_CACHE_TTL_SECONDS + 1)
+                .validate()
+                .is_err()
+        );
     }
 }

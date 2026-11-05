@@ -9,6 +9,7 @@ use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
 
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
@@ -327,13 +328,11 @@ pub struct GdalProcessPool {
     counters: PoolCounters,
 }
 
-/// How long a file's header is reused. It changes only if the file is replaced.
-const RASTER_INFO_TTL: Duration = Duration::from_secs(60);
 const RASTER_INFO_CAPACITY: NonZeroUsize = NonZeroUsize::new(4096).expect("not zero");
 
 /// Recently read headers by file, so that a tile does not queue behind the workers that decode for
 /// one on every read.
-struct RasterInfos(Mutex<LruCache<Arc<str>, (Instant, RasterInfo)>>);
+struct RasterInfos(Mutex<LruCache<Arc<str>, (CacheHint, RasterInfo)>>);
 
 impl Default for RasterInfos {
     fn default() -> Self {
@@ -344,15 +343,15 @@ impl Default for RasterInfos {
 impl RasterInfos {
     fn get(&self, file: &str) -> Option<RasterInfo> {
         let mut infos = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        let (read_at, info) = infos.get(file)?;
-        (read_at.elapsed() < RASTER_INFO_TTL).then(|| info.clone())
+        let (cache_hint, info) = infos.get(file)?;
+        cache_hint.may_cache().then(|| info.clone())
     }
 
-    fn put(&self, file: Arc<str>, info: RasterInfo) {
+    fn put(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) {
         self.0
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .put(file, (Instant::now(), info));
+            .put(file, (cache_hint, info));
     }
 
     fn clear(&self) {
@@ -1322,8 +1321,8 @@ impl GdalPoolDispatcher {
         self.pool.raster_infos.get(file)
     }
 
-    pub fn remember_raster_info(&self, file: Arc<str>, info: RasterInfo) {
-        self.pool.raster_infos.put(file, info);
+    pub fn remember_raster_info(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) {
+        self.pool.raster_infos.put(file, info, cache_hint);
     }
 
     /// Read a header (`GdalRequest::Header`) without pixel

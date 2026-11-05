@@ -1,4 +1,5 @@
 use gdal::raster::GdalType;
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel};
 use num::FromPrimitive;
 use std::sync::Arc;
@@ -186,20 +187,23 @@ impl GdalPoolReader {
         }
     }
 
-    /// Like [`Self::read_raster_info_or_no_data`], but reuses the header if `file`, which must
-    /// identify `dataset_params`, was read recently.
-    pub async fn remembered_raster_info_or_no_data(
+    /// The header of `file` if [`Self::read_and_remember_raster_info`] read it and it is valid.
+    pub fn remembered_raster_info(&self, file: &str) -> Option<RasterInfo> {
+        self.dispatcher().remembered_raster_info(file)
+    }
+
+    /// Like [`Self::read_raster_info_or_no_data`], and remembers the header of `file`, which must
+    /// identify `dataset_params`, until `cache_hint` expires.
+    pub async fn read_and_remember_raster_info(
         &self,
         file: &Arc<str>,
         dataset_params: GdalDatasetParameters,
+        cache_hint: CacheHint,
     ) -> Result<Option<RasterInfo>, GdalProcessPoolError> {
-        if let Some(info) = self.dispatcher().remembered_raster_info(file) {
-            return Ok(Some(info));
-        }
         let info = self.read_raster_info_or_no_data(dataset_params).await?;
         if let Some(info) = &info {
             self.dispatcher()
-                .remember_raster_info(file.clone(), info.clone());
+                .remember_raster_info(file.clone(), info.clone(), cache_hint);
         }
         Ok(info)
     }

@@ -59,7 +59,7 @@ use futures::StreamExt;
 use gdal::{DriverManager, raster::Buffer, raster::RasterCreationOptions, spatial_ref::SpatialRef};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
-    primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+    primitives::{BandSelection, CacheTtlSeconds, RasterQueryRectangle, TimeInterval},
     raster::{
         GridBoundingBox2D, GridBoundingBoxExt, GridBounds, GridOrEmpty, GridShape2D, Pixel,
         RasterTile2D, TilingSpecification,
@@ -466,6 +466,8 @@ async fn run(
     let new_query_ctx = || {
         let mut query_ctx = exec_ctx.mock_query_context(ChunkByteSize::test_default());
         query_ctx.new_raster_cache.clone_from(&cache);
+        // longer than a run, so that warm runs stay warm
+        query_ctx.default_cache_ttl = CacheTtlSeconds::new(3600);
         query_ctx
     };
 

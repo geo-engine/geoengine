@@ -16,7 +16,11 @@
 //! Tiles that miss the same unit share one read of it: the cache runs it once, stores its pieces
 //! once and hands all of them the same decoded unit, which they copy only their pixels from. The
 //! pool joins concurrent requests for the file headers that give the levels and block sizes, and
-//! reuses them for a short time.
+//! reuses them.
+//!
+//! Blocks and headers live as long as the dataset's cache hint says, and at least for the default
+//! cache TTL, with a warning if that is longer. A dataset with a TTL of 0 still has its tiles
+//! computed anew, but they share the blocks and headers of its files.
 
 use super::level_read_advise;
 use crate::cache::new_raster_cache::{BlockKey, NewRasterCacheEnum, SupportedRasterDataType};
@@ -31,7 +35,7 @@ use crate::source::gdal_worker_process::{
 };
 use futures::future::{join_all, try_join_all};
 use gdal::raster::GdalType;
-use geoengine_datatypes::primitives::{CacheHint, TimeInterval};
+use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIdx2D,
     GridOrEmpty, GridShapeAccess, Pixel, RasterProperties, RasterTile2D,
@@ -50,15 +54,13 @@ const MIN_UNIT_SIZE: usize = 512;
 const PIECE_SIZE: usize = 512;
 /// The side of the virtual units of levels with blocks outside the range above.
 const VIRTUAL_UNIT_SIZE: usize = 512;
-/// Blocks of data that must not be cached still live this long, so that the tiles of a query
-/// share them. shortcut: a constant, make it a setting if a provider needs fresher data
-const MIN_BLOCK_TTL_SECONDS: u32 = 3600;
 
 /// Reads blocks through the cache of a query context.
 #[derive(Clone)]
 pub struct BlockIo {
     cache: Arc<NewRasterCacheEnum>,
     reader: GdalPoolReader,
+    min_ttl: CacheTtlSeconds,
 }
 
 /// The part of one level of a file that a read covers at native size.
@@ -102,17 +104,23 @@ pub enum UnitRead {
 }
 
 impl BlockIo {
-    pub fn new(cache: Arc<NewRasterCacheEnum>, gdal_worker: GdalPoolDispatcher) -> Self {
+    /// `min_ttl` is the least time blocks and headers live.
+    pub fn new(
+        cache: Arc<NewRasterCacheEnum>,
+        gdal_worker: GdalPoolDispatcher,
+        min_ttl: CacheTtlSeconds,
+    ) -> Self {
         Self {
             cache,
             reader: GdalPoolReader::from(gdal_worker),
+            min_ttl,
         }
     }
 
     /// Block reads need the raster cache; without it, sources read windows.
     pub fn from_query_context(ctx: &dyn QueryContext) -> Option<Self> {
         ctx.new_raster_cache()
-            .map(|cache| Self::new(cache, ctx.get_gdal_worker()))
+            .map(|cache| Self::new(cache, ctx.get_gdal_worker(), ctx.default_cache_ttl()))
     }
 
     /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
@@ -135,11 +143,29 @@ impl BlockIo {
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
         let file = file_id(params);
-        let Some(info) = self
-            .reader
-            .remembered_raster_info_or_no_data(&file, params.clone())
-            .await?
-        else {
+        let info = match self.reader.remembered_raster_info(&file) {
+            Some(info) => Some(info),
+            None => {
+                // here and not per block: this runs once per file for as long as the header lives
+                let ttl = cache_hint.total_ttl_seconds();
+                if ttl < self.min_ttl {
+                    tracing::warn!(
+                        "{} has a cache TTL of {} s, its blocks live for the minimum of {} s",
+                        params.file_path.display(),
+                        ttl.seconds(),
+                        self.min_ttl.seconds(),
+                    );
+                }
+                self.reader
+                    .read_and_remember_raster_info(
+                        &file,
+                        params.clone(),
+                        block_cache_hint(cache_hint, self.min_ttl),
+                    )
+                    .await?
+            }
+        };
+        let Some(info) = info else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
         let Some(level) = info.level_of_factor(factor) else {
@@ -294,7 +320,7 @@ impl BlockIo {
                 GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
                 compose(level_window.piece_bounds(other), units).unbounded(),
                 unit.properties.clone(),
-                block_cache_hint(cache_hint),
+                block_cache_hint(cache_hint, self.min_ttl),
             );
             self.cache
                 .insert_block(block_key::<T>(&file, &level_window, other), tile)
@@ -382,9 +408,9 @@ fn block_key<T: Pixel>(file: &Arc<str>, level_window: &LevelWindow, block: [usiz
     }
 }
 
-fn block_cache_hint(cache_hint: CacheHint) -> CacheHint {
-    if cache_hint.is_expired() {
-        CacheHint::seconds(MIN_BLOCK_TTL_SECONDS)
+fn block_cache_hint(cache_hint: CacheHint, min_ttl: CacheTtlSeconds) -> CacheHint {
+    if cache_hint.expires().seconds_to_expiration() < min_ttl.seconds() {
+        CacheHint::seconds(min_ttl.seconds())
     } else {
         cache_hint
     }
@@ -474,6 +500,16 @@ mod tests {
             block_size_x: block,
             block_size_y: block,
         }
+    }
+
+    #[test]
+    fn it_keeps_blocks_as_long_as_the_dataset_says_and_at_least_the_minimum() {
+        let min_ttl = CacheTtlSeconds::new(60);
+        let seconds = |hint: CacheHint| hint.expires().seconds_to_expiration();
+
+        assert!(seconds(block_cache_hint(CacheHint::no_cache(), min_ttl)) >= 59);
+        assert!(seconds(block_cache_hint(CacheHint::seconds(10), min_ttl)) >= 59);
+        assert!(seconds(block_cache_hint(CacheHint::seconds(1000), min_ttl)) >= 999);
     }
 
     #[test]
