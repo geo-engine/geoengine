@@ -133,6 +133,7 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     debug_assert_eq!(query_rect.attributes().count(), 1);
 
     // the tile stream will allways produce tiles aligned to the tiling origin
+    // with TRACE spans (debug builds only), the stream's spans keep `query_plan` open until it ends
     let tile_stream = processor
         .query_into_owned_boxed_stream(query_rect.clone(), Box::new(query_ctx))
         .instrument(tracing::debug_span!("query_plan"))
