@@ -22,6 +22,7 @@
 //! - `WMS_LOAD_CORES`: comma separated core counts, default `8,16,32`. Use it rather than a criterion
 //!   filter, which still starts a server per core count.
 //! - `WMS_LOAD_COLD=1`: clear the server caches (`POST /cache/clear`) before each case.
+//! - `WMS_LOAD_LOG_SPEC`: the log spec of the server, default `warn`.
 
 use criterion::{
     BenchmarkId, Criterion, SamplingMode, Throughput, criterion_group, criterion_main,
@@ -74,7 +75,10 @@ impl Server {
             .env("GEOENGINE__POSTGRES__SCHEMA", "wms_load")
             .env("GEOENGINE__POSTGRES__CLEAR_DATABASE_ON_START", "true")
             .env("GEOENGINE__WEB__BIND_ADDRESS", ADDRESS)
-            .env("GEOENGINE__LOGGING__LOG_SPEC", "warn")
+            .env(
+                "GEOENGINE__LOGGING__LOG_SPEC",
+                std::env::var("WMS_LOAD_LOG_SPEC").unwrap_or_else(|_| "warn".to_owned()),
+            )
             .stdout(Stdio::null())
             .stderr(File::create(&log).unwrap())
             .spawn()
