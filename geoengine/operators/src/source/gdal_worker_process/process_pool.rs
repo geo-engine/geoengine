@@ -42,34 +42,11 @@ const INITIAL_SPAWN_DELAY_MS: u64 = 15;
 const THROTTLING_THRESHOLD_MS: u64 = 2;
 const THROTTLING_THRESHOLD_DURATION: Duration = Duration::from_millis(THROTTLING_THRESHOLD_MS);
 
-/// Cache Time-To-Live (TTL) threshold for affinity routing data tracking.
-/// Set to 30 minutes (1800s) to prioritize heavy S3 / cloud storage network connection caches.
-const CACHE_TTL_SECS: f64 = 1800.0;
-
-/// Baseline numeric floor used when initiating the maximum-score matrix search.
-const SCORE_INITIAL_FLOOR: f64 = -1.0;
-
-/// Base affinity score bonus awarded when a worker already has the requested dataset open.
-const SCORE_DATASET_MATCH: f64 = 10000.0;
-
-/// Additional score bonus awarded when both the dataset AND the specific raster band match.
-const SCORE_BAND_MATCH: f64 = 1000.0;
-
-/// Additional score bonus when the exact spatial window requested matches the worker's last task.
-const SCORE_EXACT_WINDOW_MATCH: f64 = 100.0;
-
-/// Maximum base bonus for nearby spatial windows to reward spatial locality.
-const SCORE_NEARBY_WINDOW_MAX: f64 = 50.0;
-
-/// Default baseline score given to completely fresh workers.
-const SCORE_FRESH_WORKER_DEFAULT: f64 = 0.5;
-
-/// High-affinity immediate dispatch cutoff threshold. If a candidate worker's affinity score
-/// matches or exceeds this, we short-circuit the matrix evaluation instantly.
-const IMMEDIATE_DISPATCH_THRESHOLD: f64 = SCORE_DATASET_MATCH + SCORE_BAND_MATCH;
-
 /// Max lookahead horizontal threshold for sweeps over unique datasets.
 const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
+
+/// Interval for logging the broker statistics.
+const STATS_REPORT_INTERVAL: Duration = Duration::from_secs(30);
 
 type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
@@ -130,42 +107,58 @@ struct WorkerAffinity {
     timestamp: Instant,
 }
 
+/// How well an idle worker suits a request; greater is better. Each worker holds one open
+/// dataset, so idle workers act as a cache of open datasets, and the rank keeps that cache warm.
+/// The derived order compares the variants first (declaration order), then the fields in order,
+/// so the tiers can never overlap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum WorkerRank {
+    /// The worker has to close its open dataset. Prefer closing a dataset that another worker
+    /// also holds, then the least recently used one. Without the idle time, the broker would
+    /// take the first candidate in `idle_workers`, usually the most recently used worker.
+    Evict { duplicate: bool, idle: Duration },
+    /// The worker has nothing open, so using it closes nothing.
+    Fresh,
+    /// The worker has the dataset open, so reading saves opening it. Prefer the same band, then
+    /// the nearest window: their blocks are likely still cached. Idle time does not count, as the
+    /// caches only hold blocks of the open dataset and do not expire.
+    Hit {
+        same_band: bool,
+        distance: std::cmp::Reverse<u64>,
+    },
+}
+
+impl WorkerRank {
+    /// Same dataset, band and window: no other worker can be better.
+    const BEST: Self = Self::Hit {
+        same_band: true,
+        distance: std::cmp::Reverse(0),
+    };
+}
+
 impl WorkerAffinity {
-    /// Computes the affinity score, decaying the reward linearly over time.
-    /// `now` is passed down to bypass the expensive vDSO clock lookup bottleneck inside hot loops.
+    /// `now` is passed down to avoid a clock lookup per worker inside the dispatch loop.
+    /// `holders` counts the workers holding each dataset.
     #[inline]
-    pub fn calculate_score(
+    fn rank(
         &self,
         dataset_hash: u64,
         band: usize,
         window: &GridBoundingBox2D,
         now: Instant,
-    ) -> f64 {
-        let idle_duration = now.saturating_duration_since(self.timestamp).as_secs_f64();
-
-        if idle_duration > CACHE_TTL_SECS {
-            return 0.0; // Cache expired, connections likely closed or dead
+        holders: &FastHashMap<u64, usize>,
+    ) -> WorkerRank {
+        if self.dataset_hash != dataset_hash {
+            return WorkerRank::Evict {
+                duplicate: holders.get(&self.dataset_hash).copied().unwrap_or(0) > 1,
+                idle: now.saturating_duration_since(self.timestamp),
+            };
         }
 
-        let decay = 1.0 - (idle_duration / CACHE_TTL_SECS);
-        let mut score = 0.0;
-
-        if self.dataset_hash == dataset_hash {
-            score += SCORE_DATASET_MATCH * decay;
-
-            if self.band == band {
-                score += SCORE_BAND_MATCH * decay;
-
-                let dist = calculate_grid_distance(&self.spatial_window, window);
-                if dist == 0.0 {
-                    score += SCORE_EXACT_WINDOW_MATCH * decay;
-                } else {
-                    score += (SCORE_NEARBY_WINDOW_MAX / (1.0 + dist)) * decay;
-                }
-            }
+        WorkerRank::Hit {
+            same_band: self.band == band,
+            distance: std::cmp::Reverse(calculate_grid_distance(&self.spatial_window, window)),
         }
-
-        score
     }
 }
 
@@ -180,18 +173,32 @@ struct WorkerProcess {
 
 impl WorkerProcess {
     #[inline]
-    fn score_for_job(
+    fn rank_for_job(
         &self,
         dataset_hash: u64,
         band: usize,
         window: &GridBoundingBox2D,
         now: Instant,
-    ) -> f64 {
+        holders: &FastHashMap<u64, usize>,
+    ) -> WorkerRank {
         match &self.affinity {
-            Some(affinity) => affinity.calculate_score(dataset_hash, band, window, now),
-            None => SCORE_FRESH_WORKER_DEFAULT,
+            Some(affinity) => affinity.rank(dataset_hash, band, window, now, holders),
+            None => WorkerRank::Fresh,
         }
     }
+}
+
+/// Counters of the broker's scheduling decisions, logged at debug level and reset every `STATS_REPORT_INTERVAL`.
+/// A dispatch is an affinity hit iff the worker's open dataset is reused (`partial_hash` covers
+/// exactly the fields `GdalDatasetHolder::is_hit` compares).
+#[derive(Debug, Default)]
+struct BrokerStats {
+    dispatched: u64,
+    affinity_hits: u64,
+    fresh: u64,
+    evictions: u64,
+    cancelled_dropped: u64,
+    max_dataset_queue_len: usize,
 }
 
 struct DatasetSlot {
@@ -200,26 +207,50 @@ struct DatasetSlot {
 }
 
 impl DatasetSlot {
+    /// Removes canceled requests from the front of the queue and returns how many were removed.
+    /// Canceled requests further back are skipped by `peek_first_valid` and removed once they
+    /// reach the front, so the queue is never scanned as a whole.
     #[inline]
-    pub fn clean_canceled_front(&mut self) {
+    pub fn clean_canceled_front(&mut self) -> u64 {
+        let mut removed = 0;
         while let Some(req) = self.queue.front() {
             if req.respond_to.is_closed() {
                 self.queue.pop_front();
+                removed += 1;
             } else {
                 break;
             }
         }
+        removed
     }
 
     #[inline]
     pub fn peek_first_valid(&self) -> Option<&QueuedRequest> {
         self.queue.iter().find(|req| !req.respond_to.is_closed())
     }
+
+    /// Takes the first request a caller still waits for, counting the canceled ones removed on
+    /// the way. Returns `None` if all callers gave up, which can happen after `peek_first_valid`
+    /// found a request, as callers cancel concurrently.
+    #[inline]
+    pub fn pop_next_valid(&mut self, cancelled_dropped: &mut u64) -> Option<QueuedRequest> {
+        *cancelled_dropped += self.clean_canceled_front();
+        self.queue.pop_front()
+    }
+}
+
+/// Where `try_dispatch` starts the next read: indices into `active_datasets` and `idle_workers`.
+struct DispatchChoice {
+    dataset_hash: u64,
+    active_idx: usize,
+    idle_idx: usize,
 }
 
 struct QueuedRequest {
     dataset_hash: u64,
     request: IpcChannelMessage,
+    /// Closed once the leader task drops its receiver because all callers gave up (see
+    /// `await_read_or_abandon`). The broker then drops the request instead of reading it.
     respond_to: oneshot::Sender<ReadResult>,
 }
 
@@ -241,6 +272,7 @@ enum BrokerCommand {
         dataset_hash: u64,
         band: usize,
         window: GridBoundingBox2D,
+        read_failed: bool,
     },
     WorkerCachesCleared {
         worker_id: usize,
@@ -266,9 +298,18 @@ type SharedResult = Option<
     )>,
 >;
 
+/// Sender of an in-flight read. Followers `subscribe()` to it while holding the `in_flight_tiles`
+/// lock, so its receiver count only changes under that lock. The map holds the sender, not a
+/// receiver: a stored receiver would keep the count at one or more, so the leader could not
+/// notice that all callers gave up.
+type InFlightTile = Arc<tokio::sync::watch::Sender<SharedResult>>;
+
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
-    in_flight_tiles: Mutex<FastHashMap<u64, tokio::sync::watch::Receiver<SharedResult>>>,
+    /// Reads in progress by tile, to deduplicate them. Used by the callers' tasks on any runtime
+    /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
+    /// held only briefly and never across an `.await`.
+    in_flight_tiles: Mutex<FastHashMap<u64, InFlightTile>>,
 }
 
 impl GdalProcessPool {
@@ -376,57 +417,19 @@ impl GdalProcessPool {
     /// This function will panic if any of the worker processes fail to spawn successfully.
     /// It is designed to be called during application initialization, and assumes that the system has sufficient resources to spawn the specified number of worker processes.
     ///
-    #[allow(clippy::needless_pass_by_value)] // value is cloned into spawn block, ref would need lifetime workaround
     pub fn new(
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
-        let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
-        let b_tx_clone = broker_tx.clone();
-        let worker_config_clone = worker_config.clone();
-
-        tokio::spawn(async move {
-            let b_tx_clone_2 = b_tx_clone.clone();
-            let wc = worker_config_clone;
-            let wc2 = wc.clone();
-            let workers = tokio::task::spawn_blocking(move || {
-                let mut w = Vec::with_capacity(number_of_processes);
-                for id in 0..number_of_processes {
-                    let (child_guard, _join_handle, job_tx) =
-                        Self::create_worker_with_id(id, b_tx_clone_2.clone(), &wc)
-                            .expect("Failed to create worker");
-
-                    w.push(WorkerProcess {
-                        _id: id,
-                        job_tx,
-                        child_guard,
-                        affinity: None,
-                        pending_clears: 0,
-                    });
-                    std::thread::sleep(Duration::from_millis(INITIAL_SPAWN_DELAY_MS));
-                }
-                w
-            })
-            .await
-            .expect("Failed to initialize static GDAL worker processes");
-
-            Self::broker_loop(
-                broker_rx,
-                workers,
-                max_active_processes,
-                max_dataset_processes,
-                b_tx_clone,
-                wc2,
-            )
-            .await;
-        });
-
-        Arc::new(Self {
-            broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
-        })
+        Self::new_with_tokio_handle(
+            &tokio::runtime::Handle::current(),
+            number_of_processes,
+            max_active_processes,
+            max_dataset_processes,
+            worker_config,
+        )
     }
 
     fn create_worker_with_id(
@@ -524,6 +527,7 @@ impl GdalProcessPool {
                 });
 
             let is_dead = res.is_err();
+            let read_failed = matches!(res, Ok(Err(_)));
             let _ = job.respond_to.send(ReadResult {
                 result: res,
                 companion_span,
@@ -541,6 +545,7 @@ impl GdalProcessPool {
                 dataset_hash,
                 band,
                 window,
+                read_failed,
             });
         }
     }
@@ -603,7 +608,20 @@ impl GdalProcessPool {
             Self::STRATEGY,
         );
 
-        while let Some(first_cmd) = rx.recv().await {
+        let mut stats_tick = tokio::time::interval(STATS_REPORT_INTERVAL);
+        stats_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        loop {
+            let first_cmd = tokio::select! {
+                cmd = rx.recv() => match cmd {
+                    Some(cmd) => cmd,
+                    None => break,
+                },
+                _ = stats_tick.tick() => {
+                    state.report_and_reset_stats();
+                    continue;
+                }
+            };
             let start_tick = Instant::now();
             let mut batch = vec![first_cmd];
 
@@ -627,8 +645,9 @@ impl GdalProcessPool {
                         dataset_hash,
                         band,
                         window,
+                        read_failed,
                     } => {
-                        state.release_worker(worker_id, dataset_hash, band, window);
+                        state.release_worker(worker_id, dataset_hash, band, window, read_failed);
                     }
                     BrokerCommand::WorkerCachesCleared { worker_id } => {
                         state.finish_clearing_worker(worker_id);
@@ -638,6 +657,7 @@ impl GdalProcessPool {
                         dataset_hash,
                     } => {
                         state.release_read_capacity(dataset_hash);
+                        state.set_affinity(worker_id, None);
                         Self::respawn_worker(worker_id, &mut state, &broker_tx, &worker_config);
                     }
                     BrokerCommand::WorkerDiedDuringClear { worker_id } => {
@@ -651,9 +671,9 @@ impl GdalProcessPool {
                         if let Some(worker) = state.workers.get_mut(worker_id) {
                             worker.child_guard = child_guard;
                             worker.job_tx = job_tx;
-                            worker.affinity = None;
                             worker.pending_clears = 0;
                         }
+                        state.set_affinity(worker_id, None);
                         state.idle_workers.push(worker_id);
                     }
                 }
@@ -678,6 +698,7 @@ impl GdalProcessPool {
 
 // Encapsulates all state variables and synchronous routing logic inside the broker.
 struct BrokerState {
+    /// Unordered: `swap_remove` reorders it, so recency comes from `WorkerAffinity::timestamp`.
     idle_workers: Vec<usize>,
     workers: Vec<WorkerProcess>,
     dataset_registry: FastHashMap<u64, DatasetSlot>,
@@ -686,6 +707,9 @@ struct BrokerState {
     max_dataset_processes: usize,
     max_active_processes: usize,
     strategy: SchedulingStrategy,
+    stats: BrokerStats,
+    /// Number of workers holding each dataset open, to evict duplicates first.
+    dataset_holders: FastHashMap<u64, usize>,
 }
 
 impl BrokerState {
@@ -696,7 +720,12 @@ impl BrokerState {
         strategy: SchedulingStrategy,
     ) -> Self {
         let idle_workers = (0..workers.len()).collect();
+        let mut dataset_holders = FastHashMap::default();
+        for affinity in workers.iter().filter_map(|w| w.affinity.as_ref()) {
+            *dataset_holders.entry(affinity.dataset_hash).or_default() += 1;
+        }
         Self {
+            dataset_holders,
             idle_workers,
             workers,
             dataset_registry: FastHashMap::default(),
@@ -705,6 +734,7 @@ impl BrokerState {
             max_dataset_processes,
             max_active_processes,
             strategy,
+            stats: BrokerStats::default(),
         }
     }
 
@@ -712,12 +742,12 @@ impl BrokerState {
         // Keep reads in the broker until all clears for their worker have finished.
         // On a clear failure, its companion can exit without dropping a queued read.
         self.idle_workers.clear();
-        self.workers
-            .iter_mut()
-            .map(|worker| {
+        (0..self.workers.len())
+            .map(|worker_id| {
+                self.set_affinity(worker_id, None);
+                let worker = &mut self.workers[worker_id];
                 let (tx, rx) = oneshot::channel();
                 worker.pending_clears += 1;
-                worker.affinity = None;
                 // Retain rx even if sending fails, so the caller reports the disconnection.
                 let _ = worker.job_tx.send(WorkerCommand::ClearCaches(tx));
                 rx
@@ -742,12 +772,31 @@ impl BrokerState {
             slot.active_count = slot.active_count.saturating_sub(1);
         }
         self.global_active_count = self.global_active_count.saturating_sub(1);
+        self.remove_slot_if_unused(dataset_hash);
+    }
+
+    fn report_and_reset_stats(&mut self) {
+        let stats = std::mem::take(&mut self.stats);
+        if stats.dispatched == 0 && stats.cancelled_dropped == 0 {
+            return;
+        }
+        tracing::debug!(
+            target: "gdal_pool_stats",
+            dispatched = stats.dispatched,
+            affinity_hits = stats.affinity_hits,
+            fresh = stats.fresh,
+            evictions = stats.evictions,
+            cancelled_dropped = stats.cancelled_dropped,
+            max_dataset_queue_len = stats.max_dataset_queue_len,
+            "GDAL process pool statistics"
+        );
     }
 
     #[inline]
     // on BrokerCommand::Read
     pub fn enqueue_request(&mut self, req: Box<QueuedRequest>) {
         if req.respond_to.is_closed() {
+            self.stats.cancelled_dropped += 1;
             return;
         }
         let hash = req.dataset_hash;
@@ -763,8 +812,11 @@ impl BrokerState {
             self.active_datasets.push_back(hash);
         }
         slot.queue.push_back(*req);
+        self.stats.max_dataset_queue_len = self.stats.max_dataset_queue_len.max(slot.queue.len());
     }
 
+    /// `read_failed`: the worker may not hold the dataset, as a failed open leaves it with none.
+    /// A failed read cannot be told apart from a failed open, so both count as holding nothing.
     #[inline]
     pub fn release_worker(
         &mut self,
@@ -772,173 +824,253 @@ impl BrokerState {
         dataset_hash: u64,
         band: usize,
         window: GridBoundingBox2D,
+        read_failed: bool,
     ) {
         self.release_read_capacity(dataset_hash);
 
-        if let Some(worker) = self.workers.get_mut(worker_id) {
-            worker.affinity = Some(WorkerAffinity {
-                dataset_hash,
-                band,
-                spatial_window: window,
-                timestamp: Instant::now(),
-            });
-        }
+        // A clear queued behind this read closes the dataset.
+        let pending_clear = self.workers[worker_id].pending_clears > 0;
+        let affinity = (!read_failed && !pending_clear).then(|| WorkerAffinity {
+            dataset_hash,
+            band,
+            spatial_window: window,
+            timestamp: Instant::now(),
+        });
+        self.set_affinity(worker_id, affinity);
 
         if self.workers[worker_id].pending_clears == 0 {
             self.idle_workers.push(worker_id);
         }
     }
 
-    /// Single-pass scheduler execution pass. Inlines scheduling decisions to prevent matrix re-scanning.
-    #[allow(clippy::too_many_lines)]
-    #[inline]
-    pub fn try_dispatch(&mut self) {
-        while let Some(&front_hash) = self.active_datasets.front() {
-            let should_pop = match self.dataset_registry.get_mut(&front_hash) {
-                Some(slot) => {
-                    slot.clean_canceled_front();
-                    slot.queue.is_empty()
-                }
-                None => true,
-            };
-            if should_pop {
-                self.active_datasets.pop_front();
-            } else {
-                break;
+    /// Removes the dataset's slot when nothing is queued or read, so the registry does not keep
+    /// one entry for every dataset ever read. A new request creates the slot again.
+    /// An empty queue implies the dataset is not in `active_datasets`.
+    fn remove_slot_if_unused(&mut self, dataset_hash: u64) {
+        if self
+            .dataset_registry
+            .get(&dataset_hash)
+            .is_some_and(|slot| slot.queue.is_empty() && slot.active_count == 0)
+        {
+            self.dataset_registry.remove(&dataset_hash);
+        }
+    }
+
+    /// Records what the worker holds open, keeping `dataset_holders` in sync.
+    fn set_affinity(&mut self, worker_id: usize, affinity: Option<WorkerAffinity>) {
+        let Some(worker) = self.workers.get_mut(worker_id) else {
+            return;
+        };
+        if let Some(old) = worker.affinity.take()
+            && let Some(count) = self.dataset_holders.get_mut(&old.dataset_hash)
+        {
+            *count -= 1;
+            if *count == 0 {
+                self.dataset_holders.remove(&old.dataset_hash);
             }
         }
+        if let Some(new) = &affinity {
+            *self.dataset_holders.entry(new.dataset_hash).or_default() += 1;
+        }
+        worker.affinity = affinity;
+    }
 
-        // Call the clock precisely ONCE per batch processing window
+    /// Dispatches queued requests to idle workers until either runs out or the active limit is
+    /// reached.
+    pub fn try_dispatch(&mut self) {
+        self.drop_empty_front_datasets();
+
+        // Call the clock once per dispatch pass
         let now = Instant::now();
 
-        while !self.idle_workers.is_empty() && !self.active_datasets.is_empty() {
-            if self.global_active_count >= self.max_active_processes {
+        while !self.idle_workers.is_empty()
+            && !self.active_datasets.is_empty()
+            && self.global_active_count < self.max_active_processes
+        {
+            let Some(choice) = self.choose_dispatch(now) else {
                 break;
-            }
+            };
 
-            let mut best_score = SCORE_INITIAL_FLOOR;
-            let mut best_w_matrix_idx = 0;
-            let mut best_dataset_hash = 0;
-            let mut best_dataset_active_idx = 0;
-            let mut datasets_scanned = 0;
-
-            for (idx, &hash) in self.active_datasets.iter().enumerate() {
-                let slot = self
-                    .dataset_registry
-                    .get(&hash)
-                    .expect("Active dataset missing from registry - invariant broken");
-                if slot.active_count >= self.max_dataset_processes {
-                    continue;
-                }
-
-                let Some(req) = slot.peek_first_valid() else {
-                    continue;
-                };
-
-                datasets_scanned += 1;
-                let window = &req.request.0.read_advise.read_window_bounds;
-                let band = req.request.0.dataset_params.rasterband_channel;
-
-                let mut current_best_w_idx = 0;
-                let mut current_best_score = SCORE_INITIAL_FLOOR;
-
-                for (w_idx, &w_id) in self.idle_workers.iter().enumerate() {
-                    let w = self
-                        .workers
-                        .get(w_id)
-                        .expect("Idle worker ID missing from registry - invariant broken");
-                    let score = w.score_for_job(hash, band, window, now);
-
-                    if score > current_best_score {
-                        current_best_score = score;
-                        current_best_w_idx = w_idx;
-                    }
-                    if score >= IMMEDIATE_DISPATCH_THRESHOLD {
-                        break;
-                    }
-                }
-
-                if current_best_score > best_score {
-                    best_score = current_best_score;
-                    best_w_matrix_idx = current_best_w_idx;
-                    best_dataset_hash = hash;
-                    best_dataset_active_idx = idx;
-                }
-
-                if best_score >= IMMEDIATE_DISPATCH_THRESHOLD {
-                    break;
-                }
-
-                if self.strategy == SchedulingStrategy::FifoGreedy && best_score >= 0.0 {
-                    break;
-                }
-
-                if datasets_scanned >= MAX_ELIGIBLE_SCAN_DEPTH {
-                    break;
-                }
-            }
-
-            if best_score == SCORE_INITIAL_FLOOR {
-                break;
-            }
-
-            // Perform atomic dispatch operation
-            let worker_id = self.idle_workers.swap_remove(best_w_matrix_idx);
-            let worker = self
-                .workers
-                .get_mut(worker_id)
-                .expect("Selected worker ID missing from registry - invariant broken");
             let slot = self
                 .dataset_registry
-                .get_mut(&best_dataset_hash)
+                .get_mut(&choice.dataset_hash)
                 .expect("Selected dataset missing from registry - invariant broken");
 
-            slot.clean_canceled_front();
-
-            let req = slot
-                .queue
-                .pop_front()
-                .expect("Selected request missing from dataset slot - invariant broken");
-
-            self.global_active_count += 1;
+            // Take the request before the worker: its callers may have given up since the scan
+            let Some(req) = slot.pop_next_valid(&mut self.stats.cancelled_dropped) else {
+                self.active_datasets.remove(choice.active_idx);
+                self.remove_slot_if_unused(choice.dataset_hash);
+                continue;
+            };
             slot.active_count += 1;
-
-            {
-                let _span = tracing::debug_span!(
-                    "gdal_broker_dispatch",
-                    worker_id = worker_id,
-                    dataset = %req.request.0.dataset_params.file_path.display(),
-                    read_id = req.request.0.read_id.as_deref().unwrap_or(""),
-                )
-                .entered();
-
-                let _ = worker.job_tx.send(WorkerCommand::Read(Box::new(WorkerJob {
-                    request: req.request,
-                    respond_to: req.respond_to,
-                    dataset_hash: req.dataset_hash,
-                })));
-            }
-
-            slot.clean_canceled_front();
+            self.stats.cancelled_dropped += slot.clean_canceled_front();
+            let has_more = !slot.queue.is_empty();
 
             // Maintain FIFO/Round-Robin dataset cycling fairness
             let tracked_hash = self
                 .active_datasets
-                .remove(best_dataset_active_idx)
+                .remove(choice.active_idx)
                 .expect("Best dataset hash missing from active queue - invariant broken");
-            if !slot.queue.is_empty() {
+            if has_more {
                 self.active_datasets.push_back(tracked_hash);
             }
+
+            let worker_id = self.idle_workers.swap_remove(choice.idle_idx);
+            self.start_read(worker_id, req, now);
         }
+    }
+
+    /// Pops datasets without queued requests from the front of `active_datasets`.
+    fn drop_empty_front_datasets(&mut self) {
+        while let Some(&front_hash) = self.active_datasets.front() {
+            let should_pop = match self.dataset_registry.get_mut(&front_hash) {
+                Some(slot) => {
+                    self.stats.cancelled_dropped += slot.clean_canceled_front();
+                    slot.queue.is_empty()
+                }
+                None => true,
+            };
+            if !should_pop {
+                break;
+            }
+            self.active_datasets.pop_front();
+            self.remove_slot_if_unused(front_hash);
+        }
+    }
+
+    /// Picks the queued dataset and idle worker with the best rank. Scans at most
+    /// `MAX_ELIGIBLE_SCAN_DEPTH` datasets that may start another read; ties go to the dataset
+    /// waiting longest.
+    fn choose_dispatch(&self, now: Instant) -> Option<DispatchChoice> {
+        let mut best: Option<(WorkerRank, DispatchChoice)> = None;
+        let mut datasets_scanned = 0;
+
+        for (active_idx, &dataset_hash) in self.active_datasets.iter().enumerate() {
+            let slot = self
+                .dataset_registry
+                .get(&dataset_hash)
+                .expect("Active dataset missing from registry - invariant broken");
+            if slot.active_count >= self.max_dataset_processes {
+                continue;
+            }
+            let Some(req) = slot.peek_first_valid() else {
+                continue;
+            };
+            datasets_scanned += 1;
+
+            let Some((idle_idx, rank)) = self.best_idle_worker(dataset_hash, req, now) else {
+                break;
+            };
+            if best.as_ref().is_none_or(|(best_rank, _)| rank > *best_rank) {
+                best = Some((
+                    rank,
+                    DispatchChoice {
+                        dataset_hash,
+                        active_idx,
+                        idle_idx,
+                    },
+                ));
+            }
+
+            if rank == WorkerRank::BEST
+                || self.strategy == SchedulingStrategy::FifoGreedy
+                || datasets_scanned >= MAX_ELIGIBLE_SCAN_DEPTH
+            {
+                break;
+            }
+        }
+
+        best.map(|(_, choice)| choice)
+    }
+
+    /// Returns the index into `idle_workers` of the best worker for the request, and its rank.
+    fn best_idle_worker(
+        &self,
+        dataset_hash: u64,
+        req: &QueuedRequest,
+        now: Instant,
+    ) -> Option<(usize, WorkerRank)> {
+        let window = &req.request.0.read_advise.read_window_bounds;
+        let band = req.request.0.dataset_params.rasterband_channel;
+
+        let mut best: Option<(usize, WorkerRank)> = None;
+        for (idle_idx, &worker_id) in self.idle_workers.iter().enumerate() {
+            let rank = self
+                .workers
+                .get(worker_id)
+                .expect("Idle worker ID missing from registry - invariant broken")
+                .rank_for_job(dataset_hash, band, window, now, &self.dataset_holders);
+            if best.is_none_or(|(_, best_rank)| rank > best_rank) {
+                best = Some((idle_idx, rank));
+            }
+            if rank == WorkerRank::BEST {
+                break;
+            }
+        }
+        best
+    }
+
+    /// Sends the request to the worker and records the worker as holding its dataset.
+    fn start_read(&mut self, worker_id: usize, req: QueuedRequest, now: Instant) {
+        let worker = self
+            .workers
+            .get(worker_id)
+            .expect("Selected worker ID missing from registry - invariant broken");
+
+        let affinity = match &worker.affinity {
+            None => {
+                self.stats.fresh += 1;
+                "fresh"
+            }
+            Some(a) if a.dataset_hash == req.dataset_hash => {
+                self.stats.affinity_hits += 1;
+                "hit"
+            }
+            Some(_) => {
+                self.stats.evictions += 1;
+                "evict"
+            }
+        };
+        self.stats.dispatched += 1;
+        self.global_active_count += 1;
+
+        // The worker holds the requested dataset once the read starts, not its previous one.
+        // Recorded now, so that a busy worker switching datasets does not count as a holder of
+        // its old dataset when ranking duplicates; the release corrects it.
+        let busy_affinity = WorkerAffinity {
+            dataset_hash: req.dataset_hash,
+            band: req.request.0.dataset_params.rasterband_channel,
+            spatial_window: req.request.0.read_advise.read_window_bounds,
+            timestamp: now,
+        };
+
+        {
+            let _span = tracing::debug_span!(
+                "gdal_broker_dispatch",
+                worker_id = worker_id,
+                affinity = affinity,
+                dataset = %req.request.0.dataset_params.file_path.display(),
+                read_id = req.request.0.read_id.as_deref().unwrap_or(""),
+            )
+            .entered();
+
+            let _ = worker.job_tx.send(WorkerCommand::Read(Box::new(WorkerJob {
+                request: req.request,
+                respond_to: req.respond_to,
+                dataset_hash: req.dataset_hash,
+            })));
+        }
+
+        self.set_affinity(worker_id, Some(busy_affinity));
     }
 }
 
 #[inline]
-fn calculate_grid_distance(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> f64 {
+fn calculate_grid_distance(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> u64 {
     let a_min = a.min_index();
     let b_min = b.min_index();
-    let dy = (a_min.y() - b_min.y()).abs() as f64;
-    let dx = (a_min.x() - b_min.x()).abs() as f64;
+    let dy = (a_min.y() - b_min.y()).unsigned_abs() as u64;
+    let dx = (a_min.x() - b_min.x()).unsigned_abs() as u64;
     dy.max(dx)
 }
 
@@ -950,6 +1082,7 @@ pub struct GdalPoolDispatcher {
 struct LeaderCleanupGuard {
     pool: std::sync::Arc<GdalProcessPool>,
     tile_key: u64,
+    tx: InFlightTile,
 }
 
 impl Drop for LeaderCleanupGuard {
@@ -957,9 +1090,67 @@ impl Drop for LeaderCleanupGuard {
         // This is guaranteed to run whether the function succeeds, errors,
         // panics, or is abruptly cancelled by Tokio.
         if let Ok(mut lock) = self.pool.in_flight_tiles.lock() {
-            lock.remove(&self.tile_key);
+            remove_in_flight(&mut lock, self.tile_key, &self.tx);
         }
     }
+}
+
+/// Removes the entry only if it still belongs to `tx`, never a newer leader's entry for the same key.
+fn remove_in_flight(map: &mut FastHashMap<u64, InFlightTile>, tile_key: u64, tx: &InFlightTile) {
+    if map.get(&tile_key).is_some_and(|t| Arc::ptr_eq(t, tx)) {
+        map.remove(&tile_key);
+    }
+}
+
+/// Waits for the broker's result. Returns `None` if all callers gave up first: dropping
+/// `oneshot_rx` then lets the broker discard the request if it is still queued.
+///
+/// Every caller, including the one that spawned the leader, holds a receiver of `tx`. A caller
+/// gives up when its future is dropped, e.g. when the client aborts the tile request after a
+/// pan. If the leader kept `oneshot_rx` until the read finished, the broker would never see a
+/// closed request and would read every abandoned tile before the visible ones.
+///
+/// Abandoning only helps while the request is queued. If a worker already reads it, the read
+/// runs to completion and its result is discarded.
+async fn await_read_or_abandon(
+    pool: &GdalProcessPool,
+    tile_key: u64,
+    tx: &InFlightTile,
+    mut oneshot_rx: oneshot::Receiver<ReadResult>,
+) -> Option<(
+    Result<GdalIpcBytePayload, GdalProcessPoolError>,
+    Option<tracing::Span>,
+)> {
+    let res = loop {
+        tokio::select! {
+            res = &mut oneshot_rx => break res,
+            () = tx.closed() => {
+                let Ok(mut lock) = pool.in_flight_tiles.lock() else {
+                    break (&mut oneshot_rx).await;
+                };
+                // A follower may have subscribed between `closed()` and taking the lock. Followers
+                // only subscribe under this lock, so the count is stable here: if it is 0, removing
+                // the entry guarantees that later callers start a new leader instead of joining
+                // this abandoned one. Otherwise, keep waiting for the result.
+                if tx.receiver_count() == 0 {
+                    remove_in_flight(&mut lock, tile_key, tx);
+                    tracing::trace!("All callers gave up on fetch: {tile_key}");
+                    return None;
+                }
+            }
+        }
+    };
+
+    Some(match res {
+        Ok(read_result) => (
+            read_result
+                .result
+                .map_err(|_| GdalProcessPoolError::WorkerPanic)
+                .and_then(|ipc_res| ipc_res.map_err(GdalProcessPoolError::from)),
+            read_result.companion_span,
+        ),
+        Err(_) => (Err(GdalProcessPoolError::WorkerPanic), None),
+    })
 }
 
 impl GdalPoolDispatcher {
@@ -973,8 +1164,9 @@ impl GdalPoolDispatcher {
     /// first request spawns a detached background task that submits the read to the broker;
     /// later requests attach to a shared watch channel. Because the leader task is detached,
     /// cancelling the caller's HTTP request does not abort the leader, so followers still
-    /// receive the result. The `LeaderCleanupGuard` ensures the in-flight entry is removed
-    /// when the leader task finishes, succeeds, fails, or panics.
+    /// receive the result. Once all callers are gone, the leader abandons the read, so the
+    /// broker drops it if it is still queued. The `LeaderCleanupGuard` ensures the in-flight
+    /// entry is removed when the leader task finishes, succeeds, fails, or panics.
     ///
     /// # Panics
     /// This function will panic if a required channel is dropped unexpectedly.
@@ -1001,23 +1193,25 @@ impl GdalPoolDispatcher {
                 .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
 
             // test if data is already read
-            if let Some(rx) = lock.get(&tile_key) {
+            if let Some(tx) = lock.get(&tile_key) {
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
-                rx.clone()
+                tx.subscribe()
             } else {
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
                 let (tx, rx) = tokio::sync::watch::channel(None);
-                lock.insert(tile_key, rx.clone());
+                let tx = Arc::new(tx);
+                lock.insert(tile_key, tx.clone());
 
                 let pool_clone = self.pool.clone();
                 let request_clone = request.clone();
                 let parent_span = tracing::Span::current();
 
-                // DETACHED LEADER: Guaranteed to run to completion even if the parent stream is suspended or dropped!
+                // DETACHED LEADER: runs to completion as long as at least one caller waits for the result
                 tokio::spawn(async move {
                     let _cleanup_guard = LeaderCleanupGuard {
                         pool: pool_clone.clone(),
                         tile_key,
+                        tx: tx.clone(),
                     };
 
                     let mut s_routing = rustc_hash::FxHasher::default();
@@ -1036,18 +1230,12 @@ impl GdalPoolDispatcher {
                         .await;
 
                     let (leader_res, companion_span) = if dispatched.is_ok() {
-                        match oneshot_rx.await {
-                            Ok(read_result) => {
-                                let result = read_result
-                                    .result
-                                    .map_err(|_| GdalProcessPoolError::WorkerPanic)
-                                    .and_then(|ipc_res| {
-                                        ipc_res.map_err(GdalProcessPoolError::from)
-                                    });
-                                (result, read_result.companion_span)
-                            }
-                            Err(_) => (Err(GdalProcessPoolError::WorkerPanic), None),
-                        }
+                        let Some(res) =
+                            await_read_or_abandon(&pool_clone, tile_key, &tx, oneshot_rx).await
+                        else {
+                            return;
+                        };
+                        res
                     } else {
                         (Err(GdalProcessPoolError::WorkerPanic), None)
                     };
@@ -1119,7 +1307,6 @@ impl GdalProcessPoolAccess for Arc<GdalProcessPool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
     use geoengine_datatypes::util::NonZeroFiniteF64;
 
@@ -1133,31 +1320,31 @@ mod tests {
     #[test]
     fn same_window() {
         let w = window([0, 0], [7, 7]);
-        assert_approx_eq!(f64, calculate_grid_distance(&w, &w), 0.0);
+        assert_eq!(calculate_grid_distance(&w, &w), 0);
     }
 
     #[test]
     fn overlapping_windows() {
         let a = window([0, 0], [7, 7]);
         let b = window([4, 4], [11, 11]);
-        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 4.0);
+        assert_eq!(calculate_grid_distance(&a, &b), 4);
     }
 
     #[test]
     fn disjoint_far_apart() {
         let a = window([0, 0], [7, 7]);
         let b = window([100, 200], [107, 207]);
-        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 200.0);
+        assert_eq!(calculate_grid_distance(&a, &b), 200);
     }
 
     #[test]
     fn single_axis_offset() {
         let a = window([0, 0], [7, 7]);
         let b = window([50, 0], [57, 7]);
-        assert_approx_eq!(f64, calculate_grid_distance(&a, &b), 50.0);
+        assert_eq!(calculate_grid_distance(&a, &b), 50);
     }
 
-    // --- WorkerAffinity::calculate_score ---
+    // --- WorkerAffinity::rank ---
 
     fn make_affinity(dataset_hash: u64, band: usize, window: GridBoundingBox2D) -> WorkerAffinity {
         WorkerAffinity {
@@ -1168,59 +1355,92 @@ mod tests {
         }
     }
 
+    /// Idle times from just released to one day.
+    const IDLE_SECS: [u64; 5] = [0, 1, 600, 1800, 86_400];
+
+    fn rank_after(
+        aff: &WorkerAffinity,
+        idle_secs: u64,
+        dataset_hash: u64,
+        band: usize,
+    ) -> WorkerRank {
+        let w = window([0, 0], [7, 7]);
+        let now = aff.timestamp + Duration::from_secs(idle_secs);
+        aff.rank(dataset_hash, band, &w, now, &FastHashMap::default())
+    }
+
     #[test]
-    fn score_exact_match_fresh() {
+    fn rank_exact_match_is_best() {
         let w = window([100, 100], [200, 200]);
         let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
+        for idle in IDLE_SECS {
+            let now = aff.timestamp + Duration::from_secs(idle);
+            assert_eq!(
+                aff.rank(42, 1, &w, now, &FastHashMap::default()),
+                WorkerRank::BEST
+            );
+        }
+    }
 
-        assert_approx_eq!(
-            f64,
-            score,
-            SCORE_DATASET_MATCH + SCORE_BAND_MATCH + SCORE_EXACT_WINDOW_MATCH
+    /// Opening a dataset costs the most, so any hit beats a fresh worker, and a fresh worker beats
+    /// any eviction, however long the workers were idle.
+    #[test]
+    fn rank_tiers_never_overlap() {
+        let hit = make_affinity(42, 2, window([5000, 5000], [5007, 5007]));
+        let evict = make_affinity(99, 1, window([0, 0], [7, 7]));
+        let mut duplicates = FastHashMap::default();
+        duplicates.insert(99, 2);
+
+        for hit_idle in IDLE_SECS {
+            let worst_hit = rank_after(&hit, hit_idle, 42, 1);
+            assert!(worst_hit > WorkerRank::Fresh);
+            for evict_idle in IDLE_SECS {
+                let now = evict.timestamp + Duration::from_secs(evict_idle);
+                let best_evict = evict.rank(42, 1, &window([0, 0], [7, 7]), now, &duplicates);
+                assert!(WorkerRank::Fresh > best_evict);
+            }
+        }
+    }
+
+    /// The blocks of the same band and window are still cached, however long the worker was idle.
+    #[test]
+    fn rank_hits_by_band_then_distance_regardless_of_idle_time() {
+        let w = window([0, 0], [7, 7]);
+        let same_band = make_affinity(42, 1, w);
+        let other_band = make_affinity(42, 2, w);
+        let near = make_affinity(42, 1, window([512, 0], [519, 7]));
+        let far = make_affinity(42, 1, window([1024, 0], [1031, 7]));
+
+        for old in IDLE_SECS {
+            for recent in IDLE_SECS {
+                assert!(
+                    rank_after(&same_band, old, 42, 1) > rank_after(&other_band, recent, 42, 1)
+                );
+                assert!(rank_after(&near, old, 42, 1) > rank_after(&far, recent, 42, 1));
+            }
+        }
+    }
+
+    #[test]
+    fn rank_evicts_duplicates_then_least_recently_used() {
+        let w = window([0, 0], [7, 7]);
+        let aff = make_affinity(99, 1, w);
+        let mut holders = FastHashMap::default();
+        holders.insert(99, 1);
+        let unique_long_idle = aff.rank(
+            42,
+            1,
+            &w,
+            aff.timestamp + Duration::from_secs(3600),
+            &holders,
         );
-    }
+        let unique_short_idle =
+            aff.rank(42, 1, &w, aff.timestamp + Duration::from_secs(1), &holders);
+        holders.insert(99, 2);
+        let duplicate = aff.rank(42, 1, &w, aff.timestamp, &holders);
 
-    #[test]
-    fn score_nearby_window() {
-        let w = window([100, 100], [200, 200]);
-        let aff = make_affinity(42, 1, window([100, 101], [200, 201]));
-        let score = aff.calculate_score(42, 1, &w, aff.timestamp);
-
-        // Chebyshev(|100-100|, |101-100|) = 1
-        let expected =
-            SCORE_DATASET_MATCH + SCORE_BAND_MATCH + (SCORE_NEARBY_WINDOW_MAX / (1.0 + 1.0));
-        assert_approx_eq!(f64, score, expected);
-    }
-
-    #[test]
-    fn score_different_band_same_dataset() {
-        let w = window([0, 0], [7, 7]);
-        let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(42, 2, &w, aff.timestamp);
-
-        assert_approx_eq!(f64, score, SCORE_DATASET_MATCH);
-    }
-
-    #[test]
-    fn score_different_dataset() {
-        let w = window([0, 0], [7, 7]);
-        let aff = make_affinity(42, 1, w);
-        let score = aff.calculate_score(99, 1, &w, aff.timestamp);
-
-        assert_approx_eq!(f64, score, 0.0);
-    }
-
-    #[test]
-    fn score_expired_cache() {
-        let w = window([0, 0], [7, 7]);
-        let mut aff = make_affinity(42, 1, w);
-        aff.timestamp = Instant::now()
-            .checked_sub(Duration::from_secs_f64(CACHE_TTL_SECS + 1.0))
-            .unwrap();
-        let score = aff.calculate_score(42, 1, &w, Instant::now());
-
-        assert_approx_eq!(f64, score, 0.0);
+        assert!(duplicate > unique_long_idle);
+        assert!(unique_long_idle > unique_short_idle);
     }
 
     // --- BrokerState dispatch tests ---
@@ -1315,7 +1535,7 @@ mod tests {
                 panic!("Expected second clear");
             };
             if active_read {
-                state.release_worker(0, 100, 1, bounds);
+                state.release_worker(0, 100, 1, bounds, false);
             }
             let (next, _next_response) = make_request(200, 1, bounds);
             state.enqueue_request(next);
@@ -1359,7 +1579,7 @@ mod tests {
         let second = read_job(jobs1.try_recv().unwrap());
 
         let _cleared = state.clear_caches();
-        state.release_worker(0, first.dataset_hash, 1, bounds);
+        state.release_worker(0, first.dataset_hash, 1, bounds, false);
         state.remove_worker(0);
         assert_eq!(state.global_active_count, 1);
         assert_eq!(state.dataset_registry[&second.dataset_hash].active_count, 1);
@@ -1369,7 +1589,7 @@ mod tests {
         state.release_read_capacity(second.dataset_hash);
         state.remove_worker(1);
         assert_eq!(state.global_active_count, 0);
-        assert_eq!(state.dataset_registry[&second.dataset_hash].active_count, 0);
+        assert!(!state.dataset_registry.contains_key(&second.dataset_hash));
     }
 
     #[tokio::test]
@@ -1796,13 +2016,19 @@ mod tests {
 
         assert_eq!(state.idle_workers.len(), 0);
         assert_eq!(state.global_active_count, 1);
+        // a busy worker already counts as a holder of the dataset it reads
+        assert_eq!(state.dataset_holders.get(&100), Some(&1));
 
-        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]));
+        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]), false);
 
         assert_eq!(state.idle_workers.len(), 1);
         assert_eq!(state.idle_workers[0], 0);
         assert_eq!(state.global_active_count, 0);
         assert!(state.workers[0].affinity.is_some());
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept after the last read"
+        );
     }
 
     #[test]
@@ -1822,7 +2048,7 @@ mod tests {
         let first = read_job(rx0.try_recv().unwrap()).dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, first, 1, window([0, 0], [255, 255]));
+        state.release_worker(0, first, 1, window([0, 0], [255, 255]), false);
         state.try_dispatch();
         let second = read_job(rx0.try_recv().unwrap()).dataset_hash;
 
@@ -1852,7 +2078,267 @@ mod tests {
         assert_eq!(job.dataset_hash, 100);
     }
 
+    #[test]
+    fn it_counts_dispatch_affinity() {
+        let (mut w0, _rx0) = dummy_worker(0);
+        w0.affinity = Some(make_affinity(100, 1, window([0, 0], [255, 255])));
+        let (mut w1, _rx1) = dummy_worker(1);
+        w1.affinity = Some(make_affinity(300, 1, window([0, 0], [255, 255])));
+        let (w2, _rx2) = dummy_worker(2);
+
+        let mut state = BrokerState::new(vec![w0, w1, w2], 4, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req_hit, _r1) = make_request(100, 1, w);
+        let (req_fresh, _r2) = make_request(200, 1, w);
+        let (req_evict, _r3) = make_request(400, 1, w);
+        let (req_cancelled, r4) = make_request(500, 1, w);
+        drop(r4);
+
+        state.enqueue_request(req_hit);
+        state.enqueue_request(req_fresh);
+        state.enqueue_request(req_evict);
+        state.enqueue_request(req_cancelled);
+        state.try_dispatch();
+
+        assert_eq!(state.stats.dispatched, 3);
+        assert_eq!(state.stats.affinity_hits, 1);
+        assert_eq!(state.stats.fresh, 1);
+        assert_eq!(state.stats.evictions, 1);
+        assert_eq!(state.stats.cancelled_dropped, 1);
+    }
+
+    fn affinity_idle_for(dataset_hash: u64, idle_secs: u64) -> WorkerAffinity {
+        let mut aff = make_affinity(dataset_hash, 1, window([0, 0], [255, 255]));
+        aff.timestamp = Instant::now()
+            .checked_sub(Duration::from_secs(idle_secs))
+            .unwrap();
+        aff
+    }
+
+    #[test]
+    fn it_evicts_least_recently_used_worker() {
+        let (mut w0, mut rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, 300));
+        let (mut w1, _rx1) = dummy_worker(1);
+        w1.affinity = Some(affinity_idle_for(200, 60));
+        let (mut w2, _rx2) = dummy_worker(2);
+        w2.affinity = Some(affinity_idle_for(300, 1));
+
+        let mut state = BrokerState::new(vec![w0, w1, w2], 4, 4, SchedulingStrategy::GlobalMatrix);
+        // most recently released worker first, as `swap_remove` tends to leave it
+        state.idle_workers = vec![2, 1, 0];
+
+        let (req, _resp) = make_request(400, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        let job = read_job(
+            rx0.try_recv()
+                .expect("the longest idle worker should be evicted"),
+        );
+        assert_eq!(job.dataset_hash, 400);
+        assert_eq!(state.stats.evictions, 1);
+    }
+
+    #[test]
+    fn it_prefers_open_dataset_however_long_idle() {
+        let (mut w0, mut rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, 3600));
+        let (w1, _rx1) = dummy_worker(1);
+
+        let mut state = BrokerState::new(vec![w0, w1], 4, 4, SchedulingStrategy::GlobalMatrix);
+
+        let (req, _resp) = make_request(100, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        rx0.try_recv()
+            .expect("the worker with the open dataset should be reused");
+        assert_eq!(state.stats.affinity_hits, 1);
+    }
+
+    /// A failed open leaves the worker with no dataset, so it must not count as a holder.
+    #[test]
+    fn release_after_failed_read_holds_nothing() {
+        let (w0, mut rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 2, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req, _resp_rx) = make_request(100, 1, w);
+
+        state.enqueue_request(req);
+        state.try_dispatch();
+        let job = read_job(rx0.try_recv().unwrap());
+        state.release_worker(0, job.dataset_hash, 1, w, true);
+
+        assert!(state.workers[0].affinity.is_none());
+        assert!(state.dataset_holders.is_empty());
+    }
+
+    #[test]
+    fn it_evicts_a_duplicate_before_the_only_copy() {
+        let (mut w0, _rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, 600));
+        let (mut w1, mut rx1) = dummy_worker(1);
+        w1.affinity = Some(affinity_idle_for(200, 1));
+        let (mut w2, _rx2) = dummy_worker(2);
+        w2.affinity = Some(affinity_idle_for(200, 1));
+
+        let mut state = BrokerState::new(vec![w0, w1, w2], 4, 4, SchedulingStrategy::GlobalMatrix);
+
+        let (req, _resp) = make_request(400, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        rx1.try_recv()
+            .expect("a worker holding a copy of dataset 200 should be evicted");
+        assert_eq!(state.dataset_holders.get(&100), Some(&1));
+    }
+
+    #[test]
+    fn it_prefers_fresh_worker_over_eviction() {
+        let (mut w0, _rx0) = dummy_worker(0);
+        w0.affinity = Some(affinity_idle_for(100, 3600));
+        let (w1, mut rx1) = dummy_worker(1);
+
+        let mut state = BrokerState::new(vec![w0, w1], 4, 4, SchedulingStrategy::GlobalMatrix);
+
+        let (req, _resp) = make_request(400, 1, window([0, 0], [255, 255]));
+        state.enqueue_request(req);
+        state.try_dispatch();
+
+        rx1.try_recv().expect("the fresh worker should be used");
+        assert_eq!(state.stats.fresh, 1);
+    }
+
     // --- Leader/follower dedup test ---
+
+    fn empty_read_result() -> ReadResult {
+        ReadResult {
+            result: Ok(Ok(GdalIpcBytePayload {
+                dimensions: window([0, 0], [7, 7]),
+                properties: GdalIpcRasterProperties {
+                    offset: None,
+                    scale: None,
+                    description: None,
+                    properties_map: vec![],
+                },
+                data_variant: GdalDataGridByteVariant::Empty,
+            })),
+            companion_span: None,
+        }
+    }
+
+    /// A pool whose broker forwards every queued read to the returned receiver without answering.
+    fn pool_with_holding_broker() -> (
+        Arc<GdalProcessPool>,
+        mpsc::UnboundedReceiver<Box<QueuedRequest>>,
+    ) {
+        let (broker_tx, mut broker_rx) = mpsc::channel::<BrokerCommand>(64);
+        let (held_tx, held_rx) = mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Some(cmd) = broker_rx.recv().await {
+                if let BrokerCommand::Read(req) = cmd {
+                    let _ = held_tx.send(req);
+                }
+            }
+        });
+        let pool = Arc::new(GdalProcessPool {
+            broker_tx,
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        });
+        (pool, held_rx)
+    }
+
+    #[tokio::test]
+    async fn it_cancels_queued_read_when_all_callers_drop() {
+        let (pool, mut held) = pool_with_holding_broker();
+        let dispatcher = GdalPoolDispatcher::new(pool.clone());
+        let (msg, _) = make_request(42, 1, window([0, 0], [255, 255]));
+
+        let caller = tokio::spawn(async move { dispatcher.read_data::<u8>(msg.request).await });
+        let mut queued = held.recv().await.unwrap();
+        assert!(!queued.respond_to.is_closed());
+
+        caller.abort();
+        tokio::time::timeout(Duration::from_secs(1), queued.respond_to.closed())
+            .await
+            .expect("the leader should abandon the read once its only caller is gone");
+        assert!(pool.in_flight_tiles.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_keeps_read_alive_while_a_follower_waits() {
+        let (pool, mut held) = pool_with_holding_broker();
+        let dispatcher = GdalPoolDispatcher::new(pool);
+        let w = window([0, 0], [255, 255]);
+        let (msg_a, _) = make_request(42, 1, w);
+        let (msg_b, _) = make_request(42, 1, w);
+
+        let d1 = dispatcher.clone();
+        let leader = tokio::spawn(async move { d1.read_data::<u8>(msg_a.request).await });
+        let queued = held.recv().await.unwrap();
+        let follower = tokio::spawn(async move { dispatcher.read_data::<u8>(msg_b.request).await });
+        tokio::task::yield_now().await;
+
+        leader.abort();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(!queued.respond_to.is_closed(), "the follower still waits");
+
+        let _ = queued.respond_to.send(empty_read_result());
+        assert!(follower.await.unwrap().is_ok());
+    }
+
+    #[test]
+    fn it_purges_cancelled_requests_before_dispatch() {
+        let (w0, mut rx0) = dummy_worker(0);
+        let mut state = BrokerState::new(vec![w0], 4, 4, SchedulingStrategy::GlobalMatrix);
+        let w = window([0, 0], [255, 255]);
+        let (req, resp) = make_request(100, 1, w);
+
+        state.enqueue_request(req);
+        drop(resp);
+        state.try_dispatch();
+
+        assert!(rx0.try_recv().is_err(), "no job for a cancelled request");
+        assert_eq!(state.stats.cancelled_dropped, 1);
+        assert_eq!(state.global_active_count, 0);
+        assert!(
+            state.dataset_registry.is_empty(),
+            "no slot kept for a dataset with no reads"
+        );
+    }
+
+    /// Callers can cancel between the scan (`peek_first_valid`) and the dispatch, so taking the
+    /// request must not assume that one is left.
+    #[test]
+    fn it_pops_only_requests_with_waiting_callers() {
+        let w = window([0, 0], [255, 255]);
+        let mut slot = DatasetSlot {
+            active_count: 0,
+            queue: VecDeque::new(),
+        };
+        let (cancelled_a, resp_a) = make_request(100, 1, w);
+        let (cancelled_b, resp_b) = make_request(100, 1, w);
+        slot.queue.push_back(*cancelled_a);
+        slot.queue.push_back(*cancelled_b);
+        drop((resp_a, resp_b));
+
+        let mut dropped = 0;
+        assert!(slot.pop_next_valid(&mut dropped).is_none());
+        assert_eq!(dropped, 2);
+
+        let (cancelled, resp_cancelled) = make_request(100, 1, w);
+        let (waiting, _resp_waiting) = make_request(100, 2, w);
+        slot.queue.push_back(*cancelled);
+        slot.queue.push_back(*waiting);
+        drop(resp_cancelled);
+
+        let req = slot
+            .pop_next_valid(&mut dropped)
+            .expect("the request with a waiting caller");
+        assert_eq!(req.request.0.dataset_params.rasterband_channel, 2);
+        assert_eq!(dropped, 3);
+    }
 
     #[tokio::test]
     async fn dedup_sends_only_one_broker_read() {
@@ -1870,19 +2356,7 @@ mod tests {
             while let Some(cmd) = broker_rx.recv().await {
                 if let BrokerCommand::Read(req) = cmd {
                     read_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    let _ = req.respond_to.send(ReadResult {
-                        result: Ok(Ok(GdalIpcBytePayload {
-                            dimensions: window([0, 0], [7, 7]),
-                            properties: GdalIpcRasterProperties {
-                                offset: None,
-                                scale: None,
-                                description: None,
-                                properties_map: vec![],
-                            },
-                            data_variant: GdalDataGridByteVariant::Empty,
-                        })),
-                        companion_span: None,
-                    });
+                    let _ = req.respond_to.send(empty_read_result());
                 }
             }
         });
