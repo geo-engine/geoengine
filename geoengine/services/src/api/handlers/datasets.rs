@@ -41,14 +41,16 @@ use geoengine_datatypes::{
     primitives::{FeatureDataType, Measurement, TimeInterval, VectorQueryRectangle},
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
+use geoengine_operators::source::gdal_worker_process::GdalPoolReader;
 use geoengine_operators::{
     engine::{
         OperatorName, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
         VectorColumnInfo, VectorResultDescriptor,
     },
     source::{
-        MultiBandGdalSource as OperatorsMultiBandGdalSource, OgrSourceColumnSpec, OgrSourceDataset,
-        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+        GdalProcessPoolAccess, MultiBandGdalSource as OperatorsMultiBandGdalSource,
+        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+        OgrSourceErrorSpec, OgrSourceTimeFormat,
     },
     util::gdal::{
         gdal_open_dataset, gdal_open_dataset_ex, gdal_parameters_from_dataset,
@@ -254,8 +256,22 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
     let data_path_file_path =
         file_path_from_data_path(&data_path, &session_context).context(CannotAddTilesToDataset)?;
 
+    // headers are read in a GDAL worker: GDAL must not run in the server process
+    let reader = GdalPoolReader::from(
+        session_context
+            .execution_context()
+            .context(CannotAddTilesToDataset)?
+            .get_gdal_worker(),
+    );
     for tile in &tiles {
-        validate_tile(tile, &data_path, &data_path_file_path, &dataset_descriptor)?;
+        validate_tile(
+            tile,
+            &data_path,
+            &data_path_file_path,
+            &dataset_descriptor,
+            &reader,
+        )
+        .await?;
     }
 
     db.add_dataset_tiles(dataset_id, tiles)
@@ -265,11 +281,12 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok().finish())
 }
 
-fn validate_tile(
+async fn validate_tile(
     tile: &AddDatasetTile,
     data_path: &DataPath,
     data_path_file_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
+    reader: &GdalPoolReader,
 ) -> Result<(), AddDatasetTilesError> {
     // External data uses remote URLs (http://, https://, s3://) and must not
     // refer to local filesystem paths. The GDAL virtual file system prefix is
@@ -304,17 +321,14 @@ fn validate_tile(
         }
     );
 
-    let ds = gdal_open_dataset_ex(&absolute_path, DatasetOptions::default()).context(
-        CannotOpenTileFile {
+    let mut params: geoengine_operators::source::GdalDatasetParameters = tile.params.clone().into();
+    params.file_path = absolute_path;
+    let rd = reader
+        .read_raster_info(params)
+        .await
+        .context(CannotOpenTileFile {
             file_path: tile.params.file_path.to_string_lossy().to_string(),
-        },
-    )?;
-
-    let rd = raster_descriptor_from_dataset(&ds, tile.params.rasterband_channel).context(
-        CannotGetRasterDescriptorFromTileFile {
-            file_path: tile.params.file_path.to_string_lossy().to_string(),
-        },
-    )?;
+        })?;
 
     // TODO: move this inside the db? we do not want to open datasets while keeping a database transaction, though
     ensure!(

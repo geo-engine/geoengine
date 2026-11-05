@@ -2,6 +2,7 @@ use super::{
     GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
+        RasterInfo,
     },
 };
 use crate::{
@@ -17,7 +18,11 @@ use gdal::{
 use gdal_sys::{GDALGetDataCoverageStatus, VSICurlPartialClearCache};
 use geoengine_datatypes::{
     primitives::Coordinate2D,
-    raster::{GridSize, Pixel, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType},
+    raster::{
+        GridSize, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+        RasterPropertiesEntryType,
+    },
+    spatial_reference::{SpatialReference, SpatialReferenceOption},
     util::helpers::equals_or_both_nan,
 };
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
@@ -397,14 +402,14 @@ impl GdalHandling {
         }
     }
 
-    ///
-    /// A method to load single tiles from a GDAL dataset.
-    ///
-    pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
+    /// Opens the dataset (or reuses the cached one) and runs `read` on it, retrying both the
+    /// open and the read with backoff. Remote paths clear their VSI cache on failure, and a
+    /// file that explicitly does not exist is never retried.
+    fn open_with_retry<R>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
-        read_advise: GdalReadAdvise,
-    ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
+        read: impl Fn(&mut GdalDataset, &GdalDatasetParameters) -> Result<R, IpcProcessError>,
+    ) -> Result<R, IpcProcessError> {
         let is_remote = dataset_params.is_remote();
         let max_retries = dataset_params.max_retries().unwrap_or(0);
         let dp = &dataset_params;
@@ -427,7 +432,7 @@ impl GdalHandling {
                     }
                 };
 
-                Self::load_tile_data(ds, dataset_params, read_advise).inspect_err(|_e| {
+                read(ds, dataset_params).inspect_err(|_e| {
                     if is_remote {
                         Self::clear_gdal_vsi_cache_for_path(&dp.file_path_for_open());
                     }
@@ -436,6 +441,51 @@ impl GdalHandling {
             // If the file explicitly does not exist, do not waste time retrying
             |e| matches!(e, IpcProcessError::GdalError { kind, details: _ } if *kind == IpcProcessGdalErrorKind::FileNotFound),
         )
+    }
+
+    ///
+    /// A method to load single tiles from a GDAL dataset.
+    ///
+    pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+        read_advise: GdalReadAdvise,
+    ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, |ds, params| {
+            Self::load_tile_data(ds, params, read_advise)
+        })
+    }
+
+    /// Reads the data type of the `rasterband_channel` band and the dataset's CRS, without
+    /// pixel data.
+    ///
+    /// # Errors
+    /// Returns an `IpcProcessError` if the file or band cannot be opened or the data type is
+    /// not supported.
+    pub fn load_raster_info_with_dataset_retry(
+        cache: &mut GdalDatasetHolder,
+        dataset_params: &GdalDatasetParameters,
+    ) -> Result<RasterInfo, IpcProcessError> {
+        Self::open_with_retry(cache, dataset_params, |ds, params| {
+            let band_type = ds.rasterband(params.rasterband_channel)?.band_type();
+            let data_type = RasterDataType::from_gdal_data_type(band_type).map_err(|_| {
+                IpcProcessError::IpcOther {
+                    msg: format!("unsupported raster data type {band_type:?}"),
+                }
+            })?;
+            // GDAL reports a file without a CRS as an error
+            let spatial_reference = match ds.spatial_ref() {
+                Ok(spatial_ref) => SpatialReference::try_from(spatial_ref)
+                    .map_err(|e| IpcProcessError::IpcOther { msg: e.to_string() })?
+                    .into(),
+                Err(_) => SpatialReferenceOption::Unreferenced,
+            };
+
+            Ok(RasterInfo {
+                data_type,
+                spatial_reference,
+            })
+        })
     }
 
     /// This method reads the data for a single grid with a specified size from the GDAL dataset.
@@ -757,8 +807,8 @@ mod tests {
     use super::super::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
-            IpcChannelMessage, IpcChannelMessagePayload, IpcProcessGdalErrorKind,
-            IpcProcessRasterResult, WorkerRequest, WorkerResponse,
+            GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+            IpcProcessGdalErrorKind, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
         },
     };
     use super::*;
@@ -931,7 +981,6 @@ mod tests {
         };
 
         let payload = IpcChannelMessagePayload {
-            data_type: RasterDataType::U8,
             dataset_params: GdalDatasetParameters {
                 file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
@@ -973,8 +1022,11 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: None,
             },
-            read_advise,
             read_id: None,
+            request: GdalRequest::Read {
+                read_advise,
+                data_type: RasterDataType::U8,
+            },
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -1000,7 +1052,6 @@ mod tests {
         };
 
         let payload = IpcChannelMessagePayload {
-            data_type: RasterDataType::U8,
             dataset_params: GdalDatasetParameters {
                 file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
                 rasterband_channel: 1,
@@ -1042,8 +1093,11 @@ mod tests {
                 allow_alphaband_as_mask: true,
                 retry: None,
             },
-            read_advise,
             read_id: None,
+            request: GdalRequest::Read {
+                read_advise,
+                data_type: RasterDataType::U8,
+            },
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -1061,7 +1115,9 @@ mod tests {
         let WorkerResponse::ReadResult(result) = rx_result else {
             panic!("Expected read result");
         };
-        let payload = result.unwrap();
+        let IpcChannelResult::Raster(payload) = result.unwrap() else {
+            panic!("Expected a raster result");
+        };
 
         let result_2: GdalIpcPayload<u8> = (&payload).try_into().unwrap();
 
@@ -1869,5 +1925,40 @@ mod tests {
             load_sparse_tile("sparse_mask.tif", 0, None),
             GdalDataGridVariant::WithExplicitMask { .. }
         ));
+    }
+
+    #[test]
+    fn it_reports_a_file_without_crs_as_unreferenced() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut params = get_params();
+        params.file_path = dir.path().join("no_crs.tif");
+        gdal::DriverManager::get_driver_by_name("GTiff")
+            .unwrap()
+            .create_with_band_type::<u8, _>(&params.file_path, 4, 4, 1)
+            .unwrap()
+            .close()
+            .unwrap();
+
+        let info = GdalHandling::load_raster_info_with_dataset_retry(
+            &mut GdalDatasetHolder::new(),
+            &params,
+        )
+        .unwrap();
+        assert_eq!(info.spatial_reference, SpatialReferenceOption::Unreferenced);
+    }
+
+    #[test]
+    fn it_reads_raster_info_without_pixels() {
+        let mut holder = GdalDatasetHolder::new();
+
+        let info = GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &get_params())
+            .expect("the NDVI fixture opens");
+        assert_eq!(info.data_type, RasterDataType::U8);
+        assert_eq!(info.spatial_reference, SpatialReference::epsg_4326().into());
+
+        // a missing file is an error, whatever `file_not_found_handling` says
+        let mut missing = get_params();
+        missing.file_path = test_data!("raster/does_not_exist.tif").into();
+        assert!(GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &missing).is_err());
     }
 }

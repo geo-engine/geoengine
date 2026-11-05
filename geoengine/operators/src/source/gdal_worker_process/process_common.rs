@@ -65,19 +65,57 @@ impl GdalReadWindow {
     }
 }
 
+/// What a [`IpcChannelMessagePayload`] asks the worker for: pixels, or only the header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Hash)]
+pub enum GdalRequest {
+    /// Read pixels of the window `read_advise` as `data_type`.
+    Read {
+        read_advise: GdalReadAdvise,
+        /// We use this to know what type we serialize
+        data_type: RasterDataType,
+    },
+    /// Read the data type of band `rasterband_channel` and the dataset's CRS.
+    Header,
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct IpcChannelMessagePayload {
     pub dataset_params: GdalDatasetParameters,
-    pub read_advise: GdalReadAdvise,
-    /// We use this to know what type we serialize
-    pub data_type: RasterDataType,
     /// Correlation ID for tracing: `{hash}-{nanos}`. Used to link the main process
     /// caller span with the worker process span for the same logical read.
     #[serde(default)]
     pub read_id: Option<String>,
+    pub request: GdalRequest,
 }
 
-pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
+impl IpcChannelMessagePayload {
+    /// The pixel window a read targets; `None` for header reads.
+    pub fn read_window_bounds(&self) -> Option<GridBoundingBox2D> {
+        match &self.request {
+            GdalRequest::Read { read_advise, .. } => Some(read_advise.read_window_bounds),
+            GdalRequest::Header => None,
+        }
+    }
+}
+
+/// Result payload of a worker read.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum IpcChannelResult {
+    /// Result of [`GdalRequest::Read`].
+    Raster(GdalIpcBytePayload),
+    /// Result of [`GdalRequest::Header`].
+    RasterInfo(RasterInfo),
+}
+
+/// The data type of one band and the CRS of a raster, as read from its header.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct RasterInfo {
+    pub data_type: RasterDataType,
+    /// unreferenced if the file declares no CRS
+    pub spatial_reference: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
+}
+
+pub type IpcProcessRasterResult = Result<IpcChannelResult, IpcProcessError>;
 
 /// Commands executed sequentially by each GDAL worker.
 #[derive(Debug, Serialize, Deserialize)]
@@ -564,9 +602,7 @@ impl IpcChannelMessage {
     pub fn full_hash<H: Hasher>(&self, state: &mut H) {
         self.0.dataset_params.full_hash(state);
 
-        // Hash read advise
-        self.0.read_advise.hash(state);
-        self.0.data_type.hash(state);
+        self.0.request.hash(state);
     }
 }
 
