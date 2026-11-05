@@ -106,7 +106,8 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    let current_span = span!(Level::TRACE, "spawn_blocking");
+    // `or_current`: without TRACE, the span is disabled and spans in `f` would lose their parent
+    let current_span = span!(Level::TRACE, "spawn_blocking").or_current();
 
     tokio::task::spawn_blocking(move || {
         let _entered_span = current_span.enter();
@@ -124,7 +125,8 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    let current_span = span!(Level::TRACE, "spawn_blocking_with_thread_pool");
+    // `or_current`: without TRACE, the span is disabled and spans in `f` would lose their parent
+    let current_span = span!(Level::TRACE, "spawn_blocking_with_thread_pool").or_current();
 
     tokio::task::spawn_blocking(move || {
         thread_pool.install(move || {

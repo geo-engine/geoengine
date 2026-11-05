@@ -14,6 +14,7 @@ use geoengine_datatypes::primitives::{
     QueryAttributeSelection, QueryRectangle, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::RasterTile2D;
+use geoengine_datatypes::util::ByteSize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{Level, span};
 
@@ -261,7 +262,7 @@ where
     A: QueryAttributeSelection + 'static,
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
         + 'static,
-    T: Send,
+    T: Send + ByteSize,
 {
     type Output = T;
     type SpatialBounds = S;

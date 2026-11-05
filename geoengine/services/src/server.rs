@@ -136,9 +136,8 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
 
     let data_path_config: config::DataProvider = get_config_element()?;
 
-    let chunk_byte_size = config::get_config_element::<config::QueryContext>()?
-        .chunk_byte_size
-        .into();
+    let query_context_config = config::get_config_element::<config::QueryContext>()?;
+    let chunk_byte_size = query_context_config.chunk_byte_size.into();
 
     let tiling_spec = config::get_config_element::<config::TilingSpecification>()?.into();
 
@@ -149,6 +148,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         tiling_spec,
         oidc_config,
         chunk_byte_size,
+        query_context_config.rayon_threads,
         static_files_dir,
         web_config,
         cache_config,
@@ -164,6 +164,7 @@ async fn start_postgres(
     tiling_spec: TilingSpecification,
     oidc_config: crate::config::Oidc,
     chunk_byte_size: ChunkByteSize,
+    rayon_threads: usize,
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
     cache_config: crate::config::Cache,
@@ -183,6 +184,7 @@ async fn start_postgres(
             data_path_config.layer_collection_defs_path,
             tiling_spec,
             chunk_byte_size,
+            rayon_threads,
             oidc_config,
             cache_config,
             quota_config,

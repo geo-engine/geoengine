@@ -217,6 +217,7 @@ impl MockExecutionContext {
         MockQueryContext::new(
             ChunkByteSize::test_default(),
             self.tiling_specification,
+            self.thread_pool.clone(),
             self.gdal_process_pool.clone(),
             self.default_cache_ttl,
         )
@@ -226,6 +227,7 @@ impl MockExecutionContext {
         MockQueryContext::new(
             chunk_byte_size,
             self.tiling_specification,
+            self.thread_pool.clone(),
             self.gdal_process_pool.clone(),
             self.default_cache_ttl,
         )
