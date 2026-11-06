@@ -2,7 +2,10 @@ use crate::{
     api::{
         handlers::tasks::TaskResponse,
         model::{
-            datatypes::{BandSelection, DataId, TimeInterval},
+            datatypes::{
+                BandSelection, DataId, SpatialPartition2D as ApiSpatialPartition2D,
+                SpatialReferenceOption, TimeInterval,
+            },
             processing_graphs::{ProcessingGraph, ProcessingGraphId},
             responses::IdResponse,
             services::RasterDatasetFromProcessingGraph,
@@ -28,6 +31,7 @@ use crate::{
         send_websocket_message,
     },
     queries::{
+        footprints::raster_footprints,
         run_query,
         stream::{raster_stream, vector_stream},
     },
@@ -75,6 +79,10 @@ where
                     .service(
                         web::resource("/metadata")
                             .route(web::get().to(get_processing_graph_metadata_handler::<C>)),
+                    )
+                    .service(
+                        web::resource("/footprints")
+                            .route(web::get().to(get_processing_graph_footprints_handler::<C>)),
                     )
                     .service(
                         web::resource("/provenance")
@@ -512,6 +520,136 @@ async fn dataset_from_processing_graph_handler<C: ApplicationContext>(
     .await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
+}
+
+/// The most time steps one footprints request can cover.
+pub const MAX_FOOTPRINT_TIME_STEPS: usize = 100;
+
+const fn default_footprint_limit() -> usize {
+    MAX_FOOTPRINT_TIME_STEPS
+}
+
+/// The query parameters for `get_processing_graph_footprints_handler`.
+#[derive(Clone, Debug, PartialEq, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct RasterFootprintsQuery {
+    /// `minX,minY,maxX,maxY` in the spatial reference of the processing graph.
+    #[serde(deserialize_with = "parse_spatial_partition")]
+    #[param(value_type = String)]
+    pub spatial_bounds: SpatialPartition2D,
+    #[serde(deserialize_with = "parse_time")]
+    #[param(value_type = String)]
+    pub time_interval: TimeInterval,
+    #[serde(deserialize_with = "parse_band_selection")]
+    #[param(value_type = String)]
+    pub attributes: BandSelection,
+    /// The number of time steps to answer. At most, and by default, 100.
+    #[serde(default = "default_footprint_limit")]
+    pub limit: usize,
+    /// How exact the boxes have to be. By default `coverage`.
+    #[serde(default)]
+    pub precision: RasterFootprintsPrecision,
+}
+
+/// How exact the boxes of the footprints of a time step have to be.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RasterFootprintsPrecision {
+    /// Only whether a time step has data. A step with data may carry the whole queried area as
+    /// its box. This is much cheaper for catalogs that can count items, and it does not
+    /// reject large areas that they can count.
+    Availability,
+    /// The areas in which data may exist, as boxes, as exact as the data source can tell.
+    #[default]
+    Coverage,
+}
+
+impl From<RasterFootprintsPrecision> for geoengine_operators::engine::FootprintPrecision {
+    fn from(value: RasterFootprintsPrecision) -> Self {
+        match value {
+            RasterFootprintsPrecision::Availability => Self::Availability,
+            RasterFootprintsPrecision::Coverage => Self::Coverage,
+        }
+    }
+}
+
+/// Whether a time step has data in the queried area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TimeStepFootprintStatus {
+    /// Data may exist inside of `bounds`. A box can still hold no-data, e.g. clouds.
+    Data,
+    /// There is certainly no data.
+    Empty,
+    /// The processing graph cannot tell.
+    Unknown,
+}
+
+/// Where the data of one time step may exist.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeStepFootprint {
+    pub time: TimeInterval,
+    pub status: TimeStepFootprintStatus,
+    pub bounds: Vec<ApiSpatialPartition2D>,
+}
+
+/// When and where the data of a raster processing graph may exist.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RasterFootprints {
+    /// The spatial reference of the `bounds`.
+    #[schema(value_type = String)]
+    pub spatial_reference: SpatialReferenceOption,
+    pub steps: Vec<TimeStepFootprint>,
+    /// The next time step to ask for, if more steps exist within the requested time interval.
+    pub next: Option<TimeInterval>,
+    /// Answering needs too many catalog searches. Query a smaller area or time range.
+    pub too_large: bool,
+}
+
+/// Gets when and where the data of a raster processing graph may exist.
+#[utoipa::path(
+    tag = "Processing Graphs",
+    get,
+    path = "/processingGraphs/{id}/footprints",
+    responses(
+        (status = 200, description = "The footprints per time step", body = RasterFootprints)
+    ),
+    params(
+        ("id" = ProcessingGraphId, description = "Processing graph id"),
+        RasterFootprintsQuery,
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn get_processing_graph_footprints_handler<C: ApplicationContext>(
+    id: web::Path<ProcessingGraphId>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    query: web::Query<RasterFootprintsQuery>,
+    request: HttpRequest,
+) -> Result<impl Responder> {
+    let ctx = app_ctx.session_context(session);
+    let query = query.into_inner();
+
+    let footprints = run_query(
+        &ctx,
+        connection_closed(&request, None),
+        raster_footprints(
+            ctx.clone(),
+            id.into_inner().into(),
+            query.spatial_bounds,
+            query.time_interval.into(),
+            query.attributes.try_into()?,
+            query.limit,
+            query.precision.into(),
+        ),
+    )
+    .await?;
+
+    Ok(web::Json(footprints))
 }
 
 /// The query parameters for `raster_stream_websocket`.
@@ -1201,6 +1339,128 @@ mod tests {
                 }]
             })
         );
+    }
+
+    /// A raster graph with one tile at 0 to 1000 ms that covers the pixels 0 to 1 of band 0.
+    async fn register_footprints_test_graph(
+        ctx: &<PostgresContext<NoTls> as ApplicationContext>::SessionContext,
+    ) -> ServicesProcessingGraphId {
+        let tile = geoengine_datatypes::raster::RasterTile2D::<u8> {
+            time: TimeInterval::new_unchecked(0, 1000),
+            tile_position: [0, 0].into(),
+            band: 0,
+            global_geo_transform: GeoTransform::test_default(),
+            grid_array: geoengine_datatypes::raster::Grid::new([2, 2].into(), vec![1, 2, 3, 4])
+                .unwrap()
+                .into(),
+            properties: Default::default(),
+            cache_hint: geoengine_datatypes::primitives::CacheHint::no_cache(),
+        };
+
+        let processing_graph = ServicesProcessingGraph {
+            operator: geoengine_operators::mock::MockRasterSource::<u8> {
+                params: MockRasterSourceParams::<u8> {
+                    data: vec![tile],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        time: TimeDescriptor::new_irregular(None),
+                        spatial_grid: SpatialGridDescriptor::source_from_parts(
+                            GeoTransform::test_default(),
+                            GridBoundingBox2D::new([0, 0], [199, 199]).unwrap(),
+                        ),
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Unitless,
+                        )])
+                        .unwrap(),
+                    },
+                },
+            }
+            .typed()
+            .into(),
+        };
+
+        ctx.db()
+            .register_processing_graph(processing_graph)
+            .await
+            .unwrap()
+    }
+
+    /// The mock tile of `register_footprints_test_graph` has 2 x 2 pixels.
+    fn footprints_test_tiling_spec() -> TilingSpecification {
+        TilingSpecification {
+            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::new([2, 2]),
+        }
+    }
+
+    const FOOTPRINTS_QUERY: &str =
+        "spatialBounds=0,-10,10,0&timeInterval=1970-01-01T00:00:00.000Z/1970-01-01T00:00:01.000Z";
+
+    #[ge_context::test(tiling_spec = "footprints_test_tiling_spec")]
+    async fn footprints(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+        let id = register_footprints_test_graph(&ctx).await;
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/processingGraphs/{id}/footprints?{FOOTPRINTS_QUERY}&attributes=0"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        let res_status = res.status();
+        let res_body = read_body_string(res).await;
+        assert_eq!(res_status, 200, "{res_body:?}");
+
+        let body: serde_json::Value = serde_json::from_str(&res_body).unwrap();
+        assert_eq!(body["spatialReference"], "EPSG:4326");
+        assert_eq!(body["tooLarge"], false);
+        assert_eq!(body["next"], serde_json::Value::Null);
+        let steps = body["steps"].as_array().unwrap();
+        assert_eq!(steps.len(), 1, "{body}");
+        assert_eq!(steps[0]["status"], "data");
+        assert_eq!(steps[0]["bounds"].as_array().unwrap().len(), 1);
+    }
+
+    #[ge_context::test]
+    async fn footprints_missing_header(app_ctx: PostgresContext<NoTls>) {
+        let req = test::TestRequest::get().uri(&format!(
+            "/processingGraphs/{}/footprints?{FOOTPRINTS_QUERY}&attributes=0",
+            ServicesProcessingGraphId::new()
+        ));
+        let res = send_test_request(req, app_ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            401,
+            "Unauthorized",
+            "Authorization error: Header with authorization token not provided.",
+        )
+        .await;
+    }
+
+    #[ge_context::test(tiling_spec = "footprints_test_tiling_spec")]
+    async fn footprints_of_a_band_that_does_not_exist(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+        let id = register_footprints_test_graph(&ctx).await;
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/processingGraphs/{id}/footprints?{FOOTPRINTS_QUERY}&attributes=7"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        ErrorResponse::assert(
+            res,
+            400,
+            "FootprintBandOutOfRange",
+            "Band 7 does not exist, the processing graph has 1 bands",
+        )
+        .await;
     }
 
     #[ge_context::test]
