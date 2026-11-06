@@ -718,7 +718,7 @@ impl ConfigElement for OpenTelemetry {
     const KEY: &'static str = "open_telemetry";
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Cache {
     pub enabled: bool,
     pub size_in_mb: usize,
@@ -731,25 +731,20 @@ pub struct Cache {
     /// Ignored if `enable_new_raster_cache` is `false`, in which case the old cache holds both
     /// vector and raster data and gets the full `size_in_mb`.
     pub raster_cache_size_ratio: f64,
-    /// which raster operators the new raster cache wraps
-    #[serde(default)]
-    pub raster_levels: RasterCacheLevels,
+    /// names of the raster operators whose tiles the new raster cache stores, `"*"` for all
+    pub raster_operators: Vec<String>,
     /// Default cache lifetime for values without an explicit cache TTL.
     pub default_ttl_seconds: u32,
 }
 
-/// Which raster operators of a processing graph the new raster cache wraps.
-#[derive(Debug, Deserialize, Clone, Copy, Default, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum RasterCacheLevels {
-    /// only the root of a processing graph, i.e. the tiles a query returns
-    #[default]
-    Outputs,
-    /// every raster operator, including intermediate results
-    All,
-}
-
 impl Cache {
+    /// Whether the new raster cache stores the tiles of the operator `name`.
+    pub fn caches_raster_operator(&self, name: &str) -> bool {
+        self.raster_operators
+            .iter()
+            .any(|operator| operator == "*" || operator == name)
+    }
+
     pub fn shared_cache_size_in_mb(&self) -> usize {
         self.size_in_mb - self.new_raster_cache_size_in_mb()
     }
@@ -806,7 +801,7 @@ impl TestDefault for Cache {
             landing_zone_ratio: 0.1, // 10% of cache size
             enable_new_raster_cache: false,
             raster_cache_size_ratio: 0.5,
-            raster_levels: RasterCacheLevels::Outputs,
+            raster_operators: vec!["*".to_string()],
             default_ttl_seconds: MIN_BLOCK_CACHE_TTL_SECONDS,
         }
     }
@@ -994,6 +989,18 @@ mod tests {
         let config: Web = default_element();
         assert_eq!(config.workers, 0);
         assert_eq!(config.max_blocking_threads_per_worker, 0);
+    }
+
+    #[test]
+    fn it_selects_the_raster_operators_to_cache_by_name() {
+        let cache = |operators: &[&str]| Cache {
+            raster_operators: operators.iter().map(ToString::to_string).collect(),
+            ..Cache::test_default()
+        };
+        assert!(default_element::<Cache>().caches_raster_operator("Expression"));
+        assert!(cache(&["Expression"]).caches_raster_operator("Expression"));
+        assert!(!cache(&["Expression"]).caches_raster_operator("Reprojection"));
+        assert!(!cache(&[]).caches_raster_operator("Expression"));
     }
 
     #[test]

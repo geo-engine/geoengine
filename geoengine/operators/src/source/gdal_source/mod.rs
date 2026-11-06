@@ -591,6 +591,11 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
         GdalSource::TYPE_NAME
     }
 
+    fn reads_cached_blocks(&self) -> bool {
+        // see `GdalReaderMode::level_factor`: else GDAL picks an overview, which has no blocks
+        self.original_resolution_spatial_grid.is_none() || self.max_overview_level.is_some()
+    }
+
     fn path(&self) -> ProcessingGraphOperatorPath {
         self.path.clone()
     }
