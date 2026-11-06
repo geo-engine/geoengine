@@ -6,6 +6,7 @@
 //! If `NO_DATA_BENCH_STATS` points to a file with one `<status> <bytes>` line per HTTP response,
 //! the HTTP requests and bytes of the first run are reported, too.
 //! `NO_DATA_BENCH_RUNS` sets the number of Sentinel-2 runs (default 5).
+//! `NO_DATA_BENCH_PARALLELISM` sets the sub-query parallelism per query (default 1).
 //!
 //! The first run of a case is cold: its dataset was not opened before.
 //! Later runs are warm, because the GDAL workers keep the dataset and its block cache.
@@ -29,8 +30,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        MockExecutionContext, ProcessingGraphOperatorPath, QueryContext, RasterOperator,
-        RasterQueryProcessor, SingleRasterSource, TypedRasterOperator,
+        MockExecutionContext, ProcessingGraphOperatorPath, QueryContext, QueryParallelism,
+        RasterOperator, RasterQueryProcessor, SingleRasterSource, TypedRasterOperator,
     },
     processing::{
         Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Expression,
@@ -215,7 +216,10 @@ fn main() {
         8,
         WorkerConfig::default(),
     );
-    let query_ctx = exe_ctx.mock_query_context_test_default();
+    let mut query_ctx = exe_ctx.mock_query_context_test_default();
+    query_ctx.parallelism = QueryParallelism::new(
+        std::env::var("NO_DATA_BENCH_PARALLELISM").map_or(1, |n| n.parse().unwrap()),
+    );
 
     let ndvi = add_ndvi_dataset(&mut exe_ctx);
 
