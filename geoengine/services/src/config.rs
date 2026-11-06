@@ -855,6 +855,34 @@ pub struct StacCache {
     pub size_in_mb: usize,
     /// TTL in seconds for STAC query cache entries.
     pub ttl_secs: u64,
+    /// Number of time steps one calendar search asks the STAC server for at once, per grid cell. The
+    /// result is stored per step. Chunks start at the origin of the time axis, not at months.
+    pub search_chunk_steps: u32,
+    /// Footprint queries needing more searches than this are rejected as too large.
+    pub max_footprint_searches: usize,
+    /// Share of the requests per time window of a STAC server that background searches (the
+    /// calendar) may start, between 0 and 1. Map tiles (interactive) are served first and can use
+    /// the rest, so with a limit of 10 per second and a share of 0.5 the calendar gets at most 5
+    /// per second. At least one background request per window is always allowed.
+    pub background_share: f64,
+    /// A calendar request for at most this many grid cells searches the files, which gives exact
+    /// days and warms the cache of the map. For more cells, one aggregation counts the items of the
+    /// cells, which is cheaper but also counts items next to the view. 0 always aggregates.
+    pub availability_search_cells: usize,
+}
+
+impl StacCache {
+    pub fn validate(&self) -> Result<()> {
+        if !(0.0..=1.0).contains(&self.background_share) {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "background_share must be between 0 and 1, got {}",
+                    self.background_share
+                ),
+            });
+        }
+        Ok(())
+    }
 }
 
 impl TestDefault for StacCache {
@@ -862,6 +890,10 @@ impl TestDefault for StacCache {
         Self {
             size_in_mb: 1_000, // 1 GB
             ttl_secs: 3_600,
+            search_chunk_steps: 30,
+            max_footprint_searches: 50,
+            background_share: 0.5,
+            availability_search_cells: 4,
         }
     }
 }

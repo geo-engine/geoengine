@@ -21,7 +21,10 @@
 //! unless the server supplies quota windows or usable retry timing. Admission
 //! waits for the cooldown and all quota constraints.
 use super::{StacProviderAuthentication, auth::StacAuthentication};
+
+mod aggregation;
 use crate::util::retry::{RetryAction, RetryPolicy, retry_http_with_action};
+pub(crate) use aggregation::step_has_items;
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use futures_util::{FutureExt, StreamExt, stream::FuturesUnordered};
@@ -47,6 +50,17 @@ const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(1);
 const MAX_PENDING_ATTEMPTS: usize = 256;
 /// Bound retained quota identities per application or harvesting operation.
 const MAX_COORDINATORS: usize = 1024;
+
+/// How a request is scheduled against the other requests of the same STAC server.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RequestPriority {
+    /// Requests a user waits for, such as map tiles. Admitted first.
+    #[default]
+    Interactive,
+    /// Window searches for the calendar. Admitted only while no interactive request waits,
+    /// and limited to a share of the server's limit, so tiles keep the rest.
+    Background,
+}
 /// Keep recent starts and idle coordinators long enough to learn further policies
 /// and preserve quota accounting when providers are reconstructed.
 const MIN_RETENTION: Duration = Duration::from_mins(5);
@@ -182,6 +196,15 @@ struct State {
     cooldown_until: Option<Instant>,
     /// Last admission or release of an admitted attempt, used for idle retention.
     last_activity: Instant,
+    /// Admission timestamps of background attempts only, a subset of `starts`. A background attempt
+    /// is admitted only if the starts in here stay within `background_share` of each window's
+    /// limit, counted over the same rolling duration as the window. `starts` itself counts all
+    /// attempts, so the limit of the window still holds for both kinds together.
+    background_starts: VecDeque<Instant>,
+    /// Share of each window's limit that background attempts (the calendar) may use, between 0
+    /// and 1, rounded down but at least one attempt. The rest of the limit stays free for
+    /// interactive attempts (map tiles), which are not counted against this share.
+    background_share: f64,
 }
 
 impl State {
@@ -213,8 +236,35 @@ impl State {
             .unwrap_or(self.last_activity)
     }
 
-    /// Return a blocking deadline, or reserve capacity and return `None`.
+    /// [`Self::reserve_with_priority`] for an interactive attempt.
+    #[cfg(test)]
     fn reserve(&mut self, now: Instant) -> Option<Instant> {
+        self.reserve_with_priority(now, RequestPriority::Interactive)
+    }
+
+    /// Background attempts additionally stay within their share of every window.
+    fn background_blocked_until(&self, now: Instant) -> Option<Instant> {
+        let fallback = [Window::new(10, DEFAULT_WINDOW_DURATION)];
+        let windows = if self.windows.is_empty() {
+            &fallback[..]
+        } else {
+            &self.windows[..]
+        };
+        windows
+            .iter()
+            .filter_map(|window| {
+                let limit = ((window.limit as f64 * self.background_share) as usize).max(1);
+                Window::new(limit, window.duration).blocked_until(&self.background_starts, now)
+            })
+            .max()
+    }
+
+    /// Return a blocking deadline, or reserve capacity and return `None`.
+    fn reserve_with_priority(
+        &mut self,
+        now: Instant,
+        priority: RequestPriority,
+    ) -> Option<Instant> {
         self.prune(now);
         // Before learning policies, use the fallback immediately. There is no
         // special bootstrap request or wait for its headers.
@@ -226,6 +276,9 @@ impl State {
                 .filter_map(|window| window.blocked_until(&self.starts, now))
                 .max()
         };
+        let background = (priority == RequestPriority::Background)
+            .then(|| self.background_blocked_until(now))
+            .flatten();
         let deadline = local
             .into_iter()
             .chain(
@@ -234,12 +287,16 @@ impl State {
                     .and_then(RemoteQuota::blocked_until),
             )
             .chain(self.cooldown_until)
+            .chain(background)
             .max();
         if let Some(deadline) = deadline {
             return Some(deadline);
         }
         self.in_flight_requests += 1;
         self.starts.push_back(now);
+        if priority == RequestPriority::Background {
+            self.background_starts.push_back(now);
+        }
         self.last_activity = now;
         for quota in self
             .windows
@@ -261,6 +318,13 @@ impl State {
             .is_some_and(|at| now.duration_since(*at) >= history_duration)
         {
             self.starts.pop_front();
+        }
+        while self
+            .background_starts
+            .front()
+            .is_some_and(|at| now.duration_since(*at) >= history_duration)
+        {
+            self.background_starts.pop_front();
         }
         for quota in self
             .windows
@@ -332,6 +396,7 @@ struct AttemptJob {
     client: reqwest::Client,
     request: reqwest::Request,
     authentication: Option<StacAuthentication>,
+    priority: RequestPriority,
     reply: oneshot::Sender<Result<AttemptReply, StacClientError>>,
     permit: OwnedSemaphorePermit,
 }
@@ -345,6 +410,10 @@ struct AttemptReply {
 /// Shared request channel and cancellation notification plus their registry identity.
 #[derive(Debug)]
 pub(super) struct ActorChannels {
+    /// Set when the server has shown that it does not answer aggregation requests. Like the learned
+    /// quota, it belongs to the server and is shared by all providers that use it. It ends after a
+    /// while, because a gateway can answer 404 for a moment only.
+    aggregation_pause: aggregation::Pause,
     // Each job owns a permit until its completion is processed, so draining the
     // channel into the actor's queue cannot bypass backpressure.
     jobs: mpsc::Sender<AttemptJob>,
@@ -410,12 +479,34 @@ impl Default for CoordinatorMap {
 #[derive(Clone, Debug, Default)]
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
+    /// The settings of `[stac_cache]`, which the contexts read. Without them (tests, harvester)
+    /// the registry uses [`DEFAULT_BACKGROUND_SHARE`] and providers get a standalone cache.
+    config: Option<crate::config::StacCache>,
 }
+
+/// The background share of a registry that is not configured, e.g. in tests and the harvester,
+/// which send no background requests.
+const DEFAULT_BACKGROUND_SHARE: f64 = 0.5;
 
 impl StacRequestRegistry {
     /// Create an empty request registry.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Configures the registry and the caches of the providers that use it.
+    #[must_use]
+    pub fn with_config(mut self, config: crate::config::StacCache) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    /// The query cache of a new provider.
+    pub(super) fn new_query_cache(&self) -> super::cache::StacQueryCache {
+        self.config.as_ref().map_or_else(
+            super::cache::StacQueryCache::standalone,
+            super::cache::StacQueryCache::from_config,
+        )
     }
 
     /// Find or create the coordinator for this origin and authentication.
@@ -475,6 +566,8 @@ impl StacRequestRegistry {
                 channels.cancellations.clone(),
                 Arc::downgrade(&channels),
                 dispatch,
+                self.config
+                    .map_or(DEFAULT_BACKGROUND_SHARE, |config| config.background_share),
             ));
         }
         Ok(channels)
@@ -488,6 +581,7 @@ impl StacRequestRegistry {
         let (jobs, job_receiver) = mpsc::channel(MAX_PENDING_ATTEMPTS);
         (
             Arc::new(ActorChannels {
+                aggregation_pause: aggregation::Pause::default(),
                 jobs,
                 capacity: Arc::new(Semaphore::new(MAX_PENDING_ATTEMPTS)),
                 cancellations: Arc::new(Notify::new()),
@@ -655,6 +749,17 @@ impl StacClient {
         request: reqwest::RequestBuilder,
         policy: &RetryPolicy,
     ) -> Result<T, StacClientError> {
+        self.execute_json_with_priority(request, policy, RequestPriority::Interactive)
+            .await
+    }
+
+    /// Like [`Self::execute_json`], scheduled with the given priority.
+    pub(crate) async fn execute_json_with_priority<T: DeserializeOwned>(
+        &self,
+        request: reqwest::RequestBuilder,
+        policy: &RetryPolicy,
+        priority: RequestPriority,
+    ) -> Result<T, StacClientError> {
         let request = request.build()?;
         let channels = self
             .request_registry
@@ -662,7 +767,7 @@ impl StacClient {
         let operation_name = format!("Fetch STAC items from {}", request.url());
         retry_http_with_action(
             || async {
-                let reply = match self.execute_attempt(&channels, &request).await {
+                let reply = match self.execute_attempt(&channels, &request, priority).await {
                     Ok(reply) => reply,
                     Err(error) => return (Err(error), RetryAction::Abort),
                 };
@@ -686,6 +791,7 @@ impl StacClient {
         &self,
         channels: &ActorChannels,
         request: &reqwest::Request,
+        priority: RequestPriority,
     ) -> Result<AttemptReply, StacClientError> {
         let request_copy = request
             .try_clone()
@@ -709,6 +815,7 @@ impl StacClient {
                 .as_ref()
                 .filter(|_| self.origin.origin() == request.url().origin())
                 .cloned(),
+            priority,
             reply,
             permit,
         };
@@ -730,6 +837,7 @@ async fn run_attempt(job: AttemptJob, completed_before: usize) -> AttemptComplet
         client,
         request,
         authentication,
+        priority: _,
         mut reply,
         permit,
     } = job;
@@ -757,6 +865,7 @@ async fn run_actor<F>(
     cancellations: Arc<Notify>,
     coordinator: Weak<ActorChannels>,
     dispatch: F,
+    background_share: f64,
 ) where
     F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
 {
@@ -769,8 +878,12 @@ async fn run_actor<F>(
         unscoped_quota: None,
         cooldown_until: None,
         last_activity: now,
+        background_starts: VecDeque::new(),
+        background_share,
     };
-    let mut queued: VecDeque<AttemptJob> = VecDeque::new();
+    // Interactive jobs are admitted before any waiting background job.
+    let mut interactive: VecDeque<AttemptJob> = VecDeque::new();
+    let mut background: VecDeque<AttemptJob> = VecDeque::new();
     let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
     let mut jobs_open = true;
 
@@ -780,22 +893,26 @@ async fn run_actor<F>(
         }
 
         let mut deadline = None;
-        if let Some(job) = queued.pop_front() {
+        if let Some(job) = interactive.pop_front().or_else(|| background.pop_front()) {
             if job.reply.is_closed() {
                 continue;
-            } else if let Some(until) = state.reserve(Instant::now()) {
+            } else if let Some(until) = state.reserve_with_priority(Instant::now(), job.priority) {
                 deadline = Some(until);
-                queued.push_front(job);
+                match job.priority {
+                    RequestPriority::Interactive => interactive.push_front(job),
+                    RequestPriority::Background => background.push_front(job),
+                }
             } else {
                 running.push(dispatch(job, state.completed_requests));
                 continue;
             }
         }
 
-        if !jobs_open && queued.is_empty() && running.is_empty() {
+        let queued_empty = interactive.is_empty() && background.is_empty();
+        if !jobs_open && queued_empty && running.is_empty() {
             return;
         }
-        let idle_deadline = (queued.is_empty() && running.is_empty()).then(|| {
+        let idle_deadline = (queued_empty && running.is_empty()).then(|| {
             let now = Instant::now();
             let deadline = state.retain_until();
             if deadline <= now && coordinator.strong_count() > 1 {
@@ -811,14 +928,20 @@ async fn run_actor<F>(
                     complete_attempt(&mut state, completion);
                 }
             },
-            () = cancellations.notified() => queued.retain(|job| !job.reply.is_closed()),
+            () = cancellations.notified() => {
+                interactive.retain(|job| !job.reply.is_closed());
+                background.retain(|job| !job.reply.is_closed());
+            },
             job = receiver.recv(), if jobs_open => match job {
-                Some(job) => queued.push_back(job),
+                Some(job) => match job.priority {
+                    RequestPriority::Interactive => interactive.push_back(job),
+                    RequestPriority::Background => background.push_back(job),
+                },
                 None => jobs_open = false,
             },
             () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } }, if deadline.is_some() => {},
             () = async { if let Some(deadline) = idle_deadline { tokio::time::sleep_until(deadline.into()).await } }, if idle_deadline.is_some() => {
-                if state.retain_until() <= Instant::now() && queued.is_empty() && running.is_empty()
+                if state.retain_until() <= Instant::now() && interactive.is_empty() && background.is_empty() && running.is_empty()
                     && ActorChannels::try_retire(&coordinator) {
                     return;
                 }
@@ -1139,6 +1262,8 @@ mod tests {
             unscoped_quota: None,
             cooldown_until: None,
             last_activity: now,
+            background_starts: VecDeque::new(),
+            background_share: 0.5,
         };
         for _ in 0..10 {
             assert_eq!(state.reserve(Instant::now()), None);
@@ -1161,6 +1286,8 @@ mod tests {
             unscoped_quota: None,
             cooldown_until: None,
             last_activity: now,
+            background_starts: VecDeque::new(),
+            background_share: 0.5,
         };
         assert_eq!(state.reserve(now), None);
         let headers = quota_headers("2;w=60", "0", "60");

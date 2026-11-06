@@ -333,6 +333,23 @@ min_block_ttl_seconds = 60
 size_in_mb = 100
 # TTL in seconds for STAC query cache entries
 ttl_secs = 3600
+# A search for the calendar asks the STAC server for this many time steps of one grid cell at once and
+# stores the result per step. The chunks start at the origin of the dataset's time axis, so they do not
+# follow the months. More steps mean fewer requests for a long window, but each one returns more items
+# (up to the pages of a whole chunk) even if only a few days are looked at.
+search_chunk_steps = 30
+# footprint queries needing more STAC searches than this are answered with "too large"
+max_footprint_searches = 50
+# A STAC server allows a number of requests per time window (e.g. 10 per second). Map tiles and the
+# calendar's searches share it. Tiles are always served first. Calendar searches ("background")
+# additionally may only start this share of the window's requests, so with 10 per second and 0.5 the
+# calendar uses at most 5 per second and map tiles can always use the other 5, even if many calendar
+# searches are waiting. Between 0 and 1; at least one calendar request per window is allowed.
+# 1 lets the calendar use the whole limit whenever no map tile waits.
+background_share = 0.5
+# a calendar request for at most this many grid cells searches the files (exact days, warms the map's cache);
+# for more cells one aggregation counts the items of the cells, which also counts items next to the view. 0 always aggregates
+availability_search_cells = 4
 
 [provider_cache]
 # maximum number of provider instances in the provider registry
