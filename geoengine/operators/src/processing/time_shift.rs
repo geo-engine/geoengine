@@ -588,6 +588,30 @@ where
 
         Ok(stream)
     }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<crate::engine::Footprint>>> {
+        let (time_interval, state) = self.shift.shift(query.time_interval())?;
+        let stream = self
+            .processor
+            .footprint_query(query.select_time_interval(time_interval), precision, ctx)
+            .await?;
+
+        Ok(stream
+            .map(move |footprint| {
+                footprint.and_then(|footprint| {
+                    Ok(crate::engine::Footprint {
+                        time: self.shift.reverse_shift(footprint.time, state)?,
+                        bounds: footprint.bounds,
+                    })
+                })
+            })
+            .boxed())
+    }
 }
 
 #[cfg(test)]

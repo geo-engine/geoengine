@@ -51,6 +51,10 @@ rayon_threads = 0
 gdal_source_read_ahead = 8
 # GDAL tile reads a MultiBandGdalSource query keeps in flight
 multi_band_gdal_source_read_ahead = 16
+# The most boxes a footprint (where a raster may have data, see `/processingGraphs/{id}/footprints`) keeps
+# for one time step. If a step has more, the boxes that add the least empty area are merged. Combining
+# footprints, e.g. in an expression, takes time in the product of the numbers of boxes.
+footprint_boxes_per_step_limit = 64
 
 [expression]
 # seconds a compiled expression stays in the cache without being requested; running queries keep

@@ -6,6 +6,10 @@ pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
     StatisticsWrappingMockExecutionContext,
 };
+pub use footprint::{
+    DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT, Footprint, FootprintBounds, FootprintCombine,
+    FootprintPrecision, unknown_footprints, zip_footprints,
+};
 pub use initialized_sources::{
     InitializedMultiRasterOrVectorOperator, InitializedMultiRasterOrVectorSource,
     InitializedSingleRasterOrVectorOperator, InitializedSingleRasterOrVectorSource,
@@ -40,6 +44,7 @@ use tracing::Span;
 pub use typed_operators::{TypedPlotOperator, TypedRasterOperator, TypedVectorOperator};
 mod clonable_operator;
 mod execution_context;
+mod footprint;
 mod initialized_sources;
 mod operator;
 mod operator_impl;

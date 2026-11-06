@@ -15,6 +15,52 @@ where
     current_time: Option<TimeInterval>,
 }
 
+/// The interval that follows `current_time` in the merge of several time streams, where `active`
+/// are the intervals at the head of each stream. The merge splits at every start and end, so
+/// a stream's interval either covers the result completely or does not overlap it.
+///
+/// Shared with the merge of footprint streams, so that both produce the same time steps.
+pub(crate) fn next_merged_interval(
+    current_time: Option<TimeInterval>,
+    active: &[TimeInterval],
+) -> Option<TimeInterval> {
+    // Find all intervals that contain the end of the current_time. The one with the minimum end is a candidate for the next merged interval.
+    let candidate_case_a = current_time.and_then(|current_t| {
+        active
+            .iter()
+            .filter(|a| a.contains_instance(current_t.end()))
+            .min_by_key(|a| a.end())
+            .map(|interval| TimeInterval::new_unchecked(current_t.end(), interval.end()))
+    });
+
+    let candidate_case_b = current_time.and_then(|current_t| {
+        active
+            .iter()
+            .filter(|interval| interval.start() > current_t.end())
+            .min_by_key(|interval| interval.start())
+            .copied()
+    });
+
+    let candidate_case_c = active
+        .iter()
+        .min_by_key(|interval| interval.start())
+        .copied();
+
+    let candidate = candidate_case_a.or(candidate_case_b).or(candidate_case_c)?;
+
+    // Now, we have a candidate but we need to check if there are other intervals that start before its end
+    let candidate_start_as_end = active
+        .iter()
+        .filter(|a| candidate.contains_instance(a.start()) && a.start() > candidate.start())
+        .min_by_key(|a| a.start());
+
+    Some(if let Some(csae) = candidate_start_as_end {
+        TimeInterval::new_unchecked(candidate.start(), csae.start())
+    } else {
+        candidate
+    })
+}
+
 impl<S, E> TimeIntervalStreamMerge<S, E>
 where
     S: Stream<Item = Result<TimeInterval, E>> + Unpin,
@@ -58,67 +104,10 @@ where
         }
 
         // Collect all available intervals
-        let mut active: Vec<(usize, TimeInterval)> = Vec::new();
-        for (i, interval) in this.current.iter().enumerate() {
-            if let Some(interval) = interval {
-                active.push((i, *interval));
-            }
-        }
+        let active: Vec<TimeInterval> = this.current.iter().flatten().copied().collect();
 
-        // If no active intervals, we are done
-        // This is already covered by the all-none check above, but for safety...
-        if active.is_empty() {
+        let Some(merged_interval) = next_merged_interval(*this.current_time, &active) else {
             return Poll::Ready(None);
-        }
-
-        // Find all intervals that contain the end of the current_time. The one with the minimum end is a candidate for the next merged interval.
-        let candidate_case_a = this.current_time.and_then(|current_t| {
-            active
-                .iter()
-                .filter(|(_a_i, a)| a.contains_instance(current_t.end()))
-                .min_by_key(|(_a_i, a)| a.end())
-                .map(|(i, interval)| {
-                    (
-                        *i,
-                        TimeInterval::new_unchecked(current_t.end(), interval.end()),
-                    )
-                })
-        });
-
-        let candidate_case_b = this.current_time.and_then(|current_t| {
-            active
-                .iter()
-                .filter(|(_, interval)| interval.start() > current_t.end())
-                .min_by_key(|(_, interval)| interval.start())
-                .map(|(i, interval)| (*i, *interval))
-        });
-
-        let candidate_case_c = active
-            .iter()
-            .min_by_key(|(_, interval)| interval.start())
-            .map(|(i, interval)| (*i, *interval));
-
-        let candidate = candidate_case_a.or(candidate_case_b).or(candidate_case_c);
-
-        let Some((_candidate_i, candidate)) = candidate else {
-            // This should not happen since we checked active is not empty
-            return Poll::Ready(None);
-        };
-
-        // Now, we have a candidate but we need to check if there are other intervals that start before its end
-        let candidate_start_as_end = active
-            .iter()
-            .filter(|(_a_i, a)| {
-                candidate.contains_instance(a.start()) && a.start() > candidate.start()
-            })
-            .min_by_key(|(_a_i, a)| a.start())
-            .map(|(i, interval)| (*i, *interval));
-
-        // Produce the merged interval
-        let merged_interval = if let Some((_, csae)) = candidate_start_as_end {
-            TimeInterval::new_unchecked(candidate.start(), csae.start())
-        } else {
-            candidate
         };
 
         for interval in this.current.iter_mut() {

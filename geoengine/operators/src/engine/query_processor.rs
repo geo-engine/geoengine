@@ -1,6 +1,7 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use super::footprint::{Footprint, unknown_footprints};
 use super::query::QueryContext;
 use super::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 use crate::processing::RasterTypeConversionQueryProcessor;
@@ -162,6 +163,22 @@ pub trait RasterQueryProcessor:
                 .wrap(self._time_query(query, ctx).await?),
         ))
     }
+
+    /// For each time step of `query`, tells where the raster may contain data.
+    ///
+    /// Yields the same time steps as [`Self::time_query`]. Without a better answer, each step is
+    /// [`FootprintBounds::Unknown`]. Processors that only pass tiles through must forward this
+    /// to their source, or the source's answer is lost.
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        _precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        let time_steps = self.time_query(query.time_interval(), ctx).await?;
+
+        Ok(unknown_footprints(time_steps))
+    }
 }
 
 pub type BoxRasterQueryProcessor<P> = Box<
@@ -300,6 +317,15 @@ impl<T: Pixel> RasterQueryProcessor for BoxRasterQueryProcessor<T> {
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
         self.as_ref().time_query(query, ctx).await
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        self.as_ref().footprint_query(query, precision, ctx).await
     }
 }
 
