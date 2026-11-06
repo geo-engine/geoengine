@@ -40,6 +40,13 @@ class TestProcessingGraphsApi(unittest.TestCase):
         """
         pass
 
+    def test_get_processing_graph_footprints_handler(self) -> None:
+        """Test case for get_processing_graph_footprints_handler
+
+        Gets when and where the data of a raster processing graph may exist.
+        """
+        pass
+
     def test_get_processing_graph_metadata_handler(self) -> None:
         """Test case for get_processing_graph_metadata_handler
 

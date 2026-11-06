@@ -304,6 +304,8 @@ __all__ = [
     "RasterColorizer",
     "RasterDataType",
     "RasterDatasetFromProcessingGraph",
+    "RasterFootprints",
+    "RasterFootprintsPrecision",
     "RasterOperator",
     "RasterPropertiesEntryType",
     "RasterPropertiesKey",
@@ -428,6 +430,8 @@ __all__ = [
     "TimeShiftParametersAbsolute",
     "TimeShiftParametersRelative",
     "TimeStep",
+    "TimeStepFootprint",
+    "TimeStepFootprintStatus",
     "TypedDataProviderDefinition",
     "TypedGeometry",
     "TypedGeometryMultiLineString",
@@ -776,6 +780,8 @@ from geoengine_api_client.models.raster_band_descriptor import RasterBandDescrip
 from geoengine_api_client.models.raster_colorizer import RasterColorizer as RasterColorizer
 from geoengine_api_client.models.raster_data_type import RasterDataType as RasterDataType
 from geoengine_api_client.models.raster_dataset_from_processing_graph import RasterDatasetFromProcessingGraph as RasterDatasetFromProcessingGraph
+from geoengine_api_client.models.raster_footprints import RasterFootprints as RasterFootprints
+from geoengine_api_client.models.raster_footprints_precision import RasterFootprintsPrecision as RasterFootprintsPrecision
 from geoengine_api_client.models.raster_operator import RasterOperator as RasterOperator
 from geoengine_api_client.models.raster_properties_entry_type import RasterPropertiesEntryType as RasterPropertiesEntryType
 from geoengine_api_client.models.raster_properties_key import RasterPropertiesKey as RasterPropertiesKey
@@ -900,6 +906,8 @@ from geoengine_api_client.models.time_shift_parameters import TimeShiftParameter
 from geoengine_api_client.models.time_shift_parameters_absolute import TimeShiftParametersAbsolute as TimeShiftParametersAbsolute
 from geoengine_api_client.models.time_shift_parameters_relative import TimeShiftParametersRelative as TimeShiftParametersRelative
 from geoengine_api_client.models.time_step import TimeStep as TimeStep
+from geoengine_api_client.models.time_step_footprint import TimeStepFootprint as TimeStepFootprint
+from geoengine_api_client.models.time_step_footprint_status import TimeStepFootprintStatus as TimeStepFootprintStatus
 from geoengine_api_client.models.typed_data_provider_definition import TypedDataProviderDefinition as TypedDataProviderDefinition
 from geoengine_api_client.models.typed_geometry import TypedGeometry as TypedGeometry
 from geoengine_api_client.models.typed_geometry_multi_line_string import TypedGeometryMultiLineString as TypedGeometryMultiLineString

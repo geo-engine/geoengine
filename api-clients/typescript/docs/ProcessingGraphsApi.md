@@ -6,6 +6,7 @@ All URIs are relative to *https://geoengine.io/api*
 |------------- | ------------- | -------------|
 | [**datasetFromProcessingGraphHandler**](ProcessingGraphsApi.md#datasetfromprocessinggraphhandler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its &#x60;id&#x60; and the dataset parameters in the request body. Returns the id of the created task |
 | [**getProcessingGraphAllMetadataZipHandler**](ProcessingGraphsApi.md#getprocessinggraphallmetadataziphandler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata. |
+| [**getProcessingGraphFootprintsHandler**](ProcessingGraphsApi.md#getprocessinggraphfootprintshandler) | **GET** /processingGraphs/{id}/footprints | Gets when and where the data of a raster processing graph may exist. |
 | [**getProcessingGraphMetadataHandler**](ProcessingGraphsApi.md#getprocessinggraphmetadatahandler) | **GET** /processingGraphs/{id}/metadata | Gets the result metadata of a processing graph |
 | [**getProcessingGraphProvenanceHandler**](ProcessingGraphsApi.md#getprocessinggraphprovenancehandler) | **GET** /processingGraphs/{id}/provenance | Gets the provenance of all datasets used in a processing graph. |
 | [**loadProcessingGraphHandler**](ProcessingGraphsApi.md#loadprocessinggraphhandler) | **GET** /processingGraphs/{id} | Retrieves an existing processing graph. |
@@ -151,6 +152,90 @@ example().catch(console.error);
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | ZIP Archive |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## getProcessingGraphFootprintsHandler
+
+> RasterFootprints getProcessingGraphFootprintsHandler(id, spatialBounds, timeInterval, attributes, limit, precision)
+
+Gets when and where the data of a raster processing graph may exist.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  ProcessingGraphsApi,
+} from '@geoengine/api-client';
+import type { GetProcessingGraphFootprintsHandlerRequest } from '@geoengine/api-client';
+
+async function example() {
+  console.log("🚀 Testing @geoengine/api-client SDK...");
+  const config = new Configuration({ 
+    // Configure HTTP bearer authorization: session_token
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new ProcessingGraphsApi(config);
+
+  const body = {
+    // string | Processing graph id
+    id: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | `minX,minY,maxX,maxY` in the spatial reference of the processing graph.
+    spatialBounds: spatialBounds_example,
+    // string
+    timeInterval: timeInterval_example,
+    // string
+    attributes: attributes_example,
+    // number | The number of time steps to answer. At most, and by default, 100. (optional)
+    limit: 56,
+    // RasterFootprintsPrecision | How exact the boxes have to be. By default `boxes`. (optional)
+    precision: ...,
+  } satisfies GetProcessingGraphFootprintsHandlerRequest;
+
+  try {
+    const data = await api.getProcessingGraphFootprintsHandler(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **id** | `string` | Processing graph id | [Defaults to `undefined`] |
+| **spatialBounds** | `string` | &#x60;minX,minY,maxX,maxY&#x60; in the spatial reference of the processing graph. | [Defaults to `undefined`] |
+| **timeInterval** | `string` |  | [Defaults to `undefined`] |
+| **attributes** | `string` |  | [Defaults to `undefined`] |
+| **limit** | `number` | The number of time steps to answer. At most, and by default, 100. | [Optional] [Defaults to `undefined`] |
+| **precision** | `RasterFootprintsPrecision` | How exact the boxes have to be. By default &#x60;boxes&#x60;. | [Optional] [Defaults to `undefined`] [Enum: availability, boxes] |
+
+### Return type
+
+[**RasterFootprints**](RasterFootprints.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | The footprints per time step |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
