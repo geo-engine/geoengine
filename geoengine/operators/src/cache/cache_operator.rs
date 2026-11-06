@@ -321,6 +321,15 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.processor.time_query(query, ctx).await // TODO: investigate if we can use caching here?
     }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<crate::engine::Footprint>>> {
+        self.processor.footprint_query(query, precision, ctx).await
+    }
 }
 
 #[allow(clippy::large_enum_variant)] // TODO: Box instead?
