@@ -419,8 +419,19 @@ impl Counts {
             requests: self.requests - earlier.requests,
             gets: self.gets - earlier.gets,
             bytes: self.bytes - earlier.bytes,
-            pool: self.pool.since(earlier.pool),
-            cache: self.cache.since(earlier.cache),
+            pool: PoolRequestStats {
+                reads: self.pool.reads - earlier.pool.reads,
+                reads_joined: self.pool.reads_joined - earlier.pool.reads_joined,
+                headers: self.pool.headers - earlier.pool.headers,
+                headers_joined: self.pool.headers_joined - earlier.pool.headers_joined,
+            },
+            cache: CacheStats {
+                hits: self.cache.hits - earlier.cache.hits,
+                misses: self.cache.misses - earlier.cache.misses,
+                stored: self.cache.stored - earlier.cache.stored,
+                inserts_joined: self.cache.inserts_joined - earlier.cache.inserts_joined,
+                reads_joined: self.cache.reads_joined - earlier.cache.reads_joined,
+            },
         }
     }
 

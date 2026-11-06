@@ -396,19 +396,6 @@ pub struct PoolRequestStats {
     pub headers_joined: u64,
 }
 
-impl PoolRequestStats {
-    /// The counts since an earlier snapshot.
-    #[must_use]
-    pub fn since(self, earlier: Self) -> Self {
-        Self {
-            reads: self.reads - earlier.reads,
-            reads_joined: self.reads_joined - earlier.reads_joined,
-            headers: self.headers - earlier.headers,
-            headers_joined: self.headers_joined - earlier.headers_joined,
-        }
-    }
-}
-
 impl GdalProcessPool {
     pub fn request_stats(&self) -> PoolRequestStats {
         PoolRequestStats {

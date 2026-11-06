@@ -684,20 +684,6 @@ pub struct CacheStats {
     pub reads_joined: u64,
 }
 
-impl CacheStats {
-    /// The counts since an earlier snapshot.
-    #[must_use]
-    pub fn since(self, earlier: Self) -> Self {
-        Self {
-            hits: self.hits - earlier.hits,
-            misses: self.misses - earlier.misses,
-            stored: self.stored - earlier.stored,
-            inserts_joined: self.inserts_joined - earlier.inserts_joined,
-            reads_joined: self.reads_joined - earlier.reads_joined,
-        }
-    }
-}
-
 impl<SF, ES> InMemoryCacheStore<SF, ES> {
     fn stats(&self) -> CacheStats {
         let counters = &self.counters;
