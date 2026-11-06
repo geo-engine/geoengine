@@ -275,6 +275,14 @@ raster_cache_size_ratio = 0.5
 size_in_mb = 100
 # TTL in seconds for STAC query cache entries
 ttl_secs = 3600
+# number of time steps one footprint search covers per grid cell
+search_chunk_steps = 30
+# footprint queries needing more STAC searches than this are answered with "too large"
+max_footprint_searches = 200
+# share of a STAC server's request limit that calendar searches may use while map tiles wait
+background_share = 0.5
+# how many STAC searches one request runs at the same time
+max_concurrent_searches = 8
 
 [provider_cache]
 # maximum number of provider instances in the provider registry

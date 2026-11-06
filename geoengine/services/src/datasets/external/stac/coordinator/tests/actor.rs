@@ -20,6 +20,7 @@ fn test_job(
             client,
             request,
             authentication: None,
+            priority: RequestPriority::Interactive,
             reply,
             permit: coordinator.capacity.clone().try_acquire_owned().unwrap(),
         },
@@ -161,6 +162,15 @@ fn execute_job_with_policy(
     id: usize,
     policy: RetryPolicy,
 ) -> tokio::task::JoinHandle<Result<serde_json::Value, StacClientError>> {
+    execute_job_with_priority(coordinator, id, policy, RequestPriority::Interactive)
+}
+
+fn execute_job_with_priority(
+    coordinator: Arc<ActorChannels>,
+    id: usize,
+    policy: RetryPolicy,
+    priority: RequestPriority,
+) -> tokio::task::JoinHandle<Result<serde_json::Value, StacClientError>> {
     tokio::spawn(async move {
         // Use the fixture's registry and origin so lookup selects its dispatcher.
         let registry = StacRequestRegistry {
@@ -169,9 +179,62 @@ fn execute_job_with_policy(
         let origin = format!("https://{}/", coordinator.identity.host);
         let client = StacClient::new(reqwest::Client::new(), &origin, registry).unwrap();
         client
-            .execute_json(client.get(format!("https://actor.test/{id}")), &policy)
+            .execute_json_with_priority(
+                client.get(format!("https://actor.test/{id}")),
+                &policy,
+                priority,
+            )
             .await
     })
+}
+
+#[tokio::test]
+async fn it_admits_interactive_attempts_before_waiting_background_ones() {
+    let (_registry, coordinator, mut starts) = controlled_coordinator("priority");
+    // Five background attempts use up the background share of the fallback limit.
+    let mut responses = Vec::new();
+    let mut background = Vec::new();
+    for id in 1..=5 {
+        background.push(execute_job_with_priority(
+            coordinator.clone(),
+            id,
+            RetryPolicy::new().max_retries(1),
+            RequestPriority::Background,
+        ));
+        responses.push(next_start(&mut starts).await);
+    }
+    let waiting = execute_job_with_priority(
+        coordinator.clone(),
+        6,
+        RetryPolicy::new().max_retries(1),
+        RequestPriority::Background,
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), starts.recv())
+            .await
+            .is_err(),
+        "the sixth background attempt must wait for the share"
+    );
+
+    let interactive = execute_job(coordinator.clone(), 7);
+    let (path, interactive_response) = next_start(&mut starts).await;
+    assert_eq!(
+        path, "/7",
+        "an interactive attempt passes the waiting background one"
+    );
+    interactive_response.send(response(7, None)).unwrap();
+    interactive.await.unwrap().unwrap();
+
+    // The waiting background attempt runs once its share window has passed.
+    let (path, waiting_response) = next_start(&mut starts).await;
+    assert_eq!(path, "/6");
+    waiting_response.send(response(6, None)).unwrap();
+    waiting.await.unwrap().unwrap();
+
+    for ((_, response_sender), job) in responses.into_iter().zip(background) {
+        response_sender.send(response(1, None)).unwrap();
+        job.await.unwrap().unwrap();
+    }
 }
 
 async fn next_start(starts: &mut mpsc::UnboundedReceiver<StartedAttempt>) -> StartedAttempt {

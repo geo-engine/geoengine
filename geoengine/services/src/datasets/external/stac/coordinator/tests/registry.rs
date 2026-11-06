@@ -203,7 +203,7 @@ fn it_returns_an_error_when_submission_races_with_actor_shutdown() {
         .build()
         .unwrap();
     let error = caller_runtime
-        .block_on(client.execute_attempt(&channels, &request))
+        .block_on(client.execute_attempt(&channels, &request, RequestPriority::Interactive))
         .unwrap_err();
     assert!(matches!(error, StacClientError::CoordinatorStopped));
 }

@@ -10,6 +10,8 @@ fn state(now: Instant) -> State {
         unscoped_quota: None,
         cooldown_until: None,
         last_activity: now,
+        background_starts: VecDeque::new(),
+        background_share: 0.5,
     }
 }
 
@@ -350,4 +352,59 @@ fn it_retains_history_and_remote_deadlines_until_the_latest_expiry() {
     state.prune(now + Duration::from_hours(1));
     assert!(state.unscoped_quota.is_none());
     assert_eq!(state.windows.len(), 1);
+}
+
+#[test]
+fn it_limits_background_attempts_to_their_share_and_not_interactive_ones() {
+    let now = Instant::now();
+    let mut state = state(now);
+    // The fallback admits ten per second, so a share of a half admits five background attempts.
+    for _ in 0..5 {
+        assert_eq!(
+            state.reserve_with_priority(now, RequestPriority::Background),
+            None
+        );
+    }
+    assert_eq!(
+        state.reserve_with_priority(now, RequestPriority::Background),
+        Some(now + DEFAULT_WINDOW_DURATION)
+    );
+    // Interactive attempts use the remaining capacity of the whole limit.
+    for _ in 0..5 {
+        assert_eq!(state.reserve(now), None);
+    }
+    assert_eq!(state.reserve(now), Some(now + DEFAULT_WINDOW_DURATION));
+    let later = now + DEFAULT_WINDOW_DURATION;
+    assert_eq!(
+        state.reserve_with_priority(later, RequestPriority::Background),
+        None
+    );
+}
+
+#[test]
+fn it_scales_the_background_share_with_learned_windows_and_admits_at_least_one() {
+    let now = Instant::now();
+    let mut state = state(now);
+    state.background_share = 0.1;
+    state.windows.push(Window::new(5, Duration::from_secs(60)));
+    assert_eq!(
+        state.reserve_with_priority(now, RequestPriority::Background),
+        None
+    );
+    assert_eq!(
+        state.reserve_with_priority(now, RequestPriority::Background),
+        Some(now + Duration::from_secs(60))
+    );
+    assert_eq!(state.reserve(now), None);
+}
+
+#[test]
+fn it_blocks_background_attempts_during_a_cooldown() {
+    let now = Instant::now();
+    let mut state = state(now);
+    state.cooldown_until = Some(now + DEFAULT_RETRY_DELAY);
+    assert_eq!(
+        state.reserve_with_priority(now, RequestPriority::Background),
+        Some(now + DEFAULT_RETRY_DELAY)
+    );
 }

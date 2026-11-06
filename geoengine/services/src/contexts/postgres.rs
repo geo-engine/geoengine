@@ -169,6 +169,7 @@ where
         ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
+        crate::config::get_config_element::<crate::config::StacCache>()?.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
@@ -253,6 +254,7 @@ where
         ort_environment: OrtEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
+        crate::config::get_config_element::<crate::config::StacCache>()?.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
