@@ -1,3 +1,6 @@
+use crate::source::gdal_worker_process::process_common::{
+    RasterLevelLayout, largest_overview_level,
+};
 use crate::{
     engine::{
         MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
@@ -476,25 +479,30 @@ pub fn raster_descriptor_from_dataset_and_sref(
     })
 }
 
-/// The largest power-of-two overview level `f` such that the band has all the overviews
-/// `2, 4, …, f`, each of size `ceil(size / level)`. 1 if it has none.
-pub fn max_overview_level(band: &RasterBand) -> Result<u32> {
-    let (size_x, size_y) = band.size();
-    let mut sizes = Vec::new();
-    for index in 0..usize::try_from(band.overview_count()?).unwrap_or(0) {
-        sizes.push(band.overview(index)?.size());
+/// The size and block size of the full resolution and then of each overview of a band.
+pub fn band_levels(band: &RasterBand) -> std::result::Result<Vec<RasterLevelLayout>, GdalError> {
+    let layout = |band: &RasterBand| {
+        let (size_x, size_y) = band.size();
+        let (block_size_x, block_size_y) = band.block_size();
+        RasterLevelLayout {
+            size_x,
+            size_y,
+            block_size_x,
+            block_size_y,
+        }
+    };
+    let overview_count = usize::try_from(band.overview_count()?).unwrap_or(0);
+    let mut levels = Vec::with_capacity(overview_count + 1);
+    levels.push(layout(band));
+    for overview in 0..overview_count {
+        levels.push(layout(&band.overview(overview)?));
     }
+    Ok(levels)
+}
 
-    let mut max_level: u32 = 1;
-    while let Some(level) = max_level.checked_mul(2)
-        && sizes.contains(&(
-            size_x.div_ceil(level as usize),
-            size_y.div_ceil(level as usize),
-        ))
-    {
-        max_level = level;
-    }
-    Ok(max_level)
+/// See [`largest_overview_level`].
+pub fn max_overview_level(band: &RasterBand) -> Result<u32> {
+    Ok(largest_overview_level(&band_levels(band)?))
 }
 
 pub fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {

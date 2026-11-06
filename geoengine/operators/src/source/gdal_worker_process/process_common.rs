@@ -124,28 +124,42 @@ pub struct RasterInfo {
 }
 
 impl RasterInfo {
-    /// The level `factor` times coarser than the full resolution. GDAL drivers size an overview
-    /// `ceil(size / factor)` (`gdaladdo`, COG, JPEG2000 resolution levels), so its pixel `i`
-    /// covers the full-resolution pixels `[i * factor, (i + 1) * factor)`.
+    /// See [`level_of_factor`].
     pub fn level_of_factor(&self, factor: usize) -> Option<usize> {
-        let full = self.levels.first()?;
-        if factor <= 1 {
-            return Some(0);
-        }
-        let size = (full.size_x.div_ceil(factor), full.size_y.div_ceil(factor));
-        self.levels
-            .iter()
-            .skip(1)
-            .position(|level| (level.size_x, level.size_y) == size)
-            .map(|index| index + 1)
+        level_of_factor(&self.levels, factor)
     }
 
     /// The first of the power-of-two overview levels `2..=max_overview_level` the band lacks.
     pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<u32> {
-        std::iter::successors(Some(2_u32), |level| level.checked_mul(2))
-            .take_while(|level| *level <= max_overview_level)
-            .find(|level| self.level_of_factor(*level as usize).is_none())
+        let missing = largest_overview_level(&self.levels).checked_mul(2)?;
+        (missing <= max_overview_level).then_some(missing)
     }
+}
+
+/// The index in `levels`, the full resolution first, of the level `factor` times coarser than the
+/// full resolution. GDAL drivers size an overview `ceil(size / factor)` (`gdaladdo`, COG, JPEG2000
+/// resolution levels), so its pixel `i` covers the full-resolution pixels
+/// `[i * factor, (i + 1) * factor)`.
+pub fn level_of_factor(levels: &[RasterLevelLayout], factor: usize) -> Option<usize> {
+    let full = levels.first()?;
+    if factor <= 1 {
+        return Some(0);
+    }
+    let size = (full.size_x.div_ceil(factor), full.size_y.div_ceil(factor));
+    levels
+        .iter()
+        .skip(1)
+        .position(|level| (level.size_x, level.size_y) == size)
+        .map(|index| index + 1)
+}
+
+/// The largest power-of-two level `f` such that `levels` has all the overviews `2, 4, …, f`. 1 if
+/// it has none.
+pub fn largest_overview_level(levels: &[RasterLevelLayout]) -> u32 {
+    std::iter::successors(Some(2_u32), |level| level.checked_mul(2))
+        .take_while(|level| level_of_factor(levels, *level as usize).is_some())
+        .last()
+        .unwrap_or(1)
 }
 
 /// The size and the natural block size of one level of a band, in pixels.

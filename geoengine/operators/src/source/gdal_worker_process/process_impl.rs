@@ -2,9 +2,10 @@ use super::{
     GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
-        RasterInfo, RasterLevelLayout,
+        RasterInfo, level_of_factor,
     },
 };
+use crate::util::gdal::band_levels;
 use crate::{
     source::gdal_worker_process::process_common::IpcProcessGdalErrorKind,
     util::{GdalConfigOptions, gdal::gdal_open_ex_gdal_error, retry::retry_sync},
@@ -485,27 +486,10 @@ impl GdalHandling {
                 Err(_) => SpatialReferenceOption::Unreferenced,
             };
 
-            let level_layout = |band: &GdalRasterBand| {
-                let (size_x, size_y) = band.size();
-                let (block_size_x, block_size_y) = band.block_size();
-                RasterLevelLayout {
-                    size_x,
-                    size_y,
-                    block_size_x,
-                    block_size_y,
-                }
-            };
-            let overview_count = usize::try_from(band.overview_count()?).unwrap_or(0);
-            let mut levels = Vec::with_capacity(overview_count + 1);
-            levels.push(level_layout(&band));
-            for overview in 0..overview_count {
-                levels.push(level_layout(&band.overview(overview)?));
-            }
-
             Ok(RasterInfo {
                 data_type,
                 spatial_reference,
-                levels,
+                levels: band_levels(&band)?,
             })
         })
     }
@@ -822,17 +806,9 @@ impl GdalHandling {
                         msg: "a level read must not resample".to_string(),
                     });
                 }
-                let (full_x, full_y) = rasterband.size();
-                let level_size = (full_x.div_ceil(factor), full_y.div_ceil(factor));
-                let overview_count = usize::try_from(rasterband.overview_count()?).unwrap_or(0);
-                let mut overview = None;
-                for index in 0..overview_count {
-                    let candidate = rasterband.overview(index)?;
-                    if candidate.size() == level_size {
-                        overview = Some(candidate);
-                        break;
-                    }
-                }
+                let overview = level_of_factor(&band_levels(&rasterband)?, factor)
+                    .map(|level| rasterband.overview(level - 1))
+                    .transpose()?;
                 let Some(overview) = overview else {
                     return Err(IpcProcessError::MissingOverviewLevel {
                         file: dataset_params.file_path.display().to_string(),
@@ -868,9 +844,8 @@ mod tests {
     use super::super::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
-            GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
-            IpcChannelResult, IpcProcessGdalErrorKind, IpcProcessRasterResult, WorkerRequest,
-            WorkerResponse,
+            GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+            IpcProcessGdalErrorKind, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
         },
     };
     use super::*;
