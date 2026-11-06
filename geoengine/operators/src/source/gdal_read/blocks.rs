@@ -38,7 +38,7 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIdx2D,
-    GridOrEmpty, GridShapeAccess, Pixel, RasterProperties, RasterTile2D,
+    GridOrEmpty, GridShapeAccess, Pixel, RasterTile2D,
 };
 use num::FromPrimitive;
 use std::sync::Arc;
@@ -79,10 +79,7 @@ struct LevelWindow {
 }
 
 /// A decoded block, bounded in the pixel space of its level.
-pub struct Block<T: Pixel> {
-    grid: GridOrEmpty<GridBoundingBox2D, T>,
-    properties: RasterProperties,
-}
+type Block<T> = GridAndProperties<T, GridBoundingBox2D>;
 
 /// The read of a unit: `None` if the file is missing and counts as no data.
 pub type UnitResult<T> = Result<Option<Arc<Block<T>>>, GdalProcessPoolError>;
@@ -306,10 +303,7 @@ impl BlockIo {
             GdalProcessReadResult::Grid(data) => *data,
             GdalProcessReadResult::FileNotFoundAsNoData => return Ok(None),
         };
-        let unit = Arc::new(Block {
-            grid: data.grid,
-            properties: data.properties,
-        });
+        let unit = Arc::new(data);
 
         let units = std::slice::from_ref(&unit);
         let inserts = level_window.pieces_in(unit_bounds).map(|other| {
@@ -471,6 +465,7 @@ fn level_window(
 mod tests {
     use super::*;
     use crate::source::gdal_worker_process::RasterLevelLayout;
+    use geoengine_datatypes::raster::RasterProperties;
     use geoengine_datatypes::raster::{Grid, GridIndexAccess, MaskedGrid};
 
     fn advise(start: [isize; 2], size: [usize; 2], out: [usize; 2]) -> GdalReadAdvise {
