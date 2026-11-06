@@ -1,3 +1,4 @@
+import {signal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import View from 'ol/View';
@@ -6,6 +7,7 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {MapService, ProjectService} from '@geoengine/core';
+import {FootprintsService} from './footprints.service';
 import {LayersComponent} from './layers.component';
 import {EOdysseyLayerService} from './layers.service';
 
@@ -141,6 +143,20 @@ describe('LayersComponent', () => {
         await TestBed.configureTestingModule({
             imports: [LayersComponent],
             providers: [
+                {
+                    provide: FootprintsService,
+                    useValue: {
+                        dateClass: (): string => '',
+                        calendarOpen: signal(false),
+                        overlayVisible: signal(false),
+                        zoomRequired: signal(false),
+                        tooLarge: signal(false),
+                        hasError: signal(false),
+                        steps: signal([]),
+                        timeStep: signal(undefined),
+                        showDate: vi.fn(),
+                    },
+                },
                 provideNativeDateAdapter(),
                 {
                     provide: LayersService,

@@ -6,7 +6,9 @@ import {
     afterNextRender,
     booleanAttribute,
     computed,
+    effect,
     inject,
+    Injector,
     input,
     signal,
     viewChild,
@@ -25,6 +27,7 @@ import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialRe
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
+import {FootprintsService} from '../layers/footprints.service';
 import {EOdysseyLayerService} from '../layers/layers.service';
 
 @Component({
@@ -53,6 +56,8 @@ import {EOdysseyLayerService} from '../layers/layers.service';
 })
 export class MainComponent {
     readonly config = inject(AppConfig);
+    private readonly injector = inject(Injector);
+    private readonly footprintsService = inject(FootprintsService);
     readonly projectService = inject(ProjectService);
     readonly userService = inject(UserService);
     private readonly mapService = inject(MapService);
@@ -99,9 +104,21 @@ export class MainComponent {
     readonly testIsVisible = signal(true);
 
     constructor() {
+        // the same limit that stops the map from loading tiles stops the overlay from loading boxes
+        effect(() => this.footprintsService.zoomRequired.set(this.zoomRequired()));
+
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());
+
+                // the map component is only available after the first render
+                effect(
+                    () =>
+                        this.mapComponent().dataOverlayLayer.set(
+                            this.footprintsService.overlayVisible() ? this.footprintsService.overlayLayer : undefined,
+                        ),
+                    {injector: this.injector},
+                );
 
                 this.zoomToGermany();
 
