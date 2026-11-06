@@ -5,7 +5,9 @@ use crate::{
             datasets::VolumeFileLayersResponse,
             permissions::{PermissionListing, PermissionRequest, Resource},
             plots::WrappedPlotOutput,
-            processing_graphs::{ProvenanceEntry, RasterStreamWebsocketResultType},
+            processing_graphs::{
+                ProvenanceEntry, RasterFootprintsPrecision, RasterStreamWebsocketResultType,
+            },
             spatial_references::{AxisOrder, SpatialReferenceSpecification},
             tasks::TaskResponse,
             upload::{UploadFileLayersResponse, UploadFilesResponse},
@@ -193,6 +195,7 @@ use utoipa::{
         handlers::wms::wms_handler,
         handlers::processing_graphs::dataset_from_processing_graph_handler,
         handlers::processing_graphs::get_processing_graph_all_metadata_zip_handler,
+        handlers::processing_graphs::get_processing_graph_footprints_handler,
         handlers::processing_graphs::get_processing_graph_metadata_handler,
         handlers::processing_graphs::get_processing_graph_provenance_handler,
         handlers::processing_graphs::load_processing_graph_handler,
@@ -413,6 +416,7 @@ use utoipa::{
             ProjectLayer,
             LayerVisibility,
             RasterStreamWebsocketResultType,
+            RasterFootprintsPrecision,
             CacheTtlSeconds,
 
             SpatialGridDefinition,

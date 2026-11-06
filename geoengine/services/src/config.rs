@@ -732,6 +732,34 @@ pub struct StacCache {
     pub size_in_mb: usize,
     /// TTL in seconds for STAC query cache entries.
     pub ttl_secs: u64,
+    /// Number of time steps one footprint search covers per grid cell.
+    pub search_chunk_steps: u32,
+    /// Footprint queries needing more searches than this are rejected as too large.
+    pub max_footprint_searches: usize,
+    /// Share of a STAC server's request limit that background searches (calendar windows) may
+    /// use while interactive requests (map tiles) wait, between 0 and 1.
+    pub background_share: f64,
+    /// How many STAC searches one request runs at the same time.
+    pub max_concurrent_searches: usize,
+}
+
+impl StacCache {
+    pub fn validate(&self) -> Result<()> {
+        if self.max_concurrent_searches == 0 {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: "max_concurrent_searches must be at least 1".to_owned(),
+            });
+        }
+        if !(0.0..=1.0).contains(&self.background_share) {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "background_share must be between 0 and 1, got {}",
+                    self.background_share
+                ),
+            });
+        }
+        Ok(())
+    }
 }
 
 impl TestDefault for StacCache {
@@ -739,6 +767,10 @@ impl TestDefault for StacCache {
         Self {
             size_in_mb: 1_000, // 1 GB
             ttl_secs: 3_600,
+            search_chunk_steps: 30,
+            max_footprint_searches: 200,
+            background_share: 0.5,
+            max_concurrent_searches: 8,
         }
     }
 }

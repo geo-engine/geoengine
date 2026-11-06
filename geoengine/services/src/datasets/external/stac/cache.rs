@@ -60,6 +60,9 @@ pub(crate) struct StacQueryCache {
     datasets: Mutex<Vec<StacProviderDataset>>,
     max_bytes: usize,
     ttl: Duration,
+    search_chunk_steps: u32,
+    max_footprint_searches: usize,
+    max_concurrent_searches: usize,
 }
 
 impl std::fmt::Debug for StacQueryCache {
@@ -92,10 +95,15 @@ impl Default for StacQueryCache {
     fn default() -> Self {
         let config = get_config_element::<StacCache>()
             .expect("StacCache config must be present in Settings-default.toml");
-        Self::new(
-            config.size_in_mb * 1024 * 1024,
-            Duration::from_secs(config.ttl_secs),
-        )
+        Self {
+            search_chunk_steps: config.search_chunk_steps,
+            max_footprint_searches: config.max_footprint_searches,
+            max_concurrent_searches: config.max_concurrent_searches,
+            ..Self::new(
+                config.size_in_mb * 1024 * 1024,
+                Duration::from_secs(config.ttl_secs),
+            )
+        }
     }
 }
 
@@ -118,7 +126,70 @@ impl StacQueryCache {
             datasets: Mutex::new(Vec::new()),
             max_bytes,
             ttl,
+            search_chunk_steps: 30,
+            max_footprint_searches: 1_000,
+            max_concurrent_searches: 8,
         }
+    }
+
+    pub(crate) fn search_chunk_steps(&self) -> u32 {
+        self.search_chunk_steps
+    }
+
+    pub(crate) fn max_footprint_searches(&self) -> usize {
+        self.max_footprint_searches
+    }
+
+    pub(crate) fn max_concurrent_searches(&self) -> usize {
+        self.max_concurrent_searches
+    }
+
+    /// `true` if a completed search for this cell and time step is cached. Makes no request.
+    pub(crate) fn contains(&self, dataset_id: u64, cell: GridIdx2D, time: TimeInterval) -> bool {
+        self.cache.contains_key(&Key {
+            dataset_id,
+            cell,
+            time_start: time.start().inner(),
+            time_end: time.end().inner(),
+        })
+    }
+
+    /// Removes one entry, e.g. the marker of a finished window search.
+    pub(crate) async fn remove(&self, dataset_id: u64, cell: GridIdx2D, time: TimeInterval) {
+        self.cache
+            .invalidate(&Key {
+                dataset_id,
+                cell,
+                time_start: time.start().inner(),
+                time_end: time.end().inner(),
+            })
+            .await;
+    }
+
+    /// Stores what a wider search found for one cell and time step, so that step needs no search.
+    pub(crate) async fn insert(
+        &self,
+        dataset: StacProviderDataset,
+        cell: GridIdx2D,
+        time: TimeInterval,
+        files: Vec<TileFile>,
+    ) {
+        let bytes = result_bytes(&files);
+        if self.max_bytes == 0
+            || self.ttl.is_zero()
+            || bytes > self.max_bytes
+            || u32::try_from(bytes).is_err()
+        {
+            return;
+        }
+
+        let key = Key {
+            dataset_id: self.dataset_id(dataset),
+            cell,
+            time_start: time.start().inner(),
+            time_end: time.end().inner(),
+        };
+        self.cache.insert(key, Arc::new(files)).await;
     }
 
     /// Fetches a cell once for concurrent callers and caches successful results that fit.
@@ -248,7 +319,7 @@ impl StacQueryCache {
         output
     }
 
-    fn dataset_id(&self, dataset: StacProviderDataset) -> u64 {
+    pub(crate) fn dataset_id(&self, dataset: StacProviderDataset) -> u64 {
         let mut datasets = self
             .datasets
             .lock()

@@ -6,6 +6,7 @@ Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**dataset_from_processing_graph_handler**](ProcessingGraphsApi.md#dataset_from_processing_graph_handler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its `id` and the dataset parameters in the request body. Returns the id of the created task
 [**get_processing_graph_all_metadata_zip_handler**](ProcessingGraphsApi.md#get_processing_graph_all_metadata_zip_handler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata.
+[**get_processing_graph_footprints_handler**](ProcessingGraphsApi.md#get_processing_graph_footprints_handler) | **GET** /processingGraphs/{id}/footprints | Gets when and where the data of a raster processing graph may exist.
 [**get_processing_graph_metadata_handler**](ProcessingGraphsApi.md#get_processing_graph_metadata_handler) | **GET** /processingGraphs/{id}/metadata | Gets the result metadata of a processing graph
 [**get_processing_graph_provenance_handler**](ProcessingGraphsApi.md#get_processing_graph_provenance_handler) | **GET** /processingGraphs/{id}/provenance | Gets the provenance of all datasets used in a processing graph.
 [**load_processing_graph_handler**](ProcessingGraphsApi.md#load_processing_graph_handler) | **GET** /processingGraphs/{id} | Retrieves an existing processing graph.
@@ -67,6 +68,39 @@ Name | Type | Description  | Required | Notes
 
 - **Content-Type**: Not defined
 - **Accept**: application/zip
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## get_processing_graph_footprints_handler
+
+> models::RasterFootprints get_processing_graph_footprints_handler(id, spatial_bounds, time_interval, attributes, limit, precision)
+Gets when and where the data of a raster processing graph may exist.
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**id** | **uuid::Uuid** | Processing graph id | [required] |
+**spatial_bounds** | **String** | `minX,minY,maxX,maxY` in the spatial reference of the processing graph. | [required] |
+**time_interval** | **String** |  | [required] |
+**attributes** | **String** |  | [required] |
+**limit** | Option<**i32**> | The number of time steps to answer. At most, and by default, 100. |  |
+**precision** | Option<[**RasterFootprintsPrecision**](RasterFootprintsPrecision.md)> | How exact the boxes have to be. By default `boxes`. |  |
+
+### Return type
+
+[**models::RasterFootprints**](RasterFootprints.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

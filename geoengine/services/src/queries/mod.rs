@@ -8,6 +8,7 @@ use geoengine_operators::util::spawn_query_task;
 use std::future::Future;
 use tokio::runtime::Handle;
 
+pub mod footprints;
 pub mod ogc_tile;
 pub mod plot;
 pub mod raster_grid;

@@ -2,7 +2,10 @@ use crate::{
     api::{
         handlers::tasks::TaskResponse,
         model::{
-            datatypes::{BandSelection, DataId, TimeInterval},
+            datatypes::{
+                BandSelection, DataId, SpatialPartition2D as ApiSpatialPartition2D,
+                SpatialReferenceOption, TimeInterval,
+            },
             processing_graphs::{ProcessingGraph, ProcessingGraphId},
             responses::IdResponse,
             services::RasterDatasetFromProcessingGraph,
@@ -28,6 +31,7 @@ use crate::{
         send_websocket_message,
     },
     queries::{
+        footprints::raster_footprints,
         run_query,
         stream::{raster_stream, vector_stream},
     },
@@ -75,6 +79,10 @@ where
                     .service(
                         web::resource("/metadata")
                             .route(web::get().to(get_processing_graph_metadata_handler::<C>)),
+                    )
+                    .service(
+                        web::resource("/footprints")
+                            .route(web::get().to(get_processing_graph_footprints_handler::<C>)),
                     )
                     .service(
                         web::resource("/provenance")
@@ -512,6 +520,136 @@ async fn dataset_from_processing_graph_handler<C: ApplicationContext>(
     .await?;
 
     Ok(web::Json(TaskResponse::new(task_id)))
+}
+
+/// The most time steps one footprints request can cover.
+pub const MAX_FOOTPRINT_TIME_STEPS: usize = 100;
+
+const fn default_footprint_limit() -> usize {
+    MAX_FOOTPRINT_TIME_STEPS
+}
+
+/// The query parameters for `get_processing_graph_footprints_handler`.
+#[derive(Clone, Debug, PartialEq, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct RasterFootprintsQuery {
+    /// `minX,minY,maxX,maxY` in the spatial reference of the processing graph.
+    #[serde(deserialize_with = "parse_spatial_partition")]
+    #[param(value_type = String)]
+    pub spatial_bounds: SpatialPartition2D,
+    #[serde(deserialize_with = "parse_time")]
+    #[param(value_type = String)]
+    pub time_interval: TimeInterval,
+    #[serde(deserialize_with = "parse_band_selection")]
+    #[param(value_type = String)]
+    pub attributes: BandSelection,
+    /// The number of time steps to answer. At most, and by default, 100.
+    #[serde(default = "default_footprint_limit")]
+    pub limit: usize,
+    /// How exact the boxes have to be. By default `boxes`.
+    #[serde(default)]
+    pub precision: RasterFootprintsPrecision,
+}
+
+/// How exact the boxes of the footprints of a time step have to be.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum RasterFootprintsPrecision {
+    /// Only whether a time step has data. A step with data may carry the whole queried area as
+    /// its box. This is much cheaper for catalogs that can count items, and it does not
+    /// reject large areas that they can count.
+    Availability,
+    /// The boxes in which data may exist, as exact as the data source can tell.
+    #[default]
+    Boxes,
+}
+
+impl From<RasterFootprintsPrecision> for geoengine_operators::engine::FootprintPrecision {
+    fn from(value: RasterFootprintsPrecision) -> Self {
+        match value {
+            RasterFootprintsPrecision::Availability => Self::Availability,
+            RasterFootprintsPrecision::Boxes => Self::Boxes,
+        }
+    }
+}
+
+/// Whether a time step has data in the queried area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TimeStepFootprintStatus {
+    /// Data may exist inside of `bounds`. A box can still hold no-data, e.g. clouds.
+    Data,
+    /// There is certainly no data.
+    Empty,
+    /// The processing graph cannot tell.
+    Unknown,
+}
+
+/// Where the data of one time step may exist.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeStepFootprint {
+    pub time: TimeInterval,
+    pub status: TimeStepFootprintStatus,
+    pub bounds: Vec<ApiSpatialPartition2D>,
+}
+
+/// When and where the data of a raster processing graph may exist.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RasterFootprints {
+    /// The spatial reference of the `bounds`.
+    #[schema(value_type = String)]
+    pub spatial_reference: SpatialReferenceOption,
+    pub steps: Vec<TimeStepFootprint>,
+    /// The next time step to ask for, if more steps exist within the requested time interval.
+    pub next: Option<TimeInterval>,
+    /// Answering needs too many catalog searches. Query a smaller area or time range.
+    pub too_large: bool,
+}
+
+/// Gets when and where the data of a raster processing graph may exist.
+#[utoipa::path(
+    tag = "Processing Graphs",
+    get,
+    path = "/processingGraphs/{id}/footprints",
+    responses(
+        (status = 200, description = "The footprints per time step", body = RasterFootprints)
+    ),
+    params(
+        ("id" = ProcessingGraphId, description = "Processing graph id"),
+        RasterFootprintsQuery,
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn get_processing_graph_footprints_handler<C: ApplicationContext>(
+    id: web::Path<ProcessingGraphId>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    query: web::Query<RasterFootprintsQuery>,
+    request: HttpRequest,
+) -> Result<impl Responder> {
+    let ctx = app_ctx.session_context(session);
+    let query = query.into_inner();
+
+    let footprints = run_query(
+        &ctx,
+        connection_closed(&request, None),
+        raster_footprints(
+            ctx.clone(),
+            id.into_inner().into(),
+            query.spatial_bounds,
+            query.time_interval.into(),
+            query.attributes.try_into()?,
+            query.limit,
+            query.precision.into(),
+        ),
+    )
+    .await?;
+
+    Ok(web::Json(footprints))
 }
 
 /// The query parameters for `raster_stream_websocket`.

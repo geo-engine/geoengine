@@ -110,6 +110,7 @@ All URIs are relative to *https://geoengine.io/api*
 *PlotsApi* | [**getPlotHandler**](docs/PlotsApi.md#getplothandler) | **GET** /plot/{id} | Generates a plot.
 *ProcessingGraphsApi* | [**datasetFromProcessingGraphHandler**](docs/ProcessingGraphsApi.md#datasetfromprocessinggraphhandler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its &#x60;id&#x60; and the dataset parameters in the request body. Returns the id of the created task
 *ProcessingGraphsApi* | [**getProcessingGraphAllMetadataZipHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphallmetadataziphandler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata.
+*ProcessingGraphsApi* | [**getProcessingGraphFootprintsHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphfootprintshandler) | **GET** /processingGraphs/{id}/footprints | Gets when and where the data of a raster processing graph may exist.
 *ProcessingGraphsApi* | [**getProcessingGraphMetadataHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphmetadatahandler) | **GET** /processingGraphs/{id}/metadata | Gets the result metadata of a processing graph
 *ProcessingGraphsApi* | [**getProcessingGraphProvenanceHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphprovenancehandler) | **GET** /processingGraphs/{id}/provenance | Gets the provenance of all datasets used in a processing graph.
 *ProcessingGraphsApi* | [**loadProcessingGraphHandler**](docs/ProcessingGraphsApi.md#loadprocessinggraphhandler) | **GET** /processingGraphs/{id} | Retrieves an existing processing graph.
@@ -414,6 +415,8 @@ All URIs are relative to *https://geoengine.io/api*
 - [RasterColorizer](docs/RasterColorizer.md)
 - [RasterDataType](docs/RasterDataType.md)
 - [RasterDatasetFromProcessingGraph](docs/RasterDatasetFromProcessingGraph.md)
+- [RasterFootprints](docs/RasterFootprints.md)
+- [RasterFootprintsPrecision](docs/RasterFootprintsPrecision.md)
 - [RasterOperator](docs/RasterOperator.md)
 - [RasterPropertiesEntryType](docs/RasterPropertiesEntryType.md)
 - [RasterPropertiesKey](docs/RasterPropertiesKey.md)
@@ -538,6 +541,8 @@ All URIs are relative to *https://geoengine.io/api*
 - [TimeShiftParametersAbsolute](docs/TimeShiftParametersAbsolute.md)
 - [TimeShiftParametersRelative](docs/TimeShiftParametersRelative.md)
 - [TimeStep](docs/TimeStep.md)
+- [TimeStepFootprint](docs/TimeStepFootprint.md)
+- [TimeStepFootprintStatus](docs/TimeStepFootprintStatus.md)
 - [TypedDataProviderDefinition](docs/TypedDataProviderDefinition.md)
 - [TypedGeometry](docs/TypedGeometry.md)
 - [TypedGeometryMultiLineString](docs/TypedGeometryMultiLineString.md)

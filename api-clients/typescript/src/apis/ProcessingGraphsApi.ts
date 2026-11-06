@@ -33,6 +33,16 @@ import {
     RasterDatasetFromProcessingGraphToJSON,
 } from '../models/RasterDatasetFromProcessingGraph';
 import {
+    type RasterFootprints,
+    RasterFootprintsFromJSON,
+    RasterFootprintsToJSON,
+} from '../models/RasterFootprints';
+import {
+    type RasterFootprintsPrecision,
+    RasterFootprintsPrecisionFromJSON,
+    RasterFootprintsPrecisionToJSON,
+} from '../models/RasterFootprintsPrecision';
+import {
     type RasterStreamWebsocketResultType,
     RasterStreamWebsocketResultTypeFromJSON,
     RasterStreamWebsocketResultTypeToJSON,
@@ -69,6 +79,33 @@ export interface GetProcessingGraphAllMetadataZipHandlerRequest {
      * Processing graph id
      */
     id: string;
+}
+
+export interface GetProcessingGraphFootprintsHandlerRequest {
+    /**
+     * Processing graph id
+     */
+    id: string;
+    /**
+     * `minX,minY,maxX,maxY` in the spatial reference of the processing graph.
+     */
+    spatialBounds: string;
+    /**
+     * 
+     */
+    timeInterval: string;
+    /**
+     * 
+     */
+    attributes: string;
+    /**
+     * The number of time steps to answer. At most, and by default, 100.
+     */
+    limit?: number;
+    /**
+     * How exact the boxes have to be. By default `boxes`.
+     */
+    precision?: RasterFootprintsPrecision;
 }
 
 export interface GetProcessingGraphMetadataHandlerRequest {
@@ -240,6 +277,100 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
      */
     async getProcessingGraphAllMetadataZipHandler(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile> {
         const response = await this.getProcessingGraphAllMetadataZipHandlerRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for getProcessingGraphFootprintsHandler without sending the request
+     */
+    async getProcessingGraphFootprintsHandlerRequestOpts(requestParameters: GetProcessingGraphFootprintsHandlerRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['id'] == null) {
+            throw new runtime.RequiredError(
+                'id',
+                'Required parameter "id" was null or undefined when calling getProcessingGraphFootprintsHandler().'
+            );
+        }
+
+        if (requestParameters['spatialBounds'] == null) {
+            throw new runtime.RequiredError(
+                'spatialBounds',
+                'Required parameter "spatialBounds" was null or undefined when calling getProcessingGraphFootprintsHandler().'
+            );
+        }
+
+        if (requestParameters['timeInterval'] == null) {
+            throw new runtime.RequiredError(
+                'timeInterval',
+                'Required parameter "timeInterval" was null or undefined when calling getProcessingGraphFootprintsHandler().'
+            );
+        }
+
+        if (requestParameters['attributes'] == null) {
+            throw new runtime.RequiredError(
+                'attributes',
+                'Required parameter "attributes" was null or undefined when calling getProcessingGraphFootprintsHandler().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['spatialBounds'] != null) {
+            queryParameters['spatialBounds'] = requestParameters['spatialBounds'];
+        }
+
+        if (requestParameters['timeInterval'] != null) {
+            queryParameters['timeInterval'] = requestParameters['timeInterval'];
+        }
+
+        if (requestParameters['attributes'] != null) {
+            queryParameters['attributes'] = requestParameters['attributes'];
+        }
+
+        if (requestParameters['limit'] != null) {
+            queryParameters['limit'] = requestParameters['limit'];
+        }
+
+        if (requestParameters['precision'] != null) {
+            queryParameters['precision'] = requestParameters['precision'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/processingGraphs/{id}/footprints`;
+        urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Gets when and where the data of a raster processing graph may exist.
+     */
+    async getProcessingGraphFootprintsHandlerRaw(requestParameters: GetProcessingGraphFootprintsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RasterFootprints>> {
+        const requestOptions = await this.getProcessingGraphFootprintsHandlerRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => RasterFootprintsFromJSON(jsonValue));
+    }
+
+    /**
+     * Gets when and where the data of a raster processing graph may exist.
+     */
+    async getProcessingGraphFootprintsHandler(requestParameters: GetProcessingGraphFootprintsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RasterFootprints> {
+        const response = await this.getProcessingGraphFootprintsHandlerRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
