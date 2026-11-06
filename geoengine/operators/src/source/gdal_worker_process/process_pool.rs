@@ -1333,9 +1333,16 @@ impl GdalPoolDispatcher {
     pub async fn read_header(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
+    ) -> Result<RasterInfo, GdalProcessPoolError> {
         let shared_res = self.dispatch_dedup(request).await?;
-        shared_res.0.clone()
+        match shared_res.0.clone()? {
+            IpcChannelResult::RasterInfo(info) => Ok(info),
+            IpcChannelResult::Raster(_) => Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "the worker answered a header read with a raster".to_string(),
+                },
+            }),
+        }
     }
 
     /// Shared leader/follower dispatch: hashes the request, coalesces identical

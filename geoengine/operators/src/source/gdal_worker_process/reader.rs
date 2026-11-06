@@ -10,7 +10,7 @@ use crate::source::gdal_worker_process::{
     GridAndProperties,
     process_common::{
         GdalReadAdvise, GdalReadKind, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
-        IpcChannelResult, IpcProcessError, IpcProcessGdalErrorKind, RasterInfo,
+        IpcProcessError, IpcProcessGdalErrorKind, RasterInfo,
     },
 };
 
@@ -157,14 +157,7 @@ impl GdalPoolReader {
         &self,
         dataset_params: GdalDatasetParameters,
     ) -> Result<RasterInfo, GdalProcessPoolError> {
-        match self.read_header(dataset_params).await? {
-            IpcChannelResult::RasterInfo(info) => Ok(info),
-            IpcChannelResult::Raster(_) => Err(GdalProcessPoolError::IpcProcessError {
-                source: IpcProcessError::IpcOther {
-                    msg: "the worker answered a header read with a raster".to_string(),
-                },
-            }),
-        }
+        self.read_header(dataset_params).await
     }
 
     /// Like [`Self::read_raster_info`], but `None` if the file is missing and its parameters say
@@ -175,16 +168,10 @@ impl GdalPoolReader {
     ) -> Result<Option<RasterInfo>, GdalProcessPoolError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
-        let res = self.read_header(dataset_params).await;
-        match read_result_or_no_data(res, file_not_found_as_no_data)? {
-            Some(IpcChannelResult::RasterInfo(info)) => Ok(Some(info)),
-            Some(IpcChannelResult::Raster(_)) => Err(GdalProcessPoolError::IpcProcessError {
-                source: IpcProcessError::IpcOther {
-                    msg: "the worker answered a header read with a raster".to_string(),
-                },
-            }),
-            None => Ok(None),
-        }
+        read_result_or_no_data(
+            self.read_header(dataset_params).await,
+            file_not_found_as_no_data,
+        )
     }
 
     /// The header of `file` if [`Self::read_and_remember_raster_info`] read it and it is valid.
@@ -211,7 +198,7 @@ impl GdalPoolReader {
     async fn read_header(
         &self,
         dataset_params: GdalDatasetParameters,
-    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
+    ) -> Result<RasterInfo, GdalProcessPoolError> {
         let span = tracing::info_span!(
             "gdal_pool_read_header",
             dataset = %dataset_params.file_path.display(),
