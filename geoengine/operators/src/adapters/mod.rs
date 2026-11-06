@@ -21,6 +21,7 @@ pub use simple_raster_stacker::{
 };
 pub use stream_statistics_adapter::StreamStatisticsAdapter;
 pub use time_stream_merge::TimeIntervalStreamMerge;
+pub(crate) use time_stream_merge::next_merged_interval;
 
 use self::raster_time_substream::RasterTimeMultiFold;
 use crate::util::Result;

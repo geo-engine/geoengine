@@ -283,6 +283,33 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.source.time_query(query, ctx).await
     }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<crate::engine::Footprint>>> {
+        let input_bands = query
+            .attributes()
+            .as_slice()
+            .iter()
+            .map(|band| {
+                self.output_band_to_input_band_idx
+                    .get(*band as usize)
+                    .copied()
+            })
+            .collect::<Option<Vec<_>>>()
+            .ok_or(BandFilterError::BandsCannotBeMappedToInput)?;
+
+        self.source
+            .footprint_query(
+                query.select_attributes(BandSelection::new(input_bands)?),
+                precision,
+                ctx,
+            )
+            .await
+    }
 }
 
 #[cfg(test)]

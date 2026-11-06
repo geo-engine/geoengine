@@ -74,6 +74,9 @@ impl TestDefault for ChunkByteSize {
 
 pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn chunk_byte_size(&self) -> ChunkByteSize;
+
+    /// The most boxes a footprint of one time step keeps. More are merged.
+    fn footprint_boxes_per_step_limit(&self) -> usize;
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
@@ -210,6 +213,7 @@ impl Drop for QueryAbortTrigger {
 pub struct MockQueryContext {
     pub default_cache_ttl: CacheTtlSeconds,
     pub chunk_byte_size: ChunkByteSize,
+    pub footprint_boxes_per_step_limit: usize,
     pub tiling_specification: TilingSpecification,
     pub thread_pool: Arc<ThreadPool>,
 
@@ -240,6 +244,7 @@ impl MockQueryContext {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
+            footprint_boxes_per_step_limit: super::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
             tiling_specification,
             default_cache_ttl,
             thread_pool,
@@ -269,6 +274,7 @@ impl MockQueryContext {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
+            footprint_boxes_per_step_limit: super::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(0),
@@ -296,6 +302,7 @@ impl MockQueryContext {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
+            footprint_boxes_per_step_limit: super::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
             tiling_specification,
             default_cache_ttl,
             thread_pool: create_rayon_thread_pool(num_threads),
@@ -317,6 +324,10 @@ impl MockQueryContext {
 impl QueryContext for MockQueryContext {
     fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
+    }
+
+    fn footprint_boxes_per_step_limit(&self) -> usize {
+        self.footprint_boxes_per_step_limit
     }
 
     fn processing_runtime(&self) -> tokio::runtime::Handle {

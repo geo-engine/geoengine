@@ -1,8 +1,8 @@
 use super::RasterExpressionError;
 use crate::{
     engine::{
-        BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterQueryProcessor,
-        RasterResultDescriptor,
+        BoxRasterQueryProcessor, Footprint, FootprintCombine, QueryContext, QueryProcessor,
+        RasterQueryProcessor, RasterResultDescriptor, unknown_footprints, zip_footprints,
     },
     util::Result,
 };
@@ -134,6 +134,47 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.sources.time_query(query, ctx).await
     }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        // With `map_no_data`, a pixel without data in any input can get a value from the expression.
+        // Still, if no data in all inputs gives no data, there is no data where no input has data.
+        // Without it, a pixel is no-data if any input is, so there is data only where all inputs
+        // have data.
+        let combine = if !self.map_no_data {
+            FootprintCombine::Intersection
+        } else if Tuple::maps_no_data_to_no_data(&self.program)? {
+            FootprintCombine::Union
+        } else {
+            // the expression can turn no-data into data anywhere
+            let time_steps = self.time_query(query.time_interval(), ctx).await?;
+            return Ok(unknown_footprints(time_steps));
+        };
+
+        // Each input band is asked for itself and the streams are zipped.
+        let mut streams = Vec::with_capacity(Tuple::num_bands() as usize);
+        for band in 0..Tuple::num_bands() {
+            streams.push(
+                self.sources
+                    .footprint_query(
+                        query.select_attributes(BandSelection::new(vec![band])?),
+                        precision,
+                        ctx,
+                    )
+                    .await?,
+            );
+        }
+
+        Ok(zip_footprints(
+            streams,
+            combine,
+            ctx.footprint_boxes_per_step_limit(),
+        ))
+    }
 }
 
 #[async_trait]
@@ -168,11 +209,21 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
 
     fn num_bands() -> u32;
 
+    /// Whether the expression gives no data if all of its inputs are no data.
+    fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool>;
+
     async fn time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>;
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>>;
 }
 
 #[async_trait]
@@ -276,12 +327,31 @@ where
         1
     }
 
+    fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool> {
+        let expression = unsafe {
+            // we have to "trust" that the function has the signature we expect
+            program
+                .function_1::<Option<f64>>()
+                .map_err(RasterExpressionError::from)?
+        };
+        Ok(expression(None).is_none())
+    }
+
     async fn time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.raster.time_query(query, ctx).await
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        self.raster.footprint_query(query, precision, ctx).await
     }
 }
 
@@ -424,12 +494,31 @@ where
         2
     }
 
+    fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool> {
+        let expression = unsafe {
+            // we have to "trust" that the function has the signature we expect
+            program
+                .function_2::<Option<f64>, Option<f64>>()
+                .map_err(RasterExpressionError::from)?
+        };
+        Ok(expression(None, None).is_none())
+    }
+
     async fn time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.raster.time_query(query, ctx).await
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        self.raster.footprint_query(query, precision, ctx).await
     }
 }
 
@@ -613,6 +702,20 @@ macro_rules! impl_expression_tuple_processor {
                 $N
             }
 
+            fn maps_no_data_to_no_data(program: &LinkedExpression) -> Result<bool> {
+                let expression: Symbol<$FN_T> = unsafe {
+                    // we have to "trust" that the function has the signature we expect
+                    program.function_nary().map_err(RasterExpressionError::from)?
+                };
+                // call expression with $N None values correctly:
+                Ok(expression(
+                    $(
+                        { let _ = $I; None }
+                    ),+
+                )
+                .is_none())
+            }
+
             async fn time_query<'a>(
                 &'a self,
                 query: geoengine_datatypes::primitives::TimeInterval,
@@ -620,6 +723,15 @@ macro_rules! impl_expression_tuple_processor {
                 ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
                     self.raster.time_query(query, ctx).await
                 }
+
+            async fn footprint_query<'a>(
+                &'a self,
+                query: RasterQueryRectangle,
+                precision: crate::engine::FootprintPrecision,
+                ctx: &'a dyn QueryContext,
+            ) -> Result<BoxStream<'a, Result<Footprint>>> {
+                self.raster.footprint_query(query, precision, ctx).await
+            }
         }
 
 
