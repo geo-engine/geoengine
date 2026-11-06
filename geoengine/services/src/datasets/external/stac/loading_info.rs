@@ -2,6 +2,7 @@ use super::common;
 use super::{
     StacClient, StacDataProvider, StacProviderDataset, StacProviderS3Config,
     cache::StacQueryCache,
+    coordinator::{RequestPriority, step_has_items},
     grid::{ProjectedStacGrid, StacGrid, StacGridCells},
 };
 use crate::error::Result;
@@ -14,8 +15,9 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::DataId;
 use geoengine_datatypes::operations::reproject::ReprojectClipped;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D,
-    TimeDimension, TimeInstance, TimeInterval, TimeStepIter, VectorQueryRectangle,
+    AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, RasterQueryRectangle,
+    RegularTimeDimension, SpatialPartition2D, TimeDimension, TimeInstance, TimeInterval, TimeStep,
+    TimeStepIter, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
 use geoengine_datatypes::spatial_reference::{
@@ -74,6 +76,7 @@ enum StacQueryState {
 async fn query_stac_item_collection(
     client: &StacClient,
     query_state: &StacQueryState,
+    priority: RequestPriority,
 ) -> geoengine_operators::util::Result<(stac::ItemCollection, StacQueryState)> {
     let request_policy = RetryPolicy::new().stop_on_status(&[400, 404]);
 
@@ -88,7 +91,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(query_url.clone()).query(query_params);
             let item_collection: stac::ItemCollection = client
-                .execute_json(request, &request_policy)
+                .execute_json_with_priority(request, &request_policy, priority)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -119,7 +122,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(next_url.clone());
             let item_collection: stac::ItemCollection = client
-                .execute_json(request, &request_policy)
+                .execute_json_with_priority(request, &request_policy, priority)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -177,6 +180,14 @@ impl
             ));
         }
 
+        // A window search answers one chunk and tells where the rest starts. Map tiles read
+        // their own time step and are not split.
+        let (time_interval, next) = if query.search_in_chunks {
+            self.first_chunk(time_interval)?
+        } else {
+            (time_interval, None)
+        };
+
         let spatial_bounds = query.query_rectangle.spatial_bounds();
 
         let base_url = Url::from_str(&self.api_url).map_err(|e| {
@@ -199,26 +210,37 @@ impl
             // Preserve the existing empty result for queries outside the CRS area of use.
             let time_steps = regular_time_steps(self.time_dimension, time_interval)?
                 .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
-            return Ok(MultiBandGdalLoadingInfo::new(
-                time_steps,
-                Vec::new(),
-                self.cache_ttl_secs,
-            ));
+            return Ok(
+                MultiBandGdalLoadingInfo::new(time_steps, Vec::new(), self.cache_ttl_secs)
+                    .with_next(next),
+            );
         }
 
         let time_steps = regular_time_steps(self.time_dimension, time_interval)?
             .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
 
-        // Cell bounds do not depend on the time step, so they are projected once.
-        let mut cell_bboxes = Vec::new();
-        for cell in cells {
-            let Some(clipped) = grid.clip_cell_to_extent(cell.bbox) else {
-                continue;
-            };
-            let Some(bbox) = stac_query_bbox(clipped, self.dataset.projection)? else {
-                continue;
-            };
-            cell_bboxes.push((cell.index, bbox));
+        let cell_bboxes = self.cell_bboxes(grid, cells)?;
+
+        // The calendar only needs to know which steps have items. One aggregation tells it, with
+        // no search and nothing written to the cache. It counts the items of all cells, also next
+        // to the view, so few cells are searched instead, which is exact and warms the cache of the
+        // map. Without aggregation the files are searched as well.
+        if query.availability_only
+            && cell_bboxes.len() > self.query_cache.availability_search_cells()
+            && let Some(has_data) = self
+                .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
+                .await
+        {
+            return Ok(
+                MultiBandGdalLoadingInfo::new(time_steps, Vec::new(), self.cache_ttl_secs)
+                    .with_next(next)
+                    .with_availability(has_data),
+            );
+        }
+
+        if query.search_in_chunks {
+            self.prepare_window_search(&items_url, time_interval, time_steps.len(), &cell_bboxes)
+                .await?;
         }
 
         // Searches are created lazily and are independent; the result is sorted and deduplicated below.
@@ -231,7 +253,11 @@ impl
                     self.dataset.clone(),
                     cell,
                     step,
-                    move || async move { metadata.search_bbox(url, bbox, step).await },
+                    move || async move {
+                        metadata
+                            .search_bbox(url, bbox, step, RequestPriority::Interactive)
+                            .await
+                    },
                 )
             })
             .buffer_unordered(self.max_concurrent_cell_searches)
@@ -257,11 +283,10 @@ impl
             StacTileIdentity::from(&*left) == StacTileIdentity::from(&*right)
         });
 
-        Ok(MultiBandGdalLoadingInfo::new(
-            time_steps,
-            tile_files,
-            self.cache_ttl_secs,
-        ))
+        Ok(
+            MultiBandGdalLoadingInfo::new(time_steps, tile_files, self.cache_ttl_secs)
+                .with_next(next),
+        )
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
@@ -404,6 +429,303 @@ impl StacMultiBandMetaData {
         Ok((grid, cells))
     }
 
+    /// The search boxes of the cells in WGS84. They do not depend on the time step, so they are
+    /// projected once.
+    fn cell_bboxes(
+        &self,
+        grid: ProjectedStacGrid,
+        cells: StacGridCells,
+    ) -> geoengine_operators::util::Result<Vec<(GridIdx2D, BoundingBox2D)>> {
+        let mut cell_bboxes = Vec::new();
+        for cell in cells {
+            let Some(clipped) = grid.clip_cell_to_extent(cell.bbox) else {
+                continue;
+            };
+            let Some(bbox) = stac_query_bbox(clipped, self.dataset.projection)? else {
+                continue;
+            };
+            cell_bboxes.push((cell.index, bbox));
+        }
+        Ok(cell_bboxes)
+    }
+
+    /// Fills the cache for a window, so that the per-step lookups of the loading info find it.
+    async fn prepare_window_search(
+        &self,
+        items_url: &Url,
+        time_interval: TimeInterval,
+        number_of_steps: usize,
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) -> geoengine_operators::util::Result<()> {
+        if number_of_steps > 1 {
+            return self
+                .search_missing_steps(items_url, time_interval, cell_bboxes)
+                .await;
+        }
+        // A single step is read by the interactive per-step lookup, which has no limit for map
+        // tiles. A footprint query over too many cells is still too large.
+        self.reject_too_many_searches(cell_bboxes.len())
+    }
+
+    /// For each step whether any cell has an item in it, from one aggregation, if the server can
+    /// tell. Nothing is searched. A step without items is empty for every cell, so it is stored
+    /// as such, unless the cells are so many that storing them would flood the cache.
+    async fn steps_with_items(
+        &self,
+        items_url: &Url,
+        time_interval: TimeInterval,
+        time_steps: &[TimeInterval],
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) -> Option<Vec<bool>> {
+        let TimeDimension::Regular(regular) = self.time_dimension else {
+            return None;
+        };
+        let with_items = self
+            .intervals_with_items(items_url, regular.step, &[time_interval], cell_bboxes)
+            .await?;
+        if cell_bboxes.len() <= self.query_cache.max_footprint_searches() {
+            let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
+            self.store_empty_steps(dataset_id, time_steps, &with_items, cell_bboxes)
+                .await;
+        }
+        Some(
+            time_steps
+                .iter()
+                .map(|step| step_has_items(*step, &with_items))
+                .collect(),
+        )
+    }
+
+    /// The intervals with at least one item in any of the cells, over all of the chunks, if the
+    /// server can tell. The box is the union of the cells' search boxes, so that an interval
+    /// without items is empty for every cell.
+    async fn intervals_with_items(
+        &self,
+        items_url: &Url,
+        step: TimeStep,
+        chunks: &[TimeInterval],
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) -> Option<Vec<TimeInterval>> {
+        let range = TimeInterval::new(chunks.first()?.start(), chunks.last()?.end()).ok()?;
+        let bbox = cell_bboxes
+            .iter()
+            .map(|(_, bbox)| *bbox)
+            .reduce(|union, bbox| union.union(&bbox))?;
+        let aggregate_url = items_url.join("aggregate").ok()?;
+
+        self.client
+            .intervals_with_items(aggregate_url, bbox, range, step)
+            .await
+    }
+
+    /// Stores a complete, empty result for every cell and each step without items. These steps
+    /// need no search, neither now nor for the map tiles that read them later.
+    async fn store_empty_steps(
+        &self,
+        dataset_id: u64,
+        steps: &[TimeInterval],
+        intervals_with_items: &[TimeInterval],
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) {
+        for step in steps
+            .iter()
+            .filter(|step| !step_has_items(**step, intervals_with_items))
+        {
+            for (cell, _) in cell_bboxes {
+                if !self.query_cache.contains(dataset_id, *cell, *step) {
+                    self.query_cache
+                        .insert(self.dataset.clone(), *cell, *step, Vec::new())
+                        .await;
+                }
+            }
+        }
+    }
+
+    /// The time steps of one search: `search_chunk_steps` steps, aligned to the same origin.
+    fn chunk_dimension(&self, regular: RegularTimeDimension) -> RegularTimeDimension {
+        RegularTimeDimension::new(
+            regular.origin,
+            TimeStep {
+                granularity: regular.step.granularity,
+                step: regular
+                    .step
+                    .step
+                    .saturating_mul(self.query_cache.search_chunk_steps()),
+            },
+        )
+    }
+
+    /// The first chunk of a time range and the rest of it, so that a long range of a window
+    /// search is answered part by part. A range inside one chunk has no rest.
+    fn first_chunk(
+        &self,
+        time_interval: TimeInterval,
+    ) -> geoengine_operators::util::Result<(TimeInterval, Option<TimeInterval>)> {
+        let TimeDimension::Regular(regular) = self.time_dimension else {
+            return Ok((time_interval, None));
+        };
+        let Some(first) = self
+            .chunk_dimension(regular)
+            .intersecting_intervals(time_interval)?
+            .next()
+        else {
+            return Ok((time_interval, None));
+        };
+        if first.end() >= time_interval.end() {
+            return Ok((time_interval, None));
+        }
+        Ok((
+            TimeInterval::new(time_interval.start(), first.end())?,
+            Some(TimeInterval::new(first.end(), time_interval.end())?),
+        ))
+    }
+
+    fn reject_too_many_searches(&self, searches: usize) -> geoengine_operators::util::Result<()> {
+        let limit = self.query_cache.max_footprint_searches();
+        if searches > limit {
+            return Err(geoengine_operators::error::Error::FootprintQueryTooLarge {
+                searches,
+                limit,
+            });
+        }
+        Ok(())
+    }
+
+    /// Fills the per-step cache entries of a time window with at most one search per cell and
+    /// chunk of `search_chunk_steps` steps. A cell and chunk whose steps are all cached costs no
+    /// request; otherwise only the span from its first to its last missing step is searched.
+    ///
+    /// Reading the steps afterwards goes through the normal per-step lookup, so a step
+    /// that was not stored just gets its own search.
+    async fn search_missing_steps(
+        &self,
+        items_url: &Url,
+        time_interval: TimeInterval,
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) -> geoengine_operators::util::Result<()> {
+        let TimeDimension::Regular(regular) = self.time_dimension else {
+            return Ok(());
+        };
+        let chunk_dimension = self.chunk_dimension(regular);
+        let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
+
+        let chunks = chunk_dimension
+            .intersecting_intervals(time_interval)?
+            .map(|chunk| {
+                let steps = regular_time_steps(self.time_dimension, chunk)?
+                    .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
+                Ok((chunk, steps))
+            })
+            .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
+
+        // A warm view needs no request at all, not even the one that plans the searches.
+        let anything_missing = chunks.iter().any(|(_, steps)| {
+            steps.iter().any(|step| {
+                cell_bboxes
+                    .iter()
+                    .any(|(cell, _)| !self.query_cache.contains(dataset_id, *cell, *step))
+            })
+        });
+        if !anything_missing {
+            return Ok(());
+        }
+
+        let chunk_intervals = chunks.iter().map(|(chunk, _)| *chunk).collect::<Vec<_>>();
+        let with_items = self
+            .intervals_with_items(items_url, regular.step, &chunk_intervals, cell_bboxes)
+            .await;
+
+        let mut searches = Vec::new();
+        for (_, steps) in chunks {
+            if let Some(with_items) = &with_items {
+                self.store_empty_steps(dataset_id, &steps, with_items, cell_bboxes)
+                    .await;
+            }
+            for (cell, bbox) in cell_bboxes.iter().copied() {
+                let missing = steps
+                    .iter()
+                    .filter(|step| !self.query_cache.contains(dataset_id, cell, **step))
+                    .collect::<Vec<_>>();
+                if let (Some(first), Some(last)) = (missing.first(), missing.last()) {
+                    let span = TimeInterval::new(first.start(), last.end())?;
+                    searches.push((cell, bbox, span, first == last));
+                }
+            }
+        }
+
+        self.reject_too_many_searches(searches.len())?;
+        self.search_spans(items_url, dataset_id, searches).await
+    }
+
+    /// Runs the searches of spans of missing steps, each for one cell, and stores their results.
+    async fn search_spans(
+        &self,
+        items_url: &Url,
+        dataset_id: u64,
+        searches: Vec<(GridIdx2D, BoundingBox2D, TimeInterval, bool)>,
+    ) -> geoengine_operators::util::Result<()> {
+        futures::stream::iter(searches)
+            .map(|(cell, bbox, span, single_step)| {
+                let metadata = self.clone();
+                let url = items_url.clone();
+                let cache = self.query_cache.clone();
+                async move {
+                    if single_step {
+                        // The span is the step itself, so the normal step entry is the shared search.
+                        // A map tile for the same step joins it, so it must not wait in the background lane.
+                        return cache
+                            .get_or_fetch(
+                                metadata.dataset.clone(),
+                                cell,
+                                span,
+                                move || async move {
+                                    metadata
+                                        .search_bbox(url, bbox, span, RequestPriority::Interactive)
+                                        .await
+                                },
+                            )
+                            .await;
+                    }
+                    // The entry for the span only makes concurrent callers share one search.
+                    let result = cache
+                        .get_or_fetch(metadata.dataset.clone(), cell, span, move || async move {
+                            // a window search yields to map tiles and stays within the background share
+                            let files = metadata
+                                .search_bbox(url, bbox, span, RequestPriority::Background)
+                                .await?;
+                            for step in regular_time_steps(metadata.time_dimension, span)? {
+                                let step = step?;
+                                // An item on the span's closed end belongs to the next step and is dropped here.
+                                let step_files = files
+                                    .iter()
+                                    .filter(|file| file.time == step)
+                                    .cloned()
+                                    .collect();
+                                metadata
+                                    .query_cache
+                                    .insert(metadata.dataset.clone(), cell, step, step_files)
+                                    .await;
+                            }
+                            Ok(Vec::new())
+                        })
+                        .await;
+                    // Only the step entries count: a stale marker must not hide evicted steps.
+                    cache.remove(dataset_id, cell, span).await;
+                    result
+                }
+            })
+            .buffer_unordered(self.max_concurrent_cell_searches)
+            .map_err(
+                |error| geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(error),
+                },
+            )
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        Ok(())
+    }
+
     /// Search a WGS84 bounding box for a time interval, following all result pages.
     ///
     /// Pagination must finish before this result enters the cache, so failed
@@ -413,6 +735,7 @@ impl StacMultiBandMetaData {
         items_url: Url,
         bbox: geoengine_datatypes::primitives::BoundingBox2D,
         time_interval: TimeInterval,
+        priority: RequestPriority,
     ) -> geoengine_operators::util::Result<Vec<TileFile>> {
         let mut files = Vec::new();
         let mut state = StacQueryState::FirstPage {
@@ -421,7 +744,9 @@ impl StacMultiBandMetaData {
         };
 
         while !matches!(state, StacQueryState::Finished) {
-            let (collection, next_state) = query_stac_item_collection(&self.client, &state).await?;
+            let (collection, next_state) =
+                query_stac_item_collection(&self.client, &state, priority).await?;
+
             for item in collection.items {
                 self.process_stac_item(&item, &mut files).map_err(|error| {
                     geoengine_operators::error::Error::LoadingInfo {
@@ -1531,7 +1856,7 @@ mod tests {
             query_url: Url::parse(&server.url_str("/initial-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&client, &initial_query)
+        query_stac_item_collection(&client, &initial_query, RequestPriority::Interactive)
             .await
             .expect("initial authenticated STAC request should succeed");
 
@@ -1539,9 +1864,13 @@ mod tests {
             next_url: Url::parse(&server.url_str("/next-items")).unwrap(),
         };
         let cloned_client = client.clone();
-        query_stac_item_collection(&cloned_client, &next_page_query)
-            .await
-            .expect("authenticated STAC pagination request should succeed");
+        query_stac_item_collection(
+            &cloned_client,
+            &next_page_query,
+            RequestPriority::Interactive,
+        )
+        .await
+        .expect("authenticated STAC pagination request should succeed");
 
         let authentication = client.authentication.as_ref().unwrap();
         tokio::time::timeout(Duration::from_secs(4), async {
@@ -1559,9 +1888,13 @@ mod tests {
             query_url: Url::parse(&server.url_str("/refreshed-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&cloned_client, &refreshed_query)
-            .await
-            .expect("refreshed authenticated STAC request should succeed");
+        query_stac_item_collection(
+            &cloned_client,
+            &refreshed_query,
+            RequestPriority::Interactive,
+        )
+        .await
+        .expect("refreshed authenticated STAC request should succeed");
     }
 
     /// Replicates the steps from `test_ndvi.http` without making real web requests:
@@ -1979,6 +2312,15 @@ mod grid_request_tests {
         SpatialPartition2D::new((left, 1.).into(), (right, 0.).into()).unwrap()
     }
 
+    /// The days `from` up to and excluding `to` of January 2026.
+    fn window(from: u8, to: u8) -> TimeInterval {
+        TimeInterval::new(
+            DateTime::new_utc(2026, 1, from, 0, 0, 0),
+            DateTime::new_utc(2026, 1, to, 0, 0, 0),
+        )
+        .unwrap()
+    }
+
     fn interval(day: u8) -> TimeInterval {
         TimeInterval::new(
             DateTime::new_utc(2026, 1, day, 0, 0, 0),
@@ -2226,6 +2568,10 @@ mod grid_request_tests {
 
     type SearchStarts = Arc<Mutex<Vec<Instant>>>;
 
+    fn new_starts() -> SearchStarts {
+        Arc::new(Mutex::new(Vec::new()))
+    }
+
     fn expect_search(
         server: &Server,
         bbox: &str,
@@ -2237,6 +2583,68 @@ mod grid_request_tests {
             Expectation::matching(all_of![
                 request::method_path("GET", "/collections/test/items"),
                 request::query(url_decoded(contains(("bbox", bbox.to_owned())))),
+            ])
+            .times(1)
+            .respond_with(move || {
+                starts.lock().unwrap().push(Instant::now());
+                responders::delay_and_then(
+                    delay,
+                    responders::json_encoded(collection(&features, None)),
+                )
+            }),
+        );
+    }
+
+    /// A server that does not know aggregations, so that window searches are not planned.
+    fn expect_aggregation_unsupported(server: &Server) {
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
+                .times(0..)
+                .respond_with(responders::status_code(404)),
+        );
+    }
+
+    /// The aggregation of the days with items: each given day has two items.
+    fn expect_aggregation(server: &Server, datetime: &str, days_with_items: &[&str]) {
+        let buckets = days_with_items
+            .iter()
+            .map(|day| json!({"key": day, "data_type": "datetime", "frequency": 2}))
+            .collect::<Vec<_>>();
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/collections/test/aggregate"),
+                request::query(url_decoded(contains(("datetime", datetime.to_owned())))),
+                request::query(url_decoded(contains((
+                    "bbox",
+                    "0.00000,0.00000,1.00000,1.00000".to_owned()
+                )))),
+                request::query(url_decoded(contains((
+                    "datetime_frequency_interval",
+                    "day".to_owned()
+                )))),
+            ])
+            .times(1)
+            .respond_with(responders::json_encoded(json!({"aggregations": [{
+                "name": "datetime_frequency", "data_type": "frequency_distribution",
+                "overflow": 0, "buckets": buckets,
+            }]}))),
+        );
+    }
+
+    /// Like `expect_search`, but only for one `datetime` query parameter.
+    fn expect_search_at(
+        server: &Server,
+        bbox: &str,
+        datetime: &str,
+        features: Vec<Value>,
+        delay: Duration,
+        starts: SearchStarts,
+    ) {
+        server.expect(
+            Expectation::matching(all_of![
+                request::method_path("GET", "/collections/test/items"),
+                request::query(url_decoded(contains(("bbox", bbox.to_owned())))),
+                request::query(url_decoded(contains(("datetime", datetime.to_owned())))),
             ])
             .times(1)
             .respond_with(move || {
@@ -2381,6 +2789,681 @@ mod grid_request_tests {
         );
         let warm = meta.loading_info(query(area, interval(3))).await.unwrap();
         assert_eq!(warm.tile_files(interval(3), tile, 0).len(), 5);
+    }
+
+    #[tokio::test]
+    async fn chunk_search_fills_the_step_entries_of_its_cell() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        let starts = new_starts();
+        // `times(1)`: the steps afterwards must not search again
+        expect_search(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+            .await
+            .unwrap();
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+
+        // the data query of the same step
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .await
+            .unwrap();
+        assert_file(&info, 0., "found");
+
+        // another step of the chunk, which has no items
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(4)))
+            .await
+            .unwrap();
+        assert_eq!(info.time_steps(), &[interval(4)]);
+        assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
+
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn chunk_search_leaves_an_item_on_its_end_to_the_next_chunk() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        let starts = new_starts();
+        // 2026-01-07 is day 20460 since the epoch, so it starts a chunk of 30 days
+        let mut boundary_item = item("boundary", 0.);
+        boundary_item["properties"]["datetime"] = json!("2026-01-07T00:00:00Z");
+        expect_search(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            vec![boundary_item],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), window(5, 7)).searching_in_chunks())
+            .await
+            .unwrap();
+
+        assert_eq!(info.tile_files(interval(6), tile(0.), 0).len(), 0);
+    }
+
+    #[tokio::test]
+    async fn window_search_covers_only_the_missing_steps_of_a_chunk() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        let starts = new_starts();
+        let bbox = "0.00000,0.00000,1.00000,1.00000";
+        // the last step of the chunk 2025-12-08 to 2026-01-07 is cached by a normal step query
+        let mut jan6 = item("jan6", 0.);
+        jan6["properties"]["datetime"] = json!("2026-01-06T12:00:00Z");
+        expect_search_at(
+            &server,
+            bbox,
+            "2026-01-06T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            vec![jan6],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        // so the window search covers the chunk only up to that step
+        expect_search_at(
+            &server,
+            bbox,
+            "2025-12-08T00:00:00.000Z/2026-01-06T00:00:00.000Z",
+            vec![item("jan3", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(6)))
+            .await
+            .unwrap();
+        assert_eq!(info.time_steps(), &[interval(6)]);
+        assert_eq!(info.tile_files(interval(6), tile(0.), 0).len(), 1);
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+            .await
+            .unwrap();
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        assert_eq!(starts.lock().unwrap().len(), 2);
+
+        // a warm window costs no request, and neither does a step it filled
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+            .await
+            .unwrap();
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(4)))
+            .await
+            .unwrap();
+        assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
+        assert_eq!(starts.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn one_step_window_query_searches_only_that_step() {
+        let server = Server::run();
+        let starts = new_starts();
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(3)).searching_in_chunks())
+            .await
+            .unwrap();
+        assert_file(&info, 0., "found");
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn aggregation_skips_the_searches_of_steps_without_items() {
+        let server = Server::run();
+        let starts = new_starts();
+        // one aggregation per chunk of 30 days: 2025-12-08, 2026-01-07 and 2026-02-06 up to 2026-03-08
+        expect_aggregation(
+            &server,
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            &["2026-01-03T00:00:00.000Z"],
+        );
+        expect_aggregation(
+            &server,
+            "2026-01-07T00:00:00.000Z/2026-02-06T00:00:00.000Z",
+            &[],
+        );
+        expect_aggregation(
+            &server,
+            "2026-02-06T00:00:00.000Z/2026-03-08T00:00:00.000Z",
+            &[],
+        );
+        // only the one day with items is searched
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let mut rest = Some(
+            TimeInterval::new(
+                DateTime::new_utc(2026, 1, 1, 0, 0, 0),
+                DateTime::new_utc(2026, 2, 15, 0, 0, 0),
+            )
+            .unwrap(),
+        );
+
+        // the window is answered chunk by chunk
+        let mut answers = 0;
+        while let Some(time) = rest {
+            rest = meta
+                .loading_info(query(bounds(0.1, 0.4), time).searching_in_chunks())
+                .await
+                .unwrap()
+                .next();
+            answers += 1;
+        }
+        assert_eq!(answers, 3);
+
+        // the day with items has its files, and the empty ones are known without another request
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .await
+            .unwrap();
+        assert_file(&info, 0., "found");
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(20)))
+            .await
+            .unwrap();
+        assert_eq!(info.tile_files(interval(20), tile(0.), 0).len(), 0);
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_window_search_answers_the_first_chunk_and_names_the_rest() {
+        let server = Server::run();
+        let starts = new_starts();
+        expect_aggregation_unsupported(&server);
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let window = TimeInterval::new(
+            DateTime::new_utc(2026, 1, 1, 0, 0, 0),
+            DateTime::new_utc(2026, 2, 15, 0, 0, 0),
+        )
+        .unwrap();
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), window).searching_in_chunks())
+            .await
+            .unwrap();
+
+        // the steps up to the end of the chunk, and the rest of the window
+        assert_eq!(
+            info.time_steps().first().copied(),
+            Some(interval(1)),
+            "the first step is the window's first"
+        );
+        assert_eq!(
+            info.time_steps().last().copied(),
+            Some(
+                TimeInterval::new(
+                    DateTime::new_utc(2026, 1, 6, 0, 0, 0),
+                    DateTime::new_utc(2026, 1, 7, 0, 0, 0)
+                )
+                .unwrap()
+            )
+        );
+        assert_eq!(
+            info.next(),
+            Some(
+                TimeInterval::new(
+                    DateTime::new_utc(2026, 1, 7, 0, 0, 0),
+                    DateTime::new_utc(2026, 2, 15, 0, 0, 0)
+                )
+                .unwrap()
+            )
+        );
+
+        // a window inside one chunk and a map tile have no rest
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .await
+            .unwrap();
+        assert_eq!(info.next(), None);
+    }
+
+    #[tokio::test]
+    async fn availability_seeds_the_days_without_items_and_nothing_else() {
+        let server = Server::run();
+        let starts = new_starts();
+        expect_aggregation(
+            &server,
+            "2026-01-03T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            &["2026-01-03T00:00:00.000Z"],
+        );
+        // only the day with items needs a search afterwards. A search for the other day would be
+        // unexpected and fail, so the day without items must have been stored as empty
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(
+                query(bounds(0.1, 0.4), window(3, 5))
+                    .searching_in_chunks()
+                    .availability_only(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(info.time_steps(), &[interval(3), interval(4)]);
+        assert_eq!(info.has_data(0), Some(true));
+        assert_eq!(info.has_data(1), Some(false));
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 0);
+        assert_eq!(starts.lock().unwrap().len(), 0);
+
+        // the day without items is known to be empty
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(4)))
+            .await
+            .unwrap();
+        assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
+        assert_eq!(starts.lock().unwrap().len(), 0);
+
+        // the day with items is not, and gets its search
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .await
+            .unwrap();
+        assert_file(&info, 0., "found");
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn availability_over_too_many_cells_seeds_nothing() {
+        let server = Server::run();
+        let starts = new_starts();
+        // any area: one day with items
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
+                .times(1)
+                .respond_with(responders::json_encoded(json!({"aggregations": [{
+                    "name": "datetime_frequency", "data_type": "frequency_distribution",
+                    "overflow": 0,
+                    "buckets": [{"key": "2026-01-03T00:00:00.000Z", "data_type": "datetime", "frequency": 2}],
+                }]}))),
+        );
+        // the day without items was not stored, so it is searched
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            vec![],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        let info = meta
+            .loading_info(
+                query(world, window(3, 5))
+                    .searching_in_chunks()
+                    .availability_only(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(info.has_data(1), Some(false));
+
+        meta.loading_info(query(bounds(0.1, 0.4), interval(4)))
+            .await
+            .unwrap();
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_rejected_request_does_not_switch_aggregation_off_for_the_server() {
+        let server = Server::run();
+        // A 400 can come from one request only. The search plans and the answer asks once each, and
+        // both must ask, because a server that is switched off is not asked again.
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
+                .times(2)
+                .respond_with(responders::status_code(400)),
+        );
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                .times(0..)
+                .respond_with(responders::json_encoded(collection(&[], None))),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        meta.loading_info(
+            query(bounds(0.1, 0.4), window(3, 5))
+                .searching_in_chunks()
+                .availability_only(),
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn availability_without_aggregation_answers_with_the_files() {
+        let server = Server::run();
+        let starts = new_starts();
+        expect_aggregation_unsupported(&server);
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(
+                query(bounds(0.1, 0.4), window(3, 5))
+                    .searching_in_chunks()
+                    .availability_only(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(info.has_data(0), None);
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn availability_of_few_cells_searches_the_files_without_aggregation() {
+        let server = Server::run();
+        let starts = new_starts();
+        // The aggregation of the window itself would be unexpected and fail. The search plans with
+        // the one of its chunk and then looks at the day with items.
+        expect_aggregation(
+            &server,
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            &["2026-01-03T00:00:00.000Z"],
+        );
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.query_cache = Arc::new(
+            StacQueryCache::new(1024 * 1024, Duration::from_mins(1))
+                .with_availability_search_cells(1),
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(
+                query(bounds(0.1, 0.4), window(3, 5))
+                    .searching_in_chunks()
+                    .availability_only(),
+            )
+            .await
+            .unwrap();
+
+        // the files tell, so the map finds them cached
+        assert_eq!(info.has_data(0), None);
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_warm_window_does_not_ask_for_aggregation() {
+        let server = Server::run();
+        let starts = new_starts();
+        expect_aggregation(
+            &server,
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            &["2026-01-03T00:00:00.000Z"],
+        );
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        // the aggregation is expected once, so a second request for it would fail the test
+        for _ in 0..2 {
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_server_that_rejects_aggregation_is_asked_only_once() {
+        let server = Server::run();
+        let starts = new_starts();
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
+                .times(1)
+                .respond_with(responders::status_code(404)),
+        );
+        for datetime in [
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            "2026-01-07T00:00:00.000Z/2026-02-06T00:00:00.000Z",
+        ] {
+            expect_search_at(
+                &server,
+                "0.00000,0.00000,1.00000,1.00000",
+                datetime,
+                vec![],
+                Duration::ZERO,
+                starts.clone(),
+            );
+        }
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        for window in [window(3, 5), {
+            TimeInterval::new(
+                DateTime::new_utc(2026, 1, 8, 0, 0, 0),
+                DateTime::new_utc(2026, 1, 10, 0, 0, 0),
+            )
+            .unwrap()
+        }] {
+            meta.loading_info(query(bounds(0.1, 0.4), window).searching_in_chunks())
+                .await
+                .unwrap();
+        }
+
+        assert_eq!(starts.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn concurrent_window_searches_of_a_cell_share_one_search() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        let starts = new_starts();
+        expect_search(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            vec![item("found", 0.)],
+            Duration::from_millis(300),
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let (first, second) = futures::join!(
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks()),
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks()),
+        );
+        assert_eq!(first.unwrap().tile_files(interval(3), tile(0.), 0).len(), 1);
+        assert_eq!(
+            second.unwrap().tile_files(interval(3), tile(0.), 0).len(),
+            1
+        );
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn chunk_search_rejects_too_many_searches_without_requests() {
+        // no requests are expected
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        for time in [window(3, 5), interval(3)] {
+            let result = meta
+                .loading_info(query(world, time).searching_in_chunks())
+                .await;
+
+            assert!(matches!(
+                result,
+                Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
+            ));
+        }
     }
 
     #[tokio::test]
@@ -2848,7 +3931,11 @@ mod grid_request_tests {
         };
         let result = tokio::time::timeout(
             Duration::from_secs(12),
-            super::query_stac_item_collection(&client, &state),
+            super::query_stac_item_collection(
+                &client,
+                &state,
+                crate::datasets::external::stac::coordinator::RequestPriority::Interactive,
+            ),
         )
         .await
         .expect("ten rate-limit attempts should finish with fixed cooldowns");
