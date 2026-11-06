@@ -24,6 +24,7 @@ import { IdResponseFromJSON, } from '../models/IdResponse';
 import { ProcessingGraphFromJSON, ProcessingGraphToJSON, } from '../models/ProcessingGraph';
 import { ProvenanceEntryFromJSON, } from '../models/ProvenanceEntry';
 import { RasterDatasetFromProcessingGraphToJSON, } from '../models/RasterDatasetFromProcessingGraph';
+import { RasterFootprintsFromJSON, } from '../models/RasterFootprints';
 import { TaskResponseFromJSON, } from '../models/TaskResponse';
 import { TypedResultDescriptorFromJSON, } from '../models/TypedResultDescriptor';
 /**
@@ -124,6 +125,76 @@ export class ProcessingGraphsApi extends runtime.BaseAPI {
     getProcessingGraphAllMetadataZipHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
             const response = yield this.getProcessingGraphAllMetadataZipHandlerRaw(requestParameters, initOverrides);
+            return yield response.value();
+        });
+    }
+    /**
+     * Creates request options for getProcessingGraphFootprintsHandler without sending the request
+     */
+    getProcessingGraphFootprintsHandlerRequestOpts(requestParameters) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (requestParameters['id'] == null) {
+                throw new runtime.RequiredError('id', 'Required parameter "id" was null or undefined when calling getProcessingGraphFootprintsHandler().');
+            }
+            if (requestParameters['spatialBounds'] == null) {
+                throw new runtime.RequiredError('spatialBounds', 'Required parameter "spatialBounds" was null or undefined when calling getProcessingGraphFootprintsHandler().');
+            }
+            if (requestParameters['timeInterval'] == null) {
+                throw new runtime.RequiredError('timeInterval', 'Required parameter "timeInterval" was null or undefined when calling getProcessingGraphFootprintsHandler().');
+            }
+            if (requestParameters['attributes'] == null) {
+                throw new runtime.RequiredError('attributes', 'Required parameter "attributes" was null or undefined when calling getProcessingGraphFootprintsHandler().');
+            }
+            const queryParameters = {};
+            if (requestParameters['spatialBounds'] != null) {
+                queryParameters['spatialBounds'] = requestParameters['spatialBounds'];
+            }
+            if (requestParameters['timeInterval'] != null) {
+                queryParameters['timeInterval'] = requestParameters['timeInterval'];
+            }
+            if (requestParameters['attributes'] != null) {
+                queryParameters['attributes'] = requestParameters['attributes'];
+            }
+            if (requestParameters['limit'] != null) {
+                queryParameters['limit'] = requestParameters['limit'];
+            }
+            if (requestParameters['precision'] != null) {
+                queryParameters['precision'] = requestParameters['precision'];
+            }
+            const headerParameters = {};
+            if (this.configuration && this.configuration.accessToken) {
+                const token = this.configuration.accessToken;
+                const tokenString = yield token("session_token", []);
+                if (tokenString) {
+                    headerParameters["Authorization"] = `Bearer ${tokenString}`;
+                }
+            }
+            let urlPath = `/processingGraphs/{id}/footprints`;
+            urlPath = urlPath.replace('{id}', encodeURIComponent(String(requestParameters['id'])));
+            return {
+                path: urlPath,
+                method: 'GET',
+                headers: headerParameters,
+                query: queryParameters,
+            };
+        });
+    }
+    /**
+     * Gets when and where the data of a raster processing graph may exist.
+     */
+    getProcessingGraphFootprintsHandlerRaw(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const requestOptions = yield this.getProcessingGraphFootprintsHandlerRequestOpts(requestParameters);
+            const response = yield this.request(requestOptions, initOverrides);
+            return new runtime.JSONApiResponse(response, (jsonValue) => RasterFootprintsFromJSON(jsonValue));
+        });
+    }
+    /**
+     * Gets when and where the data of a raster processing graph may exist.
+     */
+    getProcessingGraphFootprintsHandler(requestParameters, initOverrides) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const response = yield this.getProcessingGraphFootprintsHandlerRaw(requestParameters, initOverrides);
             return yield response.value();
         });
     }

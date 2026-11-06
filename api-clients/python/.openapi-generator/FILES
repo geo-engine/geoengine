@@ -286,6 +286,8 @@ docs/RasterBandDescriptor.md
 docs/RasterColorizer.md
 docs/RasterDataType.md
 docs/RasterDatasetFromProcessingGraph.md
+docs/RasterFootprints.md
+docs/RasterFootprintsPrecision.md
 docs/RasterOperator.md
 docs/RasterPropertiesEntryType.md
 docs/RasterPropertiesKey.md
@@ -413,6 +415,8 @@ docs/TimeShiftParameters.md
 docs/TimeShiftParametersAbsolute.md
 docs/TimeShiftParametersRelative.md
 docs/TimeStep.md
+docs/TimeStepFootprint.md
+docs/TimeStepFootprintStatus.md
 docs/TypedDataProviderDefinition.md
 docs/TypedGeometry.md
 docs/TypedGeometryMultiLineString.md
@@ -765,6 +769,8 @@ geoengine_api_client/models/raster_band_descriptor.py
 geoengine_api_client/models/raster_colorizer.py
 geoengine_api_client/models/raster_data_type.py
 geoengine_api_client/models/raster_dataset_from_processing_graph.py
+geoengine_api_client/models/raster_footprints.py
+geoengine_api_client/models/raster_footprints_precision.py
 geoengine_api_client/models/raster_operator.py
 geoengine_api_client/models/raster_properties_entry_type.py
 geoengine_api_client/models/raster_properties_key.py
@@ -889,6 +895,8 @@ geoengine_api_client/models/time_shift_parameters.py
 geoengine_api_client/models/time_shift_parameters_absolute.py
 geoengine_api_client/models/time_shift_parameters_relative.py
 geoengine_api_client/models/time_step.py
+geoengine_api_client/models/time_step_footprint.py
+geoengine_api_client/models/time_step_footprint_status.py
 geoengine_api_client/models/typed_data_provider_definition.py
 geoengine_api_client/models/typed_geometry.py
 geoengine_api_client/models/typed_geometry_multi_line_string.py
@@ -1236,6 +1244,8 @@ test/test_raster_band_descriptor.py
 test/test_raster_colorizer.py
 test/test_raster_data_type.py
 test/test_raster_dataset_from_processing_graph.py
+test/test_raster_footprints.py
+test/test_raster_footprints_precision.py
 test/test_raster_operator.py
 test/test_raster_properties_entry_type.py
 test/test_raster_properties_key.py
@@ -1363,6 +1373,8 @@ test/test_time_shift_parameters.py
 test/test_time_shift_parameters_absolute.py
 test/test_time_shift_parameters_relative.py
 test/test_time_step.py
+test/test_time_step_footprint.py
+test/test_time_step_footprint_status.py
 test/test_typed_data_provider_definition.py
 test/test_typed_geometry.py
 test/test_typed_geometry_multi_line_string.py
