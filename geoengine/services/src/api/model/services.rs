@@ -984,6 +984,10 @@ impl From<crate::datasets::external::stac::StacProviderAuthentication>
 pub struct StacAssetBand {
     pub asset_title: String,
     pub band_name: Option<String>,
+    /// The key of the asset in the `assets` of a STAC item, e.g. `B04_20m`. If all bands of a
+    /// dataset have one, searches only request these assets. It is required for servers that do
+    /// not support `assets.*` in `fields`, like CDSE.
+    pub asset_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -1001,6 +1005,7 @@ impl From<StacAssetBand> for crate::datasets::external::stac::StacAssetBand {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
+            asset_key: value.asset_key,
         }
     }
 }
@@ -1010,6 +1015,7 @@ impl From<crate::datasets::external::stac::StacAssetBand> for StacAssetBand {
         Self {
             asset_title: value.asset_title,
             band_name: value.band_name,
+            asset_key: value.asset_key,
         }
     }
 }

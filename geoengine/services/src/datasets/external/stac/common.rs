@@ -353,6 +353,21 @@ pub fn rasterband_channel_for_dataset_band(
     Some(asset_band_idx + 1)
 }
 
+/// [`STAC_ITEM_FIELDS`] for exactly the given assets instead of `assets.*`.
+pub fn stac_item_fields_of_assets(asset_keys: &[&str]) -> String {
+    STAC_ITEM_FIELDS
+        .split(',')
+        .flat_map(|field| match field.strip_prefix("assets.*.") {
+            Some(asset_field) => asset_keys
+                .iter()
+                .map(|key| format!("assets.{key}.{asset_field}"))
+                .collect(),
+            None => vec![field.to_owned()],
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 /// Parsed band information from a STAC 1.1.0 asset.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssetBandInfo {

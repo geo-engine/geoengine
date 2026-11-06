@@ -53,7 +53,8 @@
         {
           "assetBand": {
             "assetTitle": "Blue (band 2) - 10m",
-            "bandName": "B02_10m"
+            "bandName": "B02_10m",
+            "assetKey": "B02_10m"
           },
           "bandDescriptor": {
             "name": "B02_10m",
@@ -65,7 +66,8 @@
         {
           "assetBand": {
             "assetTitle": "Green (band 3) - 10m",
-            "bandName": "B03_10m"
+            "bandName": "B03_10m",
+            "assetKey": "B03_10m"
           },
           "bandDescriptor": {
             "name": "B03_10m",
@@ -77,7 +79,8 @@
         {
           "assetBand": {
             "assetTitle": "Red (band 4) - 10m",
-            "bandName": "B04_10m"
+            "bandName": "B04_10m",
+            "assetKey": "B04_10m"
           },
           "bandDescriptor": {
             "name": "B04_10m",
@@ -89,7 +92,8 @@
         {
           "assetBand": {
             "assetTitle": "NIR 1 (band 8) - 10m",
-            "bandName": "B08_10m"
+            "bandName": "B08_10m",
+            "assetKey": "B08_10m"
           },
           "bandDescriptor": {
             "name": "B08_10m",
@@ -136,7 +140,8 @@
         {
           "assetBand": {
             "assetTitle": "SWIR 1 (band 11) - 20m",
-            "bandName": "B11_20m"
+            "bandName": "B11_20m",
+            "assetKey": "B11_20m"
           },
           "bandDescriptor": {
             "name": "B11_20m",
@@ -148,7 +153,8 @@
         {
           "assetBand": {
             "assetTitle": "SWIR 2 (band 12) - 20m",
-            "bandName": "B12_20m"
+            "bandName": "B12_20m",
+            "assetKey": "B12_20m"
           },
           "bandDescriptor": {
             "name": "B12_20m",

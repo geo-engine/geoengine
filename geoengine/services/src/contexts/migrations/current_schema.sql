@@ -886,7 +886,8 @@ CREATE TYPE "StacProviderAuthentication" AS (
 
 CREATE TYPE "StacAssetBand" AS (
     asset_title text,
-    band_name text
+    band_name text,
+    asset_key text
 );
 
 CREATE TYPE "StacProviderDatasetBand" AS (

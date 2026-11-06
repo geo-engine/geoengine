@@ -366,7 +366,7 @@ async fn fetch_sample_items(
 /// Process sample items to discover unique datasets (by EPSG, data type, resolution)
 /// and their associated bands.
 type DiscoveredDatasets = HashMap<DatasetKey, DiscoveredDatasetInfo>;
-type SampleBandInfo = HashMap<PartialDatasetKey, Vec<(String, String)>>;
+type SampleBandInfo = HashMap<PartialDatasetKey, Vec<(String, String, String)>>;
 
 fn process_sample_assets(
     items_response: &stac::ItemCollection,
@@ -374,7 +374,8 @@ fn process_sample_assets(
     epsgs: &[u32],
 ) -> (DiscoveredDatasets, SampleBandInfo) {
     let mut discovered_datasets: HashMap<DatasetKey, DiscoveredDatasetInfo> = HashMap::new();
-    let mut sample_band_info: HashMap<PartialDatasetKey, Vec<(String, String)>> = HashMap::new();
+    let mut sample_band_info: HashMap<PartialDatasetKey, Vec<(String, String, String)>> =
+        HashMap::new();
 
     for item in &items_response.items {
         let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
@@ -442,8 +443,12 @@ fn process_sample_assets(
 
             let entry = sample_band_info.entry(partial_key.clone()).or_default();
             for bn in &asset_info.band_names {
-                if !entry.iter().any(|(t, _)| t == &asset_info.asset_title) {
-                    entry.push((asset_info.asset_title.clone(), bn.clone()));
+                if !entry.iter().any(|(t, _, _)| t == &asset_info.asset_title) {
+                    entry.push((
+                        asset_info.asset_title.clone(),
+                        bn.clone(),
+                        asset_key.clone(),
+                    ));
                 }
             }
 
@@ -474,7 +479,7 @@ fn process_sample_assets(
 fn build_datasets(
     discovered_datasets: &HashMap<DatasetKey, DiscoveredDatasetInfo>,
     dataset_bands: &HashMap<PartialDatasetKey, Vec<StacProviderDatasetBand>>,
-    sample_band_info: &HashMap<PartialDatasetKey, Vec<(String, String)>>,
+    sample_band_info: &HashMap<PartialDatasetKey, Vec<(String, String, String)>>,
     full_projection_grid: bool,
     stac_collection: &str,
 ) -> Vec<StacProviderDataset> {
@@ -508,13 +513,14 @@ fn build_datasets(
 
         // Enrich with sample item band info
         if let Some(sample_bands) = sample_band_info.get(&partial_key) {
-            for (asset_title, band_name) in sample_bands {
+            for (asset_title, band_name, asset_key) in sample_bands {
                 // Sample bands always carry an explicit band name; skip any
                 // whose resolved name is already present.
                 if seen_names.insert(band_name.clone()) {
                     bands.push(StacProviderDatasetBand::new_unitless(StacAssetBand {
                         asset_title: asset_title.clone(),
                         band_name: Some(band_name.clone()),
+                        asset_key: Some(asset_key.clone()),
                     }));
                 }
             }
@@ -793,6 +799,7 @@ fn scan_collection_item_asset_v1_0_0(
             .push(StacProviderDatasetBand::new_unitless(StacAssetBand {
                 asset_title: asset_title.clone(),
                 band_name: Some(band_name),
+                asset_key: asset_key.map(str::to_owned),
             }));
     }
 
@@ -848,6 +855,7 @@ fn scan_collection_item_asset_v1_1_0(
         entry.push(StacProviderDatasetBand::new_unitless(StacAssetBand {
             asset_title: asset_info.asset_title.clone(),
             band_name: Some(band_name),
+            asset_key: asset_key.map(str::to_owned),
         }));
     }
 
@@ -1325,6 +1333,7 @@ mod tests {
         StacProviderDatasetBand::new_unitless(StacAssetBand {
             asset_title: asset_title.to_string(),
             band_name: Some(band_name.to_string()),
+            asset_key: None,
         })
     }
 
@@ -1410,7 +1419,11 @@ mod tests {
         let mut sample_band_info = HashMap::new();
         sample_band_info.insert(
             partial_key.clone(),
-            vec![("True color image".to_string(), "B04".to_string())],
+            vec![(
+                "True color image".to_string(),
+                "B04".to_string(),
+                "visual".to_string(),
+            )],
         );
 
         let mut discovered_datasets = HashMap::new();

@@ -8,6 +8,7 @@ Name | Type
 ------------ | -------------
 `assetTitle` | string
 `bandName` | string
+`assetKey` | string
 
 ## Example
 
@@ -18,6 +19,7 @@ import type { StacAssetBand } from '@geoengine/api-client'
 const example = {
   "assetTitle": null,
   "bandName": null,
+  "assetKey": null,
 } satisfies StacAssetBand
 
 console.log(example)
