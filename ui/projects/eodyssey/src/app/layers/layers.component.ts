@@ -10,6 +10,8 @@ import {MatSelectModule} from '@angular/material/select';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import type {DataSourceDefinition} from './data-sources';
+import {FootprintCalendarHeaderComponent} from './footprint-calendar-header.component';
+import {FootprintsService} from './footprints.service';
 import {EOdysseyLayerService} from './layers.service';
 
 @Component({
@@ -119,7 +121,11 @@ import {EOdysseyLayerService} from './layers.service';
                     <mat-icon>event</mat-icon>
                     {{ formattedTime() }}
                 </button>
-                <mat-datepicker #picker></mat-datepicker>
+                <mat-datepicker
+                    #picker
+                    [dateClass]="footprintsService.dateClass"
+                    [calendarHeaderComponent]="footprintCalendarHeader"
+                ></mat-datepicker>
                 <button
                     matIconButton
                     type="button"
@@ -130,6 +136,16 @@ import {EOdysseyLayerService} from './layers.service';
                     <mat-icon>navigate_next</mat-icon>
                 </button>
             </div>
+            <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
+                Show scene coverage on map
+            </mat-checkbox>
+            @if (footprintsService.overlayVisible() && footprintsService.zoomRequired()) {
+                <p class="catalogue-message" role="status">Zoom in further to show the scene coverage.</p>
+            } @else if (footprintsService.tooLarge()) {
+                <p class="catalogue-message" role="status">Zoom in to see when and where scenes are available.</p>
+            } @else if (footprintsService.hasError()) {
+                <p class="catalogue-message catalogue-error" role="alert">Could not load the scene availability.</p>
+            }
         </section>
         <mat-divider></mat-divider>
 
@@ -484,6 +500,8 @@ import {EOdysseyLayerService} from './layers.service';
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
     readonly eodysseyLayerService = inject(EOdysseyLayerService);
+    readonly footprintsService = inject(FootprintsService);
+    readonly footprintCalendarHeader = FootprintCalendarHeaderComponent;
     private readonly layerService = inject(LayersService);
 
     readonly currentTime = toSignal(this.projectService.getTimeStream());
