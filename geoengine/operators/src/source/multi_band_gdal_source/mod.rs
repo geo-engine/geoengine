@@ -464,6 +464,21 @@ impl InitializedGdalSourceOperator {
     }
 }
 
+impl InitializedGdalSourceOperator {
+    fn processor<P: Pixel>(&self) -> GdalSourceProcessor<P> {
+        GdalSourceProcessor {
+            produced_result_descriptor: self.produced_result_descriptor.clone(),
+            tiling_specification: self.tiling_specification,
+            meta_data: self.meta_data.clone(),
+            overview_level: self.overview_level,
+            original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+            exact_level: self.max_overview_level.is_some(),
+            default_cache_ttl: self.default_cache_ttl,
+            _phantom_data: PhantomData,
+        }
+    }
+}
+
 impl InitializedRasterOperator for InitializedGdalSourceOperator {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.produced_result_descriptor
@@ -472,45 +487,9 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
-            RasterDataType::U8 => TypedRasterQueryProcessor::U8(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    exact_level: self.max_overview_level.is_some(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::U16 => TypedRasterQueryProcessor::U16(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    exact_level: self.max_overview_level.is_some(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::U32 => TypedRasterQueryProcessor::U32(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    exact_level: self.max_overview_level.is_some(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
+            RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.processor::<u8>().boxed()),
+            RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.processor::<u16>().boxed()),
+            RasterDataType::U32 => TypedRasterQueryProcessor::U32(self.processor::<u32>().boxed()),
             RasterDataType::U64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::U64,
@@ -521,63 +500,15 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     raster_type: RasterDataType::I8,
                 })?;
             }
-            RasterDataType::I16 => TypedRasterQueryProcessor::I16(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    exact_level: self.max_overview_level.is_some(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::I32 => TypedRasterQueryProcessor::I32(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    exact_level: self.max_overview_level.is_some(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
+            RasterDataType::I16 => TypedRasterQueryProcessor::I16(self.processor::<i16>().boxed()),
+            RasterDataType::I32 => TypedRasterQueryProcessor::I32(self.processor::<i32>().boxed()),
             RasterDataType::I64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::I64,
                 })?;
             }
-            RasterDataType::F32 => TypedRasterQueryProcessor::F32(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    exact_level: self.max_overview_level.is_some(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::F64 => TypedRasterQueryProcessor::F64(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    exact_level: self.max_overview_level.is_some(),
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
+            RasterDataType::F32 => TypedRasterQueryProcessor::F32(self.processor::<f32>().boxed()),
+            RasterDataType::F64 => TypedRasterQueryProcessor::F64(self.processor::<f64>().boxed()),
         })
     }
 
