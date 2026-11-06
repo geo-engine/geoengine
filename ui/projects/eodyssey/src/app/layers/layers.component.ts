@@ -2,7 +2,7 @@ import {A11yModule} from '@angular/cdk/a11y';
 import {ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
+import {MatCalendarView, MatDatepicker, MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
@@ -11,6 +11,9 @@ import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, Raster
 import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
 import type {DataSourceDefinition} from './data-sources';
+import {FootprintCalendarHeaderComponent} from './footprint-calendar-header.component';
+import {calendarStartView} from './footprints';
+import {FootprintsService} from './footprints.service';
 import {EOdysseyLayerService} from './layers.service';
 
 @Component({
@@ -105,7 +108,14 @@ import {EOdysseyLayerService} from './layers.service';
                     <mat-icon>event</mat-icon>
                     {{ formattedTime() }}
                 </button>
-                <mat-datepicker #picker></mat-datepicker>
+                <mat-datepicker
+                    #picker
+                    [startView]="calendarStartView()"
+                    (monthSelected)="selectCoarseUnit($event, 'year', picker)"
+                    (yearSelected)="selectCoarseUnit($event, 'multi-year', picker)"
+                    [dateClass]="footprintsService.dateClass"
+                    [calendarHeaderComponent]="footprintCalendarHeader"
+                ></mat-datepicker>
                 <button
                     matIconButton
                     type="button"
@@ -116,6 +126,27 @@ import {EOdysseyLayerService} from './layers.service';
                     <mat-icon>navigate_next</mat-icon>
                 </button>
             </div>
+            <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
+                Show scene coverage on map
+            </mat-checkbox>
+            @if (footprintsService.overlayVisible() && footprintsService.zoomRequired()) {
+                <p class="catalogue-message" role="status">Zoom in further to show the scene coverage.</p>
+            } @else if (footprintsService.tooLarge()) {
+                <p class="catalogue-message" role="status">Zoom in to see when and where scenes are available.</p>
+            } @else if (footprintsService.hasError()) {
+                <p class="catalogue-message catalogue-error" role="alert">Could not load the scene availability.</p>
+            } @else if (footprintsService.overlayVisible()) {
+                @if (footprintsService.overlayLoading()) {
+                    <p class="catalogue-message coverage-status" role="status">
+                        <mat-spinner [diameter]="16"></mat-spinner>
+                        Loading scene coverage…
+                    </p>
+                } @else if (footprintsService.overlayAreaCount() === 0) {
+                    <p class="catalogue-message" role="status">No scenes in view at the selected time.</p>
+                } @else if (footprintsService.overlayAreaCount() !== undefined) {
+                    <p class="catalogue-message" role="status">The highlighted areas on the map have scenes at the selected time.</p>
+                }
+            }
         </section>
         <mat-divider></mat-divider>
 
@@ -237,6 +268,12 @@ import {EOdysseyLayerService} from './layers.service';
                 color: var(--geoengine-foreground-secondary-text-color);
             }
 
+            .coverage-status {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
             .catalogue-error {
                 color: var(--geoengine-warn-color);
             }
@@ -280,14 +317,18 @@ import {EOdysseyLayerService} from './layers.service';
                 }
 
                 .time-controls {
+                    position: relative;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     gap: 0.25rem;
                 }
 
+                // the date picker opens below its input, so the hidden input sits under the time controls
                 input {
                     position: absolute;
+                    top: 100%;
+                    left: 50%;
                     visibility: hidden;
                     height: 0;
                     width: 0;
@@ -441,6 +482,8 @@ import {EOdysseyLayerService} from './layers.service';
 export class LayersComponent {
     readonly projectService = inject(ProjectService);
     readonly eodysseyLayerService = inject(EOdysseyLayerService);
+    readonly footprintsService = inject(FootprintsService);
+    readonly footprintCalendarHeader = FootprintCalendarHeaderComponent;
     private readonly layerService = inject(LayersService);
 
     readonly currentTime = toSignal(this.projectService.getTimeStream());
@@ -450,6 +493,8 @@ export class LayersComponent {
         return projectTime.start.format('DD.MM.YYYY');
     });
     readonly timeStepDuration = toSignal(this.projectService.getTimeStepDurationStream());
+    /** The calendar opens on the cell size of the time step: days, months or years. */
+    readonly calendarStartView = computed(() => calendarStartView(this.footprintsService.timeStep()?.durationUnit));
     readonly currentDate = computed<Date | undefined>(() => {
         const time = this.currentTime();
         if (!time) return undefined;
@@ -536,9 +581,18 @@ export class LayersComponent {
 
     async setDate(event: MatDatepickerInputEvent<Date>): Promise<void> {
         if (!event?.value) return;
+        await this.setCalendarDate(event.value);
+    }
 
-        const utcDate = new Date(Date.UTC(event.value.getFullYear(), event.value.getMonth(), event.value.getDate()));
-        const time = new Time(utcDate);
-        await this.projectService.setTime(time);
+    /** A month (or year) is the time step, so picking one selects it. Else the calendar goes on to the days. */
+    async selectCoarseUnit(date: Date, view: MatCalendarView, picker: MatDatepicker<Date>): Promise<void> {
+        if (this.calendarStartView() !== view) return;
+        picker.close();
+        await this.setCalendarDate(date);
+    }
+
+    private async setCalendarDate(date: Date): Promise<void> {
+        const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        await this.projectService.setTime(new Time(utcDate));
     }
 }

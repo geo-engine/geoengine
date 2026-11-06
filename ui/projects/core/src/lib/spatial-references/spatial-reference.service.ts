@@ -81,8 +81,10 @@ export class SpatialReferenceService {
         extent: [number, number, number, number],
         from: SpatialReference,
         to: SpatialReference,
+        /** Points per edge. Without them only the corners count, which misses where an edge bulges out. */
+        stops?: number,
     ): [number, number, number, number] {
-        return transformExtent(extent, from.srsString, to.srsString) as [number, number, number, number];
+        return transformExtent(extent, from.srsString, to.srsString, stops) as [number, number, number, number];
     }
 
     clipBoundsIfAvailable(extent: [number, number, number, number], projection: SpatialReference): [number, number, number, number] {
