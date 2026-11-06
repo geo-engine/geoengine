@@ -73,22 +73,15 @@ pub enum GdalRequest {
         read_advise: GdalReadAdvise,
         /// We use this to know what type we serialize
         data_type: RasterDataType,
-        kind: GdalReadKind,
+        /// `None`: read `gdal_read_widow` from the full-resolution band, resampled to
+        /// `read_window_bounds`. `Some(factor)`: read it at one level of the band, at native size
+        /// and without resampling: 1 is the full resolution, `f` the overview of size
+        /// `ceil(size / f)`, see [`RasterInfo::level_of_factor`]. `read_window_bounds` must have
+        /// the window's size. A missing level is an error, never a resampled read.
+        level_factor: Option<usize>,
     },
     /// Read the data type and levels of band `rasterband_channel` and the dataset's CRS.
     Header,
-}
-
-/// The kind of pixel read.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Hash)]
-pub enum GdalReadKind {
-    /// Read `gdal_read_widow` from the full-resolution band, resampled to `read_window_bounds`.
-    Raster,
-    /// Read `gdal_read_widow` at one level of the band, at native size and without resampling.
-    /// Factor 1 is the full resolution, factor `f` the overview of size `ceil(size / f)`, see
-    /// [`RasterInfo::level_of_factor`]. `read_window_bounds` must have the window's size. A
-    /// missing level is an error, never a resampled read.
-    Level { factor: usize },
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]

@@ -1659,8 +1659,7 @@ mod tests {
     };
     use crate::source::gdal_worker_process::process_common::{
         GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
-        GdalReadKind, GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload,
-        IpcChannelResult,
+        GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
@@ -2197,7 +2196,7 @@ mod tests {
                     flip_y: false,
                 },
                 data_type: RasterDataType::U8,
-                kind: GdalReadKind::Raster,
+                level_factor: None,
             },
         });
         let req = Box::new(QueuedRequest {

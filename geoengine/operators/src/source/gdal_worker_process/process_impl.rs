@@ -868,7 +868,7 @@ mod tests {
     use super::super::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GridAndProperties,
         process_common::{
-            GdalReadKind, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
+            GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
             IpcChannelResult, IpcProcessGdalErrorKind, IpcProcessRasterResult, WorkerRequest,
             WorkerResponse,
         },
@@ -1088,7 +1088,7 @@ mod tests {
             request: GdalRequest::Read {
                 read_advise,
                 data_type: RasterDataType::U8,
-                kind: GdalReadKind::Raster,
+                level_factor: None,
             },
         };
 
@@ -1160,7 +1160,7 @@ mod tests {
             request: GdalRequest::Read {
                 read_advise,
                 data_type: RasterDataType::U8,
-                kind: GdalReadKind::Raster,
+                level_factor: None,
             },
         };
 

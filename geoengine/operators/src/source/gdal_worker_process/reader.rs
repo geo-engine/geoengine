@@ -9,8 +9,8 @@ use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
     GridAndProperties,
     process_common::{
-        GdalReadAdvise, GdalReadKind, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload,
-        IpcProcessError, IpcProcessGdalErrorKind, RasterInfo,
+        GdalReadAdvise, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+        IpcProcessGdalErrorKind, RasterInfo,
     },
 };
 
@@ -80,8 +80,7 @@ impl GdalPoolReader {
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
-        self.read_raster(dataset_params, read_advise, GdalReadKind::Raster)
-            .await
+        self.read_raster(dataset_params, read_advise, None).await
     }
 
     /// Reads `read_advise` from the level `factor` times coarser than the full resolution, at
@@ -93,7 +92,7 @@ impl GdalPoolReader {
         factor: usize,
         read_advise: GdalReadAdvise,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
-        self.read_raster(dataset_params, read_advise, GdalReadKind::Level { factor })
+        self.read_raster(dataset_params, read_advise, Some(factor))
             .await
     }
 
@@ -101,7 +100,7 @@ impl GdalPoolReader {
         &self,
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        kind: GdalReadKind,
+        level_factor: Option<usize>,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
@@ -127,7 +126,7 @@ impl GdalPoolReader {
                     request: GdalRequest::Read {
                         read_advise,
                         data_type: T::TYPE,
-                        kind,
+                        level_factor,
                     },
                 },
             ))
