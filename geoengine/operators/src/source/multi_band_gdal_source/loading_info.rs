@@ -24,6 +24,12 @@ pub struct MultiBandGdalLoadingInfo {
     time_steps: Vec<TimeInterval>,
     /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
+    /// The part of the queried time that this answer does not cover, if the provider answered
+    /// only the first part of a long time range. Query it for the rest.
+    next: Option<TimeInterval>,
+    /// For each time step whether it has data, if the provider could tell without the files.
+    /// The answer then has no files.
+    availability: Option<Vec<bool>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -69,7 +75,40 @@ impl MultiBandGdalLoadingInfo {
             files,
             time_steps,
             cache_ttl,
+            next: None,
+            availability: None,
         }
+    }
+
+    /// Marks this answer as telling for each time step whether it has data, without its files.
+    #[must_use]
+    pub fn with_availability(mut self, has_data: Vec<bool>) -> Self {
+        debug_assert_eq!(
+            has_data.len(),
+            self.time_steps.len(),
+            "one entry per time step"
+        );
+        self.availability = Some(has_data);
+        self
+    }
+
+    /// Whether the time step with this index has data, if the provider told without files.
+    pub fn has_data(&self, time_step_index: usize) -> Option<bool> {
+        self.availability
+            .as_ref()
+            .and_then(|has_data| has_data.get(time_step_index).copied())
+    }
+
+    /// Marks this answer as covering only the start of the queried time. `next` is the rest.
+    #[must_use]
+    pub fn with_next(mut self, next: Option<TimeInterval>) -> Self {
+        self.next = next;
+        self
+    }
+
+    /// The rest of the queried time that this answer does not cover, if any.
+    pub fn next(&self) -> Option<TimeInterval> {
+        self.next
     }
 
     /// Return a gap-free list of time steps for the current loading info and query time.
@@ -98,6 +137,18 @@ impl MultiBandGdalLoadingInfo {
             })
             .map(|file| file.params.clone())
             .collect()
+    }
+
+    /// The areas of all files of a time step and bands, regardless of which tile needs them.
+    pub fn file_partitions<'a>(
+        &'a self,
+        time: TimeInterval,
+        bands: &'a [u32],
+    ) -> impl Iterator<Item = SpatialPartition2D> + 'a {
+        self.files
+            .iter()
+            .filter(move |file| time.intersects(&file.time) && bands.contains(&file.band))
+            .map(|file| file.spatial_partition)
     }
 
     pub fn cache_hint(&self, default_ttl: CacheTtlSeconds) -> CacheHint {

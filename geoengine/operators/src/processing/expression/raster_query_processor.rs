@@ -1,8 +1,8 @@
 use super::RasterExpressionError;
 use crate::{
     engine::{
-        BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterQueryProcessor,
-        RasterResultDescriptor,
+        BoxRasterQueryProcessor, Footprint, FootprintCombine, QueryContext, QueryProcessor,
+        RasterQueryProcessor, RasterResultDescriptor, unknown_footprints, zip_footprints,
     },
     util::Result,
 };
@@ -134,6 +134,36 @@ where
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.sources.time_query(query, ctx).await
     }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        if self.map_no_data {
+            // the expression can turn no-data into data anywhere
+            let time_steps = self.time_query(query.time_interval(), ctx).await?;
+            return Ok(unknown_footprints(time_steps));
+        }
+
+        // Without `map_no_data`, a pixel is no-data if any input is, so there is data only where
+        // all inputs have data. Each input band is asked for itself and the streams are zipped.
+        let mut streams = Vec::with_capacity(Tuple::num_bands() as usize);
+        for band in 0..Tuple::num_bands() {
+            streams.push(
+                self.sources
+                    .footprint_query(
+                        query.select_attributes(BandSelection::new(vec![band])?),
+                        precision,
+                        ctx,
+                    )
+                    .await?,
+            );
+        }
+
+        Ok(zip_footprints(streams, FootprintCombine::Intersection))
+    }
 }
 
 #[async_trait]
@@ -173,6 +203,13 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>;
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>>;
 }
 
 #[async_trait]
@@ -282,6 +319,15 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.raster.time_query(query, ctx).await
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        self.raster.footprint_query(query, precision, ctx).await
     }
 }
 
@@ -430,6 +476,15 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.raster.time_query(query, ctx).await
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        self.raster.footprint_query(query, precision, ctx).await
     }
 }
 
@@ -620,6 +675,15 @@ macro_rules! impl_expression_tuple_processor {
                 ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
                     self.raster.time_query(query, ctx).await
                 }
+
+            async fn footprint_query<'a>(
+                &'a self,
+                query: RasterQueryRectangle,
+                precision: crate::engine::FootprintPrecision,
+                ctx: &'a dyn QueryContext,
+            ) -> Result<BoxStream<'a, Result<Footprint>>> {
+                self.raster.footprint_query(query, precision, ctx).await
+            }
         }
 
 

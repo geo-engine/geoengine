@@ -3,10 +3,11 @@ use crate::adapters::{
     SimpleRasterStackerAdapter, SimpleRasterStackerError,
 };
 use crate::engine::{
-    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
-    InitializedSources, MultipleRasterSources, Operator, OperatorName, ProcessingGraphOperatorPath,
-    QueryContext, QueryProcessor, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, Footprint, FootprintCombine,
+    InitializedRasterOperator, InitializedSources, MultipleRasterSources, Operator, OperatorName,
+    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterBandDescriptor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterOperator,
+    TypedRasterQueryProcessor, zip_footprints,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
@@ -420,6 +421,45 @@ where
         }
         let output = crate::adapters::TimeIntervalStreamMerge::new(time_sources);
         Ok(Box::pin(output))
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        // Each source answers for its own bands. The streams are zipped, like the time streams
+        // are merged for the data, so sources with different time steps are split at each step.
+        let mut streams = Vec::with_capacity(self.sources.len());
+        let mut first_band = 0;
+        for source in &self.sources {
+            let band_count = source.result_descriptor().bands.count();
+            let bands = query
+                .attributes()
+                .as_slice()
+                .iter()
+                .filter(|band| (first_band..first_band + band_count).contains(*band))
+                .map(|band| band - first_band)
+                .collect::<Vec<_>>();
+            first_band += band_count;
+
+            if bands.is_empty() {
+                continue;
+            }
+
+            streams.push(
+                source
+                    .footprint_query(
+                        query.select_attributes(BandSelection::new(bands)?),
+                        precision,
+                        ctx,
+                    )
+                    .await?,
+            );
+        }
+
+        Ok(zip_footprints(streams, FootprintCombine::Union))
     }
 }
 

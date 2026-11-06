@@ -1,8 +1,8 @@
 use crate::engine::{
-    BoxRasterQueryProcessor, CanonicOperatorName, CreateSpan, InitializedRasterOperator,
-    OperatorData, OperatorName, ProcessingGraphOperatorPath, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, SourceOperator,
-    TypedRasterOperator, TypedRasterQueryProcessor,
+    BoxRasterQueryProcessor, CanonicOperatorName, CreateSpan, Footprint, FootprintBounds,
+    InitializedRasterOperator, OperatorData, OperatorName, ProcessingGraphOperatorPath,
+    QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, SourceOperator, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
@@ -19,8 +19,8 @@ use geoengine_datatypes::primitives::{
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
-    TileIdxBandCrossProductIter, TilingSpecification,
+    GridBoundingBox2D, GridIntersection, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize,
+    Pixel, RasterTile2D, TileIdxBandCrossProductIter, TilingSpecification,
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -269,6 +269,45 @@ where
         };
 
         Ok(times)
+    }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        _precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<stream::BoxStream<'a, Result<Footprint>>> {
+        let time_steps: Vec<TimeInterval> = self
+            .time_query(query.time_interval(), ctx)
+            .await?
+            .try_collect()
+            .await?;
+
+        let footprints = time_steps
+            .into_iter()
+            .map(|time| {
+                let boxes = self
+                    .data
+                    .iter()
+                    .filter(|tile| {
+                        tile.time == time
+                            && !tile.is_empty()
+                            && query.attributes().as_slice().contains(&tile.band)
+                    })
+                    .filter_map(|tile| {
+                        tile.tile_information()
+                            .global_pixel_bounds()
+                            .intersection(&query.spatial_bounds())
+                    });
+
+                Ok(Footprint {
+                    time,
+                    bounds: FootprintBounds::from_boxes(boxes),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        Ok(stream::iter(footprints).boxed())
     }
 }
 
