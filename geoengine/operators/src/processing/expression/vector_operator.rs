@@ -1,6 +1,6 @@
 use super::{
     AsExpressionGeo, FromExpressionGeo, VectorExpressionError, canonicalize_name,
-    error::vector as error, get_expression_dependencies,
+    error::vector as error,
 };
 use crate::{
     engine::{
@@ -29,7 +29,7 @@ use geoengine_datatypes::{
     primitives::NoGeometry,
 };
 use geoengine_expression::{
-    DataType, ExpressionParser, LinkedExpression, Parameter as ExpressionParameter,
+    DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter as ExpressionParameter,
     is_allowed_variable_name,
 };
 use rayon::iter::{
@@ -178,23 +178,28 @@ impl VectorOperator for VectorExpression {
             expression_input_names.push(variable_name);
         }
 
-        let expression = {
-            let expression_code = self.params.expression.clone();
-            let geometry_column_name = self.params.geometry_column_name.clone();
+        let code = self.params.expression.clone();
+        let geometry_column_name = self.params.geometry_column_name.clone();
+        let parameters = expression_input_names.clone();
 
-            crate::util::spawn_blocking(move || {
-                compile_expression(
-                    &expression_code,
-                    geometry_column_name,
-                    expression_geom_input_type,
-                    &expression_input_names,
-                    expression_output_type,
-                )
-                .map(Arc::new)
-            })
+        // users decide about the length of the expression, so it must not block a worker
+        let expression_ast = crate::util::spawn_blocking(move || {
+            parse_expression(
+                &code,
+                geometry_column_name,
+                expression_geom_input_type,
+                &parameters,
+                expression_output_type,
+            )
+        })
+        .await
+        .map_err(VectorExpressionError::from)??;
+
+        let expression = context
+            .expression_environment()
+            .link(expression_ast)
             .await
-            .map_err(|source| VectorExpressionError::CompilationTask { source })??
-        };
+            .map_err(VectorExpressionError::from)?;
 
         let initialized_operator = InitializedVectorExpression {
             name,
@@ -276,13 +281,13 @@ fn insert_new_column(
     Ok(())
 }
 
-fn compile_expression(
+fn parse_expression(
     expression_code: &str,
     geom_name: String,
     geom_type: VectorDataType,
     parameters: &[String],
     output_type: DataType,
-) -> Result<LinkedExpression, VectorExpressionError> {
+) -> Result<ExpressionAst, VectorExpressionError> {
     let geom_parameter = match geom_type {
         VectorDataType::Data | VectorDataType::MultiPoint => {
             ExpressionParameter::MultiPoint(geom_name.into())
@@ -297,15 +302,8 @@ fn compile_expression(
             .iter()
             .map(|p| ExpressionParameter::Number(p.into())),
     );
-    let expression = ExpressionParser::new(&expression_parameters, output_type)?
-        .parse(EXPRESSION_MAIN_NAME, expression_code)?;
-
-    let expression_dependencies = get_expression_dependencies().context(error::Dependencies)?;
-
-    Ok(LinkedExpression::from_ast(
-        &expression,
-        expression_dependencies,
-    )?)
+    Ok(ExpressionParser::new(&expression_parameters, output_type)?
+        .parse(EXPRESSION_MAIN_NAME, expression_code)?)
 }
 
 impl InitializedVectorExpression {

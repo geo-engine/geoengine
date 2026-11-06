@@ -4,14 +4,16 @@ use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::processing::ExpressionCacheConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
 use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
+use std::time::Duration;
 use url::Url;
 
 static SETTINGS: LazyLock<RwLock<Config>> = LazyLock::new(init_settings);
@@ -195,6 +197,37 @@ pub struct QueryContext {
 
 impl ConfigElement for QueryContext {
     const KEY: &'static str = "query_context";
+}
+
+/// The compiled libraries of expression operators
+#[derive(Debug, Deserialize)]
+pub struct Expression {
+    /// Seconds a library stays in the cache without being requested
+    pub library_idle_ttl_seconds: u64,
+    /// Seconds between cleanup runs
+    pub library_sweep_interval_seconds: NonZeroU64,
+    /// Cache size for libraries in MB
+    pub library_cache_size_in_mb: u64,
+    /// Directory for the build of the dependencies and the libraries
+    pub workspace_path: PathBuf,
+    /// Max. number of compilers running at the same time
+    pub max_concurrent_compilations: NonZeroUsize,
+}
+
+impl ConfigElement for Expression {
+    const KEY: &'static str = "expression";
+}
+
+impl From<Expression> for ExpressionCacheConfig {
+    fn from(config: Expression) -> Self {
+        Self {
+            idle_ttl: Duration::from_secs(config.library_idle_ttl_seconds),
+            sweep_interval: Duration::from_secs(config.library_sweep_interval_seconds.get()),
+            max_cache_size_in_bytes: config.library_cache_size_in_mb.saturating_mul(1024 * 1024),
+            max_concurrent_compilations: config.max_concurrent_compilations,
+            workspace_path: config.workspace_path,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -780,6 +813,40 @@ impl ConfigElement for Wildlive {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `Settings-default.toml` alone, without the overrides of `Settings-test.toml`
+    fn default_settings() -> Config {
+        Config::builder()
+            .add_source(File::from(
+                retrieve_settings_dir()
+                    .unwrap()
+                    .join("Settings-default.toml"),
+            ))
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn it_converts_the_default_expression_settings() {
+        let config: Expression = default_settings().get(Expression::KEY).unwrap();
+
+        let config = ExpressionCacheConfig::from(config);
+
+        assert_eq!(config.max_cache_size_in_bytes, 1024 * 1024 * 1024);
+        assert_eq!(config.workspace_path, PathBuf::from("expression_workspace"));
+    }
+
+    #[test]
+    fn it_rejects_an_expression_sweep_interval_of_zero() {
+        let config = Config::builder()
+            .add_source(default_settings())
+            .set_override("expression.library_sweep_interval_seconds", 0)
+            .unwrap()
+            .build()
+            .unwrap();
+
+        assert!(config.get::<Expression>(Expression::KEY).is_err());
+    }
 
     fn pool(
         number_of_processes: u64,

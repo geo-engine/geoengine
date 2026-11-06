@@ -1,5 +1,5 @@
 use super::{
-    RasterExpressionError, get_expression_dependencies,
+    RasterExpressionError,
     raster_query_processor::{ExpressionInput, ExpressionQueryProcessor},
 };
 use crate::{
@@ -16,12 +16,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{primitives::SpatialResolution, raster::RasterDataType};
-use geoengine_expression::{
-    DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
-};
+use geoengine_expression::{DataType, ExpressionParser, LinkedExpression, Parameter};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::borrow::Cow;
+use std::sync::Arc;
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
@@ -89,19 +87,25 @@ impl RasterOperator for Expression {
             })
             .collect::<Vec<_>>();
 
-        let expression = ExpressionParser::new(&parameters, DataType::Number)
-            .map_err(RasterExpressionError::from)?
-            .parse(
-                self.params
-                    .output_band
-                    .as_ref()
-                    .map_or(Cow::Borrowed("expression"), |b| {
-                        // allow only idents
-                        Cow::Owned(canonicalize_name(&b.name))
-                    })
-                    .as_ref(),
-                &self.params.expression,
-            )
+        let function_name = self.params.output_band.as_ref().map_or_else(
+            || "expression".to_owned(),
+            // allow only idents
+            |b| canonicalize_name(&b.name),
+        );
+        let code = self.params.expression.clone();
+
+        // users decide about the length of the expression, so it must not block a worker
+        let expression = crate::util::spawn_blocking(move || {
+            ExpressionParser::new(&parameters, DataType::Number)?.parse(&function_name, &code)
+        })
+        .await
+        .map_err(RasterExpressionError::from)?
+        .map_err(RasterExpressionError::from)?;
+
+        let expression = context
+            .expression_environment()
+            .link(expression)
+            .await
             .map_err(RasterExpressionError::from)?;
 
         let result_descriptor = RasterResultDescriptor {
@@ -143,7 +147,7 @@ pub struct InitializedExpression {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     expression_string: String,
-    expression: ExpressionAst,
+    expression: Arc<LinkedExpression>,
     map_no_data: bool,
 }
 
@@ -174,15 +178,7 @@ impl InitializedRasterOperator for InitializedExpression {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let output_type = self.result_descriptor().data_type;
 
-        // TODO: spawn a blocking task for the compilation process
-        let expression_dependencies = get_expression_dependencies()
-            .map_err(|source| RasterExpressionError::Dependencies { source })?;
-        let expression = LinkedExpression::new(
-            self.expression.name(),
-            &self.expression.code(),
-            expression_dependencies,
-        )
-        .map_err(RasterExpressionError::from)?;
+        let expression = self.expression.clone();
 
         let source_processor = self.source.query_processor()?.into_f64();
 

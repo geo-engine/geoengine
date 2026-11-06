@@ -37,6 +37,7 @@ use geoengine_operators::{
     engine::ChunkByteSize,
     machine_learning::onnx_util::OrtEnvironment,
     meta::quota::QuotaChecker,
+    processing::ExpressionEnvironment,
     source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess},
     util::create_rayon_thread_pool,
 };
@@ -72,6 +73,7 @@ where
     stac_request_registry: StacRequestRegistry,
     gdal_process_pool: Arc<GdalProcessPool>,
     ort_environment: OrtEnvironment,
+    expression_environment: ExpressionEnvironment,
     /// runs query tasks, so they leave the single-threaded HTTP workers
     processing_runtime: tokio::runtime::Handle,
 }
@@ -86,6 +88,7 @@ pub struct ContextSpec<Tls> {
     pub oidc_manager: OidcManager,
     pub gdal_process_pool_config: crate::config::GdalProcessPool,
     pub ort_environment: OrtEnvironment,
+    pub expression_environment: ExpressionEnvironment,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -105,6 +108,7 @@ where
             oidc_manager,
             gdal_process_pool_config,
             ort_environment,
+            expression_environment,
         }: ContextSpec<Tls>,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -154,11 +158,12 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            expression_environment,
             processing_runtime: tokio::runtime::Handle::current(),
         })
     }
 
-    #[allow(clippy::missing_panics_doc)]
+    #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
     pub async fn new_with_oidc(
         config: Config,
         tls: Tls,
@@ -167,6 +172,7 @@ where
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
         ort_environment: OrtEnvironment,
+        expression_environment: ExpressionEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -230,6 +236,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            expression_environment,
             processing_runtime: tokio::runtime::Handle::current(),
         })
     }
@@ -251,6 +258,7 @@ where
         quota_config: Quota,
         gdal_process_pool_config: crate::config::GdalProcessPool,
         ort_environment: OrtEnvironment,
+        expression_environment: ExpressionEnvironment,
     ) -> Result<Self> {
         cache_config.validate()?;
         let pg_mgr = PostgresConnectionManager::new(config, tls);
@@ -314,6 +322,7 @@ where
             stac_request_registry,
             gdal_process_pool,
             ort_environment,
+            expression_environment,
             // the server builds its context on the main runtime, which then runs all queries
             processing_runtime: tokio::runtime::Handle::current(),
         };
@@ -549,6 +558,7 @@ where
             self.context.new_raster_cache.clone(),
             self.context.default_cache_ttl,
             self.context.ort_environment.clone(),
+            self.context.expression_environment.clone(),
         ))
     }
 

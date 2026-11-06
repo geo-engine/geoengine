@@ -2820,6 +2820,7 @@ dependencies = [
  "libloading",
  "lru",
  "lz4_flex",
+ "moka",
  "ndarray",
  "num",
  "num-traits",
