@@ -1,4 +1,4 @@
-use crate::engine::{QueryContext, RasterQueryProcessor, SubQueryParallelism, SubQueryPermit};
+use crate::engine::{ParallelismPermit, QueryContext, QueryParallelism, RasterQueryProcessor};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -30,7 +30,7 @@ pub trait FoldTileAccuMut: FoldTileAccu {
 }
 
 /// Generates tiles by running ordered sub-queries, concurrently while the query's
-/// [`SubQueryParallelism`] has permits left.
+/// [`QueryParallelism`] has permits left.
 pub struct RasterSubQueryAdapter<'a, PixelType: Pixel> {
     stream: BoxStream<'a, Result<RasterTile2D<PixelType>>>,
 }
@@ -114,8 +114,8 @@ impl<'a, PixelType: Pixel> RasterSubQueryAdapter<'a, PixelType> {
             stream: ParallelSubQueries {
                 descriptors,
                 in_flight: FuturesOrdered::new(),
-                parallelism: query_ctx.subquery_parallelism(),
-                guaranteed_in_flight: false,
+                parallelism: query_ctx.parallelism(),
+                guaranteed_slot_available: true,
                 done: false,
             }
             .boxed(),
@@ -136,10 +136,10 @@ impl<PixelType: Pixel> Stream for RasterSubQueryAdapter<'_, PixelType> {
 }
 
 /// `None`: the adapter's guaranteed sub-query.
-type TileWithPermit<P> = (RasterTile2D<P>, Option<SubQueryPermit>);
+type TileWithPermit<P> = (RasterTile2D<P>, Option<ParallelismPermit>);
 
 /// Runs sub-queries in order: the guaranteed one always, so every adapter makes progress,
-/// further ones while the query's [`SubQueryParallelism`] has permits. The outermost adapter
+/// further ones while the query's [`QueryParallelism`] has permits. The outermost adapter
 /// asks first and gets most of them.
 ///
 /// A permit is returned when its tile is yielded, not when the sub-query finishes, so
@@ -147,10 +147,11 @@ type TileWithPermit<P> = (RasterTile2D<P>, Option<SubQueryPermit>);
 struct ParallelSubQueries<'a, P: Pixel> {
     descriptors: BoxStream<'a, Result<BoxFuture<'a, Result<RasterTile2D<P>>>>>,
     in_flight: FuturesOrdered<BoxFuture<'a, Result<TileWithPermit<P>>>>,
-    parallelism: &'a SubQueryParallelism,
-    /// The guaranteed slot is reused as soon as its tile is yielded, not only once all
-    /// parallel sub-queries are done; otherwise N parallelism would run at N - 1.
-    guaranteed_in_flight: bool,
+    parallelism: &'a QueryParallelism,
+    /// The next sub-query needs no permit. The slot is free again as soon as its tile is
+    /// yielded, not only once all parallel sub-queries are done; otherwise N parallelism would
+    /// run at N - 1.
+    guaranteed_slot_available: bool,
     done: bool,
 }
 
@@ -161,7 +162,7 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
         let this = self.get_mut();
 
         while !this.done {
-            let permit = if !this.guaranteed_in_flight {
+            let permit = if this.guaranteed_slot_available {
                 None
             } else if let Some(permit) = this.parallelism.try_acquire() {
                 Some(permit)
@@ -173,8 +174,8 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
                 // on an error the permit is returned before its tile is yielded, which is
                 // harmless: the stream ends with that error and starts no more sub-queries
                 Poll::Ready(Some(Ok(sub_query))) => {
-                    // only set once pushed: a pending descriptor must not hold the slot
-                    this.guaranteed_in_flight |= permit.is_none();
+                    // only taken once pushed: a pending descriptor must not hold the slot
+                    this.guaranteed_slot_available = false;
                     this.in_flight
                         .push_back(sub_query.map_ok(|tile| (tile, permit)).boxed());
                 }
@@ -185,7 +186,8 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
                     this.done = true;
                 }
                 Poll::Ready(None) => this.done = true,
-                // no `return`: in-flight tiles may be ready; the descriptors hold our waker
+                // don't return `Pending` yet: in-flight tiles may be ready. The descriptor stream
+                // holds our waker, so it wakes us when it has the next descriptor.
                 Poll::Pending => break,
             }
         }
@@ -198,7 +200,7 @@ impl<P: Pixel> Stream for ParallelSubQueries<'_, P> {
             }
             Poll::Ready(Some(Ok((tile, permit)))) => {
                 if permit.is_none() {
-                    this.guaranteed_in_flight = false;
+                    this.guaranteed_slot_available = true;
                 }
                 Poll::Ready(Some(Ok(tile)))
             }
@@ -568,7 +570,7 @@ mod tests {
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let mut query_ctx = exe_ctx.mock_query_context_test_default();
-        query_ctx.subquery_parallelism = SubQueryParallelism::new(parallelism);
+        query_ctx.parallelism = QueryParallelism::new(parallelism);
         query_ctx
     }
 
@@ -602,9 +604,10 @@ mod tests {
         (in_time(tiles).await, concurrency.max.load(Ordering::SeqCst))
     }
 
-    /// Runs one adapter, each tile reading only its own pixels, at parallelism 1 over a
+    /// Runs one adapter, each tile reading only its own pixels, over a
     /// `source_size`×`source_size` counting leaf. Returns the tiles and the number of leaf queries.
     async fn run_over_leaf<G>(
+        parallelism: usize,
         source_size: usize,
         query_size: isize,
         time_stream: G,
@@ -617,7 +620,7 @@ mod tests {
             descriptor: descriptor(source_size),
             concurrency: concurrency.clone(),
         };
-        let query_ctx = query_ctx(1);
+        let query_ctx = query_ctx(parallelism);
         let tiling_strategy = descriptor(query_size.unsigned_abs())
             .tiling_grid_definition(query_ctx.tiling_specification())
             .generate_data_tiling_strategy();
@@ -693,32 +696,37 @@ mod tests {
 
     #[tokio::test]
     async fn it_does_not_query_the_source_outside_of_its_data_bounds() {
-        let time_stream = futures::stream::once(ready(Ok(query(8).time_interval())));
-        let (tiles, started) = run_over_leaf(4, 8, time_stream).await;
+        for parallelism in [1, 4] {
+            let time_stream = futures::stream::once(ready(Ok(query(8).time_interval())));
+            let (tiles, started) = run_over_leaf(parallelism, 4, 8, time_stream).await;
 
-        // 16 tiles of 2×2 pixels, of which the 4 inside the 4×4 source data are queried
-        assert_eq!(tiles.len(), 16);
-        assert_eq!(started, 4);
-        // the others are empty and cacheable, unlike the source's `no_cache` tiles
-        for tile in &tiles {
-            let outside = tile.tile_position.x() >= 2 || tile.tile_position.y() >= 2;
-            assert_eq!(
-                tile.cache_hint.may_cache(),
-                outside,
-                "{:?}",
-                tile.tile_position
-            );
-            assert!(tile.is_empty());
+            // 16 tiles of 2×2 pixels, of which the 4 inside the 4×4 source data are queried
+            assert_eq!(tiles.len(), 16);
+            assert_eq!(started, 4);
+            // the others are empty and cacheable, unlike the source's `no_cache` tiles
+            for tile in &tiles {
+                let outside = tile.tile_position.x() >= 2 || tile.tile_position.y() >= 2;
+                assert_eq!(
+                    tile.cache_hint.may_cache(),
+                    outside,
+                    "{:?}",
+                    tile.tile_position
+                );
+                assert!(tile.is_empty());
+            }
         }
     }
 
     #[tokio::test]
     async fn it_does_not_hang_when_the_time_stream_is_pending() {
-        // pending once, like a time stream that waits on I/O
-        let time_stream = futures::stream::once(async {
-            tokio::task::yield_now().await;
-            Ok(query(4).time_interval())
-        });
-        assert_eq!(run_over_leaf(4, 4, time_stream).await.0.len(), 4);
+        for parallelism in [1, 4] {
+            // pending once, like a time stream that waits on I/O
+            let time_stream = futures::stream::once(async {
+                tokio::task::yield_now().await;
+                Ok(query(4).time_interval())
+            });
+            let (tiles, _) = run_over_leaf(parallelism, 4, 4, time_stream).await;
+            assert_eq!(tiles.len(), 4);
+        }
     }
 }

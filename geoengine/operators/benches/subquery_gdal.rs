@@ -12,8 +12,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{
         BoxRasterQueryProcessor, MockExecutionContext, MockQueryContext,
-        ProcessingGraphOperatorPath, QueryContext, RasterOperator, SingleRasterOrVectorSource,
-        SingleRasterSource, SubQueryParallelism, TypedRasterOperator,
+        ProcessingGraphOperatorPath, QueryContext, QueryParallelism, RasterOperator,
+        SingleRasterOrVectorSource, SingleRasterSource, TypedRasterOperator,
     },
     processing::{
         DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
@@ -165,7 +165,7 @@ fn subquery_gdal_benchmark(c: &mut Criterion) {
         for parallelism in [1, 2, 4, 8, 16] {
             let (processor, mut query_context, query) =
                 setup(&runtime, case, gdal_process_pool.clone());
-            query_context.subquery_parallelism = SubQueryParallelism::new(parallelism);
+            query_context.parallelism = QueryParallelism::new(parallelism);
             c.bench_function(&format!("{}_{parallelism}", case.name), |b| {
                 b.to_async(&runtime)
                     .iter(|| run(&processor, &query_context, query.clone()));

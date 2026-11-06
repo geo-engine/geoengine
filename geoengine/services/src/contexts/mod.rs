@@ -35,7 +35,7 @@ use geoengine_operators::{
     engine::{
         ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
-        QueryAbortTrigger, QueryContext, RasterResultDescriptor, SubQueryParallelism,
+        QueryAbortTrigger, QueryContext, QueryParallelism, RasterResultDescriptor,
         VectorResultDescriptor,
     },
     machine_learning::{MlModelLoadingInfo, onnx_util::OrtEnvironment},
@@ -147,7 +147,7 @@ pub struct QueryContextImpl {
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     default_cache_ttl: CacheTtlSeconds,
-    subquery_parallelism: SubQueryParallelism,
+    parallelism: QueryParallelism,
     cache: Option<Arc<SharedCache>>,
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     quota_tracking: Option<QuotaTracking>,
@@ -173,7 +173,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
-            subquery_parallelism: SubQueryParallelism::test_default(),
+            parallelism: QueryParallelism::test_default(),
             cache: None,
             new_raster_cache: None,
             quota_tracking: None,
@@ -192,7 +192,7 @@ impl QueryContextImpl {
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
         default_cache_ttl: CacheTtlSeconds,
-        subquery_parallelism: SubQueryParallelism,
+        parallelism: QueryParallelism,
         cache: Option<Arc<SharedCache>>,
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
@@ -205,7 +205,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             default_cache_ttl,
-            subquery_parallelism,
+            parallelism,
             cache,
             new_raster_cache,
             quota_checker,
@@ -232,8 +232,8 @@ impl QueryContext for QueryContextImpl {
         self.default_cache_ttl
     }
 
-    fn subquery_parallelism(&self) -> &SubQueryParallelism {
-        &self.subquery_parallelism
+    fn parallelism(&self) -> &QueryParallelism {
+        &self.parallelism
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {

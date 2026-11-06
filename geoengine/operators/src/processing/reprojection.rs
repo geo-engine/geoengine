@@ -841,7 +841,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor};
+    use crate::engine::{
+        MockExecutionContext, QueryParallelism, RasterBandDescriptors, SpatialGridDescriptor,
+    };
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -1274,6 +1276,63 @@ mod tests {
             .collect::<Vec<RasterTile2D<u8>>>()
             .await;
         assert!(data.tiles_equal_ignoring_cache_hint(&res));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn raster_ndvi_3857_does_not_depend_on_the_parallelism() -> Result<()> {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let id = add_ndvi_dataset(&mut exe_ctx);
+        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+
+        let qp = RasterOperator::typed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::web_mercator(),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: GdalSource {
+                    params: GdalSourceParameters::new(id),
+                }
+                .typed()
+                .into(),
+            },
+        })
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await?
+        .query_processor()?
+        .get_u8()
+        .unwrap();
+
+        let mut query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
+        let query = RasterQueryRectangle::new(
+            qp.result_descriptor()
+                .spatial_grid_descriptor()
+                .tiling_grid_definition(query_ctx.tiling_specification())
+                .tiling_grid_bounds(),
+            TimeInterval::new_unchecked(1_396_303_200_000, 1_396_389_600_000),
+            BandSelection::first(),
+        );
+
+        query_ctx.parallelism = QueryParallelism::new(1);
+        let sequential = qp
+            .raster_query(query.clone(), &query_ctx)
+            .await?
+            .map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+
+        query_ctx.parallelism = QueryParallelism::new(4);
+        let parallel = qp
+            .raster_query(query, &query_ctx)
+            .await?
+            .map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+
+        assert!(sequential.iter().any(|tile| !tile.is_empty()));
+        assert!(sequential.tiles_equal_ignoring_cache_hint(&parallel));
 
         Ok(())
     }
