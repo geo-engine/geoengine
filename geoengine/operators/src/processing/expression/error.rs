@@ -1,5 +1,6 @@
 use geoengine_expression::error::{ExpressionExecutionError, ExpressionParserError};
 use snafu::Snafu;
+use std::sync::Arc;
 
 #[derive(Debug, Snafu)]
 #[snafu(
@@ -16,7 +17,7 @@ pub enum RasterExpressionError {
     ParserTask { source: tokio::task::JoinError },
 
     #[snafu(display("{}", source), context(false))]
-    Link { source: LinkExpressionError },
+    Link { source: Arc<LinkExpressionError> },
 
     #[snafu(display("{}", source), context(false))]
     Execution { source: ExpressionExecutionError },
@@ -56,7 +57,7 @@ pub enum VectorExpressionError {
     ParsingTask { source: tokio::task::JoinError },
 
     #[snafu(display("{}", source), context(false))]
-    Link { source: LinkExpressionError },
+    Link { source: Arc<LinkExpressionError> },
 
     #[snafu(display("Cannot call expression function: {source}."), context(false))]
     Executing {
@@ -88,7 +89,11 @@ pub enum LinkExpressionError {
 
     #[snafu(display("Could not execute compilation task"), context(false))]
     Task { source: tokio::task::JoinError },
+
+    #[snafu(display("Could not wait for a free compilation slot"), context(false))]
+    CompilationSlot { source: tokio::sync::AcquireError },
 }
+
 /// This module only ensures that the error types are `Send` and `Sync`.
 mod send_sync_ensurance {
     use super::*;

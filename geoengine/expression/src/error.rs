@@ -32,6 +32,9 @@ pub enum ExpressionExecutionError {
     #[snafu(display("Cannot compile expression"))]
     Compiler { source: std::io::Error },
 
+    #[snafu(display("Cannot read the size of the compiled expression"))]
+    LibraryMetadata { source: std::io::Error },
+
     #[snafu(display("Cannot load expression for execution"))]
     LinkExpression { source: libloading::Error },
 

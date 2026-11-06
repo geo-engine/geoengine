@@ -202,12 +202,14 @@ impl ConfigElement for QueryContext {
 /// The compiled libraries of expression operators
 #[derive(Debug, Deserialize)]
 pub struct Expression {
-    /// Seconds a library stays loaded after its last use
+    /// Seconds a library stays in the cache without being requested
     pub library_idle_ttl_seconds: u64,
     /// Seconds between cleanup runs
     pub library_sweep_interval_seconds: NonZeroU64,
-    /// Max. number of unused libraries to keep
-    pub max_idle_libraries: usize,
+    /// Cache size for libraries in MB
+    pub library_cache_size_in_mb: u64,
+    /// Directory for the build of the dependencies and the libraries
+    pub workspace_path: PathBuf,
     /// Max. number of compilers running at the same time
     pub max_concurrent_compilations: NonZeroUsize,
 }
@@ -221,8 +223,9 @@ impl From<Expression> for ExpressionCacheConfig {
         Self {
             idle_ttl: Duration::from_secs(config.library_idle_ttl_seconds),
             sweep_interval: Duration::from_secs(config.library_sweep_interval_seconds.get()),
-            max_idle_libraries: config.max_idle_libraries,
+            max_cache_size_in_bytes: config.library_cache_size_in_mb.saturating_mul(1024 * 1024),
             max_concurrent_compilations: config.max_concurrent_compilations,
+            workspace_path: config.workspace_path,
         }
     }
 }
@@ -824,13 +827,13 @@ mod tests {
     }
 
     #[test]
-    fn it_expression_defaults_are_the_operator_defaults() {
+    fn it_converts_the_default_expression_settings() {
         let config: Expression = default_settings().get(Expression::KEY).unwrap();
 
-        assert_eq!(
-            ExpressionCacheConfig::from(config),
-            ExpressionCacheConfig::default()
-        );
+        let config = ExpressionCacheConfig::from(config);
+
+        assert_eq!(config.max_cache_size_in_bytes, 1024 * 1024 * 1024);
+        assert_eq!(config.workspace_path, PathBuf::from("expression_workspace"));
     }
 
     #[test]

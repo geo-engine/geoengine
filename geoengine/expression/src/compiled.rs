@@ -21,6 +21,7 @@ pub struct LinkedExpression {
     library_folder: ManuallyDrop<TempDir>,
     library: ManuallyDrop<Library>,
     function_name: String,
+    size_in_bytes: u64,
 }
 
 impl LinkedExpression {
@@ -52,13 +53,23 @@ impl LinkedExpression {
 
         let library_filename = compile_file(library_folder.path(), &input_filename, dependencies)?;
 
+        let size_in_bytes = std::fs::metadata(&library_filename)
+            .context(error::LibraryMetadata)?
+            .len();
+
         let library = unsafe { Library::new(library_filename) }.context(error::LinkExpression)?;
 
         Ok(Self {
             library_folder: ManuallyDrop::new(library_folder),
             library: ManuallyDrop::new(library),
             function_name: function_name.to_string(),
+            size_in_bytes,
         })
+    }
+
+    /// The size of the shared library in the file system
+    pub fn size_in_bytes(&self) -> u64 {
+        self.size_in_bytes
     }
 
     /// Returns a function with 1 input parameters
@@ -182,7 +193,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn it_compiles_hello_world() {
-        let dependencies = ExpressionDependencies::new().unwrap();
+        let dependencies = ExpressionDependencies::new(&std::env::temp_dir()).unwrap();
 
         let source_code = quote! {
             extern crate geo;
@@ -223,7 +234,7 @@ mod tests {
     fn it_compiles_an_expression() {
         use geo::{point, polygon};
 
-        let dependencies = ExpressionDependencies::new().unwrap();
+        let dependencies = ExpressionDependencies::new(&std::env::temp_dir()).unwrap();
 
         let ast = ExpressionParser::new(
             &[

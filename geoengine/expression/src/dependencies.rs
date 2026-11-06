@@ -39,17 +39,21 @@ pub struct ExpressionDependencies {
 }
 
 impl ExpressionDependencies {
-    pub fn new() -> Result<Self> {
+    /// Creates the workspace in the `parent` directory, which is created if necessary.
+    /// All processes using the same directory clean up after each other.
+    pub fn new(parent: &Path) -> Result<Self> {
+        std::fs::create_dir_all(parent).context(error::TempDir)?;
+
         let cargo_workspace = tempfile::Builder::new()
             .prefix(WORKSPACE_PREFIX)
             // the server loads and runs the libraries in here, so nobody else may touch them
             .permissions(Permissions::from_mode(0o700))
-            .tempdir()
+            .tempdir_in(parent)
             .context(error::TempDir)?;
 
         let lock = Self::lock_workspace(cargo_workspace.path()).context(error::DepsWorkspace)?;
 
-        remove_stale_workspaces(&std::env::temp_dir(), MIN_STALE_AGE);
+        remove_stale_workspaces(parent, MIN_STALE_AGE);
 
         Self::copy_deps_workspace(cargo_workspace.path()).context(error::DepsWorkspace)?;
 
@@ -95,7 +99,11 @@ impl ExpressionDependencies {
     }
 
     fn copy_deps_workspace(cargo_workspace: &Path) -> Result<(), std::io::Error> {
-        std::fs::write(cargo_workspace.join("Cargo.toml"), DEPS_CARGO_TOML)?;
+        // the `[workspace]` keeps cargo from searching a parent workspace if the path is inside of one
+        std::fs::write(
+            cargo_workspace.join("Cargo.toml"),
+            [DEPS_CARGO_TOML, b"\n[workspace]\n"].concat(),
+        )?;
         std::fs::write(cargo_workspace.join("Cargo.lock"), DEPS_CARGO_LOCK)?;
         std::fs::write(cargo_workspace.join("lib.rs"), DEPS_LIB_RS)?;
 
@@ -110,8 +118,8 @@ impl ExpressionDependencies {
 
 /// Deletes the workspaces of dead processes, since these never dropped their [`ExpressionDependencies`].
 /// This is best effort and must not prevent the creation of a new workspace.
-fn remove_stale_workspaces(temp_dir: &Path, min_age: Duration) {
-    let entries = match std::fs::read_dir(temp_dir) {
+fn remove_stale_workspaces(parent: &Path, min_age: Duration) {
+    let entries = match std::fs::read_dir(parent) {
         Ok(entries) => entries,
         Err(e) => {
             tracing::warn!("Cannot search for stale expression workspaces: {e}");
@@ -159,7 +167,7 @@ mod tests {
 
     #[test]
     fn it_compiles_dependencies() {
-        let deps = ExpressionDependencies::new().unwrap();
+        let deps = ExpressionDependencies::new(&std::env::temp_dir()).unwrap();
 
         assert!(deps.linker_path().exists());
         assert!(deps.linker_path().ends_with("target/release/deps/"));

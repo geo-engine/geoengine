@@ -197,7 +197,7 @@ impl VectorOperator for VectorExpression {
 
         let expression = context
             .expression_environment()
-            .link(&expression_ast)
+            .link(expression_ast)
             .await
             .map_err(VectorExpressionError::from)?;
 

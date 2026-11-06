@@ -104,7 +104,7 @@ impl RasterOperator for Expression {
 
         let expression = context
             .expression_environment()
-            .link(&expression)
+            .link(expression)
             .await
             .map_err(RasterExpressionError::from)?;
 
