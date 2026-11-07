@@ -4,6 +4,7 @@ use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::cache::new_raster_cache::NewRasterCacheEnum;
 use geoengine_operators::processing::ExpressionCacheConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -12,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
-use std::sync::{LazyLock, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 use url::Url;
 
@@ -751,6 +752,15 @@ impl Cache {
 
     pub fn new_raster_cache_size_in_bytes(&self) -> usize {
         self.new_raster_cache_size_in_mb() * 1024 * 1024
+    }
+
+    /// The new raster cache, if this config enables it.
+    pub fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
+        (self.enabled && self.enable_new_raster_cache).then(|| {
+            Arc::new(NewRasterCacheEnum::new_lru(
+                self.new_raster_cache_size_in_bytes(),
+            ))
+        })
     }
 
     fn new_raster_cache_size_in_mb(&self) -> usize {
