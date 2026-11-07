@@ -29,6 +29,10 @@
 //!
 //! - `WP7_BENCH_CASES`: comma separated case names to run, default all. Use it rather than a
 //!   criterion filter, which still does the untimed run of every case.
+//! - `WP7_BENCH_MODES`: comma separated modes to run, default both. For remote files, to bound the
+//!   traffic.
+//! - `WP7_BENCH_CACHE_MB`: the size of the raster cache, default 2 GiB. The bench prints its peak
+//!   memory at the end.
 //! - `WP7_BENCH_POOL`: the worker pool as `processes,active,per dataset`, default `32,16,8`.
 //! - `WP7_BENCH_GDAL_CONFIG`: GDAL config options of the workers as `KEY=VALUE,KEY=VALUE`, set
 //!   after the server defaults, e.g. `CPL_VSIL_CURL_CHUNK_SIZE=262144`.
@@ -957,7 +961,9 @@ fn block_reads(c: &mut Criterion) {
         }
     }
 
-    let cache = Arc::new(NewRasterCacheEnum::new_lru(CACHE_BYTES));
+    let cache_bytes = std::env::var("WP7_BENCH_CACHE_MB")
+        .map_or(CACHE_BYTES, |mb| mb.parse::<usize>().unwrap() << 20);
+    let cache = Arc::new(NewRasterCacheEnum::new_lru(cache_bytes));
     let hashes: Mutex<BTreeMap<String, u64>> = Mutex::default();
 
     let mut group = c.benchmark_group("block_reads");
@@ -966,6 +972,7 @@ fn block_reads(c: &mut Criterion) {
     let rounds: Option<u32> = std::env::var("WP7_BENCH_ROUNDS")
         .ok()
         .map(|rounds| rounds.parse().unwrap());
+    let modes = std::env::var("WP7_BENCH_MODES").unwrap_or_default();
     let view_times: Mutex<ViewTimes> = Mutex::default();
     for case in &cases {
         if !only.is_empty() && !only.split(',').any(|name| case.name == name) {
@@ -973,6 +980,9 @@ fn block_reads(c: &mut Criterion) {
         }
         let exec_ctx = &exec_ctxs[case.exec_ctx_idx];
         for (mode, use_cache) in [("window", false), ("block", true)] {
+            if !modes.is_empty() && !modes.split(',').any(|name| mode == name) {
+                continue;
+            }
             for cold in [true, false] {
                 let id = format!(
                     "{}/{mode}{}",
@@ -1110,6 +1120,10 @@ fn block_reads(c: &mut Criterion) {
         }
     }
     group.finish();
+    let status = std::fs::read_to_string("/proc/self/status").unwrap();
+    if let Some(peak) = status.lines().find(|line| line.starts_with("VmHWM")) {
+        println!("bench process {peak}");
+    }
 }
 
 criterion_group!(benches, block_reads);
