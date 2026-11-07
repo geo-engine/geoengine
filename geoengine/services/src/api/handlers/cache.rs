@@ -43,7 +43,7 @@ mod tests {
         contexts::{PostgresContext, Session},
         ge_context,
         users::UserAuth,
-        util::tests::{admin_login, send_test_request},
+        util::tests::{admin_login, register_ndvi_processing_graph_helper, send_test_request},
     };
     use actix_web::{http::header, test::TestRequest};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -78,5 +78,36 @@ mod tests {
             .await;
             assert_eq!(response.status(), 204);
         }
+    }
+
+    /// With `[cache] enable_new_raster_cache`, the second map reads its blocks and header again.
+    #[ge_context::test]
+    async fn it_renders_the_same_map_after_clearing(app_ctx: PostgresContext<NoTls>) {
+        let admin = admin_login(&app_ctx).await;
+        let (_, id) = register_ndvi_processing_graph_helper(&app_ctx).await;
+        let auth = (header::AUTHORIZATION, Bearer::new(admin.id().to_string()));
+        let get_map = async || {
+            let response = send_test_request(
+                TestRequest::get()
+                    .uri(&format!("/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox=20,-10,80,50&width=600&height=600&crs=EPSG:4326&styles=ssss&format=image/png&time=2014-01-01T00:00:00.0Z"))
+                    .append_header(auth.clone()),
+                app_ctx.clone(),
+            )
+            .await;
+            assert_eq!(response.status(), 200);
+            actix_web::test::read_body(response).await
+        };
+
+        let before = get_map().await;
+        let response = send_test_request(
+            TestRequest::post()
+                .uri("/cache/clear")
+                .append_header(auth.clone()),
+            app_ctx.clone(),
+        )
+        .await;
+        assert_eq!(response.status(), 204);
+
+        assert_eq!(get_map().await, before);
     }
 }
