@@ -24,7 +24,9 @@
 //! `view` cases read like a map client: 8 x 5 tiles of 256 px, each its own query, center first and
 //! at most `VIEW_CONCURRENCY` at a time, the defaults of `OpenLayers`. `view_pan` then moves the view
 //! four times and reads only the tiles it has not seen, after the previous view is done.
-//! `view_overview_4` is a view four times further out. They print
+//! `view_512` and `view_512_pan` cover the same screen in 4 x 3 aligned 512 px tiles, like the
+//! OGC API tiles of `eodyssey`: one source tile per request. `view_overview_4` is a view four
+//! times further out. They print
 //! the time from the start of a view to its first tile and to the median, p99 and last tile.
 //!
 //! - `WP7_BENCH_CASES`: comma separated case names to run, default all. Use it rather than a
@@ -659,9 +661,19 @@ fn panning_windows(size: usize, tile_size: usize, count: usize) -> Vec<GridBound
 }
 
 /// A view around the center of a file with `size` pixels and the views after moving it, each with
-/// the tiles it has not seen, center first. The tiles do not line up with the blocks of the file.
-fn views(size: usize, moves: isize) -> Vec<Vec<GridBoundingBox2D>> {
-    let (rows, columns) = VIEW_TILES;
+/// the tiles it has not seen, center first. Unaligned views (`gis`, `OpenLayers` WMS) request
+/// 256 px tiles that do not line up with the blocks of the file; aligned ones (`eodyssey`, OGC
+/// API tiles) request the server's 512 px tiles. Both cover the same screen and move alike.
+fn views(size: usize, moves: isize, aligned: bool) -> Vec<Vec<GridBoundingBox2D>> {
+    let (tile, (offset_y, offset_x)) = if aligned {
+        (512, (0, 0))
+    } else {
+        (VIEW_TILE_SIZE, (137, 91))
+    };
+    let (rows, columns) = (
+        (VIEW_TILES.0 * VIEW_TILE_SIZE + tile - 1) / tile,
+        (VIEW_TILES.1 * VIEW_TILE_SIZE + tile - 1) / tile,
+    );
     let center = size as isize / 2;
     let mut seen = HashSet::new();
     (0..=moves)
@@ -671,8 +683,8 @@ fn views(size: usize, moves: isize) -> Vec<Vec<GridBoundingBox2D>> {
                 center + 2 * moved * VIEW_TILE_SIZE,
             );
             let (first_row, first_column) = (
-                (center_y - rows * VIEW_TILE_SIZE / 2) / VIEW_TILE_SIZE,
-                (center_x - columns * VIEW_TILE_SIZE / 2) / VIEW_TILE_SIZE,
+                (center_y - rows * tile / 2) / tile,
+                (center_x - columns * tile / 2) / tile,
             );
             let mut view: Vec<(isize, isize)> = (first_row..first_row + rows)
                 .flat_map(|row| {
@@ -681,17 +693,16 @@ fn views(size: usize, moves: isize) -> Vec<Vec<GridBoundingBox2D>> {
                 .filter(|tile| seen.insert(*tile))
                 .collect();
             let distance = |(row, column): (isize, isize)| {
-                let y = row * VIEW_TILE_SIZE + VIEW_TILE_SIZE / 2 - center_y;
-                let x = column * VIEW_TILE_SIZE + VIEW_TILE_SIZE / 2 - center_x;
+                let y = row * tile + tile / 2 - center_y;
+                let x = column * tile + tile / 2 - center_x;
                 y * y + x * x
             };
             view.sort_by_key(|tile| distance(*tile));
             view.into_iter()
                 .map(|(row, column)| {
                     // the offsets are not multiples of a block size, like the grid of a client
-                    let (y, x) = (row * VIEW_TILE_SIZE + 137, column * VIEW_TILE_SIZE + 91);
-                    GridBoundingBox2D::new([y, x], [y + VIEW_TILE_SIZE - 1, x + VIEW_TILE_SIZE - 1])
-                        .unwrap()
+                    let (y, x) = (row * tile + offset_y, column * tile + offset_x);
+                    GridBoundingBox2D::new([y, x], [y + tile - 1, x + tile - 1]).unwrap()
                 })
                 // a level smaller than the view only has the tiles inside of it
                 .filter(|window| {
@@ -757,7 +768,7 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
             format!("{prefix}/view_overview_4"),
             512,
             source(data, Some(4)),
-            Query::Views(views(size / 4, 0)),
+            Query::Views(views(size / 4, 0, false)),
         ));
     }
     // the COG driver builds overviews down to the block size, so small files have fewer
@@ -795,22 +806,27 @@ fn jp2_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Cas
     cases
 }
 
-/// A first view and a panning session of a map client.
+/// A first view and a panning session of a map client, unaligned and aligned.
 fn view_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Case> {
-    vec![
-        Case::new(
-            format!("{prefix}/view"),
-            512,
-            source.clone(),
-            Query::Views(views(size, 0)),
-        ),
-        Case::new(
-            format!("{prefix}/view_pan"),
-            512,
-            source.clone(),
-            Query::Views(views(size, VIEW_PAN_MOVES)),
-        ),
-    ]
+    [("view", false), ("view_512", true)]
+        .into_iter()
+        .flat_map(|(name, aligned)| {
+            [
+                Case::new(
+                    format!("{prefix}/{name}"),
+                    512,
+                    source.clone(),
+                    Query::Views(views(size, 0, aligned)),
+                ),
+                Case::new(
+                    format!("{prefix}/{name}_pan"),
+                    512,
+                    source.clone(),
+                    Query::Views(views(size, VIEW_PAN_MOVES, aligned)),
+                ),
+            ]
+        })
+        .collect()
 }
 
 const TILE_AS_BLOCK: [(&str, Option<&str>); 2] = [
@@ -925,7 +941,7 @@ fn block_reads(c: &mut Criterion) {
                 format!("s2_jp2_{suffix}/view_overview_4"),
                 512,
                 source(&jp2, Some(4)),
-                Query::Views(views(size / 4, 0)),
+                Query::Views(views(size / 4, 0, false)),
             ));
         }
         let jp2_4band = multi_band_source(&add_multi_band_dataset(
