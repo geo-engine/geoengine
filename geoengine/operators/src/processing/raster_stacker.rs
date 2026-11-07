@@ -14,8 +14,8 @@ use crate::error::{
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::StreamExt;
 use futures::stream::BoxStream;
+use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
@@ -418,7 +418,9 @@ where
             let s = source.time_query(query, ctx).await?;
             time_sources.push(s);
         }
-        let output = crate::adapters::TimeIntervalStreamMerge::new(time_sources);
+        // the merge splits intervals of one source at the bounds of another, also outside the query
+        let output = crate::adapters::TimeIntervalStreamMerge::new(time_sources)
+            .try_filter(move |time| futures::future::ready(time.intersects(&query)));
         Ok(Box::pin(output))
     }
 }
@@ -631,6 +633,74 @@ mod tests {
             .collect();
 
         assert!(expected.tiles_equal_ignoring_cache_hint(&result));
+    }
+
+    #[tokio::test]
+    async fn it_returns_only_times_of_the_query() {
+        let source = |times: &[(i64, i64)]| {
+            MockRasterSource {
+                params: MockRasterSourceParams {
+                    data: times
+                        .iter()
+                        .map(|&(start, end)| RasterTile2D::<u8> {
+                            time: TimeInterval::new_unchecked(start, end),
+                            tile_position: [-1, 0].into(),
+                            band: 0,
+                            global_geo_transform: TestDefault::test_default(),
+                            grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
+                            properties: Default::default(),
+                            cache_hint: CacheHint::no_cache(),
+                        })
+                        .collect(),
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::epsg_4326().into(),
+                        time: crate::engine::TimeDescriptor::new_irregular(None),
+                        spatial_grid: SpatialGridDescriptor::source_from_parts(
+                            GeoTransform::test_default(),
+                            GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
+                        ),
+                        bands: RasterBandDescriptors::new_single_band(),
+                    },
+                },
+            }
+            .typed()
+        };
+        // the merge splits [0, 10) at 5, also into [0, 5), which ends where the query starts
+        let stacker = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![source(&[(0, 10)]), source(&[(0, 5), (5, 10)])],
+            },
+        }
+        .typed();
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+            shape_array: [2, 2],
+        };
+        let qp = stacker
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let times: Vec<TimeInterval> = qp
+            .time_query(
+                TimeInterval::new_unchecked(5, 6),
+                &exe_ctx.mock_query_context_test_default(),
+            )
+            .await
+            .unwrap()
+            .try_collect()
+            .await
+            .unwrap();
+
+        assert_eq!(times, vec![TimeInterval::new_unchecked(5, 10)]);
     }
 
     #[tokio::test]
