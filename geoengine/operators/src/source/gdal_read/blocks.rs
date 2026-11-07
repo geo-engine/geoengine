@@ -143,23 +143,27 @@ impl BlockIo {
         let info = match self.reader.remembered_raster_info(&file) {
             Some(info) => Some(info),
             None => {
-                // here and not per block: this runs once per file for as long as the header lives
-                let ttl = cache_hint.total_ttl_seconds();
-                if ttl < self.min_ttl {
-                    tracing::warn!(
-                        "{} has a cache TTL of {} s, its blocks live for the minimum of {} s",
-                        params.file_path.display(),
-                        ttl.seconds(),
-                        self.min_ttl.seconds(),
-                    );
-                }
-                self.reader
-                    .read_and_remember_raster_info(
-                        &file,
-                        params.clone(),
+                let info = self
+                    .reader
+                    .read_raster_info_or_no_data(params.clone())
+                    .await?;
+                if let Some(info) = &info {
+                    let is_new = self.reader.remember_raster_info(
+                        file.clone(),
+                        info.clone(),
                         block_cache_hint(cache_hint, self.min_ttl),
-                    )
-                    .await?
+                    );
+                    let ttl = cache_hint.total_ttl_seconds();
+                    if is_new && ttl < self.min_ttl {
+                        tracing::warn!(
+                            "{} has a cache TTL of {} s, its blocks live for the minimum of {} s",
+                            params.file_path.display(),
+                            ttl.seconds(),
+                            self.min_ttl.seconds(),
+                        );
+                    }
+                }
+                info
             }
         };
         let Some(info) = info else {

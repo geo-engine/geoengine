@@ -347,11 +347,15 @@ impl RasterInfos {
         cache_hint.may_cache().then(|| info.clone())
     }
 
-    fn put(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .put(file, (cache_hint, info));
+    /// Returns whether no valid header of the file was known. Tiles that wait for the same header
+    /// all put it, this is true for the first one.
+    fn put(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) -> bool {
+        let mut infos = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let is_new = !infos
+            .peek(&*file)
+            .is_some_and(|(cache_hint, _)| cache_hint.may_cache());
+        infos.put(file, (cache_hint, info));
+        is_new
     }
 
     fn clear(&self) {
@@ -1308,8 +1312,14 @@ impl GdalPoolDispatcher {
         self.pool.raster_infos.get(file)
     }
 
-    pub fn remember_raster_info(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) {
-        self.pool.raster_infos.put(file, info, cache_hint);
+    /// Returns whether no valid header of `file` was known, see [`RasterInfos`].
+    pub fn remember_raster_info(
+        &self,
+        file: Arc<str>,
+        info: RasterInfo,
+        cache_hint: CacheHint,
+    ) -> bool {
+        self.pool.raster_infos.put(file, info, cache_hint)
     }
 
     /// Read a header (`GdalRequest::Header`) without pixel
@@ -1474,6 +1484,24 @@ mod tests {
     /// Creates a window from min/max `[row, col]` indices.
     fn window(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
         GridBoundingBox2D::new(GridIdx2D::new(min), GridIdx2D::new(max)).unwrap()
+    }
+
+    #[test]
+    fn it_reports_only_the_first_valid_header_of_a_file_as_new() {
+        let infos = RasterInfos::default();
+        let info = RasterInfo {
+            data_type: geoengine_datatypes::raster::RasterDataType::U8,
+            spatial_reference:
+                geoengine_datatypes::spatial_reference::SpatialReferenceOption::Unreferenced,
+            levels: vec![],
+        };
+
+        assert!(infos.put("a".into(), info.clone(), CacheHint::seconds(60)));
+        assert!(!infos.put("a".into(), info.clone(), CacheHint::seconds(60)));
+        assert!(infos.put("b".into(), info.clone(), CacheHint::seconds(60)));
+
+        assert!(infos.put("expired".into(), info.clone(), CacheHint::no_cache()));
+        assert!(infos.put("expired".into(), info, CacheHint::seconds(60)));
     }
 
     // --- calculate_grid_distance ---

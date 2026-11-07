@@ -173,25 +173,21 @@ impl GdalPoolReader {
         )
     }
 
-    /// The header of `file` if [`Self::read_and_remember_raster_info`] read it and it is valid.
+    /// The header of `file` if it was remembered and is still valid.
     pub fn remembered_raster_info(&self, file: &str) -> Option<RasterInfo> {
         self.dispatcher().remembered_raster_info(file)
     }
 
-    /// Like [`Self::read_raster_info_or_no_data`], and remembers the header of `file`, which must
-    /// identify `dataset_params`, until `cache_hint` expires.
-    pub async fn read_and_remember_raster_info(
+    /// Remembers the header of `file` until `cache_hint` expires. Returns whether no valid header
+    /// of `file` was known.
+    pub fn remember_raster_info(
         &self,
-        file: &Arc<str>,
-        dataset_params: GdalDatasetParameters,
+        file: Arc<str>,
+        info: RasterInfo,
         cache_hint: CacheHint,
-    ) -> Result<Option<RasterInfo>, GdalProcessPoolError> {
-        let info = self.read_raster_info_or_no_data(dataset_params).await?;
-        if let Some(info) = &info {
-            self.dispatcher()
-                .remember_raster_info(file.clone(), info.clone(), cache_hint);
-        }
-        Ok(info)
+    ) -> bool {
+        self.dispatcher()
+            .remember_raster_info(file, info, cache_hint)
     }
 
     async fn read_header(
