@@ -772,7 +772,7 @@ pub struct RasterStackerParameters {
     /// Override the origin of the stacked output grid.
     /// If `None`, the first input's origin is used.
     #[schema(examples(json!({ "x": 2.0, "y": -2.0 })))]
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_origin: Option<crate::api::model::datatypes::Coordinate2D>,
 }
 

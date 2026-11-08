@@ -30,7 +30,8 @@ use snafu::ensure;
 #[serde(rename_all = "camelCase")]
 pub struct RasterStackerParams {
     pub rename_bands: RenameBands,
-    #[serde(default)]
+    // omitted when unset, so processing graph ids (a hash of the JSON) of existing stackers stay the same
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_origin: Option<Coordinate2D>,
 }
 
