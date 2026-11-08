@@ -23,8 +23,8 @@
 //! variables, e.g. `GEOENGINE__GDAL_PROCESS_POOL__MAX_ACTIVE_PROCESSES=4`. One configuration
 //! drives the server, its benches in `services` and these.
 //!
-//! Locally, after timing a case, `Env::bench` runs it a few more times with a DEBUG subscriber and
-//! prints where the time goes: the wall time per span (the stages of the map path) and the
+//! With `GEOENGINE_BENCH_METRICS=1` (local runs only), after timing a case, `Env::bench` runs it a
+//! few more times with a DEBUG subscriber and prints where the time goes: the wall time per span (the stages of the map path) and the
 //! `stream_metrics` of each operator (elements, bytes, poll and wall time, dropped streams). The
 //! subscriber only records during these runs, so the timed runs do not pay for it.
 #![allow(
@@ -48,10 +48,10 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        InitializedRasterOperator, MockExecutionContext, MockQueryContext, MultipleRasterSources,
-        ProcessingGraphOperatorPath, QueryContext, RasterOperator, RasterQueryProcessor,
-        SingleRasterOrVectorSource, SingleRasterSource, StatisticsWrappingMockExecutionContext,
-        TypedRasterOperator, TypedRasterQueryProcessor,
+        GdalReadAhead, InitializedRasterOperator, MockExecutionContext, MockQueryContext,
+        MultipleRasterSources, ProcessingGraphOperatorPath, QueryContext, RasterOperator,
+        RasterQueryProcessor, SingleRasterOrVectorSource, SingleRasterSource,
+        StatisticsWrappingMockExecutionContext, TypedRasterOperator, TypedRasterQueryProcessor,
     },
     meta::quota::{QuotaCheck, QuotaTracking},
     processing::{
@@ -191,12 +191,14 @@ pub struct Env {
     /// start and time step of the raster's files, for the query times
     start: TimeInstance,
     step: TimeStep,
+    /// the read-ahead of the settings, for further query contexts
+    read_ahead: GdalReadAhead,
 }
 
 impl Env {
     /// 512 px tiles, like the OGC API tiles, and the pools of the server settings.
     pub fn new() -> Self {
-        if !ci() {
+        if metrics_enabled() {
             install_metrics();
         }
         let settings = settings();
@@ -251,7 +253,20 @@ impl Env {
             raster.clone(),
             Box::new(meta_data),
         );
-        let query_ctx = Arc::new(query_ctx(&runtime, &exe_ctx, exe_ctx.thread_pool.clone()));
+        let read_ahead = GdalReadAhead {
+            gdal_source: setting(&settings, "query_context.gdal_source_read_ahead", 8),
+            multi_band_gdal_source: setting(
+                &settings,
+                "query_context.multi_band_gdal_source_read_ahead",
+                16,
+            ),
+        };
+        let query_ctx = Arc::new(query_ctx(
+            &runtime,
+            &exe_ctx,
+            exe_ctx.thread_pool.clone(),
+            read_ahead,
+        ));
         Self {
             runtime,
             exe_ctx: StatisticsWrappingMockExecutionContext { inner: exe_ctx },
@@ -259,6 +274,7 @@ impl Env {
             raster,
             start,
             step,
+            read_ahead,
         }
     }
 
@@ -269,6 +285,7 @@ impl Env {
             &self.runtime,
             &self.exe_ctx.inner,
             create_rayon_thread_pool(threads),
+            self.read_ahead,
         ))
     }
 
@@ -394,7 +411,8 @@ impl Env {
     /// Locally, runs `run` a few times while recording the metrics and prints their mean per run.
     pub fn metrics<F: Future>(&self, name: &str, run: impl Fn() -> F) {
         const RUNS: u32 = 5;
-        if ci() {
+        // opt-in: these runs are outside Criterion's closures, so a case filter would not skip them
+        if !metrics_enabled() {
             return;
         }
         SPANS.lock().unwrap().clear();
@@ -498,6 +516,11 @@ pub fn ci() -> bool {
     std::env::var_os("GEOENGINE_BENCH_CI").is_some()
 }
 
+/// Whether to record and print the metrics after each case: `GEOENGINE_BENCH_METRICS`, never in CI.
+pub fn metrics_enabled() -> bool {
+    !ci() && std::env::var_os("GEOENGINE_BENCH_METRICS").is_some()
+}
+
 /// Criterion settings: short in CI, where the cases take at most ~60 ms per iteration, and for
 /// cases up to a second per iteration locally.
 pub fn criterion() -> Criterion {
@@ -514,12 +537,13 @@ pub fn criterion() -> Criterion {
     c.configure_from_args()
 }
 
-/// A query context of the server's kind: the processing runtime, the Rayon pool, and quota
+/// A query context of the server's kind: the processing runtime, the Rayon pool, the read-ahead and quota
 /// tracking and checks, which the statistics wrapper of every operator needs.
 fn query_ctx(
     runtime: &tokio::runtime::Runtime,
     exe_ctx: &MockExecutionContext,
     thread_pool: Arc<ThreadPool>,
+    read_ahead: GdalReadAhead,
 ) -> MockQueryContext {
     // the query context takes the processing runtime from the current one
     let mut query_ctx = {
@@ -527,6 +551,7 @@ fn query_ctx(
         exe_ctx.mock_query_context_test_default()
     };
     query_ctx.thread_pool = thread_pool;
+    query_ctx.gdal_read_ahead = read_ahead;
     // the statistics wrapper reports work units like in the server, whose quota manager drains them
     let (quota_sender, mut quota_receiver) = tokio::sync::mpsc::unbounded_channel();
     runtime.spawn(async move { while quota_receiver.recv().await.is_some() {} });
@@ -689,10 +714,14 @@ fn install_metrics() {
 fn print_metrics(name: &str, runs: u32) {
     let runs = f64::from(runs);
     eprintln!("{name}: mean per run over {runs} runs");
-    eprintln!("  {:<40} {:>8} {:>10}", "span", "count", "ms");
+    // a span's time is its lifetime, waits included, so overlapping spans add up beyond the run
+    eprintln!(
+        "  {:<40} {:>8} {:>22}",
+        "span", "count", "ms (sum of lifetimes)"
+    );
     for (span, (total, count)) in SPANS.lock().unwrap().iter() {
         eprintln!(
-            "  {span:<40} {:>8.1} {:>10.3}",
+            "  {span:<40} {:>8.1} {:>22.3}",
             *count as f64 / runs,
             total.as_secs_f64() * 1000. / runs
         );
