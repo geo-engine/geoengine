@@ -2806,6 +2806,7 @@ dependencies = [
  "bytes",
  "chrono",
  "codspeed-criterion-compat",
+ "config",
  "csv",
  "float-cmp",
  "futures",
