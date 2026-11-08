@@ -120,6 +120,20 @@ test-services filter="" lib="--lib": common::_clear build-gdalsource-process
 test-macros filter="": common::_clear
     cargo test --package geoengine-macros --lib -- {{ filter }} --nocapture
 
+# The operator topic benches of `operators/benches/`, one file per topic. A new topic goes here and
+# into `operators/Cargo.toml`; `no_data_tiles` stays out, it needs remote data.
+topic_benches := "--bench ci_operators --bench gdal_source --bench reprojection --bench expression --bench bands_and_time --bench raster_cache"
+
+# Run all cases of the operator topic benches to compare changes locally. Pass criterion arguments, e.g. `just backend bench -- --save-baseline main` and later `-- --baseline main`.
+[group("test")]
+bench *args:
+    cargo bench -p geoengine-operators {{ topic_benches }} {{ args }}
+
+# Run the fast cases of the operator topic benches with short measurements, as the continuous benchmarking in CI does.
+[group("test")]
+bench-ci *args:
+    GEOENGINE_BENCH_CI=1 cargo bench --profile bench-ci -p geoengine-operators {{ topic_benches }} {{ args }}
+
 # Run doctests
 [group("test")]
 test-doc:
