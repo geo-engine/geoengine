@@ -5,6 +5,7 @@ members = [
     "expression",
     "macros",
     "operators",
+    "server",
     "services",
 ]
 exclude = [
@@ -34,8 +35,13 @@ repository = "https://github.com/geo-engine/geoengine"
 lto = "thin"
 codegen-units = 1
 
+# full debug info only for workspace crates; dependencies keep line tables for backtraces
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 [profile.ci]
 inherits = "test"
+debug = "line-tables-only" # backtraces keep file:line; llvm-cov needs no DWARF
 strip = "debuginfo"
 
 [profile.bench-ci]
@@ -93,7 +99,7 @@ actix-ws = "0.4"
 aes-gcm = "0.11.1"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "60.0", features = ["ipc_compression"] }
+arrow = { version = "60.0", default-features = false, features = ["ipc", "ipc_compression", "json"] }
 arrow-array = "60.0"
 arrow-ord = "60.0"
 arrow-schema = { version = "60.0", features = ["serde"] }
@@ -125,7 +131,7 @@ geo-types = "0.7.20" # important for compatibility when linking expressions
 geodesy = { version = "0.15" }
 geojson = { version = "1.0", features = ["geo-types"] }
 httptest = "0.16"
-image = "0.25"
+image = { version = "0.25", default-features = false, features = ["png", "rayon", "tiff"] }
 indoc = "2.0"
 ipc-channel = "0.23.1"
 itertools = "0.15"
@@ -141,8 +147,8 @@ oauth2 = "5.0"
 ogcapi-types = { git = "https://github.com/georust/ogcapi", branch = "main", features = ["common", "tiles"], default-features = false }
 openidconnect = "4.0"
 opentelemetry = { version = "0.33", default-features = false, features = ["trace"] } # version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
-opentelemetry-otlp = { version = "0.33", features = ["grpc-tonic"] }
-opentelemetry_sdk = { version = "0.33", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["grpc-tonic", "internal-logs", "trace"] } # internal-logs: export errors reach the log
+opentelemetry_sdk = { version = "0.33", default-features = false, features = ["rt-tokio", "trace"] }
 ort = { version = "2.0.0-rc.15", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-21"] } # allow default features again wrt. <https://github.com/pykeio/ort/issues/553>
 ouroboros = "0.18"
 paste = "1.0"

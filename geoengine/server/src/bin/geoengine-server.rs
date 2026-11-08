@@ -89,7 +89,14 @@ pub async fn start_server() -> Result<()> {
     #[cfg(feature = "runtime-metrics")]
     spawn_runtime_metrics_logger();
 
-    match geoengine_services::server::start_server(None).await {
+    let server_info = geoengine_services::util::server::ServerInfo {
+        build_date: env!("VERGEN_BUILD_DATE"),
+        commit_hash: option_env!("VERGEN_GIT_SHA").unwrap_or("unknown"), // 'unknown' if not built in a git repository
+        version: env!("CARGO_PKG_VERSION"),
+        features: env!("VERGEN_CARGO_FEATURES"),
+    };
+
+    match geoengine_services::server::start_server(None, server_info).await {
         Ok(()) => tracing::info!("Server stopped successfully"),
         Err(err) => tracing::error!("Server stopped with error: {err}"),
     }

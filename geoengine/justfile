@@ -50,15 +50,14 @@ lint-sql fix="false": common::_clear
 [arg('mode', pattern='|--release')]
 [group("build")]
 build mode="":
-    cargo build --bin geoengine-server --locked {{ mode }} --verbose
-    cargo build --bin geoengine-cli --locked {{ mode }} --verbose    
-    cargo build --bin gdalsource-process --locked {{ mode }} --verbose
+    cargo build --locked --workspace --bins {{ mode }} --verbose
 
 # Build gdalsource-process in dev or release mode.
+# `--workspace` unifies features as in `build`, so the operators crate is not compiled a second time.
 [arg('mode', pattern='|--release')]
 [group("build")]
 build-gdalsource-process mode="":
-    cargo build --bin gdalsource-process --locked {{ mode }} --verbose
+    cargo build --workspace --bin gdalsource-process --locked {{ mode }} --verbose
 
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
@@ -85,8 +84,8 @@ test-coverage-services filter="": common::_clear
 [arg('mode', pattern='|--release')]
 [group("run")]
 run mode="": common::_clear
-    cargo build --bin gdalsource-process {{ mode }}
-    cargo run {{ mode }}
+    cargo build --workspace --bins {{ mode }}
+    cargo run --bin geoengine-server {{ mode }}
 
 # Run the CLI
 [group("run")]
@@ -96,7 +95,7 @@ cli *parameters: common::_clear
 
 # Run the tests. Optionally, a filter can be provided to run only a subset of the tests.
 [group("test")]
-test filter="": common::_clear build-gdalsource-process
+test filter="": common::_clear
     cargo test -- {{ filter }} --nocapture
 
 # Run the tests for the geoengine-datatypes package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-datatypes workflows::workflow::tests
@@ -171,7 +170,7 @@ validate-ogc-compliance requests-log-file="": common::_clear
 
     # 1. Start the cargo server in the background
     GEOENGINE__WEB__EXTERNAL_ADDRESS="$PROXY_URL/api" \
-    cargo run & SERVER_PID=$!
+    cargo run --bin geoengine-server & SERVER_PID=$!
 
     # 2. Trap exits (success or failure) to kill the server process
     trap 'kill $SERVER_PID 2>/dev/null || true' EXIT

@@ -53,7 +53,8 @@ If port 3030 is taken, also set `GEOENGINE__WEB__BIND_ADDRESS=127.0.0.1:3031` (t
 
 ## Crate architecture
 
-Core layering: `services` depends on `operators`, which depends on `datatypes`; lower crates never depend on higher ones.
+Core layering: `server` depends on `services`, which depends on `operators`, which depends on `datatypes`; lower crates never depend on higher ones.
+`server` only holds the `geoengine-server` and `geoengine-cli` binaries, their integration tests and the build-info `build.rs`, so a new commit does not recompile `services`.
 Supporting crates: `expression` (used by `operators` and `services`), `macros` (used by `services`) and `crs-constants` (used by `datatypes`).
 
 - **`datatypes`**: primitives (time intervals, bounding boxes, spatial references), feature collections (Arrow-backed), raster tiles/grids, plots.

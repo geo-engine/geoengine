@@ -164,13 +164,14 @@ pub fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> act
     }
 }
 
-#[derive(serde::Serialize, ToSchema)]
+// passed in by the binary, so build info changing on every commit does not recompile this library
+#[derive(Debug, Clone, Copy, serde::Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ServerInfo {
-    pub(crate) build_date: &'static str,
-    pub(crate) commit_hash: &'static str,
-    pub(crate) version: &'static str,
-    pub(crate) features: &'static str,
+pub struct ServerInfo {
+    pub build_date: &'static str,
+    pub commit_hash: &'static str,
+    pub version: &'static str,
+    pub features: &'static str,
 }
 
 /// Shows information about the server software version.
@@ -189,17 +190,10 @@ pub(crate) struct ServerInfo {
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn server_info_handler() -> impl actix_web::Responder {
-    web::Json(server_info())
-}
-
-pub(crate) fn server_info() -> ServerInfo {
-    ServerInfo {
-        build_date: env!("VERGEN_BUILD_DATE"),
-        commit_hash: option_env!("VERGEN_GIT_SHA").unwrap_or("unknown"), // 'unknown' if not builded in git repository
-        version: env!("CARGO_PKG_VERSION"),
-        features: env!("VERGEN_CARGO_FEATURES"),
-    }
+pub(crate) async fn server_info_handler(
+    server_info: web::Data<ServerInfo>,
+) -> impl actix_web::Responder {
+    web::Json(**server_info)
 }
 
 /// Server availablity check.
@@ -278,7 +272,7 @@ pub fn serve_openapi_json<
     )
 }
 
-pub(crate) fn log_server_info() -> Result<()> {
+pub(crate) fn log_server_info(version: &ServerInfo) -> Result<()> {
     fn enabled_disabled(enabled: bool) -> &'static str {
         if enabled { "enabled" } else { "disabled" }
     }
@@ -298,7 +292,6 @@ pub(crate) fn log_server_info() -> Result<()> {
         web_config.bind_address, web_config.api_prefix
     ))?;
     let swagger_url = external_address.join("swagger-ui/")?;
-    let version = server_info();
 
     let mut cache_enabled = enabled_disabled(cache_config.enabled).to_string();
     if cache_config.enabled {
