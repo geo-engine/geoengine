@@ -32,7 +32,10 @@ class LayerTests(unittest.TestCase):
             properties=[],
             processing_graph={
                 "operator": {
-                    "params": {"renameBands": {"type": "rename", "values": ["blue", "green", "red"]}},
+                    "params": {
+                        "renameBands": {"type": "rename", "values": ["blue", "green", "red"]},
+                        "outputOrigin": None,
+                    },
                     "sources": {
                         "rasters": [
                             {"type": "GdalSource", "params": {"data": "ne2_raster_blue", "overviewLevel": None}},
