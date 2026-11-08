@@ -4,7 +4,8 @@
 //! Each block starts with a header `[start, end)` and an optional `band N` (default `0`),
 //! followed by the pixels of all tiles of that time step and band.
 //! A time instance is either milliseconds (`-10`, `0`), an RFC 3339 date time (`2010-01-01T12:00:00Z`),
-//! or a date (`2010-01-01`, midnight UTC):
+//! a date (`2010-01-01`, midnight UTC), or `-inf` and `inf` for the start and end of time
+//! ([`TimeInstance::MIN`] and [`TimeInstance::MAX`], e.g., `[-inf, inf)` for [`TimeInterval::default`]):
 //!
 //! ```text
 //! [0, 10)
@@ -382,6 +383,13 @@ where
 }
 
 fn format_time_instance(millis: i64, time_format: AsciiTimeFormat) -> String {
+    if millis == TimeInstance::MIN.inner() {
+        return "-inf".to_string();
+    }
+    if millis == TimeInstance::MAX.inner() {
+        return "inf".to_string();
+    }
+
     let date_time = match time_format {
         AsciiTimeFormat::Millis => None,
         AsciiTimeFormat::DateTime => TimeInstance::from_millis(millis)
@@ -426,6 +434,10 @@ fn regular_time_step(times: &BTreeSet<(i64, i64)>) -> Option<TimeStep> {
 
     let mut expected_start = first_start;
     for &(start, end) in times {
+        // a step from or to the start or end of time is not regular
+        if start == TimeInstance::MIN.inner() || end == TimeInstance::MAX.inner() {
+            return None;
+        }
         let start_instance = TimeInstance::from_millis(start).ok()?;
         if start != expected_start || (start_instance + step).ok()?.inner() != end {
             return None;
@@ -827,9 +839,15 @@ fn parse_header(line: &str, line_number: usize) -> (TimeInterval, u32, bool) {
     (time, band, start_is_date_time || end_is_date_time)
 }
 
-/// Parses milliseconds, an RFC 3339 date time or a date (midnight UTC).
+/// Parses milliseconds, an RFC 3339 date time, a date (midnight UTC), `-inf` or `inf`.
 /// Returns whether the instance was given as a date or date time.
 fn parse_time_instance(text: &str) -> Option<(TimeInstance, bool)> {
+    match text {
+        "-inf" => return Some((TimeInstance::MIN, false)),
+        "inf" => return Some((TimeInstance::MAX, false)),
+        _ => {}
+    }
+
     if let Ok(millis) = text.parse::<i64>() {
         return TimeInstance::from_millis(millis)
             .ok()
@@ -853,7 +871,7 @@ fn parse_time_instance(text: &str) -> Option<(TimeInstance, bool)> {
 fn invalid_header(line: &str, line_number: usize) -> ! {
     panic!(
         "line {line_number}: expected `[start, end)` or `[start, end) band N` with milliseconds, \
-        RFC 3339 date times or dates, found `{line}`"
+        RFC 3339 date times, dates, `-inf` or `inf`, found `{line}`"
     )
 }
 
@@ -1093,6 +1111,42 @@ mod tests {
         assert_eq!(
             AsciiRasterTiles::new(TWO_BY_TWO_TILES).time_format(),
             AsciiTimeFormat::Millis
+        );
+    }
+
+    #[test]
+    fn it_accepts_the_start_and_end_of_time() {
+        let text = indoc! {"
+            [-inf, 0)
+            +---+
+            | 1 |
+            +---+
+
+            [0, inf)
+            +---+
+            | 2 |
+            +---+"};
+
+        let tiles = AsciiRasterTiles::new(text);
+
+        assert_eq!(
+            tiles
+                .tiles::<u8>()
+                .iter()
+                .map(|tile| tile.time)
+                .collect::<Vec<_>>(),
+            vec![
+                TimeInterval::new_unchecked(TimeInstance::MIN, 0),
+                TimeInterval::new_unchecked(0, TimeInstance::MAX),
+            ]
+        );
+        assert_eq!(raster_tiles_to_ascii(&tiles.tiles::<u8>()), text);
+        assert_eq!(tiles.info().regular_time_step, None);
+        assert_eq!(
+            AsciiRasterTiles::new("[-inf, inf)\n| 1 |")
+                .info()
+                .time_bounds,
+            TimeInterval::default()
         );
     }
 
