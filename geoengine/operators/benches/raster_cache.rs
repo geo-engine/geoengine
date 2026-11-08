@@ -10,14 +10,12 @@
 
 mod common;
 
-use common::{Area, Env, one_month, six_months, stack};
+use common::{Area, Env, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
 use futures::future::join_all;
-use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
 use geoengine_operators::{
     cache::new_raster_cache::{NewRasterCacheEnum, RasterCacheOperator},
-    engine::{InitializedRasterOperator, RasterOperator, SingleRasterSource},
-    processing::{Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters},
+    engine::InitializedRasterOperator,
 };
 use std::{
     sync::Arc,
@@ -26,7 +24,8 @@ use std::{
 
 const CACHE_BYTES: usize = 1 << 30;
 
-/// Runs `concurrent` queries of the case at once after clearing the cache, `iters` times.
+/// Runs `concurrent` queries of the case at once after clearing the cache, `iters` times, and
+/// returns the time of the queries only: for `iter_custom`, so that clearing is not measured.
 fn cold(
     env: &Env,
     cache: &NewRasterCacheEnum,
@@ -53,27 +52,12 @@ fn raster_cache(c: &mut Criterion) {
     let cached = |initialized: Box<dyn InitializedRasterOperator>| {
         RasterCacheOperator::wrap_operator(initialized).boxed()
     };
-    let extent = env.wrapped_case(env.ndvi(), Area::Extent, one_month(), cached);
-    let series = env.wrapped_case(env.ndvi(), Area::Extent, six_months(), cached);
-    let half_year_mean = TemporalRasterAggregation {
-        params: TemporalRasterAggregationParameters {
-            aggregation: Aggregation::Mean {
-                ignore_no_data: true,
-            },
-            window: TimeStep {
-                granularity: TimeGranularity::Months,
-                step: 6,
-            },
-            window_reference: None,
-            output_type: None,
-        },
-        sources: SingleRasterSource { raster: env.ndvi() },
-    }
-    .typed();
+    let extent = env.wrapped_case(env.raster(), Area::Extent, env.one_step(), cached);
+    let series = env.wrapped_case(env.raster(), Area::Extent, env.six_steps(), cached);
     let stacked = env.wrapped_case(
-        stack(vec![env.ndvi(), half_year_mean]),
+        stack(vec![env.raster(), env.six_step_mean(env.raster())]),
         Area::Extent,
-        one_month(),
+        env.one_step(),
         cached,
     );
 
@@ -87,7 +71,8 @@ fn raster_cache(c: &mut Criterion) {
     group.bench_function("extent_cold_concurrent8", |b| {
         b.iter_custom(|iters| cold(&env, &cache, &extent, 8, iters));
     });
-    // 70 ms and more per iteration
+    // Local only (`just backend bench`), skipped in CI (`GEOENGINE_BENCH_CI`): 70 ms and more per
+    // iteration, beyond the ~60 ms budget of a CI case. `extent_cold` covers cold runs in CI.
     if !common::ci() {
         series.print("series_6_months_cold");
         group.bench_function("series_6_months_cold", |b| {

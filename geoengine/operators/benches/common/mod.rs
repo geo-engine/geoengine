@@ -1,6 +1,14 @@
 //! Setup shared by the topic benches (`gdal_source`, `reprojection`, `expression`,
-//! `bands_and_time`, `raster_cache`): the local NDVI test data, one GDAL pool like the server
+//! `bands_and_time`, `raster_cache`): one raster dataset, one GDAL pool like the server
 //! default and queries over the whole result or a part of it.
+//!
+//! The raster is the local NDVI test data (EPSG:4326, global, 6 monthly files). For local runs on
+//! other data, `GEOENGINE_BENCH_RASTER=<file.json>` names a `GdalMetaDataRegular` as JSON, e.g. the
+//! `metaData` of a dataset definition like `test_data/dataset_defs/ndvi.json`, with absolute file
+//! paths or paths relative to `operators/`. The query times follow the data's time step:
+//! `one_step` is the 4th step, `six_steps` the first six. The cases with fixed coordinates
+//! (`reprojection/wms_tile`, `tile_time6`) assume global data and give empty tiles elsewhere.
+//! CI never sets it, so the continuous benchmarking always measures the NDVI data.
 //!
 //! The benches measure workloads through typed operators, not internals, so that the same bench
 //! runs before and after a change. They need no network and no database.
@@ -25,8 +33,8 @@ use futures::StreamExt;
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     primitives::{
-        BandSelection, CacheTtlSeconds, DateTime, RasterQueryRectangle, SpatialPartition2D,
-        TimeInterval,
+        BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
+        TimeInterval, TimeStep,
     },
     raster::{GridBoundingBox2D, RenameBands, TilingSpecification},
 };
@@ -35,30 +43,20 @@ use geoengine_operators::{
     engine::{
         InitializedRasterOperator, MockExecutionContext, MockQueryContext, MultipleRasterSources,
         ProcessingGraphOperatorPath, QueryContext, RasterOperator, RasterQueryProcessor,
-        TypedRasterOperator, TypedRasterQueryProcessor,
+        SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
     },
-    processing::{RasterStacker, RasterStackerParams},
+    processing::{
+        Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
+        TemporalRasterAggregationParameters,
+    },
     source::{
-        GdalProcessPool, GdalSource, GdalSourceParameters, gdal_worker_process::WorkerConfig,
+        GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
+        gdal_worker_process::WorkerConfig,
     },
     util::{create_rayon_thread_pool, gdal::create_ndvi_meta_data_with_cache_ttl},
 };
 use serde::de::DeserializeOwned;
 use std::{collections::HashMap, fmt::Debug, path::Path, time::Duration};
-
-/// 2014-04-01, the NDVI file of April
-pub fn one_month() -> TimeInterval {
-    TimeInterval::new_instant(DateTime::new_utc(2014, 4, 1, 0, 0, 0)).unwrap()
-}
-
-/// 2014-01-01 to 2014-07-01, the six monthly NDVI files
-pub fn six_months() -> TimeInterval {
-    TimeInterval::new(
-        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
-        DateTime::new_utc(2014, 7, 1, 0, 0, 0),
-    )
-    .unwrap()
-}
 
 /// The rasters as bands of one raster.
 pub fn stack(rasters: Vec<TypedRasterOperator>) -> TypedRasterOperator {
@@ -101,7 +99,11 @@ pub struct Env {
     pub runtime: tokio::runtime::Runtime,
     pub exe_ctx: MockExecutionContext,
     pub query_ctx: MockQueryContext,
-    pub ndvi: NamedData,
+    /// the raster dataset, NDVI unless `GEOENGINE_BENCH_RASTER` is set
+    pub raster: NamedData,
+    /// start and time step of the raster's files, for the query times
+    start: TimeInstance,
+    step: TimeStep,
 }
 
 impl Env {
@@ -115,6 +117,7 @@ impl Env {
             "processing_runtime.max_blocking_threads",
             512,
         ));
+        // 0 is the server's "one per core", tokio's default
         match setting(&settings, "processing_runtime.worker_threads", 0) {
             0 => {}
             threads => {
@@ -147,16 +150,16 @@ impl Env {
                 ..WorkerConfig::default()
             },
         );
+        // 0 is one thread per core, as in the server
         exe_ctx.thread_pool =
             create_rayon_thread_pool(setting(&settings, "query_context.rayon_threads", 0));
-        // a cache TTL, so that the raster cache keeps the tiles
-        let ndvi = NamedData::with_system_name("ndvi");
+        let meta_data = raster_meta_data();
+        let (start, step) = (meta_data.data_time.start(), meta_data.step);
+        let raster = NamedData::with_system_name("raster");
         exe_ctx.add_meta_data(
             DataId::from(DatasetId::from_u128(1)),
-            ndvi.clone(),
-            Box::new(create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::new(
-                3600,
-            ))),
+            raster.clone(),
+            Box::new(meta_data),
         );
         // the query context takes the processing runtime from the current one
         let mut query_ctx = {
@@ -168,13 +171,42 @@ impl Env {
             runtime,
             exe_ctx,
             query_ctx,
-            ndvi,
+            raster,
+            start,
+            step,
         }
     }
 
-    pub fn ndvi(&self) -> TypedRasterOperator {
+    /// A GDAL source of the raster dataset.
+    pub fn raster(&self) -> TypedRasterOperator {
         GdalSource {
-            params: GdalSourceParameters::new(self.ndvi.clone()),
+            params: GdalSourceParameters::new(self.raster.clone()),
+        }
+        .typed()
+    }
+
+    /// The 4th time step of the raster: 2014-04-01 for NDVI.
+    pub fn one_step(&self) -> TimeInterval {
+        TimeInterval::new_instant((self.start + self.step * 3).unwrap()).unwrap()
+    }
+
+    /// The first six time steps of the raster: 2014-01 to 2014-06 for NDVI.
+    pub fn six_steps(&self) -> TimeInterval {
+        TimeInterval::new(self.start, (self.start + self.step * 6).unwrap()).unwrap()
+    }
+
+    /// The mean over windows of six time steps of the raster, ignoring no data.
+    pub fn six_step_mean(&self, raster: TypedRasterOperator) -> TypedRasterOperator {
+        TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: Aggregation::Mean {
+                    ignore_no_data: true,
+                },
+                window: self.step * 6,
+                window_reference: None,
+                output_type: None,
+            },
+            sources: SingleRasterSource { raster },
         }
         .typed()
     }
@@ -207,6 +239,7 @@ impl Env {
         let data = grid.tiling_grid_bounds();
         let bounds = match area {
             Area::Extent => data,
+            // grow by (n - 1) / 2 extents on each side, so the data stays in the center
             Area::ExtentTimes(n) => {
                 let margin_y = (n - 1) / 2 * (data.y_max() - data.y_min() + 1);
                 let margin_x = (n - 1) / 2 * (data.x_max() - data.x_min() + 1);
@@ -258,6 +291,24 @@ impl Env {
     }
 }
 
+/// The raster's metadata: from `GEOENGINE_BENCH_RASTER` if set, else the NDVI test data. Both get
+/// a cache TTL, so that the raster cache keeps the tiles.
+///
+/// shortcut: only `GdalMetaDataRegular` (one file per time step); read the dataset definition's
+/// `MetaDataDefinition` when a case needs a static or list dataset.
+fn raster_meta_data() -> GdalMetaDataRegular {
+    let ttl = CacheTtlSeconds::new(3600);
+    let Some(path) = std::env::var_os("GEOENGINE_BENCH_RASTER") else {
+        return create_ndvi_meta_data_with_cache_ttl(ttl);
+    };
+    eprintln!("GEOENGINE_BENCH_RASTER = {}", path.display());
+    let file = std::fs::File::open(&path).unwrap();
+    let mut meta_data: GdalMetaDataRegular =
+        serde_json::from_reader(std::io::BufReader::new(file)).unwrap();
+    meta_data.cache_ttl = Some(ttl);
+    meta_data
+}
+
 /// The server settings, read as `services::config` reads them: `Settings-default.toml`, a local
 /// `Settings.toml` if present, then `GEOENGINE__SECTION__KEY` environment variables.
 fn settings() -> Config {
@@ -276,6 +327,7 @@ fn setting<T: DeserializeOwned + Debug>(settings: &Config, key: &str, default: T
     let value = match settings.get(key) {
         Ok(value) => value,
         Err(ConfigError::NotFound(_)) => default,
+        // a key with a wrong value must not silently fall back to the default
         Err(e) => panic!("{key}: {e}"),
     };
     eprintln!("{key} = {value:?}");
@@ -304,6 +356,7 @@ async fn count<P: RasterQueryProcessor + ?Sized>(
             (tiles + 1, empty + usize::from(tile.unwrap().is_empty()))
         })
         .await;
+    // a query without tiles means a broken case (wrong time or area), not a fast one
     assert_ne!(tiles, 0);
     (tiles, empty)
 }
@@ -325,6 +378,8 @@ pub fn ci() -> bool {
 /// cases up to a second per iteration locally.
 pub fn criterion() -> Criterion {
     let c = Criterion::default();
+    // CI: 10 samples of 2 s after 0.5 s warm-up keep the whole set at a few minutes on the shared
+    // runner; locally, more samples for smaller confidence intervals
     let c = if ci() {
         c.sample_size(10)
             .warm_up_time(Duration::from_millis(500))

@@ -7,31 +7,8 @@
 
 mod common;
 
-use common::{Area, Env, one_month, six_months, stack};
+use common::{Area, Env, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
-use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
-use geoengine_operators::{
-    engine::{RasterOperator, SingleRasterSource, TypedRasterOperator},
-    processing::{Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters},
-};
-
-fn six_month_mean(raster: TypedRasterOperator) -> TypedRasterOperator {
-    TemporalRasterAggregation {
-        params: TemporalRasterAggregationParameters {
-            aggregation: Aggregation::Mean {
-                ignore_no_data: true,
-            },
-            window: TimeStep {
-                granularity: TimeGranularity::Months,
-                step: 6,
-            },
-            window_reference: None,
-            output_type: None,
-        },
-        sources: SingleRasterSource { raster },
-    }
-    .typed()
-}
 
 fn bands_and_time(c: &mut Criterion) {
     let env = Env::new();
@@ -39,26 +16,30 @@ fn bands_and_time(c: &mut Criterion) {
         (
             "stack3_extent",
             env.case(
-                stack(vec![env.ndvi(), env.ndvi(), env.ndvi()]),
+                stack(vec![env.raster(), env.raster(), env.raster()]),
                 Area::Extent,
-                one_month(),
+                env.one_step(),
             ),
         ),
         (
             "series_6_months",
-            env.case(env.ndvi(), Area::Extent, six_months()),
+            env.case(env.raster(), Area::Extent, env.six_steps()),
         ),
         (
             "mean_6_months",
-            env.case(six_month_mean(env.ndvi()), Area::Extent, six_months()),
+            env.case(
+                env.six_step_mean(env.raster()),
+                Area::Extent,
+                env.six_steps(),
+            ),
         ),
         // the half-year steps of the mean split at the monthly steps of the series
         (
             "stack_month_and_half_year",
             env.case(
-                stack(vec![env.ndvi(), six_month_mean(env.ndvi())]),
+                stack(vec![env.raster(), env.six_step_mean(env.raster())]),
                 Area::Extent,
-                one_month(),
+                env.one_step(),
             ),
         ),
     ];

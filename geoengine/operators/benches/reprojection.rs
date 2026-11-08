@@ -1,4 +1,4 @@
-//! Raster reprojection of the NDVI test data (EPSG:4326) to EPSG:3857: the whole extent, a
+//! Raster reprojection of the bench raster (see `common`; NDVI in EPSG:4326) to EPSG:3857: the whole extent, a
 //! chain of two reprojections, a WMS tile and the cases where sub-queries of a tile share work:
 //! several bands of a tile, and several time steps of a single tile, like a time slider.
 //!
@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{Area, Env, one_month, six_months, stack};
+use common::{Area, Env, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::{
     primitives::{Coordinate2D, SpatialPartition2D},
@@ -38,54 +38,57 @@ fn mercator(source: TypedRasterOperator) -> TypedRasterOperator {
 fn reprojection(c: &mut Criterion) {
     let env = Env::new();
     let mut cases = vec![
-        // a WMS GetMap tile at zoom 4 over Europe
+        // a WMS GetMap tile at zoom 4 over Europe; the EPSG:3857 coordinates assume global data
         (
             "wms_tile",
             env.case(
-                mercator(env.ndvi()),
+                mercator(env.raster()),
                 Area::Part(SpatialPartition2D::new_unchecked(
                     Coordinate2D::new(0., 7_514_065.6),
                     Coordinate2D::new(2_504_688.5, 5_009_377.1),
                 )),
-                one_month(),
+                env.one_step(),
             ),
         ),
-        // a time slider on the single output tile that contains 10°E 50°N
+        // a time slider on the single output tile that contains 10°E 50°N: a 2 m square, so the
+        // query selects exactly that tile
         (
             "tile_time6",
             env.case(
-                mercator(env.ndvi()),
+                mercator(env.raster()),
                 Area::Part(SpatialPartition2D::new_unchecked(
                     Coordinate2D::new(1_113_194., 6_446_277.),
                     Coordinate2D::new(1_113_196., 6_446_275.),
                 )),
-                six_months(),
+                env.six_steps(),
             ),
         ),
     ];
-    // whole-extent cases take up to a second per iteration
+    // Local only (`just backend bench`), skipped in CI (`GEOENGINE_BENCH_CI`): the whole-extent
+    // cases take up to a second per iteration, beyond the ~60 ms budget of a CI case. The tile
+    // cases above cover the reprojection in CI.
     if !common::ci() {
         cases.extend([
             (
                 "extent",
-                env.case(mercator(env.ndvi()), Area::Extent, one_month()),
+                env.case(mercator(env.raster()), Area::Extent, env.one_step()),
             ),
             // the inner reprojection runs once per sub-query of the outer one
             (
                 "chained",
                 env.case(
-                    reproject(mercator(env.ndvi()), SpatialReference::epsg_4326()),
+                    reproject(mercator(env.raster()), SpatialReference::epsg_4326()),
                     Area::Extent,
-                    one_month(),
+                    env.one_step(),
                 ),
             ),
             // sub-queries of one tile that differ only by band
             (
                 "bands3",
                 env.case(
-                    mercator(stack(vec![env.ndvi(), env.ndvi(), env.ndvi()])),
+                    mercator(stack(vec![env.raster(), env.raster(), env.raster()])),
                     Area::Extent,
-                    one_month(),
+                    env.one_step(),
                 ),
             ),
         ]);

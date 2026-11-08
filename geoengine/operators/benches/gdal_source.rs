@@ -1,4 +1,4 @@
-//! Reads of the GDAL source through the GDAL worker pool: warm reads and re-opens, overview reads,
+//! Reads of the GDAL source of the bench raster (see `common`) through the GDAL worker pool: warm reads and re-opens, overview reads,
 //! empty tiles, many small concurrent queries like a map client and queries that are dropped
 //! while their reads are queued.
 //!
@@ -13,7 +13,7 @@
 
 mod common;
 
-use common::{Area, Env, one_month};
+use common::{Area, Env};
 use criterion::{Criterion, criterion_group, criterion_main};
 use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::raster::GridBoundingBox2D;
@@ -44,7 +44,7 @@ fn tile_queries(case: &common::Case) -> Vec<geoengine_datatypes::primitives::Ras
 
 fn gdal_source(c: &mut Criterion) {
     let env = Env::new();
-    let extent = env.case(env.ndvi(), Area::Extent, one_month());
+    let extent = env.case(env.raster(), Area::Extent, env.one_step());
     let overview = env.case(
         Downsampling {
             params: DownsamplingParams {
@@ -52,13 +52,17 @@ fn gdal_source(c: &mut Criterion) {
                 output_resolution: DownsamplingResolution::Fraction(Fraction { x: 4., y: 4. }),
                 output_origin_reference: None,
             },
-            sources: SingleRasterSource { raster: env.ndvi() },
+            sources: SingleRasterSource {
+                raster: env.raster(),
+            },
         }
         .typed(),
         Area::Extent,
-        one_month(),
+        env.one_step(),
     );
-    let empty = env.case(env.ndvi(), Area::ExtentTimes(3), one_month());
+    let empty = env.case(env.raster(), Area::ExtentTimes(3), env.one_step());
+    // one query per 512 px tile of the extent; the tiles of `Env` are 512 px, so each query
+    // returns exactly one tile
     let tiles = tile_queries(&extent);
 
     let mut group = common::group(c, "gdal_source");
@@ -66,7 +70,8 @@ fn gdal_source(c: &mut Criterion) {
     env.bench(&mut group, "extent_warm", &extent);
 
     // each iteration closes the datasets of the workers and opens the file again, so this is the
-    // open and header cost; the file stays in the page cache, so it is not a cold disk
+    // open and header cost; the file stays in the page cache, so it is not a cold disk.
+    // `iter_custom`, so that clearing the caches is not part of the measured time
     extent.print("extent_reopen");
     group.bench_function("extent_reopen", |b| {
         b.iter_custom(|iters| {
@@ -98,8 +103,10 @@ fn gdal_source(c: &mut Criterion) {
         });
     });
 
-    // shortcut: not in CI, the pool answers with an intermittent `WorkerPanic` (no worker
-    // panics) in about one of three runs, until the dispatcher handles abandoned reads
+    // Local only (`just backend bench`), skipped in CI (`GEOENGINE_BENCH_CI`): the case fails.
+    // shortcut: the pool answers with an intermittent `WorkerPanic` (no worker panics) in about
+    // one of three runs; move it out of this `if` into CI once the dispatcher handles abandoned
+    // reads
     if !common::ci() {
         // clients pan away: 8 extent queries stop after their first tile and drop their queued reads,
         // then one extent query must not wait for them

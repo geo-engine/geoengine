@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{Area, Env, count_tiles, one_month, stack};
+use common::{Area, Env, count_tiles, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
 use geoengine_operators::{
@@ -37,23 +37,25 @@ fn expression(
 
 fn expression_bench(c: &mut Criterion) {
     let env = Env::new();
-    let scale = || expression(env.ndvi(), "A / 255", false);
-    let extent = env.case(scale(), Area::Extent, one_month());
+    let scale = || expression(env.raster(), "A / 255", false);
+    let extent = env.case(scale(), Area::Extent, env.one_step());
     let bands2 = env.case(
         expression(
-            stack(vec![env.ndvi(), env.ndvi()]),
+            stack(vec![env.raster(), env.raster()]),
             "(A - B) / (A + B + 1)",
             false,
         ),
         Area::Extent,
-        one_month(),
+        env.one_step(),
     );
     // 8 of 9 tiles are empty, but `map_no_data` must compute them
     let map_no_data = env.case(
-        expression(env.ndvi(), "if A IS NODATA { 0 } else { A }", true),
+        expression(env.raster(), "if A IS NODATA { 0 } else { A }", true),
         Area::ExtentTimes(3),
-        one_month(),
+        env.one_step(),
     );
+    // the top left 512 px tile of the extent, so that the query part of `initialize_and_tile`
+    // stays small next to the initialization
     let first_tile = extent.query.select_spatial_bounds(
         GridBoundingBox2D::new_min_max(
             extent.query.spatial_bounds().y_min(),
@@ -73,6 +75,8 @@ fn expression_bench(c: &mut Criterion) {
         env.bench(&mut group, name, case);
     }
 
+    // a new operator per iteration, like a request of a processing graph; the expression was
+    // compiled once by the setup of `extent`, so this measures the reuse, not the compilation
     group.bench_function("initialize_and_tile", |b| {
         b.to_async(&env.runtime).iter(|| async {
             let processor = scale()
