@@ -42,6 +42,7 @@ use geoengine_operators::{
         wrapper::InitializedOperatorWrapper,
     },
     mock::MockDatasetDataSourceLoadingInfo,
+    processing::ExpressionEnvironment,
     source::{
         GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
         OgrSourceDataset,
@@ -278,12 +279,14 @@ where
     new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     default_cache_ttl: CacheTtlSeconds,
     ort_environment: OrtEnvironment,
+    expression_environment: ExpressionEnvironment,
 }
 
 impl<D> ExecutionContextImpl<D>
 where
     D: DatasetDb + LayerProviderDb,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         db: D,
         thread_pool: Arc<ThreadPool>,
@@ -292,6 +295,7 @@ where
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         default_cache_ttl: CacheTtlSeconds,
         ort_environment: OrtEnvironment,
+        expression_environment: ExpressionEnvironment,
     ) -> Self {
         Self {
             db,
@@ -301,6 +305,7 @@ where
             new_raster_cache,
             default_cache_ttl,
             ort_environment,
+            expression_environment,
         }
     }
 }
@@ -447,6 +452,10 @@ where
 
     fn ort_environment(&self) -> &OrtEnvironment {
         &self.ort_environment
+    }
+
+    fn expression_environment(&self) -> &ExpressionEnvironment {
+        &self.expression_environment
     }
 }
 

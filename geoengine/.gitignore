@@ -17,6 +17,7 @@ Settings.toml
 
 # Data
 upload/
+expression_workspace/
 test_upload/
 services/test_upload/
 **/*.gpkg-shm

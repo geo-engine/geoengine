@@ -12,12 +12,13 @@ use crate::machine_learning::onnx_util::OrtEnvironment;
 use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
+use crate::processing::ExpressionEnvironment;
 use crate::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess, WorkerConfig};
 use crate::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
 };
-use crate::util::test::test_ort_environment;
+use crate::util::test::{test_expression_environment, test_ort_environment};
 use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
@@ -80,6 +81,9 @@ pub trait ExecutionContext: Send
 
     /// The ONNX Runtime environment for creating ML model sessions.
     fn ort_environment(&self) -> &OrtEnvironment;
+
+    /// The environment for compiling expressions and sharing their libraries.
+    fn expression_environment(&self) -> &ExpressionEnvironment;
 }
 
 #[async_trait]
@@ -119,6 +123,7 @@ pub struct MockExecutionContext {
     pub default_cache_ttl: CacheTtlSeconds,
     pub gdal_process_pool: Arc<GdalProcessPool>,
     pub ort_environment: OrtEnvironment,
+    pub expression_environment: ExpressionEnvironment,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -132,6 +137,7 @@ impl TestDefault for MockExecutionContext {
             default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
             ort_environment: test_ort_environment(),
+            expression_environment: test_expression_environment(),
         }
     }
 }
@@ -156,6 +162,7 @@ impl MockExecutionContext {
                 WorkerConfig::default(),
             ),
             ort_environment: test_ort_environment(),
+            expression_environment: test_expression_environment(),
         }
     }
 
@@ -169,6 +176,7 @@ impl MockExecutionContext {
             default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
             ort_environment: test_ort_environment(),
+            expression_environment: test_expression_environment(),
         }
     }
 
@@ -185,6 +193,7 @@ impl MockExecutionContext {
             default_cache_ttl: CacheTtlSeconds::new(0),
             gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
             ort_environment: test_ort_environment(),
+            expression_environment: test_expression_environment(),
         }
     }
 
@@ -324,6 +333,10 @@ impl ExecutionContext for MockExecutionContext {
 
     fn ort_environment(&self) -> &OrtEnvironment {
         &self.ort_environment
+    }
+
+    fn expression_environment(&self) -> &ExpressionEnvironment {
+        &self.expression_environment
     }
 }
 
@@ -535,6 +548,10 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 
     fn ort_environment(&self) -> &OrtEnvironment {
         self.inner.ort_environment()
+    }
+
+    fn expression_environment(&self) -> &ExpressionEnvironment {
+        self.inner.expression_environment()
     }
 }
 

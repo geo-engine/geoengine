@@ -44,18 +44,6 @@ impl ExpressionAst {
         self.to_token_stream().to_string()
     }
 
-    /// Outputs the generated code (file) as a formatted string.
-    pub fn pretty_code(&self) -> String {
-        match syn::parse2(self.to_token_stream()) {
-            Ok(code) => prettyplease::unparse(&code),
-            Err(e) => {
-                // fallback to unformatted code
-                tracing::error!("Cannot parse expression: {e}");
-                self.code()
-            }
-        }
-    }
-
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
