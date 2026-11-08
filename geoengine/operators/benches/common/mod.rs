@@ -58,10 +58,13 @@ use geoengine_operators::{
     },
     meta::quota::{QuotaCheck, QuotaTracking},
     processing::{
-        Aggregation, BandFilter, BandFilterParams, BandsByNameOrIndex, DeriveOutRasterSpecsSource,
-        Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Expression,
-        ExpressionParams, Fraction, RasterStacker, RasterStackerParams, Reprojection,
-        ReprojectionParams, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        AggregateFunctionParams, Aggregation, BandFilter, BandFilterParams, BandsByNameOrIndex,
+        DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
+        DownsamplingResolution, Expression, ExpressionParams, Fraction, Interpolation,
+        InterpolationMethod, InterpolationParams, InterpolationResolution, NeighborhoodAggregate,
+        NeighborhoodAggregateParams, NeighborhoodParams, RasterScaling, RasterScalingParams,
+        RasterStacker, RasterStackerParams, Reprojection, ReprojectionParams, ScalingMode,
+        SlopeOffsetSelection, TemporalRasterAggregation, TemporalRasterAggregationParameters,
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
@@ -120,6 +123,74 @@ pub fn downsample(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperat
                 y: factor,
             }),
             output_origin_reference: None,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// A GDAL source of `data`.
+pub fn gdal_source(data: NamedData) -> TypedRasterOperator {
+    GdalSource {
+        params: GdalSourceParameters::new(data),
+    }
+    .typed()
+}
+
+/// `value * slope + offset` with constant slope and offset.
+pub fn scale(raster: TypedRasterOperator, slope: f64, offset: f64) -> TypedRasterOperator {
+    RasterScaling {
+        params: RasterScalingParams {
+            slope: SlopeOffsetSelection::Constant { value: slope },
+            offset: SlopeOffsetSelection::Constant { value: offset },
+            output_measurement: None,
+            scaling_mode: ScalingMode::MulSlopeAddOffset,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// The sum over a `size` × `size` neighbourhood of each pixel.
+pub fn neighborhood_sum(raster: TypedRasterOperator, size: usize) -> TypedRasterOperator {
+    NeighborhoodAggregate {
+        params: NeighborhoodAggregateParams {
+            neighborhood: NeighborhoodParams::Rectangle {
+                dimensions: [size, size],
+            },
+            aggregate_function: AggregateFunctionParams::Sum,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// Bilinear interpolation to `factor` times the resolution in x and y.
+pub fn interpolate(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperator {
+    Interpolation {
+        params: InterpolationParams {
+            interpolation: InterpolationMethod::BiLinear,
+            output_resolution: InterpolationResolution::Fraction(Fraction {
+                x: factor,
+                y: factor,
+            }),
+            output_origin_reference: None,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// The mean over windows of `window`, ignoring no data.
+pub fn mean(raster: TypedRasterOperator, window: TimeStep) -> TypedRasterOperator {
+    TemporalRasterAggregation {
+        params: TemporalRasterAggregationParameters {
+            aggregation: Aggregation::Mean {
+                ignore_no_data: true,
+            },
+            window,
+            window_reference: None,
+            output_type: None,
         },
         sources: SingleRasterSource { raster },
     }
@@ -312,10 +383,7 @@ impl Env {
 
     /// A GDAL source of the raster dataset.
     pub fn raster(&self) -> TypedRasterOperator {
-        GdalSource {
-            params: GdalSourceParameters::new(self.raster.clone()),
-        }
-        .typed()
+        gdal_source(self.raster.clone())
     }
 
     /// The 4th time step of the raster: 2014-04-01 for NDVI.
@@ -330,18 +398,7 @@ impl Env {
 
     /// The mean over windows of six time steps of the raster, ignoring no data.
     pub fn six_step_mean(&self, raster: TypedRasterOperator) -> TypedRasterOperator {
-        TemporalRasterAggregation {
-            params: TemporalRasterAggregationParameters {
-                aggregation: Aggregation::Mean {
-                    ignore_no_data: true,
-                },
-                window: self.step * 6,
-                window_reference: None,
-                output_type: None,
-            },
-            sources: SingleRasterSource { raster },
-        }
-        .typed()
+        mean(raster, self.step * 6)
     }
 
     /// Initializes the operator and queries all of its bands in `area` and `time`.

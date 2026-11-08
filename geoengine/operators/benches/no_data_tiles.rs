@@ -22,12 +22,11 @@
 
 mod common;
 
-use common::{Area, Env, count_tiles, downsample, expression};
-use geoengine_datatypes::dataset::NamedData;
+use common::{Area, Env, count_tiles, downsample, expression, gdal_source};
 use geoengine_datatypes::primitives::{DateTime, TimeInterval};
 use geoengine_operators::{
-    engine::{RasterOperator, TypedRasterOperator},
-    source::{GdalMetaDataStatic, GdalSource, GdalSourceParameters},
+    engine::TypedRasterOperator,
+    source::GdalMetaDataStatic,
     util::gdal::{
         create_ndvi_meta_data, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
     },
@@ -36,13 +35,6 @@ use std::{path::Path, time::Instant};
 
 const NDVI_RUNS: usize = 20;
 const DEFAULT_COG_RUNS: usize = 5;
-
-fn source(data: NamedData) -> TypedRasterOperator {
-    GdalSource {
-        params: GdalSourceParameters::new(data),
-    }
-    .typed()
-}
 
 /// One benchmark case: a processing graph and the query area.
 struct Case {
@@ -136,7 +128,7 @@ fn main() {
     let mut cases = vec![
         Case {
             name: "ndvi_ocean_as_no_data_expression",
-            operator: expression(source(ndvi_ocean_no_data), "A / 255", false),
+            operator: expression(gdal_source(ndvi_ocean_no_data), "A / 255", false),
             area: Area::Extent,
             time: ndvi_time,
             runs: NDVI_RUNS,
@@ -173,14 +165,14 @@ fn main() {
 
         cases.push(Case {
             name: "s2_scene_reflectance",
-            operator: expression(source(s2_reflectance), "A / 10000", false),
+            operator: expression(gdal_source(s2_reflectance), "A / 10000", false),
             area: Area::Extent,
             time: cog_time,
             runs: cog_runs,
         });
         cases.push(Case {
             name: "s2_3x3_scenes_downsample_60m",
-            operator: downsample(source(s2_downsample), 6.),
+            operator: downsample(gdal_source(s2_downsample), 6.),
             area: Area::ExtentTimes(3),
             time: cog_time,
             runs: cog_runs,
