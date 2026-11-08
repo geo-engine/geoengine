@@ -163,6 +163,9 @@ fn with_projector<R>(
         static PROJECTORS: RefCell<VecDeque<DefaultCoordinateProjector>> = const { RefCell::new(VecDeque::new()) };
     }
 
+    // The borrow lasts only for this call, and `f` never calls `with_projector` again on this
+    // thread: the projectors don't use Rayon, so no work stealing runs another chunk here meanwhile.
+    // A nested call would panic on the `RefCell`, not corrupt the cache.
     PROJECTORS.with_borrow_mut(|projectors| {
         let position = projectors
             .iter()
@@ -254,7 +257,9 @@ impl InputPixelIndicesCache {
     const CAPACITY: usize = 4;
 
     fn get(&self, tile_position: GridIdx2D) -> Arc<OnceCell<InputPixelIndices>> {
-        // the entries stay valid if another thread panicked while holding the lock
+        // The lock is held only to look up at most `CAPACITY` entries, never across an `await` or
+        // the computation of the indices, so it cannot deadlock and is barely contended.
+        // The entries stay valid if another thread panicked while holding the lock.
         let mut entries = self.0.lock().unwrap_or_else(PoisonError::into_inner);
 
         if let Some((_, cell)) = entries.iter().find(|(pos, _)| *pos == tile_position) {
@@ -392,6 +397,10 @@ where
             return Ok(accu);
         }
 
+        // Only the first caller computes the indices; concurrent sub-queries of the tile await it
+        // without blocking a thread. The computation never waits for another sub-query, so it cannot
+        // deadlock. If it fails or its future is dropped (an aborted query), the cell stays empty and
+        // the next caller retries.
         let (pool, spec) = (accu.pool.clone(), accu.spec);
         accu.indices
             .get_or_try_init(|| async move {
