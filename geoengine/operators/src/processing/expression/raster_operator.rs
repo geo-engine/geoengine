@@ -92,11 +92,13 @@ impl RasterOperator for Expression {
             // allow only idents
             |b| canonicalize_name(&b.name),
         );
-        let code = self.params.expression.clone();
+        let code = self.params.expression;
 
         // users decide about the length of the expression, so it must not block a worker
-        let expression = crate::util::spawn_blocking(move || {
-            ExpressionParser::new(&parameters, DataType::Number)?.parse(&function_name, &code)
+        let (expression, code) = crate::util::spawn_blocking(move || {
+            ExpressionParser::new(&parameters, DataType::Number)?
+                .parse(&function_name, &code)
+                .map(|expression| (expression, code))
         })
         .await
         .map_err(RasterExpressionError::from)?
@@ -125,7 +127,7 @@ impl RasterOperator for Expression {
             path,
             result_descriptor,
             source,
-            expression_string: self.params.expression,
+            expression_string: code,
             expression,
             map_no_data: self.params.map_no_data,
         };

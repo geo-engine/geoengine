@@ -60,14 +60,16 @@ impl RasterOperator for BandwiseExpression {
 
         let parameters = vec![Parameter::Number("x".into())];
 
-        let code = self.params.expression.clone();
+        let params = self.params;
 
         // users decide about the length of the expression, so it must not block a worker
-        let expression = crate::util::spawn_blocking(move || {
-            ExpressionParser::new(&parameters, DataType::Number)?.parse(
-                "expression", // TODO: what is the name used for?
-                &code,
-            )
+        let (expression, params) = crate::util::spawn_blocking(move || {
+            ExpressionParser::new(&parameters, DataType::Number)?
+                .parse(
+                    "expression", // TODO: what is the name used for?
+                    &params.expression,
+                )
+                .map(|expression| (expression, params))
         })
         .await
         .map_err(RasterExpressionError::from)?
@@ -82,11 +84,11 @@ impl RasterOperator for BandwiseExpression {
         Ok(Box::new(InitializedBandwiseExpression {
             name,
             path,
-            params: self.params.clone(),
+            map_no_data: params.map_no_data,
+            params,
             result_descriptor,
             source,
             expression,
-            map_no_data: self.params.map_no_data,
         }))
     }
 

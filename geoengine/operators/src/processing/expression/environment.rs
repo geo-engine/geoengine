@@ -30,7 +30,7 @@ struct Inner {
     /// It contains the name and signature of the function, so the libraries of equal keys are interchangeable.
     ///
     /// A removed library stays loaded until its last user drops it.
-    libraries: Cache<String, Arc<LinkedExpression>>,
+    libraries: Cache<Arc<str>, Arc<LinkedExpression>>,
     dependencies: OnceCell<Arc<ExpressionDependencies>>,
     maintenance: Once,
     compilations: Arc<Semaphore>,
@@ -68,10 +68,11 @@ impl ExpressionEnvironment {
         let libraries = Cache::builder()
             .max_capacity(config.max_cache_size_in_bytes)
             .time_to_idle(config.idle_ttl)
-            .weigher(|_code: &String, library: &Arc<LinkedExpression>| {
+            .weigher(|_code: &Arc<str>, library: &Arc<LinkedExpression>| {
                 u32::try_from(library.size_in_bytes()).unwrap_or(u32::MAX)
             })
-            // unloading and deleting is slow, so it must not block an async worker
+            // unloading and deleting is slow, so it must not block an async worker;
+            // a library still in use is unloaded wherever its last user drops it
             .eviction_listener(|_code, library, _cause| {
                 crate::util::spawn_blocking(move || drop(library));
             })
@@ -105,14 +106,14 @@ impl ExpressionEnvironment {
     ) -> Result<Arc<LinkedExpression>, Arc<LinkExpressionError>> {
         self.0.maintenance.call_once(|| spawn_maintenance(&self.0));
 
-        let code = ast.code();
+        // shared by the key and the compilation
+        let code: Arc<str> = ast.code().into();
 
         self.0
             .libraries
-            .try_get_with_by_ref(&code, async {
+            .try_get_with(code.clone(), async {
                 let dependencies = self.0.dependencies().await?.clone();
                 let permit = self.0.compilations.clone().acquire_owned().await?;
-                let code = code.clone();
                 let library = crate::util::spawn_blocking(move || {
                     // held until the compiler is done, even if the request gets cancelled
                     let _permit = permit;

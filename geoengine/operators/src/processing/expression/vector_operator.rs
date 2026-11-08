@@ -178,19 +178,18 @@ impl VectorOperator for VectorExpression {
             expression_input_names.push(variable_name);
         }
 
-        let code = self.params.expression.clone();
-        let geometry_column_name = self.params.geometry_column_name.clone();
-        let parameters = expression_input_names.clone();
+        let params = self.params;
 
         // users decide about the length of the expression, so it must not block a worker
-        let expression_ast = crate::util::spawn_blocking(move || {
+        let (expression_ast, params) = crate::util::spawn_blocking(move || {
             parse_expression(
-                &code,
-                geometry_column_name,
+                &params.expression,
+                &params.geometry_column_name,
                 expression_geom_input_type,
-                &parameters,
+                &expression_input_names,
                 expression_output_type,
             )
+            .map(|expression_ast| (expression_ast, params))
         })
         .await
         .map_err(VectorExpressionError::from)??;
@@ -204,12 +203,12 @@ impl VectorOperator for VectorExpression {
         let initialized_operator = InitializedVectorExpression {
             name,
             path,
-            params: self.params.clone(),
+            input_columns: params.input_columns.clone(),
+            output_column: params.output_column.clone(),
+            params,
             result_descriptor,
             features: initialized_source.vector,
             expression,
-            input_columns: self.params.input_columns,
-            output_column: self.params.output_column,
         };
 
         Ok(initialized_operator.boxed())
@@ -283,7 +282,7 @@ fn insert_new_column(
 
 fn parse_expression(
     expression_code: &str,
-    geom_name: String,
+    geom_name: &str,
     geom_type: VectorDataType,
     parameters: &[String],
     output_type: DataType,
