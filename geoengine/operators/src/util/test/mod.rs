@@ -2,6 +2,7 @@ use super::Result;
 use crate::{
     engine::{ExecutionContext, ProcessingGraphOperatorPath, QueryContext, TypedRasterOperator},
     machine_learning::onnx_util::{OrtEnvironment, create_ort_environment},
+    processing::{ExpressionCacheConfig, ExpressionEnvironment},
     util::gdal::gdal_open_dataset,
 };
 use futures::StreamExt;
@@ -14,8 +15,10 @@ use geoengine_datatypes::{
     },
     util::test::assert_eq_two_list_of_tiles_u8,
 };
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 mod ascii_raster;
 
@@ -32,6 +35,27 @@ static TEST_ORT_ENVIRONMENT: LazyLock<OrtEnvironment> = LazyLock::new(|| {
 /// Returns the ONNX Runtime environment shared by all tests of this process.
 pub fn test_ort_environment() -> OrtEnvironment {
     TEST_ORT_ENVIRONMENT.clone()
+}
+
+/// Compiling the expression dependencies takes a while, but tests create many contexts.
+/// Only for tests: the server creates one [`ExpressionEnvironment`] per application and passes it on.
+static TEST_EXPRESSION_ENVIRONMENT: LazyLock<ExpressionEnvironment> =
+    LazyLock::new(|| ExpressionEnvironment::new(test_expression_cache_config()));
+
+/// The workspace is in the temp directory, so that tests do not write into the repository.
+pub fn test_expression_cache_config() -> ExpressionCacheConfig {
+    ExpressionCacheConfig {
+        idle_ttl: Duration::from_mins(15),
+        sweep_interval: Duration::from_secs(30),
+        max_cache_size_in_bytes: 1024 * 1024 * 1024,
+        max_concurrent_compilations: const { NonZeroUsize::new(8).expect("8 is not zero") },
+        workspace_path: std::env::temp_dir(),
+    }
+}
+
+/// Returns the expression environment shared by all tests of this process.
+pub fn test_expression_environment() -> ExpressionEnvironment {
+    TEST_EXPRESSION_ENVIRONMENT.clone()
 }
 
 pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryContext>(

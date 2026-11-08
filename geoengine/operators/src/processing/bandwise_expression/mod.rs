@@ -16,13 +16,10 @@ use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, Spati
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridOrEmpty2D, MapElementsParallel, Pixel, RasterDataType, RasterTile2D,
 };
-use geoengine_expression::{
-    DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
-};
+use geoengine_expression::{DataType, ExpressionParser, LinkedExpression, Parameter};
 use serde::{Deserialize, Serialize};
 
 use super::RasterExpressionError;
-use super::expression::get_expression_dependencies;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,22 +60,35 @@ impl RasterOperator for BandwiseExpression {
 
         let parameters = vec![Parameter::Number("x".into())];
 
-        let expression = ExpressionParser::new(&parameters, DataType::Number)
-            .map_err(RasterExpressionError::from)?
-            .parse(
-                "expression", // TODO: what is the name used for?
-                &self.params.expression,
-            )
+        let params = self.params;
+
+        // users decide about the length of the expression, so it must not block a worker
+        let (expression, params) = crate::util::spawn_blocking(move || {
+            ExpressionParser::new(&parameters, DataType::Number)?
+                .parse(
+                    "expression", // TODO: what is the name used for?
+                    &params.expression,
+                )
+                .map(|expression| (expression, params))
+        })
+        .await
+        .map_err(RasterExpressionError::from)?
+        .map_err(RasterExpressionError::from)?;
+
+        let expression = context
+            .expression_environment()
+            .link(expression)
+            .await
             .map_err(RasterExpressionError::from)?;
 
         Ok(Box::new(InitializedBandwiseExpression {
             name,
             path,
-            params: self.params.clone(),
+            map_no_data: params.map_no_data,
+            params,
             result_descriptor,
             source,
             expression,
-            map_no_data: self.params.map_no_data,
         }))
     }
 
@@ -91,7 +101,7 @@ pub struct InitializedBandwiseExpression {
     path: ProcessingGraphOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
-    expression: ExpressionAst,
+    expression: Arc<LinkedExpression>,
     map_no_data: bool,
 }
 
@@ -105,16 +115,7 @@ impl InitializedRasterOperator for InitializedBandwiseExpression {
 
         let output_type = self.result_descriptor().data_type;
 
-        // TODO: spawn a blocking task for the compilation process
-        let expression_dependencies = get_expression_dependencies()
-            .map_err(|source| RasterExpressionError::Dependencies { source })?;
-
-        let expression = LinkedExpression::new(
-            self.expression.name(),
-            &self.expression.code(),
-            expression_dependencies,
-        )
-        .map_err(RasterExpressionError::from)?;
+        let expression = self.expression.clone();
 
         Ok(call_generic_raster_processor!(
             output_type,
@@ -169,13 +170,13 @@ where
     pub fn new(
         source: BoxRasterQueryProcessor<f64>,
         result_descriptor: RasterResultDescriptor,
-        expression: LinkedExpression,
+        expression: Arc<LinkedExpression>,
         map_no_data: bool,
     ) -> Self {
         Self {
             source,
             result_descriptor,
-            expression: Arc::new(expression),
+            expression,
             map_no_data,
             phantom: Default::default(),
         }

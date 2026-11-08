@@ -19,7 +19,7 @@ use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::{
     engine::ChunkByteSize, machine_learning::onnx_util::OrtEnvironment,
-    util::gdal::register_gdal_drivers_from_list,
+    processing::ExpressionEnvironment, util::gdal::register_gdal_drivers_from_list,
 };
 use std::{net::SocketAddr, path::PathBuf};
 use tracing_actix_web::TracingLogger;
@@ -174,6 +174,13 @@ async fn start_postgres(
         let db_config: DatabaseConnectionConfig =
             config::get_config_element::<config::Postgres>()?.into();
 
+        let expression_environment =
+            ExpressionEnvironment::new(config::get_config_element::<config::Expression>()?.into());
+        expression_environment
+            .initialize()
+            .await
+            .expect("successful compilation process is necessary for expression operators to work");
+
         let ctx = PostgresContext::new_with_data(
             db_config.pg_config(),
             NoTls,
@@ -188,6 +195,7 @@ async fn start_postgres(
             quota_config,
             gdal_process_pool_config,
             OrtEnvironment::default(),
+            expression_environment,
         )
         .await?;
 

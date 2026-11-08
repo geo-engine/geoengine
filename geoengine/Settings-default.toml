@@ -41,6 +41,20 @@ tile_shape_pixels_y = 512
 [query_context]
 chunk_byte_size = 1048576 # TODO: find reasonable default
 
+[expression]
+# seconds a compiled expression stays in the cache without being requested; running queries keep
+# theirs loaded in any case
+library_idle_ttl_seconds = 900
+# seconds between cleanup runs
+library_sweep_interval_seconds = 30
+# cache size for compiled expressions in MB, each takes about 4.4 MB in the workspace directory
+library_cache_size_in_mb = 1_024
+# directory for the build of the dependencies and the compiled expressions, about 90 MB + cache size;
+# avoid the system's temp directory: its cleanup can delete files of a running server
+workspace_path = "expression_workspace"
+# max. expressions to compile at the same time, further requests wait; each runs one `rustc` process
+max_concurrent_compilations = 8
+
 [upload]
 path = "upload"
 
