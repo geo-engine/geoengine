@@ -55,40 +55,44 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 /// Returns a reference to the cached `gdalsource-process` path.
 /// The detection logic runs exactly once on the very first call.
 fn get_gdalsource_path() -> &'static Path {
-    GDALSOURCE_PROCESS_PATH.get_or_init(|| {
-        // 1. Try the environment variable path first
-        if let Ok(env_path) = env::var("GDALSOURCE_PROCESS_PATH")
-            && !env_path.is_empty()
-        {
-            let path = PathBuf::from(env_path);
-            if path.is_file() {
-                tracing::debug!(
-                    "Using gdalsource-process path from environment variable: {}",
-                    path.display()
-                );
-                return path;
-            }
+    GDALSOURCE_PROCESS_PATH
+        .get_or_init(|| sibling_binary_path("gdalsource-process", "GDALSOURCE_PROCESS_PATH"))
+}
+
+/// Resolves the path of a helper binary: the file in `env_var` if it exists,
+/// otherwise the executable `name` next to the current executable (or its parent for `deps/`).
+pub fn sibling_binary_path(name: &str, env_var: &str) -> PathBuf {
+    // 1. Try the environment variable path first
+    if let Ok(env_path) = env::var(env_var)
+        && !env_path.is_empty()
+    {
+        let path = PathBuf::from(env_path);
+        if path.is_file() {
+            tracing::debug!(
+                "Using {name} path from environment variable: {}",
+                path.display()
+            );
+            return path;
         }
+    }
 
-        // 2. Fallback detection logic
-        let mut exe_path = env::current_exe()
-            .unwrap_or_else(|_| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    // 2. Fallback detection logic
+    let mut exe_path = env::current_exe()
+        .unwrap_or_else(|_| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-        if exe_path.is_file() {
-            exe_path.pop();
-        }
+    if exe_path.is_file() {
+        exe_path.pop();
+    }
 
-        if exe_path.file_name().is_some_and(|name| name == "deps") {
-            exe_path.pop();
-        }
+    if exe_path.file_name().is_some_and(|dir| dir == "deps") {
+        exe_path.pop();
+    }
 
-        let binary_name = format!("gdalsource-process{}", std::env::consts::EXE_SUFFIX);
-        exe_path.push(binary_name);
+    exe_path.push(format!("{name}{}", std::env::consts::EXE_SUFFIX));
 
-        tracing::debug!("Detected gdalsource-process path: {}", exe_path.display());
+    tracing::debug!("Detected {name} path: {}", exe_path.display());
 
-        exe_path
-    })
+    exe_path
 }
 
 pub struct ChildProcessGuard {
@@ -199,12 +203,25 @@ impl Default for OpenTelemetryConfig {
 pub fn spawn_ipc_server_process<S, R>(
     worker_config: &WorkerConfig,
 ) -> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
+    spawn_ipc_process(get_gdalsource_path(), worker_config)
+}
+
+/// Spawns the helper binary `exe_path` and establishes the IPC channels with it,
+/// like [`spawn_ipc_server_process`] does for the `gdalsource-process`.
+///
+/// # Errors
+/// Returns an `IpcProcessError` if the process fails to start, or if the IPC channels fail to establish communication.
+///
+/// # Panics
+/// Panics if the `WorkerConfig` cannot be serialized, which should not happen.
+pub fn spawn_ipc_process<S, R>(
+    exe_path: &Path,
+    worker_config: &WorkerConfig,
+) -> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
     let (server, token) = ipc::IpcOneShotServer::<(IpcSender<S>, IpcReceiver<R>)>::new()
         .map_err(IpcProcessError::from)?;
 
     tracing::debug!("spawn_ipc_server token: {}", token);
-
-    let exe_path = get_gdalsource_path();
 
     let config_json =
         serde_json::to_string(worker_config).expect("WorkerConfig should always serialize");
