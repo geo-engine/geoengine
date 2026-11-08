@@ -323,7 +323,7 @@ impl<D, T, C: TileCompression> CompressedMaskedGrid<D, T, C> {
     pub fn compress_masked_grid(grid: &MaskedGrid<D, T>) -> Self
     where
         D: Clone + GridSize + PartialEq,
-        T: Copy,
+        T: bytemuck::NoUninit,
     {
         let grid_data_compressed = C::compress(&grid.inner_grid.data);
         let grid_mask_compressed = C::compress(&grid.validity_mask.data);
@@ -340,12 +340,16 @@ impl<D, T, C: TileCompression> CompressedMaskedGrid<D, T, C> {
     pub fn decompress_masked_grid(&self) -> Result<MaskedGrid<D, T>, CacheError>
     where
         D: Clone + GridSize + PartialEq,
-        T: Copy,
+        T: bytemuck::Pod,
     {
         let elements = self.shape().number_of_elements();
 
         let grid_data = C::decompress(&self.data, elements)?;
-        let grid_mask = C::decompress(&self.mask, elements)?;
+        // `bool` is not `Pod`, as only 0 and 1 are valid; collecting maps the bytes in place
+        let grid_mask = C::decompress::<u8>(&self.mask, elements)?
+            .into_iter()
+            .map(|valid| valid != 0)
+            .collect();
 
         let masked_grid = MaskedGrid {
             inner_grid: Grid {
@@ -401,7 +405,7 @@ impl<D, T, C: TileCompression> CompressedGridOrEmpty<D, T, C> {
     pub fn compress_grid(grid: &GridOrEmpty<D, T>) -> Self
     where
         D: Clone + GridSize + PartialEq,
-        T: Copy,
+        T: bytemuck::NoUninit,
     {
         match grid {
             GridOrEmpty::Empty(empty_grid) => Self::Empty(empty_grid.clone()),
@@ -415,7 +419,7 @@ impl<D, T, C: TileCompression> CompressedGridOrEmpty<D, T, C> {
     pub fn decompress_grid(&self) -> Result<GridOrEmpty<D, T>, CacheError>
     where
         D: Clone + GridSize + PartialEq,
-        T: Copy,
+        T: bytemuck::Pod,
     {
         match self {
             Self::Empty(empty_grid) => Ok(GridOrEmpty::Empty(empty_grid.clone())),
@@ -475,7 +479,7 @@ where
 impl<T, C> CompressedRasterTileExt<GridShape2D, T>
     for BaseTile<CompressedGridOrEmpty<GridShape2D, T, C>>
 where
-    T: Copy,
+    T: bytemuck::Pod,
     C: TileCompression,
 {
     fn compress_tile(tile: RasterTile<GridShape2D, T>) -> Self {
@@ -547,52 +551,33 @@ where
 pub trait TileCompression {
     fn compress<T>(data: &[T]) -> Vec<u8>
     where
-        T: Copy;
+        T: bytemuck::NoUninit;
 
     fn decompress<T>(data: &[u8], elements: usize) -> Result<Vec<T>, CacheError>
     where
-        T: Copy;
+        T: bytemuck::Pod;
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct Lz4FlexCompression;
 
-impl Lz4FlexCompression {
-    fn cast_data_slice_to_u8_slice<T>(data: &[T]) -> &[u8]
-    where
-        T: Copy,
-    {
-        unsafe {
-            std::slice::from_raw_parts(data.as_ptr().cast::<u8>(), std::mem::size_of_val(data))
-        }
-    }
-}
-
 impl TileCompression for Lz4FlexCompression {
     fn compress<T>(data: &[T]) -> Vec<u8>
     where
-        T: Copy,
+        T: bytemuck::NoUninit,
     {
-        let data_as_u8_slice = Self::cast_data_slice_to_u8_slice(data);
-        lz4_flex::compress(data_as_u8_slice)
+        lz4_flex::compress(bytemuck::cast_slice(data))
     }
 
     fn decompress<T>(data: &[u8], elements: usize) -> Result<Vec<T>, CacheError>
     where
-        T: Copy,
+        T: bytemuck::Pod,
     {
-        let stored_bytes = elements * std::mem::size_of::<T>();
-        let mut decompressed = Vec::<T>::with_capacity(elements);
-        // Safety: the buffer has this capacity and the zeroed bytes are valid pixels and masks
-        let bytes = unsafe {
-            let bytes = decompressed.as_mut_ptr().cast::<u8>();
-            bytes.write_bytes(0, stored_bytes);
-            std::slice::from_raw_parts_mut(bytes, stored_bytes)
-        };
-        let written = lz4_flex::block::decompress_into(data, bytes)
-            .map_err(|source| CacheError::CouldNotDecompressElement { source })?;
-        // Safety: these elements were zeroed and then written
-        unsafe { decompressed.set_len(written / std::mem::size_of::<T>()) };
+        let mut decompressed = vec![T::zeroed(); elements];
+        let written =
+            lz4_flex::block::decompress_into(data, bytemuck::cast_slice_mut(&mut decompressed))
+                .map_err(|source| CacheError::CouldNotDecompressElement { source })?;
+        decompressed.truncate(written / std::mem::size_of::<T>());
         Ok(decompressed)
     }
 }
