@@ -217,6 +217,8 @@ pub struct MockQueryContext {
     pub quota_tracking: Option<QuotaTracking>,
     pub quota_checker: Option<QuotaChecker>,
     pub new_raster_cache: Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>>,
+    /// see [`QueryContext::gdal_read_ahead`]; the server reads it from `[query_context]`
+    pub gdal_read_ahead: GdalReadAhead,
 
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
@@ -247,6 +249,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            gdal_read_ahead: GdalReadAhead::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             processing_runtime: tokio::runtime::Handle::current(),
@@ -275,6 +278,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            gdal_read_ahead: GdalReadAhead::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             processing_runtime: tokio::runtime::Handle::current(),
@@ -302,6 +306,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            gdal_read_ahead: GdalReadAhead::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             processing_runtime: tokio::runtime::Handle::current(),
@@ -324,6 +329,10 @@ impl QueryContext for MockQueryContext {
 
     fn default_cache_ttl(&self) -> CacheTtlSeconds {
         self.default_cache_ttl
+    }
+
+    fn gdal_read_ahead(&self) -> GdalReadAhead {
+        self.gdal_read_ahead
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
