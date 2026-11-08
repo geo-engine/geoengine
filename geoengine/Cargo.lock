@@ -2733,6 +2733,7 @@ dependencies = [
  "geodesy",
  "geojson 1.0.0",
  "image",
+ "indoc",
  "num",
  "num-traits",
  "paste",

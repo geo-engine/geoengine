@@ -52,6 +52,7 @@ wkt = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+indoc = { workspace = true }
 
 [[bench]]
 name = "multi_point_collection"
