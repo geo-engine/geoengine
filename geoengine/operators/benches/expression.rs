@@ -8,32 +8,10 @@
 
 mod common;
 
-use common::{Area, Env, count_tiles, stack};
+use common::{Area, Env, count_tiles, expression, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
-use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
-use geoengine_operators::{
-    engine::{
-        ProcessingGraphOperatorPath, RasterOperator, SingleRasterSource, TypedRasterOperator,
-    },
-    processing::{Expression, ExpressionParams},
-};
-
-fn expression(
-    raster: TypedRasterOperator,
-    expression: &str,
-    map_no_data: bool,
-) -> TypedRasterOperator {
-    Expression {
-        params: ExpressionParams {
-            expression: expression.to_string(),
-            output_type: RasterDataType::F32,
-            output_band: None,
-            map_no_data,
-        },
-        sources: SingleRasterSource { raster },
-    }
-    .typed()
-}
+use geoengine_datatypes::raster::GridBoundingBox2D;
+use geoengine_operators::engine::ProcessingGraphOperatorPath;
 
 fn expression_bench(c: &mut Criterion) {
     let env = Env::new();
@@ -85,7 +63,7 @@ fn expression_bench(c: &mut Criterion) {
                 .unwrap()
                 .query_processor()
                 .unwrap();
-            count_tiles(&processor, first_tile.clone(), &env.query_ctx).await
+            count_tiles(&processor, first_tile.clone(), env.query_ctx.as_ref()).await
         });
     });
     group.finish();

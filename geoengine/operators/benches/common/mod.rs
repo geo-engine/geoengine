@@ -1,6 +1,7 @@
 //! Setup shared by the topic benches (`gdal_source`, `reprojection`, `expression`,
-//! `bands_and_time`, `raster_cache`): one raster dataset, one GDAL pool like the server
-//! default and queries over the whole result or a part of it.
+//! `bands_and_time`, `raster_cache`) and `core_scaling`: one raster dataset, one GDAL pool like
+//! the server, the operator workloads and queries over the whole result or a part of it, run as
+//! one task per query where they are concurrent, like the server does.
 //!
 //! The raster is the local NDVI test data (EPSG:4326, global, 6 monthly files). For local runs on
 //! other data, `GEOENGINE_BENCH_RASTER=<file.json>` names a `GdalMetaDataRegular` as JSON, e.g. the
@@ -34,27 +35,30 @@
 
 use config::{Config, ConfigError, Environment, File};
 use criterion::{BenchmarkGroup, Criterion, SamplingMode, measurement::WallTime};
-use futures::StreamExt;
+use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     primitives::{
         BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
         TimeInterval, TimeStep,
     },
-    raster::{GridBoundingBox2D, RenameBands, TilingSpecification},
+    raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
+    spatial_reference::SpatialReference,
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
         InitializedRasterOperator, MockExecutionContext, MockQueryContext, MultipleRasterSources,
         ProcessingGraphOperatorPath, QueryContext, RasterOperator, RasterQueryProcessor,
-        SingleRasterSource, StatisticsWrappingMockExecutionContext, TypedRasterOperator,
-        TypedRasterQueryProcessor,
+        SingleRasterOrVectorSource, SingleRasterSource, StatisticsWrappingMockExecutionContext,
+        TypedRasterOperator, TypedRasterQueryProcessor,
     },
     meta::quota::{QuotaCheck, QuotaTracking},
     processing::{
-        Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
-        TemporalRasterAggregationParameters,
+        Aggregation, DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod,
+        DownsamplingParams, DownsamplingResolution, Expression, ExpressionParams, Fraction,
+        RasterStacker, RasterStackerParams, Reprojection, ReprojectionParams,
+        TemporalRasterAggregation, TemporalRasterAggregationParameters,
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
@@ -62,13 +66,14 @@ use geoengine_operators::{
     },
     util::{create_rayon_thread_pool, gdal::create_ndvi_meta_data_with_cache_ttl},
 };
+use rayon::ThreadPool;
 use serde::de::DeserializeOwned;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Debug,
     path::Path,
     sync::{
-        LazyLock, Mutex,
+        Arc, LazyLock, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
@@ -86,6 +91,58 @@ use tracing_subscriber::{
     registry::LookupSpan,
 };
 use uuid::Uuid;
+
+/// The raster expression `expression` on one raster, with `f32` output.
+pub fn expression(
+    raster: TypedRasterOperator,
+    expression: &str,
+    map_no_data: bool,
+) -> TypedRasterOperator {
+    Expression {
+        params: ExpressionParams {
+            expression: expression.to_string(),
+            output_type: RasterDataType::F32,
+            output_band: None,
+            map_no_data,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+pub fn reproject(source: TypedRasterOperator, target: SpatialReference) -> TypedRasterOperator {
+    Reprojection {
+        params: ReprojectionParams {
+            target_spatial_reference: target,
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+        },
+        sources: SingleRasterOrVectorSource {
+            source: source.into(),
+        },
+    }
+    .typed()
+}
+
+/// Reprojects to EPSG:3857, the CRS of web maps.
+pub fn mercator(source: TypedRasterOperator) -> TypedRasterOperator {
+    reproject(source, SpatialReference::web_mercator())
+}
+
+/// Nearest-neighbour downsampling by `factor` in x and y, like an overview.
+pub fn downsample(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperator {
+    Downsampling {
+        params: DownsamplingParams {
+            sampling_method: DownsamplingMethod::NearestNeighbor,
+            output_resolution: DownsamplingResolution::Fraction(Fraction {
+                x: factor,
+                y: factor,
+            }),
+            output_origin_reference: None,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
 
 /// The rasters as bands of one raster.
 pub fn stack(rasters: Vec<TypedRasterOperator>) -> TypedRasterOperator {
@@ -111,7 +168,7 @@ pub enum Area {
 /// A processor and the query to run on it. Setup ran the query once, so the first timed
 /// iteration is warm, and recorded the result size.
 pub struct Case {
-    pub processor: TypedRasterQueryProcessor,
+    pub processor: Arc<TypedRasterQueryProcessor>,
     pub query: RasterQueryRectangle,
     pub tiles: usize,
     pub empty: usize,
@@ -128,7 +185,7 @@ pub struct Env {
     pub runtime: tokio::runtime::Runtime,
     /// wraps every operator with the statistics wrapper, as the server's context does
     pub exe_ctx: StatisticsWrappingMockExecutionContext,
-    pub query_ctx: MockQueryContext,
+    pub query_ctx: Arc<MockQueryContext>,
     /// the raster dataset, NDVI unless `GEOENGINE_BENCH_RASTER` is set
     pub raster: NamedData,
     /// start and time step of the raster's files, for the query times
@@ -194,23 +251,7 @@ impl Env {
             raster.clone(),
             Box::new(meta_data),
         );
-        // the query context takes the processing runtime from the current one
-        let mut query_ctx = {
-            let _guard = runtime.enter();
-            exe_ctx.mock_query_context_test_default()
-        };
-        query_ctx.thread_pool = exe_ctx.thread_pool.clone();
-        // the statistics wrapper reports work units like in the server, whose quota manager
-        // drains them
-        let (quota_sender, mut quota_receiver) = tokio::sync::mpsc::unbounded_channel();
-        runtime.spawn(async move { while quota_receiver.recv().await.is_some() {} });
-        query_ctx.quota_tracking = Some(QuotaTracking::new(
-            quota_sender,
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-        ));
-        query_ctx.quota_checker = Some(Box::new(NoQuota));
+        let query_ctx = Arc::new(query_ctx(&runtime, &exe_ctx, exe_ctx.thread_pool.clone()));
         Self {
             runtime,
             exe_ctx: StatisticsWrappingMockExecutionContext { inner: exe_ctx },
@@ -219,6 +260,16 @@ impl Env {
             start,
             step,
         }
+    }
+
+    /// A query context like `query_ctx`, but with its own Rayon pool of `threads` threads
+    /// (0 = one per core).
+    pub fn query_ctx_with_rayon_threads(&self, threads: usize) -> Arc<MockQueryContext> {
+        Arc::new(query_ctx(
+            &self.runtime,
+            &self.exe_ctx.inner,
+            create_rayon_thread_pool(threads),
+        ))
     }
 
     /// A GDAL source of the raster dataset.
@@ -302,10 +353,12 @@ impl Env {
             time,
             BandSelection::new((0..descriptor.bands.count()).collect()).unwrap(),
         );
-        let processor = initialized.query_processor().unwrap();
-        let (tiles, empty) =
-            self.runtime
-                .block_on(count_tiles(&processor, query.clone(), &self.query_ctx));
+        let processor = Arc::new(initialized.query_processor().unwrap());
+        let (tiles, empty) = self.runtime.block_on(count_tiles(
+            &processor,
+            query.clone(),
+            self.query_ctx.as_ref(),
+        ));
         Case {
             processor,
             query,
@@ -316,7 +369,17 @@ impl Env {
 
     /// Runs the case and returns the number of tiles and of empty tiles.
     pub async fn run(&self, case: &Case) -> (usize, usize) {
-        count_tiles(&case.processor, case.query.clone(), &self.query_ctx).await
+        count_tiles(&case.processor, case.query.clone(), self.query_ctx.as_ref()).await
+    }
+
+    /// Runs `concurrent` queries of the case, each as its own task, like the server does.
+    pub async fn run_concurrent(&self, case: &Case, concurrent: usize) -> (usize, usize) {
+        spawn_queries(
+            case,
+            vec![case.query.clone(); concurrent],
+            self.query_ctx.clone(),
+        )
+        .await
     }
 
     /// Times the case as it is, one query per iteration.
@@ -449,6 +512,51 @@ pub fn criterion() -> Criterion {
         c.sample_size(20).measurement_time(Duration::from_secs(5))
     };
     c.configure_from_args()
+}
+
+/// A query context of the server's kind: the processing runtime, the Rayon pool, and quota
+/// tracking and checks, which the statistics wrapper of every operator needs.
+fn query_ctx(
+    runtime: &tokio::runtime::Runtime,
+    exe_ctx: &MockExecutionContext,
+    thread_pool: Arc<ThreadPool>,
+) -> MockQueryContext {
+    // the query context takes the processing runtime from the current one
+    let mut query_ctx = {
+        let _guard = runtime.enter();
+        exe_ctx.mock_query_context_test_default()
+    };
+    query_ctx.thread_pool = thread_pool;
+    // the statistics wrapper reports work units like in the server, whose quota manager drains them
+    let (quota_sender, mut quota_receiver) = tokio::sync::mpsc::unbounded_channel();
+    runtime.spawn(async move { while quota_receiver.recv().await.is_some() {} });
+    query_ctx.quota_tracking = Some(QuotaTracking::new(
+        quota_sender,
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+    ));
+    query_ctx.quota_checker = Some(Box::new(NoQuota));
+    query_ctx
+}
+
+/// Runs the queries on the case's processor, each as its own task, like the server does, and
+/// returns the number of tiles and of empty tiles.
+pub async fn spawn_queries(
+    case: &Case,
+    queries: Vec<RasterQueryRectangle>,
+    query_ctx: Arc<MockQueryContext>,
+) -> (usize, usize) {
+    let tasks = queries.into_iter().map(|query| {
+        let processor = case.processor.clone();
+        let query_ctx = query_ctx.clone();
+        tokio::spawn(async move { count_tiles(&processor, query, query_ctx.as_ref()).await })
+    });
+    join_all(tasks)
+        .await
+        .into_iter()
+        .map(Result::unwrap)
+        .fold((0, 0), |(tiles, empty), (t, e)| (tiles + t, empty + e))
 }
 
 /// Quota is always available.

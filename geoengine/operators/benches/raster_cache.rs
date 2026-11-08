@@ -12,7 +12,6 @@ mod common;
 
 use common::{Area, Env, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
-use futures::future::join_all;
 use geoengine_operators::{
     cache::new_raster_cache::{NewRasterCacheEnum, RasterCacheOperator},
     engine::InitializedRasterOperator,
@@ -24,7 +23,7 @@ use std::{
 
 const CACHE_BYTES: usize = 1 << 30;
 
-/// Runs `concurrent` queries of the case at once after clearing the cache, `iters` times, and
+/// Runs `concurrent` queries of the case at once, each as its own task, after clearing the cache, `iters` times, and
 /// returns the time of the queries only: for `iter_custom`, so that clearing is not measured.
 fn cold(
     env: &Env,
@@ -37,8 +36,7 @@ fn cold(
     for _ in 0..iters {
         cache.clear();
         let start = Instant::now();
-        env.runtime
-            .block_on(join_all((0..concurrent).map(|_| env.run(case))));
+        env.runtime.block_on(env.run_concurrent(case, concurrent));
         total += start.elapsed();
     }
     total
@@ -47,7 +45,8 @@ fn cold(
 fn raster_cache(c: &mut Criterion) {
     let mut env = Env::new();
     let cache = Arc::new(NewRasterCacheEnum::new_lru(CACHE_BYTES));
-    env.query_ctx.new_raster_cache = Some(cache.clone());
+    // before any case shares the query context
+    Arc::get_mut(&mut env.query_ctx).unwrap().new_raster_cache = Some(cache.clone());
 
     let cached = |initialized: Box<dyn InitializedRasterOperator>| {
         RasterCacheOperator::wrap_operator(initialized).boxed()

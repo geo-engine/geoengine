@@ -13,17 +13,11 @@
 
 mod common;
 
-use common::{Area, Env};
+use common::{Area, Env, downsample};
 use criterion::{Criterion, criterion_group, criterion_main};
 use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::raster::GridBoundingBox2D;
-use geoengine_operators::{
-    call_on_generic_raster_processor,
-    engine::{RasterOperator, RasterQueryProcessor, SingleRasterSource},
-    processing::{
-        Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Fraction,
-    },
-};
+use geoengine_operators::{call_on_generic_raster_processor, engine::RasterQueryProcessor};
 use std::time::{Duration, Instant};
 
 const TILE: isize = 512;
@@ -44,8 +38,8 @@ fn tile_queries(case: &common::Case) -> Vec<geoengine_datatypes::primitives::Ras
 
 async fn abandoned_then_extent(env: &Env, extent: &common::Case) -> (usize, usize) {
     join_all((0..8).map(|_| async {
-        call_on_generic_raster_processor!(&extent.processor, p => {
-            let mut stream = p.raster_query(extent.query.clone(), &env.query_ctx).await.unwrap();
+        call_on_generic_raster_processor!(extent.processor.as_ref(), p => {
+            let mut stream = p.raster_query(extent.query.clone(), env.query_ctx.as_ref()).await.unwrap();
             stream.next().await.unwrap().unwrap();
         });
     }))
@@ -56,21 +50,7 @@ async fn abandoned_then_extent(env: &Env, extent: &common::Case) -> (usize, usiz
 fn gdal_source(c: &mut Criterion) {
     let env = Env::new();
     let extent = env.case(env.raster(), Area::Extent, env.one_step());
-    let overview = env.case(
-        Downsampling {
-            params: DownsamplingParams {
-                sampling_method: DownsamplingMethod::NearestNeighbor,
-                output_resolution: DownsamplingResolution::Fraction(Fraction { x: 4., y: 4. }),
-                output_origin_reference: None,
-            },
-            sources: SingleRasterSource {
-                raster: env.raster(),
-            },
-        }
-        .typed(),
-        Area::Extent,
-        env.one_step(),
-    );
+    let overview = env.case(downsample(env.raster(), 4.), Area::Extent, env.one_step());
     let empty = env.case(env.raster(), Area::ExtentTimes(3), env.one_step());
     // one query per 512 px tile of the extent; the tiles of `Env` are 512 px, so each query
     // returns exactly one tile
@@ -102,16 +82,11 @@ fn gdal_source(c: &mut Criterion) {
     // 8 of 9 tiles are outside of the data
     env.bench(&mut group, "extent_x3_empty", &empty);
 
-    // like a map client: one query per tile, all at once
+    // like a map client: one request per tile, all at once, each its own task as in the server
     eprintln!("tile_queries_concurrent: {} queries", tiles.len());
     group.bench_function("tile_queries_concurrent", |b| {
-        b.to_async(&env.runtime).iter(|| {
-            join_all(
-                tiles.iter().map(|query| {
-                    common::count_tiles(&extent.processor, query.clone(), &env.query_ctx)
-                }),
-            )
-        });
+        b.to_async(&env.runtime)
+            .iter(|| common::spawn_queries(&extent, tiles.clone(), env.query_ctx.clone()));
     });
 
     // Local only (`just backend bench`), skipped in CI (`GEOENGINE_BENCH_CI`): the case fails.

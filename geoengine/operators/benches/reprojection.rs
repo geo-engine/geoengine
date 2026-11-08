@@ -7,34 +7,12 @@
 
 mod common;
 
-use common::{Area, Env, stack};
+use common::{Area, Env, mercator, reproject, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::{
     primitives::{Coordinate2D, SpatialPartition2D},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::{
-    engine::{RasterOperator, SingleRasterOrVectorSource, TypedRasterOperator},
-    processing::{DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams},
-};
-
-fn reproject(source: TypedRasterOperator, target: SpatialReference) -> TypedRasterOperator {
-    Reprojection {
-        params: ReprojectionParams {
-            target_spatial_reference: target,
-            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
-        },
-        sources: SingleRasterOrVectorSource {
-            source: source.into(),
-        },
-    }
-    .typed()
-}
-
-fn mercator(source: TypedRasterOperator) -> TypedRasterOperator {
-    reproject(source, SpatialReference::web_mercator())
-}
-
 fn reprojection(c: &mut Criterion) {
     let env = Env::new();
     let mut cases = vec![
