@@ -46,13 +46,14 @@ use geoengine_datatypes::{
     },
     raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
     spatial_reference::SpatialReference,
+    util::Identifier,
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        GdalReadAhead, InitializedRasterOperator, MockExecutionContext, MockQueryContext,
+        GdalReadAhead, InitializedRasterOperator, MetaData, MockExecutionContext, MockQueryContext,
         MultipleRasterSources, ProcessingGraphOperatorPath, QueryContext, RasterOperator,
-        RasterQueryProcessor, SingleRasterOrVectorSource, SingleRasterSource,
+        RasterQueryProcessor, ResultDescriptor, SingleRasterOrVectorSource, SingleRasterSource,
         StatisticsWrappingMockExecutionContext, TypedRasterOperator, TypedRasterQueryProcessor,
     },
     meta::quota::{QuotaCheck, QuotaTracking},
@@ -270,6 +271,34 @@ impl Env {
         }
     }
 
+    /// A new query context like `query_ctx`, for APIs that take one by value.
+    pub fn new_query_ctx(&self) -> MockQueryContext {
+        query_ctx(
+            &self.runtime,
+            &self.exe_ctx.inner,
+            self.exe_ctx.inner.thread_pool.clone(),
+            self.read_ahead,
+        )
+    }
+
+    /// Registers more data under `name`, e.g. a COG of a bench, next to the raster.
+    pub fn add_data<L, R, Q>(
+        &mut self,
+        name: &str,
+        meta_data: Box<dyn MetaData<L, R, Q>>,
+    ) -> NamedData
+    where
+        L: Send + Sync + 'static,
+        R: Send + Sync + 'static + ResultDescriptor,
+        Q: Send + Sync + 'static,
+    {
+        let data = NamedData::with_system_name(name);
+        self.exe_ctx
+            .inner
+            .add_meta_data(DataId::from(DatasetId::new()), data.clone(), meta_data);
+        data
+    }
+
     /// A query context like `query_ctx`, but with its own Rayon pool of `threads` threads
     /// (0 = one per core).
     pub fn query_ctx_with_rayon_threads(&self, threads: usize) -> Arc<MockQueryContext> {
@@ -328,6 +357,27 @@ impl Env {
         time: TimeInterval,
         wrap: impl FnOnce(Box<dyn InitializedRasterOperator>) -> Box<dyn InitializedRasterOperator>,
     ) -> Case {
+        let mut case = self.unprimed_case(operator, area, time, wrap);
+        (case.tiles, case.empty) = self.runtime.block_on(count_tiles(
+            &case.processor,
+            case.query.clone(),
+            self.query_ctx.as_ref(),
+        ));
+        case
+    }
+
+    /// Like `case`, but without the first query, so the first run reads cold; the counts stay 0.
+    pub fn cold_case(&self, operator: TypedRasterOperator, area: Area, time: TimeInterval) -> Case {
+        self.unprimed_case(operator, area, time, |initialized| initialized)
+    }
+
+    fn unprimed_case(
+        &self,
+        operator: TypedRasterOperator,
+        area: Area,
+        time: TimeInterval,
+        wrap: impl FnOnce(Box<dyn InitializedRasterOperator>) -> Box<dyn InitializedRasterOperator>,
+    ) -> Case {
         let initialized = wrap(
             self.runtime
                 .block_on(operator.initialize(
@@ -362,17 +412,11 @@ impl Env {
             time,
             BandSelection::new((0..descriptor.bands.count()).collect()).unwrap(),
         );
-        let processor = Arc::new(initialized.query_processor().unwrap());
-        let (tiles, empty) = self.runtime.block_on(count_tiles(
-            &processor,
-            query.clone(),
-            self.query_ctx.as_ref(),
-        ));
         Case {
-            processor,
+            processor: Arc::new(initialized.query_processor().unwrap()),
             query,
-            tiles,
-            empty,
+            tiles: 0,
+            empty: 0,
         }
     }
 

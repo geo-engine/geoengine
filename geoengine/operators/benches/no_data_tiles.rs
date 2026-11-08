@@ -1,6 +1,7 @@
 //! Benchmarks queries with many tiles without data. It is not part of the CI benchmarks.
 //!
-//! The NDVI cases use local test data.
+//! The NDVI cases use local test data. Pools, runtime and GDAL workers follow the server settings
+//! and the operators are wrapped as in the server, see `common`.
 //! The Sentinel-2 cases run if `NO_DATA_BENCH_COG` is set to a GDAL path of a Sentinel-2 band COG,
 //! e.g. `/vsicurl/http://127.0.0.1:8099/B04.tif`.
 //! If `NO_DATA_BENCH_STATS` points to a file with one `<status> <bytes>` line per HTTP response,
@@ -19,30 +20,16 @@
     reason = "okay in benchmarks"
 )]
 
-use futures::StreamExt;
-use geoengine_datatypes::{
-    dataset::{DataId, DatasetId, NamedData},
-    primitives::{BandSelection, DateTime, RasterQueryRectangle, TimeInterval},
-    raster::{GridBoundingBox2D, RasterDataType, TilingSpecification},
-    util::test::TestDefault,
-};
+mod common;
+
+use common::{Area, Env, count_tiles, downsample, expression};
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::{DateTime, TimeInterval};
 use geoengine_operators::{
-    call_on_generic_raster_processor,
-    engine::{
-        MockExecutionContext, ProcessingGraphOperatorPath, QueryContext, RasterOperator,
-        RasterQueryProcessor, SingleRasterSource, TypedRasterOperator,
-    },
-    processing::{
-        Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Expression,
-        ExpressionParams, Fraction,
-    },
-    source::{
-        GdalMetaDataStatic, GdalProcessPool, GdalSource, GdalSourceParameters,
-        gdal_worker_process::WorkerConfig,
-    },
+    engine::{RasterOperator, TypedRasterOperator},
+    source::{GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     util::gdal::{
-        add_ndvi_dataset, create_ndvi_meta_data, gdal_parameters_from_dataset,
-        raster_descriptor_from_dataset,
+        create_ndvi_meta_data, gdal_parameters_from_dataset, raster_descriptor_from_dataset,
     },
 };
 use std::{path::Path, time::Instant};
@@ -57,40 +44,11 @@ fn source(data: NamedData) -> TypedRasterOperator {
     .typed()
 }
 
-fn downsampling(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperator {
-    Downsampling {
-        params: DownsamplingParams {
-            sampling_method: DownsamplingMethod::NearestNeighbor,
-            output_resolution: DownsamplingResolution::Fraction(Fraction {
-                x: factor,
-                y: factor,
-            }),
-            output_origin_reference: None,
-        },
-        sources: SingleRasterSource { raster },
-    }
-    .typed()
-}
-
-fn expression(raster: TypedRasterOperator, expression: &str) -> TypedRasterOperator {
-    Expression {
-        params: ExpressionParams {
-            expression: expression.to_string(),
-            output_type: RasterDataType::F32,
-            output_band: None,
-            map_no_data: false,
-        },
-        sources: SingleRasterSource { raster },
-    }
-    .typed()
-}
-
-/// One benchmark case: a processing graph and the query area in units of the data extent.
+/// One benchmark case: a processing graph and the query area.
 struct Case {
     name: &'static str,
     operator: TypedRasterOperator,
-    /// 1 queries the data extent, 3 queries a 3×3 area with the data in the center.
-    extent_factor: isize,
+    area: Area,
     time: TimeInterval,
     runs: usize,
 }
@@ -109,49 +67,10 @@ fn http_stats() -> Option<(usize, usize)> {
     }))
 }
 
-/// Returns the number of all tiles and of empty tiles.
-async fn count_tiles<P: RasterQueryProcessor + ?Sized>(
-    processor: &P,
-    query: RasterQueryRectangle,
-    query_ctx: &dyn QueryContext,
-) -> (usize, usize) {
-    processor
-        .raster_query(query, query_ctx)
-        .await
-        .unwrap()
-        .fold((0, 0), |(all, empty), tile| async move {
-            (all + 1, empty + usize::from(tile.unwrap().is_empty()))
-        })
-        .await
-}
-
 #[allow(clippy::cast_precision_loss)]
-async fn run_case(case: Case, exe_ctx: &MockExecutionContext, query_ctx: &dyn QueryContext) {
-    let initialized = case
-        .operator
-        .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
-        .await
-        .unwrap();
-    let data = initialized
-        .result_descriptor()
-        .tiling_grid_definition(exe_ctx.tiling_specification)
-        .tiling_spatial_grid_definition()
-        .grid_bounds();
-    let processor = initialized.query_processor().unwrap();
-
-    let margin_x = (case.extent_factor - 1) / 2 * (data.x_max() - data.x_min() + 1);
-    let margin_y = (case.extent_factor - 1) / 2 * (data.y_max() - data.y_min() + 1);
-    let query = RasterQueryRectangle::new(
-        GridBoundingBox2D::new_min_max(
-            data.y_min() - margin_y,
-            data.y_max() + margin_y,
-            data.x_min() - margin_x,
-            data.x_max() + margin_x,
-        )
-        .unwrap(),
-        case.time,
-        BandSelection::first(),
-    );
+fn run_case(env: &Env, case: Case) {
+    // cold: the first run opens the dataset
+    let prepared = env.cold_case(case.operator, case.area, case.time);
 
     let mut durations = Vec::with_capacity(case.runs);
     let mut tiles = (0, 0);
@@ -161,7 +80,11 @@ async fn run_case(case: Case, exe_ctx: &MockExecutionContext, query_ctx: &dyn Qu
         let stats_before = http_stats();
         let start = Instant::now();
 
-        tiles = call_on_generic_raster_processor!(&processor, p => count_tiles(p.as_ref(), query.clone(), query_ctx).await);
+        tiles = env.runtime.block_on(count_tiles(
+            &prepared.processor,
+            prepared.query.clone(),
+            env.query_ctx.as_ref(),
+        ));
 
         durations.push(start.elapsed());
         if run == 0
@@ -201,52 +124,27 @@ fn cog_meta_data(path: &str) -> GdalMetaDataStatic {
 }
 
 fn main() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let _guard = runtime.enter();
-
-    let tiling_spec = TilingSpecification::test_default();
-    let mut exe_ctx =
-        MockExecutionContext::new_with_tiling_spec_and_tokio_handle(tiling_spec, runtime.handle());
-    // like the server default: up to 8 workers read one dataset in parallel
-    exe_ctx.gdal_process_pool = GdalProcessPool::new_with_tokio_handle(
-        runtime.handle(),
-        16,
-        16,
-        8,
-        WorkerConfig::default(),
-    );
-    let query_ctx = exe_ctx.mock_query_context_test_default();
-
-    let ndvi = add_ndvi_dataset(&mut exe_ctx);
+    // the pools, runtime and GDAL workers of the server settings, see `common`
+    let mut env = Env::new();
 
     // the ocean has the value 255, so declaring it as no-data makes all ocean tiles no-data
     let mut ocean_meta_data = create_ndvi_meta_data();
     ocean_meta_data.params.no_data_value = Some(255.);
-    let ndvi_ocean_no_data = NamedData::with_system_name("ndvi_ocean_no_data");
-    exe_ctx.add_meta_data(
-        DataId::from(DatasetId::from_u128(1)),
-        ndvi_ocean_no_data.clone(),
-        Box::new(ocean_meta_data),
-    );
-
-    let ndvi_time = TimeInterval::new(
-        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
-        DateTime::new_utc(2014, 7, 1, 0, 0, 0),
-    )
-    .unwrap();
+    let ndvi_ocean_no_data = env.add_data("ndvi_ocean_no_data", Box::new(ocean_meta_data));
+    let ndvi_time = env.six_steps();
 
     let mut cases = vec![
         Case {
             name: "ndvi_ocean_as_no_data_expression",
-            operator: expression(source(ndvi_ocean_no_data), "A / 255"),
-            extent_factor: 1,
+            operator: expression(source(ndvi_ocean_no_data), "A / 255", false),
+            area: Area::Extent,
             time: ndvi_time,
             runs: NDVI_RUNS,
         },
         Case {
             name: "ndvi_3x_width_downsample",
-            operator: downsampling(source(ndvi), 2.),
-            extent_factor: 3,
+            operator: downsample(env.raster(), 2.),
+            area: Area::ExtentTimes(3),
             time: ndvi_time,
             runs: NDVI_RUNS,
         },
@@ -256,17 +154,14 @@ fn main() {
         // one dataset per case, so that the first run of each case is cold;
         // for remote files, the query string makes GDAL open a separate dataset for the same file
         let mut s2 = |id: u128| {
-            let name = NamedData::with_system_name(format!("s2_{id}"));
-            exe_ctx.add_meta_data(
-                DataId::from(DatasetId::from_u128(id)),
-                name.clone(),
+            env.add_data(
+                &format!("s2_{id}"),
                 Box::new(cog_meta_data(&if cog.starts_with("/vsicurl/") {
                     format!("{cog}?case={id}")
                 } else {
                     cog.clone()
                 })),
-            );
-            name
+            )
         };
         let s2_reflectance = s2(2);
         let s2_downsample = s2(3);
@@ -278,15 +173,15 @@ fn main() {
 
         cases.push(Case {
             name: "s2_scene_reflectance",
-            operator: expression(source(s2_reflectance), "A / 10000"),
-            extent_factor: 1,
+            operator: expression(source(s2_reflectance), "A / 10000", false),
+            area: Area::Extent,
             time: cog_time,
             runs: cog_runs,
         });
         cases.push(Case {
             name: "s2_3x3_scenes_downsample_60m",
-            operator: downsampling(source(s2_downsample), 6.),
-            extent_factor: 3,
+            operator: downsample(source(s2_downsample), 6.),
+            area: Area::ExtentTimes(3),
             time: cog_time,
             runs: cog_runs,
         });
@@ -297,6 +192,6 @@ fn main() {
     );
     println!("|---|---|---|---|---|---|---|");
     for case in cases {
-        runtime.block_on(run_case(case, &exe_ctx, &query_ctx));
+        run_case(&env, case);
     }
 }
