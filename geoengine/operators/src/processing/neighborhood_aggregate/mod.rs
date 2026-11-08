@@ -356,7 +356,7 @@ mod tests {
         primitives::{
             DateTime, RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
         },
-        raster::{Grid2D, GridBoundingBox2D, RasterTile2D, RenameBands, TilingSpecification},
+        raster::{Grid2D, GridBoundingBox2D, RasterTile2D, RenameBands},
         test_data,
         util::{
             assert_image_equals,
@@ -473,7 +473,7 @@ mod tests {
     #[tokio::test]
     async fn test_mean_convolution() {
         let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+            MockExecutionContext::new_with_tiling_spec(test_raster().tiling_specification());
 
         let raster = make_raster();
 
@@ -531,7 +531,7 @@ mod tests {
     #[tokio::test]
     async fn check_make_raster() {
         let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+            MockExecutionContext::new_with_tiling_spec(test_raster().tiling_specification());
 
         let raster = make_raster();
 
@@ -732,7 +732,7 @@ mod tests {
     #[tokio::test]
     async fn test_mean_convolution_multi_bands() {
         let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+            MockExecutionContext::new_with_tiling_spec(test_raster().tiling_specification());
 
         let operator = NeighborhoodAggregate {
             params: NeighborhoodAggregateParams {

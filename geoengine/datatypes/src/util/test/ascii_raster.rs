@@ -1,8 +1,10 @@
 //! Describe lists of raster tiles as ASCII art in tests.
 //!
 //! A text consists of blocks, one per time step and band.
-//! Each block starts with a header `[start, end)` (milliseconds) and an optional `band N` (default `0`),
-//! followed by the pixels of all tiles of that time step and band:
+//! Each block starts with a header `[start, end)` and an optional `band N` (default `0`),
+//! followed by the pixels of all tiles of that time step and band.
+//! A time instance is either milliseconds (`-10`, `0`), an RFC 3339 date time (`2010-01-01T12:00:00Z`),
+//! or a date (`2010-01-01`, midnight UTC):
 //!
 //! ```text
 //! [0, 10)
@@ -28,13 +30,15 @@
 //! The upper left tile of each block is at [`AsciiRasterTiles::origin`].
 
 use crate::{
-    primitives::{CacheHint, TimeInstance, TimeInterval, TimeStep},
+    primitives::{CacheHint, DateTime, TimeGranularity, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridIdx, GridIdx2D, GridIndexAccess,
         GridOrEmpty, GridShape2D, GridSize, MaskedGrid2D, Pixel, RasterTile2D, TileInformation,
+        TilingSpecification,
     },
     util::test::TestDefault,
 };
+use chrono::{Datelike, NaiveDate, Timelike};
 use float_cmp::approx_eq;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -44,6 +48,16 @@ use std::{
 
 const NO_DATA: &str = "_";
 const MISSING_TILE: &str = "?";
+
+/// How [`raster_tiles_to_ascii_with_time_format`] writes time instances.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AsciiTimeFormat {
+    /// Milliseconds, e.g., `[0, 10)`.
+    #[default]
+    Millis,
+    /// Dates for midnight UTC and RFC 3339 date times otherwise, e.g., `[2010-01-01, 2010-01-01T12:00:00.000Z)`.
+    DateTime,
+}
 
 /// Builder for a list of raster tiles described as ASCII art.
 ///
@@ -80,6 +94,8 @@ pub struct AsciiRasterInfo {
     /// From the earliest start to the latest end of all time steps.
     pub time_bounds: TimeInterval,
     /// `Some` if all time steps have the same length and follow each other without gaps.
+    /// This is the step with the largest granularity, e.g., one year for `[2010-01-01, 2011-01-01)` or ten
+    /// milliseconds for `[0, 10)`.
     pub regular_time_step: Option<TimeStep>,
     /// The pixel bounds covered by all tiles.
     pub pixel_bounds: GridBoundingBox2D,
@@ -150,6 +166,32 @@ impl<'a> AsciiRasterTiles<'a> {
 
         tiles.sort_by_key(tile_order_key);
         tiles
+    }
+
+    /// [`AsciiTimeFormat::DateTime`] if any header uses a date or date time, [`AsciiTimeFormat::Millis`] otherwise.
+    ///
+    /// # Panics
+    ///
+    /// If the text is malformed.
+    pub fn time_format(&self) -> AsciiTimeFormat {
+        if parse(self.text)
+            .blocks
+            .iter()
+            .any(|block| block.uses_date_time)
+        {
+            AsciiTimeFormat::DateTime
+        } else {
+            AsciiTimeFormat::Millis
+        }
+    }
+
+    /// A tiling specification with the tile size of the text.
+    ///
+    /// # Panics
+    ///
+    /// If the text is malformed.
+    pub fn tiling_specification(&self) -> TilingSpecification {
+        TilingSpecification::new(parse(self.text).tile_size)
     }
 
     /// Returns the properties of the described raster, e.g., to build a result descriptor.
@@ -243,6 +285,17 @@ pub fn raster_tiles_to_ascii<T>(tiles: &[RasterTile2D<T>]) -> String
 where
     T: Pixel + Display,
 {
+    raster_tiles_to_ascii_with_time_format(tiles, AsciiTimeFormat::Millis)
+}
+
+/// Renders tiles like [`raster_tiles_to_ascii`], with time instances in the given format.
+pub fn raster_tiles_to_ascii_with_time_format<T>(
+    tiles: &[RasterTile2D<T>],
+    time_format: AsciiTimeFormat,
+) -> String
+where
+    T: Pixel + Display,
+{
     let show_band = tiles.iter().any(|tile| tile.band != 0);
 
     // (time start, time end, band) -> tiles
@@ -261,7 +314,11 @@ where
     let blocks: Vec<(String, Cells)> = blocks
         .into_iter()
         .map(|((start, end, band), tiles)| {
-            let mut header = format!("[{start}, {end})");
+            let mut header = format!(
+                "[{}, {})",
+                format_time_instance(start, time_format),
+                format_time_instance(end, time_format)
+            );
             if show_band {
                 let _ = write!(header, " band {band}");
             }
@@ -297,10 +354,11 @@ pub fn assert_raster_tiles_eq_ascii<T>(actual: &[RasterTile2D<T>], expected: &As
 where
     T: Pixel + FromStr + Display,
 {
+    let time_format = expected.time_format();
     let expected = expected.tiles::<T>();
 
-    let actual_ascii = raster_tiles_to_ascii(actual);
-    let expected_ascii = raster_tiles_to_ascii(&expected);
+    let actual_ascii = raster_tiles_to_ascii_with_time_format(actual, time_format);
+    let expected_ascii = raster_tiles_to_ascii_with_time_format(&expected, time_format);
     assert!(
         actual_ascii == expected_ascii,
         "tiles differ\n\nactual:\n{actual_ascii}\n\nexpected:\n{expected_ascii}\n"
@@ -323,6 +381,25 @@ where
     }
 }
 
+fn format_time_instance(millis: i64, time_format: AsciiTimeFormat) -> String {
+    let date_time = match time_format {
+        AsciiTimeFormat::Millis => None,
+        AsciiTimeFormat::DateTime => TimeInstance::from_millis(millis)
+            .ok()
+            .and_then(TimeInstance::as_date_time),
+    };
+    let Some(date_time) = date_time else {
+        return millis.to_string();
+    };
+
+    let chrono_date_time: chrono::DateTime<chrono::Utc> = date_time.into();
+    if chrono_date_time.num_seconds_from_midnight() == 0 && chrono_date_time.nanosecond() == 0 {
+        chrono_date_time.format("%Y-%m-%d").to_string()
+    } else {
+        date_time.to_datetime_string_with_millis()
+    }
+}
+
 fn tile_key<T>(tile: &RasterTile2D<T>) -> (TimeInterval, GridIdx2D, u32) {
     (tile.time, tile.tile_position, tile.band)
 }
@@ -338,17 +415,63 @@ fn tile_order_key<T>(tile: &RasterTile2D<T>) -> (i64, i64, isize, isize, u32) {
     )
 }
 
+/// Returns the step if all time steps follow each other without gaps and have the same length.
+/// The length can also be a calendar step (months, years), e.g., `[2010-01-01, 2011-01-01)`, `[2011-01-01, 2012-01-01)`.
 fn regular_time_step(times: &BTreeSet<(i64, i64)>) -> Option<TimeStep> {
     let &(first_start, first_end) = times.first()?;
-    let step = first_end.checked_sub(first_start)?;
+    let step = time_step_between(
+        TimeInstance::from_millis(first_start).ok()?,
+        TimeInstance::from_millis(first_end).ok()?,
+    )?;
+
     let mut expected_start = first_start;
     for &(start, end) in times {
-        if start != expected_start || end.checked_sub(start)? != step {
+        let start_instance = TimeInstance::from_millis(start).ok()?;
+        if start != expected_start || (start_instance + step).ok()?.inner() != end {
             return None;
         }
         expected_start = end;
     }
-    TimeStep::millis(u32::try_from(step).ok()?).ok()
+
+    Some(step)
+}
+
+/// The step with the largest granularity that leads from `start` to `end`.
+fn time_step_between(start: TimeInstance, end: TimeInstance) -> Option<TimeStep> {
+    const FIXED_GRANULARITIES: [(TimeGranularity, i64); 5] = [
+        (TimeGranularity::Days, 86_400_000),
+        (TimeGranularity::Hours, 3_600_000),
+        (TimeGranularity::Minutes, 60_000),
+        (TimeGranularity::Seconds, 1_000),
+        (TimeGranularity::Millis, 1),
+    ];
+
+    let start_date_time: chrono::DateTime<chrono::Utc> = start.as_date_time()?.into();
+    let end_date_time: chrono::DateTime<chrono::Utc> = end.as_date_time()?.into();
+    let years = i64::from(end_date_time.year()) - i64::from(start_date_time.year());
+    let months = years * 12 + i64::from(end_date_time.month()) - i64::from(start_date_time.month());
+
+    let calendar_candidates = [
+        (TimeGranularity::Years, years),
+        (TimeGranularity::Months, months),
+    ];
+    for (granularity, count) in calendar_candidates {
+        let Some(step) = u32::try_from(count)
+            .ok()
+            .and_then(|count| TimeStep::new(granularity, count).ok())
+        else {
+            continue;
+        };
+        if (start + step).ok() == Some(end) {
+            return Some(step);
+        }
+    }
+
+    let duration = end.inner().checked_sub(start.inner())?;
+    let (granularity, unit) = FIXED_GRANULARITIES
+        .into_iter()
+        .find(|(_, unit)| duration % unit == 0)?;
+    TimeStep::new(granularity, u32::try_from(duration / unit).ok()?).ok()
 }
 
 /// Rendered values of a block, indexed by tile row, tile column, pixel row and pixel column.
@@ -465,6 +588,8 @@ struct RawRaster<'a> {
 struct RawBlock<'a> {
     time: TimeInterval,
     band: u32,
+    /// Whether the header uses dates or date times instead of milliseconds.
+    uses_date_time: bool,
     tile_rows: Vec<RawTileRow<'a>>,
 }
 
@@ -538,10 +663,11 @@ fn parse(text: &str) -> RawRaster<'_> {
         }
 
         if line.starts_with('[') {
-            let (time, band) = parse_header(line, line_number);
+            let (time, band, uses_date_time) = parse_header(line, line_number);
             blocks.push(RawBlock {
                 time,
                 band,
+                uses_date_time,
                 tile_rows: vec![RawTileRow::default()],
             });
             continue;
@@ -672,7 +798,7 @@ fn is_border(line: &str) -> bool {
             .all(|c| matches!(c, '+' | '-' | '|') || c.is_whitespace())
 }
 
-fn parse_header(line: &str, line_number: usize) -> (TimeInterval, u32) {
+fn parse_header(line: &str, line_number: usize) -> (TimeInterval, u32, bool) {
     let invalid = || invalid_header(line, line_number);
 
     let Some((interval, rest)) = line.strip_prefix('[').and_then(|line| line.split_once(')'))
@@ -682,7 +808,10 @@ fn parse_header(line: &str, line_number: usize) -> (TimeInterval, u32) {
     let Some((start, end)) = interval.split_once(',') else {
         invalid()
     };
-    let (Ok(start), Ok(end)) = (start.trim().parse::<i64>(), end.trim().parse::<i64>()) else {
+    let (Some((start, start_is_date_time)), Some((end, end_is_date_time))) = (
+        parse_time_instance(start.trim()),
+        parse_time_instance(end.trim()),
+    ) else {
         invalid()
     };
 
@@ -692,17 +821,40 @@ fn parse_header(line: &str, line_number: usize) -> (TimeInterval, u32) {
         _ => invalid(),
     };
 
-    let time = TimeInterval::new(
-        TimeInstance::from_millis(start).unwrap_or_else(|_| invalid()),
-        TimeInstance::from_millis(end).unwrap_or_else(|_| invalid()),
-    )
-    .unwrap_or_else(|error| panic!("line {line_number}: invalid time interval: {error}"));
+    let time = TimeInterval::new(start, end)
+        .unwrap_or_else(|error| panic!("line {line_number}: invalid time interval: {error}"));
 
-    (time, band)
+    (time, band, start_is_date_time || end_is_date_time)
+}
+
+/// Parses milliseconds, an RFC 3339 date time or a date (midnight UTC).
+/// Returns whether the instance was given as a date or date time.
+fn parse_time_instance(text: &str) -> Option<(TimeInstance, bool)> {
+    if let Ok(millis) = text.parse::<i64>() {
+        return TimeInstance::from_millis(millis)
+            .ok()
+            .map(|instance| (instance, false));
+    }
+
+    if let Ok(date_time) = DateTime::from_str(text) {
+        return Some((date_time.into(), true));
+    }
+
+    let millis = NaiveDate::parse_from_str(text, "%Y-%m-%d")
+        .ok()?
+        .and_hms_opt(0, 0, 0)?
+        .and_utc()
+        .timestamp_millis();
+    TimeInstance::from_millis(millis)
+        .ok()
+        .map(|instance| (instance, true))
 }
 
 fn invalid_header(line: &str, line_number: usize) -> ! {
-    panic!("line {line_number}: expected `[start, end)` or `[start, end) band N`, found `{line}`")
+    panic!(
+        "line {line_number}: expected `[start, end)` or `[start, end) band N` with milliseconds, \
+        RFC 3339 date times or dates, found `{line}`"
+    )
 }
 
 #[cfg(test)]
@@ -737,6 +889,10 @@ mod tests {
         );
         assert!(tiles.iter().all(|t| t.band == 0));
         assert_eq!(*tiles[0].grid_array.shape_ref(), [2, 3].into());
+        assert_eq!(
+            AsciiRasterTiles::new(TWO_BY_TWO_TILES).tiling_specification(),
+            TilingSpecification::new([2, 3].into())
+        );
 
         let GridOrEmpty::Grid(upper_left) = &tiles[0].grid_array else {
             panic!("upper left tile must not be empty");
@@ -890,6 +1046,73 @@ mod tests {
     }
 
     #[test]
+    fn it_parses_dates_and_date_times() {
+        let tiles = AsciiRasterTiles::new(indoc! {"
+            [2010-01-01, 2010-01-01T12:00:00Z)
+            | 1 |
+            [2010-01-01T12:00:00+02:00, 1262390400000)
+            | 2 |
+        "});
+
+        assert_eq!(tiles.time_format(), AsciiTimeFormat::DateTime);
+        let times: Vec<TimeInterval> = tiles.tiles::<u8>().iter().map(|t| t.time).collect();
+        assert_eq!(
+            times,
+            vec![
+                TimeInterval::new_unchecked(
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2010, 1, 1, 12, 0, 0),
+                ),
+                TimeInterval::new_unchecked(
+                    DateTime::new_utc(2010, 1, 1, 10, 0, 0),
+                    DateTime::new_utc(2010, 1, 2, 0, 0, 0),
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_renders_dates_and_date_times() {
+        let text = indoc! {"
+            [2010-01-01, 2010-01-01T12:00:00.000Z)
+            +---+
+            | 1 |
+            +---+
+
+            [2010-01-01T12:00:00.000Z, 2011-01-01)
+            +---+
+            | 2 |
+            +---+"};
+
+        let tiles = AsciiRasterTiles::new(text);
+
+        assert_eq!(
+            raster_tiles_to_ascii_with_time_format(&tiles.tiles::<u8>(), tiles.time_format()),
+            text
+        );
+        assert_eq!(
+            AsciiRasterTiles::new(TWO_BY_TWO_TILES).time_format(),
+            AsciiTimeFormat::Millis
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "tiles differ\n\nactual:\n[2010-01-01, 2011-01-01)")]
+    fn it_shows_differences_with_dates() {
+        let expected = AsciiRasterTiles::new("[2010-01-01, 2011-01-01)\n| 2 |");
+        let mut actual = expected.tiles::<u8>();
+        actual[0].grid_array = Grid2D::new([1, 1].into(), vec![1]).unwrap().into();
+
+        assert_raster_tiles_eq_ascii(&actual, &expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "line 1: expected `[start, end)`")]
+    fn it_rejects_invalid_time_instances() {
+        raster_tiles_from_ascii::<u8>("[2010-13-01, 2011-01-01)\n| 1 |");
+    }
+
+    #[test]
     fn it_renders_missing_tiles() {
         let mut tiles = raster_tiles_from_ascii::<u8>(TWO_BY_TWO_TILES);
         tiles.remove(1);
@@ -943,6 +1166,41 @@ mod tests {
                 tile_size: [2, 2].into(),
                 num_bands: 3,
             }
+        );
+    }
+
+    #[test]
+    fn it_detects_calendar_and_fixed_time_steps() {
+        let step = |text: &str| AsciiRasterTiles::new(text).info().regular_time_step;
+        let tile = "| 1 |\n";
+
+        assert_eq!(
+            step(&format!(
+                "[2010-01-01, 2011-01-01)\n{tile}[2011-01-01, 2012-01-01)\n{tile}[2012-01-01, 2013-01-01)\n{tile}"
+            )),
+            Some(TimeStep::years(1).unwrap())
+        );
+        assert_eq!(
+            step(&format!(
+                "[2014-01-31, 2014-03-31)\n{tile}[2014-03-31, 2014-05-31)\n{tile}"
+            )),
+            Some(TimeStep::months(2).unwrap())
+        );
+        assert_eq!(
+            step(&format!(
+                "[2014-01-01, 2014-01-08)\n{tile}[2014-01-08, 2014-01-15)\n{tile}"
+            )),
+            Some(TimeStep::days(7).unwrap())
+        );
+        assert_eq!(
+            step(&format!("[0, 3600000)\n{tile}[3600000, 7200000)\n{tile}")),
+            Some(TimeStep::new(TimeGranularity::Hours, 1).unwrap())
+        );
+        assert_eq!(
+            step(&format!(
+                "[2010-01-01, 2011-01-01)\n{tile}[2011-01-01, 2013-01-01)\n{tile}"
+            )),
+            None
         );
     }
 

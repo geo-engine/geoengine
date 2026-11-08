@@ -11,8 +11,8 @@ use std::{panic, path::Path};
 mod ascii_raster;
 
 pub use ascii_raster::{
-    AsciiRasterInfo, AsciiRasterTiles, assert_raster_tiles_eq_ascii, raster_tiles_from_ascii,
-    raster_tiles_to_ascii,
+    AsciiRasterInfo, AsciiRasterTiles, AsciiTimeFormat, assert_raster_tiles_eq_ascii,
+    raster_tiles_from_ascii, raster_tiles_to_ascii, raster_tiles_to_ascii_with_time_format,
 };
 
 pub trait TestDefault {
