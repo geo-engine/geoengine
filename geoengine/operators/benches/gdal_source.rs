@@ -42,6 +42,17 @@ fn tile_queries(case: &common::Case) -> Vec<geoengine_datatypes::primitives::Ras
     queries
 }
 
+async fn abandoned_then_extent(env: &Env, extent: &common::Case) -> (usize, usize) {
+    join_all((0..8).map(|_| async {
+        call_on_generic_raster_processor!(&extent.processor, p => {
+            let mut stream = p.raster_query(extent.query.clone(), &env.query_ctx).await.unwrap();
+            stream.next().await.unwrap().unwrap();
+        });
+    }))
+    .await;
+    env.run(extent).await
+}
+
 fn gdal_source(c: &mut Criterion) {
     let env = Env::new();
     let extent = env.case(env.raster(), Area::Extent, env.one_step());
@@ -111,16 +122,12 @@ fn gdal_source(c: &mut Criterion) {
         // clients pan away: 8 extent queries stop after their first tile and drop their queued reads,
         // then one extent query must not wait for them
         group.bench_function("abandoned_then_extent", |b| {
-            b.to_async(&env.runtime).iter(|| async {
-                join_all((0..8).map(|_| async {
-                    call_on_generic_raster_processor!(&extent.processor, p => {
-                        let mut stream = p.raster_query(extent.query.clone(), &env.query_ctx).await.unwrap();
-                        stream.next().await.unwrap().unwrap();
-                    });
-                }))
-                .await;
-                env.run(&extent).await
-            });
+            b.to_async(&env.runtime)
+                .iter(|| abandoned_then_extent(&env, &extent));
+        });
+        // the metrics show the 8 dropped streams per run
+        env.metrics("abandoned_then_extent", || {
+            abandoned_then_extent(&env, &extent)
         });
     }
 

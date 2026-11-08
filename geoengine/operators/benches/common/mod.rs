@@ -21,6 +21,11 @@
 //! reads them: `Settings-default.toml`, a local `Settings.toml` and `GEOENGINE__...` environment
 //! variables, e.g. `GEOENGINE__GDAL_PROCESS_POOL__MAX_ACTIVE_PROCESSES=4`. One configuration
 //! drives the server, its benches in `services` and these.
+//!
+//! Locally, after timing a case, `Env::bench` runs it a few more times with a DEBUG subscriber and
+//! prints where the time goes: the wall time per span (the stages of the map path) and the
+//! `stream_metrics` of each operator (elements, bytes, poll and wall time, dropped streams). The
+//! subscriber only records during these runs, so the timed runs do not pay for it.
 #![allow(
     dead_code,
     clippy::print_stderr,
@@ -43,8 +48,10 @@ use geoengine_operators::{
     engine::{
         InitializedRasterOperator, MockExecutionContext, MockQueryContext, MultipleRasterSources,
         ProcessingGraphOperatorPath, QueryContext, RasterOperator, RasterQueryProcessor,
-        SingleRasterSource, TypedRasterOperator, TypedRasterQueryProcessor,
+        SingleRasterSource, StatisticsWrappingMockExecutionContext, TypedRasterOperator,
+        TypedRasterQueryProcessor,
     },
+    meta::quota::{QuotaCheck, QuotaTracking},
     processing::{
         Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
         TemporalRasterAggregationParameters,
@@ -56,7 +63,29 @@ use geoengine_operators::{
     util::{create_rayon_thread_pool, gdal::create_ndvi_meta_data_with_cache_ttl},
 };
 use serde::de::DeserializeOwned;
-use std::{collections::HashMap, fmt::Debug, path::Path, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    path::Path,
+    sync::{
+        LazyLock, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
+};
+use tracing::{
+    Event, Subscriber,
+    field::{Field, Visit},
+    span,
+};
+use tracing_subscriber::{
+    Layer,
+    filter::{LevelFilter, dynamic_filter_fn},
+    layer::Context,
+    prelude::*,
+    registry::LookupSpan,
+};
+use uuid::Uuid;
 
 /// The rasters as bands of one raster.
 pub fn stack(rasters: Vec<TypedRasterOperator>) -> TypedRasterOperator {
@@ -97,7 +126,8 @@ impl Case {
 
 pub struct Env {
     pub runtime: tokio::runtime::Runtime,
-    pub exe_ctx: MockExecutionContext,
+    /// wraps every operator with the statistics wrapper, as the server's context does
+    pub exe_ctx: StatisticsWrappingMockExecutionContext,
     pub query_ctx: MockQueryContext,
     /// the raster dataset, NDVI unless `GEOENGINE_BENCH_RASTER` is set
     pub raster: NamedData,
@@ -109,6 +139,9 @@ pub struct Env {
 impl Env {
     /// 512 px tiles, like the OGC API tiles, and the pools of the server settings.
     pub fn new() -> Self {
+        if !ci() {
+            install_metrics();
+        }
         let settings = settings();
         let mut runtime = tokio::runtime::Builder::new_multi_thread();
         runtime.enable_all();
@@ -167,9 +200,20 @@ impl Env {
             exe_ctx.mock_query_context_test_default()
         };
         query_ctx.thread_pool = exe_ctx.thread_pool.clone();
+        // the statistics wrapper reports work units like in the server, whose quota manager
+        // drains them
+        let (quota_sender, mut quota_receiver) = tokio::sync::mpsc::unbounded_channel();
+        runtime.spawn(async move { while quota_receiver.recv().await.is_some() {} });
+        query_ctx.quota_tracking = Some(QuotaTracking::new(
+            quota_sender,
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+        ));
+        query_ctx.quota_checker = Some(Box::new(NoQuota));
         Self {
             runtime,
-            exe_ctx,
+            exe_ctx: StatisticsWrappingMockExecutionContext { inner: exe_ctx },
             query_ctx,
             raster,
             start,
@@ -235,7 +279,7 @@ impl Env {
         let descriptor = initialized.result_descriptor();
         let grid = descriptor
             .spatial_grid_descriptor()
-            .tiling_grid_definition(self.exe_ctx.tiling_specification);
+            .tiling_grid_definition(self.exe_ctx.inner.tiling_specification);
         let data = grid.tiling_grid_bounds();
         let bounds = match area {
             Area::Extent => data,
@@ -281,12 +325,29 @@ impl Env {
         group.bench_function(name, |b| {
             b.to_async(&self.runtime).iter(|| self.run(case));
         });
+        self.metrics(name, || self.run(case));
+    }
+
+    /// Locally, runs `run` a few times while recording the metrics and prints their mean per run.
+    pub fn metrics<F: Future>(&self, name: &str, run: impl Fn() -> F) {
+        const RUNS: u32 = 5;
+        if ci() {
+            return;
+        }
+        SPANS.lock().unwrap().clear();
+        STREAMS.lock().unwrap().clear();
+        RECORD.store(true, Ordering::Relaxed);
+        for _ in 0..RUNS {
+            self.runtime.block_on(run());
+        }
+        RECORD.store(false, Ordering::Relaxed);
+        print_metrics(name, RUNS);
     }
 
     /// Clears the open datasets and block caches of the GDAL workers.
     pub fn clear_gdal_caches(&self) {
         self.runtime
-            .block_on(self.exe_ctx.gdal_process_pool.clear_caches())
+            .block_on(self.exe_ctx.inner.gdal_process_pool.clear_caches())
             .unwrap();
     }
 }
@@ -388,4 +449,161 @@ pub fn criterion() -> Criterion {
         c.sample_size(20).measurement_time(Duration::from_secs(5))
     };
     c.configure_from_args()
+}
+
+/// Quota is always available.
+struct NoQuota;
+
+#[async_trait::async_trait]
+impl QuotaCheck for NoQuota {
+    async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
+        Ok(())
+    }
+}
+
+/// Whether the metrics layer records; only during `Env::metrics`.
+static RECORD: AtomicBool = AtomicBool::new(false);
+/// Sum of the wall time and count of closed spans by name
+static SPANS: LazyLock<Mutex<BTreeMap<&'static str, (Duration, u64)>>> =
+    LazyLock::new(Default::default);
+/// Sums of the `stream_metrics` events by operator path and name
+static STREAMS: LazyLock<Mutex<BTreeMap<(String, String), StreamSums>>> =
+    LazyLock::new(Default::default);
+
+#[derive(Default)]
+struct StreamSums {
+    streams: u64,
+    elements: u64,
+    output_bytes: u64,
+    poll_time_us: u64,
+    wall_time_us: u64,
+    dropped: u64,
+    failed: u64,
+}
+
+/// The fields of one `stream_metrics` event of the `StreamStatisticsAdapter`
+#[derive(Default)]
+struct StreamEvent {
+    event: String,
+    operator: String,
+    path: String,
+    completion: String,
+    elements: u64,
+    output_bytes: u64,
+    poll_time_us: u64,
+    wall_time_us: u64,
+}
+
+impl Visit for StreamEvent {
+    fn record_u64(&mut self, field: &Field, value: u64) {
+        match field.name() {
+            "elements" => self.elements = value,
+            "output_bytes" => self.output_bytes = value,
+            "poll_time_us" => self.poll_time_us = value,
+            "wall_time_us" => self.wall_time_us = value,
+            _ => {}
+        }
+    }
+
+    fn record_str(&mut self, field: &Field, value: &str) {
+        match field.name() {
+            "event" => self.event = value.to_string(),
+            "operator" => self.operator = value.to_string(),
+            "path" => self.path = value.to_string(),
+            "completion" => self.completion = value.to_string(),
+            _ => {}
+        }
+    }
+
+    // `%path` and `%"stream_metrics"` arrive as `Display` values
+    fn record_debug(&mut self, field: &Field, value: &dyn Debug) {
+        self.record_str(field, &format!("{value:?}"));
+    }
+}
+
+/// The span timing of wp0's `map_tile` bench plus a sink for the `stream_metrics` events.
+struct Metrics;
+
+impl<S: Subscriber + for<'a> LookupSpan<'a>> Layer<S> for Metrics {
+    fn on_new_span(&self, _attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
+        if let Some(span) = ctx.span(id) {
+            span.extensions_mut().insert(Instant::now());
+        }
+    }
+
+    fn on_close(&self, id: span::Id, ctx: Context<'_, S>) {
+        let Some(span) = ctx.span(&id) else { return };
+        let Some(start) = span.extensions().get::<Instant>().copied() else {
+            return;
+        };
+        let mut spans = SPANS.lock().unwrap();
+        let entry = spans.entry(span.name()).or_default();
+        entry.0 += start.elapsed();
+        entry.1 += 1;
+    }
+
+    fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
+        let mut fields = StreamEvent::default();
+        event.record(&mut fields);
+        if fields.event != "stream_metrics" {
+            return;
+        }
+        let mut streams = STREAMS.lock().unwrap();
+        let entry = streams.entry((fields.path, fields.operator)).or_default();
+        entry.streams += 1;
+        entry.elements += fields.elements;
+        entry.output_bytes += fields.output_bytes;
+        entry.poll_time_us += fields.poll_time_us;
+        entry.wall_time_us += fields.wall_time_us;
+        entry.dropped += u64::from(fields.completion == "dropped");
+        entry.failed += u64::from(fields.completion == "failed");
+    }
+}
+
+/// Installs the metrics layer as the global subscriber, recording only while `RECORD` is set.
+fn install_metrics() {
+    // `dynamic_filter_fn` is asked per span and event (`filter_fn` caches per callsite), so
+    // switching `RECORD` takes effect at once; an
+    // error means another bench of this binary installed it already
+    let _ = tracing_subscriber::registry()
+        .with(
+            Metrics.with_filter(
+                dynamic_filter_fn(|metadata, _| {
+                    RECORD.load(Ordering::Relaxed) && *metadata.level() <= tracing::Level::DEBUG
+                })
+                .with_max_level_hint(LevelFilter::DEBUG),
+            ),
+        )
+        .try_init();
+}
+
+#[allow(clippy::cast_precision_loss, reason = "printed means")]
+fn print_metrics(name: &str, runs: u32) {
+    let runs = f64::from(runs);
+    eprintln!("{name}: mean per run over {runs} runs");
+    eprintln!("  {:<40} {:>8} {:>10}", "span", "count", "ms");
+    for (span, (total, count)) in SPANS.lock().unwrap().iter() {
+        eprintln!(
+            "  {span:<40} {:>8.1} {:>10.3}",
+            *count as f64 / runs,
+            total.as_secs_f64() * 1000. / runs
+        );
+    }
+    eprintln!(
+        "  {:<40} {:>8} {:>10} {:>10} {:>10} {:>10} {:>8} {:>7}",
+        "operator [path]", "streams", "elements", "MB", "poll ms", "wall ms", "dropped", "failed"
+    );
+    for ((path, operator), s) in STREAMS.lock().unwrap().iter() {
+        eprintln!(
+            "  {:<40} {:>8.1} {:>10.1} {:>10.2} {:>10.3} {:>10.3} {:>8.1} {:>7.1}",
+            format!("{operator} {path}"),
+            s.streams as f64 / runs,
+            s.elements as f64 / runs,
+            s.output_bytes as f64 / runs / 1e6,
+            s.poll_time_us as f64 / runs / 1e3,
+            s.wall_time_us as f64 / runs / 1e3,
+            s.dropped as f64 / runs,
+            s.failed as f64 / runs
+        );
+    }
 }
