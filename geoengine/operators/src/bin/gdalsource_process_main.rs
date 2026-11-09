@@ -309,7 +309,6 @@ fn raster_type_dispatch(
     }
 }
 
-#[allow(clippy::print_stderr)]
 fn run(token: Token) {
     let (sender, receiver) = match setup_client::<WorkerRequest, WorkerResponse>(token) {
         Ok(pair) => pair,
@@ -341,7 +340,7 @@ fn run(token: Token) {
 
         // If helper returns an error, it means the underlying IPC channel is completely broken
         if let Err(err) = handle_request(payload, &mut dataset_cache, &sender) {
-            eprintln!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
+            tracing::error!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
             break;
         }
     }
