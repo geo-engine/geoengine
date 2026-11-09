@@ -7,8 +7,8 @@
 
 //! One 256 px EPSG:3857 map tile from a UTM scene, along the WMS path (projection and resampling
 //! wrapper, PNG encoding) without loading the processing graph from the database.
-//! Prints the mean wall time per stage (the spans of the map path) for each zoom level, plus the
-//! stream metrics per operator.
+//! With `GEOENGINE_BENCH_METRICS=1`, prints the mean wall time per stage (the spans of the map
+//! path) for each case, plus the stream metrics per operator.
 //!
 //! - `map_tile`: a `GdalSource` on one COG band, warm and cold (GDAL worker caches cleared before
 //!   each tile).
@@ -22,7 +22,7 @@
 //! Setup and metrics come from the operator benches' `common` module: server settings, operators
 //! wrapped as in the server.
 //!
-//! `cargo build --release --bin gdalsource-process && cargo bench --bench map_tile [-- layer_patterns]`
+//! `cargo build --release --bin gdalsource-process && [GEOENGINE_BENCH_METRICS=1] cargo bench --bench map_tile [-- layer_patterns]`
 
 #[path = "../../operators/benches/common/mod.rs"]
 mod common;
@@ -420,7 +420,7 @@ async fn clear_caches(env: &Env, cold: bool) {
     }
 }
 
-/// Times one tile as `<group_name>/<name>`, then records its stages
+/// Times one tile as `<group_name>/<name>`, then records its stages if the metrics are enabled
 fn bench_tile(
     group: &mut BenchmarkGroup<WallTime>,
     group_name: &str,
@@ -442,6 +442,10 @@ fn bench_tile(
             elapsed
         });
     });
+    // opt-in: these runs are outside Criterion's closures, so a case filter would not skip them
+    if !common::metrics_enabled() {
+        return;
+    }
     // clearing the caches is part of these runs, but it opens no spans or streams
     metrics::record(&format!("{group_name}/{name}"), STAGE_RUNS, || {
         env.runtime.block_on(async {
@@ -452,8 +456,6 @@ fn bench_tile(
 }
 
 fn map_tile(c: &mut Criterion) {
-    // the stage times are the point of this bench, so it records them without the opt-in
-    metrics::install();
     let mut env = Env::new();
 
     let cog = utm_band(Format::Cog, 0);
