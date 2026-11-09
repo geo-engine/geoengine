@@ -71,6 +71,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
     let level_factor = reader_mode.level_factor();
+    let blocks = blocks.filter(|blocks| blocks.caches(plan.cache_hint));
 
     for params in plan.files {
         let Some(read_advise) = reader_mode
@@ -526,6 +527,44 @@ mod tests {
             gpp.request_stats().reads + gpp.request_stats().reads_joined,
             1
         );
+    }
+
+    #[tokio::test]
+    async fn tiles_read_windows_when_blocks_would_not_stay_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff_with_overviews(dir.path());
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        // no minimum lifetime and a tile that must not be cached, as in the mock query contexts
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(0));
+
+        let plan = TilePlan {
+            tile: TileInformation::new(
+                [0, 0].into(),
+                GridShape2D::new([32, 32]),
+                GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
+            ),
+            time: TimeInterval::default(),
+            band: 0,
+            files: vec![params.clone()],
+            cache_hint: CacheHint::no_cache(),
+        };
+        let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
+            dataset_spatial_grid: file_grid,
+        });
+        let from_blocks =
+            assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, Some(&blocks))
+                .await
+                .unwrap();
+        let from_window = assemble_tile::<u16>(plan, reader_mode, &gdal_worker, None)
+            .await
+            .unwrap();
+
+        assert_eq!(from_blocks.grid_array, from_window.grid_array);
+        assert_eq!(cache.stats().stored, 0, "no block is stored");
+        assert_eq!(gpp.request_stats().headers, 0, "no header is read");
     }
 
     #[tokio::test]

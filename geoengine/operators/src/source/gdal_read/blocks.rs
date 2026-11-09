@@ -120,6 +120,12 @@ impl BlockIo {
             .map(|cache| Self::new(cache, ctx.get_gdal_worker(), ctx.default_cache_ttl()))
     }
 
+    /// Whether blocks read for `cache_hint` stay in the cache. If they do not, each tile reads
+    /// the header and its whole unit again, which costs more than reading its window.
+    pub fn caches(&self, cache_hint: CacheHint) -> bool {
+        block_cache_hint(cache_hint, self.min_ttl).may_cache()
+    }
+
     /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
     /// than the full resolution.
     ///
