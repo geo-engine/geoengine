@@ -8,7 +8,7 @@
 //!
 //! Each case registers a processing graph on the local NDVI test dataset and times
 //! `GetMap` requests through the full actix app (handler, processing graph, operators, PNG encoding).
-//! Needs the Postgres from `Settings-default.toml` and must run from `geoengine/`; every run uses its own temporary schema.
+//! Needs the Postgres from `Settings-default.toml`; every run uses its own temporary schema.
 //!
 //! Compare build settings with criterion baselines, e.g. `-- --save-baseline fat` on one build and `-- --baseline fat` on the other.
 //! The output hash printed per case must match between builds.
@@ -124,6 +124,8 @@ async fn get_map(app_ctx: PostgresContext<NoTls>, uri: &str, token: &str) -> act
 }
 
 fn query_pipelines(c: &mut Criterion) {
+    // `services::config` reads the settings from the working directory, but `cargo bench` starts in `services/`
+    std::env::set_current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/..")).unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
     // `with_temp_context` needs a `'static` closure, so it runs as a task that keeps the schema
