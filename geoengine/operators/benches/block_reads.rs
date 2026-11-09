@@ -495,8 +495,6 @@ async fn run(
     let new_query_ctx = || {
         let mut query_ctx = exec_ctx.mock_query_context(ChunkByteSize::test_default());
         query_ctx.new_raster_cache.clone_from(&cache);
-        // longer than a run, so that warm runs stay warm
-        query_ctx.default_cache_ttl = CacheTtlSeconds::new(3600);
         query_ctx
     };
 
@@ -979,7 +977,10 @@ fn block_reads(c: &mut Criterion) {
 
     let cache_bytes = std::env::var("WP7_BENCH_CACHE_MB")
         .map_or(CACHE_BYTES, |mb| mb.parse::<usize>().unwrap() << 20);
-    let cache = Arc::new(NewRasterCacheEnum::new_lru(cache_bytes));
+    // blocks live longer than a run, so that warm runs stay warm
+    let cache = Arc::new(
+        NewRasterCacheEnum::new_lru(cache_bytes).with_min_block_ttl(CacheTtlSeconds::new(3600)),
+    );
     let hashes: Mutex<BTreeMap<String, u64>> = Mutex::default();
 
     let mut group = c.benchmark_group("block_reads");

@@ -2,9 +2,11 @@ use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
-use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
+use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
-use geoengine_operators::cache::new_raster_cache::NewRasterCacheEnum;
+use geoengine_operators::cache::new_raster_cache::{
+    DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
+};
 use geoengine_operators::processing::ExpressionCacheConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -736,6 +738,8 @@ pub struct Cache {
     pub raster_operators: Vec<String>,
     /// Default cache lifetime for values without an explicit cache TTL.
     pub default_ttl_seconds: u32,
+    /// With the new raster cache, the least time file blocks and headers stay cached
+    pub min_block_ttl_seconds: u32,
 }
 
 impl Cache {
@@ -757,9 +761,10 @@ impl Cache {
     /// The new raster cache, if this config enables it.
     pub fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
         (self.enabled && self.enable_new_raster_cache).then(|| {
-            Arc::new(NewRasterCacheEnum::new_lru(
-                self.new_raster_cache_size_in_bytes(),
-            ))
+            Arc::new(
+                NewRasterCacheEnum::new_lru(self.new_raster_cache_size_in_bytes())
+                    .with_min_block_ttl(CacheTtlSeconds::new(self.min_block_ttl_seconds)),
+            )
         })
     }
 
@@ -771,6 +776,13 @@ impl Cache {
         }
     }
 
+    /// Whether the file blocks of data without a TTL stay cached longer than its tiles.
+    fn blocks_outlive_default_ttl(&self) -> bool {
+        self.enabled
+            && self.enable_new_raster_cache
+            && self.default_ttl_seconds < self.min_block_ttl_seconds
+    }
+
     pub fn validate(&self) -> Result<()> {
         if self.default_ttl_seconds > MAX_CACHE_TTL_SECONDS {
             return Err(crate::error::Error::InvalidConfig {
@@ -780,16 +792,21 @@ impl Cache {
                 ),
             });
         }
-        if self.enabled
-            && self.enable_new_raster_cache
-            && self.default_ttl_seconds < MIN_BLOCK_CACHE_TTL_SECONDS
-        {
+        if self.min_block_ttl_seconds > MAX_CACHE_TTL_SECONDS {
             return Err(crate::error::Error::InvalidConfig {
                 reason: format!(
-                    "default_ttl_seconds must be at least {MIN_BLOCK_CACHE_TTL_SECONDS} with the new raster cache, got {}",
-                    self.default_ttl_seconds
+                    "min_block_ttl_seconds must be at most {MAX_CACHE_TTL_SECONDS}, got {}",
+                    self.min_block_ttl_seconds
                 ),
             });
+        }
+        if self.blocks_outlive_default_ttl() {
+            tracing::warn!(
+                "[cache] default_ttl_seconds ({} s) is below min_block_ttl_seconds ({} s): the file blocks of data without its own TTL stay cached longer than its tiles, so changes to its files can take {} s to show",
+                self.default_ttl_seconds,
+                self.min_block_ttl_seconds,
+                self.min_block_ttl_seconds,
+            );
         }
         if !(0.0..=1.0).contains(&self.raster_cache_size_ratio) {
             return Err(crate::error::Error::InvalidConfig {
@@ -812,14 +829,11 @@ impl TestDefault for Cache {
             enable_new_raster_cache: false,
             raster_cache_size_ratio: 0.5,
             raster_operators: vec!["*".to_string()],
-            default_ttl_seconds: MIN_BLOCK_CACHE_TTL_SECONDS,
+            default_ttl_seconds: 0,
+            min_block_ttl_seconds: DEFAULT_MIN_BLOCK_TTL_SECONDS,
         }
     }
 }
-
-/// The new raster cache keeps file blocks for at least the default TTL, so that the tiles of a view
-/// share them. Shorter than this, they would be read again within a view.
-const MIN_BLOCK_CACHE_TTL_SECONDS: u32 = 60;
 
 impl ConfigElement for Cache {
     const KEY: &'static str = "cache";
@@ -1014,29 +1028,48 @@ mod tests {
     }
 
     #[test]
-    fn it_requires_a_minimum_default_cache_ttl_only_with_the_new_raster_cache() {
-        let cache = |enabled, enable_new_raster_cache, default_ttl_seconds| Cache {
-            enabled,
-            enable_new_raster_cache,
-            default_ttl_seconds,
+    fn it_warns_when_blocks_outlive_the_default_ttl_only_with_the_new_raster_cache() {
+        let cache =
+            |enabled, enable_new_raster_cache, default_ttl_seconds, min_block_ttl_seconds| Cache {
+                enabled,
+                enable_new_raster_cache,
+                default_ttl_seconds,
+                min_block_ttl_seconds,
+                ..Cache::test_default()
+            };
+        assert!(cache(true, true, 0, 60).blocks_outlive_default_ttl());
+        assert!(cache(true, true, 0, 60).validate().is_ok());
+        assert!(!cache(true, true, 60, 60).blocks_outlive_default_ttl());
+        assert!(!cache(true, true, 300, 60).blocks_outlive_default_ttl());
+        assert!(!cache(true, true, 0, 0).blocks_outlive_default_ttl());
+        assert!(!cache(true, false, 0, 60).blocks_outlive_default_ttl());
+        assert!(!cache(false, true, 0, 60).blocks_outlive_default_ttl());
+        assert!(
+            cache(true, true, 0, MAX_CACHE_TTL_SECONDS + 1)
+                .validate()
+                .is_err()
+        );
+        assert!(
+            Cache {
+                default_ttl_seconds: MAX_CACHE_TTL_SECONDS + 1,
+                ..Cache::test_default()
+            }
+            .validate()
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn it_gives_the_new_raster_cache_the_min_block_ttl() {
+        let cache = Cache {
+            enabled: true,
+            enable_new_raster_cache: true,
+            min_block_ttl_seconds: 7,
             ..Cache::test_default()
         };
-        assert!(
-            cache(true, true, MIN_BLOCK_CACHE_TTL_SECONDS)
-                .validate()
-                .is_ok()
-        );
-        assert!(
-            cache(true, true, MIN_BLOCK_CACHE_TTL_SECONDS - 1)
-                .validate()
-                .is_err()
-        );
-        assert!(cache(true, false, 0).validate().is_ok());
-        assert!(cache(false, true, 0).validate().is_ok());
-        assert!(
-            cache(false, false, MAX_CACHE_TTL_SECONDS + 1)
-                .validate()
-                .is_err()
+        assert_eq!(
+            cache.new_raster_cache().unwrap().min_block_ttl().seconds(),
+            7
         );
     }
 }

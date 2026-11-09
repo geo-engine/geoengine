@@ -18,9 +18,9 @@
 //! pool joins concurrent requests for the file headers that give the levels and block sizes, and
 //! reuses them.
 //!
-//! Blocks and headers live as long as the dataset's cache hint says, and at least for the default
-//! cache TTL, with a warning if that is longer. A dataset with a TTL of 0 still has its tiles
-//! computed anew, but they share the blocks and headers of its files.
+//! Blocks and headers live as long as the dataset's cache hint says, and at least for the cache's
+//! minimum block TTL. A dataset with a TTL of 0 still has its tiles computed anew, but they share
+//! the blocks and headers of its files.
 
 use super::level_read_advise;
 use crate::cache::new_raster_cache::{BlockKey, NewRasterCacheEnum, SupportedRasterDataType};
@@ -116,8 +116,10 @@ impl BlockIo {
 
     /// Block reads need the raster cache; without it, sources read windows.
     pub fn from_query_context(ctx: &dyn QueryContext) -> Option<Self> {
-        ctx.new_raster_cache()
-            .map(|cache| Self::new(cache, ctx.get_gdal_worker(), ctx.default_cache_ttl()))
+        ctx.new_raster_cache().map(|cache| {
+            let min_ttl = cache.min_block_ttl();
+            Self::new(cache, ctx.get_gdal_worker(), min_ttl)
+        })
     }
 
     /// Whether blocks read for `cache_hint` stay in the cache. If they do not, each tile reads
@@ -161,7 +163,7 @@ impl BlockIo {
                     );
                     let ttl = cache_hint.total_ttl_seconds();
                     if is_new && ttl < self.min_ttl {
-                        tracing::warn!(
+                        tracing::debug!(
                             "{} has a cache TTL of {} s, its blocks live for the minimum of {} s",
                             params.file_path.display(),
                             ttl.seconds(),

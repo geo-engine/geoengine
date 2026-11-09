@@ -145,12 +145,6 @@ where
         let cache_config = get_config_element::<Cache>()?;
         cache_config.validate()?;
         let new_raster_cache = cache_config.new_raster_cache();
-        // block reads need the configured TTL; without them, tests expect uncached responses
-        let default_cache_ttl = CacheTtlSeconds::new(if new_raster_cache.is_some() {
-            cache_config.default_ttl_seconds
-        } else {
-            0
-        });
 
         Ok(PostgresContext {
             task_manager: Arc::new(TypedTaskManagerBackend::new(
@@ -165,7 +159,7 @@ where
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
             new_raster_cache,
-            default_cache_ttl,
+            default_cache_ttl: CacheTtlSeconds::new(0),
             provider_registry,
             stac_request_registry,
             gdal_process_pool,

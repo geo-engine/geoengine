@@ -16,7 +16,8 @@ use futures::StreamExt;
 use futures::stream;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, QueryRectangle, RasterQueryRectangle, SpatialResolution, TimeInterval,
+    BandSelection, CacheHint, CacheTtlSeconds, QueryRectangle, RasterQueryRectangle,
+    SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridIdx2D, Pixel, RasterDataType, RasterTile2D, TileInformation,
@@ -32,7 +33,13 @@ use std::sync::{Arc, Mutex, RwLock};
 
 pub struct NewRasterCache<Store> {
     store: Store,
+    /// the least time file blocks and headers stay cached, see [`NewRasterCacheEnum::min_block_ttl`]
+    min_block_ttl: CacheTtlSeconds,
 }
+
+/// The least time file blocks and headers stay cached unless set otherwise, so that the tiles of a
+/// view share them; the server takes it from `[cache] min_block_ttl_seconds`.
+pub const DEFAULT_MIN_BLOCK_TTL_SECONDS: u32 = 60;
 
 pub enum NewRasterCacheEnum {
     InMemoryCompressedRasterTile2DFifo(
@@ -54,6 +61,7 @@ impl TestDefault for NewRasterCacheEnum {
                 block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
+            min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
         })
     }
 }
@@ -77,6 +85,7 @@ impl NewRasterCacheEnum {
                 block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
+            min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
         })
     }
 
@@ -90,7 +99,26 @@ impl NewRasterCacheEnum {
                 block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
+            min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
         })
+    }
+
+    /// The least time file blocks and headers stay cached, also for data with a shorter TTL. With
+    /// 0, sources read windows of data without a TTL, as its blocks would expire when stored.
+    pub fn min_block_ttl(&self) -> CacheTtlSeconds {
+        match self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.min_block_ttl,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.min_block_ttl,
+        }
+    }
+
+    #[must_use]
+    pub fn with_min_block_ttl(mut self, min_block_ttl: CacheTtlSeconds) -> Self {
+        match &mut self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.min_block_ttl = min_block_ttl,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.min_block_ttl = min_block_ttl,
+        }
+        self
     }
 
     async fn get(
