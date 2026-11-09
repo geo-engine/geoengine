@@ -1712,6 +1712,7 @@ mod tests {
     /// code on the item properties (`proj:epsg`), so this exercises the version-aware
     /// parsing in `try_create_tile_for_band`. The item fixture is a recorded response
     /// from the element84 STAC API and contains no external dependencies.
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_process_harvest_item_recovers_v1_0_0_item() {
         use geoengine_datatypes::dataset::DataProviderId;
@@ -1747,6 +1748,7 @@ mod tests {
                 bands: vec![StacProviderDatasetBand::new_unitless(StacAssetBand {
                     asset_title: "Blue - 10m".to_string(),
                     band_name: Some("blue".to_string()),
+                    asset_key: None,
                 })],
             }],
             query_timeout_secs: 60,

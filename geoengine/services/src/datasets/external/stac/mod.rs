@@ -183,6 +183,12 @@ pub struct StacAssetBand {
     /// Matches the STAC `bands[].name` metadata (e.g. `B04`) to select the
     /// raster channel inside the asset. `None` for single-band assets.
     pub band_name: Option<String>,
+    /// The key of the asset in the `assets` of a STAC item, e.g. `B04_20m`.
+    ///
+    /// If all bands of a dataset have one, searches only request these assets, which makes
+    /// responses much smaller. It is required for servers that do not support `assets.*` in
+    /// `fields`, like CDSE.
+    pub asset_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
