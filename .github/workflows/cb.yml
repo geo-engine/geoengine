@@ -78,6 +78,8 @@ jobs:
           echo "Comparing against benchmark data at ${{ env.BENCH_FILE_PATH }}."
 
       - name: Run benchmark
+        # `bash` runs with `pipefail`, so a failing bench fails the step despite the `tee`
+        shell: bash
         run: just bench-ci -- --output-format bencher | tee ../${{ env.CARGO_BENCH_FILE_PATH }}
 
       - name: Compare benchmark result
