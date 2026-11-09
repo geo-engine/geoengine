@@ -172,6 +172,8 @@ fn print(name: &str, runs: u32) {
     // poll ms: time in the stream's polls, its inputs' polls included, but not work on Rayon or
     // blocking threads; wall ms: first poll to end, waits for the consumer included. Both overlap
     // with the inputs' times, so they neither add up along the path nor are CPU time.
+    // dropped: ended before its end was polled, e.g. the other inputs of a `RasterStacker` once
+    // its first input ended, after they delivered all their tiles.
     eprintln!(
         "  {:<40} {:>8} {:>10} {:>10} {:>10} {:>10} {:>8} {:>7}",
         "operator [path]", "streams", "elements", "MB", "poll ms", "wall ms", "dropped", "failed"
