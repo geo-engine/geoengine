@@ -166,16 +166,19 @@ impl ApproxEq for SpatialResolution {
     }
 }
 
+/// Resolutions are ordered per axis, i.e., a resolution is less than another one if it is finer
+/// or equal in both axes and they are not equal.
+/// Resolutions that are finer in one axis and coarser in the other are incomparable.
 #[allow(clippy::float_cmp)]
 impl PartialOrd for SpatialResolution {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self.x < other.x && self.y < other.y {
-            Some(std::cmp::Ordering::Less)
-        } else if self.x > other.x && self.y > other.y {
-            Some(std::cmp::Ordering::Greater)
-        } else if self.x == other.x && self.y == other.y {
+        if self.x == other.x && self.y == other.y {
             // TODO: use `approx_eq`?
             Some(std::cmp::Ordering::Equal)
+        } else if self.x <= other.x && self.y <= other.y {
+            Some(std::cmp::Ordering::Less)
+        } else if self.x >= other.x && self.y >= other.y {
+            Some(std::cmp::Ordering::Greater)
         } else {
             None
         }
@@ -360,6 +363,31 @@ mod test {
                 SpatialResolution::new_unchecked(0.4, 0.4)
             ),
             4
+        );
+    }
+
+    #[test]
+    fn it_orders_resolutions_per_axis() {
+        let res = SpatialResolution::new_unchecked;
+
+        assert_eq!(res(0.1, 0.1), res(0.1, 0.1));
+        assert!(res(0.1, 0.1) < res(0.2, 0.2));
+        assert!(res(0.1, 0.1) < res(0.1, 0.2));
+        assert!(res(0.1, 0.1) <= res(0.2, 0.1));
+        assert!(res(0.2, 0.1) > res(0.1, 0.1));
+
+        // finer in one axis and coarser in the other
+        assert_eq!(res(0.2, 0.1).partial_cmp(&res(0.1, 0.2)), None);
+    }
+
+    #[test]
+    fn it_finds_overview_levels_for_a_coarser_axis() {
+        assert_eq!(
+            find_next_best_overview_level_resolution(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.1, 0.4)
+            ),
+            SpatialResolution::new_unchecked(0.1, 0.1)
         );
     }
 }

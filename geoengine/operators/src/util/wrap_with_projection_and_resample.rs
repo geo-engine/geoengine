@@ -128,11 +128,11 @@ impl WrapWithProjectionAndResample {
             return Ok(self);
         }
 
+        let target_resolution = target_spatial_grid.spatial_resolution();
+
         // Query resolution is smaller than processing graph => compute on full resolution and append interpolation to decrease resolution
-        if target_spatial_grid.spatial_resolution().x() <= rd_resolution.x()
-            && target_spatial_grid.spatial_resolution().y() <= rd_resolution.y()
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
-        {
+        if target_resolution <= rd_resolution {
             self.interpolation(
                 target_spatial_resolution,
                 exe_ctx,
@@ -140,12 +140,37 @@ impl WrapWithProjectionAndResample {
                 target_spatial_grid,
             )
             .await
-        } else {
+        } else if target_resolution >= rd_resolution {
             // Query resolution is larger than processing graph => compute on overview level and append downsampling to increase resolution
             self.downsampling(
                 target_spatial_resolution,
                 exe_ctx,
                 rd_resolution,
+                target_spatial_grid,
+            )
+            .await
+        } else {
+            // Query resolution is larger in one axis and smaller in the other one => downsample the coarser axis and interpolate the finer one
+            let downsampled_resolution = SpatialResolution::new_unchecked(
+                target_resolution.x().get().max(rd_resolution.x().get()),
+                target_resolution.y().get().max(rd_resolution.y().get()),
+            );
+            let downsampled_spatial_grid = self
+                .result_descriptor
+                .spatial_grid_descriptor()
+                .with_changed_resolution(downsampled_resolution);
+
+            self.downsampling(
+                Some(downsampled_resolution),
+                exe_ctx,
+                rd_resolution,
+                downsampled_spatial_grid,
+            )
+            .await?
+            .interpolation(
+                target_spatial_resolution,
+                exe_ctx,
+                downsampled_resolution,
                 target_spatial_grid,
             )
             .await
@@ -259,5 +284,81 @@ impl WrapWithProjectionAndResample {
             .await?
             .wrap_with_resample(target_origin_reference, target_spatial_resolution, exe_ctx)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{
+        MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
+    };
+    use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use geoengine_datatypes::primitives::TimeInterval;
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::util::test::TestDefault;
+
+    async fn wrap_with_resample(target_resolution: SpatialResolution) -> TypedRasterOperator {
+        let exe_ctx = MockExecutionContext::test_default();
+        let source = MockRasterSource::<u8> {
+            params: MockRasterSourceParams {
+                data: vec![],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.).unwrap(),
+                        GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
+                    ),
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .typed();
+        let initialized = source
+            .clone()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let wrapped =
+            WrapWithProjectionAndResample::new_create_result_descriptor(source, initialized)
+                .wrap_with_resample(None, Some(target_resolution), &exe_ctx)
+                .await
+                .unwrap();
+
+        assert_eq!(
+            wrapped
+                .result_descriptor
+                .spatial_grid_descriptor()
+                .spatial_resolution(),
+            target_resolution
+        );
+
+        wrapped.operator
+    }
+
+    #[tokio::test]
+    async fn it_resamples_to_a_resolution_that_is_coarser_in_one_axis_and_finer_in_the_other() {
+        let operator = wrap_with_resample(SpatialResolution::new_unchecked(2., 0.5)).await;
+
+        let TypedRasterOperator::Interpolation(interpolation) = operator else {
+            panic!("the finer axis should be interpolated");
+        };
+        assert!(
+            matches!(
+                interpolation.sources.raster,
+                TypedRasterOperator::Downsampling(_)
+            ),
+            "the coarser axis should be downsampled"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_resamples_to_a_resolution_that_is_coarser_in_one_axis() {
+        let operator = wrap_with_resample(SpatialResolution::new_unchecked(3., 1.)).await;
+
+        assert!(matches!(operator, TypedRasterOperator::Downsampling(_)));
     }
 }
