@@ -88,6 +88,7 @@ import {NeighborhoodAggregateComponent} from './operators/dialogs/neighborhood-a
 import {OperatorListComponent} from './operators/dialogs/operator-list/operator-list.component';
 import {PieChartComponent} from './operators/dialogs/pie-chart/pie-chart.component';
 import {PointInPolygonFilterOperatorComponent} from './operators/dialogs/point-in-polygon-filter/point-in-polygon-filter.component';
+import {PolygonRasterizationComponent} from './operators/dialogs/polygon-rasterization/polygon-rasterization.component';
 import {RasterScalingComponent} from './operators/dialogs/raster-scaling/raster-scaling.component';
 import {RasterStackerComponent} from './operators/dialogs/raster-stacker/raster-stacker.component';
 import {RasterTypeConversionComponent} from './operators/dialogs/raster-type-conversion/raster-type-conversion.component';
@@ -228,6 +229,7 @@ const CORE_COMPONENTS = [
     PlotListComponent,
     PlotListEntryComponent,
     PointInPolygonFilterOperatorComponent,
+    PolygonRasterizationComponent,
     ProvenanceTableComponent,
     QuotaInfoComponent,
     RasterizationComponent,

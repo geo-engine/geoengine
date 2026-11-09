@@ -74,6 +74,7 @@ export * from './lib/operators/dialogs/raster-stacker/raster-stacker.component';
 export * from './lib/operators/dialogs/raster-type-conversion/raster-type-conversion.component';
 export * from './lib/operators/dialogs/raster-vector-join/raster-vector-join.component';
 export * from './lib/operators/dialogs/rasterization/rasterization.component';
+export * from './lib/operators/dialogs/polygon-rasterization/polygon-rasterization.component';
 export * from './lib/operators/dialogs/scatterplot-operator/scatterplot-operator.component';
 export * from './lib/operators/dialogs/statistics-plot/statistics-plot.component';
 export * from './lib/operators/dialogs/temporal-raster-aggregation/temporal-raster-aggregation.component';
