@@ -28,7 +28,7 @@
 //! - All tiles must have the same size, since the tile size is fixed for a whole stream.
 //!
 //! The tiles are returned in raster stream order: time, then tile position (row-major), then band.
-//! The upper left tile of each block is at [`AsciiRasterTiles::origin`].
+//! The upper left tile of each block is at [`AsciiRasterTiles::tile_origin`].
 
 use crate::{
     primitives::{CacheHint, DateTime, TimeGranularity, TimeInstance, TimeInterval, TimeStep},
@@ -76,7 +76,7 @@ pub enum AsciiTimeFormat {
 ///     +-----+-----+
 ///     ",
 /// )
-/// .origin([-1, 0])
+/// .tile_origin([-1, 0])
 /// .tiles::<u8>();
 ///
 /// assert_eq!(tiles.len(), 2);
@@ -84,7 +84,7 @@ pub enum AsciiTimeFormat {
 #[derive(Debug, Clone, Copy)]
 pub struct AsciiRasterTiles<'a> {
     text: &'a str,
-    origin: GridIdx2D,
+    tile_origin: GridIdx2D,
     geo_transform: GeoTransform,
     cache_hint: CacheHint,
 }
@@ -111,7 +111,7 @@ impl<'a> AsciiRasterTiles<'a> {
     pub fn new(text: &'a str) -> Self {
         Self {
             text,
-            origin: [0, 0].into(),
+            tile_origin: [0, 0].into(),
             geo_transform: GeoTransform::test_default(),
             cache_hint: CacheHint::no_cache(),
         }
@@ -119,8 +119,8 @@ impl<'a> AsciiRasterTiles<'a> {
 
     /// Sets the tile position (`[y, x]`) of the upper left tile of each block.
     #[must_use]
-    pub fn origin(mut self, tile_position: impl Into<GridIdx2D>) -> Self {
-        self.origin = tile_position.into();
+    pub fn tile_origin(mut self, tile_position: impl Into<GridIdx2D>) -> Self {
+        self.tile_origin = tile_position.into();
         self
     }
 
@@ -246,7 +246,7 @@ impl<'a> AsciiRasterTiles<'a> {
     }
 
     fn tile_position(&self, tile_row: usize, tile_column: usize) -> GridIdx2D {
-        let GridIdx([y, x]) = self.origin;
+        let GridIdx([y, x]) = self.tile_origin;
         [y + to_isize(tile_row), x + to_isize(tile_column)].into()
     }
 
@@ -982,11 +982,11 @@ mod tests {
     }
 
     #[test]
-    fn it_applies_origin_geo_transform_and_cache_hint() {
+    fn it_applies_tile_origin_geo_transform_and_cache_hint() {
         let geo_transform = GeoTransform::new_with_coordinate_x_y_unchecked(10.0, 0.5, 20.0, -0.5);
         let cache_hint = CacheHint::seconds(42);
         let tiles = AsciiRasterTiles::new(TWO_BY_TWO_TILES)
-            .origin([-1, -2])
+            .tile_origin([-1, -2])
             .geo_transform(geo_transform)
             .cache_hint(cache_hint)
             .tiles::<u8>();
@@ -1058,7 +1058,9 @@ mod tests {
             |  1  1  1 |  1  1  1 |
             +----------+----------+"};
 
-        let tiles = AsciiRasterTiles::new(text).origin([5, 5]).tiles::<i32>();
+        let tiles = AsciiRasterTiles::new(text)
+            .tile_origin([5, 5])
+            .tiles::<i32>();
 
         assert_eq!(raster_tiles_to_ascii(&tiles), text);
     }
@@ -1207,7 +1209,7 @@ mod tests {
             +-----+-----+-----+
             ",
         )
-        .origin([-1, 1])
+        .tile_origin([-1, 1])
         .info();
 
         assert_eq!(
@@ -1278,7 +1280,7 @@ mod tests {
 
     #[test]
     fn it_accepts_equal_tiles() {
-        let tiles = AsciiRasterTiles::new(TWO_BY_TWO_TILES).origin([-1, 0]);
+        let tiles = AsciiRasterTiles::new(TWO_BY_TWO_TILES).tile_origin([-1, 0]);
         assert_raster_tiles_eq_ascii(&tiles.tiles::<u8>(), &tiles);
     }
 
@@ -1296,7 +1298,7 @@ mod tests {
         let actual = raster_tiles_from_ascii::<u8>(TWO_BY_TWO_TILES);
         assert_raster_tiles_eq_ascii(
             &actual,
-            &AsciiRasterTiles::new(TWO_BY_TWO_TILES).origin([1, 1]),
+            &AsciiRasterTiles::new(TWO_BY_TWO_TILES).tile_origin([1, 1]),
         );
     }
 

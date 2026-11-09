@@ -807,7 +807,7 @@ mod tests {
             | 6 7 |
             +-----+
             "})
-        .origin([-1, 0])
+        .tile_origin([-1, 0])
     }
 
     /// Adds the bands of [`three_bands`] one by one and collects the tiles the accumulator returns.
@@ -859,7 +859,7 @@ mod tests {
                 | 2 2 |
                 +-----+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -890,7 +890,7 @@ mod tests {
                 | 0.6666666666666666 0.6666666666666666 |
                 +---------------------------------------+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -917,7 +917,7 @@ mod tests {
                 | 5 6 |
                 +-----+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -940,7 +940,7 @@ mod tests {
             | 6 7 | 10 11 |
             +-----+-------+
             "})
-        .origin([-1, 0])
+        .tile_origin([-1, 0])
     }
 
     /// Queries the first derivative of [`two_tiles_with_three_bands`] for `bands`.
@@ -1008,7 +1008,7 @@ mod tests {
                 | 2 2 | 4 4 |
                 +-----+-----+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -1026,7 +1026,7 @@ mod tests {
                 | 2 2 | 4 4 |
                 +-----+-----+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 }

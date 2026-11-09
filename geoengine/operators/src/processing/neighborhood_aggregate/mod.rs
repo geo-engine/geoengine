@@ -524,7 +524,7 @@ mod tests {
                 +----------+-------+
                 ",
             )
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -575,7 +575,7 @@ mod tests {
             +----------+----------+
             ",
         )
-        .origin([-1, 0])
+        .tile_origin([-1, 0])
     }
 
     fn make_raster() -> TypedRasterOperator {

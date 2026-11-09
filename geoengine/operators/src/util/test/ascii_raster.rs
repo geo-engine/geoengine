@@ -92,7 +92,7 @@ mod tests {
             +-------+-------+
             ",
         )
-        .origin([-1, 0])
+        .tile_origin([-1, 0])
         .result_descriptor::<i8>();
 
         assert_eq!(

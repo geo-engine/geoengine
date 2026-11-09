@@ -488,7 +488,7 @@ mod tests {
             | 10 11 | 14 15 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let raster2 = AsciiRasterTiles::new(indoc! {"
             [0, 5)
@@ -502,7 +502,7 @@ mod tests {
             | 26 27 | 30 31 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -563,7 +563,7 @@ mod tests {
                 | 26 27 | 30 31 |
                 +-------+-------+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -576,7 +576,7 @@ mod tests {
             | 2 3 |
             +-----+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let time_series = AsciiRasterTiles::new(indoc! {"
             [0, 5)
@@ -590,7 +590,7 @@ mod tests {
             | 2 3 |
             +-----+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let irregular = TimeDescriptor::new_irregular(None);
         // the merge splits [0, 10) at 5, also into [0, 5), which ends where the query starts
@@ -669,7 +669,7 @@ mod tests {
             |  9  8 | 13 12 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let raster2 = AsciiRasterTiles::new(indoc! {"
             [0, 5)
@@ -693,7 +693,7 @@ mod tests {
             | 25 24 | 39 28 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -774,7 +774,7 @@ mod tests {
                 | 25 24 | 39 28 |
                 +-------+-------+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -805,7 +805,7 @@ mod tests {
             | 10 11 | 14 15 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let raster2 = AsciiRasterTiles::new(indoc! {"
             [0, 5)
@@ -819,7 +819,7 @@ mod tests {
             | 26 27 | 30 31 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
 
         let stacker = RasterStacker {
             params: RasterStackerParams {
@@ -871,7 +871,7 @@ mod tests {
                 | 26 27 | 30 31 |
                 +-------+-------+
                 "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 

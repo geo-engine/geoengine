@@ -926,7 +926,7 @@ mod tests {
             | 30 30 | 31 31 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
         let mrs = raster.mock_raster_source::<u8>().typed();
 
         let time_shift = TimeShift {
@@ -989,7 +989,7 @@ mod tests {
                 | 20 20 | 21 21 |
                 +-------+-------+
             "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
@@ -1018,7 +1018,7 @@ mod tests {
             | 30 30 | 31 31 |
             +-------+-------+
             "})
-        .origin([-1, 0]);
+        .tile_origin([-1, 0]);
         let mrs = raster.mock_raster_source::<u8>().typed();
 
         let time_shift = TimeShift {
@@ -1078,7 +1078,7 @@ mod tests {
                 | 20 20 | 21 21 |
                 +-------+-------+
             "})
-            .origin([-1, 0]),
+            .tile_origin([-1, 0]),
         );
     }
 
