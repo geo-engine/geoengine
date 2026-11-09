@@ -679,18 +679,15 @@ struct StoringGuard<'a> {
 
 impl<'a> StoringGuard<'a> {
     /// `None` if another insert stores the key.
-    fn claim(
-        storing: &'a Mutex<HashSet<Arc<CacheKey>>>,
-        key: &Arc<CacheKey>,
-    ) -> Result<Option<Self>> {
+    fn claim(storing: &'a Mutex<HashSet<Arc<CacheKey>>>, key: &Arc<CacheKey>) -> Option<Self> {
         let claimed = storing
             .lock()
-            .map_err(|_| CacheError::LockPoisoned)?
+            .unwrap_or_else(PoisonError::into_inner)
             .insert(key.clone());
-        Ok(claimed.then(|| Self {
+        claimed.then(|| Self {
             storing,
             key: key.clone(),
-        }))
+        })
     }
 }
 
@@ -904,17 +901,17 @@ where
 
     async fn get(&self, key: &CacheKey) -> Result<Option<Arc<Self::SF>>> {
         let hit = {
-            let cache = self.cache.read().map_err(|_| CacheError::LockPoisoned)?;
+            let cache = self.cache.read().unwrap_or_else(PoisonError::into_inner);
             cache.get(key).map(Arc::clone)
         };
 
         if let Some(entry) = &hit {
             if entry.value.is_expired().await {
-                let mut cache = self.cache.write().map_err(|_| CacheError::LockPoisoned)?;
+                let mut cache = self.cache.write().unwrap_or_else(PoisonError::into_inner);
                 let mut eviction_strategy = self
                     .eviction_strategy
                     .lock()
-                    .map_err(|_| CacheError::LockPoisoned)?;
+                    .unwrap_or_else(PoisonError::into_inner);
 
                 if cache.contains_key(key) {
                     let arc_key = Arc::new(key.clone());
@@ -928,7 +925,7 @@ where
 
             self.eviction_strategy
                 .lock()
-                .map_err(|_| CacheError::LockPoisoned)?
+                .unwrap_or_else(PoisonError::into_inner)
                 .record_hit(key);
             self.counters.hits.fetch_add(1, Ordering::Relaxed);
         } else {
@@ -940,17 +937,17 @@ where
 
     async fn insert(&self, key: Arc<CacheKey>, tile: TypedRasterTile2D) -> Result<()> {
         {
-            let cache = self.cache.read().map_err(|_| CacheError::LockPoisoned)?;
+            let cache = self.cache.read().unwrap_or_else(PoisonError::into_inner);
             if cache.contains_key(&key) {
                 self.eviction_strategy
                     .lock()
-                    .map_err(|_| CacheError::LockPoisoned)?
+                    .unwrap_or_else(PoisonError::into_inner)
                     .record_hit(&key);
                 self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
                 return Ok(());
             }
         }
-        let Some(_storing) = StoringGuard::claim(&self.storing, &key)? else {
+        let Some(_storing) = StoringGuard::claim(&self.storing, &key) else {
             self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         };
@@ -962,7 +959,7 @@ where
         let key_size = cache_key_byte_size(&key);
         let required_space = value_size + key_size;
 
-        let mut cache = self.cache.write().map_err(|_| CacheError::LockPoisoned)?;
+        let mut cache = self.cache.write().unwrap_or_else(PoisonError::into_inner);
         if cache.contains_key(&key) {
             self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
             return Ok(());
@@ -971,7 +968,7 @@ where
         let mut eviction_strategy = self
             .eviction_strategy
             .lock()
-            .map_err(|_| CacheError::LockPoisoned)?;
+            .unwrap_or_else(PoisonError::into_inner);
         let current_size = self.total_size.load(Ordering::SeqCst);
 
         let eviction_plan =
@@ -1384,9 +1381,7 @@ mod tests {
         };
         let key = make_cache_key(0, 0);
 
-        let other_insert = StoringGuard::claim(&lru.store.storing, &Arc::new(key.clone()))
-            .unwrap()
-            .unwrap();
+        let other_insert = StoringGuard::claim(&lru.store.storing, &Arc::new(key.clone())).unwrap();
         cache
             .insert(key.clone(), make_tile(1, CacheHint::max_duration()))
             .await
