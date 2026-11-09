@@ -15,7 +15,7 @@ use crate::api::model::{
         },
     },
 };
-use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
+use geoengine_datatypes::util::{FiniteF64, NonNegativeFiniteF64, PositiveFiniteF64};
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::{
     machine_learning::{onnx::Onnx as OperatorsOnnx, onnx::OnnxParams as OperatorsOnnxParameters},
@@ -29,7 +29,7 @@ use geoengine_operators::{
         BandNeighborhoodAggregateParams as OperatorsBandNeighborhoodAggregateParameters,
         BandwiseExpression as OperatorsBandwiseExpression,
         BandwiseExpressionParams as OperatorsBandwiseExpressionParameters,
-        ColumnRangeFilter as OperatorsColumnRangeFilter,
+        BurnValue as OperatorsBurnValue, ColumnRangeFilter as OperatorsColumnRangeFilter,
         ColumnRangeFilterParams as OperatorsColumnRangeFilterParameters,
         DensityParams as OperatorsDensityParameters,
         DeriveOutRasterSpecsSource as OperatorsDeriveOutRasterSpecsSource,
@@ -46,10 +46,12 @@ use geoengine_operators::{
         LineSimplificationParams as OperatorsLineSimplificationParameters,
         NeighborhoodAggregate as OperatorsNeighborhoodAggregate,
         NeighborhoodAggregateParams as OperatorsNeighborhoodAggregateParameters,
-        OutputColumn as OperatorsOutputColumn,
+        OutputColumn as OperatorsOutputColumn, OverlapAggregation as OperatorsOverlapAggregation,
         PointInPolygonFilter as OperatorsPointInPolygonFilter,
         PointInPolygonFilterParams as OperatorsPointInPolygonFilterParameters,
         PointInPolygonFilterSource as OperatorsPointInPolygonFilterSource,
+        PolygonRasterization as OperatorsPolygonRasterization,
+        PolygonRasterizationParams as OperatorsPolygonRasterizationParameters,
         Radiance as OperatorsRadiance, RadianceParams as OperatorsRadianceParameters,
         RasterScaling as OperatorsRasterScaling,
         RasterScalingParams as OperatorsRasterScalingParameters,
@@ -61,8 +63,8 @@ use geoengine_operators::{
         RasterVectorJoinParams as OperatorsRasterVectorJoinParameters,
         Rasterization as OperatorsRasterization,
         RasterizationParams as OperatorsRasterizationParameters,
-        Reflectance as OperatorsReflectance, ReflectanceParams as OperatorsReflectanceParameters,
-        Reprojection as OperatorsReprojection,
+        RasterizationTime as OperatorsRasterizationTime, Reflectance as OperatorsReflectance,
+        ReflectanceParams as OperatorsReflectanceParameters, Reprojection as OperatorsReprojection,
         ReprojectionParams as OperatorsReprojectionParameters, ScalingMode as OperatorsScalingMode,
         SlopeOffsetSelection as OperatorsSlopeOffsetSelection, Temperature as OperatorsTemperature,
         TemperatureParams as OperatorsTemperatureParameters,
@@ -2128,6 +2130,388 @@ impl TryFrom<Rasterization> for OperatorsRasterization {
     }
 }
 
+/// The `PolygonRasterization` operator creates a raster from a polygon vector source.
+///
+/// A pixel is covered by a polygon if its center lies inside the polygon (holes are respected).
+/// Pixels that are not covered by any polygon are NO DATA.
+///
+/// The value of the covered pixels is
+/// - a constant (`1` by default),
+/// - the number of polygons that cover the pixel (`count`), or
+/// - the value of a numeric column (`attribute`), aggregated over all polygons that cover the pixel.
+///   Features with a null value are skipped, unless `ignoreNoData` is `false`, which makes all pixels they cover NO DATA.
+///   `first`, `last`, `min` and `max` keep the measurement of the column, e.g., its classes.
+///   `sum`, `mean` and `medianEstimate` create new values, so a classification becomes unitless.
+///   The median is exact for up to five values and estimated by the P² algorithm for more.
+///
+/// The time slices of the output raster are
+/// - `featureTimes` (default): bounded by the start and end times of the features.
+///   Each slice contains exactly the features that are valid during it, and slices without features are NO DATA.
+///   This needs to scan the times of all features of the source for each query, so prefer `regular` for large data.
+/// - `regular`: slices of a fixed time step, each containing all features whose time intersects it.
+/// - `ignore`: one slice that is valid forever and contains all features.
+///
+/// ## Clipping a raster with polygons
+///
+/// Rasterize the polygons on the grid of the raster and mask the raster with the NO DATA pixels of the result,
+/// using a `RasterStacker` and an `Expression` like `if B IS NODATA { NODATA } else { A }`.
+/// Both rasters need
+/// - the same resolution and origin modulo the resolution, e.g., the default origin `(0, 0)` for most grids,
+/// - the same data type, i.e., set `outputType` to the data type of the raster, and
+/// - the same regular time steps, i.e., use the `regular` time of the raster, or slices that the stacker can align.
+///
+/// ## Errors
+///
+/// If the source is not a polygon source, the column does not exist or is not numeric,
+/// or the constant value cannot be represented by the output type, an error will be thrown.
+#[api_operator(
+    title = "Polygon Rasterization",
+    examples(
+        json!({
+            "type": "PolygonRasterization",
+            "params": {
+                "spatialResolution": { "x": 0.1, "y": 0.1 },
+                "value": { "type": "constant", "value": 1 }
+            },
+            "sources": {
+                "vector": { "type": "OgrSource", "params": { "data": "germany" } }
+            }
+        }),
+        json!({
+            "type": "PolygonRasterization",
+            "params": {
+                "spatialResolution": { "x": 10, "y": 10 },
+                "originCoordinate": { "x": 0, "y": 0 },
+                "value": { "type": "attribute", "column": "landCoverClass", "aggregation": "max" },
+                "outputType": "U8",
+                "time": { "type": "regular", "step": { "granularity": "years", "step": 1 } }
+            },
+            "sources": {
+                "vector": { "type": "OgrSource", "params": { "data": "land_cover" } }
+            }
+        }),
+        json!({
+            "type": "Expression",
+            "params": {
+                "expression": "if B IS NODATA { NODATA } else { A }",
+                "outputType": "U8",
+                "mapNoData": true
+            },
+            "sources": {
+                "raster": {
+                    "type": "RasterStacker",
+                    "params": { "renameBands": { "type": "default" } },
+                    "sources": {
+                        "rasters": [
+                            { "type": "GdalSource", "params": { "data": "ndvi" } },
+                            {
+                                "type": "PolygonRasterization",
+                                "params": {
+                                    "spatialResolution": { "x": 0.1, "y": 0.1 },
+                                    "outputType": "U8",
+                                    "time": { "type": "regular", "step": { "granularity": "months", "step": 1 } }
+                                },
+                                "sources": {
+                                    "vector": { "type": "OgrSource", "params": { "data": "germany" } }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }),
+    )
+)]
+pub struct PolygonRasterization {
+    pub params: PolygonRasterizationParameters,
+    pub sources: Box<SingleVectorSource>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PolygonRasterizationParameters {
+    /// Spatial resolution of the output grid in x/y direction.
+    #[schema(examples(json!({ "x": 0.1, "y": 0.1 })))]
+    pub spatial_resolution: SpatialResolution,
+    /// Origin coordinate to which the raster grid is aligned.
+    ///
+    /// If omitted, the grid is aligned to `(0, 0)`.
+    #[schema(examples(json!({ "x": 0.0, "y": 0.0 })))]
+    #[serde(default)]
+    pub origin_coordinate: Coordinate2D,
+    /// The value that a polygon burns into the pixels it covers.
+    ///
+    /// If omitted, each covered pixel gets the value `1`.
+    #[schema(examples(
+        json!({ "type": "constant", "value": 1 }),
+        json!({ "type": "count" }),
+        json!({ "type": "attribute", "column": "class", "aggregation": "first" })
+    ))]
+    #[serde(default)]
+    pub value: PolygonRasterizationValue,
+    /// Optional output raster data type.
+    ///
+    /// If omitted, it is `U8` for a constant, `U32` for a count and `F64` for an attribute.
+    #[schema(examples("U8"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_type: Option<RasterDataType>,
+    /// Optional measurement of the output band.
+    ///
+    /// If omitted, it is derived from the value: unitless for a constant, `count` for a count,
+    /// and the measurement of the column for an attribute (unitless for a classification that is summed or averaged).
+    #[schema(examples(json!({ "type": "continuous", "measurement": "population", "unit": null })))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_measurement: Option<Measurement>,
+    /// How the time slices of the output raster are derived from the features.
+    ///
+    /// If omitted, the slices are bounded by the start and end times of the features.
+    #[schema(examples(
+        json!({ "type": "featureTimes" }),
+        json!({ "type": "regular", "step": { "granularity": "months", "step": 1 } }),
+        json!({ "type": "ignore" })
+    ))]
+    #[serde(default)]
+    pub time: PolygonRasterizationTime,
+}
+
+/// The value that a polygon burns into the pixels it covers.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
+pub enum PolygonRasterizationValue {
+    Constant(PolygonRasterizationValueConstant),
+    Count(PolygonRasterizationValueCount),
+    Attribute(PolygonRasterizationValueAttribute),
+}
+
+impl Default for PolygonRasterizationValue {
+    fn default() -> Self {
+        Self::Constant(PolygonRasterizationValueConstant {
+            r#type: Default::default(),
+            value: FiniteF64::new_unchecked(1.),
+        })
+    }
+}
+
+/// Each covered pixel gets the same value.
+#[type_tag(value = "constant")]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PolygonRasterizationValueConstant {
+    /// The finite value of the covered pixels.
+    #[schema(value_type = f64, examples(1.0))]
+    pub value: FiniteF64,
+}
+
+/// Each pixel gets the number of polygons that cover it.
+#[type_tag(value = "count")]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PolygonRasterizationValueCount {}
+
+/// Each pixel gets the value of a numeric column, aggregated over all polygons that cover it.
+#[type_tag(value = "attribute")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PolygonRasterizationValueAttribute {
+    /// The name of a numeric (int, float or category) column.
+    #[schema(examples("class"))]
+    pub column: String,
+    /// How the values of overlapping polygons are combined.
+    #[schema(examples("first"))]
+    pub aggregation: PolygonRasterizationAggregation,
+    /// If `true` (default), features with a null value are skipped.
+    /// If `false`, they make all pixels they cover NO DATA.
+    #[schema(default = true, examples(true))]
+    #[serde(default = "default_true")]
+    pub ignore_no_data: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// How the values of overlapping polygons are combined.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum PolygonRasterizationAggregation {
+    /// The value of the first polygon in the stream.
+    First,
+    /// The value of the last polygon in the stream.
+    Last,
+    Min,
+    Max,
+    Sum,
+    Mean,
+    /// The median, which is exact for up to five values and estimated by the P² algorithm for more.
+    MedianEstimate,
+}
+
+/// How the time slices of the output raster are derived from the features.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
+pub enum PolygonRasterizationTime {
+    FeatureTimes(PolygonRasterizationTimeFeatureTimes),
+    Regular(PolygonRasterizationTimeRegular),
+    Ignore(PolygonRasterizationTimeIgnore),
+}
+
+impl Default for PolygonRasterizationTime {
+    fn default() -> Self {
+        Self::FeatureTimes(PolygonRasterizationTimeFeatureTimes::default())
+    }
+}
+
+/// The time slices are bounded by the start and end times of the features.
+#[type_tag(value = "featureTimes")]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PolygonRasterizationTimeFeatureTimes {}
+
+/// Regular time slices that contain all features whose time intersects them.
+#[type_tag(value = "regular")]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PolygonRasterizationTimeRegular {
+    /// The length of the time slices.
+    #[schema(examples(json!({ "granularity": "months", "step": 1 })))]
+    pub step: TimeStep,
+    /// Optional reference time to which the slices are aligned.
+    ///
+    /// If omitted, the slices are aligned to `1970-01-01T00:00:00Z`.
+    #[schema(examples("2020-01-01T00:00:00.000Z"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<TimeInstance>,
+}
+
+/// One time slice that is valid forever and contains all features, regardless of their times.
+#[type_tag(value = "ignore")]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PolygonRasterizationTimeIgnore {}
+
+impl From<PolygonRasterizationValue> for OperatorsBurnValue {
+    fn from(value: PolygonRasterizationValue) -> Self {
+        match value {
+            PolygonRasterizationValue::Constant(constant) => Self::Constant {
+                value: constant.value,
+            },
+            PolygonRasterizationValue::Count(_) => Self::Count,
+            PolygonRasterizationValue::Attribute(attribute) => Self::Attribute {
+                column: attribute.column,
+                aggregation: attribute.aggregation.into(),
+                ignore_no_data: attribute.ignore_no_data,
+            },
+        }
+    }
+}
+
+impl From<&OperatorsBurnValue> for PolygonRasterizationValue {
+    fn from(value: &OperatorsBurnValue) -> Self {
+        match value {
+            OperatorsBurnValue::Constant { value } => {
+                Self::Constant(PolygonRasterizationValueConstant {
+                    r#type: Default::default(),
+                    value: *value,
+                })
+            }
+            OperatorsBurnValue::Count => Self::Count(PolygonRasterizationValueCount {
+                r#type: Default::default(),
+            }),
+            OperatorsBurnValue::Attribute {
+                column,
+                aggregation,
+                ignore_no_data,
+            } => Self::Attribute(PolygonRasterizationValueAttribute {
+                r#type: Default::default(),
+                column: column.clone(),
+                aggregation: (*aggregation).into(),
+                ignore_no_data: *ignore_no_data,
+            }),
+        }
+    }
+}
+
+impl From<PolygonRasterizationAggregation> for OperatorsOverlapAggregation {
+    fn from(value: PolygonRasterizationAggregation) -> Self {
+        match value {
+            PolygonRasterizationAggregation::First => Self::First,
+            PolygonRasterizationAggregation::Last => Self::Last,
+            PolygonRasterizationAggregation::Min => Self::Min,
+            PolygonRasterizationAggregation::Max => Self::Max,
+            PolygonRasterizationAggregation::Sum => Self::Sum,
+            PolygonRasterizationAggregation::Mean => Self::Mean,
+            PolygonRasterizationAggregation::MedianEstimate => Self::MedianEstimate,
+        }
+    }
+}
+
+impl From<OperatorsOverlapAggregation> for PolygonRasterizationAggregation {
+    fn from(value: OperatorsOverlapAggregation) -> Self {
+        match value {
+            OperatorsOverlapAggregation::First => Self::First,
+            OperatorsOverlapAggregation::Last => Self::Last,
+            OperatorsOverlapAggregation::Min => Self::Min,
+            OperatorsOverlapAggregation::Max => Self::Max,
+            OperatorsOverlapAggregation::Sum => Self::Sum,
+            OperatorsOverlapAggregation::Mean => Self::Mean,
+            OperatorsOverlapAggregation::MedianEstimate => Self::MedianEstimate,
+        }
+    }
+}
+
+impl From<PolygonRasterizationTime> for OperatorsRasterizationTime {
+    fn from(value: PolygonRasterizationTime) -> Self {
+        match value {
+            PolygonRasterizationTime::FeatureTimes(_) => Self::FeatureTimes,
+            PolygonRasterizationTime::Regular(regular) => Self::Regular {
+                step: regular.step.into(),
+                reference: regular.reference.map(Into::into),
+            },
+            PolygonRasterizationTime::Ignore(_) => Self::Ignore,
+        }
+    }
+}
+
+impl From<OperatorsRasterizationTime> for PolygonRasterizationTime {
+    fn from(value: OperatorsRasterizationTime) -> Self {
+        match value {
+            OperatorsRasterizationTime::FeatureTimes => {
+                Self::FeatureTimes(PolygonRasterizationTimeFeatureTimes::default())
+            }
+            OperatorsRasterizationTime::Regular { step, reference } => {
+                Self::Regular(PolygonRasterizationTimeRegular {
+                    r#type: Default::default(),
+                    step: step.into(),
+                    reference: reference.map(Into::into),
+                })
+            }
+            OperatorsRasterizationTime::Ignore => {
+                Self::Ignore(PolygonRasterizationTimeIgnore::default())
+            }
+        }
+    }
+}
+
+impl TryFrom<PolygonRasterization> for OperatorsPolygonRasterization {
+    type Error = anyhow::Error;
+
+    fn try_from(value: PolygonRasterization) -> Result<Self, Self::Error> {
+        Ok(OperatorsPolygonRasterization {
+            params: OperatorsPolygonRasterizationParameters {
+                spatial_resolution: value.params.spatial_resolution.into(),
+                origin_coordinate: value.params.origin_coordinate.into(),
+                value: value.params.value.into(),
+                output_type: value.params.output_type.map(Into::into),
+                output_measurement: value.params.output_measurement.map(Into::into),
+                time: value.params.time.into(),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
 /// The `Reflectance` operator converts radiance values to reflectance.
 #[api_operator(
     title = "Reflectance",
@@ -3400,6 +3784,76 @@ mod tests {
         assert!(ops.params.density_params.is_some());
         approx_eq!(f64, ops.params.density_params.unwrap().cutoff, 0.5);
         approx_eq!(f64, ops.params.density_params.unwrap().stddev, 1.5);
+    }
+
+    #[test]
+    fn it_converts_polygon_rasterization_params() {
+        let api: PolygonRasterization = serde_json::from_value(serde_json::json!({
+            "type": "PolygonRasterization",
+            "params": {
+                "spatialResolution": { "x": 1.0, "y": 2.0 },
+                "value": { "type": "attribute", "column": "class", "aggregation": "medianEstimate" },
+                "outputType": "U8",
+                "time": {
+                    "type": "regular",
+                    "step": { "granularity": "months", "step": 1 },
+                    "reference": "2020-01-01T00:00:00.000Z"
+                }
+            },
+            "sources": {
+                "vector": { "type": "OgrSource", "params": { "data": "polygons" } }
+            }
+        }))
+        .expect("deserialization failed");
+
+        assert_eq!(
+            api.params.origin_coordinate,
+            Coordinate2D { x: 0.0, y: 0.0 }
+        );
+        assert_eq!(api.params.output_measurement, None);
+
+        let ops = OperatorsPolygonRasterization::try_from(api).expect("conversion failed");
+
+        approx_eq!(f64, ops.params.spatial_resolution.y().get(), 2.0);
+        assert_eq!(
+            ops.params.value,
+            OperatorsBurnValue::Attribute {
+                column: "class".to_string(),
+                aggregation: OperatorsOverlapAggregation::MedianEstimate,
+                ignore_no_data: true,
+            }
+        );
+        assert_eq!(
+            ops.params.output_type,
+            Some(geoengine_datatypes::raster::RasterDataType::U8)
+        );
+        assert_eq!(
+            ops.params.time,
+            OperatorsRasterizationTime::Regular {
+                step: geoengine_datatypes::primitives::TimeStep {
+                    granularity: geoengine_datatypes::primitives::TimeGranularity::Months,
+                    step: 1,
+                },
+                reference: Some(
+                    geoengine_datatypes::primitives::TimeInstance::from_millis(1_577_836_800_000)
+                        .unwrap()
+                ),
+            }
+        );
+
+        let defaults: PolygonRasterizationParameters =
+            serde_json::from_value(serde_json::json!({ "spatialResolution": { "x": 1, "y": 1 } }))
+                .expect("deserialization failed");
+        assert_eq!(defaults.value, PolygonRasterizationValue::default());
+        assert_eq!(defaults.time, PolygonRasterizationTime::default());
+
+        assert!(
+            serde_json::from_value::<PolygonRasterizationParameters>(serde_json::json!({
+                "spatialResolution": { "x": 1, "y": 1 },
+                "value": { "type": "unknown" }
+            }))
+            .is_err()
+        );
     }
 
     #[test]

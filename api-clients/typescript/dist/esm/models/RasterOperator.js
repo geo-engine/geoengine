@@ -20,6 +20,7 @@ import { InterpolationFromJSONTyped, InterpolationToJSON, } from './Interpolatio
 import { MultiBandGdalSourceFromJSONTyped, MultiBandGdalSourceToJSON, } from './MultiBandGdalSource';
 import { NeighborhoodAggregateFromJSONTyped, NeighborhoodAggregateToJSON, } from './NeighborhoodAggregate';
 import { OnnxFromJSONTyped, OnnxToJSON, } from './Onnx';
+import { PolygonRasterizationFromJSONTyped, PolygonRasterizationToJSON, } from './PolygonRasterization';
 import { RadianceFromJSONTyped, RadianceToJSON, } from './Radiance';
 import { RasterScalingFromJSONTyped, RasterScalingToJSON, } from './RasterScaling';
 import { RasterStackerFromJSONTyped, RasterStackerToJSON, } from './RasterStacker';
@@ -58,6 +59,8 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, NeighborhoodAggregateFromJSONTyped(json, true), { type: 'NeighborhoodAggregate' });
         case 'Onnx':
             return Object.assign({}, OnnxFromJSONTyped(json, true), { type: 'Onnx' });
+        case 'PolygonRasterization':
+            return Object.assign({}, PolygonRasterizationFromJSONTyped(json, true), { type: 'PolygonRasterization' });
         case 'Radiance':
             return Object.assign({}, RadianceFromJSONTyped(json, true), { type: 'Radiance' });
         case 'RasterScaling':
@@ -110,6 +113,8 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, NeighborhoodAggregateToJSON(value), { 'type': 'NeighborhoodAggregate' });
         case 'Onnx':
             return Object.assign({}, OnnxToJSON(value), { 'type': 'Onnx' });
+        case 'PolygonRasterization':
+            return Object.assign({}, PolygonRasterizationToJSON(value), { 'type': 'PolygonRasterization' });
         case 'Radiance':
             return Object.assign({}, RadianceToJSON(value), { 'type': 'Radiance' });
         case 'RasterScaling':

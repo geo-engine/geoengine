@@ -82,6 +82,13 @@ import {
     OnnxFromJSONTyped,
     OnnxToJSON,
 } from './Onnx';
+import type { PolygonRasterization } from './PolygonRasterization';
+import {
+    instanceOfPolygonRasterization,
+    PolygonRasterizationFromJSON,
+    PolygonRasterizationFromJSONTyped,
+    PolygonRasterizationToJSON,
+} from './PolygonRasterization';
 import type { Radiance } from './Radiance';
 import {
     instanceOfRadiance,
@@ -158,7 +165,7 @@ import {
  * An operator that produces raster data.
  * @export
  */
-export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
+export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'PolygonRasterization' } & PolygonRasterization | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
 
 export function RasterOperatorFromJSON(json: any): RasterOperator {
     return RasterOperatorFromJSONTyped(json, false);
@@ -189,6 +196,8 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, NeighborhoodAggregateFromJSONTyped(json, true), { type: 'NeighborhoodAggregate' } as const);
         case 'Onnx':
             return Object.assign({}, OnnxFromJSONTyped(json, true), { type: 'Onnx' } as const);
+        case 'PolygonRasterization':
+            return Object.assign({}, PolygonRasterizationFromJSONTyped(json, true), { type: 'PolygonRasterization' } as const);
         case 'Radiance':
             return Object.assign({}, RadianceFromJSONTyped(json, true), { type: 'Radiance' } as const);
         case 'RasterScaling':
@@ -243,6 +252,8 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
             return Object.assign({}, NeighborhoodAggregateToJSON(value), { 'type': 'NeighborhoodAggregate' } as const);
         case 'Onnx':
             return Object.assign({}, OnnxToJSON(value), { 'type': 'Onnx' } as const);
+        case 'PolygonRasterization':
+            return Object.assign({}, PolygonRasterizationToJSON(value), { 'type': 'PolygonRasterization' } as const);
         case 'Radiance':
             return Object.assign({}, RadianceToJSON(value), { 'type': 'Radiance' } as const);
         case 'RasterScaling':

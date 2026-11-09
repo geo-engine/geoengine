@@ -1,4 +1,7 @@
-use crate::util::{Result, statistics::SafePSquareQuantileEstimator};
+use crate::util::{
+    Result,
+    statistics::{SafePSquareQuantileEstimator, incremental_mean},
+};
 use geoengine_datatypes::raster::{GridOrEmpty2D, MapIndexedElements, Pixel};
 use std::marker::PhantomData;
 
@@ -213,15 +216,8 @@ impl<P: Pixel, const IGNORE_NO_DATA: bool> TemporalRasterPixelAggregator<P>
     }
 }
 
-fn mean_of_state_and_value<P: Pixel>(
-    (mean_value, count): (f64, usize),
-    new_value: P,
-) -> (f64, usize) {
-    let new_value: f64 = new_value.as_();
-    let new_count = count + 1;
-    let delta: f64 = new_value - mean_value;
-    let new_state_value = mean_value + delta / (new_count as f64);
-    (new_state_value, new_count)
+fn mean_of_state_and_value<P: Pixel>(state: (f64, usize), new_value: P) -> (f64, usize) {
+    incremental_mean(state, new_value.as_())
 }
 
 #[derive(Clone)]

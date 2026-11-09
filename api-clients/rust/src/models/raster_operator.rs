@@ -34,6 +34,8 @@ pub enum RasterOperator {
     NeighborhoodAggregate(Box<models::NeighborhoodAggregate>),
     #[serde(rename="Onnx")]
     Onnx(Box<models::Onnx>),
+    #[serde(rename="PolygonRasterization")]
+    PolygonRasterization(Box<models::PolygonRasterization>),
     #[serde(rename="RasterScaling")]
     RasterScaling(Box<models::RasterScaling>),
     #[serde(rename="RasterStacker")]

@@ -13,6 +13,15 @@ pub enum StatisticsError {
     Empty,
 }
 
+/// Adds `new_value` to the running mean `(mean, count)` and returns the new `(mean, count)`.
+///
+/// This is the numerically stable incremental mean of Welford's algorithm.
+pub fn incremental_mean((mean, count): (f64, usize), new_value: f64) -> (f64, usize) {
+    let new_count = count + 1;
+    let delta = new_value - mean;
+    (mean + delta / (new_count as f64), new_count)
+}
+
 /// Single quantile estimation with the P^2 algorithm
 ///
 /// The P^2 algorithm estimates a quantile dynamically without storing samples. Instead of
@@ -354,7 +363,11 @@ impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
                     return;
                 }
 
-                samples[*num_samples] = sample;
+                // keep the samples sorted, since `quantile_estimate` reads them by position
+                let position =
+                    samples[..*num_samples].partition_point(|value| value.as_() <= sample.as_());
+                samples.copy_within(position..*num_samples, position + 1);
+                samples[position] = sample;
                 *num_samples += 1;
 
                 if *num_samples < 5 {
@@ -876,5 +889,16 @@ mod tests {
                 2.0, // 0,1,2,3,4,5
             ]
         );
+    }
+
+    #[test]
+    fn it_estimates_quantiles_of_unsorted_values_safely() {
+        let mut estimator = SafePSquareQuantileEstimator::new(0.5, 3.).unwrap();
+        estimator.update(1.);
+        estimator.update(4.);
+        assert_eq!(estimator.quantile_estimate(), 3.);
+
+        estimator.update(2.);
+        assert_eq!(estimator.quantile_estimate(), 2.5);
     }
 }

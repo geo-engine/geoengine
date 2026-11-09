@@ -21,7 +21,9 @@ pub use image::{
 };
 pub use result::Result;
 use std::path::{Path, PathBuf};
-pub use typed_float::{NonNanF64, NonNegativeFiniteF64, NonZeroFiniteF64, PositiveFiniteF64};
+pub use typed_float::{
+    FiniteF64, NonNanF64, NonNegativeFiniteF64, NonZeroFiniteF64, PositiveFiniteF64,
+};
 
 /// Canonicalize `base`/`sub_path` and ensure the `sub_path` doesn't escape the `base`
 /// returns an error if the `sub_path` escapes the `base`

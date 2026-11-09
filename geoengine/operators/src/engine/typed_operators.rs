@@ -19,9 +19,10 @@ use crate::plot::{
 use crate::processing::{
     BandFilter, BandNeighborhoodAggregate, BandwiseExpression, ColumnRangeFilter, Downsampling,
     Expression, Interpolation, LineSimplification, NeighborhoodAggregate, PointInPolygonFilter,
-    Radiance, RasterScaling, RasterStacker, RasterTypeConversion, RasterVectorJoin, Rasterization,
-    Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeProjection, TimeShift,
-    VectorExpression, VectorJoin, VisualPointClustering,
+    PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion,
+    RasterVectorJoin, Rasterization, Reflectance, Reprojection, Temperature,
+    TemporalRasterAggregation, TimeProjection, TimeShift, VectorExpression, VectorJoin,
+    VisualPointClustering,
 };
 use crate::source::{CsvSource, GdalSource, MultiBandGdalSource, OgrSource};
 use crate::util::Result;
@@ -108,6 +109,7 @@ typed_operator! {
         MultiBandGdalSource(MultiBandGdalSource),
         NeighborhoodAggregate(NeighborhoodAggregate),
         Onnx(Onnx),
+        PolygonRasterization(PolygonRasterization),
         Radiance(Radiance),
         RasterScaling(RasterScaling),
         RasterStacker(RasterStacker),
