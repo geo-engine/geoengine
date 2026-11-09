@@ -18,7 +18,7 @@ env:
 jobs:
   geoengine-test:
     name: "geoengine / test"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     outputs:
       coverage-artifact-id: ${{ steps.upload-coverage-artifact.outputs.artifact-id }}
@@ -65,7 +65,7 @@ jobs:
   geoengine-lint:
     name: "geoengine / lint"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -98,7 +98,7 @@ jobs:
   geoengine-build:
     name: "geoengine / build"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container:
       image: quay.io/geoengine/devcontainer:latest
       options: --privileged --security-opt seccomp=unconfined --security-opt apparmor=unconfined --user root # for podman to run in the container
@@ -218,7 +218,7 @@ jobs:
       - cancel: ge-instance
 
   python:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -307,7 +307,7 @@ jobs:
           if-no-files-found: error
 
   www:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -332,7 +332,7 @@ jobs:
   api-client-python:
     name: "api-client / python"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     strategy:
@@ -355,7 +355,7 @@ jobs:
   api-client-typescript:
     name: "api-client / typescript"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     strategy:
@@ -377,7 +377,7 @@ jobs:
   api-client-rust:
     name: "api-client / rust"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -394,7 +394,7 @@ jobs:
   api-client-idempotency:
     name: "api-client / rust"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -423,7 +423,7 @@ jobs:
 
   ui-build:
     name: "ui / build"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -452,7 +452,7 @@ jobs:
 
   ui-test:
     name: "ui / test"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -470,7 +470,7 @@ jobs:
   ui-lint:
     name: "ui / lint"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -493,7 +493,7 @@ jobs:
   repository-lint:
     name: "repository / lint"
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
 
     permissions:
@@ -515,7 +515,7 @@ jobs:
       - geoengine-test
       - python
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     permissions:
       contents: read

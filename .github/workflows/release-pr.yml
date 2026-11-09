@@ -32,7 +32,7 @@ jobs:
     name: Create Release PR
     if: github.repository_owner == 'geo-engine'
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     container:
       image: quay.io/geoengine/devcontainer:latest
       # mount the large host directories at their own paths, so that `free-disk-space` empties them on the host
