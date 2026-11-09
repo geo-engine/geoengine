@@ -341,30 +341,27 @@ mod tests {
 
     use super::*;
     use crate::{
-        engine::{
-            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
-        },
-        mock::{MockRasterSource, MockRasterSourceParams},
+        engine::{MockExecutionContext, MultipleRasterSources, RasterOperator},
         processing::{RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
-        util::{gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes},
+        util::{
+            gdal::add_ndvi_dataset, raster_stream_to_png::raster_stream_to_png_bytes,
+            test::AsciiRasterTilesExt,
+        },
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::NamedData,
         operations::image::{Colorizer, RgbaColor},
         primitives::{
-            CacheHint, Coordinate2D, DateTime, RasterQueryRectangle, SpatialPartition2D,
-            TimeInstance, TimeInterval, TimeStep,
+            DateTime, RasterQueryRectangle, SpatialPartition2D, TimeInstance, TimeInterval,
         },
-        raster::{
-            GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, RasterDataType, RasterTile2D,
-            RenameBands, TileInformation, TilesEqualIgnoringCacheHint, TilingSpecification,
-        },
-        spatial_reference::SpatialReference,
+        raster::{Grid2D, GridBoundingBox2D, RasterTile2D, RenameBands},
         test_data,
-        util::{assert_image_equals, test::TestDefault},
+        util::{
+            assert_image_equals,
+            test::{AsciiRasterTiles, TestDefault, assert_raster_tiles_eq_ascii},
+        },
     };
 
     #[test]
@@ -476,7 +473,7 @@ mod tests {
     #[tokio::test]
     async fn test_mean_convolution() {
         let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+            MockExecutionContext::new_with_tiling_spec(test_raster().tiling_specification());
 
         let raster = make_raster();
 
@@ -508,35 +505,33 @@ mod tests {
         let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        let mut times: Vec<TimeInterval> = vec![TimeInterval::new_unchecked(0, 10); 2];
-        times.append(&mut vec![TimeInterval::new_unchecked(10, 20); 2]);
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(
+                "
+                [0, 10)
+                +-------+----------+
+                | _ _ _ |  _  _  _ |
+                | _ 8 9 | 10 11  _ |
+                | _ _ _ |  _  _  _ |
+                +-------+----------+
 
-        let data = [
-            vec![0, 0, 0, 0, 8, 9, 0, 0, 0],
-            vec![0, 0, 0, 10, 11, 0, 0, 0, 0],
-            vec![0, 0, 0, 0, 10, 10, 0, 0, 0],
-            vec![0, 0, 0, 9, 7, 0, 0, 0, 0],
-        ];
-
-        let valid = [
-            vec![false, false, false, false, true, true, false, false, false],
-            vec![false, false, false, true, true, false, false, false, false],
-            vec![false, false, false, false, true, true, false, false, false],
-            vec![false, false, false, true, true, false, false, false, false],
-        ];
-
-        for (i, tile) in result.into_iter().enumerate() {
-            let tile = tile.into_materialized_tile();
-            assert_eq!(tile.time, times[i]);
-            assert_eq!(tile.grid_array.inner_grid.data, data[i]);
-            assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
-        }
+                [10, 20)
+                +----------+-------+
+                |  _  _  _ | _ _ _ |
+                |  _ 10 10 | 9 7 _ |
+                |  _  _  _ | _ _ _ |
+                +----------+-------+
+                ",
+            )
+            .tile_origin([-1, 0]),
+        );
     }
 
     #[tokio::test]
     async fn check_make_raster() {
         let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+            MockExecutionContext::new_with_tiling_spec(test_raster().tiling_specification());
 
         let raster = make_raster();
 
@@ -559,157 +554,32 @@ mod tests {
         let result: Vec<Result<RasterTile2D<i8>>> = result_stream.collect().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert_eq!(result.len(), 4);
+        assert_raster_tiles_eq_ascii(&result, &test_raster());
+    }
 
-        let raster_tiles = vec![
-            RasterTile2D::<i8>::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 10),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 10),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(10, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(10, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-        ];
+    fn test_raster() -> AsciiRasterTiles<'static> {
+        AsciiRasterTiles::new(
+            "
+            [0, 10)
+            +----------+----------+
+            |  1  2  3 |  4  5  6 |
+            |  7  8  9 | 10 11 12 |
+            | 13 14 15 | 16 17 18 |
+            +----------+----------+
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&raster_tiles));
+            [10, 20)
+            +----------+----------+
+            | 18 17 16 | 15 14 13 |
+            | 12 11 10 |  9  8  7 |
+            |  6  5  4 |  3  2  1 |
+            +----------+----------+
+            ",
+        )
+        .tile_origin([-1, 0])
     }
 
     fn make_raster() -> TypedRasterOperator {
-        // test raster:
-        // [0, 10)
-        // ||  1 |   2 |  3 ||  4 |  5 |  6 ||
-        // ||  7 |   8 |  9 || 10 | 11 | 12 ||
-        // || 13 |  14 | 15 || 16 | 17 | 18 ||
-        //
-        // [10, 20)
-        // || 18 |  17 | 16 || 15 | 14 | 13 ||
-        // || 12 |  11 | 10 ||  9 |  8 |  7 ||
-        // ||  6 |   5 |  4 ||  3 |  2 |  1 ||
-        //
-        let raster_tiles = vec![
-            RasterTile2D::<i8>::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 10),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![1, 2, 3, 7, 8, 9, 13, 14, 15]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 10),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![4, 5, 6, 10, 11, 12, 16, 17, 18]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(10, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![18, 17, 16, 12, 11, 10, 6, 5, 4]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(10, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 3].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    Grid2D::new([3, 3].into(), vec![15, 14, 13, 9, 8, 7, 3, 2, 1]).unwrap(),
-                ),
-                CacheHint::no_cache(),
-            ),
-        ];
-
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::I8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(
-                    raster_tiles.first().unwrap().time.start(),
-                    raster_tiles.last().unwrap().time.end(),
-                )),
-                TimeStep::millis(10).unwrap(),
-            ),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
-                GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
-            ),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data: raster_tiles,
-                result_descriptor,
-            },
-        }
-        .typed()
+        test_raster().mock_raster_source::<i8>().typed()
     }
 
     #[tokio::test]
@@ -862,7 +732,7 @@ mod tests {
     #[tokio::test]
     async fn test_mean_convolution_multi_bands() {
         let exe_ctx =
-            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
+            MockExecutionContext::new_with_tiling_spec(test_raster().tiling_specification());
 
         let operator = NeighborhoodAggregate {
             params: NeighborhoodAggregateParams {

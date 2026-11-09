@@ -8,6 +8,13 @@ use crate::{
 use float_cmp::approx_eq;
 use std::{panic, path::Path};
 
+mod ascii_raster;
+
+pub use ascii_raster::{
+    AsciiRasterInfo, AsciiRasterTiles, AsciiTimeFormat, assert_raster_tiles_eq_ascii,
+    raster_tiles_from_ascii, raster_tiles_to_ascii, raster_tiles_to_ascii_with_time_format,
+};
+
 pub trait TestDefault {
     /// Generate a default value used for testing. Use this instead of the `Default` trait
     /// if the default value only makes sense in tests and not in production code.

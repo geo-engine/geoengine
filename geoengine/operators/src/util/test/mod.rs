@@ -20,6 +20,10 @@ use std::path::Path;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+mod ascii_raster;
+
+pub use ascii_raster::AsciiRasterTilesExt;
+
 /// ONNX Runtime allows only one environment per process, but tests create many contexts.
 /// Only for tests: the server creates one [`OrtEnvironment`] per application and passes it on.
 static TEST_ORT_ENVIRONMENT: LazyLock<OrtEnvironment> = LazyLock::new(|| {

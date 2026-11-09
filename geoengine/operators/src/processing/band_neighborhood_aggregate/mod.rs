@@ -778,651 +778,255 @@ impl Accu for MovingAverageAccu {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{BandSelection, CacheHint, TimeInterval, TimeStep},
-        raster::{Grid, GridBoundingBox2D, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
-        spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        primitives::{BandSelection, TimeInterval},
+        raster::GridBoundingBox2D,
+        util::test::{AsciiRasterTiles, assert_raster_tiles_eq_ascii},
     };
+    use indoc::indoc;
 
-    use crate::{
-        engine::{
-            MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
-        },
-        mock::{MockRasterSource, MockRasterSourceParams},
-    };
+    use crate::{engine::MockExecutionContext, util::test::AsciiRasterTilesExt};
 
     use super::*;
 
-    #[test]
-    fn it_computes_first_derivative() {
-        let mut data: Vec<RasterTile2D<f64>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0., 1., 2., 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4., 5., 6., 7.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-        ];
+    /// One tile with three bands that grow by 2 per band.
+    fn three_bands() -> AsciiRasterTiles<'static> {
+        AsciiRasterTiles::new(indoc! {"
+            [0, 5)
+            +-----+
+            | 0 1 |
+            | 2 3 |
+            +-----+
+            [0, 5) band 1
+            +-----+
+            | 2 3 |
+            | 4 5 |
+            +-----+
+            [0, 5) band 2
+            +-----+
+            | 4 5 |
+            | 6 7 |
+            +-----+
+            "})
+        .tile_origin([-1, 0])
+    }
 
-        let mut accu = FirstDerivativeAccu::new(3, &BandDistance::EquallySpaced { distance: 1. });
+    /// Adds the bands of [`three_bands`] one by one and collects the tiles the accumulator returns.
+    fn accumulate(mut accu: impl Accu) -> Vec<RasterTile2D<f64>> {
+        let mut tiles = three_bands().tiles::<f64>().into_iter();
+        let mut result = Vec::new();
 
-        accu.add_tile(data.remove(0)).unwrap();
+        accu.add_tile(tiles.next().unwrap()).unwrap();
         assert!(accu.next_band_tile().is_none());
 
-        accu.add_tile(data.remove(0)).unwrap();
+        accu.add_tile(tiles.next().unwrap()).unwrap();
+        result.push(accu.next_band_tile().unwrap());
+
+        accu.add_tile(tiles.next().unwrap()).unwrap();
+        result.push(accu.next_band_tile().unwrap());
+        result.push(accu.next_band_tile().unwrap());
+
         assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 0,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                })
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || accu.next_band_tile()))
+                .is_err()
         );
 
-        accu.add_tile(data.remove(0)).unwrap();
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 1,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                }),
-        );
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 2,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                })
-        );
+        result
+    }
 
-        assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
+    #[test]
+    fn it_computes_first_derivative() {
+        let result = accumulate(FirstDerivativeAccu::new(
+            3,
+            &BandDistance::EquallySpaced { distance: 1. },
+        ));
+
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [0, 5)
+                +-----+
+                | 2 2 |
+                | 2 2 |
+                +-----+
+                [0, 5) band 1
+                +-----+
+                | 2 2 |
+                | 2 2 |
+                +-----+
+                [0, 5) band 2
+                +-----+
+                | 2 2 |
+                | 2 2 |
+                +-----+
+                "})
+            .tile_origin([-1, 0]),
+        );
     }
 
     #[test]
     fn it_computes_first_derivative_distances() {
-        let mut data: Vec<RasterTile2D<f64>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0., 1., 2., 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4., 5., 6., 7.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-        ];
+        let result = accumulate(FirstDerivativeAccu::new(
+            3,
+            &BandDistance::EquallySpaced { distance: 3. },
+        ));
 
-        let mut accu = FirstDerivativeAccu::new(3, &BandDistance::EquallySpaced { distance: 3. });
-
-        accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu.next_band_tile().is_none());
-
-        accu.add_tile(data.remove(0)).unwrap();
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 0,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                })
+        // 2 / 3
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [0, 5)
+                +---------------------------------------+
+                | 0.6666666666666666 0.6666666666666666 |
+                | 0.6666666666666666 0.6666666666666666 |
+                +---------------------------------------+
+                [0, 5) band 1
+                +---------------------------------------+
+                | 0.6666666666666666 0.6666666666666666 |
+                | 0.6666666666666666 0.6666666666666666 |
+                +---------------------------------------+
+                [0, 5) band 2
+                +---------------------------------------+
+                | 0.6666666666666666 0.6666666666666666 |
+                | 0.6666666666666666 0.6666666666666666 |
+                +---------------------------------------+
+                "})
+            .tile_origin([-1, 0]),
         );
-
-        accu.add_tile(data.remove(0)).unwrap();
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 1,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                }),
-        );
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 2,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                })
-        );
-
-        assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
 
     #[test]
     fn it_computes_moving_average() {
-        let mut data: Vec<RasterTile2D<f64>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0., 1., 2., 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4., 5., 6., 7.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-        ];
+        let result = accumulate(MovingAverageAccu::new(3, 3));
 
-        let mut accu = MovingAverageAccu::new(3, 3);
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [0, 5)
+                +-----+
+                | 1 2 |
+                | 3 4 |
+                +-----+
+                [0, 5) band 1
+                +-----+
+                | 2 3 |
+                | 4 5 |
+                +-----+
+                [0, 5) band 2
+                +-----+
+                | 3 4 |
+                | 5 6 |
+                +-----+
+                "})
+            .tile_origin([-1, 0]),
+        );
+    }
 
-        accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu.next_band_tile().is_none());
+    /// Two tiles with three bands; the bands grow by 2 in the left tile and by 4 in the right one.
+    fn two_tiles_with_three_bands() -> AsciiRasterTiles<'static> {
+        AsciiRasterTiles::new(indoc! {"
+            [0, 5)
+            +-----+-------+
+            | 0 1 |  0  1 |
+            | 2 3 |  2  3 |
+            +-----+-------+
+            [0, 5) band 1
+            +-----+-------+
+            | 2 3 |  4  5 |
+            | 4 5 |  6  7 |
+            +-----+-------+
+            [0, 5) band 2
+            +-----+-------+
+            | 4 5 |  8  9 |
+            | 6 7 | 10 11 |
+            +-----+-------+
+            "})
+        .tile_origin([-1, 0])
+    }
 
-        accu.add_tile(data.remove(0)).unwrap();
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 0,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![1., 2., 3., 4.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                })
+    /// Queries the first derivative of [`two_tiles_with_three_bands`] for `bands`.
+    async fn first_derivative(bands: BandSelection) -> Vec<RasterTile2D<f64>> {
+        let raster = two_tiles_with_three_bands();
+
+        let band_neighborhood_aggregate: TypedRasterOperator = BandNeighborhoodAggregate {
+            params: BandNeighborhoodAggregateParams {
+                aggregate: NeighborhoodAggregate::FirstDerivative {
+                    band_distance: BandDistance::EquallySpaced { distance: 1.0 },
+                },
+            },
+            sources: SingleRasterSource {
+                raster: raster.mock_raster_source::<u8>().typed(),
+            },
+        }
+        .typed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(raster.tiling_specification());
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            bands,
         );
 
-        accu.add_tile(data.remove(0)).unwrap();
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 1,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                })
-        );
-        assert!(
-            accu.next_band_tile()
-                .unwrap()
-                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                    time: TimeInterval::new_unchecked(0, 5),
-                    tile_position: [-1, 0].into(),
-                    band: 2,
-                    global_geo_transform: TestDefault::test_default(),
-                    grid_array: Grid::new([2, 2].into(), vec![3., 4., 5., 6.])
-                        .unwrap()
-                        .into(),
-                    properties: Default::default(),
-                    cache_hint: CacheHint::no_cache(),
-                })
-        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
-        assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
+        let op = band_neighborhood_aggregate
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_f64().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        result.into_iter().collect::<Result<Vec<_>>>().unwrap()
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn it_computes_first_derivative_on_stream() {
-        let data: Vec<RasterTile2D<u8>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2, 3, 4, 5]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-        ];
+        let result = first_derivative(BandSelection::new_unchecked(vec![0, 1, 2])).await;
 
-        let expected: Vec<RasterTile2D<f64>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4., 4., 4., 4.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4., 4., 4., 4.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4., 4., 4., 4.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-        ];
-
-        let mrs1 = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(
-                        Some(
-                            TimeInterval::new(
-                                data.first().unwrap().time.start(),
-                                data.last().unwrap().time.end(),
-                            )
-                            .unwrap(),
-                        ),
-                        TimeStep::millis(5).unwrap(),
-                    ),
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        TestDefault::test_default(),
-                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                    ),
-                    bands: RasterBandDescriptors::new_multiple_bands(3),
-                },
-            },
-        }
-        .typed();
-
-        let band_neighborhood_aggregate: TypedRasterOperator = BandNeighborhoodAggregate {
-            params: BandNeighborhoodAggregateParams {
-                aggregate: NeighborhoodAggregate::FirstDerivative {
-                    band_distance: BandDistance::EquallySpaced { distance: 1.0 },
-                },
-            },
-            sources: SingleRasterSource { raster: mrs1 },
-        }
-        .typed();
-
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
-
-        let query_rect = RasterQueryRectangle::new(
-            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-            TimeInterval::new_unchecked(0, 5),
-            BandSelection::new_unchecked(vec![0, 1, 2]),
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [0, 5)
+                +-----+-----+
+                | 2 2 | 4 4 |
+                | 2 2 | 4 4 |
+                +-----+-----+
+                [0, 5) band 1
+                +-----+-----+
+                | 2 2 | 4 4 |
+                | 2 2 | 4 4 |
+                +-----+-----+
+                [0, 5) band 2
+                +-----+-----+
+                | 2 2 | 4 4 |
+                | 2 2 | 4 4 |
+                +-----+-----+
+                "})
+            .tile_origin([-1, 0]),
         );
-
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-
-        let op = band_neighborhood_aggregate
-            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap();
-
-        let qp = op.query_processor().unwrap().get_f64().unwrap();
-
-        let result = qp
-            .raster_query(query_rect, &query_ctx)
-            .await
-            .unwrap()
-            .collect::<Vec<_>>()
-            .await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
-
-        assert!(result.tiles_equal_ignoring_cache_hint(&expected));
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn it_selects_bands_from_result() {
-        let data: Vec<RasterTile2D<u8>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2, 3, 4, 5]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-        ];
+        // only get first band
+        let result = first_derivative(BandSelection::new_unchecked(vec![0])).await;
 
-        let expected: Vec<RasterTile2D<f64>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4., 4., 4., 4.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-        ];
-
-        let mrs1 = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(
-                        Some(
-                            TimeInterval::new(
-                                data.first().unwrap().time.start(),
-                                data.last().unwrap().time.end(),
-                            )
-                            .unwrap(),
-                        ),
-                        TimeStep::millis(5).unwrap(),
-                    ),
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        TestDefault::test_default(),
-                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                    ),
-                    bands: RasterBandDescriptors::new_multiple_bands(3),
-                },
-            },
-        }
-        .typed();
-
-        let band_neighborhood_aggregate: TypedRasterOperator = BandNeighborhoodAggregate {
-            params: BandNeighborhoodAggregateParams {
-                aggregate: NeighborhoodAggregate::FirstDerivative {
-                    band_distance: BandDistance::EquallySpaced { distance: 1.0 },
-                },
-            },
-            sources: SingleRasterSource { raster: mrs1 },
-        }
-        .typed();
-
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
-
-        let query_rect = RasterQueryRectangle::new(
-            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-            TimeInterval::new_unchecked(0, 5),
-            BandSelection::new_unchecked(vec![0]), // only get first band
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [0, 5)
+                +-----+-----+
+                | 2 2 | 4 4 |
+                | 2 2 | 4 4 |
+                +-----+-----+
+                "})
+            .tile_origin([-1, 0]),
         );
-
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-
-        let op = band_neighborhood_aggregate
-            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap();
-
-        let qp = op.query_processor().unwrap().get_f64().unwrap();
-
-        let result = qp
-            .raster_query(query_rect, &query_ctx)
-            .await
-            .unwrap()
-            .collect::<Vec<_>>()
-            .await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
-
-        assert!(result.tiles_equal_ignoring_cache_hint(&expected));
     }
 }

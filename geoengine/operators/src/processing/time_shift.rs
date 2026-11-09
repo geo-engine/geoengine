@@ -595,30 +595,23 @@ mod tests {
     use super::*;
 
     use crate::{
-        engine::{
-            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, SingleRasterSource,
-            SpatialGridDescriptor, TimeDescriptor,
-        },
-        mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
+        engine::{MockExecutionContext, MultipleRasterSources, SingleRasterSource},
+        mock::MockFeatureCollectionSource,
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
-        util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator},
+        util::{gdal::add_ndvi_dataset, input::RasterOrVectorOperator, test::AsciiRasterTilesExt},
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection},
         dataset::NamedData,
         primitives::{
-            BandSelection, BoundingBox2D, CacheHint, Coordinate2D, DateTime, MultiPoint,
-            TimeGranularity,
+            BandSelection, BoundingBox2D, CacheHint, DateTime, MultiPoint, TimeGranularity,
         },
-        raster::{
-            BoundedGrid, EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridOrEmpty, GridShape2D,
-            RasterDataType, RenameBands, TileInformation, TilingSpecification,
-        },
-        spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        raster::{GridBoundingBox2D, RasterDataType, RenameBands},
+        util::test::{AsciiRasterTiles, TestDefault, assert_raster_tiles_eq_ascii},
     };
+    use indoc::indoc;
 
     #[test]
     fn test_ser_de_absolute() {
@@ -909,122 +902,32 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn test_absolute_raster_shift() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(
-                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
-                )),
-                TimeStep::years(1).unwrap(),
-            ),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new_unchecked(Coordinate2D::new(0., -3.), 1., -1.),
-                GridShape2D::new_2d(3, 4).bounding_box(),
-            ),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        // three years of 2×1 tiles, the value encodes the year and the tile column
+        let raster = AsciiRasterTiles::new(indoc! {"
+            [2010-01-01, 2011-01-01)
+            +-------+-------+
+            | 10 10 | 11 11 |
+            | 10 10 | 11 11 |
+            | 10 10 | 11 11 |
+            +-------+-------+
 
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
-        let raster_tiles = vec![
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-        ];
+            [2011-01-01, 2012-01-01)
+            +-------+-------+
+            | 20 20 | 21 21 |
+            | 20 20 | 21 21 |
+            | 20 20 | 21 21 |
+            +-------+-------+
 
-        let mrs = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: raster_tiles,
-                result_descriptor,
-            },
-        }
-        .typed();
+            [2012-01-01, 2013-01-01)
+            +-------+-------+
+            | 30 30 | 31 31 |
+            | 30 30 | 31 31 |
+            | 30 30 | 31 31 |
+            +-------+-------+
+            "})
+        .tile_origin([-1, 0]);
+        let mrs = raster.mock_raster_source::<u8>().typed();
 
         let time_shift = TimeShift {
             sources: SingleRasterOrVectorSource {
@@ -1038,7 +941,8 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(raster.tiling_specification());
 
         let query_context = execution_context.mock_query_context_test_default();
 
@@ -1075,141 +979,47 @@ mod tests {
             result.push(tile.unwrap());
         }
 
-        assert_eq!(result.len(), 2);
-
-        assert_eq!(
-            result[0].time,
-            TimeInterval::new_unchecked(
-                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-            ),
-        );
-        assert_eq!(
-            result[1].time,
-            TimeInterval::new_unchecked(
-                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-            ),
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [2010-01-01, 2011-01-01)
+                +-------+-------+
+                | 20 20 | 21 21 |
+                | 20 20 | 21 21 |
+                | 20 20 | 21 21 |
+                +-------+-------+
+            "})
+            .tile_origin([-1, 0]),
         );
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn test_relative_raster_shift() {
-        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
-        let result_descriptor = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(
-                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
-                )),
-                TimeStep::years(1).unwrap(),
-            ),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
-                GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),
-            ),
-            bands: RasterBandDescriptors::new_single_band(),
-        };
-        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        // three years of 2×1 tiles, the value encodes the year and the tile column
+        let raster = AsciiRasterTiles::new(indoc! {"
+            [2010-01-01, 2011-01-01)
+            +-------+-------+
+            | 10 10 | 11 11 |
+            | 10 10 | 11 11 |
+            | 10 10 | 11 11 |
+            +-------+-------+
 
-        let empty_grid = GridOrEmpty::Empty(EmptyGrid2D::<u8>::new(tile_size_in_pixels));
-        let raster_tiles = vec![
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(
-                    DateTime::new_utc(2012, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
-                ),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                empty_grid.clone(),
-                CacheHint::no_cache(),
-            ),
-        ];
+            [2011-01-01, 2012-01-01)
+            +-------+-------+
+            | 20 20 | 21 21 |
+            | 20 20 | 21 21 |
+            | 20 20 | 21 21 |
+            +-------+-------+
 
-        let mrs = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: raster_tiles,
-                result_descriptor,
-            },
-        }
-        .typed();
+            [2012-01-01, 2013-01-01)
+            +-------+-------+
+            | 30 30 | 31 31 |
+            | 30 30 | 31 31 |
+            | 30 30 | 31 31 |
+            +-------+-------+
+            "})
+        .tile_origin([-1, 0]);
+        let mrs = raster.mock_raster_source::<u8>().typed();
 
         let time_shift = TimeShift {
             sources: SingleRasterOrVectorSource {
@@ -1221,7 +1031,8 @@ mod tests {
             },
         };
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(raster.tiling_specification());
         let query_context = execution_context.mock_query_context_test_default();
 
         let query_processor = RasterOperator::typed(time_shift)
@@ -1257,21 +1068,17 @@ mod tests {
             result.push(tile.unwrap());
         }
 
-        assert_eq!(result.len(), 2);
-
-        assert_eq!(
-            result[0].time,
-            TimeInterval::new_unchecked(
-                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-            ),
-        );
-        assert_eq!(
-            result[1].time,
-            TimeInterval::new_unchecked(
-                DateTime::new_utc(2010, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2011, 1, 1, 0, 0, 0),
-            ),
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [2010-01-01, 2011-01-01)
+                +-------+-------+
+                | 20 20 | 21 21 |
+                | 20 20 | 21 21 |
+                | 20 20 | 21 21 |
+                +-------+-------+
+            "})
+            .tile_origin([-1, 0]),
         );
     }
 
