@@ -1,5 +1,5 @@
-//! The raster expression: the per-pixel work, several bands, `map_no_data` on empty tiles and
-//! initializing an expression that was compiled before, like every request of a processing graph.
+//! The raster expression: the per-pixel work, several bands, bands selected by a band filter as
+//! in the layer templates, `map_no_data` on empty tiles and initializing an expression that was compiled before, like every request of a processing graph.
 //!
 //! The first compilation of each expression happens before the measurement.
 //!
@@ -15,8 +15,19 @@ use geoengine_operators::{
     engine::{
         ProcessingGraphOperatorPath, RasterOperator, SingleRasterSource, TypedRasterOperator,
     },
-    processing::{Expression, ExpressionParams},
+    processing::{BandFilter, BandFilterParams, BandsByNameOrIndex, Expression, ExpressionParams},
 };
+
+/// Bands `bands` of the raster, by index.
+fn band_filter(raster: TypedRasterOperator, bands: Vec<usize>) -> TypedRasterOperator {
+    BandFilter {
+        params: BandFilterParams {
+            bands: BandsByNameOrIndex::Index(bands),
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
 
 fn expression(
     raster: TypedRasterOperator,
@@ -48,6 +59,20 @@ fn expression_bench(c: &mut Criterion) {
         Area::Extent,
         env.one_step(),
     );
+    // like `bands2_extent`, but the two bands are filtered from three, as the layer templates do
+    // for an NDVI; the difference to `bands2_extent` is the band filter
+    let band_filter_bands2 = env.case(
+        expression(
+            band_filter(
+                stack(vec![env.raster(), env.raster(), env.raster()]),
+                vec![0, 2],
+            ),
+            "(A - B) / (A + B + 1)",
+            false,
+        ),
+        Area::Extent,
+        env.one_step(),
+    );
     // 8 of 9 tiles are empty, but `map_no_data` must compute them
     let map_no_data = env.case(
         expression(env.raster(), "if A IS NODATA { 0 } else { A }", true),
@@ -70,6 +95,7 @@ fn expression_bench(c: &mut Criterion) {
     for (name, case) in [
         ("extent", &extent),
         ("bands2_extent", &bands2),
+        ("band_filter_bands2_extent", &band_filter_bands2),
         ("map_no_data_x3_empty", &map_no_data),
     ] {
         env.bench(&mut group, name, case);
