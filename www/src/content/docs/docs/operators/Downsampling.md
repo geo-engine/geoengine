@@ -24,11 +24,11 @@ DownsamplingResolution::Resolution(SpatialResolution { x: 200.0, y: 200.0 })
 
 ## Parameters
 
-| Name                  | Type                   | Description               | Examples                          |
-| --------------------- | ---------------------- | ------------------------- | --------------------------------- |
-| samplingMethod        | DownsamplingMethod     | Downsampling method.      | `"nearestNeighbor"`               |
-| outputResolution      | DownsamplingResolution | Target output resolution. | `{"type":"fraction","x":2,"y":2}` |
-| outputOriginReference | Coordinate2D or null   |                           |                                   |
+| Name                  | Type                   | Description                                                    | Examples                          |
+| --------------------- | ---------------------- | -------------------------------------------------------------- | --------------------------------- |
+| samplingMethod        | DownsamplingMethod     | Downsampling method.                                           | `"nearestNeighbor"`               |
+| outputResolution      | DownsamplingResolution | Target output resolution.                                      | `{"type":"fraction","x":2,"y":2}` |
+| outputOriginReference | Coordinate2D or null   | Optional reference point used to align the output grid origin. |                                   |
 
 ## Sources
 

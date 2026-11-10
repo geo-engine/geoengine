@@ -28,12 +28,12 @@ An example for Meteosat Second Generation properties is:
 
 ## Parameters
 
-| Name              | Type                 | Description                                                    | Examples                                                                                               |
-| ----------------- | -------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| slope             | SlopeOffsetSelection | The slope (multiplication factor) applied to each pixel value. | `{"domain":"","key":"scale"}`<br>`{"value":0.1}`<br>`{"type":"metadataKey","domain":"","key":"scale"}` |
-| offset            | SlopeOffsetSelection | The offset (addition) applied to each pixel value.             | `{"domain":"","key":"scale"}`<br>`{"value":0.1}`<br>`{"type":"constant","value":1}`                    |
-| outputMeasurement | Measurement or null  |                                                                | `null`                                                                                                 |
-| scalingMode       | ScalingMode          | Selects whether the values are scaled or unscaled.             | `"mulSlopeAddOffset"`                                                                                  |
+| Name              | Type                 | Description                                                            | Examples                                                                                               |
+| ----------------- | -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| slope             | SlopeOffsetSelection | The slope (multiplication factor) applied to each pixel value.         | `{"domain":"","key":"scale"}`<br>`{"value":0.1}`<br>`{"type":"metadataKey","domain":"","key":"scale"}` |
+| offset            | SlopeOffsetSelection | The offset (addition) applied to each pixel value.                     | `{"domain":"","key":"scale"}`<br>`{"value":0.1}`<br>`{"type":"constant","value":1}`                    |
+| outputMeasurement | Measurement or null  | _Optional:_ output measurement of the result of the scaling operation. | `null`                                                                                                 |
+| scalingMode       | ScalingMode          | Selects whether the values are scaled or unscaled.                     | `"mulSlopeAddOffset"`                                                                                  |
 
 ## Sources
 

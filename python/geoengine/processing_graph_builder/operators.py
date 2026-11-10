@@ -452,7 +452,7 @@ class Downsampling(RasterOperator):
 
 
 class ReTile(RasterOperator):
-    """A ReTile operator."""
+    """Moves raster tiles onto another tile size or origin without resampling."""
 
     source: RasterOperator
     tile_size: tuple[int, int] | None
