@@ -329,7 +329,8 @@ pub struct GdalProcessPool {
     counters: PoolCounters,
 }
 
-const RASTER_INFO_CAPACITY: NonZeroUsize = NonZeroUsize::new(4096).expect("not zero");
+/// The default of `[gdal_process_pool] header_cache_entries`, for mock contexts and tests.
+pub const DEFAULT_HEADER_CACHE_ENTRIES: NonZeroUsize = NonZeroUsize::new(4096).expect("not zero");
 
 /// Recently read headers by file, so that a tile does not queue behind the workers that decode for
 /// one on every read.
@@ -337,11 +338,15 @@ struct RasterInfos(Mutex<LruCache<Arc<str>, (CacheHint, RasterInfo)>>);
 
 impl Default for RasterInfos {
     fn default() -> Self {
-        Self(Mutex::new(LruCache::new(RASTER_INFO_CAPACITY)))
+        Self::new(DEFAULT_HEADER_CACHE_ENTRIES)
     }
 }
 
 impl RasterInfos {
+    fn new(entries: NonZeroUsize) -> Self {
+        Self(Mutex::new(LruCache::new(entries)))
+    }
+
     fn get(&self, file: &str) -> Option<RasterInfo> {
         let mut infos = safe_lock_mutex(&self.0);
         let (cache_hint, info) = infos.get(file)?;
@@ -450,6 +455,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        header_cache_entries: NonZeroUsize,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
@@ -495,7 +501,7 @@ impl GdalProcessPool {
         Arc::new(Self {
             broker_tx,
             in_flight_tiles: Mutex::new(FastHashMap::default()),
-            raster_infos: RasterInfos::default(),
+            raster_infos: RasterInfos::new(header_cache_entries),
             counters: PoolCounters::default(),
         })
     }
@@ -510,6 +516,7 @@ impl GdalProcessPool {
     /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
     /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
     /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `header_cache_entries`: The number of file headers kept for reads through cached blocks.
     ///
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
@@ -519,6 +526,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        header_cache_entries: NonZeroUsize,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
         Self::new_with_tokio_handle(
@@ -526,6 +534,7 @@ impl GdalProcessPool {
             number_of_processes,
             max_active_processes,
             max_dataset_processes,
+            header_cache_entries,
             worker_config,
         )
     }
@@ -1932,7 +1941,13 @@ mod tests {
             dataset.flush_cache().unwrap();
         };
         write(&path, 1.0);
-        let pool = GdalProcessPool::new(1, 1, 1, WorkerConfig::default());
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let (mut request, _) = make_request(0, 1, window([0, 0], [255, 255]));
         request.request.0.dataset_params.file_path = path.clone();
         for (iteration, expected) in [1, 1, 2, 2].into_iter().enumerate() {
@@ -2156,7 +2171,13 @@ mod tests {
                 .times(2)
                 .respond_with(status_code(200).body(bytes)),
         );
-        let pool = GdalProcessPool::new(1, 1, 1, WorkerConfig::default());
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         for iteration in 0..3 {
             if iteration == 2 {
                 pool.clear_caches().await.unwrap();

@@ -89,7 +89,7 @@ use geoengine_operators::{
         GdalMetaDataStatic, GdalProcessPool, GdalSource, GdalSourceParameters,
         MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
         MultiBandGdalSourceParameters, TileFile,
-        gdal_worker_process::{PoolRequestStats, WorkerConfig},
+        gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, PoolRequestStats, WorkerConfig},
     },
     util::gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
 };
@@ -863,6 +863,7 @@ fn block_reads(c: &mut Criterion) {
         limits[0],
         limits[1],
         limits[2],
+        DEFAULT_HEADER_CACHE_ENTRIES,
         WorkerConfig {
             gdal_config_options: Some(
                 vec![

@@ -153,6 +153,9 @@ max_active_processes = 16
 # Max. concurrent reads of a single dataset. Keeps one file from occupying all workers and
 # evicting the other datasets they hold open.
 max_dataset_processes = 8
+# Number of file headers (levels, block sizes) kept for reads through cached file blocks, one per
+# file and band, so that tiles do not wait for a worker to read a header again.
+header_cache_entries = 4096
 
 [gdal]
 # TODO: find good default

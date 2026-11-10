@@ -652,8 +652,9 @@ mod tests {
     use crate::source::gdal_worker_process::GdalDatasetParameters;
     use crate::source::gdal_worker_process::GdalPoolDispatcher;
     use crate::source::gdal_worker_process::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
-        GdalProcessPoolAccess, GdalSourceTimePlaceholder, TimeReference, WorkerConfig,
+        DEFAULT_HEADER_CACHE_ENTRIES, FileNotFoundHandling, GdalDatasetGeoTransform,
+        GdalMetadataMapping, GdalProcessPool, GdalProcessPoolAccess, GdalSourceTimePlaceholder,
+        TimeReference, WorkerConfig,
     };
     use crate::util::Result;
     use crate::util::gdal::add_ndvi_dataset;
@@ -1087,7 +1088,13 @@ mod tests {
             ),
         });
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
 
         let tile = assemble_tile::<f64>(
@@ -1277,7 +1284,13 @@ mod tests {
         let tile_info = tile_information_with_partition_and_shape(output_bounds, output_shape);
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gw: GdalPoolDispatcher = gpp.get_gdal_worker();
 
         let tile = assemble_tile::<f64>(

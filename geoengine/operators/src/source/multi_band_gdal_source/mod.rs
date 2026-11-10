@@ -584,7 +584,7 @@ mod tests {
         TimeDescriptor,
     };
     use crate::source::gdal_read::assemble_tile;
-    use crate::source::gdal_worker_process::WorkerConfig;
+    use crate::source::gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig};
     use crate::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess,
@@ -1944,7 +1944,13 @@ mod tests {
             TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
         );
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
 
         let mut failures = Vec::new();
 
@@ -2252,7 +2258,13 @@ mod tests {
             GeoTransform::new_unchecked((0.0, 4.0).into(), 1.0, -1.0),
         );
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gw = gpp.get_gdal_worker();
 
         let tile = assemble_tile::<u16>(

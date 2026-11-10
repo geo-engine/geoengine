@@ -283,8 +283,9 @@ mod tests {
     use super::*;
     use crate::cache::new_raster_cache::NewRasterCacheEnum;
     use crate::source::gdal_worker_process::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
-        GdalProcessPoolAccess, OverviewReaderState, ReaderState, WorkerConfig,
+        DEFAULT_HEADER_CACHE_ENTRIES, FileNotFoundHandling, GdalDatasetGeoTransform,
+        GdalMetadataMapping, GdalProcessPool, GdalProcessPoolAccess, OverviewReaderState,
+        ReaderState, WorkerConfig,
     };
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{
@@ -353,7 +354,13 @@ mod tests {
             global_geo_transform: GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
         };
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
 
         let tile = assemble_tile::<u8>(
             TilePlan {
@@ -489,7 +496,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
@@ -535,7 +548,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         // no minimum lifetime and a tile that must not be cached, as in the mock query contexts
@@ -573,7 +592,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         let blocks = BlockIo::new(cache, gdal_worker.clone(), CacheTtlSeconds::new(60));
@@ -610,7 +635,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         let blocks = BlockIo::new(cache, gdal_worker.clone(), CacheTtlSeconds::new(60));
@@ -651,7 +682,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));

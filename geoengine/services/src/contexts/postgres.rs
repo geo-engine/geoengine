@@ -138,6 +138,7 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
         );
 
@@ -208,6 +209,7 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
         );
 
@@ -290,6 +292,7 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
         );
 
@@ -827,6 +830,7 @@ mod tests {
                 0,
                 0,
                 0,
+                geoengine_operators::source::gdal_worker_process::DEFAULT_HEADER_CACHE_ENTRIES,
                 WorkerConfig::default(),
             )
         })

@@ -68,7 +68,7 @@ use geoengine_operators::{
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
-        gdal_worker_process::WorkerConfig,
+        gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig},
     },
     util::{create_rayon_thread_pool, gdal::create_ndvi_meta_data_with_cache_ttl},
 };
@@ -291,6 +291,11 @@ impl Env {
             setting(&settings, "gdal_process_pool.number_of_processes", 32),
             setting(&settings, "gdal_process_pool.max_active_processes", 16),
             setting(&settings, "gdal_process_pool.max_dataset_processes", 8),
+            setting(
+                &settings,
+                "gdal_process_pool.header_cache_entries",
+                DEFAULT_HEADER_CACHE_ENTRIES,
+            ),
             WorkerConfig {
                 // without the server's options GDAL caches 5% of the RAM per worker
                 gdal_config_options: Some(

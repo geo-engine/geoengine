@@ -18,7 +18,8 @@ pub use grid_and_properties::GridAndProperties;
 pub use process_common::{RasterInfo, RasterLevelLayout};
 pub use process_impl::{OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig};
 pub use process_pool::{
-    GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError, PoolRequestStats,
+    DEFAULT_HEADER_CACHE_ENTRIES, GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError,
+    PoolRequestStats,
 };
 pub use reader::{GdalPoolReader, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
