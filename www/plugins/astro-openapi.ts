@@ -428,7 +428,8 @@ function parseParameters(
         const entry = {
             name,
             type: param['x-reference-id'] ?? param.type ?? 'unknown',
-            description: param.description ?? '',
+            // an optional `$ref` puts its description on the `oneOf` variant, not on the property
+            description: param.description ?? param.oneOf?.find((schema: OpenAPI.SchemaObject) => schema.description)?.description ?? '',
             examples: [...new Set([...schemaExamples, ...operatorExample].map((ex) => JSON.stringify(ex)))],
         };
         if (entry.type === 'unknown' && param.oneOf) {
