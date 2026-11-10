@@ -120,7 +120,10 @@ export class FootprintsService {
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
     private readonly mapSpatialReference = toSignal(this.projectService.getSpatialReferenceStream());
-    private readonly time = toSignal(this.projectService.getTimeStream());
+    private readonly projectTime = toSignal(this.projectService.getTimeStream());
+    /** A time to use instead of the project's, e.g. the default time of a dataset that is not applied yet. Set by the app. */
+    readonly timeOverride = signal<Time | undefined>(undefined);
+    private readonly time = computed(() => this.timeOverride() ?? this.projectTime());
     private readonly projectTimeStep = toSignal(this.projectService.getTimeStepDurationStream());
     /** The layer to show the footprints of. Set by the app. */
     readonly layer = signal<FootprintLayer | undefined>(undefined);
