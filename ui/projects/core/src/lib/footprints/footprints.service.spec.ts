@@ -1,20 +1,17 @@
-import {signal} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {BehaviorSubject, Observable, of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {RasterFootprints, RasterFootprintsPrecision} from '@geoengine/api-client';
 import {LayersService, ProcessingGraphsService, RasterLayerMetadata, Time} from '@geoengine/common';
-import {MapService, ProjectService, SpatialReferenceService} from '@geoengine/core';
 import {FootprintsService} from './footprints.service';
-import {EOdysseyLayerService} from './layers.service';
+import {MapService} from '../map/map.service';
+import {ProjectService} from '../project/project.service';
+import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 
 const FOOTPRINTS: RasterFootprints = {spatialReference: 'EPSG:4326', steps: [], next: null, tooLarge: false};
 
 describe('FootprintsService overlay', () => {
     const registerLayer = vi.fn<(connector: string, layer: string) => Promise<string>>();
-    const canApplyPreset = signal(false);
-    const selectedDataSource = signal<{defaultTimeStep?: {durationAmount: number; durationUnit: string}} | undefined>(undefined);
-    const selectedPreset = signal<{connectorId: string; layerId: string} | undefined>(undefined);
     const getFootprints =
         vi.fn<
             (
@@ -26,24 +23,12 @@ describe('FootprintsService overlay', () => {
     beforeEach(() => {
         getFootprints.mockReset().mockResolvedValue(FOOTPRINTS);
         registerLayer.mockReset().mockResolvedValue('graph');
-        selectedPreset.set(undefined);
-        canApplyPreset.set(false);
-        selectedDataSource.set(undefined);
         const metadata = Object.assign(Object.create(RasterLayerMetadata.prototype) as object, {
             spatialReference: {srsString: 'EPSG:4326'},
         }) as RasterLayerMetadata;
 
         TestBed.configureTestingModule({
             providers: [
-                {
-                    provide: EOdysseyLayerService,
-                    useValue: {
-                        mapTileLayer: signal({dataConnectorId: 'provider', layerId: 'layer'}),
-                        selectedPreset,
-                        canApplyPreset,
-                        selectedDataSource,
-                    },
-                },
                 {
                     provide: LayersService,
                     useValue: {
@@ -80,6 +65,13 @@ describe('FootprintsService overlay', () => {
 
     afterEach(() => TestBed.resetTestingModule());
 
+    /** The service as an app sets it up: with the layer to show. */
+    function createService(connector = 'provider', layer = 'layer'): FootprintsService {
+        const service = TestBed.inject(FootprintsService);
+        service.layer.set({key: `${connector}/${layer}`, processingGraphId: () => registerLayer(connector, layer)});
+        return service;
+    }
+
     /** The calendar header opens the calendar and asks for the window of its month. */
     function openCalendar(service: FootprintsService): void {
         service.calendarOpen.set(true);
@@ -98,7 +90,7 @@ describe('FootprintsService overlay', () => {
         getFootprints.mock.calls.filter(([, query]) => query.precision === RasterFootprintsPrecision.Coverage).length;
 
     it('asks for the boxes of its step only where the map loads tiles', async () => {
-        const service = TestBed.inject(FootprintsService);
+        const service = createService();
 
         service.zoomRequired.set(true);
         service.overlayVisible.set(true);
@@ -112,7 +104,7 @@ describe('FootprintsService overlay', () => {
     });
 
     it('asks the calendar for availability only', async () => {
-        const service = TestBed.inject(FootprintsService);
+        const service = createService();
 
         openCalendar(service);
         await settle();
@@ -122,9 +114,8 @@ describe('FootprintsService overlay', () => {
         expect(windowRequests.every(([, query]) => query.precision === RasterFootprintsPrecision.Availability)).toBe(true);
     });
 
-    it('uses the selected preset before it is applied to the map', async () => {
-        selectedPreset.set({connectorId: 'selected-provider', layerId: 'selected-layer'});
-        const service = TestBed.inject(FootprintsService);
+    it('asks for the graph of the layer the app set', async () => {
+        const service = createService('selected-provider', 'selected-layer');
 
         service.overlayVisible.set(true);
         await settle();
@@ -134,7 +125,7 @@ describe('FootprintsService overlay', () => {
     });
 
     it('asks for the boxes of an area around the view, so scenes do not end at the edge of the view', async () => {
-        const service = TestBed.inject(FootprintsService);
+        const service = createService();
 
         service.overlayVisible.set(true);
         openCalendar(service);
@@ -147,7 +138,7 @@ describe('FootprintsService overlay', () => {
     });
 
     it('asks for the graph of a layer once, however often the view changes', async () => {
-        const service = TestBed.inject(FootprintsService);
+        const service = createService();
 
         service.overlayVisible.set(true);
         openCalendar(service);
@@ -159,7 +150,7 @@ describe('FootprintsService overlay', () => {
     });
 
     it('does not load the days of the calendar while only the overlay is on', async () => {
-        const service = TestBed.inject(FootprintsService);
+        const service = createService();
 
         service.overlayVisible.set(true);
         await settle();
@@ -170,7 +161,7 @@ describe('FootprintsService overlay', () => {
 
     it('reports a failed request of the overlay instead of throwing', async () => {
         getFootprints.mockRejectedValue(new Error('server error'));
-        const service = TestBed.inject(FootprintsService);
+        const service = createService();
 
         service.overlayVisible.set(true);
         await settle();
@@ -180,14 +171,11 @@ describe('FootprintsService overlay', () => {
         expect(service.overlayAreaCount()).toBeUndefined();
     });
 
-    it('uses the time step of the selected dataset until it is applied', () => {
-        const service = TestBed.inject(FootprintsService);
+    it("uses the time step the app sets instead of the project's", () => {
+        const service = createService();
         expect(service.timeStep()?.durationUnit).toBe('days');
 
-        selectedDataSource.set({defaultTimeStep: {durationAmount: 1, durationUnit: 'months'}});
-        expect(service.timeStep()?.durationUnit).toBe('days');
-
-        canApplyPreset.set(true);
+        service.timeStepOverride.set({durationAmount: 1, durationUnit: 'months'});
         expect(service.timeStep()?.durationUnit).toBe('months');
     });
 });

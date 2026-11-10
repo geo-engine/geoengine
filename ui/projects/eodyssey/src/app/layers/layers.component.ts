@@ -8,12 +8,16 @@ import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
-import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
+import {
+    CoreModule,
+    FootprintCalendarHeaderComponent,
+    FootprintsService,
+    ProjectService,
+    RasterLegendViewComponent,
+    calendarStartView,
+} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
 import type {DataSourceDefinition} from './data-sources';
-import {FootprintCalendarHeaderComponent} from './footprint-calendar-header.component';
-import {calendarStartView} from './footprints';
-import {FootprintsService} from './footprints.service';
 import {EOdysseyLayerService} from './layers.service';
 
 @Component({

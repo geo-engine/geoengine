@@ -10,11 +10,29 @@ import {Fill, Stroke, Style} from 'ol/style';
 import {firstValueFrom} from 'rxjs';
 import {debounceTime} from 'rxjs/operators';
 import {RasterFootprints, RasterFootprintsPrecision} from '@geoengine/api-client';
-import {LayersService, ProcessingGraphsService, RasterLayerMetadata, SpatialReference, Time, UUID} from '@geoengine/common';
-import {MapService, ProjectService, SpatialReferenceService, ViewportSize} from '@geoengine/core';
-import {DataSourceLayer} from './data-sources';
-import {TimeRange, boxRing, cellHasData, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
-import {EOdysseyLayerService} from './layers.service';
+import {
+    LayersService,
+    ProcessingGraphsService,
+    RasterLayerMetadata,
+    SpatialReference,
+    Time,
+    TimeStepDuration,
+    UUID,
+} from '@geoengine/common';
+import {
+    TimeRange,
+    boxRing,
+    cellHasData,
+    cellHasStepAfter,
+    cellHasStepStart,
+    mergeFootprints,
+    monthStartUtc,
+    stepAt,
+    windowRequests,
+} from './footprints';
+import {MapService, ViewportSize} from '../map/map.service';
+import {ProjectService} from '../project/project.service';
+import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 
 /** One request covers at most this many time steps of the dataset. */
 const WINDOW_TIME_STEPS = 100;
@@ -29,15 +47,63 @@ const OVERLAY_MARGIN = 0.5;
 /** The view is a rectangle of the map's projection, so its bounds in the layer's projection need its edges, not only its corners. */
 const EXTENT_EDGE_STOPS = 16;
 
+/** The raster layer an app wants to know the footprints of. */
+export interface FootprintLayer {
+    /** Identifies the layer, so its graph and metadata are asked for once. */
+    key: string;
+    /** The id of the processing graph, registering the layer first if it is not one yet. */
+    processingGraphId: () => Promise<UUID>;
+}
+
 export const CELL_WITH_DATA_CLASS = 'geoengine-calendar-cell-with-data';
+/** The time step of the cell goes on in the next cell, so a band joins them. */
+export const CELL_BAND_AFTER_CLASS = 'geoengine-calendar-cell-band-after';
+/** A cell a time step reaches into from an earlier cell. The cell where the step starts has a disc, the others a band. */
+export const CELL_WITH_DATA_CONTINUED_CLASS = 'geoengine-calendar-cell-with-data-continued';
+
+/** Period and line width of the stripes of the overlay in CSS pixels. */
+const STRIPE_PERIOD = 10;
+const STRIPE_WIDTH = 3;
+
+/**
+ * Diagonal stripes over the faded accent color. The map stays readable through them, and boxes that
+ * overlap are told apart from one big box by the stripes meeting.
+ */
+function stripePattern(fill: string, stripe: string): CanvasPattern | undefined {
+    const ratio = window.devicePixelRatio || 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = STRIPE_PERIOD * ratio;
+    const context = canvas.getContext('2d');
+    if (!context) return undefined;
+
+    context.scale(ratio, ratio);
+    context.fillStyle = fill;
+    context.fillRect(0, 0, STRIPE_PERIOD, STRIPE_PERIOD);
+    context.strokeStyle = stripe;
+    context.lineWidth = STRIPE_WIDTH;
+    // three segments, so the stripe is continuous across the edges of the pattern tile
+    context.beginPath();
+    for (const offset of [-STRIPE_PERIOD, 0, STRIPE_PERIOD]) {
+        context.moveTo(offset, STRIPE_PERIOD);
+        context.lineTo(offset + STRIPE_PERIOD, 0);
+    }
+    context.stroke();
+
+    const pattern = context.createPattern(canvas, 'repeat');
+    // the bitmap has `ratio` pixels per CSS pixel, which the map's canvas scales up by `ratio` again
+    pattern?.setTransform(new DOMMatrix().scale(1 / ratio));
+    return pattern ?? undefined;
+}
 
 /** The theme's accent colors, which are CSS variables of the app. */
 function overlayStyle(): Style {
     const css = getComputedStyle(document.documentElement);
     const color = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
+    const accent = color('--geoengine-accent-color', '#ffc107');
+    const faded = color('--geoengine-faded-accent-color', 'rgba(255, 193, 7, 0.32)');
     return new Style({
-        fill: new Fill({color: color('--geoengine-faded-accent-color', 'rgba(255, 193, 7, 0.32)')}),
-        stroke: new Stroke({color: color('--geoengine-accent-color', '#ffc107'), width: 2}),
+        fill: new Fill({color: stripePattern(faded, accent) ?? faded}),
+        stroke: new Stroke({color: accent, width: 2}),
     });
 }
 
@@ -47,7 +113,6 @@ function overlayStyle(): Style {
  */
 @Service()
 export class FootprintsService {
-    private readonly eodysseyLayerService = inject(EOdysseyLayerService);
     private readonly layerService = inject(LayersService);
     private readonly processingGraphsService = inject(ProcessingGraphsService);
     private readonly projectService = inject(ProjectService);
@@ -57,19 +122,12 @@ export class FootprintsService {
     private readonly mapSpatialReference = toSignal(this.projectService.getSpatialReferenceStream());
     private readonly time = toSignal(this.projectService.getTimeStream());
     private readonly projectTimeStep = toSignal(this.projectService.getTimeStepDurationStream());
-    /** The step of the selected dataset until it is applied, because the project keeps the step of the applied one. */
-    readonly timeStep = computed(
-        () =>
-            (this.eodysseyLayerService.canApplyPreset() ? this.eodysseyLayerService.selectedDataSource()?.defaultTimeStep : undefined) ??
-            this.projectTimeStep(),
-    );
+    /** The layer to show the footprints of. Set by the app. */
+    readonly layer = signal<FootprintLayer | undefined>(undefined);
+    /** A step to use instead of the project's, e.g. the one of a layer that is not applied yet. Set by the app. */
+    readonly timeStepOverride = signal<TimeStepDuration | undefined>(undefined);
+    readonly timeStep = computed(() => this.timeStepOverride() ?? this.projectTimeStep());
     private readonly viewport = toSignal(this.mapService.getViewportSizeStream().pipe(debounceTime(VIEWPORT_DEBOUNCE_MS)));
-
-    /** The selected preset, so availability is shown before the visualization is applied. Else the layer on the map. */
-    private readonly footprintLayer = computed<DataSourceLayer | undefined>(() => {
-        const preset = this.eodysseyLayerService.selectedPreset();
-        return preset ? {dataConnectorId: preset.connectorId, layerId: preset.layerId} : this.eodysseyLayerService.mapTileLayer();
-    });
 
     private readonly graphs = new Map<string, Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}>>();
 
@@ -83,7 +141,7 @@ export class FootprintsService {
 
     private readonly footprintsResource = resource({
         params: () => {
-            const layer = this.footprintLayer();
+            const layer = this.layer();
             const mapSpatialReference = this.mapSpatialReference();
             const timeStep = this.timeStep();
             const viewport = this.viewport();
@@ -136,7 +194,7 @@ export class FootprintsService {
      */
     private readonly overlayStepResource = resource({
         params: () => {
-            const layer = this.footprintLayer();
+            const layer = this.layer();
             const mapSpatialReference = this.mapSpatialReference();
             const viewport = this.viewport();
             const time = this.time();
@@ -201,15 +259,12 @@ export class FootprintsService {
     }
 
     /** The graph and the metadata of a layer. They do not change while the page is open, so they are asked for once. */
-    private graphOf(layer: DataSourceLayer): Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}> {
-        const key = `${layer.dataConnectorId}/${layer.layerId}`;
+    private graphOf(layer: FootprintLayer): Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}> {
+        const key = layer.key;
         let graph = this.graphs.get(key);
         if (!graph) {
             graph = (async (): Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}> => {
-                const processingGraphId = await this.layerService.registerAndGetLayerProcessingGraphId(
-                    layer.dataConnectorId,
-                    layer.layerId,
-                );
+                const processingGraphId = await layer.processingGraphId();
                 const metadata = await this.layerService.getProcessingGraphIdMetadata(processingGraphId);
                 return {processingGraphId, metadata: metadata instanceof RasterLayerMetadata ? metadata : undefined};
             })();
@@ -222,7 +277,7 @@ export class FootprintsService {
 
     /** The graph id and the view's bounds in the graph's spatial reference, for both requests. */
     private async queryOf(
-        layer: DataSourceLayer,
+        layer: FootprintLayer,
         mapSpatialReference: SpatialReference,
         viewport: ViewportSize,
         margin = 0,
@@ -251,8 +306,14 @@ export class FootprintsService {
         return {processingGraphId, spatialBounds: spatialBounds.join(',')};
     }
 
-    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) =>
-        cellHasData(this.steps(), date, view) ? CELL_WITH_DATA_CLASS : '';
+    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) => {
+        const steps = this.steps();
+        if (!cellHasData(steps, date, view)) return '';
+        return [
+            cellHasStepStart(steps, date, view) ? CELL_WITH_DATA_CLASS : CELL_WITH_DATA_CONTINUED_CLASS,
+            ...(cellHasStepAfter(steps, date, view) ? [CELL_BAND_AFTER_CLASS] : []),
+        ];
+    };
 
     /** Loads the window of `date` unless it is loaded already. Takes a calendar date. */
     showDate(date: Date): void {

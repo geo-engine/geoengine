@@ -7,8 +7,7 @@ import {Observable, of} from 'rxjs';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
-import {MapService, ProjectService} from '@geoengine/core';
-import {FootprintsService} from './footprints.service';
+import {FootprintsService, MapService, ProjectService} from '@geoengine/core';
 import {LayersComponent} from './layers.component';
 import {EOdysseyLayerService} from './layers.service';
 

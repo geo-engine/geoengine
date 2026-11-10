@@ -1,0 +1,80 @@
+// The classes come from `dateClass` of the footprints service: a disc where a time step starts and a band
+// over the days it goes on. The band is the `::before` of the cell, as Material draws its ranges.
+.mat-calendar:has(geoengine-footprint-calendar-header) {
+    // Opaque, because the band and the discs overlap, and see-through colors would add up to a visible edge.
+    --footprint-disc-color: color-mix(in srgb, var(--geoengine-accent-color) 60%, var(--geoengine-card-background-color));
+    --footprint-band-color: color-mix(in srgb, var(--geoengine-accent-color) 22%, var(--geoengine-card-background-color));
+
+    // the color of the day itself, which the rules for focus below keep
+    .geoengine-calendar-cell-with-data {
+        --footprint-cell-color: var(--footprint-disc-color);
+    }
+
+    .geoengine-calendar-cell-with-data .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+        background-color: var(--footprint-disc-color);
+    }
+
+    // the step goes on: the band starts in the middle of the disc
+    .geoengine-calendar-cell-with-data.geoengine-calendar-cell-band-after::before {
+        left: 50%;
+        width: 50%;
+        background-color: var(--footprint-band-color);
+    }
+
+    // the days after the start: a band over the whole cell, ending in a rounded end at the last day
+    .geoengine-calendar-cell-with-data-continued {
+        &::before {
+            background-color: var(--footprint-band-color);
+            width: 50%;
+        }
+
+        &.geoengine-calendar-cell-band-after::before {
+            width: 100%;
+        }
+
+        &:not(.geoengine-calendar-cell-band-after) {
+            --footprint-cell-color: var(--footprint-band-color);
+
+            .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+                background-color: var(--footprint-band-color);
+            }
+        }
+    }
+
+    // The selected day is a solid disc with a ring, so it stands out from days with and without data.
+    .mat-calendar-body-cell-content.mat-calendar-body-selected {
+        box-shadow:
+            0 0 0 2px var(--geoengine-card-background-color),
+            0 0 0 4px var(--geoengine-primary-color);
+        font-weight: 600;
+    }
+
+    // Material fills the focused day with grey, which hides the color of the data. Focus is a dashed ring
+    // and the day keeps its color. The calendar moves the focus by itself too, e.g. with the month.
+    .cdk-keyboard-focused .mat-calendar-body-active > .mat-calendar-body-cell-content:not(.mat-calendar-body-selected),
+    .cdk-program-focused .mat-calendar-body-active > .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+        background-color: var(--footprint-cell-color, transparent);
+        outline: 1px dashed var(--geoengine-foreground-secondary-text-color);
+        outline-offset: -1px;
+    }
+
+    // Material's hover tint is see-through and replaces the color of the day, which shows the band behind it.
+    // A day with data keeps its color and gets a little darker instead.
+    @media (hover: hover) {
+        .mat-calendar-body-cell:not(.mat-calendar-body-disabled):hover
+            > .mat-calendar-body-cell-content:not(.mat-calendar-body-selected):not(.mat-calendar-body-comparison-identical) {
+            background-color: var(
+                --footprint-cell-color,
+                var(
+                    --mat-datepicker-calendar-date-hover-state-background-color,
+                    color-mix(in srgb, var(--mat-sys-on-surface) calc(var(--mat-sys-hover-state-layer-opacity) * 100%), transparent)
+                )
+            );
+        }
+
+        .geoengine-calendar-cell-with-data:hover .mat-calendar-body-cell-content,
+        .geoengine-calendar-cell-with-data-continued:hover .mat-calendar-body-cell-content {
+            filter: brightness(0.94);
+        }
+    }
+}
