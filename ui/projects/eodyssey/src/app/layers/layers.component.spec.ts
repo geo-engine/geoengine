@@ -1,6 +1,7 @@
-import {signal} from '@angular/core';
+import {WritableSignal, signal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {provideNativeDateAdapter} from '@angular/material/core';
+import type {MatDatepicker} from '@angular/material/datepicker';
 import View from 'ol/View';
 import {Observable, of} from 'rxjs';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
@@ -298,6 +299,34 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.selectedCategory()?.key).toBe('Imagery');
         expect(eodysseyLayerService.selectedDataSource()?.key).toBe('sentinel');
         await vi.waitFor(() => expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default'));
+    });
+
+    describe('picking a calendar cell of the size of the time step', () => {
+        const picker = {close: vi.fn()};
+        const timeStepUnit = (unit: string): void => {
+            const footprints = TestBed.inject(FootprintsService) as unknown as {timeStep: WritableSignal<unknown>};
+            footprints.timeStep.set({durationAmount: 1, durationUnit: unit});
+        };
+
+        it('selects the month and closes the picker for a time step of months', async () => {
+            timeStepUnit('months');
+            picker.close.mockClear();
+
+            await fixture.componentInstance.selectCoarseUnit(new Date(2026, 2, 1), 'year', picker as unknown as MatDatepicker<Date>);
+
+            expect(picker.close).toHaveBeenCalledOnce();
+            expect(setTime).toHaveBeenCalledWith(new Time(new Date(Date.UTC(2026, 2, 1))));
+        });
+
+        it('leaves the picker open for a time step of days, so a day can still be picked', async () => {
+            timeStepUnit('days');
+            picker.close.mockClear();
+
+            await fixture.componentInstance.selectCoarseUnit(new Date(2026, 2, 1), 'year', picker as unknown as MatDatepicker<Date>);
+
+            expect(picker.close).not.toHaveBeenCalled();
+            expect(setTime).not.toHaveBeenCalled();
+        });
     });
 
     it('preselects the matching coverage on source switches and preserves the initial choice while panning', async () => {

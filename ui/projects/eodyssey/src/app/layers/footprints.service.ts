@@ -88,7 +88,7 @@ export class FootprintsService {
             const timeStep = this.timeStep();
             const viewport = this.viewport();
             const windowStart = this.windowStart();
-            const isNeeded = this.calendarOpen() || this.overlayVisible();
+            const isNeeded = this.calendarOpen();
 
             if (!isNeeded || !layer || !mapSpatialReference || !timeStep || !viewport || windowStart === undefined) {
                 return undefined;
@@ -160,22 +160,29 @@ export class FootprintsService {
         },
     });
 
+    /** `value()` of a resource throws while it is in an error state. */
+    private readonly overlayFootprints = computed(() =>
+        this.overlayStepResource.hasValue() ? this.overlayStepResource.value() : undefined,
+    );
+
     private readonly footprints = computed(() =>
         this.footprintsResource.hasValue() ? this.footprintsResource.value() : this.partialFootprints(),
     );
     readonly steps = computed(() => this.footprints()?.steps ?? []);
     /** The view needs too many catalog searches, so the user has to zoom in. */
     readonly tooLarge = computed(
-        () => (this.footprints()?.tooLarge ?? false) || (this.overlayVisible() && (this.overlayStepResource.value()?.tooLarge ?? false)),
+        () => (this.footprints()?.tooLarge ?? false) || (this.overlayVisible() && (this.overlayFootprints()?.tooLarge ?? false)),
     );
     readonly isLoading = computed(() => this.footprintsResource.isLoading());
-    readonly hasError = computed(() => this.footprintsResource.status() === 'error');
+    readonly hasError = computed(
+        () => this.footprintsResource.status() === 'error' || (this.overlayVisible() && this.overlayStepResource.status() === 'error'),
+    );
 
     readonly overlayLoading = computed(() => this.overlayVisible() && this.overlayStepResource.isLoading());
     /** The areas of the selected time step in view, undefined until they are known. */
     readonly overlayAreaCount = computed(() => {
         const time = this.time();
-        const footprints = this.overlayStepResource.hasValue() ? this.overlayStepResource.value() : undefined;
+        const footprints = this.overlayFootprints();
         if (!time || !footprints) return undefined;
         return stepAt(footprints.steps, time.start.valueOf())?.bounds.length ?? 0;
     });
@@ -183,15 +190,13 @@ export class FootprintsService {
     /** Stays one object, because replacing a layer redraws all layers of the map. */
     readonly overlayLayer = new OlLayerVector({
         source: new OlSourceVector<OlFeature<OlGeometry>>({wrapX: false}),
-        style: (): Style => overlayStyle(),
+        // OpenLayers asks for the style of every box in every frame
+        style: (): Style => (this.overlayStyleCache ??= overlayStyle()),
     });
+    /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
+    private overlayStyleCache?: Style;
 
     constructor() {
-        effect(() => {
-            const time = this.time();
-            if (time && this.overlayVisible()) this.showDate(time.start.toDate());
-        });
-
         effect(() => this.updateOverlay());
     }
 
@@ -261,12 +266,13 @@ export class FootprintsService {
         const mapSpatialReference = this.mapSpatialReference();
         const time = this.time();
 
+        this.overlayStyleCache = undefined;
         source?.clear();
         if (!source || !mapSpatialReference || !time || !this.overlayVisible()) return;
 
         // The window only says which days have data. Its boxes are the whole view, so the overlay
         // draws the boxes of its own request for the selected step.
-        const footprints = this.overlayStepResource.value();
+        const footprints = this.overlayFootprints();
         if (!footprints) return;
 
         const step = stepAt(footprints.steps, time.start.valueOf());
