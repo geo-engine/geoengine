@@ -21,7 +21,8 @@ Every data connector has a name, a description and a `priority` that orders the 
 Some types take an `id` in their definition; the others, e.g., `Gbif` or `Pangaea`, always use the same fixed id.
 
 Administrators manage data connector definitions with the `/layerDb/providers` endpoints or the `manager` app.
-On startup, the server also loads the definitions in `[dataprovider] provider_defs_path`.
+When the server creates its database schema, i.e., on the first start with an empty schema, it also loads the definitions in `[dataprovider] provider_defs_path`.
+Files added there later are not loaded on a restart.
 Access to a data connector is controlled by [permissions](/docs/the-geo-engine/users-and-permissions), like access to datasets.
 
 STAC credentials are stored in PostgreSQL.
@@ -41,7 +42,7 @@ Set `[dataprovider] password_encryption_key` (or `GEOENGINE__DATAPROVIDER__PASSW
 | `GfbioAbcd`              | Biodiversity data in the ABCD standard of the [GFBio](https://www.gfbio.org/) collections, from PostgreSQL                           |
 | `GfbioCollections`       | Collections of the GFBio collection API, combined with ABCD and Pangaea data                                                         |
 | `Pangaea`                | Datasets of the [PANGAEA](https://www.pangaea.de/) data publisher                                                                    |
-| `Wildlive`               | Camera trap data of the WildLIVE! portal                                                                                             |
+| `WildLIVE!`              | Camera trap data of the WildLIVE! portal                                                                                             |
 | `DatasetLayerListing`    | Not an external source: lists internal datasets as layers, grouped into collections by tags                                          |
 
 The fields of each type are part of the [OpenAPI specification](/docs/api/rest-api#openapi-specification), under `TypedDataProviderDefinition`.

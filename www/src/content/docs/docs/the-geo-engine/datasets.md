@@ -40,7 +40,8 @@ The files of a dataset come from one of these places:
   Volumes are directories on the server that the administrator configures under `[data] volumes`.
   Only administrators can create datasets from volumes, e.g., with `ge.add_dataset` in Python or in the `manager` app.
 - **Dataset definition files.**
-  On startup, the server loads the dataset definitions in `[dataprovider] dataset_defs_path`.
+  When the server creates its database schema, i.e., on the first start with an empty schema, it loads the dataset definitions in `[dataprovider] dataset_defs_path`.
+  Files added there later are not loaded on a restart.
   This is how the example datasets of a development instance are created.
 - **Processing graphs.**
   `POST /datasetFromProcessingGraph/{id}` computes a raster processing graph and stores the result as a new dataset.

@@ -164,9 +164,11 @@ export declare class SessionApi extends runtime.BaseAPI {
      */
     sessionViewHandlerRequestOpts(requestParameters: SessionViewHandlerRequest): Promise<runtime.RequestOpts>;
     /**
+     * Sets the view (spatial and temporal extent) of the current session.
      */
     sessionViewHandlerRaw(requestParameters: SessionViewHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>>;
     /**
+     * Sets the view (spatial and temporal extent) of the current session.
      */
     sessionViewHandler(requestParameters: SessionViewHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void>;
 }

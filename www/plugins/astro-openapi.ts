@@ -96,7 +96,7 @@ export default function openApiOperatorsPlugin(options: OpenApiOperatorsOptions)
                         await writeMarkdownFile(plotsOutputDir, plotOperatorMd, logger);
                     }
 
-                    await writeEndpointsFile(endpointsOutputFile, openapiSchema?.paths ?? {}, logger);
+                    await writeEndpointsFile(endpointsOutputFile, openapiSchema?.paths ?? {}, openapiSchema?.security, logger);
 
                     logger.info('✅ Documentation generated successfully.');
                 } catch (error) {
@@ -204,16 +204,44 @@ interface EndpointEntry {
     method: string;
     path: string;
     summary: string;
-    authenticated: boolean;
+    session: SessionRequirement;
+}
+
+/**
+ * Whether an endpoint needs a session: `yes` if it requires one, `optional` if it works with and without, `no` if it needs none.
+ */
+type SessionRequirement = 'yes' | 'optional' | 'no';
+
+/**
+ * Derives the session requirement of an operation from its own `security`, falling back to the global `security` of the spec.
+ * An empty security requirement object (`{}`) means that the operation also works without authentication.
+ * @param operation The OpenAPI operation.
+ * @param globalSecurity The top-level `security` of the OpenAPI spec.
+ * @returns The session requirement of the operation.
+ */
+function sessionRequirement(
+    operation: OpenAPI.OperationObject,
+    globalSecurity: OpenAPI.SecurityRequirementObject[] | undefined,
+): SessionRequirement {
+    const security = operation.security ?? globalSecurity ?? [];
+    if (security.length === 0) return 'no';
+    if (security.some((requirement) => Object.keys(requirement).length === 0)) return 'optional';
+    return 'yes';
 }
 
 /**
  * Writes a markdown page that lists all REST endpoints of the OpenAPI spec, grouped by their tag.
  * @param filePath The markdown file to write.
  * @param paths The `paths` object of the OpenAPI spec.
+ * @param globalSecurity The top-level `security` of the OpenAPI spec.
  * @param logger The logger instance for logging messages.
  */
-async function writeEndpointsFile(filePath: string, paths: OpenAPI.PathsObject, logger: AstroIntegrationLogger): Promise<void> {
+async function writeEndpointsFile(
+    filePath: string,
+    paths: OpenAPI.PathsObject,
+    globalSecurity: OpenAPI.SecurityRequirementObject[] | undefined,
+    logger: AstroIntegrationLogger,
+): Promise<void> {
     const groups = new Map<string, EndpointEntry[]>();
 
     for (const [endpointPath, pathItem] of Object.entries(paths)) {
@@ -226,8 +254,8 @@ async function writeEndpointsFile(filePath: string, paths: OpenAPI.PathsObject, 
             entries.push({
                 method: method.toUpperCase(),
                 path: endpointPath,
-                summary: operation.summary ?? operation.description ?? '',
-                authenticated: (operation.security ?? []).length > 0,
+                summary: operation.summary || operation.description || (operation.operationId ? `\`${operation.operationId}\`` : ''),
+                session: sessionRequirement(operation, globalSecurity),
             });
             groups.set(tag, entries);
         }
@@ -238,8 +266,8 @@ async function writeEndpointsFile(filePath: string, paths: OpenAPI.PathsObject, 
         .map(([tag, entries]) => {
             const rows = entries
                 .map(
-                    ({method, path: endpointPath, summary, authenticated}) =>
-                        `| \`${method}\` | \`${endpointPath}\` | ${authenticated ? '' : 'no'} | ${escapeMarkdownTableCell(summary)} |`,
+                    ({method, path: endpointPath, summary, session}) =>
+                        `| \`${method}\` | \`${endpointPath}\` | ${session} | ${escapeMarkdownTableCell(summary)} |`,
                 )
                 .join('\n');
             return `## ${tag}\n\n| Method | Path | Session | Description |\n| --- | --- | --- | --- |\n${rows}`;
@@ -257,7 +285,7 @@ sidebar:
 
 This page lists all endpoints of the [REST API](/docs/api/rest-api), grouped by topic.
 Paths are relative to the API base URL, e.g., \`http://localhost:3030/api\`.
-Endpoints marked with _no_ in the column _Session_ work without a session; all others need one (see [Authentication](/docs/api/rest-api#authentication)).
+The column _Session_ says whether an endpoint needs a session (_yes_), works with and without one (_optional_), or needs none (_no_); see [Authentication](/docs/api/rest-api#authentication).
 The request and response bodies are described in the OpenAPI specification and the Swagger UI of the server.
 
 ${sections}

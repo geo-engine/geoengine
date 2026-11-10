@@ -66,6 +66,7 @@ export class SpatialReferencesApi extends runtime.BaseAPI {
     }
 
     /**
+     * Returns the name, PROJ string, extent and axis order of a spatial reference.
      */
     async getSpatialReferenceSpecificationHandlerRaw(requestParameters: GetSpatialReferenceSpecificationHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SpatialReferenceSpecification>> {
         const requestOptions = await this.getSpatialReferenceSpecificationHandlerRequestOpts(requestParameters);
@@ -75,6 +76,7 @@ export class SpatialReferencesApi extends runtime.BaseAPI {
     }
 
     /**
+     * Returns the name, PROJ string, extent and axis order of a spatial reference.
      */
     async getSpatialReferenceSpecificationHandler(requestParameters: GetSpatialReferenceSpecificationHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SpatialReferenceSpecification> {
         const response = await this.getSpatialReferenceSpecificationHandlerRaw(requestParameters, initOverrides);

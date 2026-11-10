@@ -1294,6 +1294,7 @@ export class LayersApi extends runtime.BaseAPI {
     }
 
     /**
+     * Returns the capabilities of the given provider, e.g., whether it supports listing and search.
      */
     async providerCapabilitiesHandlerRaw(requestParameters: ProviderCapabilitiesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProviderCapabilities>> {
         const requestOptions = await this.providerCapabilitiesHandlerRequestOpts(requestParameters);
@@ -1303,6 +1304,7 @@ export class LayersApi extends runtime.BaseAPI {
     }
 
     /**
+     * Returns the capabilities of the given provider, e.g., whether it supports listing and search.
      */
     async providerCapabilitiesHandler(requestParameters: ProviderCapabilitiesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProviderCapabilities> {
         const response = await this.providerCapabilitiesHandlerRaw(requestParameters, initOverrides);

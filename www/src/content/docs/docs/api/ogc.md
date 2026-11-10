@@ -117,4 +117,4 @@ Since the services require a bearer token, the connection needs an authorization
 3. In the _Data Source Manager_, add a new WMS/WMTS, WFS or WCS connection with the URL of the service, e.g., `http://localhost:3030/api/wms/<processing graph id>`, and select the authentication configuration.
 4. Connect and add the layer that has the id of the processing graph.
 
-The session expires after 30 days, after which you need to update the header value.
+When the session expires, after 30 days for anonymous and password sessions or with the identity provider token for OIDC sessions, you need to update the header value.

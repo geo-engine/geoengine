@@ -444,9 +444,11 @@ export declare class LayersApi extends runtime.BaseAPI {
      */
     providerCapabilitiesHandlerRequestOpts(requestParameters: ProviderCapabilitiesHandlerRequest): Promise<runtime.RequestOpts>;
     /**
+     * Returns the capabilities of the given provider, e.g., whether it supports listing and search.
      */
     providerCapabilitiesHandlerRaw(requestParameters: ProviderCapabilitiesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProviderCapabilities>>;
     /**
+     * Returns the capabilities of the given provider, e.g., whether it supports listing and search.
      */
     providerCapabilitiesHandler(requestParameters: ProviderCapabilitiesHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProviderCapabilities>;
     /**

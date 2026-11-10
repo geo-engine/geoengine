@@ -24,7 +24,10 @@ The following processing graph joins the values of the `ndvi` raster to the feat
     "operator": {
         "type": "RasterVectorJoin",
         "params": {
-            "names": ["NDVI"],
+            "names": {
+                "type": "names",
+                "values": ["NDVI"]
+            },
             "featureAggregation": "first",
             "temporalAggregation": "mean",
             "temporalAggregationIgnoreNoData": true
@@ -105,7 +108,7 @@ It describes the result by data type, spatial reference, time and spatial extent
         },
         "dimension": {
             "type": "regular",
-            "origin": 0,
+            "origin": 1388534400000,
             "step": {
                 "granularity": "months",
                 "step": 1
@@ -164,7 +167,10 @@ See [Time](/docs/the-geo-engine/time) and [Raster and Vector Data](/docs/the-geo
             }
         }
     },
-    "time": null,
+    "time": {
+        "start": -8334601228800000,
+        "end": 8210266876799999
+    },
     "bbox": {
         "lowerLeftCoordinate": {"x": -171.75795, "y": -54.809444},
         "upperRightCoordinate": {"x": 179.309364, "y": 78.226111}
@@ -172,6 +178,7 @@ See [Time](/docs/the-geo-engine/time) and [Raster and Vector Data](/docs/the-geo
 }
 ```
 
+`ne_10m_ports` has no time attribute, so its time interval covers all time (see [Time](/docs/the-geo-engine/time)).
 `time` and `bbox` are optional for vectors and are `null` if the extent is unknown.
 
 ## Provenance and metadata

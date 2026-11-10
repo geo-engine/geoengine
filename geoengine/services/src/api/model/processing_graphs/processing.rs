@@ -1073,7 +1073,10 @@ impl TryFrom<BandFilter> for OperatorsBandFilter {
     examples(json!({
         "type": "RasterVectorJoin",
         "params": {
-            "names": ["NDVI"],
+            "names": {
+                "type": "names",
+                "values": ["NDVI"]
+            },
             "featureAggregation": "first",
             "temporalAggregation": "mean",
             "temporalAggregationIgnoreNoData": true

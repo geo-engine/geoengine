@@ -18,7 +18,7 @@ Method | HTTP request | Description
 [**list_collection_handler**](LayersApi.md#list_collection_handler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider
 [**list_providers**](LayersApi.md#list_providers) | **GET** /layerDb/providers | List all providers
 [**list_root_collections_handler**](LayersApi.md#list_root_collections_handler) | **GET** /layers/collections | List all layer collections
-[**provider_capabilities_handler**](LayersApi.md#provider_capabilities_handler) | **GET** /layers/{provider}/capabilities | 
+[**provider_capabilities_handler**](LayersApi.md#provider_capabilities_handler) | **GET** /layers/{provider}/capabilities | Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 [**remove_collection**](LayersApi.md#remove_collection) | **DELETE** /layerDb/collections/{collection} | Remove a collection
 [**remove_collection_from_collection**](LayersApi.md#remove_collection_from_collection) | **DELETE** /layerDb/collections/{parent}/collections/{collection} | Delete a collection from a collection
 [**remove_layer**](LayersApi.md#remove_layer) | **DELETE** /layerDb/layers/{layer} | Remove a collection
@@ -442,7 +442,7 @@ Name | Type | Description  | Required | Notes
 ## provider_capabilities_handler
 
 > models::ProviderCapabilities provider_capabilities_handler(provider)
-
+Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 
 ### Parameters
 

@@ -53,7 +53,8 @@ The response describes the session:
 ```
 
 `roles` lists the ids of the user's roles, including the user's individual role.
-Sessions are valid for 30 days.
+Anonymous and password sessions are valid for 30 days.
+OIDC sessions expire together with the token of the identity provider.
 
 Send the session `id` as a bearer token in the `Authorization` header of all further requests, including OGC requests:
 

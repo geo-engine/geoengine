@@ -38,7 +38,7 @@ Class | Method | HTTP request | Description
 *DatasetsApi* | [**list_volumes_handler**](docs/DatasetsApi.md#list_volumes_handler) | **GET** /dataset/volumes | Lists available volumes.
 *DatasetsApi* | [**suggest_meta_data_handler**](docs/DatasetsApi.md#suggest_meta_data_handler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified.
 *DatasetsApi* | [**update_dataset_handler**](docs/DatasetsApi.md#update_dataset_handler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name.
-*DatasetsApi* | [**update_dataset_provenance_handler**](docs/DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | 
+*DatasetsApi* | [**update_dataset_provenance_handler**](docs/DatasetsApi.md#update_dataset_provenance_handler) | **PUT** /dataset/{dataset}/provenance | Updates the dataset's provenance.
 *DatasetsApi* | [**update_dataset_symbology_handler**](docs/DatasetsApi.md#update_dataset_symbology_handler) | **PUT** /dataset/{dataset}/symbology | Updates the dataset's symbology
 *DatasetsApi* | [**update_loading_info_handler**](docs/DatasetsApi.md#update_loading_info_handler) | **PUT** /dataset/{dataset}/loadingInfo | Updates the dataset's loading info
 *GeneralApi* | [**available_handler**](docs/GeneralApi.md#available_handler) | **GET** /available | Server availablity check.
@@ -57,7 +57,7 @@ Class | Method | HTTP request | Description
 *LayersApi* | [**list_collection_handler**](docs/LayersApi.md#list_collection_handler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider
 *LayersApi* | [**list_providers**](docs/LayersApi.md#list_providers) | **GET** /layerDb/providers | List all providers
 *LayersApi* | [**list_root_collections_handler**](docs/LayersApi.md#list_root_collections_handler) | **GET** /layers/collections | List all layer collections
-*LayersApi* | [**provider_capabilities_handler**](docs/LayersApi.md#provider_capabilities_handler) | **GET** /layers/{provider}/capabilities | 
+*LayersApi* | [**provider_capabilities_handler**](docs/LayersApi.md#provider_capabilities_handler) | **GET** /layers/{provider}/capabilities | Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 *LayersApi* | [**remove_collection**](docs/LayersApi.md#remove_collection) | **DELETE** /layerDb/collections/{collection} | Remove a collection
 *LayersApi* | [**remove_collection_from_collection**](docs/LayersApi.md#remove_collection_from_collection) | **DELETE** /layerDb/collections/{parent}/collections/{collection} | Delete a collection from a collection
 *LayersApi* | [**remove_layer**](docs/LayersApi.md#remove_layer) | **DELETE** /layerDb/layers/{layer} | Remove a collection
@@ -107,8 +107,8 @@ Class | Method | HTTP request | Description
 *SessionApi* | [**register_user_handler**](docs/SessionApi.md#register_user_handler) | **POST** /user | Registers a user.
 *SessionApi* | [**session_handler**](docs/SessionApi.md#session_handler) | **GET** /session | Retrieves details about the current session.
 *SessionApi* | [**session_project_handler**](docs/SessionApi.md#session_project_handler) | **POST** /session/project/{project} | Sets the active project of the session.
-*SessionApi* | [**session_view_handler**](docs/SessionApi.md#session_view_handler) | **POST** /session/view | 
-*SpatialReferencesApi* | [**get_spatial_reference_specification_handler**](docs/SpatialReferencesApi.md#get_spatial_reference_specification_handler) | **GET** /spatialReferenceSpecification/{srsString} | 
+*SessionApi* | [**session_view_handler**](docs/SessionApi.md#session_view_handler) | **POST** /session/view | Sets the view (spatial and temporal extent) of the current session.
+*SpatialReferencesApi* | [**get_spatial_reference_specification_handler**](docs/SpatialReferencesApi.md#get_spatial_reference_specification_handler) | **GET** /spatialReferenceSpecification/{srsString} | Returns the name, PROJ string, extent and axis order of a spatial reference.
 *TasksApi* | [**abort_handler**](docs/TasksApi.md#abort_handler) | **DELETE** /tasks/{id} | Abort a running task.
 *TasksApi* | [**list_handler**](docs/TasksApi.md#list_handler) | **GET** /tasks/list | Retrieve the status of all tasks.
 *TasksApi* | [**status_handler**](docs/TasksApi.md#status_handler) | **GET** /tasks/{id}/status | Retrieve the status of a task.
