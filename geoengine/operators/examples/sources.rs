@@ -33,7 +33,7 @@ fn setup_gdal_source(
         overview_level: 0,
         meta_data: Box::new(meta_data),
         original_resolution_spatial_grid: None,
-        exact_level: false,
+        files_have_level: false,
         default_cache_ttl: CacheTtlSeconds::new(0),
         _phantom_data: PhantomData,
     }

@@ -626,11 +626,11 @@ mod tests {
             cache_hint: CacheHint::max_duration(),
         };
         // the file has the overviews 2 and 4
-        let reader_mode = |exact_level| {
+        let reader_mode = |files_have_level| {
             GdalReaderMode::OverviewLevel(OverviewReaderState {
                 original_dataset_grid: file_grid,
                 overview_level: 8,
-                exact_level,
+                files_have_level,
             })
         };
 
@@ -656,7 +656,7 @@ mod tests {
         let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
 
         for (overview_level, tile_size) in [(0_u32, 8_usize), (0, 12), (2, 8), (2, 12), (4, 12)] {
-            let reader_mode = |exact_level| {
+            let reader_mode = |files_have_level| {
                 if overview_level == 0 {
                     GdalReaderMode::OriginalResolution(ReaderState {
                         dataset_spatial_grid: file_grid,
@@ -665,7 +665,7 @@ mod tests {
                     GdalReaderMode::OverviewLevel(OverviewReaderState {
                         original_dataset_grid: file_grid,
                         overview_level,
-                        exact_level,
+                        files_have_level,
                     })
                 }
             };

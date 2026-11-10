@@ -143,7 +143,7 @@ impl GdalReaderMode {
     pub fn level_factor(&self) -> Option<usize> {
         match self {
             GdalReaderMode::OriginalResolution(_) => Some(1),
-            GdalReaderMode::OverviewLevel(rs) if rs.exact_level => {
+            GdalReaderMode::OverviewLevel(rs) if rs.files_have_level => {
                 Some(rs.overview_level.max(1) as usize)
             }
             GdalReaderMode::OverviewLevel(_) => None,
@@ -155,8 +155,9 @@ impl GdalReaderMode {
 pub struct OverviewReaderState {
     pub original_dataset_grid: SpatialGridDefinition,
     pub overview_level: u32,
-    /// the dataset declares that every file has this overview level
-    pub exact_level: bool,
+    /// The dataset declares its overview levels (`max_overview_level`), so every file has
+    /// `overview_level`: it is read from that level as is, never resampled.
+    pub files_have_level: bool,
 }
 
 impl OverviewReaderState {
@@ -594,7 +595,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 2,
-            exact_level: false,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -642,7 +643,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
-            exact_level: false,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -690,7 +691,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
-            exact_level: false,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -741,7 +742,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
-            exact_level: false,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -795,7 +796,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
-            exact_level: false,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -843,7 +844,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
-            exact_level: false,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -893,7 +894,7 @@ mod tests {
                 grid_bounds: GridBoundingBox2D::new_unchecked([0, 0], [899, 1799]),
             },
             overview_level: 2,
-            exact_level: false,
+            files_have_level: false,
         };
 
         let actual_gdal_dataset_spatial_grid_definition = SpatialGridDefinition {
@@ -982,7 +983,7 @@ mod tests {
                 let reader_state = OverviewReaderState {
                     original_dataset_grid: mosaic_grid,
                     overview_level: overview_level as u32,
-                    exact_level: false,
+                    files_have_level: false,
                 };
 
                 // global overview pixel grid with the tiling origin at (0, 0)
