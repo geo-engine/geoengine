@@ -11,11 +11,11 @@ If the `cutoff` is not in `[0, 1)` or the `stddev` is negative, an error will be
 
 ## Parameters
 
-| Name              | Type                  | Description                                             | Examples                     |
-| ----------------- | --------------------- | ------------------------------------------------------- | ---------------------------- |
-| spatialResolution | SpatialResolution     | Spatial resolution of the output grid in x/y direction. | `{"x":10,"y":10}`            |
-| originCoordinate  | Coordinate2D          | Origin coordinate to which the raster grid is aligned.  | `{"x":0,"y":0}`              |
-| densityParams     | DensityParams or null |                                                         | `{"cutoff":0.01,"stddev":1}` |
+| Name              | Type                  | Description                                                       | Examples                     |
+| ----------------- | --------------------- | ----------------------------------------------------------------- | ---------------------------- |
+| spatialResolution | SpatialResolution     | Spatial resolution of the output grid in x/y direction.           | `{"x":10,"y":10}`            |
+| originCoordinate  | Coordinate2D          | Origin coordinate to which the raster grid is aligned.            | `{"x":0,"y":0}`              |
+| densityParams     | DensityParams or null | Optional density parameters for a Gaussian density rasterization. | `{"cutoff":0.01,"stddev":1}` |
 
 ## Sources
 

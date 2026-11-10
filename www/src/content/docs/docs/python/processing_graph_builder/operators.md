@@ -251,6 +251,35 @@ def from_operator_dict(cls, operator_dict: dict[str, Any]) -> Downsampling
 
 Returns an operator from a dictionary.
 
+## ReTile Objects
+
+```python
+class ReTile(RasterOperator)
+```
+
+Moves raster tiles onto another tile size or origin without resampling.
+
+#### \_\_init\_\_
+
+```python
+def __init__(source_operator: RasterOperator,
+             tile_size: tuple[int, int] | None = None,
+             output_origin: tuple[float, float] | None = None)
+```
+
+Creates a new ReTile operator.
+
+`tile_size` is given as a `(rows, columns)` tuple.
+
+#### from\_operator\_dict
+
+```python
+@classmethod
+def from_operator_dict(cls, operator_dict: dict[str, Any]) -> ReTile
+```
+
+Returns an operator from a dictionary.
+
 ## ColumnNames Objects
 
 ```python

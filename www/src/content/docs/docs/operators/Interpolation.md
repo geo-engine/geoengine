@@ -24,11 +24,11 @@ InterpolationResolution::Resolution(SpatialResolution { x: 50.0, y: 50.0 })
 
 ## Parameters
 
-| Name                  | Type                    | Description               | Examples                          |
-| --------------------- | ----------------------- | ------------------------- | --------------------------------- |
-| interpolation         | InterpolationMethod     | Interpolation method.     | `"nearestNeighbor"`               |
-| outputResolution      | InterpolationResolution | Target output resolution. | `{"type":"fraction","x":2,"y":2}` |
-| outputOriginReference | Coordinate2D or null    |                           |                                   |
+| Name                  | Type                    | Description                                                    | Examples                          |
+| --------------------- | ----------------------- | -------------------------------------------------------------- | --------------------------------- |
+| interpolation         | InterpolationMethod     | Interpolation method.                                          | `"nearestNeighbor"`               |
+| outputResolution      | InterpolationResolution | Target output resolution.                                      | `{"type":"fraction","x":2,"y":2}` |
+| outputOriginReference | Coordinate2D or null    | Optional reference point used to align the output grid origin. |                                   |
 
 ## Sources
 
