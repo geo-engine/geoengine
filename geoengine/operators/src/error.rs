@@ -211,7 +211,7 @@ pub enum Error {
     },
 
     #[snafu(display(
-        "Dataset '{data}' has no overview level {overview_level}, it declares the levels 2 to {max_overview_level}"
+        "Dataset '{data}' has no overview level {overview_level}, but it declares the levels 2 to {max_overview_level}"
     ))]
     OverviewLevelNotAvailable {
         data: String,

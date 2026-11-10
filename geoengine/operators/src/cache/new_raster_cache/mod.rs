@@ -1313,6 +1313,9 @@ where
     }
 }
 
+/// Converts between the values of one pixel type and the enums over all pixel types that the cache
+/// stores: tiles as [`TypedRasterTile2D`], block units as [`UnitRead`]. Implemented for all
+/// [`Pixel`] types; the conversion back fails if the enum holds another pixel type.
 pub trait SupportedRasterDataType {
     fn map_enum_to_tile(tile: TypedRasterTile2D) -> Result<RasterTile2D<Self>>
     where
