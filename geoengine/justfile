@@ -125,12 +125,12 @@ test-macros filter="": common::_clear
 topic_benches := "--bench ci_operators --bench gdal_source --bench reprojection --bench expression --bench bands_and_time --bench raster_cache"
 
 # Run all cases of the operator topic benches to compare changes locally. Pass criterion arguments, e.g. `just backend bench -- --save-baseline main` and later `-- --baseline main`.
-[group("test")]
+[group("bench")]
 bench *args:
     cargo bench -p geoengine-operators {{ topic_benches }} {{ args }}
 
 # Run the fast cases of the operator topic benches with short measurements, as the continuous benchmarking in CI does.
-[group("test")]
+[group("bench")]
 bench-ci *args:
     GEOENGINE_BENCH_CI=1 cargo bench --profile bench-ci -p geoengine-operators {{ topic_benches }} {{ args }}
 
