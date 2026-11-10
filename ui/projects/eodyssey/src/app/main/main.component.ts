@@ -130,6 +130,17 @@ export class MainComponent {
             ),
         );
 
+        // The default time of the selected dataset until it is applied, because the project keeps the time of the applied one.
+        effect(() => {
+            const source = this.eodysseyLayerService.selectedDataSource();
+            const isNewSource = source !== this.eodysseyLayerService.appliedDataSource();
+            this.footprintsService.timeOverride.set(
+                isNewSource && this.eodysseyLayerService.autoSelectTime() && source?.defaultTime
+                    ? new Time(new Date(source.defaultTime))
+                    : undefined,
+            );
+        });
+
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());

@@ -1,5 +1,5 @@
 import {A11yModule} from '@angular/cdk/a11y';
-import {ChangeDetectionStrategy, Component, computed, inject, resource, signal} from '@angular/core';
+import {ChangeDetectionStrategy, Component, computed, inject, resource} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatCalendarView, MatDatepicker, MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
@@ -505,7 +505,7 @@ export class LayersComponent {
         return time.start.toDate();
     });
 
-    readonly autoSelectTime = signal<boolean>(true);
+    readonly autoSelectTime = this.eodysseyLayerService.autoSelectTime;
 
     readonly legendLayer = resource({
         params: () => ({layerId: this.eodysseyLayerService.mapTileLayer()}),

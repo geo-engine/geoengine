@@ -72,6 +72,8 @@ export class EOdysseyLayerService {
     });
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
+    /** Whether applying another data source sets the time to the default time of that data source. */
+    readonly autoSelectTime = signal<boolean>(true);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();

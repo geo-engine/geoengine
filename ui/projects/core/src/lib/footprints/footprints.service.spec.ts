@@ -178,4 +178,18 @@ describe('FootprintsService overlay', () => {
         service.timeStepOverride.set({durationAmount: 1, durationUnit: 'months'});
         expect(service.timeStep()?.durationUnit).toBe('months');
     });
+
+    it("asks for the boxes of the time the app sets instead of the project's", async () => {
+        const service = createService();
+        service.timeOverride.set(new Time(Date.UTC(2024, 5, 1)));
+
+        service.overlayVisible.set(true);
+        await settle();
+
+        expect(getFootprints).toHaveBeenCalledWith(
+            'graph',
+            expect.objectContaining({timeInterval: new Time(Date.UTC(2024, 5, 1)).asRequestString()}),
+            expect.anything(),
+        );
+    });
 });
