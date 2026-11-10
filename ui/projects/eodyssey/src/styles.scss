@@ -30,8 +30,3 @@ body {
 a {
     color: mat.get-theme-color(theme.$geoengine-theme, foreground, secondary-text);
 }
-
-// not `.mat-calendar-body-selected`, so the selected day keeps its own look
-.geoengine-calendar-cell-with-data .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
-    background-color: var(--geoengine-faded-accent-color);
-}

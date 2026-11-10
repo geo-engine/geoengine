@@ -130,3 +130,8 @@ export * from './lib/users/user.model';
 // Misc
 export * from './lib/util/directives/if-guest.directive';
 export * from './lib/util/directives/if-logged-in.directive';
+
+// Footprints
+export * from './lib/footprints/footprint-calendar-header.component';
+export * from './lib/footprints/footprints';
+export * from './lib/footprints/footprints.service';

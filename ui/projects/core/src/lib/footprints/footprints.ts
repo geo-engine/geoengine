@@ -31,6 +31,20 @@ export function cellHasData(steps: ReadonlyArray<TimeStepFootprint>, date: Date,
     return steps.some((step) => step.status === TimeStepFootprintStatus.Data && step.time.start < cell.end && step.time.end > cell.start);
 }
 
+/** Whether a time step with data starts in the calendar cell, as opposed to only reaching into it from before. */
+export function cellHasStepStart(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView): boolean {
+    const cell = calendarCellRange(date, view);
+    return steps.some(
+        (step) => step.status === TimeStepFootprintStatus.Data && step.time.start >= cell.start && step.time.start < cell.end,
+    );
+}
+
+/** Whether a time step with data goes on after the calendar cell, so a band continues into the next cell. */
+export function cellHasStepAfter(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView): boolean {
+    const cell = calendarCellRange(date, view);
+    return steps.some((step) => step.status === TimeStepFootprintStatus.Data && step.time.start < cell.end && step.time.end > cell.end);
+}
+
 /**
  * The calendar view that shows one cell per time step: days for steps of a day or less, because a
  * calendar does not go below days, months for steps of months and years for steps of years.

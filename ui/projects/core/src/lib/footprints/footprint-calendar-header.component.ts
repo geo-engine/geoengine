@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, DestroyRef, effect, inject} from '@angular/core';
+import {ChangeDetectionStrategy, Component, DestroyRef, effect, inject, ViewEncapsulation} from '@angular/core';
 import {MatCalendar, MatCalendarHeader} from '@angular/material/datepicker';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {FootprintsService} from './footprints.service';
@@ -17,6 +17,10 @@ import {FootprintsService} from './footprints.service';
         }
     `,
     imports: [MatCalendarHeader, MatProgressBarModule],
+    // The cells are drawn by the calendar body, outside this component, so the styles have to be global.
+    // They use the theme variables every app defines. Only calendars with this header are touched.
+    encapsulation: ViewEncapsulation.None,
+    styleUrl: './footprint-calendar-header.component.scss',
 })
 export class FootprintCalendarHeaderComponent {
     readonly footprintsService = inject(FootprintsService);

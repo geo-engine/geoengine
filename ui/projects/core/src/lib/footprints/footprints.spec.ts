@@ -1,6 +1,16 @@
 import {describe, expect, it} from 'vitest';
 import {TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-import {boxRing, calendarStartView, cellHasData, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
+import {
+    boxRing,
+    calendarStartView,
+    cellHasData,
+    cellHasStepAfter,
+    cellHasStepStart,
+    mergeFootprints,
+    monthStartUtc,
+    stepAt,
+    windowRequests,
+} from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
     return {time: {start: Date.parse(startIso), end: Date.parse(endIso)}, status, bounds: []};
@@ -31,6 +41,20 @@ describe('footprints', () => {
         const month = step('2026-01-01T00:00:00Z', '2026-03-01T00:00:00Z', TimeStepFootprintStatus.Data);
         expect([0, 1, 2].map((m) => cellHasData([month], new Date(2026, m, 1), 'year'))).toEqual([true, true, false]);
         expect(cellHasData([month], new Date(2025, 0, 1), 'multi-year')).toBe(false);
+    });
+
+    it('tells the day a long time step starts in from the days it only continues in', () => {
+        const eightDays = step('2026-03-30T00:00:00Z', '2026-04-07T00:00:00Z', TimeStepFootprintStatus.Data);
+        const starts = [29, 30, 31, 32].map((day) => cellHasStepStart([eightDays], new Date(2026, 2, day), 'month'));
+        expect(starts).toEqual([false, true, false, false]);
+        expect(cellHasStepStart([empty], new Date(2026, 3, 1), 'month')).toBe(false);
+    });
+
+    it('tells the days a long time step goes on after from its last day', () => {
+        const eightDays = step('2026-03-30T00:00:00Z', '2026-04-07T00:00:00Z', TimeStepFootprintStatus.Data);
+        const after = [29, 30, 31, 37, 38].map((day) => cellHasStepAfter([eightDays], new Date(2026, 2, day), 'month'));
+        expect(after).toEqual([false, true, true, false, false]);
+        expect(cellHasStepAfter([data], new Date(2026, 2, 15), 'month')).toBe(false);
     });
 
     it('marks neither empty nor unknown time steps', () => {

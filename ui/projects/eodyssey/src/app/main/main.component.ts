@@ -20,12 +20,19 @@ import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {isActive, Router, RouterModule} from '@angular/router';
-import {Layer, Time, UserService} from '@geoengine/common';
-import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
+import {Layer, LayersService, Time, UserService, UUID} from '@geoengine/common';
+import {
+    FootprintsService,
+    ProjectService,
+    MapService,
+    MapContainerComponent,
+    CoreModule,
+    SpatialReferenceService,
+    WGS_84,
+} from '@geoengine/core';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
-import {FootprintsService} from '../layers/footprints.service';
 import {EOdysseyLayerService} from '../layers/layers.service';
 
 @Component({
@@ -61,6 +68,7 @@ export class MainComponent {
     private readonly mapService = inject(MapService);
     private readonly router = inject(Router);
     private readonly eodysseyLayerService = inject(EOdysseyLayerService);
+    private readonly layersService = inject(LayersService);
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
@@ -99,6 +107,28 @@ export class MainComponent {
     constructor() {
         // the same limit that stops the map from loading tiles stops the overlay from loading boxes
         effect(() => this.footprintsService.zoomRequired.set(this.zoomRequired()));
+
+        // The selected preset, so availability is shown before the visualization is applied. Else the layer on the map.
+        effect(() => {
+            const preset = this.eodysseyLayerService.selectedPreset();
+            const layer = preset
+                ? {dataConnectorId: preset.connectorId, layerId: preset.layerId}
+                : this.eodysseyLayerService.mapTileLayer();
+            this.footprintsService.layer.set(
+                layer && {
+                    key: `${layer.dataConnectorId}/${layer.layerId}`,
+                    processingGraphId: (): Promise<UUID> =>
+                        this.layersService.registerAndGetLayerProcessingGraphId(layer.dataConnectorId, layer.layerId),
+                },
+            );
+        });
+
+        // The step of the selected dataset until it is applied, because the project keeps the step of the applied one.
+        effect(() =>
+            this.footprintsService.timeStepOverride.set(
+                this.eodysseyLayerService.canApplyPreset() ? this.eodysseyLayerService.selectedDataSource()?.defaultTimeStep : undefined,
+            ),
+        );
 
         afterNextRender({
             read: () => {
