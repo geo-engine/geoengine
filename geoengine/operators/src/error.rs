@@ -458,11 +458,11 @@ pub enum Error {
     },
 
     #[snafu(display(
-        "ReTile is blit-only: input and output grids must have equal pixel size and the output origin must be aligned to an input grid pixel edge. Input: {input:?}, output: {output:?}"
+        "ReTile is blit-only: input and output grids must have equal pixel size and the output origin must be aligned to an input grid pixel edge. Input: {input:?}, origin: {origin:?}"
     ))]
     ReTileGridMismatch {
         input: SpatialGridDefinition,
-        output: SpatialGridDefinition,
+        origin: Coordinate2D,
     },
 
     #[snafu(display(

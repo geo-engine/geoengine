@@ -17,9 +17,8 @@ use geoengine_datatypes::primitives::{
     BandSelection, CacheHint, Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    BoundedGrid, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds,
-    GridIdx2D, GridOrEmpty, Pixel, RasterTile2D, SpatialGridDefinition, TileInformation, TileSize,
-    TilingGrid,
+    BoundedGrid, ChangeGridBounds, GridBlit, GridBoundingBox2D, GridBounds, GridIdx2D, GridOrEmpty,
+    Pixel, RasterTile2D, TileInformation, TileSize, TilingGrid,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -86,16 +85,9 @@ impl RasterOperator for ReTile {
             output_origin,
             output_tile_size,
         )
-        .ok_or_else(|| crate::error::Error::ReTileGridMismatch {
+        .ok_or(crate::error::Error::ReTileGridMismatch {
             input: in_spatial_grid.spatial_grid,
-            output: SpatialGridDefinition::new(
-                GeoTransform::new_typed(
-                    output_origin,
-                    in_spatial_grid.geo_transform().x_pixel_size(),
-                    in_spatial_grid.geo_transform().y_pixel_size(),
-                ),
-                GridBoundingBox2D::new_unchecked([0, 0], [0, 0]),
-            ),
+            origin: output_origin,
         })?;
         let output_spatial_grid = SpatialGridDescriptor::new_source(
             output_tiling_grid.to_spatial_grid(),
@@ -248,13 +240,16 @@ where
 
         let tiling_strategy = out_spatial_grid.tiling_strategy();
 
-        let input_geo_transform = in_spatial_grid.geo_transform();
-
-        let output_geo_transform = out_spatial_grid.geo_transform();
+        // The grids are pixel-aligned (checked on initialization), so output pixel `p` is
+        // input pixel `p + shift`. Integer math avoids float rounding at tile edges.
+        let shift = in_spatial_grid.geo_transform().coordinate_to_grid_idx_2d(
+            out_spatial_grid
+                .geo_transform()
+                .grid_idx_to_pixel_center_coordinate_2d(GridIdx2D::new([0, 0])),
+        );
 
         let sub_query = ReTileSubQuery {
-            input_geo_transform,
-            output_geo_transform,
+            shift,
             _phantom_pixel_type: PhantomData,
         };
 
@@ -277,22 +272,13 @@ where
 
 /// Sub-query implementation that bridges the output tile grid to input queries.
 ///
-/// For each output tile, this struct:
-/// 1. **Computes the spatial bounds** of the output tile using the output geo-transform.
-/// 2. **Converts those bounds to input pixel coordinates** using the input geo-transform,
-///    producing a query rectangle for the source operator.
-/// 3. **Provides the fold function** (`re_tile_fold`) that maps input data to output pixels.
-///
-/// Both geo-transforms have the same pixel size (resolution) — only the origin differs.
-/// This means the mapping is a direct pixel-by-pixel copy, not an interpolation.
+/// Input and output have the same pixel size and pixel-aligned origins, so output pixel
+/// `p` is input pixel `p + shift`: each output tile queries its shifted bounds and
+/// `re_tile_fold` copies the input pixels back, without interpolation.
 #[derive(Debug, Clone)]
 pub struct ReTileSubQuery<T> {
-    /// The geo-transform of the source (input) tiles — used to map spatial coordinates
-    /// back to input pixel indices.
-    input_geo_transform: GeoTransform,
-    /// The geo-transform of the output tiles — used to determine spatial bounds for
-    /// each output tile and to compute the pixel center coordinate for the mapping.
-    output_geo_transform: GeoTransform,
+    /// Offset from output to input pixel indices.
+    shift: GridIdx2D,
     _phantom_pixel_type: PhantomData<T>,
 }
 
@@ -316,13 +302,13 @@ where
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         let output_grid = GridOrEmpty::new_empty_shape(tile_info.global_pixel_bounds());
-        let input_geo_transform = self.input_geo_transform;
+        let shift = self.shift;
         let pool = pool.clone();
         Box::pin(async move {
             Ok(ReTileAccu {
                 output_tile_info: tile_info,
                 output_grid,
-                input_geo_transform,
+                shift,
                 // An output tile can fall outside every input's extent (e.g. the
                 // union grid of a `RasterStacker`), in which case the fold sees no
                 // input tiles. Fall back to the query interval like
@@ -334,12 +320,7 @@ where
         })
     }
 
-    /// Determines which input region to query for a given output tile.
-    ///
-    /// Converts the output tile's pixel bounds to spatial coordinates via the output
-    /// geo-transform, then converts those spatial bounds to input pixel bounds via
-    /// the input geo-transform. The resulting query rectangle tells the source
-    /// operator which pixels to return.
+    /// Queries the input pixels of the output tile, i.e. its bounds shifted by `shift`.
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
@@ -347,13 +328,11 @@ where
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let out_tile_pixel_bounds = tile_info.global_pixel_bounds();
-        let out_tile_spatial_bounds = self
-            .output_geo_transform
-            .grid_to_spatial_bounds(&out_tile_pixel_bounds);
-        let input_pixel_bounds = self
-            .input_geo_transform
-            .spatial_to_grid_bounds(&out_tile_spatial_bounds);
+        let out_bounds = tile_info.global_pixel_bounds();
+        let input_pixel_bounds = GridBoundingBox2D::new_unchecked(
+            out_bounds.min_index() + self.shift,
+            out_bounds.max_index() + self.shift,
+        );
 
         Ok(Some(RasterQueryRectangle::new(
             input_pixel_bounds,
@@ -375,7 +354,8 @@ where
 pub struct ReTileAccu<T: Pixel> {
     pub output_tile_info: TileInformation,
     pub output_grid: GridOrEmpty<GridBoundingBox2D, T>,
-    pub input_geo_transform: GeoTransform,
+    /// Offset from output to input pixel indices.
+    pub shift: GridIdx2D,
     pub time: Option<TimeInterval>,
     pub cache_hint: CacheHint,
     pub pool: Arc<ThreadPool>,
@@ -428,13 +408,7 @@ pub fn re_tile_fold<T: Pixel>(
             return accu;
         }
 
-        // Input and output grids are pixel-aligned (checked on initialization), so the
-        // output pixel `p` is the input pixel `p + shift` for one integer `shift`.
-        let shift = accu.input_geo_transform.coordinate_to_grid_idx_2d(
-            accu.output_tile_info
-                .global_geo_transform
-                .grid_idx_to_pixel_center_coordinate_2d(GridIdx2D::new([0, 0])),
-        );
+        let shift = accu.shift;
         let in_bounds = tile.bounding_box();
         let in_tile_grid = tile
             .into_inner_positioned_grid()
@@ -462,7 +436,9 @@ mod tests {
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
     use geoengine_datatypes::raster::TilingSpecification;
-    use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType, TileIdx, TileSize};
+    use geoengine_datatypes::raster::{
+        GeoTransform, Grid, GridShape2D, RasterDataType, TileIdx, TileSize,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -568,7 +544,7 @@ mod tests {
             output_grid: GridOrEmpty::new_empty_shape(
                 GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
             ),
-            input_geo_transform: GeoTransform::test_default(),
+            shift: GridIdx2D::new([0, 0]),
             time: None,
             cache_hint: CacheHint::max_duration(),
             pool: std::sync::Arc::new(rayon::ThreadPoolBuilder::new().build().unwrap()),
@@ -751,5 +727,111 @@ mod tests {
                     .data)
                 .collect::<Vec<_>>()
         );
+    }
+
+    /// 4x4 input tiles re-tiled to 3x3: the 8x8 grid does not divide by 3, so the last
+    /// row and column of output tiles are partial and must be no-data outside the input.
+    #[tokio::test]
+    async fn retile_to_a_tile_size_that_does_not_divide_the_grid() {
+        let geo_transform = GeoTransform::new_unchecked(Coordinate2D::new(0.0, 0.0), 1.0, -1.0);
+        let in_tile_size = TileSize::new_unchecked(4, 4);
+        let value = |y: isize, x: isize| u8::try_from(y * 8 + x + 1).unwrap();
+
+        let data = (0..2)
+            .flat_map(|ty| (0..2).map(move |tx| (ty, tx)))
+            .map(|(ty, tx)| RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: TileIdx::new_y_x(ty, tx),
+                band: 0,
+                global_geo_transform: geo_transform,
+                grid_array: Grid::new(
+                    in_tile_size.grid_shape(),
+                    (0..4)
+                        .flat_map(|y| (0..4).map(move |x| value(ty * 4 + y, tx * 4 + x)))
+                        .collect(),
+                )
+                .unwrap()
+                .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::no_cache(),
+            })
+            .collect();
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 5))),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                geo_transform,
+                GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
+                in_tile_size,
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let retile = ReTile {
+            params: ReTileParams {
+                tile_size: Some(TileSize::new_unchecked(3, 3)),
+                origin: None,
+            },
+            sources: SingleRasterSource {
+                raster: MockRasterSource {
+                    params: MockRasterSourceParams {
+                        data,
+                        result_descriptor,
+                    },
+                }
+                .typed(),
+            },
+        }
+        .typed();
+
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(in_tile_size));
+        let qp = retile
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let query_ctx = exe_ctx.mock_query_context(ChunkByteSize::test_default());
+        let tiles = qp
+            .raster_query(
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
+                    TimeInterval::new_unchecked(0, 5),
+                    [0].try_into().unwrap(),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(tiles.len(), 9);
+        for tile in tiles {
+            let tile = tile.unwrap();
+            let [ty, tx] = tile.tile_position.grid_idx().0;
+            let grid = tile.grid_array.into_materialized_masked_grid();
+            for (i, (pixel, valid)) in grid
+                .inner_grid
+                .data
+                .iter()
+                .zip(grid.validity_mask.data.iter())
+                .enumerate()
+            {
+                let (y, x) = (ty * 3 + i as isize / 3, tx * 3 + i as isize % 3);
+                if y < 8 && x < 8 {
+                    assert!(*valid, "pixel ({y}, {x}) must be valid");
+                    assert_eq!(*pixel, value(y, x), "pixel ({y}, {x})");
+                } else {
+                    assert!(!*valid, "pixel ({y}, {x}) lies outside the input");
+                }
+            }
+        }
     }
 }
