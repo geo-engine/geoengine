@@ -1,5 +1,5 @@
-//! The raster expression: the per-pixel work, several bands, `map_no_data` on empty tiles and
-//! initializing an expression that was compiled before, like every request of a processing graph.
+//! The raster expression: the per-pixel work, several bands, bands selected by a band filter as
+//! in the layer templates, `map_no_data` on empty tiles and initializing an expression that was compiled before, like every request of a processing graph.
 //!
 //! The first compilation of each expression happens before the measurement.
 //!
@@ -8,7 +8,7 @@
 
 mod common;
 
-use common::{Area, Env, count_tiles, expression, stack};
+use common::{Area, Env, band_filter, count_tiles, expression, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::raster::GridBoundingBox2D;
 use geoengine_operators::engine::ProcessingGraphOperatorPath;
@@ -20,6 +20,20 @@ fn expression_bench(c: &mut Criterion) {
     let bands2 = env.case(
         expression(
             stack(vec![env.raster(), env.raster()]),
+            "(A - B) / (A + B + 1)",
+            false,
+        ),
+        Area::Extent,
+        env.one_step(),
+    );
+    // like `bands2_extent`, but the two bands are filtered from three, as the layer templates do
+    // for an NDVI; the difference to `bands2_extent` is the band filter
+    let band_filter_bands2 = env.case(
+        expression(
+            band_filter(
+                stack(vec![env.raster(), env.raster(), env.raster()]),
+                vec![0, 2],
+            ),
             "(A - B) / (A + B + 1)",
             false,
         ),
@@ -48,6 +62,7 @@ fn expression_bench(c: &mut Criterion) {
     for (name, case) in [
         ("extent", &extent),
         ("bands2_extent", &bands2),
+        ("band_filter_bands2_extent", &band_filter_bands2),
         ("map_no_data_x3_empty", &map_no_data),
     ] {
         env.bench(&mut group, name, case);

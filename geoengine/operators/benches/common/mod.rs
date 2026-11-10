@@ -57,10 +57,10 @@ use geoengine_operators::{
     },
     meta::quota::{QuotaCheck, QuotaTracking},
     processing::{
-        Aggregation, DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod,
-        DownsamplingParams, DownsamplingResolution, Expression, ExpressionParams, Fraction,
-        RasterStacker, RasterStackerParams, Reprojection, ReprojectionParams,
-        TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        Aggregation, BandFilter, BandFilterParams, BandsByNameOrIndex, DeriveOutRasterSpecsSource,
+        Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Expression,
+        ExpressionParams, Fraction, RasterStacker, RasterStackerParams, Reprojection,
+        ReprojectionParams, TemporalRasterAggregation, TemporalRasterAggregationParameters,
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
@@ -119,6 +119,17 @@ pub fn downsample(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperat
                 y: factor,
             }),
             output_origin_reference: None,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// Bands `bands` of the raster, by index.
+pub fn band_filter(raster: TypedRasterOperator, bands: Vec<usize>) -> TypedRasterOperator {
+    BandFilter {
+        params: BandFilterParams {
+            bands: BandsByNameOrIndex::Index(bands),
         },
         sources: SingleRasterSource { raster },
     }
