@@ -25,7 +25,7 @@ jobs:
   create-container:
     if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     permissions:
       contents: read
@@ -92,7 +92,7 @@ jobs:
     needs: create-container
     if: always()
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     permissions:
       contents: read
