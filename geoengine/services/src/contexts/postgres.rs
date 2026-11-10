@@ -2044,6 +2044,25 @@ mod tests {
 
         assert_eq!(meta.tile_size().unwrap(), tile_size);
 
+        let part = |tile_size| geoengine_operators::source::GdalLoadingInfoTemporalSlice {
+            time: TimeInterval::default(),
+            params: Some(GdalDatasetParameters {
+                tile_size,
+                ..gdal_params.clone()
+            }),
+            cache_ttl: None,
+        };
+        let mixed_tile_sizes = GdalMetaDataList {
+            result_descriptor: raster_descriptor.clone(),
+            params: vec![part(tile_size), part(None)],
+        };
+        assert!(
+            db.add_dataset(raster_ds.clone(), mixed_tile_sizes.into(), None)
+                .await
+                .is_err(),
+            "a list whose files use different tile sizes can never be loaded"
+        );
+
         let meta = GdalMetaDataList {
             result_descriptor: raster_descriptor.clone(),
             params: vec![],

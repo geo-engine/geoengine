@@ -191,6 +191,14 @@ impl From<GdalMultiBand> for MetaDataDefinition {
 }
 
 impl MetaDataDefinition {
+    /// Rejects meta data that would fail on every use: files of a list with different tile size overrides
+    pub fn validate_tile_size(&self) -> Result<()> {
+        if let MetaDataDefinition::GdalMetaDataList(list) = self {
+            list.tile_size()?;
+        }
+        Ok(())
+    }
+
     pub fn source_operator_type(&self) -> &str {
         match self {
             MetaDataDefinition::MockMetaData(_) => "MockDatasetDataSource",

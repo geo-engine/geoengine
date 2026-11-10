@@ -1139,6 +1139,7 @@ where
         );
 
         self.check_dataset_namespace(&name)?;
+        meta_data.validate_tile_size()?;
 
         // TODO: check `data_path` exists?
 
@@ -1235,6 +1236,8 @@ where
         dataset: DatasetId,
         meta_data: &MetaDataDefinition,
     ) -> Result<()> {
+        meta_data.validate_tile_size()?;
+
         let mut conn = self.conn_pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
