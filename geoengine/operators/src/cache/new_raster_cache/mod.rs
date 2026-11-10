@@ -7,7 +7,7 @@ use crate::engine::{
     RasterResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
-use crate::util::Result;
+use crate::util::{Result, safe_lock_mutex, safe_read_rwlock, safe_write_rwlock};
 use async_trait::async_trait;
 use futures::Stream;
 use futures::StreamExt;
@@ -26,7 +26,7 @@ use std::collections::HashSet;
 use std::iter;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, PoisonError, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub struct NewRasterCache<Store> {
     store: Store,
@@ -680,10 +680,7 @@ struct StoringGuard<'a> {
 impl<'a> StoringGuard<'a> {
     /// `None` if another insert stores the key.
     fn claim(storing: &'a Mutex<HashSet<Arc<CacheKey>>>, key: &Arc<CacheKey>) -> Option<Self> {
-        let claimed = storing
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(key.clone());
+        let claimed = safe_lock_mutex(storing).insert(key.clone());
         claimed.then(|| Self {
             storing,
             key: key.clone(),
@@ -693,10 +690,7 @@ impl<'a> StoringGuard<'a> {
 
 impl Drop for StoringGuard<'_> {
     fn drop(&mut self) {
-        self.storing
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .remove(&self.key);
+        safe_lock_mutex(self.storing).remove(&self.key);
     }
 }
 
@@ -706,11 +700,8 @@ impl<SF, ES> InMemoryCacheStore<SF, ES> {
         ES: EvictionStrategy,
     {
         // clearing leaves a consistent state even after a panic
-        let mut cache = self.cache.write().unwrap_or_else(PoisonError::into_inner);
-        let mut strategy = self
-            .eviction_strategy
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut cache = safe_write_rwlock(&self.cache);
+        let mut strategy = safe_lock_mutex(&self.eviction_strategy);
         strategy.clear();
         cache.clear();
     }
@@ -901,17 +892,14 @@ where
 
     async fn get(&self, key: &CacheKey) -> Result<Option<Arc<Self::SF>>> {
         let hit = {
-            let cache = self.cache.read().unwrap_or_else(PoisonError::into_inner);
+            let cache = safe_read_rwlock(&self.cache);
             cache.get(key).map(Arc::clone)
         };
 
         if let Some(entry) = &hit {
             if entry.value.is_expired().await {
-                let mut cache = self.cache.write().unwrap_or_else(PoisonError::into_inner);
-                let mut eviction_strategy = self
-                    .eviction_strategy
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner);
+                let mut cache = safe_write_rwlock(&self.cache);
+                let mut eviction_strategy = safe_lock_mutex(&self.eviction_strategy);
 
                 if cache.contains_key(key) {
                     let arc_key = Arc::new(key.clone());
@@ -923,10 +911,7 @@ where
                 return Ok(None);
             }
 
-            self.eviction_strategy
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .record_hit(key);
+            safe_lock_mutex(&self.eviction_strategy).record_hit(key);
             self.counters.hits.fetch_add(1, Ordering::Relaxed);
         } else {
             self.counters.misses.fetch_add(1, Ordering::Relaxed);
@@ -937,12 +922,9 @@ where
 
     async fn insert(&self, key: Arc<CacheKey>, tile: TypedRasterTile2D) -> Result<()> {
         {
-            let cache = self.cache.read().unwrap_or_else(PoisonError::into_inner);
+            let cache = safe_read_rwlock(&self.cache);
             if cache.contains_key(&key) {
-                self.eviction_strategy
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .record_hit(&key);
+                safe_lock_mutex(&self.eviction_strategy).record_hit(&key);
                 self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
                 return Ok(());
             }
@@ -959,16 +941,13 @@ where
         let key_size = cache_key_byte_size(&key);
         let required_space = value_size + key_size;
 
-        let mut cache = self.cache.write().unwrap_or_else(PoisonError::into_inner);
+        let mut cache = safe_write_rwlock(&self.cache);
         if cache.contains_key(&key) {
             self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         }
 
-        let mut eviction_strategy = self
-            .eviction_strategy
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut eviction_strategy = safe_lock_mutex(&self.eviction_strategy);
         let current_size = self.total_size.load(Ordering::SeqCst);
 
         let eviction_plan =
