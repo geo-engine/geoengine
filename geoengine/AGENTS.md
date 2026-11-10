@@ -21,12 +21,15 @@ Inside this directory, drop the module prefix (`just test` instead of `just back
   - SQL only: `just backend lint-sql`.
 - Before committing: `just ci backend` runs the same install → lint → build → test sequence as CI.
 - Tests: `just backend test [filter]`.
-  Per crate: `just backend test-services <filter>`, `test-operators`, `test-datatypes`, `test-macros` (lib tests only; `test-services <filter> --all` includes integration tests).
+  Per crate: `just backend test-services <filter>`, `test-operators`, `test-datatypes`, `test-macros` (lib tests only).
+  Integration tests live in `server` and `operators`: `cargo test -p geoengine-server --test integration`.
   - Doctests: `just backend test-doc`.
   - Single test, e.g.: `cargo test -p geoengine-operators --lib -- processing::expression::tests::it_works --nocapture`
   - GDAL reads in tests run in the `gdalsource-process` binary.
-    `just backend test`, `test-operators` and `test-services` build it before running the tests.
-    Plain `cargo test` does not, so run `cargo build --bin gdalsource-process` first; a stale binary makes GDAL tests fail in misleading ways.
+    `cargo test` on the whole workspace builds it, because cargo builds a package's binaries for its integration tests; `operators/tests/integration/gdalsource_process.rs` fails if that stops.
+    `test-operators` and `test-services` build it first; with `--lib` or only `-p geoengine-services`, run `cargo build --bin gdalsource-process` first, since a stale binary makes GDAL tests fail in misleading ways.
+  - New integration tests go into `tests/integration/` as a module of its `main.rs`, not as a new file directly in `tests/`: each file there becomes its own test binary that links the whole library again.
+    Only a test that needs a process of its own (process-wide env vars, global GDAL state that other tests in the binary use in-process) gets its own file.
 - Expression deps sync check: `cargo test --package geoengine-expression --test check-expression-deps`
 - After API-visible changes: `just backend generate-openapi-spec`, then `just api-clients build` (see root `AGENTS.md`).
 
