@@ -84,7 +84,8 @@ test-coverage-services filter="": common::_clear
 [arg('mode', pattern='|--release')]
 [group("run")]
 run mode="": common::_clear
-    cargo build --workspace --bins {{ mode }}
+    # one call, so `operators` is compiled once for both binaries; the CLI is not needed here
+    cargo build --bin geoengine-server --bin gdalsource-process {{ mode }}
     cargo run --bin geoengine-server {{ mode }}
 
 # Run the CLI

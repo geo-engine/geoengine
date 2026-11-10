@@ -669,4 +669,36 @@ mod tests {
 
         drop(client_b);
     }
+
+    #[tokio::test]
+    async fn it_serves_the_server_info_passed_in_by_the_binary() {
+        use actix_web::{App, test};
+
+        let server_info = ServerInfo {
+            build_date: "2026-11-10",
+            commit_hash: "abc123",
+            version: "1.2.3",
+            features: "feature-a,feature-b",
+        };
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(server_info))
+                .route("/info", web::get().to(server_info_handler)),
+        )
+        .await;
+
+        let response: serde_json::Value =
+            test::call_and_read_body_json(&app, test::TestRequest::get().uri("/info").to_request())
+                .await;
+
+        assert_eq!(
+            response,
+            serde_json::json!({
+                "buildDate": "2026-11-10",
+                "commitHash": "abc123",
+                "version": "1.2.3",
+                "features": "feature-a,feature-b",
+            })
+        );
+    }
 }

@@ -41,8 +41,12 @@ debug = "line-tables-only"
 
 [profile.ci]
 inherits = "test"
-debug = "line-tables-only" # backtraces keep file:line; llvm-cov needs no DWARF
+# `strip` removes debug info only after compiling, so do not generate it at all; llvm-cov needs none
+debug = false
 strip = "debuginfo"
+
+[profile.ci.package."*"]
+debug = false # otherwise inherited from `profile.dev.package."*"`
 
 [profile.bench-ci]
 inherits = "bench"
