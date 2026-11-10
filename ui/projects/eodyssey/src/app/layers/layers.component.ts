@@ -200,6 +200,11 @@ import {EOdysseyLayerService} from './layers.service';
                 >
                     Apply visualization
                 </button>
+                @if (eodysseyLayerService.mapTileLayer()) {
+                    <button mat-stroked-button type="button" (click)="eodysseyLayerService.removeVisualization()">
+                        Remove visualization
+                    </button>
+                }
             </div>
         </section>
 
@@ -439,6 +444,10 @@ import {EOdysseyLayerService} from './layers.service';
             }
 
             .apply-preset-action {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+
                 button {
                     width: 100%;
                     min-height: 2.75rem;
@@ -556,7 +565,7 @@ export class LayersComponent {
         if (!this.eodysseyLayerService.canApplyPreset()) return;
 
         const source = this.eodysseyLayerService.selectedDataSource();
-        const sourceChanged = source !== this.eodysseyLayerService.appliedDataSource();
+        const sourceChanged = source !== this.eodysseyLayerService.dataSourceOfTime();
         this.eodysseyLayerService.applySelectedPreset();
         if (source && sourceChanged) void this.applyDataSourceTime(source);
     }
