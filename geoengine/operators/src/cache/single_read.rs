@@ -1,10 +1,11 @@
 use crate::cache::error::CacheError;
+use crate::util::safe_lock_mutex;
 use futures::FutureExt;
 use futures::future::{BoxFuture, WeakShared};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use tokio_util::task::AbortOnDropHandle;
 
 /// Runs a read once for all concurrent callers with the same key and gives each the result, e.g.
@@ -44,7 +45,7 @@ where
         F: Future<Output = V> + Send + 'static,
     {
         let shared_read = {
-            let mut running = self.running.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut running = safe_lock_mutex(&self.running);
             if let Some(running_read) = running.get(&key).and_then(WeakShared::upgrade) {
                 self.joined.fetch_add(1, Ordering::Relaxed);
                 running_read
@@ -84,10 +85,7 @@ struct RunningReadGuard<K: Eq + Hash, V> {
 
 impl<K: Eq + Hash, V> Drop for RunningReadGuard<K, V> {
     fn drop(&mut self) {
-        self.running
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .remove(&self.key);
+        safe_lock_mutex(&self.running).remove(&self.key);
     }
 }
 

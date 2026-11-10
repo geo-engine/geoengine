@@ -1,10 +1,11 @@
+use crate::util::safe_lock_mutex;
 use lru::LruCache;
 use snafu::Snafu;
 use std::collections::VecDeque;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
@@ -342,7 +343,7 @@ impl Default for RasterInfos {
 
 impl RasterInfos {
     fn get(&self, file: &str) -> Option<RasterInfo> {
-        let mut infos = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut infos = safe_lock_mutex(&self.0);
         let (cache_hint, info) = infos.get(file)?;
         cache_hint.may_cache().then(|| info.clone())
     }
@@ -350,7 +351,7 @@ impl RasterInfos {
     /// Returns whether no valid header of the file was known. Tiles that wait for the same header
     /// all put it, this is true for the first one.
     fn put(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) -> bool {
-        let mut infos = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut infos = safe_lock_mutex(&self.0);
         let is_new = !infos
             .peek(&*file)
             .is_some_and(|(cache_hint, _)| cache_hint.may_cache());
@@ -359,10 +360,7 @@ impl RasterInfos {
     }
 
     fn clear(&self) {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clear();
+        safe_lock_mutex(&self.0).clear();
     }
 }
 
