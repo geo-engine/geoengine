@@ -1,0 +1,276 @@
+---
+/**
+ * Layered architecture diagram of Geo Engine for the docs page `the-geo-engine/architecture.mdx`.
+ * The content lives in the arrays below, the colors are the Geo Engine colors from `src/styles/global.css`.
+ * Every block is a grid with `columns` columns; choose the items so that the rows are filled.
+ */
+import '@fontsource/poppins/400.css';
+import '@fontsource/poppins/600.css';
+
+type Item = string | {title: string; items: string[]};
+
+interface Block {
+    title: string;
+    columns: number;
+    items: Item[];
+}
+
+interface Client extends Block {
+    variant: 'darkblue' | 'turquoise' | 'lightblue';
+}
+
+const clients: Client[] = [
+    {title: 'Web apps', variant: 'darkblue', columns: 2, items: ['gis', 'eodyssey', 'Dashboards', 'manager']},
+    {title: 'Python library', variant: 'turquoise', columns: 2, items: ['API client', 'GeoPandas', 'xarray', 'Jupyter']},
+    {title: 'Third-party clients', variant: 'lightblue', columns: 2, items: ['QGIS', 'OGC clients', 'Rust client', 'TS client']},
+];
+
+const layers: Block[] = [
+    {
+        title: 'Services',
+        columns: 4,
+        items: [
+            {title: 'OGC', items: ['WMS', 'WFS', 'WCS', 'Tiles']},
+            'REST API',
+            'Processing Graphs',
+            'Datasets & Uploads',
+            'Layers & Projects',
+            'Data Connectors',
+            'Users & Permissions',
+        ],
+    },
+    {
+        title: 'Operators',
+        columns: 4,
+        items: [
+            'Processing Engine',
+            'Source Operators',
+            'Operator Toolbox',
+            'Stream Adapters',
+            'Expressions',
+            'Machine Learning',
+            'Plot Operators',
+            'Cache',
+        ],
+    },
+    {
+        title: 'Data Types',
+        columns: 3,
+        items: ['Feature Collections (Vector)', 'Raster Tiles', 'Time Intervals', 'Plots', 'Spatial References', 'Basic Operations'],
+    },
+];
+
+const runtime: Block = {
+    title: 'Runtime',
+    columns: 4,
+    items: ['PostgreSQL & PostGIS', 'GDAL workers', 'Files & volumes', 'External data sources'],
+};
+
+const technologies: Block = {
+    title: 'Built with',
+    columns: 5,
+    items: ['actix', 'Angular', 'Apache Arrow', 'GDAL/OGR', 'geo', 'ONNX Runtime', 'OpenLayers', 'PROJ', 'rayon', 'tokio'],
+};
+---
+
+<figure class="not-content architecture" aria-label="Geo Engine architecture">
+    <div class="clients">
+        {clients.map((client) => (
+            <section class:list={['card', `card-${client.variant}`]}>
+                <h3>{client.title}</h3>
+                <ul class="grid" style={`--columns: ${client.columns}`}>
+                    {client.items.map((item) => (
+                        <li class="chip chip-white">{item}</li>
+                    ))}
+                </ul>
+            </section>
+        ))}
+    </div>
+
+    <section class="card card-green backend">
+        <h3>Geo Engine backend</h3>
+        {layers.map((layer) => (
+            <section class="layer">
+                <h4>{layer.title}</h4>
+                <ul class="grid" style={`--columns: ${layer.columns}`}>
+                    {layer.items.map((item) =>
+                        typeof item === 'string' ? (
+                            <li class="chip chip-green">{item}</li>
+                        ) : (
+                            <li class="chip chip-green chip-group">
+                                <span>{item.title}</span>
+                                <ul class="grid" style={`--columns: ${item.items.length}`}>
+                                    {item.items.map((subItem) => (
+                                        <li class="chip chip-white">{subItem}</li>
+                                    ))}
+                                </ul>
+                            </li>
+                        ),
+                    )}
+                </ul>
+            </section>
+        ))}
+    </section>
+
+    {[runtime, technologies].map((block) => (
+        <section class="card card-gray">
+            <h3>{block.title}</h3>
+            <ul class="grid" style={`--columns: ${block.columns}`}>
+                {block.items.map((item) => (
+                    <li class="chip chip-white">{item}</li>
+                ))}
+            </ul>
+        </section>
+    ))}
+</figure>
+
+<style>
+    .architecture {
+        --ge-green: #3fab39;
+        --ge-lightblue: #92d2e3;
+        --ge-darkblue: #0f4493;
+        --ge-turquoise: #0e8e89;
+        --ge-gray: #dcdcdc;
+        --ge-gray-text: #1a1a1a;
+        --ge-text: #1a1a1a;
+
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        margin: 1.5rem 0;
+        font-family: 'Poppins', sans-serif;
+        font-size: 0.875rem;
+        line-height: 1.25;
+    }
+
+    :global([data-theme='dark']) .architecture {
+        --ge-gray: #3a3d42;
+        --ge-gray-text: #f0f0f0;
+    }
+
+    .architecture ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .clients {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.6rem;
+    }
+
+    .card {
+        padding: 0.6rem 0.8rem 0.8rem;
+        border-radius: 0.25rem;
+    }
+
+    .card h3 {
+        margin: 0 0 0.6rem;
+        font-size: 1.15rem;
+        font-weight: 600;
+        text-align: center;
+        color: inherit;
+    }
+
+    .card-darkblue {
+        background: var(--ge-darkblue);
+        color: #fff;
+    }
+
+    .card-turquoise {
+        background: var(--ge-turquoise);
+        color: #fff;
+    }
+
+    .card-lightblue {
+        background: var(--ge-lightblue);
+        color: var(--ge-darkblue);
+    }
+
+    .card-green {
+        background: var(--ge-green);
+        color: #fff;
+    }
+
+    .card-gray {
+        background: var(--ge-gray);
+        color: var(--ge-gray-text);
+    }
+
+    .backend {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .backend > h3 {
+        margin-bottom: 0.1rem;
+    }
+
+    .layer {
+        padding: 0.45rem 0.6rem 0.6rem;
+        border-radius: 0.2rem;
+        background: #fff;
+        color: var(--ge-text);
+    }
+
+    .layer h4 {
+        margin: 0 0 0.45rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-align: center;
+        color: inherit;
+    }
+
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+        gap: 0.4rem;
+    }
+
+    .chip {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.35rem 0.5rem;
+        border-radius: 0.25rem;
+        text-align: center;
+    }
+
+    .chip-white {
+        background: #fff;
+        color: var(--ge-text);
+    }
+
+    .chip-green {
+        min-height: 3rem;
+        background: var(--ge-green);
+        color: #000;
+    }
+
+    .chip-group {
+        grid-column: span 2;
+        flex-direction: column;
+        gap: 0.3rem;
+        padding: 0.3rem 0.4rem 0.4rem;
+    }
+
+    .chip-group .chip {
+        padding: 0.25rem 0.4rem;
+    }
+
+    @media (max-width: 50rem) {
+        .clients {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .grid {
+            grid-template-columns: repeat(min(var(--columns), 2), minmax(0, 1fr));
+        }
+
+        .chip-group .grid {
+            grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+        }
+    }
+</style>
