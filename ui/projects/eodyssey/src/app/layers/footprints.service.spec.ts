@@ -80,6 +80,12 @@ describe('FootprintsService overlay', () => {
 
     afterEach(() => TestBed.resetTestingModule());
 
+    /** The calendar header opens the calendar and asks for the window of its month. */
+    function openCalendar(service: FootprintsService): void {
+        service.calendarOpen.set(true);
+        service.showDate(new Date(2026, 3, 1));
+    }
+
     /** The viewport is debounced, then the requests of the resources run. */
     async function settle(): Promise<void> {
         for (let i = 0; i < 4; i++) {
@@ -108,7 +114,7 @@ describe('FootprintsService overlay', () => {
     it('asks the calendar for availability only', async () => {
         const service = TestBed.inject(FootprintsService);
 
-        service.overlayVisible.set(true);
+        openCalendar(service);
         await settle();
 
         const windowRequests = getFootprints.mock.calls.filter(([, query]) => query.limit === 100);
@@ -131,6 +137,7 @@ describe('FootprintsService overlay', () => {
         const service = TestBed.inject(FootprintsService);
 
         service.overlayVisible.set(true);
+        openCalendar(service);
         await settle();
 
         const bounds = (precision: RasterFootprintsPrecision): string | undefined =>
@@ -143,11 +150,34 @@ describe('FootprintsService overlay', () => {
         const service = TestBed.inject(FootprintsService);
 
         service.overlayVisible.set(true);
+        openCalendar(service);
         await settle();
         await settle();
 
         expect(getFootprints.mock.calls.length).toBeGreaterThan(1);
         expect(registerLayer).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not load the days of the calendar while only the overlay is on', async () => {
+        const service = TestBed.inject(FootprintsService);
+
+        service.overlayVisible.set(true);
+        await settle();
+
+        expect(boxesRequests()).toBe(1);
+        expect(getFootprints.mock.calls.filter(([, query]) => query.limit === 100)).toHaveLength(0);
+    });
+
+    it('reports a failed request of the overlay instead of throwing', async () => {
+        getFootprints.mockRejectedValue(new Error('server error'));
+        const service = TestBed.inject(FootprintsService);
+
+        service.overlayVisible.set(true);
+        await settle();
+
+        expect(service.hasError()).toBe(true);
+        expect(() => service.tooLarge()).not.toThrow();
+        expect(service.overlayAreaCount()).toBeUndefined();
     });
 
     it('uses the time step of the selected dataset until it is applied', () => {
