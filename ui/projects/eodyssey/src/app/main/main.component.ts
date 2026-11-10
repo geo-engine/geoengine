@@ -105,9 +105,6 @@ export class MainComponent {
     readonly testIsVisible = signal(true);
 
     constructor() {
-        // the same limit that stops the map from loading tiles stops the overlay from loading boxes
-        effect(() => this.footprintsService.zoomRequired.set(this.zoomRequired()));
-
         // The selected preset, so availability is shown before the visualization is applied. Else the layer on the map.
         effect(() => {
             const preset = this.eodysseyLayerService.selectedPreset();

@@ -89,15 +89,10 @@ describe('FootprintsService overlay', () => {
     const boxesRequests = (): number =>
         getFootprints.mock.calls.filter(([, query]) => query.precision === RasterFootprintsPrecision.Coverage).length;
 
-    it('asks for the boxes of its step only where the map loads tiles', async () => {
+    it('asks for the boxes of its step alone', async () => {
         const service = createService();
 
-        service.zoomRequired.set(true);
         service.overlayVisible.set(true);
-        await settle();
-        expect(boxesRequests()).toBe(0);
-
-        service.zoomRequired.set(false);
         await settle();
         expect(boxesRequests()).toBe(1);
         expect(getFootprints).toHaveBeenCalledWith('graph', expect.objectContaining({limit: 1}), expect.anything());

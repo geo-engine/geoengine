@@ -149,7 +149,6 @@ describe('LayersComponent', () => {
                         dateClass: (): string => '',
                         calendarOpen: signal(false),
                         overlayVisible: signal(false),
-                        zoomRequired: signal(false),
                         tooLarge: signal(false),
                         hasError: signal(false),
                         steps: signal([]),

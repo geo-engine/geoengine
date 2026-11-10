@@ -136,8 +136,6 @@ export class FootprintsService {
 
     readonly calendarOpen = signal(false);
     readonly overlayVisible = signal(false);
-    /** The map shows no tiles at this zoom. The overlay costs what a map costs, so it waits as well. */
-    readonly zoomRequired = signal(false);
     private readonly windowStart = signal<number | undefined>(undefined);
     /** The visible month of a window while the rest of it loads. */
     private readonly partialFootprints = signal<RasterFootprints | undefined>(undefined);
@@ -201,7 +199,7 @@ export class FootprintsService {
             const mapSpatialReference = this.mapSpatialReference();
             const viewport = this.viewport();
             const time = this.time();
-            if (!this.overlayVisible() || this.zoomRequired() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
+            if (!this.overlayVisible() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
             return {layer, mapSpatialReference, viewport, time};
         },
         loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<RasterFootprints | undefined> => {

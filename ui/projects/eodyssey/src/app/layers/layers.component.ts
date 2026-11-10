@@ -133,9 +133,7 @@ import {EOdysseyLayerService} from './layers.service';
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
                 Show scene coverage on map
             </mat-checkbox>
-            @if (footprintsService.overlayVisible() && footprintsService.zoomRequired()) {
-                <p class="catalogue-message" role="status">Zoom in further to show the scene coverage.</p>
-            } @else if (footprintsService.tooLarge()) {
+            @if (footprintsService.tooLarge()) {
                 <p class="catalogue-message" role="status">Zoom in to see when and where scenes are available.</p>
             } @else if (footprintsService.hasError()) {
                 <p class="catalogue-message catalogue-error" role="alert">Could not load the scene availability.</p>
