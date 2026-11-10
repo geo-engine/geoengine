@@ -845,6 +845,29 @@ describe('LayersComponent', () => {
         expect(setTime).not.toHaveBeenCalled();
     });
 
+    it('removes the visualization from the map without resetting the time when it is applied again', async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
+        fixture.componentInstance.applySelectedPreset();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Remove visualization');
+
+        setTime.mockClear();
+        eodysseyLayerService.removeVisualization();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
+        expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Remove visualization');
+
+        fixture.componentInstance.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
+        expect(setTime).not.toHaveBeenCalled();
+    });
+
     it('preserves the applied layer and time when returning to the layers panel', async () => {
         fixture.detectChanges();
         await fixture.whenStable();

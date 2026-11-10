@@ -74,6 +74,12 @@ export class EOdysseyLayerService {
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     /** Whether applying another data source sets the time to the default time of that data source. */
     readonly autoSelectTime = signal<boolean>(true);
+    /**
+     * The data source whose default time and time step were set last. Removing the visualization keeps it, so
+     * applying the same data source again does not reset the time the user chose since.
+     */
+    private readonly timeSource = signal<DataSourceDefinition | undefined>(undefined);
+    readonly dataSourceOfTime = this.timeSource.asReadonly();
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();
@@ -239,7 +245,13 @@ export class EOdysseyLayerService {
         const preset = this.selectedPreset();
         if (source && preset && this.canApplyPreset()) {
             this.appliedVisualization.set({source, preset});
+            this.timeSource.set(source);
         }
+    }
+
+    /** Takes the visualization off the map, e.g. to see only the boxes where data exists. */
+    removeVisualization(): void {
+        this.appliedVisualization.set(undefined);
     }
 
     /** Load EDV -> category -> data source -> region, leaving preset layers lazy. */

@@ -120,17 +120,11 @@ export class MainComponent {
             );
         });
 
-        // The step of the selected dataset until it is applied, because the project keeps the step of the applied one.
-        effect(() =>
-            this.footprintsService.timeStepOverride.set(
-                this.eodysseyLayerService.canApplyPreset() ? this.eodysseyLayerService.selectedDataSource()?.defaultTimeStep : undefined,
-            ),
-        );
-
-        // The default time of the selected dataset until it is applied, because the project keeps the time of the applied one.
+        // The time and step of the selected data source until it is applied, because the project keeps those of the applied one.
         effect(() => {
             const source = this.eodysseyLayerService.selectedDataSource();
-            const isNewSource = source !== this.eodysseyLayerService.appliedDataSource();
+            const isNewSource = source !== this.eodysseyLayerService.dataSourceOfTime();
+            this.footprintsService.timeStepOverride.set(isNewSource ? source?.defaultTimeStep : undefined);
             this.footprintsService.timeOverride.set(
                 isNewSource && this.eodysseyLayerService.autoSelectTime() && source?.defaultTime
                     ? new Time(new Date(source.defaultTime))
