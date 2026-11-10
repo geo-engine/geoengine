@@ -2,6 +2,7 @@ use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridShapeAccess, GridSize,
     SpatialGridDefinition,
 };
+use std::num::NonZeroUsize;
 use tracing::trace;
 
 use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
@@ -140,11 +141,11 @@ impl GdalReaderMode {
     /// The level of the files that reads map onto pixel by pixel: 1 for the full resolution,
     /// the overview level if the dataset declares it. `None`: GDAL picks an overview and may
     /// resample.
-    pub fn level_factor(&self) -> Option<usize> {
+    pub fn level_factor(&self) -> Option<NonZeroUsize> {
         match self {
-            GdalReaderMode::OriginalResolution(_) => Some(1),
+            GdalReaderMode::OriginalResolution(_) => Some(NonZeroUsize::MIN),
             GdalReaderMode::OverviewLevel(rs) if rs.files_have_level => {
-                Some(rs.overview_level.max(1) as usize)
+                Some(NonZeroUsize::new(rs.overview_level as usize).unwrap_or(NonZeroUsize::MIN))
             }
             GdalReaderMode::OverviewLevel(_) => None,
         }

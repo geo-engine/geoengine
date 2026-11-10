@@ -27,6 +27,7 @@ use geoengine_datatypes::util::test::TestDefault;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -780,7 +781,7 @@ pub struct BlockKey {
     /// the file and everything that changes how it is read, e.g. its band and no-data value
     pub file: Arc<str>,
     /// the level is this many times coarser than the full resolution
-    pub factor: usize,
+    pub factor: NonZeroUsize,
     /// block index, y then x
     pub block: [usize; 2],
     pub data_type: RasterDataType,

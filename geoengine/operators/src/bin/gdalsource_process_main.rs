@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::num::NonZeroUsize;
 
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
@@ -288,7 +289,7 @@ fn raster_type_dispatch(
     dataset_params: &GdalDatasetParameters,
     read_advise: GdalReadAdvise,
     data_type: geoengine_datatypes::raster::RasterDataType,
-    level_factor: Option<usize>,
+    level_factor: Option<NonZeroUsize>,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
@@ -358,7 +359,7 @@ fn run(token: Token) {
 fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     dataset_params: &GdalDatasetParameters,
     read_advise: GdalReadAdvise,
-    level_factor: Option<usize>,
+    level_factor: Option<NonZeroUsize>,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {

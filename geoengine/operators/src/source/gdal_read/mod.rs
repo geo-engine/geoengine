@@ -34,6 +34,7 @@ use geoengine_datatypes::raster::{
     GridShapeAccess, Pixel, RasterTile2D, TileInformation,
 };
 use num::FromPrimitive;
+use std::num::NonZeroUsize;
 use tracing::trace;
 
 /// Everything needed to produce one output tile.
@@ -102,7 +103,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
                     .read::<T>(&params, read_advise, factor, plan.cache_hint)
                     .await
             }
-            (Some(factor), None) if factor > 1 => {
+            (Some(factor), None) if factor.get() > 1 => {
                 let Some(level_advise) = level_read_advise(read_advise, factor) else {
                     return Err(misaligned_read(&params, factor));
                 };
@@ -221,7 +222,7 @@ pub(crate) fn overview_source(
 /// pixel of the level.
 pub(crate) fn level_read_advise(
     read_advise: GdalReadAdvise,
-    factor: usize,
+    factor: NonZeroUsize,
 ) -> Option<GdalReadAdvise> {
     let (start_x, start_y) = read_advise.gdal_read_widow.gdal_window_start();
     let (start_x, start_y) = (
@@ -240,7 +241,7 @@ pub(crate) fn level_read_advise(
     })
 }
 
-fn misaligned_read(params: &GdalDatasetParameters, factor: usize) -> GdalProcessPoolError {
+fn misaligned_read(params: &GdalDatasetParameters, factor: NonZeroUsize) -> GdalProcessPoolError {
     IpcProcessError::IpcOther {
         msg: format!(
             "a read of {} does not start at a pixel of its level {factor}",

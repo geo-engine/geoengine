@@ -7,6 +7,7 @@ use geoengine_datatypes::raster::{
 use ipc_channel::IpcError;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::num::NonZeroUsize;
 use std::{
     borrow::Cow,
     hash::{Hash, Hasher},
@@ -78,7 +79,7 @@ pub enum GdalRequest {
         /// and without resampling: 1 is the full resolution, `f` the overview of size
         /// `ceil(size / f)`, see [`RasterInfo::level_of_factor`]. `read_window_bounds` must have
         /// the window's size. A missing level is an error, never a resampled read.
-        level_factor: Option<usize>,
+        level_factor: Option<NonZeroUsize>,
     },
     /// Read the data type and levels of band `rasterband_channel` and the dataset's CRS.
     Header,
@@ -125,7 +126,7 @@ pub struct RasterInfo {
 
 impl RasterInfo {
     /// See [`level_of_factor`].
-    pub fn level_of_factor(&self, factor: usize) -> Option<usize> {
+    pub fn level_of_factor(&self, factor: NonZeroUsize) -> Option<usize> {
         level_of_factor(&self.levels, factor)
     }
 
@@ -140,12 +141,15 @@ impl RasterInfo {
 /// full resolution. GDAL drivers size an overview `ceil(size / factor)` (`gdaladdo`, COG, JPEG2000
 /// resolution levels), so its pixel `i` covers the full-resolution pixels
 /// `[i * factor, (i + 1) * factor)`.
-pub fn level_of_factor(levels: &[RasterLevelLayout], factor: usize) -> Option<usize> {
+pub fn level_of_factor(levels: &[RasterLevelLayout], factor: NonZeroUsize) -> Option<usize> {
     let full = levels.first()?;
-    if factor <= 1 {
+    if factor.get() == 1 {
         return Some(0);
     }
-    let size = (full.size_x.div_ceil(factor), full.size_y.div_ceil(factor));
+    let size = (
+        full.size_x.div_ceil(factor.get()),
+        full.size_y.div_ceil(factor.get()),
+    );
     levels
         .iter()
         .skip(1)
@@ -157,7 +161,11 @@ pub fn level_of_factor(levels: &[RasterLevelLayout], factor: usize) -> Option<us
 /// it has none.
 pub fn largest_overview_level(levels: &[RasterLevelLayout]) -> u32 {
     std::iter::successors(Some(2_u32), |level| level.checked_mul(2))
-        .take_while(|level| level_of_factor(levels, *level as usize).is_some())
+        .take_while(|level| {
+            NonZeroUsize::new(*level as usize)
+                .and_then(|factor| level_of_factor(levels, factor))
+                .is_some()
+        })
         .last()
         .unwrap_or(1)
 }
@@ -543,7 +551,7 @@ pub enum IpcProcessError {
     IpcOther { msg: String },
 
     #[snafu(display("File {file} has no overview level {factor}, but its dataset declares it"))]
-    MissingOverviewLevel { file: String, factor: usize },
+    MissingOverviewLevel { file: String, factor: NonZeroUsize },
 
     #[snafu(display("Gdal buffer len {buffer_len} does not match grid shape {shape:?}"))]
     ShapeBufferMissmatch {

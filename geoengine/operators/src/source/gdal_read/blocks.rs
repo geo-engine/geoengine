@@ -41,6 +41,7 @@ use geoengine_datatypes::raster::{
     GridOrEmpty, GridShapeAccess, Pixel, RasterTile2D,
 };
 use num::FromPrimitive;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 /// Blocks with fewer pixels, e.g. the one-row strips of untiled files, are not grouped into units.
@@ -67,7 +68,7 @@ pub struct BlockIo {
 #[derive(Clone, Copy)]
 struct LevelWindow {
     /// the level is this many times coarser than the full resolution
-    factor: usize,
+    factor: NonZeroUsize,
     /// in the level's pixel space
     window: GridBoundingBox2D,
     /// the level's size, y then x
@@ -141,7 +142,7 @@ impl BlockIo {
         &self,
         params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        factor: usize,
+        factor: NonZeroUsize,
         cache_hint: CacheHint,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
@@ -427,7 +428,7 @@ fn block_cache_hint(cache_hint: CacheHint, min_ttl: CacheTtlSeconds) -> CacheHin
 fn level_window(
     info: &RasterInfo,
     level: usize,
-    factor: usize,
+    factor: NonZeroUsize,
     read_advise: GdalReadAdvise,
 ) -> Option<LevelWindow> {
     let level_layout = info.levels.get(level)?;
@@ -479,6 +480,10 @@ mod tests {
     use crate::source::gdal_worker_process::RasterLevelLayout;
     use geoengine_datatypes::raster::RasterProperties;
     use geoengine_datatypes::raster::{Grid, GridIndexAccess, MaskedGrid};
+
+    fn factor(factor: usize) -> NonZeroUsize {
+        NonZeroUsize::new(factor).expect("not zero")
+    }
 
     fn advise(start: [isize; 2], size: [usize; 2], out: [usize; 2]) -> GdalReadAdvise {
         let bounds =
@@ -550,23 +555,28 @@ mod tests {
             level(2745, 512),
             level(1373, 512),
         ]);
-        assert_eq!(layout.level_of_factor(1), Some(0));
-        assert_eq!(layout.level_of_factor(2), Some(1));
-        assert_eq!(layout.level_of_factor(4), Some(2));
+        assert_eq!(layout.level_of_factor(factor(1)), Some(0));
+        assert_eq!(layout.level_of_factor(factor(2)), Some(1));
+        assert_eq!(layout.level_of_factor(factor(4)), Some(2));
         assert_eq!(
-            layout.level_of_factor(8),
+            layout.level_of_factor(factor(8)),
             Some(3),
             "ceil(10 980 / 8) = 1 373"
         );
-        assert_eq!(layout.level_of_factor(16), None);
+        assert_eq!(layout.level_of_factor(factor(16)), None);
     }
 
     #[test]
     fn it_maps_a_read_onto_the_pixels_and_units_of_its_level() {
         let layout = raster_info(vec![level(4096, 512), level(2048, 256), level(1024, 128)]);
 
-        let window = level_window(&layout, 1, 2, advise([1024, 512], [1024, 1024], [512, 512]))
-            .expect("inside overview 2");
+        let window = level_window(
+            &layout,
+            1,
+            factor(2),
+            advise([1024, 512], [1024, 1024], [512, 512]),
+        )
+        .expect("inside overview 2");
         // the read starts at y 1024, x 512 of the full resolution
         assert_eq!(
             window.window,
@@ -589,9 +599,14 @@ mod tests {
                 block_size_x: block_x,
                 block_size_y: block_y,
             }]);
-            level_window(&layout, 0, 1, advise([0, 0], [512, 512], [512, 512]))
-                .expect("full resolution")
-                .block_size
+            level_window(
+                &layout,
+                0,
+                factor(1),
+                advise([0, 0], [512, 512], [512, 512]),
+            )
+            .expect("full resolution")
+            .block_size
         };
         assert_eq!(unit(256, 256), [512, 512]);
         assert_eq!(unit(128, 128), [512, 512]);
@@ -608,8 +623,13 @@ mod tests {
     #[test]
     fn it_caches_large_units_in_pieces_and_reads_them_whole() {
         let layout = raster_info(vec![level(2600, 1024)]);
-        let window = level_window(&layout, 0, 1, advise([500, 1000], [512, 512], [512, 512]))
-            .expect("full resolution");
+        let window = level_window(
+            &layout,
+            0,
+            factor(1),
+            advise([500, 1000], [512, 512], [512, 512]),
+        )
+        .expect("full resolution");
         assert_eq!(window.block_size, [1024, 1024]);
         assert_eq!(window.piece_size, [PIECE_SIZE, PIECE_SIZE]);
         assert_eq!(
@@ -639,8 +659,13 @@ mod tests {
     fn it_reads_the_partial_last_pixel_of_an_overview() {
         // 1001 px: overview 2 has 501 px, the last one covers only full-resolution pixel 1000
         let layout = raster_info(vec![level(1001, 256), level(501, 256)]);
-        let window = level_window(&layout, 1, 2, advise([768, 0], [233, 233], [117, 117]))
-            .expect("the last overview pixel is inside the level");
+        let window = level_window(
+            &layout,
+            1,
+            factor(2),
+            advise([768, 0], [233, 233], [117, 117]),
+        )
+        .expect("the last overview pixel is inside the level");
         assert_eq!(
             window.window,
             GridBoundingBox2D::new_min_max(384, 500, 0, 116).unwrap()
@@ -651,11 +676,23 @@ mod tests {
     fn it_rejects_misaligned_reads_and_reads_beyond_the_level() {
         let layout = raster_info(vec![level(1024, 256), level(512, 256)]);
         assert!(
-            level_window(&layout, 1, 2, advise([1, 0], [256, 256], [128, 128])).is_none(),
+            level_window(
+                &layout,
+                1,
+                factor(2),
+                advise([1, 0], [256, 256], [128, 128])
+            )
+            .is_none(),
             "starts inside an overview pixel"
         );
         assert!(
-            level_window(&layout, 1, 2, advise([0, 0], [1024, 1024], [513, 513])).is_none(),
+            level_window(
+                &layout,
+                1,
+                factor(2),
+                advise([0, 0], [1024, 1024], [513, 513])
+            )
+            .is_none(),
             "ends beyond the overview"
         );
     }
@@ -663,8 +700,13 @@ mod tests {
     #[test]
     fn it_clips_edge_blocks_to_the_level() {
         let layout = raster_info(vec![level(1000, 256)]);
-        let window = level_window(&layout, 0, 1, advise([768, 768], [232, 232], [232, 232]))
-            .expect("full resolution");
+        let window = level_window(
+            &layout,
+            0,
+            factor(1),
+            advise([768, 768], [232, 232], [232, 232]),
+        )
+        .expect("full resolution");
         assert_eq!(
             window.pieces_in(window.window).collect::<Vec<_>>(),
             vec![[1, 1]]
@@ -683,8 +725,13 @@ mod tests {
             block_size_x: 3600,
             block_size_y: 1,
         }]);
-        let window = level_window(&strips, 0, 1, advise([600, 300], [512, 512], [512, 512]))
-            .expect("full resolution");
+        let window = level_window(
+            &strips,
+            0,
+            factor(1),
+            advise([600, 300], [512, 512], [512, 512]),
+        )
+        .expect("full resolution");
         assert_eq!(window.block_size, [VIRTUAL_UNIT_SIZE, VIRTUAL_UNIT_SIZE]);
         assert_eq!(
             window.pieces_in(window.window).collect::<Vec<_>>(),
@@ -692,8 +739,13 @@ mod tests {
         );
 
         let one_block = raster_info(vec![level(4096, 4096)]);
-        let window = level_window(&one_block, 0, 1, advise([0, 0], [512, 512], [512, 512]))
-            .expect("full resolution");
+        let window = level_window(
+            &one_block,
+            0,
+            factor(1),
+            advise([0, 0], [512, 512], [512, 512]),
+        )
+        .expect("full resolution");
         assert_eq!(window.block_size, [VIRTUAL_UNIT_SIZE, VIRTUAL_UNIT_SIZE]);
     }
 }

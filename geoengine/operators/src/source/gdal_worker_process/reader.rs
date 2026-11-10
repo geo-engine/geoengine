@@ -2,6 +2,7 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridOrEmpty, MaskedGrid, Pixel};
 use num::FromPrimitive;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tracing::Instrument;
 
@@ -89,7 +90,7 @@ impl GdalPoolReader {
     pub async fn read_level_data<T: Pixel + GdalType + FromPrimitive>(
         &self,
         dataset_params: GdalDatasetParameters,
-        factor: usize,
+        factor: NonZeroUsize,
         read_advise: GdalReadAdvise,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
         self.read_raster(dataset_params, read_advise, Some(factor))
@@ -100,7 +101,7 @@ impl GdalPoolReader {
         &self,
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        level_factor: Option<usize>,
+        level_factor: Option<NonZeroUsize>,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;

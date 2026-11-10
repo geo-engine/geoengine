@@ -29,6 +29,7 @@ use geoengine_datatypes::{
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::{
     env,
     ffi::CString,
@@ -453,7 +454,7 @@ impl GdalHandling {
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        level_factor: Option<usize>,
+        level_factor: Option<NonZeroUsize>,
     ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
         Self::open_with_retry(cache, dataset_params, |ds, params| {
             Self::load_tile_data(ds, params, read_advise, level_factor)
@@ -726,7 +727,7 @@ impl GdalHandling {
         dataset: &mut GdalDataset,
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        level_factor: Option<usize>,
+        level_factor: Option<NonZeroUsize>,
     ) -> Result<GdalIpcPayload<T>, IpcProcessError> {
         let _span = tracing::debug_span!(
             "gdal_load_tile_data",
@@ -788,8 +789,8 @@ impl GdalHandling {
         let rasterband = dataset.rasterband(dataset_params.rasterband_channel)?;
 
         // properties, scale and offset always come from the full-resolution band
-        let result_gdal_raster = match level_factor {
-            None | Some(0 | 1) => Self::read_grid_from_raster(
+        let result_gdal_raster = match level_factor.filter(|factor| factor.get() > 1) {
+            None => Self::read_grid_from_raster(
                 &rasterband,
                 &read_advise.gdal_read_widow,
                 &read_advise.read_window_bounds,
@@ -2102,7 +2103,7 @@ mod tests {
                 &mut holder,
                 &params,
                 read_advise,
-                Some(factor),
+                NonZeroUsize::new(factor),
             )
             .unwrap();
             assert_eq!(payload.dimensions, window);
@@ -2120,9 +2121,9 @@ mod tests {
                     &mut holder,
                     &params,
                     read_advise,
-                    Some(8),
+                    NonZeroUsize::new(8),
                 ),
-                Err(IpcProcessError::MissingOverviewLevel { factor: 8, .. })
+                Err(IpcProcessError::MissingOverviewLevel { factor, .. }) if factor.get() == 8
             ),
             "a missing level is an error, not a resampled read"
         );
