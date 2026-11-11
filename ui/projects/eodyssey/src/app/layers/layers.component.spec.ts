@@ -159,6 +159,7 @@ describe('LayersComponent', () => {
                         dateWithData: vi.fn(),
                         isLoading: signal(false),
                         overlayLoading: signal(false),
+                        overlayAreaCount: signal(undefined),
                         showDate: vi.fn(),
                     },
                 },
@@ -334,7 +335,13 @@ describe('LayersComponent', () => {
     });
 
     describe('dates of the layer', () => {
-        interface FootprintsMock {time: WritableSignal<Time | undefined>; dateStatus: WritableSignal<string | undefined>; dateWithData: Mock}
+        interface FootprintsMock {
+            time: WritableSignal<Time | undefined>;
+            dateStatus: WritableSignal<string | undefined>;
+            dateWithData: Mock;
+            overlayVisible: WritableSignal<boolean>;
+            overlayAreaCount: WritableSignal<number | undefined>;
+        }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
 
         it('tells whether the date has scenes in view', async () => {
@@ -347,6 +354,26 @@ describe('LayersComponent', () => {
             footprints().dateStatus.set('empty');
             fixture.detectChanges();
             expect((fixture.nativeElement as HTMLElement).textContent).toContain('No scenes in view on 01.04.2026.');
+        });
+
+        it('names the number of scene areas of the date while the overlay is on', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().dateStatus.set('data');
+            footprints().overlayVisible.set(true);
+            const text = (): string => (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+            footprints().overlayAreaCount.set(3);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(text()).toContain('3 scene areas in view on 01.04.2026.');
+
+            footprints().overlayAreaCount.set(1);
+            fixture.detectChanges();
+            expect(text()).toContain('1 scene area in view on 01.04.2026.');
+
+            footprints().overlayAreaCount.set(0);
+            fixture.detectChanges();
+            expect(text()).toContain('No scenes in view on 01.04.2026.');
         });
 
         it('goes to the next date with data and remembers that the user chose the date', async () => {

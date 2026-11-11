@@ -83,6 +83,8 @@ export class FootprintsService {
     /** The app shows the dates of the layer outside of the calendar, e.g. next to the date with arrows. Set by the app. */
     readonly datesNeeded = signal(false);
     readonly overlayVisible = signal(false);
+    /** Draw the overlay lighter, e.g. while the layer is on the map and its imagery lies below. Set by the app. */
+    readonly overlayLight = signal(false);
     private readonly windowStart = signal<number | undefined>(undefined);
     /** The visible month of a window while the rest of it loads. */
     private readonly partialFootprints = signal<RasterFootprints | undefined>(undefined);
@@ -194,7 +196,7 @@ export class FootprintsService {
     readonly overlayLayer = new OlLayerVector({
         source: new OlSourceVector<OlFeature<OlGeometry>>({wrapX: false}),
         // OpenLayers asks for the style of every box in every frame
-        style: (): Style => (this.overlayStyleCache ??= overlayStyle()),
+        style: (): Style => (this.overlayStyleCache ??= overlayStyle(this.overlayLight())),
     });
     /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
     private overlayStyleCache?: Style;
@@ -296,6 +298,7 @@ export class FootprintsService {
         const mapSpatialReference = this.mapSpatialReference();
         const time = this.time();
 
+        this.overlayLight();
         this.overlayStyleCache = undefined;
         source?.clear();
         if (!source || !mapSpatialReference || !time || !this.overlayVisible()) return;
