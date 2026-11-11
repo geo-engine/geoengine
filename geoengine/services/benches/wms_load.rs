@@ -16,13 +16,13 @@
 //! Needs Postgres as configured for the server and release builds of the server:
 //! `cargo build --release --bin gdalsource-process --bin geoengine-server && cargo bench --bench wms_load`
 //!
-//! - `WMS_LOAD_SERVER`: the server binary, default `target/release/geoengine-server`. The server runs in
-//!   the workspace directory of the binary (`<dir>/target/release/geoengine-server`), so it reads the
-//!   settings and test data of that directory.
-//! - `WMS_LOAD_CORES`: comma separated core counts, default `8,16,32`. Use it rather than a criterion
-//!   filter, which still starts a server per core count.
-//! - `WMS_LOAD_COLD=1`: clear the server caches (`POST /cache/clear`) before each case.
-//! - `WMS_LOAD_LOG_SPEC`: the log spec of the server, default `warn`.
+//! - `GEOENGINE_BENCH_SERVER`: the server binary, default `target/release/geoengine-server`. The
+//!   server runs in the workspace directory of the binary (`<dir>/target/release/geoengine-server`),
+//!   so it reads the settings and test data of that directory.
+//! - `GEOENGINE_BENCH_CORES`: comma separated core counts, default `8,16,32`. Use it rather than a
+//!   criterion filter, which still starts a server per core count.
+//! - `GEOENGINE_BENCH_COLD=1`: clear the server caches (`POST /cache/clear`) before each case.
+//! - `GEOENGINE_BENCH_LOG_SPEC`: the log spec of the server, default `warn`.
 
 use criterion::{
     BenchmarkId, Criterion, SamplingMode, Throughput, criterion_group, criterion_main,
@@ -77,7 +77,7 @@ impl Server {
             .env("GEOENGINE__WEB__BIND_ADDRESS", ADDRESS)
             .env(
                 "GEOENGINE__LOGGING__LOG_SPEC",
-                std::env::var("WMS_LOAD_LOG_SPEC").unwrap_or_else(|_| "warn".to_owned()),
+                std::env::var("GEOENGINE_BENCH_LOG_SPEC").unwrap_or_else(|_| "warn".to_owned()),
             )
             .stdout(Stdio::null())
             .stderr(File::create(&log).unwrap())
@@ -410,14 +410,14 @@ fn print_case(
 }
 
 fn wms_load(c: &mut Criterion) {
-    let binary = std::env::var("WMS_LOAD_SERVER").map_or_else(
+    let binary = std::env::var("GEOENGINE_BENCH_SERVER").map_or_else(
         |_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/release/geoengine-server"),
         PathBuf::from,
     );
     let binary =
         fs::canonicalize(&binary).unwrap_or_else(|_| panic!("{} should exist", binary.display()));
-    let cores = std::env::var("WMS_LOAD_CORES").unwrap_or_else(|_| "8,16,32".to_owned());
-    let cold = std::env::var("WMS_LOAD_COLD").is_ok_and(|v| v == "1");
+    let cores = std::env::var("GEOENGINE_BENCH_CORES").unwrap_or_else(|_| "8,16,32".to_owned());
+    let cold = std::env::var("GEOENGINE_BENCH_COLD").is_ok_and(|v| v == "1");
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let client = reqwest::Client::builder()
