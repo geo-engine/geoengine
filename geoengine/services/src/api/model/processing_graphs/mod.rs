@@ -50,8 +50,9 @@ pub use crate::api::model::processing_graphs::{
         WarpParameters, WarpUpsamplingMethod,
     },
     source::{
-        AttributeFilter, GdalSource, GdalSourceParameters, MockPointSource,
-        MockPointSourceParameters, MultiBandGdalSource, OgrSource, OgrSourceParameters,
+        AttributeFilter, GdalSource, GdalSourceParameters, MdGdalSource, MdGdalSourceParameters,
+        MockPointSource, MockPointSourceParameters, MultiBandGdalSource, OgrSource,
+        OgrSourceParameters,
     },
     source_parameters::{
         MultipleRasterSources, SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
@@ -150,6 +151,7 @@ pub enum RasterOperator {
     Expression(Expression),
     GdalSource(GdalSource),
     Interpolation(Interpolation),
+    MdGdalSource(MdGdalSource),
     MultiBandGdalSource(MultiBandGdalSource),
     NeighborhoodAggregate(NeighborhoodAggregate),
     Onnx(Onnx),
@@ -243,6 +245,7 @@ operator_conversions!(RasterOperator <=> OperatorsTypedRasterOperator {
     Expression,
     GdalSource,
     Interpolation,
+    MdGdalSource,
     MultiBandGdalSource,
     NeighborhoodAggregate,
     Onnx,
@@ -308,6 +311,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     // Source
     GdalSource,
     GdalSourceParameters,
+    MdGdalSource,
+    MdGdalSourceParameters,
     MockPointSource,
     MockPointSourceParameters,
     MultiBandGdalSource,

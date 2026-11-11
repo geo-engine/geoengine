@@ -24,7 +24,7 @@ use crate::processing::{
     TemporalRasterAggregation, TimeProjection, TimeShift, VectorExpression, VectorJoin,
     VisualPointClustering, Warp,
 };
-use crate::source::{CsvSource, GdalSource, MultiBandGdalSource, OgrSource};
+use crate::source::{CsvSource, GdalSource, MdGdalSource, MultiBandGdalSource, OgrSource};
 use crate::util::Result;
 
 /// Generates an enum over all operators of one output type.
@@ -106,6 +106,7 @@ typed_operator! {
         Expression(Expression),
         GdalSource(GdalSource),
         Interpolation(Interpolation),
+        MdGdalSource(MdGdalSource),
         MultiBandGdalSource(MultiBandGdalSource),
         NeighborhoodAggregate(NeighborhoodAggregate),
         Onnx(Onnx),

@@ -18,6 +18,8 @@ Name | Type
 `start` | number
 `end` | number
 `bandOffset` | number
+`variables` | [Array&lt;MdVariable&gt;](MdVariable.md)
+`wrap` | boolean
 
 ## Example
 
@@ -38,6 +40,8 @@ const example = {
   "start": null,
   "end": null,
   "bandOffset": null,
+  "variables": null,
+  "wrap": null,
 } satisfies MetaDataDefinition
 
 console.log(example)
