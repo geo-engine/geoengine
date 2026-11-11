@@ -131,11 +131,15 @@ import {EOdysseyLayerService} from './layers.service';
                     <mat-spinner [diameter]="16"></mat-spinner>
                     Checking for data…
                 </p>
-            } @else if (footprintsService.dateStatus() === 'data') {
-                <p class="date-status" role="status"><span class="status-dot" aria-hidden="true"></span>Data in view</p>
-            } @else if (footprintsService.dateStatus() === 'empty') {
-                <p class="date-status" role="status"><span class="status-dot empty" aria-hidden="true"></span>No data in view</p>
-                @if (previousDateWithData() || nextDateWithData()) {
+            } @else if (dateStatusText(); as text) {
+                <p class="date-status" role="status">
+                    <span class="status-dot" [class.empty]="footprintsService.dateStatus() === 'empty'" aria-hidden="true"></span>
+                    {{ text }}
+                    @if (isFeaturedDateShown()) {
+                        <span class="featured-mark"><mat-icon aria-hidden="true">star</mat-icon>Featured date</span>
+                    }
+                </p>
+                @if (footprintsService.dateStatus() === 'empty' && (previousDateWithData() || nextDateWithData())) {
                     <p id="nearest-dates-label" class="catalogue-message">Nearest dates with data:</p>
                     <div class="nearest-dates" role="group" aria-labelledby="nearest-dates-label">
                         @if (previousDateWithData(); as previous) {
@@ -153,18 +157,19 @@ import {EOdysseyLayerService} from './layers.service';
                     </div>
                 }
             }
-            @if (suggestedDate(); as suggestion) {
-                <p class="catalogue-message suggested-date">
-                    Suggested date:
+            @if (featuredDate(); as featured) {
+                @if (!isFeaturedDateShown()) {
                     <button
                         mat-stroked-button
                         type="button"
-                        [matTooltip]="'Default date of ' + suggestion.source"
-                        (click)="goTo(suggestion.time)"
+                        class="featured-date"
+                        [matTooltip]="'A good date to look at ' + featured.source"
+                        (click)="goTo(featured.time)"
                     >
-                        Go to {{ suggestion.text }}
+                        <mat-icon>star</mat-icon>
+                        Featured: {{ featured.time.start.format('DD.MM.YYYY') }}
                     </button>
-                </p>
+                }
             }
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
                 <span class="stripe-swatch" aria-hidden="true"></span>
@@ -310,11 +315,24 @@ import {EOdysseyLayerService} from './layers.service';
                 color: var(--geoengine-foreground-secondary-text-color);
             }
 
-            .suggested-date {
-                display: flex;
-                flex-wrap: wrap;
+            .featured-date {
+                border-radius: 0.5rem;
+                font-size: $text2;
+                color: var(--geoengine-primary-color);
+                border-color: var(--geoengine-primary-color);
+            }
+
+            .featured-mark {
+                display: inline-flex;
                 align-items: center;
                 gap: 0.25rem;
+                color: var(--geoengine-primary-color);
+
+                mat-icon {
+                    width: 1rem;
+                    height: 1rem;
+                    font-size: 1rem;
+                }
             }
 
             .date-status {
@@ -612,13 +630,23 @@ export class LayersComponent {
         return time.start.toDate();
     });
 
-    /** The default date of the selected data source, suggested while the date field shows another one. */
-    readonly suggestedDate = computed<{source: string; text: string; time: Time} | undefined>(() => {
+    /** The default date of the selected data source, which is always one click away. The date never changes by itself. */
+    readonly featuredDate = computed<{source: string; time: Time} | undefined>(() => {
         const source = this.eodysseyLayerService.selectedDataSource();
-        const current = this.currentTime();
-        if (!source?.defaultTime || !current || current.start.valueOf() === source.defaultTime) return undefined;
-        const time = new Time(new Date(source.defaultTime));
-        return {source: source.name, text: time.start.format('DD.MM.YYYY'), time};
+        return source?.defaultTime === undefined ? undefined : {source: source.name, time: new Time(new Date(source.defaultTime))};
+    });
+    readonly isFeaturedDateShown = computed(
+        () => this.currentTime()?.start.valueOf() === this.featuredDate()?.time.start.valueOf() && !!this.featuredDate(),
+    );
+    readonly dateStatusText = computed<string | undefined>(() => {
+        switch (this.footprintsService.dateStatus()) {
+            case 'data':
+                return 'Data in view';
+            case 'empty':
+                return 'No data in view';
+            default:
+                return undefined;
+        }
     });
     /** The apply button says what it does: show the selected preset, switch to it, or that it is on the map. */
     readonly applyLabel = computed(() => {
@@ -694,7 +722,7 @@ export class LayersComponent {
         inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
     }
 
-    /** The time step of a data source is applied with it, the date is only suggested, see `suggestedDate`. */
+    /** The time step of a data source is applied with it, the date is only offered, see `featuredDate`. */
     private applyDataSourceTimeStep(dataSource: DataSourceDefinition): void {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }

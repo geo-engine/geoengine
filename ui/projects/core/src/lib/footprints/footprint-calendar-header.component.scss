@@ -41,6 +41,23 @@
         }
     }
 
+    // the featured date: a star at the corner of the day, which keeps the color of its data
+    .geoengine-calendar-cell-featured .mat-calendar-body-cell-content::after {
+        // the empty alternative text keeps the star out of the name of the day, which screen readers read
+        content: '★' / '';
+        position: absolute;
+        top: -0.3rem;
+        right: -0.3rem;
+        width: 0.9rem;
+        height: 0.9rem;
+        border-radius: 50%;
+        background-color: var(--geoengine-card-background-color);
+        color: var(--geoengine-primary-color);
+        font-size: 0.7rem;
+        line-height: 0.9rem;
+        text-align: center;
+    }
+
     // The selected day is a solid disc with a ring, so it stands out from days with and without data.
     .mat-calendar-body-cell-content.mat-calendar-body-selected {
         box-shadow:

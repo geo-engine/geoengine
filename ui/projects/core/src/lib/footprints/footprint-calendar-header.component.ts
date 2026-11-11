@@ -32,6 +32,7 @@ export class FootprintCalendarHeaderComponent {
 
         effect(() => {
             footprintsService.steps();
+            footprintsService.featuredTime();
             calendar.updateTodaysDate();
         });
     }
