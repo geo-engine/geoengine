@@ -123,19 +123,11 @@ export class MainComponent {
         // the stripes would hide the imagery of the layer on the map
         effect(() => this.footprintsService.overlayLight.set(!!this.eodysseyLayerService.mapTileLayer()));
 
-        // The time and step of the selected data source until it is applied, because the project keeps those of the applied one.
+        // The step of the selected data source until it is applied, because the project keeps the step of the applied one.
         effect(() => {
             const source = this.eodysseyLayerService.selectedDataSource();
             const isNewSource = source !== this.eodysseyLayerService.dataSourceOfTime();
             this.footprintsService.timeStepOverride.set(isNewSource ? source?.defaultTimeStep : undefined);
-            this.footprintsService.timeOverride.set(
-                isNewSource &&
-                    this.eodysseyLayerService.autoSelectTime() &&
-                    !this.eodysseyLayerService.userChoseTime() &&
-                    source?.defaultTime
-                    ? new Time(new Date(source.defaultTime))
-                    : undefined,
-            );
         });
 
         afterNextRender({
