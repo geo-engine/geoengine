@@ -33,8 +33,8 @@ class PolygonRasterizationParameters(BaseModel):
     """
     PolygonRasterizationParameters
     """ # noqa: E501
-    spatial_resolution: SpatialResolution = Field(description="Spatial resolution of the output grid in x/y direction.", alias="spatialResolution")
-    origin_coordinate: Optional[Coordinate2D] = Field(default=None, description="Origin coordinate to which the raster grid is aligned.  If omitted, the grid is aligned to `(0, 0)`.", alias="originCoordinate")
+    spatial_resolution: SpatialResolution = Field(description="Spatial resolution of the output grid, i.e., the positive pixel size in x and y direction in units of the spatial reference of the source.  The columns of the grid run from west to east (increasing x) and the rows from north to south (decreasing y), i.e., the grid has the geo transform `(originCoordinate, x, -y)`. This holds for every spatial reference, since coordinates are always given as x = easting/longitude and y = northing/latitude.", alias="spatialResolution")
+    origin_coordinate: Optional[Coordinate2D] = Field(default=None, description="Origin coordinate to which the raster grid is aligned.  It is a pixel corner, and the grid continues from it in all directions to cover the polygons. If omitted, the grid is aligned to `(0, 0)`.", alias="originCoordinate")
     value: Optional[PolygonRasterizationValue] = Field(default=None, description="The value that a polygon burns into the pixels it covers.  If omitted, each covered pixel gets the value `1`.")
     output_type: Optional[RasterDataType] = Field(default=None, description="Optional output raster data type.  If omitted, it is `U8` for a constant, `U32` for a count and `F64` for an attribute.", alias="outputType")
     output_measurement: Optional[Measurement] = Field(default=None, description="Optional measurement of the output band.  If omitted, it is derived from the value: unitless for a constant, `count` for a count, and the measurement of the column for an attribute (unitless for a classification that is summed or averaged).", alias="outputMeasurement")

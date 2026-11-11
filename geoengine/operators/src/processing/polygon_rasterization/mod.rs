@@ -58,9 +58,11 @@ impl OperatorName for PolygonRasterization {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonRasterizationParams {
-    /// The pixel size of the output raster
+    /// The pixel size of the output raster.
+    ///
+    /// The rows run from north to south, i.e., the geo transform is `(origin_coordinate, x, -y)`.
     pub spatial_resolution: SpatialResolution,
-    /// The coordinate to which the pixel grid is aligned
+    /// A pixel corner to which the pixel grid is aligned
     #[serde(default)]
     pub origin_coordinate: Coordinate2D,
     /// The value that a polygon burns into the pixels it covers

@@ -12249,11 +12249,11 @@
         "properties": {
           "spatialResolution": {
             "$ref": "#/components/schemas/SpatialResolution",
-            "description": "Spatial resolution of the output grid in x/y direction."
+            "description": "Spatial resolution of the output grid, i.e., the positive pixel size in x and y direction in units of the spatial reference of the source.\n\nThe columns of the grid run from west to east (increasing x) and the rows from north to south (decreasing y), i.e., the grid has the geo transform `(originCoordinate, x, -y)`.\nThis holds for every spatial reference, since coordinates are always given as x = easting/longitude and y = northing/latitude."
           },
           "originCoordinate": {
             "$ref": "#/components/schemas/Coordinate2D",
-            "description": "Origin coordinate to which the raster grid is aligned.\n\nIf omitted, the grid is aligned to `(0, 0)`."
+            "description": "Origin coordinate to which the raster grid is aligned.\n\nIt is a pixel corner, and the grid continues from it in all directions to cover the polygons.\nIf omitted, the grid is aligned to `(0, 0)`."
           },
           "value": {
             "$ref": "#/components/schemas/PolygonRasterizationValue",

@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolygonRasterizationParameters {
-    /// Spatial resolution of the output grid in x/y direction.
+    /// Spatial resolution of the output grid, i.e., the positive pixel size in x and y direction in units of the spatial reference of the source.  The columns of the grid run from west to east (increasing x) and the rows from north to south (decreasing y), i.e., the grid has the geo transform `(originCoordinate, x, -y)`. This holds for every spatial reference, since coordinates are always given as x = easting/longitude and y = northing/latitude.
     #[serde(rename = "spatialResolution")]
     pub spatial_resolution: Box<models::SpatialResolution>,
-    /// Origin coordinate to which the raster grid is aligned.  If omitted, the grid is aligned to `(0, 0)`.
+    /// Origin coordinate to which the raster grid is aligned.  It is a pixel corner, and the grid continues from it in all directions to cover the polygons. If omitted, the grid is aligned to `(0, 0)`.
     #[serde(rename = "originCoordinate", skip_serializing_if = "Option::is_none")]
     pub origin_coordinate: Option<Box<models::Coordinate2D>>,
     /// The value that a polygon burns into the pixels it covers.  If omitted, each covered pixel gets the value `1`.

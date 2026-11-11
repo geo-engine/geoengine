@@ -2232,11 +2232,15 @@ pub struct PolygonRasterization {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonRasterizationParameters {
-    /// Spatial resolution of the output grid in x/y direction.
+    /// Spatial resolution of the output grid, i.e., the positive pixel size in x and y direction in units of the spatial reference of the source.
+    ///
+    /// The columns of the grid run from west to east (increasing x) and the rows from north to south (decreasing y), i.e., the grid has the geo transform `(originCoordinate, x, -y)`.
+    /// This holds for every spatial reference, since coordinates are always given as x = easting/longitude and y = northing/latitude.
     #[schema(examples(json!({ "x": 0.1, "y": 0.1 })))]
     pub spatial_resolution: SpatialResolution,
     /// Origin coordinate to which the raster grid is aligned.
     ///
+    /// It is a pixel corner, and the grid continues from it in all directions to cover the polygons.
     /// If omitted, the grid is aligned to `(0, 0)`.
     #[schema(examples(json!({ "x": 0.0, "y": 0.0 })))]
     #[serde(default)]
