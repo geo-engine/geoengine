@@ -5,53 +5,66 @@
 //! polygons sharing an edge never both contain a pixel.
 
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
+use geoengine_datatypes::raster::{GeoTransform, GridShape2D, GridSize};
 use std::ops::Range;
 
-/// The pixel grid of one tile in world coordinates.
-///
-/// The pixel centers are at `origin + (idx + 0.5) * pixel_size` per axis.
-/// `pixel_size_y` is usually negative, i.e., rows go from north to south.
-#[derive(Debug, Clone, Copy)]
-pub struct PixelGrid {
-    pub origin: Coordinate2D,
-    pub pixel_size_x: f64,
-    pub pixel_size_y: f64,
-    pub rows: usize,
-    pub cols: usize,
+// The pixel grid of a tile is given by its `GeoTransform` and `GridShape2D`.
+// The pixel centers are at `origin + (idx + 0.5) * pixel_size` per axis.
+// The y pixel size is usually negative, i.e., rows go from north to south.
+
+/// The y coordinate of the pixel centers of `row`.
+fn row_center(geo_transform: &GeoTransform, row: usize) -> f64 {
+    geo_transform.origin_coordinate.y + (row as f64 + 0.5) * geo_transform.y_pixel_size().get()
 }
 
-impl PixelGrid {
-    /// The y coordinate of the pixel centers of `row`.
-    pub fn row_center(&self, row: usize) -> f64 {
-        self.origin.y + (row as f64 + 0.5) * self.pixel_size_y
-    }
+/// The fractional row index of the pixel center at `y`.
+fn row_index(geo_transform: &GeoTransform, y: f64) -> f64 {
+    (y - geo_transform.origin_coordinate.y) / geo_transform.y_pixel_size().get() - 0.5
+}
 
-    /// The rows whose pixel centers lie within the y extent of `bbox`.
-    pub fn rows_within(&self, bbox: &BoundingBox2D) -> Range<usize> {
-        let a = (bbox.upper_right().y - self.origin.y) / self.pixel_size_y - 0.5;
-        let b = (bbox.lower_left().y - self.origin.y) / self.pixel_size_y - 0.5;
-        index_range_within(a.min(b), a.max(b), self.rows)
-    }
+/// The fractional column index of the pixel center at `x`.
+fn col_index(geo_transform: &GeoTransform, x: f64) -> f64 {
+    (x - geo_transform.origin_coordinate.x) / geo_transform.x_pixel_size().get() - 0.5
+}
 
-    /// The columns whose pixel centers lie within the x extent of `bbox`.
-    pub fn cols_within(&self, bbox: &BoundingBox2D) -> Range<usize> {
-        let a = (bbox.lower_left().x - self.origin.x) / self.pixel_size_x - 0.5;
-        let b = (bbox.upper_right().x - self.origin.x) / self.pixel_size_x - 0.5;
-        index_range_within(a.min(b), a.max(b), self.cols)
-    }
+/// The rows of the grid whose pixel centers lie within the y extent of `bbox`.
+pub fn rows_within(
+    geo_transform: &GeoTransform,
+    shape: GridShape2D,
+    bbox: &BoundingBox2D,
+) -> Range<usize> {
+    let a = row_index(geo_transform, bbox.upper_right().y);
+    let b = row_index(geo_transform, bbox.lower_left().y);
+    index_range_within(a.min(b), a.max(b), shape.axis_size_y())
+}
 
-    /// The columns whose pixel centers `x_c` satisfy `x_start <= x_c < x_end`.
-    fn cols_of_span(&self, x_start: f64, x_end: f64) -> Range<usize> {
-        let a = (x_start - self.origin.x) / self.pixel_size_x - 0.5;
-        let b = (x_end - self.origin.x) / self.pixel_size_x - 0.5;
-        // for a negative pixel size, the order of the coordinates flips
-        let (from, to) = if self.pixel_size_x > 0. {
-            (a, b)
-        } else {
-            (b, a)
-        };
-        clamp_index_range(from.ceil(), to.ceil(), self.cols)
-    }
+/// The columns of the grid whose pixel centers lie within the x extent of `bbox`.
+pub fn cols_within(
+    geo_transform: &GeoTransform,
+    shape: GridShape2D,
+    bbox: &BoundingBox2D,
+) -> Range<usize> {
+    let a = col_index(geo_transform, bbox.lower_left().x);
+    let b = col_index(geo_transform, bbox.upper_right().x);
+    index_range_within(a.min(b), a.max(b), shape.axis_size_x())
+}
+
+/// The columns of the grid whose pixel centers `x_c` satisfy `x_start <= x_c < x_end`.
+fn cols_of_span(
+    geo_transform: &GeoTransform,
+    shape: GridShape2D,
+    x_start: f64,
+    x_end: f64,
+) -> Range<usize> {
+    let a = col_index(geo_transform, x_start);
+    let b = col_index(geo_transform, x_end);
+    // for a negative pixel size, the order of the coordinates flips
+    let (from, to) = if geo_transform.x_pixel_size().get() > 0. {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    clamp_index_range(from.ceil(), to.ceil(), shape.axis_size_x())
 }
 
 /// The integer indices `i` with `from <= i <= to`, clamped to `0..len`.
@@ -72,7 +85,8 @@ fn clamp_index_range(start: f64, end: f64, len: usize) -> Range<usize> {
 ///
 /// `crossings` is a scratch buffer to avoid allocations.
 pub fn row_spans<P, R>(
-    grid: &PixelGrid,
+    geo_transform: &GeoTransform,
+    shape: GridShape2D,
     row: usize,
     polygons: &[P],
     crossings: &mut Vec<f64>,
@@ -83,7 +97,7 @@ pub fn row_spans<P, R>(
 {
     spans.clear();
 
-    let y = grid.row_center(row);
+    let y = row_center(geo_transform, row);
 
     for polygon in polygons {
         crossings.clear();
@@ -101,7 +115,7 @@ pub fn row_spans<P, R>(
         crossings.sort_unstable_by(f64::total_cmp);
 
         for pair in crossings.as_chunks::<2>().0 {
-            let cols = grid.cols_of_span(pair[0], pair[1]);
+            let cols = cols_of_span(geo_transform, shape, pair[0], pair[1]);
             if !cols.is_empty() {
                 spans.push(cols);
             }
@@ -136,14 +150,11 @@ mod tests {
     use super::*;
 
     /// A 4×4 grid of unit pixels with its upper left corner at (0, 4).
-    fn grid() -> PixelGrid {
-        PixelGrid {
-            origin: Coordinate2D::new(0., 4.),
-            pixel_size_x: 1.,
-            pixel_size_y: -1.,
-            rows: 4,
-            cols: 4,
-        }
+    fn grid() -> (GeoTransform, GridShape2D) {
+        (
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 4.), 1., -1.),
+            GridShape2D::new([4, 4]),
+        )
     }
 
     fn ring(coords: &[(f64, f64)]) -> Vec<Coordinate2D> {
@@ -154,13 +165,23 @@ mod tests {
     }
 
     /// Renders the covered pixels as rows of `#` and `.`.
-    fn render(grid: &PixelGrid, polygons: &[Vec<Vec<Coordinate2D>>]) -> Vec<String> {
+    fn render(
+        (geo_transform, shape): &(GeoTransform, GridShape2D),
+        polygons: &[Vec<Vec<Coordinate2D>>],
+    ) -> Vec<String> {
         let mut crossings = Vec::new();
         let mut spans = Vec::new();
-        (0..grid.rows)
+        (0..shape.axis_size_y())
             .map(|row| {
-                row_spans(grid, row, polygons, &mut crossings, &mut spans);
-                let mut line = vec!['.'; grid.cols];
+                row_spans(
+                    geo_transform,
+                    *shape,
+                    row,
+                    polygons,
+                    &mut crossings,
+                    &mut spans,
+                );
+                let mut line = vec!['.'; shape.axis_size_x()];
                 for span in &spans {
                     for col in span.clone() {
                         assert_eq!(line[col], '.', "pixel covered twice");
@@ -250,16 +271,16 @@ mod tests {
 
     #[test]
     fn it_computes_rows_and_cols_within_a_bbox() {
-        let grid = grid();
+        let (geo_transform, shape) = grid();
         let bbox = BoundingBox2D::new_unchecked((0.5, 0.6).into(), (2.5, 3.5).into());
 
         // row centers 3.5, 2.5, 1.5, 0.5 → 3.5..=0.6 contains rows 0, 1, 2
-        assert_eq!(grid.rows_within(&bbox), 0..3);
+        assert_eq!(rows_within(&geo_transform, shape, &bbox), 0..3);
         // col centers 0.5, 1.5, 2.5, 3.5 → 0.5..=2.5 contains cols 0, 1, 2
-        assert_eq!(grid.cols_within(&bbox), 0..3);
+        assert_eq!(cols_within(&geo_transform, shape, &bbox), 0..3);
 
         let outside = BoundingBox2D::new_unchecked((5., 5.).into(), (6., 6.).into());
-        assert!(grid.rows_within(&outside).is_empty());
-        assert!(grid.cols_within(&outside).is_empty());
+        assert!(rows_within(&geo_transform, shape, &outside).is_empty());
+        assert!(cols_within(&geo_transform, shape, &outside).is_empty());
     }
 }

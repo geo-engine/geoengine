@@ -2,7 +2,7 @@
 
 mod scanline;
 
-use self::scanline::{PixelGrid, row_spans};
+use self::scanline::{cols_within, row_spans, rows_within};
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, InitializedVectorOperator, Operator, OperatorName,
@@ -460,7 +460,6 @@ impl<T: Pixel> QueryProcessor for PolygonRasterizationQueryProcessor<T> {
         let tile_infos = tiling_grid
             .generate_data_tiling_strategy()
             .tile_information_iterator_from_pixel_bounds(query.spatial_bounds());
-        let tiling_geo_transform = tiling_grid.tiling_geo_transform();
 
         let time_slices = self.time_query(query.time_interval(), ctx).await?;
 
@@ -474,7 +473,7 @@ impl<T: Pixel> QueryProcessor for PolygonRasterizationQueryProcessor<T> {
             })
             .try_flatten()
             .and_then(move |(time_slice, tile_info)| {
-                self.rasterize_tile(time_slice, tile_info, tiling_geo_transform, ctx)
+                self.rasterize_tile(time_slice, tile_info, ctx)
             });
 
         Ok(tiles.boxed())
@@ -521,24 +520,11 @@ impl<T: Pixel> PolygonRasterizationQueryProcessor<T> {
         &self,
         time_slice: TimeInterval,
         tile_info: TileInformation,
-        tiling_geo_transform: GeoTransform,
         ctx: &dyn QueryContext,
     ) -> Result<RasterTile2D<T>> {
         let shape = tile_info.tile_size_in_pixels();
-        let grid = PixelGrid {
-            origin: tiling_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(
-                tile_info.global_upper_left_pixel_idx(),
-            ),
-            pixel_size_x: tiling_geo_transform.x_pixel_size().get(),
-            pixel_size_y: tiling_geo_transform.y_pixel_size().get(),
-            rows: shape.axis_size_y(),
-            cols: shape.axis_size_x(),
-        };
 
-        let (values, cache_hint) = self
-            .shared
-            .burn_value(time_slice, tile_info, grid, ctx)
-            .await?;
+        let (values, cache_hint) = self.shared.burn_value(time_slice, tile_info, ctx).await?;
 
         let grid_array = match values {
             Some(values) => {
@@ -566,7 +552,6 @@ impl SharedQueryState {
         &self,
         time_slice: TimeInterval,
         tile_info: TileInformation,
-        grid: PixelGrid,
         ctx: &dyn QueryContext,
     ) -> Result<(Option<Vec<Option<f64>>>, CacheHint)> {
         let (aggregation, ignore_no_data) = match &self.value {
@@ -576,14 +561,13 @@ impl SharedQueryState {
                         ConstantAggregator((*value).into()),
                         time_slice,
                         tile_info,
-                        grid,
                         ctx,
                     )
                     .await;
             }
             BurnValue::Count => {
                 return self
-                    .burn(CountAggregator::default(), time_slice, tile_info, grid, ctx)
+                    .burn(CountAggregator::default(), time_slice, tile_info, ctx)
                     .await;
             }
             BurnValue::Attribute {
@@ -595,15 +579,8 @@ impl SharedQueryState {
 
         macro_rules! burn_attribute {
             ($aggregator:expr) => {
-                self.burn_attribute(
-                    $aggregator,
-                    ignore_no_data,
-                    time_slice,
-                    tile_info,
-                    grid,
-                    ctx,
-                )
-                .await
+                self.burn_attribute($aggregator, ignore_no_data, time_slice, tile_info, ctx)
+                    .await
             };
         }
 
@@ -630,21 +607,13 @@ impl SharedQueryState {
         ignore_no_data: bool,
         time_slice: TimeInterval,
         tile_info: TileInformation,
-        grid: PixelGrid,
         ctx: &dyn QueryContext,
     ) -> Result<(Option<Vec<Option<f64>>>, CacheHint)> {
         if ignore_no_data {
-            self.burn(aggregator, time_slice, tile_info, grid, ctx)
-                .await
+            self.burn(aggregator, time_slice, tile_info, ctx).await
         } else {
-            self.burn(
-                PropagateNoData(aggregator),
-                time_slice,
-                tile_info,
-                grid,
-                ctx,
-            )
-            .await
+            self.burn(PropagateNoData(aggregator), time_slice, tile_info, ctx)
+                .await
         }
     }
 
@@ -656,7 +625,6 @@ impl SharedQueryState {
         aggregator: A,
         time_slice: TimeInterval,
         tile_info: TileInformation,
-        grid: PixelGrid,
         ctx: &dyn QueryContext,
     ) -> Result<(Option<Vec<Option<f64>>>, CacheHint)> {
         let (vector_time, feature_time_filter) = match self.time {
@@ -696,7 +664,7 @@ impl SharedQueryState {
                     aggregator.as_ref(),
                     states,
                     &chunk,
-                    &grid,
+                    &tile_info,
                     feature_time_filter,
                     column.as_deref(),
                     ignore_no_data,
@@ -875,11 +843,14 @@ fn burn_chunk<A: PixelAggregator<f64>>(
     aggregator: &A,
     states: Option<Vec<A::State>>,
     chunk: &MultiPolygonCollection,
-    grid: &PixelGrid,
+    tile_info: &TileInformation,
     time_filter: Option<TimeInterval>,
     column: Option<&str>,
     ignore_no_data: bool,
 ) -> Result<Option<Vec<A::State>>> {
+    let geo_transform = &tile_info.tile_geo_transform();
+    let shape = tile_info.tile_size_in_pixels;
+
     let values: Option<Vec<Option<f64>>> = match column {
         Some(column) => Some(chunk.data(column)?.float_options_iter().collect()),
         None => None,
@@ -904,8 +875,8 @@ fn burn_chunk<A: PixelAggregator<f64>>(
         let Some(bbox) = geometry.bbox() else {
             continue;
         };
-        let rows = grid.rows_within(&bbox);
-        if rows.is_empty() || grid.cols_within(&bbox).is_empty() {
+        let rows = rows_within(geo_transform, shape, &bbox);
+        if rows.is_empty() || cols_within(geo_transform, shape, &bbox).is_empty() {
             continue;
         }
 
@@ -922,28 +893,38 @@ fn burn_chunk<A: PixelAggregator<f64>>(
 
     let mut states = states.unwrap_or_else(|| {
         std::iter::repeat_with(A::State::default)
-            .take(grid.rows * grid.cols)
+            .take(shape.number_of_elements())
             .collect()
     });
 
-    states.par_chunks_mut(grid.cols).enumerate().for_each_init(
-        || (Vec::new(), Vec::new()),
-        |(crossings, spans), (row, row_states)| {
-            for feature in &features {
-                if !feature.rows.contains(&row) {
-                    continue;
-                }
+    states
+        .par_chunks_mut(shape.axis_size_x())
+        .enumerate()
+        .for_each_init(
+            || (Vec::new(), Vec::new()),
+            |(crossings, spans), (row, row_states)| {
+                for feature in &features {
+                    if !feature.rows.contains(&row) {
+                        continue;
+                    }
 
-                row_spans(grid, row, feature.geometry.polygons(), crossings, spans);
+                    row_spans(
+                        geo_transform,
+                        shape,
+                        row,
+                        feature.geometry.polygons(),
+                        crossings,
+                        spans,
+                    );
 
-                for span in spans.iter() {
-                    for state in &mut row_states[span.clone()] {
-                        aggregator.add(state, feature.value);
+                    for span in spans.iter() {
+                        for state in &mut row_states[span.clone()] {
+                            aggregator.add(state, feature.value);
+                        }
                     }
                 }
-            }
-        },
-    );
+            },
+        );
 
     Ok(Some(states))
 }
