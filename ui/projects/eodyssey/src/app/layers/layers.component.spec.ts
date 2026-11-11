@@ -387,7 +387,7 @@ describe('LayersComponent', () => {
             expect(text()).toContain('1 area in view on this date.');
         });
 
-        it('offers the default date of the selected data source as featured date instead of switching to it', async () => {
+        it('offers the default date of the selected data source as example date instead of switching to it', async () => {
             fixture.detectChanges();
             await fixture.whenStable();
             const defaultTime = eodysseyLayerService.selectedDataSource()?.defaultTime;
@@ -396,9 +396,8 @@ describe('LayersComponent', () => {
             footprints().dateStatus.set('data');
             fixture.detectChanges();
             const element = fixture.nativeElement as HTMLElement;
-            const button = element.querySelector<HTMLButtonElement>('.featured-date')!;
-            expect(button.textContent).toContain('Featured:');
-            expect(element.querySelector('.featured-mark')).toBeNull();
+            const button = element.querySelector<HTMLButtonElement>('.example-date')!;
+            expect(button.textContent).toContain('Example date:');
             setTime.mockClear();
 
             button.click();
@@ -406,8 +405,7 @@ describe('LayersComponent', () => {
             expect(setTime).toHaveBeenCalledWith(new Time(new Date(defaultTime!)));
             footprints().time.set(new Time(new Date(defaultTime!)));
             fixture.detectChanges();
-            expect(element.querySelector('.featured-date')).toBeNull();
-            expect(element.querySelector('.date-status')?.textContent).toContain('Featured date');
+            expect(element.querySelector('.example-date')).toBeNull();
         });
 
         it('goes to the next date with data and remembers that the user chose the date', async () => {
