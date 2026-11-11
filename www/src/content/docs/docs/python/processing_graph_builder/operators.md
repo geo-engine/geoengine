@@ -736,3 +736,188 @@ def __init__(source: RasterOperator, model: str)
 ```
 
 Creates a new Onnx operator.
+
+## PolygonRasterizationValue Objects
+
+```python
+class PolygonRasterizationValue()
+```
+
+The value that a polygon burns into the pixels it covers.
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, value_dict: dict[str, Any]) -> PolygonRasterizationValue
+```
+
+Returns a value object from a dictionary.
+
+#### constant
+
+```python
+@classmethod
+def constant(cls, value: float) -> PolygonRasterizationValue
+```
+
+Each covered pixel gets the `value`.
+
+#### count
+
+```python
+@classmethod
+def count(cls) -> PolygonRasterizationValue
+```
+
+Each pixel gets the number of polygons that cover it.
+
+#### attribute
+
+```python
+@classmethod
+def attribute(cls,
+              column: str,
+              aggregation: PolygonRasterizationAggregation,
+              ignore_no_data: bool = True) -> PolygonRasterizationValue
+```
+
+Each pixel gets the value of a numeric column, aggregated over all polygons that cover it.
+
+If `ignore_no_data` is `False`, features with a null value make all pixels they cover no data.
+
+## PolygonRasterizationValueConstant Objects
+
+```python
+@dataclass
+class PolygonRasterizationValueConstant(PolygonRasterizationValue)
+```
+
+Each covered pixel gets the constant value.
+
+## PolygonRasterizationValueCount Objects
+
+```python
+@dataclass
+class PolygonRasterizationValueCount(PolygonRasterizationValue)
+```
+
+Each pixel gets the number of polygons that cover it.
+
+## PolygonRasterizationValueAttribute Objects
+
+```python
+@dataclass
+class PolygonRasterizationValueAttribute(PolygonRasterizationValue)
+```
+
+Each pixel gets the value of a numeric column, aggregated over all polygons that cover it.
+
+## PolygonRasterizationTime Objects
+
+```python
+class PolygonRasterizationTime()
+```
+
+How the time slices of the output raster are derived from the features.
+
+#### from\_dict
+
+```python
+@classmethod
+def from_dict(cls, time_dict: dict[str, Any]) -> PolygonRasterizationTime
+```
+
+Returns a time object from a dictionary.
+
+#### feature\_times
+
+```python
+@classmethod
+def feature_times(cls) -> PolygonRasterizationTime
+```
+
+Every start and end time of a feature is a slice boundary.
+
+#### regular
+
+```python
+@classmethod
+def regular(
+    cls,
+    granularity: TimeGranularity,
+    step: int = 1,
+    reference: datetime.datetime | np.datetime64 | None = None
+) -> PolygonRasterizationTime
+```
+
+Regular time slices of length `step`, aligned to `reference` (default: Unix epoch).
+
+#### ignore
+
+```python
+@classmethod
+def ignore(cls) -> PolygonRasterizationTime
+```
+
+All features are rasterized into one time slice that is valid forever.
+
+## PolygonRasterizationTimeFeatureTimes Objects
+
+```python
+@dataclass
+class PolygonRasterizationTimeFeatureTimes(PolygonRasterizationTime)
+```
+
+Every start and end time of a feature is a slice boundary.
+
+## PolygonRasterizationTimeRegular Objects
+
+```python
+@dataclass
+class PolygonRasterizationTimeRegular(PolygonRasterizationTime)
+```
+
+Regular time slices that contain all features whose time intersects them.
+
+## PolygonRasterizationTimeIgnore Objects
+
+```python
+@dataclass
+class PolygonRasterizationTimeIgnore(PolygonRasterizationTime)
+```
+
+All features are rasterized into one time slice that is valid forever.
+
+## PolygonRasterization Objects
+
+```python
+class PolygonRasterization(RasterOperator)
+```
+
+The `PolygonRasterization` operator, which rasterizes (multi) polygons.
+
+A pixel is covered by a polygon if its center lies inside the polygon.
+Pixels that are not covered by any polygon are no data.
+
+#### \_\_init\_\_
+
+```python
+def __init__(source: VectorOperator,
+             *,
+             spatial_resolution: tuple[float, float],
+             origin_coordinate: tuple[float, float] | None = None,
+             value: PolygonRasterizationValue | None = None,
+             output_type: Literal["U8", "U16", "U32", "U64", "I8", "I16",
+                                  "I32", "I64", "F32", "F64"] | None = None,
+             output_measurement: Measurement | None = None,
+             time: PolygonRasterizationTime | None = None)
+```
+
+Creates a new PolygonRasterization operator.
+
+`spatial_resolution` are the positive pixel sizes in x and y direction.
+The rows of the grid run from north to south, and `origin_coordinate` is a pixel corner
+to which the grid is aligned (default: `(0, 0)`).
+Omitted parameters use the defaults of the server, i.e., a constant value of `1` and
+time slices between the start and end times of the features.
