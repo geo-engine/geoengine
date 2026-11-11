@@ -1511,6 +1511,107 @@ impl From<GdalMultiBand> for geoengine_operators::source::GdalMultiBand {
     }
 }
 
+#[type_tag(value = "GdalMdMetaData")]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMdMetaData {
+    pub result_descriptor: RasterResultDescriptor,
+    /// The variables of the dataset; the index of a variable is its output band.
+    pub variables: Vec<MdVariable>,
+    /// whether the stored 0..360 degree coverage is re-presented as -180..180
+    pub wrap: bool,
+    /// Dataset-level TTL fallback used when no tile-level TTL is provided.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<CacheTtlSeconds>,
+}
+
+/// One variable of an MD dataset: its name and the role of each of its source dimensions.
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MdVariable {
+    /// unique within the dataset
+    pub name: String,
+    /// Required role for each source-array dimension, in source order.
+    pub axis_mapping: Vec<MdAxisMapping>,
+}
+
+/// The role of one source-array dimension in an MD raster read.
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy, ToSchema)]
+#[serde(tag = "role", rename_all = "camelCase")]
+pub enum MdAxisMapping {
+    X,
+    Y,
+    /// The z axis as time steps: every slice is one time step of the array.
+    Time,
+    /// A fixed index into a dimension that is not sliced (a band or level dimension).
+    Fixed {
+        index: i64,
+    },
+}
+
+impl From<MdAxisMapping> for geoengine_operators::source::MdAxisMapping {
+    fn from(value: MdAxisMapping) -> Self {
+        match value {
+            MdAxisMapping::X => Self::X,
+            MdAxisMapping::Y => Self::Y,
+            MdAxisMapping::Time => Self::Time,
+            MdAxisMapping::Fixed { index } => Self::Fixed { index },
+        }
+    }
+}
+
+impl From<geoengine_operators::source::MdAxisMapping> for MdAxisMapping {
+    fn from(value: geoengine_operators::source::MdAxisMapping) -> Self {
+        match value {
+            geoengine_operators::source::MdAxisMapping::X => Self::X,
+            geoengine_operators::source::MdAxisMapping::Y => Self::Y,
+            geoengine_operators::source::MdAxisMapping::Time => Self::Time,
+            geoengine_operators::source::MdAxisMapping::Fixed { index } => Self::Fixed { index },
+        }
+    }
+}
+
+impl From<geoengine_operators::source::MdVariable> for MdVariable {
+    fn from(value: geoengine_operators::source::MdVariable) -> Self {
+        Self {
+            name: value.name,
+            axis_mapping: value.axis_mapping.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<MdVariable> for geoengine_operators::source::MdVariable {
+    fn from(value: MdVariable) -> Self {
+        Self {
+            name: value.name,
+            axis_mapping: value.axis_mapping.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<geoengine_operators::source::GdalMdMetaData> for GdalMdMetaData {
+    fn from(value: geoengine_operators::source::GdalMdMetaData) -> Self {
+        Self {
+            r#type: Default::default(),
+            result_descriptor: value.result_descriptor.into(),
+            variables: value.variables.into_iter().map(Into::into).collect(),
+            wrap: value.wrap,
+            cache_ttl: value.cache_ttl.map(Into::into),
+        }
+    }
+}
+
+impl From<GdalMdMetaData> for geoengine_operators::source::GdalMdMetaData {
+    fn from(value: GdalMdMetaData) -> Self {
+        Self {
+            result_descriptor: value.result_descriptor.into(),
+            variables: value.variables.into_iter().map(Into::into).collect(),
+            wrap: value.wrap,
+            cache_ttl: value.cache_ttl.map(Into::into),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {

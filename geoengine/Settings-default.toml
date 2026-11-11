@@ -256,7 +256,7 @@ blas_threads = 1
 # Every worker process has its own caches, so the GDAL memory bound of the pool is about
 # number_of_processes * (GDAL_CACHEMAX + VSI_CACHE_SIZE + CPL_VSIL_CURL_CACHE_SIZE (default 16mb)).
 GDAL_DISABLE_READDIR_ON_OPEN = "EMPTY_DIR"
-CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr"
+CPL_VSIL_CURL_ALLOWED_EXTENSIONS = ".tif,.tiff,.TIF,.jp2,.ovr,.nc"
 CPL_VSIL_CURL_CHUNK_SIZE = "1048576" # 1mb TODO: need to tune this!
 VSI_CACHE = "TRUE"
 VSI_CACHE_SIZE = "67108864" # 64mb per open file; a worker keeps one file open

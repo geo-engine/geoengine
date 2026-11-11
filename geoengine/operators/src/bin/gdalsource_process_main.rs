@@ -5,8 +5,9 @@ use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::gdal_worker_process::{
     GdalDatasetParameters, OpenTelemetryConfig, WorkerConfig, WorkerLoggingConfig,
     process_common::{
-        GdalIpcBytePayload, GdalReadAdvise, GdalRequest, IpcChannelMessagePayload,
-        IpcChannelResult, IpcProcessError, IpcProcessRasterResult, WorkerRequest, WorkerResponse,
+        GdalHeaderKind, GdalIpcBytePayload, GdalIpcMdBytePayload, GdalReadAdvise, GdalReadKind,
+        GdalRequest, IpcChannelMessagePayload, IpcChannelResult, IpcProcessError,
+        IpcProcessRasterResult, WorkerRequest, WorkerResponse,
     },
     process_impl::{GdalDatasetHolder, GdalHandling, setup_client},
 };
@@ -92,6 +93,9 @@ fn set_gdal_process_global_options(options: &[(String, String)]) {
             tracing::warn!("Failed to set GDAL config option {key}={value}: {err}");
         }
     }
+    // Log what was applied: several of these are frozen at first /vsicurl/ use, so the only
+    // way to tell a tuning change took effect is to see it here rather than assume it.
+    tracing::info!(?options, "GDAL worker config options applied");
 }
 
 /// Initializes a tracing subscriber. Writes to stderr (filtered by `log_spec`) and,
@@ -267,16 +271,28 @@ fn handle_request(
         GdalRequest::Read {
             read_advise,
             data_type,
+            kind,
         } => raster_type_dispatch(
             &dataset_params,
             read_advise,
             data_type,
+            kind,
             dataset_cache,
             sender,
         ),
-        GdalRequest::Header => send_result(
+        GdalRequest::Header(GdalHeaderKind::Raster) => send_result(
             GdalHandling::load_raster_info_with_dataset_retry(dataset_cache, &dataset_params)
                 .map(IpcChannelResult::RasterInfo),
+            sender,
+        ),
+        GdalRequest::Header(GdalHeaderKind::MdArray { group, array_name }) => send_result(
+            GdalHandling::load_md_array_info_with_dataset_retry(
+                dataset_cache,
+                &dataset_params,
+                group.as_deref(),
+                &array_name,
+            )
+            .map(IpcChannelResult::MdArrayInfo),
             sender,
         ),
     }
@@ -286,13 +302,14 @@ fn raster_type_dispatch(
     dataset_params: &GdalDatasetParameters,
     read_advise: GdalReadAdvise,
     data_type: geoengine_datatypes::raster::RasterDataType,
+    kind: GdalReadKind,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
     use geoengine_datatypes::raster::RasterDataType as T;
     macro_rules! dispatch {
         ($t:ty) => {
-            read_and_send::<$t>(dataset_params, read_advise, dataset_cache, sender)
+            read_and_send::<$t>(dataset_params, read_advise, kind, dataset_cache, sender)
         };
     }
     match data_type {
@@ -349,16 +366,35 @@ fn run(token: Token) {
 fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     dataset_params: &GdalDatasetParameters,
     read_advise: GdalReadAdvise,
+    kind: GdalReadKind,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
-    let result = GdalHandling::load_tile_data_with_dataset_retry::<T>(
-        dataset_cache,
-        dataset_params,
-        read_advise,
-    )
-    .and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into))
-    .map(IpcChannelResult::Raster);
+    let result = match kind {
+        GdalReadKind::Raster => GdalHandling::load_tile_data_with_dataset_retry::<T>(
+            dataset_cache,
+            dataset_params,
+            read_advise,
+        )
+        .and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into))
+        .map(IpcChannelResult::Raster),
+        GdalReadKind::MdArray {
+            group,
+            array_name,
+            z_index,
+            axis_mapping,
+        } => GdalHandling::load_md_tile_data_with_dataset_retry::<T>(
+            dataset_cache,
+            dataset_params,
+            read_advise,
+            group.as_deref(),
+            &array_name,
+            z_index,
+            &axis_mapping,
+        )
+        .and_then(|payload| GdalIpcMdBytePayload::try_from(payload).map_err(Into::into))
+        .map(IpcChannelResult::MdSlice),
+    };
 
     send_result(result, sender)
 }
@@ -369,6 +405,13 @@ fn send_result(
     sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
     // Propagate channel send errors directly up out of the handler
+    if let Err(err) = &result {
+        // This is the only place the real cause survives. The parent wraps it into
+        // `GdalProcessPoolError`, whose `Display` is just the variant name, so the error that
+        // reaches the client says nothing about *why* the read failed - and the caller's span
+        // (`gdal_worker_read_tile`) carries the read id, dataset and band this happened on.
+        tracing::error!(error = ?err, "gdal worker read failed");
+    }
     sender.send(WorkerResponse::ReadResult(result))?;
 
     Ok(())
