@@ -22,27 +22,28 @@ export function calendarCellRange(date: Date, view: MatCalendarView): TimeRange 
     }
 }
 
+const CELL_WITH_DATA_CLASS = 'geoengine-calendar-cell-with-data';
+const CELL_WITH_DATA_CONTINUED_CLASS = 'geoengine-calendar-cell-with-data-continued';
+const CELL_BAND_AFTER_CLASS = 'geoengine-calendar-cell-band-after';
+
 /**
- * Whether a time step with data overlaps the calendar cell. A step can be valid for many days, and then
- * marks every day it covers, as a day, month or year cell.
+ * The classes of a calendar cell, which the styles of the calendar header turn into a disc on the day a time
+ * step starts and a band over the days it goes on. A step can be valid for many days, and then marks every
+ * day, month or year cell it overlaps.
  */
-export function cellHasData(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView): boolean {
+export function cellClasses(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView): string[] {
     const cell = calendarCellRange(date, view);
-    return steps.some((step) => step.status === TimeStepFootprintStatus.Data && step.time.start < cell.end && step.time.end > cell.start);
-}
-
-/** Whether a time step with data starts in the calendar cell, as opposed to only reaching into it from before. */
-export function cellHasStepStart(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView): boolean {
-    const cell = calendarCellRange(date, view);
-    return steps.some(
-        (step) => step.status === TimeStepFootprintStatus.Data && step.time.start >= cell.start && step.time.start < cell.end,
-    );
-}
-
-/** Whether a time step with data goes on after the calendar cell, so a band continues into the next cell. */
-export function cellHasStepAfter(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView): boolean {
-    const cell = calendarCellRange(date, view);
-    return steps.some((step) => step.status === TimeStepFootprintStatus.Data && step.time.start < cell.end && step.time.end > cell.end);
+    let hasData = false;
+    let starts = false;
+    let goesOn = false;
+    for (const step of steps) {
+        if (step.status !== TimeStepFootprintStatus.Data || step.time.start >= cell.end || step.time.end <= cell.start) continue;
+        hasData = true;
+        starts ||= step.time.start >= cell.start;
+        goesOn ||= step.time.end > cell.end;
+    }
+    if (!hasData) return [];
+    return [starts ? CELL_WITH_DATA_CLASS : CELL_WITH_DATA_CONTINUED_CLASS, ...(goesOn ? [CELL_BAND_AFTER_CLASS] : [])];
 }
 
 /**
