@@ -12,7 +12,7 @@ const STRIPE_WIDTH = 3;
  * Diagonal stripes over the faded accent color. The map stays readable through them, and boxes that
  * overlap are told apart from one big box by the stripes meeting.
  */
-function stripePattern(fill: string, stripe: string): CanvasPattern | undefined {
+function stripePattern(fill: string | undefined, stripe: string, stripeAlpha: number): CanvasPattern | undefined {
     const ratio = window.devicePixelRatio || 1;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = STRIPE_PERIOD * ratio;
@@ -20,8 +20,11 @@ function stripePattern(fill: string, stripe: string): CanvasPattern | undefined 
     if (!context) return undefined;
 
     context.scale(ratio, ratio);
-    context.fillStyle = fill;
-    context.fillRect(0, 0, STRIPE_PERIOD, STRIPE_PERIOD);
+    if (fill) {
+        context.fillStyle = fill;
+        context.fillRect(0, 0, STRIPE_PERIOD, STRIPE_PERIOD);
+    }
+    context.globalAlpha = stripeAlpha;
     context.strokeStyle = stripe;
     context.lineWidth = STRIPE_WIDTH;
     // three segments, so the stripe is continuous across the edges of the pattern tile
@@ -38,14 +41,19 @@ function stripePattern(fill: string, stripe: string): CanvasPattern | undefined 
     return pattern ?? undefined;
 }
 
-/** The theme's accent colors, which are CSS variables of the app. */
-export function overlayStyle(): Style {
+/**
+ * The theme's accent colors, which are CSS variables of the app. The light style has only faint stripes and an
+ * outline, so imagery below the boxes stays readable.
+ */
+export function overlayStyle(light: boolean): Style {
     const css = getComputedStyle(document.documentElement);
     const color = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
     const accent = color('--geoengine-accent-color', '#ffc107');
     const faded = color('--geoengine-faded-accent-color', 'rgba(255, 193, 7, 0.32)');
     return new Style({
-        fill: new Fill({color: stripePattern(faded, accent) ?? faded}),
+        fill: new Fill({
+            color: (light ? stripePattern(undefined, accent, 0.45) : stripePattern(faded, accent, 1)) ?? (light ? 'transparent' : faded),
+        }),
         stroke: new Stroke({color: accent, width: 2}),
     });
 }

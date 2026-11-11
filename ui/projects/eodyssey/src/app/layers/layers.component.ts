@@ -132,13 +132,12 @@ import {EOdysseyLayerService} from './layers.service';
                     <mat-spinner [diameter]="16"></mat-spinner>
                     Checking for scenes…
                 </p>
-            } @else if (footprintsService.dateStatus() === 'data') {
-                <p class="catalogue-message" role="status">Scenes in view on {{ formattedTime() }}.</p>
-            } @else if (footprintsService.dateStatus() === 'empty') {
-                <p class="catalogue-message" role="status">No scenes in view on {{ formattedTime() }}.</p>
+            } @else if (scenesText(); as text) {
+                <p class="catalogue-message" role="status">{{ text }}</p>
             }
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
-                Show scene coverage on map
+                <span class="stripe-swatch" aria-hidden="true"></span>
+                Show scenes of this date on the map
             </mat-checkbox>
         </section>
         <mat-divider></mat-divider>
@@ -264,6 +263,20 @@ import {EOdysseyLayerService} from './layers.service';
                 font-size: $text2;
                 line-height: 1.5;
                 color: var(--geoengine-foreground-secondary-text-color);
+            }
+
+            .stripe-swatch {
+                display: inline-block;
+                width: 0.9rem;
+                height: 0.9rem;
+                margin-right: 0.4rem;
+                vertical-align: text-bottom;
+                border: 1px solid var(--geoengine-accent-color);
+                background: repeating-linear-gradient(
+                    45deg,
+                    var(--geoengine-accent-color) 0 2px,
+                    var(--geoengine-faded-accent-color) 2px 5px
+                );
             }
 
             .coverage-status {
@@ -504,6 +517,22 @@ export class LayersComponent {
     });
 
     readonly autoSelectTime = this.eodysseyLayerService.autoSelectTime;
+    /** What is known about the scenes of the date in view: the boxes of the overlay if it is on, else the calendar window. */
+    readonly scenesText = computed<string | undefined>(() => {
+        const date = this.formattedTime();
+        const areas = this.footprintsService.overlayVisible() ? this.footprintsService.overlayAreaCount() : undefined;
+        if (areas !== undefined) {
+            return areas === 0 ? `No scenes in view on ${date}.` : `${areas} scene ${areas === 1 ? 'area' : 'areas'} in view on ${date}.`;
+        }
+        switch (this.footprintsService.dateStatus()) {
+            case 'data':
+                return `Scenes in view on ${date}.`;
+            case 'empty':
+                return `No scenes in view on ${date}.`;
+            default:
+                return undefined;
+        }
+    });
     /** The arrows go to the next date with data when it is known, else by one time step. */
     readonly backwardsLabel = computed(() =>
         this.footprintsService.dateWithData(-1)
