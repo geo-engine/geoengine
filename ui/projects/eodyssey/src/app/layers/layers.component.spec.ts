@@ -756,7 +756,7 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         fixture.detectChanges();
         const element = fixture.nativeElement as HTMLElement;
-        const button = [...element.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Apply visualization'))!;
+        const button = element.querySelector<HTMLButtonElement>('.apply-visualization')!;
         expect(eodysseyLayerService.dataSources().map((source) => source.key)).toEqual(['sentinel']);
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
         expect(eodysseyLayerService.selectedPresetKey()).toBe('Default');
@@ -918,6 +918,29 @@ describe('LayersComponent', () => {
         expect(setTime).not.toHaveBeenCalled();
     });
 
+    it('labels the apply button by what it does and says what is on the map', async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        eodysseyLayerService.setSelectedPreset(eodysseyLayerService.currentPresets()[0].key);
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        const button = (): HTMLButtonElement => element.querySelector<HTMLButtonElement>('.apply-visualization')!;
+        const name = eodysseyLayerService.selectedPreset()!.displayName;
+        expect(button().textContent).toContain(`Show ${name} on map`);
+        expect(element.textContent).toContain('Nothing on the map yet.');
+
+        fixture.componentInstance.applySelectedPreset();
+        fixture.detectChanges();
+        expect(button().textContent).toContain('On map');
+        expect(button().disabled).toBe(true);
+        expect(element.textContent).toContain(`On map: ${name}`);
+
+        eodysseyLayerService.removeVisualization();
+        fixture.detectChanges();
+        expect(button().textContent).toContain(`Show ${name} on map`);
+        expect(element.textContent).toContain('Nothing on the map yet.');
+    });
+
     it('removes the visualization from the map without resetting the time when it is applied again', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
@@ -926,7 +949,7 @@ describe('LayersComponent', () => {
         fixture.detectChanges();
         await fixture.whenStable();
         expect(eodysseyLayerService.mapTileLayer()).toBeDefined();
-        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Remove visualization');
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Remove from map');
 
         setTime.mockClear();
         eodysseyLayerService.removeVisualization();
@@ -934,7 +957,7 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
         expect(eodysseyLayerService.canApplyPreset()).toBe(true);
-        expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Remove visualization');
+        expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Remove from map');
 
         fixture.componentInstance.applySelectedPreset();
         expect(eodysseyLayerService.mapTileLayer()).toBeDefined();

@@ -82,6 +82,7 @@ export class EOdysseyLayerService {
      */
     private readonly timeSource = signal<DataSourceDefinition | undefined>(undefined);
     readonly dataSourceOfTime = this.timeSource.asReadonly();
+    readonly appliedPreset = computed(() => this.appliedVisualization()?.preset);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();
