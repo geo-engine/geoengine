@@ -134,12 +134,17 @@ import {EOdysseyLayerService} from './layers.service';
             } @else if (scenesText(); as text) {
                 <p class="catalogue-message" role="status">{{ text }}</p>
             }
+            @if (suggestedDate(); as suggestion) {
+                <p class="catalogue-message suggested-date">
+                    Suggested date:
+                    <button mat-button type="button" [matTooltip]="'Default date of ' + suggestion.source" (click)="useSuggestedDate()">
+                        Go to {{ suggestion.text }}
+                    </button>
+                </p>
+            }
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
                 <span class="stripe-swatch" aria-hidden="true"></span>
                 Show scenes of this date on the map
-            </mat-checkbox>
-            <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">
-                Use the default date of the data source when showing it
             </mat-checkbox>
         </section>
         <mat-divider></mat-divider>
@@ -271,6 +276,13 @@ import {EOdysseyLayerService} from './layers.service';
                 font-size: $text2;
                 line-height: 1.5;
                 color: var(--geoengine-foreground-secondary-text-color);
+            }
+
+            .suggested-date {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 0.25rem;
             }
 
             .stripe-swatch {
@@ -531,7 +543,14 @@ export class LayersComponent {
         return time.start.toDate();
     });
 
-    readonly autoSelectTime = this.eodysseyLayerService.autoSelectTime;
+    /** The default date of the selected data source, suggested while the date field shows another one. */
+    readonly suggestedDate = computed<{source: string; text: string; time: Time} | undefined>(() => {
+        const source = this.eodysseyLayerService.selectedDataSource();
+        const current = this.currentTime();
+        if (!source?.defaultTime || !current || current.start.valueOf() === source.defaultTime) return undefined;
+        const time = new Time(new Date(source.defaultTime));
+        return {source: source.name, text: time.start.format('DD.MM.YYYY'), time};
+    });
     /** The apply button says what it does: show the selected preset, switch to it, or that it is on the map. */
     readonly applyLabel = computed(() => {
         const selected = this.eodysseyLayerService.selectedPreset();
@@ -614,11 +633,14 @@ export class LayersComponent {
         inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
     }
 
-    private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
-        if (this.autoSelectTime() && !this.eodysseyLayerService.userChoseTime() && dataSource.defaultTime) {
-            await this.projectService.setTime(new Time(new Date(dataSource.defaultTime)));
-        }
+    /** The time step of a data source is applied with it, the date is only suggested, see `suggestedDate`. */
+    private applyDataSourceTimeStep(dataSource: DataSourceDefinition): void {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
+    }
+
+    async useSuggestedDate(): Promise<void> {
+        const suggestion = this.suggestedDate();
+        if (suggestion) await this.projectService.setTime(suggestion.time);
     }
 
     applySelectedPreset(): void {
@@ -627,7 +649,7 @@ export class LayersComponent {
         const source = this.eodysseyLayerService.selectedDataSource();
         const sourceChanged = source !== this.eodysseyLayerService.dataSourceOfTime();
         this.eodysseyLayerService.applySelectedPreset();
-        if (source && sourceChanged) void this.applyDataSourceTime(source);
+        if (source && sourceChanged) this.applyDataSourceTimeStep(source);
     }
 
     async timeForward(): Promise<void> {
@@ -648,12 +670,7 @@ export class LayersComponent {
             direction === 1
                 ? time.add(timeStepDuration.durationAmount, timeStepDuration.durationUnit)
                 : time.subtract(timeStepDuration.durationAmount, timeStepDuration.durationUnit);
-        await this.setTime(this.footprintsService.dateWithData(direction) ?? step);
-    }
-
-    private async setTime(time: Time): Promise<void> {
-        this.eodysseyLayerService.userChoseTime.set(true);
-        await this.projectService.setTime(time);
+        await this.projectService.setTime(this.footprintsService.dateWithData(direction) ?? step);
     }
 
     async setDate(event: MatDatepickerInputEvent<Date>): Promise<void> {
@@ -670,6 +687,6 @@ export class LayersComponent {
 
     private async setCalendarDate(date: Date): Promise<void> {
         const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        await this.setTime(new Time(utcDate));
+        await this.projectService.setTime(new Time(utcDate));
     }
 }

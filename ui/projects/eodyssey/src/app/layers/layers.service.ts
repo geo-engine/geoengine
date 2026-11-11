@@ -72,10 +72,6 @@ export class EOdysseyLayerService {
     });
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
-    /** Whether applying another data source sets the time to the default time of that data source. */
-    readonly autoSelectTime = signal<boolean>(true);
-    /** The user picked a date for the selected data source, so applying it keeps that date. Starts over with another data source. */
-    readonly userChoseTime = linkedSignal({source: () => this.selectedDataSource(), computation: () => false});
     /**
      * The data source whose default time and time step were set last. Removing the visualization keeps it, so
      * applying the same data source again does not reset the time the user chose since.
