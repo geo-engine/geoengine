@@ -2,16 +2,16 @@
 //! blocks through the raster cache.
 //!
 //! A local range server serves generated files to the GDAL workers via `/vsicurl/` and waits
-//! `WP7_BENCH_LATENCY_MS` (default 20) before each answer, like an object store:
+//! `GEOENGINE_BENCH_LATENCY_MS` (default 20) before each answer, like an object store:
 //! - a Sentinel-2 like COG: 10 980² `u16`, DEFLATE, 1 024 px blocks, overviews 2 to 16;
-//! - if `WP7_BENCH_JP2` is set, a JP2 granule of the same size in 1 024 px tiles with TLM
+//! - if `GEOENGINE_BENCH_JP2` is set, a JP2 granule of the same size in 1 024 px tiles with TLM
 //!   markers, opened with and without `USE_TILE_AS_BLOCK=YES`. Needs the `JP2OpenJPEG` driver,
 //!   and the encoder holds the granule in memory once (about 1 GB) when it is generated.
 //!
-//! `WP7_BENCH_SMALL` uses 2 048² files, so that a run takes seconds (CI).
+//! With `GEOENGINE_BENCH_CI` (see `common`), the files are 2 048², so that a run takes seconds.
 //! The files are written once to `CARGO_TARGET_TMPDIR`.
 //!
-//! If `WP7_BENCH_DATA` is a directory with real Sentinel-2 L2A bands, the bench serves those
+//! If `GEOENGINE_BENCH_DATA` is a directory with real Sentinel-2 L2A bands, the bench serves those
 //! instead. They are from tile 30UVD, 2026-11-02
 //! (<https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items/S2B_30UVD_20261102_0_L2A>):
 //! - `B04.tif`, `B08.tif`, `SCL.tif` from
@@ -29,19 +29,20 @@
 //! times further out. They print
 //! the time from the start of a view to its first tile and to the median, p99 and last tile.
 //!
-//! - `WP7_BENCH_CASES`: comma separated case names to run, default all. Use it rather than a
+//! The pool, the runtime and the GDAL options of the workers come from the server settings, as in
+//! the other benches (`common`), e.g. `GEOENGINE__GDAL_PROCESS_POOL__MAX_DATASET_PROCESSES=4` or
+//! `GEOENGINE__GDAL_PROCESS_POOL__WORKER__GDAL_CONFIG_OPTIONS__CPL_VSIL_CURL_CHUNK_SIZE=262144`.
+//!
+//! - `GEOENGINE_BENCH_CASES`: comma separated case names to run, default all. Use it rather than a
 //!   criterion filter, which still does the untimed run of every case.
-//! - `WP7_BENCH_MODES`: comma separated modes to run, default both. For remote files, to bound the
+//! - `GEOENGINE_BENCH_MODES`: comma separated modes to run, default both. For remote files, to bound the
 //!   traffic.
-//! - `WP7_BENCH_CACHE_MB`: the size of the raster cache, default 2 GiB. The bench prints its peak
+//! - `GEOENGINE_BENCH_CACHE_MB`: the size of the raster cache, default 2 GiB. The bench prints its peak
 //!   memory at the end.
-//! - `WP7_BENCH_POOL`: the worker pool as `processes,active,per dataset`, default `32,16,8`.
-//! - `WP7_BENCH_GDAL_CONFIG`: GDAL config options of the workers as `KEY=VALUE,KEY=VALUE`, set
-//!   after the server defaults, e.g. `CPL_VSIL_CURL_CHUNK_SIZE=262144`.
-//! - `WP7_BENCH_REMOTE_JP2`, `WP7_BENCH_REMOTE_TIF`: read the files with that extension from this
+//! - `GEOENGINE_BENCH_REMOTE_JP2`, `GEOENGINE_BENCH_REMOTE_TIF`: read the files with that extension from this
 //!   base URL instead of the local server, with their metadata from the local copies. The local
 //!   server then counts no GETs and bytes for them.
-//! - `WP7_BENCH_ROUNDS`: run each mode this many times, cold and then warm, plus one cold run for
+//! - `GEOENGINE_BENCH_ROUNDS`: run each mode this many times, cold and then warm, plus one cold run for
 //!   the hash, instead of letting criterion pick. For remote files, to bound the traffic.
 //!
 //! Modes: `window` queries without the raster cache, `block` with it.
@@ -63,33 +64,30 @@
     reason = "okay in benchmarks"
 )]
 
-mod util;
+mod common;
 
+use common::{Env, range_server::RangeServer};
 use criterion::{Criterion, criterion_group, criterion_main};
 use futures::StreamExt;
 use gdal::{DriverManager, raster::Buffer, raster::RasterCreationOptions, spatial_ref::SpatialRef};
 use geoengine_datatypes::{
-    dataset::{DataId, DatasetId, NamedData},
+    dataset::{DatasetId, NamedData},
     primitives::{BandSelection, CacheTtlSeconds, RasterQueryRectangle, TimeInterval},
-    raster::{
-        GridBoundingBox2D, GridBoundingBoxExt, GridBounds, GridOrEmpty, GridShape2D, Pixel,
-        RasterTile2D, TilingSpecification,
-    },
-    util::{Identifier, test::TestDefault},
+    raster::{GridBoundingBox2D, GridBoundingBoxExt, GridBounds, GridOrEmpty, Pixel, RasterTile2D},
+    util::Identifier,
 };
 use geoengine_operators::{
     cache::new_raster_cache::{CacheStats, NewRasterCacheEnum},
     engine::{
-        BoxRasterQueryProcessor, ChunkByteSize, InitializedRasterOperator, MetaData,
-        MockExecutionContext, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
-        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-        StaticMetaData, TimeDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
+        BoxRasterQueryProcessor, InitializedRasterOperator, MetaData, ProcessingGraphOperatorPath,
+        QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+        RasterResultDescriptor, StaticMetaData, TimeDescriptor, TypedRasterOperator,
+        TypedRasterQueryProcessor,
     },
     source::{
         GdalMetaDataStatic, GdalProcessPool, GdalSource, GdalSourceParameters,
         MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
-        MultiBandGdalSourceParameters, TileFile,
-        gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, PoolRequestStats, WorkerConfig},
+        MultiBandGdalSourceParameters, TileFile, gdal_worker_process::PoolRequestStats,
     },
     util::gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
 };
@@ -104,11 +102,9 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use util::range_server::RangeServer;
 
 const DEFAULT_SIZE: usize = 10_980;
 const SMALL_SIZE: usize = 2_048;
-const BLOCK_SIZE: usize = 1_024;
 const SCL_SIZE: usize = 5_490;
 const WRITE_ROWS: usize = 512;
 const RANDOM_WINDOWS: usize = 100;
@@ -121,7 +117,7 @@ const VIEW_CONCURRENCY: usize = 16;
 const CACHE_BYTES: usize = 2 << 30;
 
 fn file_size() -> usize {
-    if std::env::var_os("WP7_BENCH_SMALL").is_some() {
+    if common::ci() {
         SMALL_SIZE
     } else {
         DEFAULT_SIZE
@@ -182,7 +178,7 @@ fn generate(file_name: &str, driver: &str, options: &[(&str, &str)]) -> PathBuf 
 
 fn cog() -> PathBuf {
     generate(
-        "wp7_cog.tif",
+        "cog.tif",
         "COG",
         &[
             ("COMPRESS", "DEFLATE"),
@@ -194,7 +190,7 @@ fn cog() -> PathBuf {
 
 fn jp2() -> PathBuf {
     generate(
-        "wp7_granule.jp2",
+        "granule.jp2",
         "JP2OpenJPEG",
         &[
             ("BLOCKXSIZE", "1024"),
@@ -209,7 +205,7 @@ fn jp2() -> PathBuf {
 fn vsicurl_path(server: &RangeServer, file: &Path) -> String {
     let name = file.file_name().unwrap().to_str().unwrap();
     let extension = file.extension().unwrap().to_str().unwrap().to_uppercase();
-    match std::env::var(format!("WP7_BENCH_REMOTE_{extension}")) {
+    match std::env::var(format!("GEOENGINE_BENCH_REMOTE_{extension}")) {
         Ok(base) => format!("/vsicurl/{base}/{name}"),
         Err(_) => server.vsicurl_path(name),
     }
@@ -218,7 +214,7 @@ fn vsicurl_path(server: &RangeServer, file: &Path) -> String {
 /// Registers `file`, served by `server`, as a `GdalSource` dataset. Returns its name and the
 /// largest overview level it declares.
 fn add_dataset(
-    exec_ctxs: &mut [MockExecutionContext],
+    env: &mut Env,
     server: &RangeServer,
     file: &Path,
     open_options: Option<Vec<String>>,
@@ -232,20 +228,15 @@ fn add_dataset(
         .max_overview_level()
         .unwrap_or(1);
 
-    let name = NamedData::with_system_name(format!("wp7_{}", DatasetId::new()));
-    let id = DataId::from(DatasetId::new());
-    for exec_ctx in exec_ctxs {
-        exec_ctx.add_meta_data(
-            id.clone(),
-            name.clone(),
-            Box::new(GdalMetaDataStatic {
-                time: Some(TimeInterval::default()),
-                params: params.clone(),
-                result_descriptor: result_descriptor.clone(),
-                cache_ttl: None,
-            }),
-        );
-    }
+    let name = env.add_data(
+        &format!("file_{}", DatasetId::new()),
+        Box::new(GdalMetaDataStatic {
+            time: Some(TimeInterval::default()),
+            params,
+            result_descriptor,
+            cache_ttl: None,
+        }),
+    );
     (name, max_overview_level)
 }
 
@@ -259,7 +250,7 @@ fn source(name: &NamedData, overview_level: Option<u32>) -> TypedRasterOperator 
 /// Registers one file per band, served by `server`, as a `MultiBandGdalSource` dataset. The
 /// files must share their grid.
 fn add_multi_band_dataset(
-    exec_ctxs: &mut [MockExecutionContext],
+    env: &mut Env,
     server: &RangeServer,
     files: &[PathBuf],
     open_option: Option<&str>,
@@ -298,27 +289,22 @@ fn add_multi_band_dataset(
         })
         .collect();
 
-    let name = NamedData::with_system_name(format!("wp7_{}", DatasetId::new()));
-    let id = DataId::from(DatasetId::new());
-    for exec_ctx in exec_ctxs {
-        let meta_data: Box<
-            dyn MetaData<
-                    MultiBandGdalLoadingInfo,
-                    RasterResultDescriptor,
-                    MultiBandGdalLoadingInfoQueryRectangle,
-                >,
-        > = Box::new(StaticMetaData {
-            loading_info: MultiBandGdalLoadingInfo::new(
-                vec![TimeInterval::default()],
-                tile_files.clone(),
-                None,
-            ),
-            result_descriptor: result_descriptor.clone(),
-            phantom: PhantomData,
-        });
-        exec_ctx.add_meta_data(id.clone(), name.clone(), meta_data);
-    }
-    name
+    let meta_data: Box<
+        dyn MetaData<
+                MultiBandGdalLoadingInfo,
+                RasterResultDescriptor,
+                MultiBandGdalLoadingInfoQueryRectangle,
+            >,
+    > = Box::new(StaticMetaData {
+        loading_info: MultiBandGdalLoadingInfo::new(
+            vec![TimeInterval::default()],
+            tile_files,
+            None,
+        ),
+        result_descriptor,
+        phantom: PhantomData,
+    });
+    env.add_data(&format!("files_{}", DatasetId::new()), meta_data)
 }
 
 fn multi_band_source(name: &NamedData) -> TypedRasterOperator {
@@ -361,21 +347,6 @@ impl ViewTimes {
         );
         *self = Self::default();
     }
-}
-
-/// `WP7_BENCH_GDAL_CONFIG` as pairs.
-fn gdal_config_from_env() -> Vec<(String, String)> {
-    std::env::var("WP7_BENCH_GDAL_CONFIG")
-        .unwrap_or_default()
-        .split(',')
-        .filter(|pair| !pair.is_empty())
-        .map(|pair| {
-            let (key, value) = pair
-                .split_once('=')
-                .expect("WP7_BENCH_GDAL_CONFIG pairs are KEY=VALUE");
-            (key.to_string(), value.to_string())
-        })
-        .collect()
 }
 
 /// User and system time of the child processes.
@@ -467,7 +438,7 @@ impl Counts {
 
 /// Runs the queries one after another and returns a hash of all tiles.
 async fn run(
-    exec_ctx: &MockExecutionContext,
+    env: &Env,
     source: TypedRasterOperator,
     bands: u32,
     query: &Query,
@@ -476,12 +447,12 @@ async fn run(
     view_times: &Mutex<ViewTimes>,
 ) -> u64 {
     let processor = source
-        .initialize(ProcessingGraphOperatorPath::initialize_root(), exec_ctx)
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &env.exe_ctx)
         .await
         .unwrap();
     let scene = processor
         .result_descriptor()
-        .tiling_grid_definition(exec_ctx.tiling_specification)
+        .tiling_grid_definition(env.exe_ctx.inner.tiling_specification)
         .tiling_grid_bounds();
     let processor = processor.query_processor().unwrap();
 
@@ -493,7 +464,7 @@ async fn run(
             .collect()
     };
     let new_query_ctx = || {
-        let mut query_ctx = exec_ctx.mock_query_context(ChunkByteSize::test_default());
+        let mut query_ctx = env.new_query_ctx();
         query_ctx.new_raster_cache.clone_from(&cache);
         query_ctx
     };
@@ -716,17 +687,15 @@ fn views(size: usize, moves: isize, aligned: bool) -> Vec<Vec<GridBoundingBox2D>
 
 struct Case {
     name: String,
-    exec_ctx_idx: usize,
     source: TypedRasterOperator,
     bands: u32,
     query: Query,
 }
 
 impl Case {
-    fn new(name: String, tile_size: usize, source: TypedRasterOperator, query: Query) -> Self {
+    fn new(name: String, source: TypedRasterOperator, query: Query) -> Self {
         Self {
             name,
-            exec_ctx_idx: usize::from(tile_size == BLOCK_SIZE),
             source,
             bands: 1,
             query,
@@ -738,24 +707,16 @@ impl Case {
     }
 }
 
-/// Whole scenes in both tile sizes, random windows and the declared overview levels 2 and 4.
+/// The whole scene, random windows and the declared overview levels 2 and 4.
 fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usize) -> Vec<Case> {
     let mut cases = vec![
         Case::new(
             format!("{prefix}/scene_512"),
-            512,
-            source(data, None),
-            Query::Scene,
-        ),
-        Case::new(
-            format!("{prefix}/scene_1024"),
-            BLOCK_SIZE,
             source(data, None),
             Query::Scene,
         ),
         Case::new(
             format!("{prefix}/windows_256"),
-            512,
             source(data, None),
             Query::Windows(random_windows(size, RANDOM_WINDOWS)),
         ),
@@ -764,7 +725,6 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
     if max_overview_level >= 4 {
         cases.push(Case::new(
             format!("{prefix}/view_overview_4"),
-            512,
             source(data, Some(4)),
             Query::Views(views(size / 4, 0, false)),
         ));
@@ -776,7 +736,6 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
     {
         cases.push(Case::new(
             format!("{prefix}/overview_{level}"),
-            512,
             source(data, Some(level)),
             Query::Scene,
         ));
@@ -784,18 +743,12 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
     cases
 }
 
-/// A whole scene and a panning session, both in 512 px tiles.
+/// A whole scene and a panning session.
 fn jp2_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Case> {
     let mut cases = vec![
-        Case::new(
-            format!("{prefix}/scene_512"),
-            512,
-            source.clone(),
-            Query::Scene,
-        ),
+        Case::new(format!("{prefix}/scene_512"), source.clone(), Query::Scene),
         Case::new(
             format!("{prefix}/pan_{PAN_TILES}"),
-            512,
             source.clone(),
             Query::Windows(panning_windows(size, 512, PAN_TILES)),
         ),
@@ -812,13 +765,11 @@ fn view_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Ca
             [
                 Case::new(
                     format!("{prefix}/{name}"),
-                    512,
                     source.clone(),
                     Query::Views(views(size, 0, aligned)),
                 ),
                 Case::new(
                     format!("{prefix}/{name}_pan"),
-                    512,
                     source.clone(),
                     Query::Views(views(size, VIEW_PAN_MOVES, aligned)),
                 ),
@@ -834,18 +785,18 @@ const TILE_AS_BLOCK: [(&str, Option<&str>); 2] = [
 
 #[allow(clippy::too_many_lines)]
 fn block_reads(c: &mut Criterion) {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let _guard = runtime.enter();
+    let mut env = Env::new();
+    let pool = env.exe_ctx.inner.gdal_process_pool.clone();
 
     let latency = Duration::from_millis(
-        std::env::var("WP7_BENCH_LATENCY_MS")
+        std::env::var("GEOENGINE_BENCH_LATENCY_MS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(20),
     );
     let size = file_size();
 
-    let data_dir = std::env::var_os("WP7_BENCH_DATA").map(PathBuf::from);
+    let data_dir = std::env::var_os("GEOENGINE_BENCH_DATA").map(PathBuf::from);
     let server = RangeServer::start(
         data_dir
             .clone()
@@ -853,58 +804,17 @@ fn block_reads(c: &mut Criterion) {
         latency,
     );
 
-    // the server defaults of `[gdal_process_pool]` and `[gdal_process_pool.worker.gdal_config_options]`
-    let limits: Vec<usize> = std::env::var("WP7_BENCH_POOL")
-        .unwrap_or("32,16,8".into())
-        .split(',')
-        .map(|n| n.parse().unwrap())
-        .collect();
-    let pool = GdalProcessPool::new(
-        limits[0],
-        limits[1],
-        limits[2],
-        DEFAULT_HEADER_CACHE_ENTRIES,
-        WorkerConfig {
-            gdal_config_options: Some(
-                vec![
-                    ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
-                    ("CPL_VSIL_CURL_CHUNK_SIZE".into(), "1048576".into()),
-                    ("GDAL_CACHEMAX".into(), "256".into()),
-                    ("VSI_CACHE".into(), "TRUE".into()),
-                    ("VSI_CACHE_SIZE".into(), "67108864".into()),
-                    ("GDAL_NUM_THREADS".into(), "1".into()),
-                ]
-                .into_iter()
-                .chain(gdal_config_from_env())
-                .collect(),
-            ),
-            ..WorkerConfig::default()
-        },
-    );
-    let mut exec_ctxs: Vec<MockExecutionContext> = [512, BLOCK_SIZE]
-        .into_iter()
-        .map(|tile_size| {
-            let mut exec_ctx = MockExecutionContext::new_with_tiling_spec(
-                TilingSpecification::new(GridShape2D::new([tile_size, tile_size])),
-            );
-            exec_ctx.gdal_process_pool = pool.clone();
-            exec_ctx
-        })
-        .collect();
-
     let mut cases = Vec::new();
     if let Some(dir) = &data_dir {
         let band = |file: &str| dir.join(file);
 
-        let (cog, max_overview_level) =
-            add_dataset(&mut exec_ctxs, &server, &band("B04.tif"), None);
+        let (cog, max_overview_level) = add_dataset(&mut env, &server, &band("B04.tif"), None);
         cases.extend(cog_cases("s2_cog", &cog, max_overview_level, size));
         // a classification, the data that compresses: 5 490² `u8`, 512 px blocks
-        let (scl, max_overview_level) =
-            add_dataset(&mut exec_ctxs, &server, &band("SCL.tif"), None);
+        let (scl, max_overview_level) = add_dataset(&mut env, &server, &band("SCL.tif"), None);
         cases.extend(cog_cases("s2_scl", &scl, max_overview_level, SCL_SIZE));
         let cog_2band = multi_band_source(&add_multi_band_dataset(
-            &mut exec_ctxs,
+            &mut env,
             &server,
             &[band("B04.tif"), band("B08.tif")],
             None,
@@ -912,7 +822,6 @@ fn block_reads(c: &mut Criterion) {
         cases.push(
             Case::new(
                 "s2_cog_2band/scene_512".into(),
-                512,
                 cog_2band.clone(),
                 Query::Scene,
             )
@@ -921,7 +830,6 @@ fn block_reads(c: &mut Criterion) {
         cases.push(
             Case::new(
                 "s2_cog_2band/windows_256".into(),
-                512,
                 cog_2band,
                 Query::Windows(random_windows(size, RANDOM_WINDOWS)),
             )
@@ -930,7 +838,7 @@ fn block_reads(c: &mut Criterion) {
 
         for (suffix, open_option) in TILE_AS_BLOCK {
             let open_options = open_option.map(|option| vec![option.to_string()]);
-            let (jp2, _) = add_dataset(&mut exec_ctxs, &server, &band("B04.jp2"), open_options);
+            let (jp2, _) = add_dataset(&mut env, &server, &band("B04.jp2"), open_options);
             cases.extend(jp2_cases(
                 &format!("s2_jp2_{suffix}"),
                 &source(&jp2, None),
@@ -938,13 +846,12 @@ fn block_reads(c: &mut Criterion) {
             ));
             cases.push(Case::new(
                 format!("s2_jp2_{suffix}/view_overview_4"),
-                512,
                 source(&jp2, Some(4)),
                 Query::Views(views(size / 4, 0, false)),
             ));
         }
         let jp2_4band = multi_band_source(&add_multi_band_dataset(
-            &mut exec_ctxs,
+            &mut env,
             &server,
             &[
                 band("B02.jp2"),
@@ -960,13 +867,13 @@ fn block_reads(c: &mut Criterion) {
                 .map(|case| case.bands(4)),
         );
     } else {
-        let (cog, max_overview_level) = add_dataset(&mut exec_ctxs, &server, &cog(), None);
+        let (cog, max_overview_level) = add_dataset(&mut env, &server, &cog(), None);
         cases.extend(cog_cases("cog", &cog, max_overview_level, size));
-        if std::env::var_os("WP7_BENCH_JP2").is_some() {
+        if std::env::var_os("GEOENGINE_BENCH_JP2").is_some() {
             let jp2 = jp2();
             for (suffix, open_option) in TILE_AS_BLOCK {
                 let open_options = open_option.map(|option| vec![option.to_string()]);
-                let (data, _) = add_dataset(&mut exec_ctxs, &server, &jp2, open_options);
+                let (data, _) = add_dataset(&mut env, &server, &jp2, open_options);
                 cases.extend(jp2_cases(
                     &format!("jp2_{suffix}"),
                     &source(&data, None),
@@ -976,7 +883,7 @@ fn block_reads(c: &mut Criterion) {
         }
     }
 
-    let cache_bytes = std::env::var("WP7_BENCH_CACHE_MB")
+    let cache_bytes = std::env::var("GEOENGINE_BENCH_CACHE_MB")
         .map_or(CACHE_BYTES, |mb| mb.parse::<usize>().unwrap() << 20);
     // blocks live longer than a run, so that warm runs stay warm
     let cache = Arc::new(
@@ -984,19 +891,19 @@ fn block_reads(c: &mut Criterion) {
     );
     let hashes: Mutex<BTreeMap<String, u64>> = Mutex::default();
 
-    let mut group = c.benchmark_group("block_reads");
+    let mut group = common::group(c, "block_reads");
+    // a cold iteration takes up to seconds
     group.sample_size(10);
-    let only = std::env::var("WP7_BENCH_CASES").unwrap_or_default();
-    let rounds: Option<u32> = std::env::var("WP7_BENCH_ROUNDS")
+    let only = std::env::var("GEOENGINE_BENCH_CASES").unwrap_or_default();
+    let rounds: Option<u32> = std::env::var("GEOENGINE_BENCH_ROUNDS")
         .ok()
         .map(|rounds| rounds.parse().unwrap());
-    let modes = std::env::var("WP7_BENCH_MODES").unwrap_or_default();
+    let modes = std::env::var("GEOENGINE_BENCH_MODES").unwrap_or_default();
     let view_times: Mutex<ViewTimes> = Mutex::default();
     for case in &cases {
         if !only.is_empty() && !only.split(',').any(|name| case.name == name) {
             continue;
         }
-        let exec_ctx = &exec_ctxs[case.exec_ctx_idx];
         for (mode, use_cache) in [("window", false), ("block", true)] {
             if !modes.is_empty() && !modes.split(',').any(|name| mode == name) {
                 continue;
@@ -1007,15 +914,15 @@ fn block_reads(c: &mut Criterion) {
                     case.name,
                     if cold { "_cold" } else { "_warm" }
                 );
-                let (server, cache, hashes, pool) = (&server, &cache, &hashes, &pool);
+                let (env, server, cache, hashes, pool) = (&env, &server, &cache, &hashes, &pool);
                 let view_times = &view_times;
                 let source = case.source.clone();
 
                 if let Some(rounds) = rounds {
-                    runtime.block_on(async {
+                    env.runtime.block_on(async {
                         let run_once = |hash_tiles| {
                             run(
-                                exec_ctx,
+                                env,
                                 source.clone(),
                                 case.bands,
                                 &case.query,
@@ -1059,13 +966,13 @@ fn block_reads(c: &mut Criterion) {
                 }
 
                 // one untimed run for the request counts and the hash
-                runtime.block_on(async {
+                env.runtime.block_on(async {
                     pool.clear_caches().await.unwrap();
                     cache.clear();
                     server.reset();
                     let before = Counts::now(server, pool, cache);
                     let hash = run(
-                        exec_ctx,
+                        env,
                         source.clone(),
                         case.bands,
                         &case.query,
@@ -1091,7 +998,7 @@ fn block_reads(c: &mut Criterion) {
                 let timed_iterations = AtomicU64::new(0);
                 let cpu_before = worker_cpu_seconds();
                 group.bench_function(&id, |b| {
-                    b.to_async(&runtime).iter_custom(|iters| {
+                    b.to_async(&env.runtime).iter_custom(|iters| {
                         let source = source.clone();
                         let timed_iterations = &timed_iterations;
                         async move {
@@ -1105,7 +1012,7 @@ fn block_reads(c: &mut Criterion) {
                                 let start = Instant::now();
                                 std::hint::black_box(
                                     run(
-                                        exec_ctx,
+                                        env,
                                         source.clone(),
                                         case.bands,
                                         &case.query,
@@ -1144,5 +1051,5 @@ fn block_reads(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, block_reads);
+criterion_group!(name = benches; config = common::criterion(); targets = block_reads);
 criterion_main!(benches);

@@ -2,6 +2,8 @@
 //! files of one directory. It counts requests and bytes per path and can wait a fixed time
 //! before each answer, so that local files behave like an object store.
 
+#![allow(clippy::print_stdout, reason = "the coverage is printed by a bench")]
+
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};

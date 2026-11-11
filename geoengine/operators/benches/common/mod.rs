@@ -1,5 +1,5 @@
 //! Setup shared by the topic benches (`gdal_source`, `reprojection`, `expression`,
-//! `bands_and_time`, `raster_cache`) and `core_scaling`: one raster dataset, one GDAL pool like
+//! `bands_and_time`, `raster_cache`), `core_scaling` and `block_reads`: one raster dataset, one GDAL pool like
 //! the server, the operator workloads and queries over the whole result or a part of it, run as
 //! one task per query where they are concurrent, like the server does.
 //!
@@ -34,6 +34,7 @@
 )]
 
 pub mod metrics;
+pub mod range_server;
 
 use config::{Config, ConfigError, Environment, File};
 use criterion::{BenchmarkGroup, Criterion, SamplingMode, measurement::WallTime};
