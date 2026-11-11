@@ -344,36 +344,47 @@ describe('LayersComponent', () => {
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
 
-        it('tells whether the date has scenes in view', async () => {
-            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+        it('tells whether the date has data in view and offers the nearest dates with data when it has none', async () => {
+            // the mock is no signal, so it has to be set before the component reads it
+            const previous = new Time(Date.UTC(2026, 3, 3));
+            footprints().dateWithData.mockImplementation((direction: number) => (direction === -1 ? previous : undefined));
+            footprints().time.set(new Time(Date.UTC(2026, 3, 5)));
             footprints().dateStatus.set('data');
             fixture.detectChanges();
             await fixture.whenStable();
-            expect((fixture.nativeElement as HTMLElement).textContent).toContain('Scenes in view on 01.04.2026.');
+            const element = fixture.nativeElement as HTMLElement;
+            expect(element.querySelector('.date-status')?.textContent).toContain('Data in view');
+            expect(element.querySelector('.nearest-dates')).toBeNull();
 
             footprints().dateStatus.set('empty');
             fixture.detectChanges();
-            expect((fixture.nativeElement as HTMLElement).textContent).toContain('No scenes in view on 01.04.2026.');
+            expect(element.querySelector('.date-status')?.textContent).toContain('No data in view');
+            const buttons = element.querySelectorAll<HTMLButtonElement>('.nearest-dates button');
+            expect(buttons.length).toBe(1);
+            expect(buttons[0].textContent).toContain('03.04.2026');
+            setTime.mockClear();
+
+            buttons[0].click();
+
+            expect(setTime).toHaveBeenCalledWith(previous);
         });
 
-        it('names the number of scene areas of the date while the overlay is on', async () => {
+        it('names the number of areas of the date while the coverage is on the map', async () => {
             footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
-            footprints().dateStatus.set('data');
-            footprints().overlayVisible.set(true);
             const text = (): string => (fixture.nativeElement as HTMLElement).textContent ?? '';
 
             footprints().overlayAreaCount.set(3);
             fixture.detectChanges();
             await fixture.whenStable();
-            expect(text()).toContain('3 scene areas in view on 01.04.2026.');
+            expect(text()).not.toContain('in view on this date');
+
+            footprints().overlayVisible.set(true);
+            fixture.detectChanges();
+            expect(text()).toContain('3 areas in view on this date.');
 
             footprints().overlayAreaCount.set(1);
             fixture.detectChanges();
-            expect(text()).toContain('1 scene area in view on 01.04.2026.');
-
-            footprints().overlayAreaCount.set(0);
-            fixture.detectChanges();
-            expect(text()).toContain('No scenes in view on 01.04.2026.');
+            expect(text()).toContain('1 area in view on this date.');
         });
 
         it('suggests the default date of the selected data source instead of switching to it', async () => {
