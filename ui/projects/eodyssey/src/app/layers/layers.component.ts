@@ -137,7 +137,12 @@ import {EOdysseyLayerService} from './layers.service';
             @if (suggestedDate(); as suggestion) {
                 <p class="catalogue-message suggested-date">
                     Suggested date:
-                    <button mat-button type="button" [matTooltip]="'Default date of ' + suggestion.source" (click)="useSuggestedDate()">
+                    <button
+                        mat-stroked-button
+                        type="button"
+                        [matTooltip]="'Default date of ' + suggestion.source"
+                        (click)="useSuggestedDate()"
+                    >
                         Go to {{ suggestion.text }}
                     </button>
                 </p>
@@ -191,7 +196,12 @@ import {EOdysseyLayerService} from './layers.service';
                 <p class="catalogue-message on-map-status" role="status">
                     @if (eodysseyLayerService.appliedPreset(); as applied) {
                         <span>On map: {{ applied.displayName }}</span>
-                        <button mat-button type="button" class="remove-visualization" (click)="eodysseyLayerService.removeVisualization()">
+                        <button
+                            mat-stroked-button
+                            type="button"
+                            class="remove-visualization"
+                            (click)="eodysseyLayerService.removeVisualization()"
+                        >
                             Remove from map
                         </button>
                     } @else {
@@ -480,6 +490,7 @@ import {EOdysseyLayerService} from './layers.service';
 
                 .on-map-status {
                     display: flex;
+                    flex-wrap: wrap;
                     align-items: center;
                     justify-content: space-between;
                     gap: 0.5rem;
