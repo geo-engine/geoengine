@@ -17,6 +17,7 @@ import { instanceOfDownsampling, DownsamplingFromJSONTyped, DownsamplingToJSON, 
 import { instanceOfExpression, ExpressionFromJSONTyped, ExpressionToJSON, } from './Expression';
 import { instanceOfGdalSource, GdalSourceFromJSONTyped, GdalSourceToJSON, } from './GdalSource';
 import { instanceOfInterpolation, InterpolationFromJSONTyped, InterpolationToJSON, } from './Interpolation';
+import { instanceOfMdGdalSource, MdGdalSourceFromJSONTyped, MdGdalSourceToJSON, } from './MdGdalSource';
 import { instanceOfMultiBandGdalSource, MultiBandGdalSourceFromJSONTyped, MultiBandGdalSourceToJSON, } from './MultiBandGdalSource';
 import { instanceOfNeighborhoodAggregate, NeighborhoodAggregateFromJSONTyped, NeighborhoodAggregateToJSON, } from './NeighborhoodAggregate';
 import { instanceOfOnnx, OnnxFromJSONTyped, OnnxToJSON, } from './Onnx';
@@ -54,6 +55,8 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, GdalSourceFromJSONTyped(json, true), { type: 'GdalSource' });
         case 'Interpolation':
             return Object.assign({}, InterpolationFromJSONTyped(json, true), { type: 'Interpolation' });
+        case 'MdGdalSource':
+            return Object.assign({}, MdGdalSourceFromJSONTyped(json, true), { type: 'MdGdalSource' });
         case 'MultiBandGdalSource':
             return Object.assign({}, MultiBandGdalSourceFromJSONTyped(json, true), { type: 'MultiBandGdalSource' });
         case 'NeighborhoodAggregate':
@@ -110,6 +113,8 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, GdalSourceToJSON(value), { 'type': 'GdalSource' });
         case 'Interpolation':
             return Object.assign({}, InterpolationToJSON(value), { 'type': 'Interpolation' });
+        case 'MdGdalSource':
+            return Object.assign({}, MdGdalSourceToJSON(value), { 'type': 'MdGdalSource' });
         case 'MultiBandGdalSource':
             return Object.assign({}, MultiBandGdalSourceToJSON(value), { 'type': 'MultiBandGdalSource' });
         case 'NeighborhoodAggregate':
@@ -155,6 +160,7 @@ export function instanceOfRasterOperator(value) {
         || instanceOfExpression(value)
         || instanceOfGdalSource(value)
         || instanceOfInterpolation(value)
+        || instanceOfMdGdalSource(value)
         || instanceOfMultiBandGdalSource(value)
         || instanceOfNeighborhoodAggregate(value)
         || instanceOfOnnx(value)

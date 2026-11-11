@@ -19,8 +19,8 @@ use rustc_hash::FxHasher;
 use super::{
     GdalProcessPoolAccess,
     process_common::{
-        GdalIpcPayload, GdalRequest, IpcChannelMessage, IpcChannelResult, IpcProcessError,
-        IpcProcessRasterResult, RasterInfo, WorkerRequest, WorkerResponse,
+        GdalIpcMdPayload, GdalIpcPayload, GdalRequest, IpcChannelMessage, IpcChannelResult,
+        IpcProcessError, IpcProcessRasterResult, RasterInfo, WorkerRequest, WorkerResponse,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
@@ -57,15 +57,13 @@ type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHa
 #[derive(Debug, Snafu, Clone)]
 #[snafu(visibility(pub))]
 pub enum GdalProcessPoolError {
-    IpcProcessError {
-        source: IpcProcessError,
-    },
+    #[snafu(display("IpcProcessError caused by: {source}"))]
+    IpcProcessError { source: IpcProcessError },
 
     #[snafu(display("IpcError caused by: {error_str}"))]
-    IpcError {
-        error_str: String,
-    },
+    IpcError { error_str: String },
 
+    #[snafu(display("GDAL worker process panicked"))]
     WorkerPanic,
 
     #[snafu(display("Timed out waiting for GDAL worker caches to be cleared"))]
@@ -381,7 +379,7 @@ struct PoolCounters {
 
 impl PoolCounters {
     fn count(&self, request: &IpcChannelMessage, joined: bool) {
-        let is_header = matches!(request.0.request, GdalRequest::Header);
+        let is_header = matches!(request.0.request, GdalRequest::Header(_));
         match (is_header, joined) {
             (true, true) => &self.headers_joined,
             (true, false) => &self.headers,
@@ -1296,7 +1294,7 @@ impl GdalPoolDispatcher {
         let IpcChannelResult::Raster(byte_payload) = result_ref else {
             return Err(GdalProcessPoolError::IpcProcessError {
                 source: IpcProcessError::IpcOther {
-                    msg: "expected a raster result but got a header".to_string(),
+                    msg: "expected a raster result but got an MD slice or a header".to_string(),
                 },
             });
         };
@@ -1331,6 +1329,40 @@ impl GdalPoolDispatcher {
         self.pool.raster_infos.put(file, info, cache_hint)
     }
 
+    /// Read one z-slice from a GDAL multidimensional array (one request, one response
+    /// containing the raw source-order buffer). Uses the same
+    /// leader/follower deduplication as [`Self::read_data`].
+    ///
+    /// # Panics
+    /// This function will panic if a required channel is dropped unexpectedly.
+    pub async fn read_md_slice_data<P: Pixel>(
+        &self,
+        request: IpcChannelMessage,
+    ) -> Result<GdalIpcMdPayload<P>, GdalProcessPoolError> {
+        let shared_res = self.dispatch_dedup(request).await?;
+
+        let result_ref = shared_res.0.as_ref().map_err(Clone::clone)?;
+
+        let IpcChannelResult::MdSlice(byte_payload) = result_ref else {
+            return Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "expected an MD slice result but got a 2D raster result".to_string(),
+                },
+            });
+        };
+
+        byte_payload
+            .try_into()
+            .map_err(|e: bytemuck::PodCastError| {
+                tracing::error!("Failed to cast MD payload: {:?}", e);
+                GdalProcessPoolError::IpcProcessError {
+                    source: IpcProcessError::PocCastError {
+                        error: e.to_string(),
+                    },
+                }
+            })
+    }
+
     /// Read a header (`GdalRequest::Header`) without pixel
     /// data. Uses the same leader/follower deduplication as [`Self::read_data`].
     ///
@@ -1339,16 +1371,9 @@ impl GdalPoolDispatcher {
     pub async fn read_header(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<RasterInfo, GdalProcessPoolError> {
+    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
         let shared_res = self.dispatch_dedup(request).await?;
-        match shared_res.0.clone()? {
-            IpcChannelResult::RasterInfo(info) => Ok(info),
-            IpcChannelResult::Raster(_) => Err(GdalProcessPoolError::IpcProcessError {
-                source: IpcProcessError::IpcOther {
-                    msg: "the worker answered a header read with a raster".to_string(),
-                },
-            }),
-        }
+        shared_res.0.clone()
     }
 
     /// Shared leader/follower dispatch: hashes the request, coalesces identical
@@ -1486,6 +1511,7 @@ mod tests {
     use super::*;
     use geoengine_datatypes::raster::{GridBoundingBox2D, GridIdx2D};
     use geoengine_datatypes::util::NonZeroFiniteF64;
+    use std::path::PathBuf;
 
     /// Creates a window from min/max `[row, col]` indices.
     fn window(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
@@ -1556,6 +1582,112 @@ mod tests {
         };
         assert_eq!(hash_of(&a), hash_of(&b));
         assert!(!same_read(&a, &b));
+    }
+
+    // --- routing is z-blind, sharing is z-aware ---
+
+    fn md_message(z_index: usize) -> IpcChannelMessage {
+        IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
+            dataset_params: GdalDatasetParameters {
+                file_path: PathBuf::from("/vsicurl/https://example.invalid/tasmax.nc"),
+                rasterband_channel: 1,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: (0.0, 0.0).into(),
+                    x_pixel_size: geoengine_datatypes::util::NonZeroFiniteF64::new_unchecked(0.25),
+                    y_pixel_size: geoengine_datatypes::util::NonZeroFiniteF64::new_unchecked(0.25),
+                },
+                width: 1440,
+                height: 600,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: Some(vec![(
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_string(),
+                    ".nc".to_string(),
+                )]),
+                allow_alphaband_as_mask: false,
+                retry: None,
+            },
+            read_id: None,
+            request: GdalRequest::Read {
+                read_advise: GdalReadAdvise {
+                    gdal_read_widow: GdalReadWindow {
+                        start_x: 0,
+                        start_y: 0,
+                        size_x: 512,
+                        size_y: 360,
+                    },
+                    read_window_bounds: window([0, 0], [359, 511]),
+                    bounds_of_target: window([0, 0], [599, 1439]),
+                    flip_y: true,
+                },
+                data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                level_factor: None,
+                kind: GdalReadKind::MdArray {
+                    group: None,
+                    array_name: "tasmax".to_string(),
+                    z_index,
+                    axis_mapping: vec![
+                        super::super::process_common::MdAxisMapping::Time,
+                        super::super::process_common::MdAxisMapping::Y,
+                        super::super::process_common::MdAxisMapping::X,
+                    ],
+                },
+            },
+        })
+    }
+
+    fn hash_of(msg: &IpcChannelMessage, full: bool) -> u64 {
+        let mut h = rustc_hash::FxHasher::default();
+        if full {
+            msg.full_hash(&mut h);
+        } else {
+            msg.0.dataset_params.partial_hash(&mut h);
+        }
+        h.finish()
+    }
+
+    /// The routing key (`dataset_params.partial_hash`) picks the worker queue and must group
+    /// every read of one file, so the worker reuses the GDAL dataset it already has open:
+    /// re-opening costs a 4.8s round trip per slice. The dedup key (`full_hash`) decides
+    /// which requests share a result and must tell apart every read that returns different
+    /// data.
+    #[test]
+    fn routing_groups_by_file_and_sharing_by_read() {
+        let mut other_array = md_message(0);
+        let GdalRequest::Read {
+            kind: GdalReadKind::MdArray { array_name, .. },
+            ..
+        } = &mut other_array.0.request
+        else {
+            panic!("md_message builds an MD pixel read");
+        };
+        *array_name = "tasmin".to_string();
+        let mut other_file = md_message(0);
+        other_file.0.dataset_params.file_path =
+            PathBuf::from("/vsicurl/https://example.invalid/tasmin.nc");
+
+        // (case, second request, same queue, same result)
+        let cases = [
+            ("another z slice", md_message(48), true, false),
+            ("another array of the file", other_array, true, false),
+            ("another file", other_file, false, false),
+        ];
+
+        let a = md_message(0);
+        for (case, b, same_queue, same_result) in cases {
+            assert_eq!(
+                hash_of(&a, false) == hash_of(&b, false),
+                same_queue,
+                "routing of {case}"
+            );
+            assert_eq!(
+                hash_of(&a, true) == hash_of(&b, true),
+                same_result,
+                "sharing of {case}"
+            );
+        }
     }
 
     // --- WorkerAffinity::rank ---
@@ -1680,7 +1812,7 @@ mod tests {
     };
     use crate::source::gdal_worker_process::process_common::{
         GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
-        GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+        GdalReadKind, GdalReadWindow, IpcChannelMessagePayload,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
@@ -2230,6 +2362,7 @@ mod tests {
                 },
                 data_type: RasterDataType::U8,
                 level_factor: None,
+                kind: GdalReadKind::Raster,
             },
         });
         let req = Box::new(QueuedRequest {
