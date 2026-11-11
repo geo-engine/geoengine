@@ -22,6 +22,7 @@ import {
 import {
     TimeRange,
     boxRing,
+    calendarStartView,
     cellHasData,
     cellHasStepAfter,
     cellHasStepStart,
@@ -130,6 +131,8 @@ export class FootprintsService {
     /** A step to use instead of the project's, e.g. the one of a layer that is not applied yet. Set by the app. */
     readonly timeStepOverride = signal<TimeStepDuration | undefined>(undefined);
     readonly timeStep = computed(() => this.timeStepOverride() ?? this.projectTimeStep());
+    /** The calendar view that has one cell per time step. */
+    readonly calendarStartView = computed(() => calendarStartView(this.timeStep()?.durationUnit));
     private readonly viewport = toSignal(this.mapService.getViewportSizeStream().pipe(debounceTime(VIEWPORT_DEBOUNCE_MS)));
 
     private readonly graphs = new Map<string, Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}>>();

@@ -152,7 +152,7 @@ describe('LayersComponent', () => {
                         tooLarge: signal(false),
                         hasError: signal(false),
                         steps: signal([]),
-                        timeStep: signal(undefined),
+                        calendarStartView: signal('month'),
                         showDate: vi.fn(),
                     },
                 },
@@ -301,13 +301,13 @@ describe('LayersComponent', () => {
 
     describe('picking a calendar cell of the size of the time step', () => {
         const picker = {close: vi.fn()};
-        const timeStepUnit = (unit: string): void => {
-            const footprints = TestBed.inject(FootprintsService) as unknown as {timeStep: WritableSignal<unknown>};
-            footprints.timeStep.set({durationAmount: 1, durationUnit: unit});
+        const startView = (view: string): void => {
+            const footprints = TestBed.inject(FootprintsService) as unknown as {calendarStartView: WritableSignal<string>};
+            footprints.calendarStartView.set(view);
         };
 
         it('selects the month and closes the picker for a time step of months', async () => {
-            timeStepUnit('months');
+            startView('year');
             picker.close.mockClear();
 
             await fixture.componentInstance.selectCoarseUnit(new Date(2026, 2, 1), 'year', picker as unknown as MatDatepicker<Date>);
@@ -317,7 +317,7 @@ describe('LayersComponent', () => {
         });
 
         it('leaves the picker open for a time step of days, so a day can still be picked', async () => {
-            timeStepUnit('days');
+            startView('month');
             picker.close.mockClear();
 
             await fixture.componentInstance.selectCoarseUnit(new Date(2026, 2, 1), 'year', picker as unknown as MatDatepicker<Date>);

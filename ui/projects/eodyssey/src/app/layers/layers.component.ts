@@ -8,14 +8,7 @@ import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
-import {
-    CoreModule,
-    FootprintCalendarHeaderComponent,
-    FootprintsService,
-    ProjectService,
-    RasterLegendViewComponent,
-    calendarStartView,
-} from '@geoengine/core';
+import {CoreModule, FootprintCalendarHeaderComponent, FootprintsService, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
 import type {DataSourceDefinition} from './data-sources';
 import {EOdysseyLayerService} from './layers.service';
@@ -114,7 +107,7 @@ import {EOdysseyLayerService} from './layers.service';
                 </button>
                 <mat-datepicker
                     #picker
-                    [startView]="calendarStartView()"
+                    [startView]="footprintsService.calendarStartView()"
                     (monthSelected)="selectCoarseUnit($event, 'year', picker)"
                     (yearSelected)="selectCoarseUnit($event, 'multi-year', picker)"
                     [dateClass]="footprintsService.dateClass"
@@ -505,7 +498,6 @@ export class LayersComponent {
     });
     readonly timeStepDuration = toSignal(this.projectService.getTimeStepDurationStream());
     /** The calendar opens on the cell size of the time step: days, months or years. */
-    readonly calendarStartView = computed(() => calendarStartView(this.footprintsService.timeStep()?.durationUnit));
     readonly currentDate = computed<Date | undefined>(() => {
         const time = this.currentTime();
         if (!time) return undefined;
@@ -597,7 +589,7 @@ export class LayersComponent {
 
     /** A month (or year) is the time step, so picking one selects it. Else the calendar goes on to the days. */
     async selectCoarseUnit(date: Date, view: MatCalendarView, picker: MatDatepicker<Date>): Promise<void> {
-        if (this.calendarStartView() !== view) return;
+        if (this.footprintsService.calendarStartView() !== view) return;
         picker.close();
         await this.setCalendarDate(date);
     }
