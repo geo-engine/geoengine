@@ -181,20 +181,26 @@ import {EOdysseyLayerService} from './layers.service';
                 }
             </mat-nav-list>
             <div class="apply-preset-action">
+                <p class="catalogue-message on-map-status" role="status">
+                    @if (eodysseyLayerService.appliedPreset(); as applied) {
+                        <span>On map: {{ applied.displayName }}</span>
+                        <button mat-button type="button" class="remove-visualization" (click)="eodysseyLayerService.removeVisualization()">
+                            Remove from map
+                        </button>
+                    } @else {
+                        <span>Nothing on the map yet.</span>
+                    }
+                </p>
                 <button
                     mat-flat-button
                     color="primary"
                     type="button"
+                    class="apply-visualization"
                     [disabled]="!eodysseyLayerService.canApplyPreset()"
                     (click)="applySelectedPreset()"
                 >
-                    Apply visualization
+                    {{ applyLabel() }}
                 </button>
-                @if (eodysseyLayerService.mapTileLayer()) {
-                    <button mat-stroked-button type="button" (click)="eodysseyLayerService.removeVisualization()">
-                        Remove visualization
-                    </button>
-                }
             </div>
         </section>
 
@@ -452,10 +458,17 @@ import {EOdysseyLayerService} from './layers.service';
                 flex-direction: column;
                 gap: 0.5rem;
 
-                button {
+                > button {
                     width: 100%;
                     min-height: 2.75rem;
                     border-radius: 0.5rem;
+                }
+
+                .on-map-status {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 0.5rem;
                 }
             }
 
@@ -517,6 +530,13 @@ export class LayersComponent {
     });
 
     readonly autoSelectTime = this.eodysseyLayerService.autoSelectTime;
+    /** The apply button says what it does: show the selected preset, switch to it, or that it is on the map. */
+    readonly applyLabel = computed(() => {
+        const selected = this.eodysseyLayerService.selectedPreset();
+        if (!selected) return 'Show on map';
+        if (!this.eodysseyLayerService.appliedPreset()) return `Show ${selected.displayName} on map`;
+        return this.eodysseyLayerService.canApplyPreset() ? `Switch to ${selected.displayName}` : 'On map';
+    });
     /** What is known about the scenes of the date in view: the boxes of the overlay if it is on, else the calendar window. */
     readonly scenesText = computed<string | undefined>(() => {
         const date = this.formattedTime();
