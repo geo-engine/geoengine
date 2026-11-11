@@ -69,6 +69,7 @@ uuid = { workspace = true }
 [dev-dependencies]
 approx = { workspace = true }
 async-stream = { workspace = true }
+config = { workspace = true }
 criterion = { workspace = true }
 httptest = { workspace = true }
 indoc = { workspace = true }
@@ -93,6 +94,21 @@ harness = false
 name = "core_scaling"
 harness = false
 
+[[bench]]
+name = "gdal_source"
+harness = false
+
+[[bench]]
+name = "reprojection"
+harness = false
+
+[[bench]]
+name = "expression"
+harness = false
+
+[[bench]]
+name = "bands_and_time"
+harness = false
 
 [lints]
 workspace = true

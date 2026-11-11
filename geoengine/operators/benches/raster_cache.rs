@@ -1,94 +1,89 @@
-//! Benchmarks queries through the new raster cache operator: cold, with the cache cleared before
-//! every run, and warm, with every tile cached. It is not part of the CI benchmarks.
+//! Queries through the raster cache operator: cold, with the cache cleared before every run,
+//! warm, with every tile cached, concurrent cold queries for the same tiles, and a cached stack
+//! of rasters with different time steps.
 //!
-//! The source is the local NDVI test data, so the GDAL workers keep the file open: cold runs
-//! measure the cache operator and its source queries, not remote reads.
+//! The source is local, so the GDAL workers keep the file open: cold runs measure the cache
+//! operator and its source queries, not remote reads.
 //!
-//! Run with `cargo bench -p geoengine-operators --bench raster_cache`.
+//! `cargo bench -p geoengine-operators --bench raster_cache`
+#![allow(clippy::unwrap_used, reason = "okay in benchmarks")]
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::print_stdout,
-    clippy::print_stderr,
-    reason = "okay in benchmarks"
-)]
+mod common;
 
-use futures::StreamExt;
-use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::{
-    primitives::{BandSelection, DateTime, RasterQueryRectangle, TimeInterval},
-    raster::{GridBoundingBox2D, TilingSpecification},
-};
+use common::{Area, Env, stack};
+use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_operators::{
     cache::new_raster_cache::{NewRasterCacheEnum, RasterCacheOperator},
-    engine::{
-        ChunkByteSize, InitializedRasterOperator, MockExecutionContext,
-        ProcessingGraphOperatorPath, QueryProcessor, RasterOperator,
-    },
-    source::{GdalSource, GdalSourceParameters},
-    util::gdal::add_ndvi_dataset,
+    engine::InitializedRasterOperator,
 };
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-const RUNS: usize = 20;
 const CACHE_BYTES: usize = 1 << 30;
 
-fn main() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    runtime.block_on(async {
-        for tile_size in [256, 512] {
-            let mut exec_ctx = MockExecutionContext::new_with_tiling_spec(
-                TilingSpecification::new([tile_size, tile_size].into()),
-            );
-            let ndvi = add_ndvi_dataset(&mut exec_ctx);
-            let source = GdalSource {
-                params: GdalSourceParameters::new(ndvi),
-            }
-            .typed()
-            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exec_ctx)
-            .await
-            .unwrap();
-            let cached = RasterCacheOperator::wrap_operator(source);
-            let processor = cached.query_processor().unwrap().get_u8().unwrap();
+/// Runs `concurrent` queries of the case at once, each as its own task, after clearing the cache, `iters` times, and
+/// returns the time of the queries only: for `iter_custom`, so that clearing is not measured.
+fn cold(
+    env: &Env,
+    cache: &NewRasterCacheEnum,
+    case: &common::Case,
+    concurrent: usize,
+    iters: u64,
+) -> Duration {
+    let mut total = Duration::ZERO;
+    for _ in 0..iters {
+        cache.clear();
+        let start = Instant::now();
+        env.runtime.block_on(env.run_concurrent(case, concurrent));
+        total += start.elapsed();
+    }
+    total
+}
 
-            let cache = Arc::new(NewRasterCacheEnum::new_lru(CACHE_BYTES));
-            let mut query_ctx = exec_ctx.mock_query_context(ChunkByteSize::test_default());
-            query_ctx.new_raster_cache = Some(cache.clone());
+fn raster_cache(c: &mut Criterion) {
+    let mut env = Env::new();
+    let cache = Arc::new(NewRasterCacheEnum::new_lru(CACHE_BYTES));
+    // before any case shares the query context
+    Arc::get_mut(&mut env.query_ctx).unwrap().new_raster_cache = Some(cache.clone());
 
-            let query = RasterQueryRectangle::new(
-                GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
-                TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(),
-                BandSelection::first(),
-            );
+    let cached = |initialized: Box<dyn InitializedRasterOperator>| {
+        RasterCacheOperator::wrap_operator(initialized).boxed()
+    };
+    let extent = env.wrapped_case(env.raster(), Area::Extent, env.one_step(), cached);
+    let series = env.wrapped_case(env.raster(), Area::Extent, env.six_steps(), cached);
+    let stacked = env.wrapped_case(
+        stack(vec![env.raster(), env.six_step_mean(env.raster())]),
+        Area::Extent,
+        env.one_step(),
+        cached,
+    );
 
-            for (case, cold) in [("cold", true), ("warm", false)] {
-                let mut times = Vec::with_capacity(RUNS);
-                let mut tiles = 0;
-                for _ in 0..RUNS {
-                    if cold {
-                        cache.clear();
-                    }
-                    let start = Instant::now();
-                    let mut stream = processor.query(query.clone(), &query_ctx).await.unwrap();
-                    tiles = 0;
-                    while let Some(tile) = stream.next().await {
-                        tile.unwrap();
-                        tiles += 1;
-                    }
-                    times.push(start.elapsed());
-                }
-                times.sort();
-                println!(
-                    "ndvi/tiles_{tile_size}/{case}: {tiles} tiles, min {:.1} ms, median {:.1} ms ({RUNS} runs)",
-                    ms(times[0]),
-                    ms(times[RUNS / 2]),
-                );
-            }
-        }
+    let mut group = common::group(c, "raster_cache");
+    extent.print("extent_cold");
+    group.bench_function("extent_cold", |b| {
+        b.iter_custom(|iters| cold(&env, &cache, &extent, 1, iters));
     });
+    env.bench(&mut group, "extent_warm", &extent);
+    // the queries must share the source reads, not each read every tile
+    group.bench_function("extent_cold_concurrent8", |b| {
+        b.iter_custom(|iters| cold(&env, &cache, &extent, 8, iters));
+    });
+    // Local only (`just backend bench`), skipped in CI (`GEOENGINE_BENCH_CI`): 70 ms and more per
+    // iteration, beyond the ~60 ms budget of a CI case. `extent_cold` covers cold runs in CI.
+    if !common::ci() {
+        series.print("series_6_months_cold");
+        group.bench_function("series_6_months_cold", |b| {
+            b.iter_custom(|iters| cold(&env, &cache, &series, 1, iters));
+        });
+        stacked.print("stack_month_and_half_year_cold");
+        group.bench_function("stack_month_and_half_year_cold", |b| {
+            b.iter_custom(|iters| cold(&env, &cache, &stacked, 1, iters));
+        });
+    }
+    group.finish();
 }
 
-fn ms(duration: Duration) -> f64 {
-    duration.as_secs_f64() * 1000.
-}
+criterion_group!(name = benches; config = common::criterion(); targets = raster_cache);
+criterion_main!(benches);
