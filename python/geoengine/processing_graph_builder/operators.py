@@ -107,6 +107,8 @@ class RasterOperator(Operator):
             return BandNeighborhoodAggregate.from_operator_dict(operator_dict)
         if operator_dict["type"] == "Onnx":
             return Onnx.from_operator_dict(operator_dict)
+        if operator_dict["type"] == "PolygonRasterization":
+            return PolygonRasterization.from_operator_dict(operator_dict)
 
         raise NotImplementedError(f"Unknown operator type {operator_dict['type']}")
 
@@ -1438,3 +1440,261 @@ class Onnx(RasterOperator):
         model = operator_dict["params"]["model"]
 
         return Onnx(source=source, model=model)
+
+
+PolygonRasterizationAggregation = Literal["first", "last", "min", "max", "sum", "mean", "medianEstimate"]
+TimeGranularity = Literal["millis", "seconds", "minutes", "hours", "days", "months", "years"]
+
+
+class PolygonRasterizationValue:
+    """The value that a polygon burns into the pixels it covers."""
+
+    @abstractmethod
+    def to_dict(self) -> dict[str, Any]:
+        pass
+
+    @classmethod
+    def from_dict(cls, value_dict: dict[str, Any]) -> PolygonRasterizationValue:
+        """Returns a value object from a dictionary."""
+        if value_dict["type"] == "constant":
+            return PolygonRasterizationValueConstant(float(value_dict["value"]))
+        if value_dict["type"] == "count":
+            return PolygonRasterizationValueCount()
+        if value_dict["type"] == "attribute":
+            return PolygonRasterizationValueAttribute(
+                column=value_dict["column"],
+                aggregation=value_dict["aggregation"],
+                ignore_no_data=value_dict.get("ignoreNoData", True),
+            )
+        raise ValueError(f"Invalid polygon rasterization value type {value_dict['type']}")
+
+    @classmethod
+    def constant(cls, value: float) -> PolygonRasterizationValue:
+        """Each covered pixel gets the `value`."""
+        return PolygonRasterizationValueConstant(value)
+
+    @classmethod
+    def count(cls) -> PolygonRasterizationValue:
+        """Each pixel gets the number of polygons that cover it."""
+        return PolygonRasterizationValueCount()
+
+    @classmethod
+    def attribute(
+        cls, column: str, aggregation: PolygonRasterizationAggregation, ignore_no_data: bool = True
+    ) -> PolygonRasterizationValue:
+        """Each pixel gets the value of a numeric column, aggregated over all polygons that cover it.
+
+        If `ignore_no_data` is `False`, features with a null value make all pixels they cover no data.
+        """
+        return PolygonRasterizationValueAttribute(column, aggregation, ignore_no_data)
+
+
+@dataclass
+class PolygonRasterizationValueConstant(PolygonRasterizationValue):
+    """Each covered pixel gets the constant value."""
+
+    value: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "constant", "value": self.value}
+
+
+@dataclass
+class PolygonRasterizationValueCount(PolygonRasterizationValue):
+    """Each pixel gets the number of polygons that cover it."""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "count"}
+
+
+@dataclass
+class PolygonRasterizationValueAttribute(PolygonRasterizationValue):
+    """Each pixel gets the value of a numeric column, aggregated over all polygons that cover it."""
+
+    column: str
+    aggregation: PolygonRasterizationAggregation
+    ignore_no_data: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": "attribute",
+            "column": self.column,
+            "aggregation": self.aggregation,
+            "ignoreNoData": self.ignore_no_data,
+        }
+
+
+class PolygonRasterizationTime:
+    """How the time slices of the output raster are derived from the features."""
+
+    @abstractmethod
+    def to_dict(self) -> dict[str, Any]:
+        pass
+
+    @classmethod
+    def from_dict(cls, time_dict: dict[str, Any]) -> PolygonRasterizationTime:
+        """Returns a time object from a dictionary."""
+        if time_dict["type"] == "featureTimes":
+            return PolygonRasterizationTimeFeatureTimes()
+        if time_dict["type"] == "regular":
+            reference = time_dict.get("reference")
+            return PolygonRasterizationTimeRegular(
+                granularity=time_dict["step"]["granularity"],
+                step=time_dict["step"]["step"],
+                reference=np.datetime64(reference, "ms") if reference is not None else None,
+            )
+        if time_dict["type"] == "ignore":
+            return PolygonRasterizationTimeIgnore()
+        raise ValueError(f"Invalid polygon rasterization time type {time_dict['type']}")
+
+    @classmethod
+    def feature_times(cls) -> PolygonRasterizationTime:
+        """Every start and end time of a feature is a slice boundary."""
+        return PolygonRasterizationTimeFeatureTimes()
+
+    @classmethod
+    def regular(
+        cls,
+        granularity: TimeGranularity,
+        step: int = 1,
+        reference: datetime.datetime | np.datetime64 | None = None,
+    ) -> PolygonRasterizationTime:
+        """Regular time slices of length `step`, aligned to `reference` (default: Unix epoch)."""
+        if isinstance(reference, datetime.datetime):
+            # We assume that a datetime without a timezone means UTC
+            if reference.tzinfo is not None:
+                reference = reference.astimezone(tz=datetime.timezone.utc).replace(tzinfo=None)
+            reference = np.datetime64(reference)
+        return PolygonRasterizationTimeRegular(granularity, step, reference)
+
+    @classmethod
+    def ignore(cls) -> PolygonRasterizationTime:
+        """All features are rasterized into one time slice that is valid forever."""
+        return PolygonRasterizationTimeIgnore()
+
+
+@dataclass
+class PolygonRasterizationTimeFeatureTimes(PolygonRasterizationTime):
+    """Every start and end time of a feature is a slice boundary."""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "featureTimes"}
+
+
+@dataclass
+class PolygonRasterizationTimeRegular(PolygonRasterizationTime):
+    """Regular time slices that contain all features whose time intersects them."""
+
+    granularity: TimeGranularity
+    step: int = 1
+    reference: np.datetime64 | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        time_dict: dict[str, Any] = {
+            "type": "regular",
+            "step": {"granularity": self.granularity, "step": self.step},
+        }
+        if self.reference is not None:
+            time_dict["reference"] = int(self.reference.astype("datetime64[ms]").astype(int))
+        return time_dict
+
+
+@dataclass
+class PolygonRasterizationTimeIgnore(PolygonRasterizationTime):
+    """All features are rasterized into one time slice that is valid forever."""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"type": "ignore"}
+
+
+class PolygonRasterization(RasterOperator):
+    """The `PolygonRasterization` operator, which rasterizes (multi) polygons.
+
+    A pixel is covered by a polygon if its center lies inside the polygon.
+    Pixels that are not covered by any polygon are no data.
+    """
+
+    # pylint: disable=too-many-instance-attributes
+
+    source: VectorOperator
+    spatial_resolution: tuple[float, float]
+    origin_coordinate: tuple[float, float] | None
+    value: PolygonRasterizationValue | None
+    output_type: Literal["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64", "F32", "F64"] | None
+    output_measurement: Measurement | None
+    time: PolygonRasterizationTime | None
+
+    # pylint: disable=too-many-arguments
+    def __init__(
+        self,
+        source: VectorOperator,
+        *,
+        spatial_resolution: tuple[float, float],
+        origin_coordinate: tuple[float, float] | None = None,
+        value: PolygonRasterizationValue | None = None,
+        output_type: Literal["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64", "F32", "F64"] | None = None,
+        output_measurement: Measurement | None = None,
+        time: PolygonRasterizationTime | None = None,
+    ):
+        """Creates a new PolygonRasterization operator.
+
+        `spatial_resolution` are the positive pixel sizes in x and y direction.
+        The rows of the grid run from north to south, and `origin_coordinate` is a pixel corner
+        to which the grid is aligned (default: `(0, 0)`).
+        Omitted parameters use the defaults of the server, i.e., a constant value of `1` and
+        time slices between the start and end times of the features.
+        """
+        self.source = source
+        self.spatial_resolution = spatial_resolution
+        self.origin_coordinate = origin_coordinate
+        self.value = value
+        self.output_type = output_type
+        self.output_measurement = output_measurement
+        self.time = time
+
+    def name(self) -> str:
+        return "PolygonRasterization"
+
+    def to_dict(self) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "spatialResolution": {"x": self.spatial_resolution[0], "y": self.spatial_resolution[1]},
+        }
+        if self.origin_coordinate is not None:
+            params["originCoordinate"] = {"x": self.origin_coordinate[0], "y": self.origin_coordinate[1]}
+        if self.value is not None:
+            params["value"] = self.value.to_dict()
+        if self.output_type is not None:
+            params["outputType"] = self.output_type
+        if self.output_measurement is not None:
+            params["outputMeasurement"] = self.output_measurement.to_api_dict().to_dict()
+        if self.time is not None:
+            params["time"] = self.time.to_dict()
+
+        return {"type": self.name(), "params": params, "sources": {"vector": self.source.to_dict()}}
+
+    @classmethod
+    def from_operator_dict(cls, operator_dict: dict[str, Any]) -> PolygonRasterization:
+        if operator_dict["type"] != "PolygonRasterization":
+            raise ValueError("Invalid operator type")
+
+        params = operator_dict["params"]
+
+        origin_coordinate = None
+        if params.get("originCoordinate") is not None:
+            origin_coordinate = (float(params["originCoordinate"]["x"]), float(params["originCoordinate"]["y"]))
+
+        output_measurement = None
+        if params.get("outputMeasurement") is not None:
+            output_measurement = Measurement.from_response(
+                geoengine_api_client.Measurement.from_dict(params["outputMeasurement"])
+            )
+
+        return PolygonRasterization(
+            source=VectorOperator.from_operator_dict(operator_dict["sources"]["vector"]),
+            spatial_resolution=(float(params["spatialResolution"]["x"]), float(params["spatialResolution"]["y"])),
+            origin_coordinate=origin_coordinate,
+            value=PolygonRasterizationValue.from_dict(params["value"]) if params.get("value") is not None else None,
+            output_type=params.get("outputType"),
+            output_measurement=output_measurement,
+            time=PolygonRasterizationTime.from_dict(params["time"]) if params.get("time") is not None else None,
+        )

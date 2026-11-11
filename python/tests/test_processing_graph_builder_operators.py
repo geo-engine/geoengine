@@ -1,5 +1,6 @@
 """Tests for the processing graph builder operators."""
 
+import datetime
 import unittest
 
 from geoengine import processing_graph_builder as wb
@@ -529,6 +530,94 @@ class OperatorsTests(unittest.TestCase):
 
         self.assertEqual(parsed.name(), "Onnx")
         self.assertEqual(parsed.to_dict()["type"], "Onnx")
+
+    def test_polygon_rasterization_defaults(self):
+        source_operator = wb.operators.OgrSource("germany")
+
+        processing_graph = wb.operators.PolygonRasterization(source_operator, spatial_resolution=(0.1, 0.1))
+
+        self.assertEqual(
+            processing_graph.to_dict(),
+            {
+                "type": "PolygonRasterization",
+                "params": {"spatialResolution": {"x": 0.1, "y": 0.1}},
+                "sources": {"vector": source_operator.to_dict()},
+            },
+        )
+
+        parsed = wb.operators.RasterOperator.from_operator_dict(processing_graph.to_dict())
+        self.assertIsInstance(parsed, wb.operators.PolygonRasterization)
+        self.assertEqual(parsed.to_dict(), processing_graph.to_dict())
+
+    def test_polygon_rasterization(self):
+        source_operator = wb.operators.OgrSource("land_cover")
+
+        processing_graph = wb.operators.PolygonRasterization(
+            source_operator,
+            spatial_resolution=(10.0, 10.0),
+            origin_coordinate=(5.0, 5.0),
+            value=wb.operators.PolygonRasterizationValue.attribute("population", "sum", ignore_no_data=False),
+            output_type="U32",
+            output_measurement=ContinuousMeasurement("population", unit=None),
+            time=wb.operators.PolygonRasterizationTime.regular(
+                "years", reference=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+            ),
+        )
+
+        self.assertEqual(
+            processing_graph.to_dict(),
+            {
+                "type": "PolygonRasterization",
+                "params": {
+                    "spatialResolution": {"x": 10.0, "y": 10.0},
+                    "originCoordinate": {"x": 5.0, "y": 5.0},
+                    "value": {
+                        "type": "attribute",
+                        "column": "population",
+                        "aggregation": "sum",
+                        "ignoreNoData": False,
+                    },
+                    "outputType": "U32",
+                    "outputMeasurement": {"type": "continuous", "measurement": "population", "unit": None},
+                    "time": {
+                        "type": "regular",
+                        "step": {"granularity": "years", "step": 1},
+                        "reference": 1_577_836_800_000,
+                    },
+                },
+                "sources": {"vector": source_operator.to_dict()},
+            },
+        )
+
+        self.assertEqual(
+            wb.operators.PolygonRasterization.from_operator_dict(processing_graph.to_dict()).to_dict(),
+            processing_graph.to_dict(),
+        )
+
+    def test_polygon_rasterization_values_and_times(self):
+        source_operator = wb.operators.OgrSource("germany")
+
+        for value, time in [
+            (wb.operators.PolygonRasterizationValue.constant(3.0), wb.operators.PolygonRasterizationTime.ignore()),
+            (wb.operators.PolygonRasterizationValue.count(), wb.operators.PolygonRasterizationTime.feature_times()),
+            (
+                wb.operators.PolygonRasterizationValue.attribute("class", "medianEstimate"),
+                wb.operators.PolygonRasterizationTime.regular("months", step=3),
+            ),
+        ]:
+            processing_graph = wb.operators.PolygonRasterization(
+                source_operator, spatial_resolution=(1.0, 2.0), value=value, time=time
+            )
+
+            self.assertEqual(processing_graph.to_dict()["params"]["value"], value.to_dict())
+            self.assertEqual(processing_graph.to_dict()["params"]["time"], time.to_dict())
+            self.assertEqual(
+                wb.operators.PolygonRasterization.from_operator_dict(processing_graph.to_dict()).to_dict(),
+                processing_graph.to_dict(),
+            )
+
+        with self.assertRaises(ValueError):
+            wb.operators.PolygonRasterizationValue.from_dict({"type": "unknown"})
 
 
 if __name__ == "__main__":
