@@ -1,4 +1,3 @@
-mod aggregators;
 mod first_last_subquery;
 mod subquery;
 mod temporal_aggregation_operator;

@@ -5,11 +5,12 @@ use crate::api::model::processing_graphs::{
     DownsamplingResolution, Expression, ExpressionParameters, GdalSource, GdalSourceParameters,
     Interpolation, InterpolationMethod, InterpolationParameters, InterpolationResolution,
     MultiBandGdalSource, NeighborhoodAggregate, NeighborhoodAggregateParameters,
-    NeighborhoodKernel, Onnx, OnnxParameters, Radiance, RadianceParameters, RasterOperator,
-    RasterScaling, RasterScalingParameters, RasterStacker, RasterStackerParameters,
-    RasterTypeConversion, RasterTypeConversionParameters, Rasterization, RasterizationParameters,
-    Reflectance, ReflectanceParameters, RenameBands, Temperature, TemperatureParameters,
-    TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
+    NeighborhoodKernel, Onnx, OnnxParameters, PolygonRasterization, PolygonRasterizationParameters,
+    Radiance, RadianceParameters, RasterOperator, RasterScaling, RasterScalingParameters,
+    RasterStacker, RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
+    Rasterization, RasterizationParameters, Reflectance, ReflectanceParameters, RenameBands,
+    Temperature, TemperatureParameters, TemporalRasterAggregation,
+    TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
         AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum,
@@ -40,8 +41,8 @@ use geoengine_operators::{
         InterpolationMethod as OperatorsInterpolationMethod,
         InterpolationResolution as OperatorsInterpolationResolution,
         NeighborhoodAggregate as OperatorsNeighborhoodAggregate, NeighborhoodParams,
-        Radiance as OperatorsRadiance, RasterScaling as OperatorsRasterScaling,
-        RasterStacker as OperatorsRasterStacker,
+        PolygonRasterization as OperatorsPolygonRasterization, Radiance as OperatorsRadiance,
+        RasterScaling as OperatorsRasterScaling, RasterStacker as OperatorsRasterStacker,
         RasterTypeConversion as OperatorsRasterTypeConversion,
         Rasterization as OperatorsRasterization, Reflectance as OperatorsReflectance,
         ScalingMode as OperatorsScalingMode, SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
@@ -550,6 +551,30 @@ impl TryFrom<&OperatorsRasterization> for Rasterization {
     }
 }
 
+impl TryFrom<&OperatorsPolygonRasterization> for PolygonRasterization {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsPolygonRasterization) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            params: PolygonRasterizationParameters {
+                spatial_resolution: value.params.spatial_resolution.into(),
+                origin_coordinate: value.params.origin_coordinate.into(),
+                value: (&value.params.value).into(),
+                output_type: value.params.output_type.map(Into::into),
+                output_measurement: value.params.output_measurement.clone().map(Into::into),
+                time: value.params.time.into(),
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleVectorSource {
+                vector: crate::api::model::processing_graphs::back_conversion::vector::vector_operator_from_runtime(
+                    &value.sources.vector,
+                )?,
+            }
+            .into(),
+        })
+    }
+}
+
 impl TryFrom<&OperatorsReflectance> for Reflectance {
     type Error = anyhow::Error;
 
@@ -649,7 +674,8 @@ mod tests {
             BandNeighborhoodAggregateParams as OperatorsBandNeighborhoodAggregateParameters,
             BandwiseExpression as OperatorsBandwiseExpression,
             BandwiseExpressionParams as OperatorsBandwiseExpressionParams,
-            DeriveOutRasterSpecsSource, Downsampling as OperatorsDownsampling,
+            BurnValue as OperatorsBurnValue, DeriveOutRasterSpecsSource,
+            Downsampling as OperatorsDownsampling,
             DownsamplingMethod as OperatorsDownsamplingMethod,
             DownsamplingParams as OperatorsDownsamplingParams,
             DownsamplingResolution as OperatorsDownsamplingResolution,
@@ -660,8 +686,11 @@ mod tests {
             InterpolationResolution as OperatorsInterpolationResolution,
             NeighborhoodAggregate as OperatorsNeighborhoodAggregate,
             NeighborhoodAggregateParams as OperatorsNeighborhoodAggregateParams,
-            NeighborhoodParams, Radiance as OperatorsRadiance,
-            RadianceParams as OperatorsRadianceParameters, RasterScaling as OperatorsRasterScaling,
+            NeighborhoodParams, OverlapAggregation as OperatorsOverlapAggregation,
+            PolygonRasterization as OperatorsPolygonRasterization,
+            PolygonRasterizationParams as OperatorsPolygonRasterizationParams,
+            Radiance as OperatorsRadiance, RadianceParams as OperatorsRadianceParameters,
+            RasterScaling as OperatorsRasterScaling,
             RasterScalingParams as OperatorsRasterScalingParams,
             RasterStacker as OperatorsRasterStacker,
             RasterStackerParams as OperatorsRasterStackerParams,
@@ -669,8 +698,8 @@ mod tests {
             RasterTypeConversionParams as OperatorsRasterTypeConversionParams,
             Rasterization as OperatorsRasterization,
             RasterizationParams as OperatorsRasterizationParams,
-            Reflectance as OperatorsReflectance, ReflectanceParams as OperatorsReflectanceParams,
-            Reprojection as OperatorsReprojection,
+            RasterizationTime as OperatorsRasterizationTime, Reflectance as OperatorsReflectance,
+            ReflectanceParams as OperatorsReflectanceParams, Reprojection as OperatorsReprojection,
             ReprojectionParams as OperatorsReprojectionParams, ScalingMode as OperatorsScalingMode,
             SlopeOffsetSelection as OperatorsSlopeOffsetSelection,
             Temperature as OperatorsTemperature, TemperatureParams as OperatorsTemperatureParams,
@@ -912,6 +941,10 @@ mod tests {
                 |graph| matches!(graph, RasterOperator::Rasterization(_)),
             ),
             (
+                TypedRasterOperator::from(polygon_rasterization()),
+                |graph| matches!(graph, RasterOperator::PolygonRasterization(_)),
+            ),
+            (
                 TypedRasterOperator::from(OperatorsReflectance {
                     params: OperatorsReflectanceParams {
                         solar_correction: true,
@@ -963,6 +996,76 @@ mod tests {
                 "runtime raster conversion failed for {}",
                 operator.type_name()
             );
+        }
+    }
+
+    fn polygon_rasterization() -> OperatorsPolygonRasterization {
+        OperatorsPolygonRasterization {
+            params: OperatorsPolygonRasterizationParams {
+                spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+                origin_coordinate: Coordinate2D::new(0.0, 0.0),
+                value: OperatorsBurnValue::Attribute {
+                    column: "class".to_string(),
+                    aggregation: OperatorsOverlapAggregation::Mean,
+                    ignore_no_data: false,
+                },
+                output_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
+                output_measurement: Some(geoengine_datatypes::primitives::Measurement::continuous(
+                    "height".to_string(),
+                    Some("m".to_string()),
+                )),
+                time: OperatorsRasterizationTime::Regular {
+                    step: geoengine_datatypes::primitives::TimeStep {
+                        granularity: geoengine_datatypes::primitives::TimeGranularity::Months,
+                        step: 1,
+                    },
+                    reference: None,
+                },
+            },
+            sources: SingleVectorSource {
+                vector: TypedVectorOperator::from(geoengine_operators::source::OgrSource {
+                    params: geoengine_operators::source::OgrSourceParameters {
+                        data: NamedData::with_system_name("polygons"),
+                        attribute_projection: None,
+                        attribute_filters: None,
+                    },
+                }),
+            },
+        }
+    }
+
+    #[test]
+    fn it_round_trips_polygon_rasterization() {
+        for (value, time) in [
+            (
+                OperatorsBurnValue::Constant {
+                    value: geoengine_datatypes::util::FiniteF64::new_unchecked(2.5),
+                },
+                OperatorsRasterizationTime::FeatureTimes,
+            ),
+            (
+                OperatorsBurnValue::Count,
+                OperatorsRasterizationTime::Ignore,
+            ),
+            (
+                polygon_rasterization().params.value,
+                polygon_rasterization().params.time,
+            ),
+        ] {
+            let operator = OperatorsPolygonRasterization {
+                params: OperatorsPolygonRasterizationParams {
+                    value,
+                    time,
+                    ..polygon_rasterization().params
+                },
+                ..polygon_rasterization()
+            };
+
+            let api = PolygonRasterization::try_from(&operator).expect("conversion failed");
+            let round_tripped =
+                OperatorsPolygonRasterization::try_from(api).expect("conversion failed");
+
+            assert_eq!(round_tripped.params, operator.params);
         }
     }
 }

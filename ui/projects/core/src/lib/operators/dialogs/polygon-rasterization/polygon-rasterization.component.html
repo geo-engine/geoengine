@@ -1,0 +1,184 @@
+<geoengine-sidenav-header>Polygon Rasterization</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container [loading]="loading()">
+        <a
+            mat-icon-button
+            operatorInputIcon
+            href="https://docs.geoengine.io/operators/polygonrasterization.html"
+            target="_blank"
+            aria-label="Help"
+        >
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a
+            mat-icon-button
+            operatorParametersIcon
+            href="https://docs.geoengine.io/operators/polygonrasterization.html"
+            target="_blank"
+            aria-label="Help"
+        >
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <mat-form-field>
+                <mat-label>Grid</mat-label>
+                <mat-select formControlName="gridLayer">
+                    <mat-option [value]="undefined">Custom</mat-option>
+                    @for (rasterLayer of rasterLayers(); track rasterLayer.id) {
+                        <mat-option [value]="rasterLayer">Grid of {{ rasterLayer.name }}</mat-option>
+                    }
+                </mat-select>
+                @if (reprojectionTarget(); as target) {
+                    <mat-hint>The polygons are reprojected to {{ target.srsString }}.</mat-hint>
+                }
+            </mat-form-field>
+            @if (gridLayer()) {
+                <p class="hint">
+                    Resolution, origin and data type are copied from the raster, so that you can clip it with a Raster Stacker and an
+                    Expression. Choose the time steps of the raster as well.
+                </p>
+            }
+            <div class="groupInRow">
+                <mat-form-field appearance="fill">
+                    <mat-label>Resolution (x)</mat-label>
+                    <input matInput type="number" formControlName="resolutionX" />
+                    @if (form.controls.resolutionX.errors?.valueNotLarger) {
+                        <mat-hint class="error">The value must be greater than zero.</mat-hint>
+                    }
+                </mat-form-field>
+                <mat-form-field appearance="fill">
+                    <mat-label>Resolution (y)</mat-label>
+                    <input matInput type="number" formControlName="resolutionY" />
+                    @if (form.controls.resolutionY.errors?.valueNotLarger) {
+                        <mat-hint class="error">The value must be greater than zero.</mat-hint>
+                    }
+                </mat-form-field>
+            </div>
+            <div class="groupInRow">
+                <mat-form-field appearance="fill">
+                    <mat-label>Origin (x)</mat-label>
+                    <input matInput type="number" formControlName="originX" />
+                </mat-form-field>
+                <mat-form-field appearance="fill">
+                    <mat-label>Origin (y)</mat-label>
+                    <input matInput type="number" formControlName="originY" />
+                </mat-form-field>
+            </div>
+
+            <mat-form-field>
+                <mat-label>Pixel value</mat-label>
+                <mat-select formControlName="valueMode">
+                    @for (valueMode of valueModes | keyvalue: keepOrder; track valueMode.key) {
+                        <mat-option [value]="valueMode.key">{{ valueMode.value }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            @switch (valueMode()) {
+                @case ('constant') {
+                    <mat-form-field>
+                        <mat-label>Value</mat-label>
+                        <input matInput type="number" formControlName="constant" />
+                        @if (form.controls.constant.errors?.required) {
+                            <mat-hint class="error">The value must be a number.</mat-hint>
+                        }
+                    </mat-form-field>
+                }
+                @case ('attribute') {
+                    <mat-form-field>
+                        <mat-label>Column</mat-label>
+                        <mat-select formControlName="column">
+                            @for (column of columns(); track column) {
+                                <mat-option [value]="column">{{ column }}</mat-option>
+                            }
+                        </mat-select>
+                        @if (columns().length === 0) {
+                            <mat-hint class="error">The layer has no numeric or categorical columns.</mat-hint>
+                        }
+                    </mat-form-field>
+                    <mat-form-field>
+                        <mat-label>Aggregation of overlapping polygons</mat-label>
+                        <mat-select formControlName="aggregation">
+                            @for (aggregation of aggregations | keyvalue: keepOrder; track aggregation.key) {
+                                <mat-option [value]="aggregation.key">{{ aggregation.value }}</mat-option>
+                            }
+                        </mat-select>
+                    </mat-form-field>
+                    <mat-checkbox formControlName="ignoreNoData">Ignore polygons without a value</mat-checkbox>
+                }
+            }
+
+            <mat-form-field>
+                <mat-label>Output Data Type</mat-label>
+                <mat-select formControlName="outputType">
+                    <mat-option [value]="undefined">Default ({{ defaultOutputTypes[valueMode()] }})</mat-option>
+                    @for (dataType of rasterDataTypes; track dataType) {
+                        <mat-option [value]="dataType">{{ dataType }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            <mat-form-field>
+                <mat-label>Time</mat-label>
+                <mat-select formControlName="timeMode">
+                    @for (timeMode of timeModes | keyvalue: keepOrder; track timeMode.key) {
+                        <mat-option [value]="timeMode.key">{{ timeMode.value }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            @if (timeMode() === 'regular') {
+                <div class="groupInRow">
+                    <mat-form-field>
+                        <mat-label>Time Granularity</mat-label>
+                        <mat-select formControlName="granularity">
+                            @for (granularity of timeGranularityOptions; track granularity) {
+                                <mat-option [value]="granularity">{{ granularity }}</mat-option>
+                            }
+                        </mat-select>
+                    </mat-form-field>
+                    <mat-form-field>
+                        <mat-label>Step</mat-label>
+                        <input matInput type="number" formControlName="step" />
+                        @if (form.controls.step.errors?.min) {
+                            <mat-hint class="error">The step must be at least 1.</mat-hint>
+                        }
+                    </mat-form-field>
+                </div>
+                <div>
+                    <mat-checkbox formControlName="referenceChecked">Specify a custom point in time for the time steps</mat-checkbox>
+                    @if (referenceChecked()) {
+                        <geoengine-time-input formControlName="reference"></geoengine-time-input>
+                    }
+                </div>
+            }
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name formControlName="name" [suggestion]="'Rasterized ' + (layer()?.name ?? 'Polygons')">
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error">The name must be non-empty.</mat-hint>
+                }
+            </geoengine-operator-output-name>
+            <geoengine-symbology-creator
+                #symbologyCreator
+                [enableCopyInputSymbology]="false"
+                [opacity]="0.8"
+                [colorMapName]="'inferno'"
+            ></geoengine-symbology-creator>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="form.invalid || symbologyCreator.form.invalid || loading()">
+                Create
+            </button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

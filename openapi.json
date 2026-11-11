@@ -12094,6 +12094,379 @@
           }
         }
       },
+      "PolygonRasterization": {
+        "type": "object",
+        "title": "Polygon Rasterization",
+        "description": "The `PolygonRasterization` operator creates a raster from a polygon vector source.\n\nA pixel is covered by a polygon if its center lies inside the polygon (holes are respected).\nPixels that are not covered by any polygon are NO DATA.\n\nThe value of the covered pixels is\n- a constant (`1` by default),\n- the number of polygons that cover the pixel (`count`), or\n- the value of a numeric column (`attribute`), aggregated over all polygons that cover the pixel.\n  Features with a null value are skipped, unless `ignoreNoData` is `false`, which makes all pixels they cover NO DATA.\n  `first`, `last`, `min` and `max` keep the measurement of the column, e.g., its classes.\n  `sum`, `mean` and `medianEstimate` create new values, so a classification becomes unitless.\n  The median is exact for up to five values and estimated by the P² algorithm for more.\n\nThe time slices of the output raster are\n- `featureTimes` (default): every start and end time of a feature is a slice boundary,\n  i.e., the slices are the intervals between consecutive boundaries.\n  For example, features valid during `[0, 10)` and `[5, 20)` yield the slices `[0, 5)`, `[5, 10)` and `[10, 20)`.\n  Each slice contains exactly the features that are valid during it, and slices without features are NO DATA.\n  This needs to scan the times of all features of the source for each query, so prefer `regular` for large data.\n- `regular`: slices of a fixed time step, each containing all features whose time intersects it.\n- `ignore`: one slice that is valid forever and contains all features.\n\n## Clipping a raster with polygons\n\nRasterize the polygons on the grid of the raster and mask the raster with the NO DATA pixels of the result,\nusing a `RasterStacker` and an `Expression` like `if B IS NODATA { NODATA } else { A }`.\nBoth rasters need\n- the same resolution and origin modulo the resolution, e.g., the default origin `(0, 0)` for most grids,\n- the same data type, i.e., set `outputType` to the data type of the raster, and\n- the same regular time steps, i.e., use the `regular` time of the raster, or slices that the stacker can align.\n\n## Errors\n\nIf the source is not a polygon source, the column does not exist or is not numeric,\nor the constant value cannot be represented by the output type, an error will be thrown.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PolygonRasterization"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/PolygonRasterizationParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "PolygonRasterization",
+            "params": {
+              "spatialResolution": {
+                "x": 0.1,
+                "y": 0.1
+              },
+              "value": {
+                "type": "constant",
+                "value": 1
+              }
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "germany"
+                }
+              }
+            }
+          },
+          {
+            "type": "PolygonRasterization",
+            "params": {
+              "spatialResolution": {
+                "x": 10,
+                "y": 10
+              },
+              "originCoordinate": {
+                "x": 0,
+                "y": 0
+              },
+              "value": {
+                "type": "attribute",
+                "column": "landCoverClass",
+                "aggregation": "max"
+              },
+              "outputType": "U8",
+              "time": {
+                "type": "regular",
+                "step": {
+                  "granularity": "years",
+                  "step": 1
+                }
+              }
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "land_cover"
+                }
+              }
+            }
+          },
+          {
+            "type": "Expression",
+            "params": {
+              "expression": "if B IS NODATA { NODATA } else { A }",
+              "outputType": "U8",
+              "mapNoData": true
+            },
+            "sources": {
+              "raster": {
+                "type": "RasterStacker",
+                "params": {
+                  "renameBands": {
+                    "type": "default"
+                  }
+                },
+                "sources": {
+                  "rasters": [
+                    {
+                      "type": "GdalSource",
+                      "params": {
+                        "data": "ndvi"
+                      }
+                    },
+                    {
+                      "type": "PolygonRasterization",
+                      "params": {
+                        "spatialResolution": {
+                          "x": 0.1,
+                          "y": 0.1
+                        },
+                        "outputType": "U8",
+                        "time": {
+                          "type": "regular",
+                          "step": {
+                            "granularity": "months",
+                            "step": 1
+                          }
+                        }
+                      },
+                      "sources": {
+                        "vector": {
+                          "type": "OgrSource",
+                          "params": {
+                            "data": "germany"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PolygonRasterizationAggregation": {
+        "type": "string",
+        "description": "How the values of overlapping polygons are combined.",
+        "enum": [
+          "first",
+          "last",
+          "min",
+          "max",
+          "sum",
+          "mean",
+          "medianEstimate"
+        ]
+      },
+      "PolygonRasterizationParameters": {
+        "type": "object",
+        "required": [
+          "spatialResolution"
+        ],
+        "properties": {
+          "spatialResolution": {
+            "$ref": "#/components/schemas/SpatialResolution",
+            "description": "Spatial resolution of the output grid, i.e., the positive pixel size in x and y direction in units of the spatial reference of the source.\n\nThe columns of the grid run from west to east (increasing x) and the rows from north to south (decreasing y), i.e., the grid has the geo transform `(originCoordinate, x, -y)`.\nThis holds for every spatial reference, since coordinates are always given as x = easting/longitude and y = northing/latitude."
+          },
+          "originCoordinate": {
+            "$ref": "#/components/schemas/Coordinate2D",
+            "description": "Origin coordinate to which the raster grid is aligned.\n\nIt is a pixel corner, and the grid continues from it in all directions to cover the polygons.\nIf omitted, the grid is aligned to `(0, 0)`."
+          },
+          "value": {
+            "$ref": "#/components/schemas/PolygonRasterizationValue",
+            "description": "The value that a polygon burns into the pixels it covers.\n\nIf omitted, each covered pixel gets the value `1`."
+          },
+          "outputType": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RasterDataType",
+                "description": "Optional output raster data type.\n\nIf omitted, it is `U8` for a constant, `U32` for a count and `F64` for an attribute."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outputMeasurement": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Measurement",
+                "description": "Optional measurement of the output band.\n\nIf omitted, it is derived from the value: unitless for a constant, `count` for a count,\nand the measurement of the column for an attribute (unitless for a classification that is summed or averaged)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time": {
+            "$ref": "#/components/schemas/PolygonRasterizationTime",
+            "description": "How the time slices of the output raster are derived from the features.\n\nIf omitted, every start and end time of a feature is a slice boundary (`featureTimes`)."
+          }
+        }
+      },
+      "PolygonRasterizationTime": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PolygonRasterizationTimeFeatureTimes"
+          },
+          {
+            "$ref": "#/components/schemas/PolygonRasterizationTimeRegular"
+          },
+          {
+            "$ref": "#/components/schemas/PolygonRasterizationTimeIgnore"
+          }
+        ],
+        "description": "How the time slices of the output raster are derived from the features.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "featureTimes": "#/components/schemas/PolygonRasterizationTimeFeatureTimes",
+            "ignore": "#/components/schemas/PolygonRasterizationTimeIgnore",
+            "regular": "#/components/schemas/PolygonRasterizationTimeRegular"
+          }
+        }
+      },
+      "PolygonRasterizationTimeFeatureTimes": {
+        "type": "object",
+        "description": "Every start and end time of a feature is a slice boundary, i.e., the slices are the intervals\nbetween consecutive boundaries.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "featureTimes"
+            ]
+          }
+        }
+      },
+      "PolygonRasterizationTimeIgnore": {
+        "type": "object",
+        "description": "One time slice that is valid forever and contains all features, regardless of their times.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "ignore"
+            ]
+          }
+        }
+      },
+      "PolygonRasterizationTimeRegular": {
+        "type": "object",
+        "description": "Regular time slices that contain all features whose time intersects them.",
+        "required": [
+          "type",
+          "step"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "regular"
+            ]
+          },
+          "step": {
+            "$ref": "#/components/schemas/TimeStep",
+            "description": "The length of the time slices."
+          },
+          "reference": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimeInstance",
+                "description": "Optional reference time to which the slices are aligned.\n\nIf omitted, the slices are aligned to `1970-01-01T00:00:00Z`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PolygonRasterizationValue": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PolygonRasterizationValueConstant"
+          },
+          {
+            "$ref": "#/components/schemas/PolygonRasterizationValueCount"
+          },
+          {
+            "$ref": "#/components/schemas/PolygonRasterizationValueAttribute"
+          }
+        ],
+        "description": "The value that a polygon burns into the pixels it covers.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "attribute": "#/components/schemas/PolygonRasterizationValueAttribute",
+            "constant": "#/components/schemas/PolygonRasterizationValueConstant",
+            "count": "#/components/schemas/PolygonRasterizationValueCount"
+          }
+        }
+      },
+      "PolygonRasterizationValueAttribute": {
+        "type": "object",
+        "description": "Each pixel gets the value of a numeric column, aggregated over all polygons that cover it.",
+        "required": [
+          "type",
+          "column",
+          "aggregation"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "attribute"
+            ]
+          },
+          "column": {
+            "type": "string",
+            "description": "The name of a numeric (int, float or category) column.",
+            "examples": [
+              "class"
+            ]
+          },
+          "aggregation": {
+            "$ref": "#/components/schemas/PolygonRasterizationAggregation",
+            "description": "How the values of overlapping polygons are combined."
+          },
+          "ignoreNoData": {
+            "type": "boolean",
+            "description": "If `true` (default), features with a null value are skipped.\nIf `false`, they make all pixels they cover NO DATA.",
+            "default": true,
+            "examples": [
+              true
+            ]
+          }
+        }
+      },
+      "PolygonRasterizationValueConstant": {
+        "type": "object",
+        "description": "Each covered pixel gets the same value.",
+        "required": [
+          "type",
+          "value"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "constant"
+            ]
+          },
+          "value": {
+            "type": "number",
+            "format": "double",
+            "description": "The finite value of the covered pixels.",
+            "examples": [
+              1.0
+            ]
+          }
+        }
+      },
+      "PolygonRasterizationValueCount": {
+        "type": "object",
+        "description": "Each pixel gets the number of polygons that cover it.",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "count"
+            ]
+          }
+        }
+      },
       "PolygonSymbology": {
         "type": "object",
         "required": [
@@ -12657,6 +13030,9 @@
             "$ref": "#/components/schemas/Onnx"
           },
           {
+            "$ref": "#/components/schemas/PolygonRasterization"
+          },
+          {
             "$ref": "#/components/schemas/RasterScaling"
           },
           {
@@ -12701,6 +13077,7 @@
             "MultiBandGdalSource": "#/components/schemas/MultiBandGdalSource",
             "NeighborhoodAggregate": "#/components/schemas/NeighborhoodAggregate",
             "Onnx": "#/components/schemas/Onnx",
+            "PolygonRasterization": "#/components/schemas/PolygonRasterization",
             "Radiance": "#/components/schemas/Radiance",
             "RasterScaling": "#/components/schemas/RasterScaling",
             "RasterStacker": "#/components/schemas/RasterStacker",

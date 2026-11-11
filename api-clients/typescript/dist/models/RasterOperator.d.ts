@@ -18,6 +18,7 @@ import type { Interpolation } from './Interpolation';
 import type { MultiBandGdalSource } from './MultiBandGdalSource';
 import type { NeighborhoodAggregate } from './NeighborhoodAggregate';
 import type { Onnx } from './Onnx';
+import type { PolygonRasterization } from './PolygonRasterization';
 import type { Radiance } from './Radiance';
 import type { RasterScaling } from './RasterScaling';
 import type { RasterStacker } from './RasterStacker';
@@ -54,6 +55,8 @@ export type RasterOperator = {
 } & NeighborhoodAggregate | {
     type: 'Onnx';
 } & Onnx | {
+    type: 'PolygonRasterization';
+} & PolygonRasterization | {
     type: 'Radiance';
 } & Radiance | {
     type: 'RasterScaling';

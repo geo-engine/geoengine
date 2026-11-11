@@ -429,7 +429,8 @@ impl Colorizer {
 
         let mut breakpoint_iter = breakpoints.iter();
         let mut breakpoint_prev = breakpoint_iter.next().expect("must have first entry");
-        let mut breakpoint_next = breakpoint_iter.next().expect("must have second entry");
+        // deserialized colorizers may have a single breakpoint
+        let mut breakpoint_next = breakpoint_iter.next().unwrap_or(breakpoint_prev);
 
         let color_table: Vec<RgbaColor> = std::iter::successors(Some(min), |v| Some(v + step))
             .take(number_of_colors)
@@ -451,6 +452,12 @@ impl Colorizer {
 
                     let prev_color = breakpoint_prev.color;
                     let next_color = breakpoint_next.color;
+
+                    // breakpoints with the same value have no gradient in between
+                    #[allow(clippy::float_cmp)]
+                    if prev_value == next_value {
+                        return prev_color;
+                    }
 
                     let fraction = match self {
                         Self::LinearGradient { .. } => {
@@ -951,6 +958,36 @@ mod tests {
         assert_eq!(color_table[3], RgbaColor::new(v2, v2, v2, 255)); // at 76
 
         assert_eq!(color_table[4], RgbaColor::white());
+    }
+
+    #[test]
+    fn it_creates_color_tables_of_breakpoints_with_the_same_value() {
+        let red = RgbaColor::new(255, 0, 0, 255);
+        let green = RgbaColor::new(0, 255, 0, 255);
+        let gradient = |breakpoints: Vec<(f64, RgbaColor)>| Colorizer::LinearGradient {
+            breakpoints: breakpoints
+                .into_iter()
+                .map(|breakpoint| breakpoint.try_into().unwrap())
+                .collect(),
+            no_data_color: RgbaColor::transparent(),
+            over_color: RgbaColor::white(),
+            under_color: RgbaColor::black(),
+        };
+
+        // e.g., a raster that only contains ones, deserialized without validation
+        let single = gradient(vec![(1., red)]);
+        assert_eq!(single.color_table(3, 1., 1.), vec![red; 3]);
+        assert_eq!(
+            single.color_table(3, 0., 2.),
+            vec![RgbaColor::black(), red, RgbaColor::white()]
+        );
+
+        let same = gradient(vec![(1., red), (1., green)]);
+        assert_eq!(same.color_table(3, 1., 1.), vec![red; 3]);
+        assert_eq!(
+            same.color_table(3, 0., 2.),
+            vec![RgbaColor::black(), red, RgbaColor::white()]
+        );
     }
 
     #[test]

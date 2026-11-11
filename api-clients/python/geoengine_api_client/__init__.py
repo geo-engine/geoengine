@@ -284,6 +284,17 @@ __all__ = [
     "PointInPolygonFilter",
     "PointInPolygonFilterSource",
     "PointSymbology",
+    "PolygonRasterization",
+    "PolygonRasterizationAggregation",
+    "PolygonRasterizationParameters",
+    "PolygonRasterizationTime",
+    "PolygonRasterizationTimeFeatureTimes",
+    "PolygonRasterizationTimeIgnore",
+    "PolygonRasterizationTimeRegular",
+    "PolygonRasterizationValue",
+    "PolygonRasterizationValueAttribute",
+    "PolygonRasterizationValueConstant",
+    "PolygonRasterizationValueCount",
     "PolygonSymbology",
     "ProcessingGraph",
     "Project",
@@ -756,6 +767,17 @@ from geoengine_api_client.models.plot_update import PlotUpdate as PlotUpdate
 from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter as PointInPolygonFilter
 from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource as PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology as PointSymbology
+from geoengine_api_client.models.polygon_rasterization import PolygonRasterization as PolygonRasterization
+from geoengine_api_client.models.polygon_rasterization_aggregation import PolygonRasterizationAggregation as PolygonRasterizationAggregation
+from geoengine_api_client.models.polygon_rasterization_parameters import PolygonRasterizationParameters as PolygonRasterizationParameters
+from geoengine_api_client.models.polygon_rasterization_time import PolygonRasterizationTime as PolygonRasterizationTime
+from geoengine_api_client.models.polygon_rasterization_time_feature_times import PolygonRasterizationTimeFeatureTimes as PolygonRasterizationTimeFeatureTimes
+from geoengine_api_client.models.polygon_rasterization_time_ignore import PolygonRasterizationTimeIgnore as PolygonRasterizationTimeIgnore
+from geoengine_api_client.models.polygon_rasterization_time_regular import PolygonRasterizationTimeRegular as PolygonRasterizationTimeRegular
+from geoengine_api_client.models.polygon_rasterization_value import PolygonRasterizationValue as PolygonRasterizationValue
+from geoengine_api_client.models.polygon_rasterization_value_attribute import PolygonRasterizationValueAttribute as PolygonRasterizationValueAttribute
+from geoengine_api_client.models.polygon_rasterization_value_constant import PolygonRasterizationValueConstant as PolygonRasterizationValueConstant
+from geoengine_api_client.models.polygon_rasterization_value_count import PolygonRasterizationValueCount as PolygonRasterizationValueCount
 from geoengine_api_client.models.polygon_symbology import PolygonSymbology as PolygonSymbology
 from geoengine_api_client.models.processing_graph import ProcessingGraph as ProcessingGraph
 from geoengine_api_client.models.project import Project as Project

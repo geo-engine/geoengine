@@ -11,6 +11,7 @@ mod map_query;
 mod meteosat;
 mod neighborhood_aggregate;
 mod point_in_polygon;
+mod polygon_rasterization;
 mod raster_scaling;
 mod raster_stacker;
 mod raster_type_conversion;
@@ -60,6 +61,10 @@ pub use neighborhood_aggregate::{
 pub use point_in_polygon::{
     PointInPolygonFilter, PointInPolygonFilterParams, PointInPolygonFilterSource,
     PointInPolygonTester,
+};
+pub use polygon_rasterization::{
+    BurnValue, OverlapAggregation, PolygonRasterization, PolygonRasterizationParams,
+    RasterizationTime,
 };
 pub use raster_scaling::{RasterScaling, RasterScalingParams, ScalingMode, SlopeOffsetSelection};
 pub use raster_stacker::{RasterStacker, RasterStackerParams};

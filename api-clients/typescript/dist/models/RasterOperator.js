@@ -27,6 +27,7 @@ const Interpolation_1 = require("./Interpolation");
 const MultiBandGdalSource_1 = require("./MultiBandGdalSource");
 const NeighborhoodAggregate_1 = require("./NeighborhoodAggregate");
 const Onnx_1 = require("./Onnx");
+const PolygonRasterization_1 = require("./PolygonRasterization");
 const Radiance_1 = require("./Radiance");
 const RasterScaling_1 = require("./RasterScaling");
 const RasterStacker_1 = require("./RasterStacker");
@@ -65,6 +66,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, NeighborhoodAggregate_1.NeighborhoodAggregateFromJSONTyped)(json, true), { type: 'NeighborhoodAggregate' });
         case 'Onnx':
             return Object.assign({}, (0, Onnx_1.OnnxFromJSONTyped)(json, true), { type: 'Onnx' });
+        case 'PolygonRasterization':
+            return Object.assign({}, (0, PolygonRasterization_1.PolygonRasterizationFromJSONTyped)(json, true), { type: 'PolygonRasterization' });
         case 'Radiance':
             return Object.assign({}, (0, Radiance_1.RadianceFromJSONTyped)(json, true), { type: 'Radiance' });
         case 'RasterScaling':
@@ -117,6 +120,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, NeighborhoodAggregate_1.NeighborhoodAggregateToJSON)(value), { 'type': 'NeighborhoodAggregate' });
         case 'Onnx':
             return Object.assign({}, (0, Onnx_1.OnnxToJSON)(value), { 'type': 'Onnx' });
+        case 'PolygonRasterization':
+            return Object.assign({}, (0, PolygonRasterization_1.PolygonRasterizationToJSON)(value), { 'type': 'PolygonRasterization' });
         case 'Radiance':
             return Object.assign({}, (0, Radiance_1.RadianceToJSON)(value), { 'type': 'Radiance' });
         case 'RasterScaling':

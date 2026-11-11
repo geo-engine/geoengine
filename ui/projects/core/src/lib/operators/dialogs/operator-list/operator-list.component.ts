@@ -31,6 +31,7 @@ import {MeanRasterPixelValuesOverTimeDialogComponent} from '../mean-raster-pixel
 import {NeighborhoodAggregateComponent} from '../neighborhood-aggregate/neighborhood-aggregate.component';
 import {PieChartComponent} from '../pie-chart/pie-chart.component';
 import {PointInPolygonFilterOperatorComponent} from '../point-in-polygon-filter/point-in-polygon-filter.component';
+import {PolygonRasterizationComponent} from '../polygon-rasterization/polygon-rasterization.component';
 import {RasterScalingComponent} from '../raster-scaling/raster-scaling.component';
 import {RasterStackerComponent} from '../raster-stacker/raster-stacker.component';
 import {RasterTypeConversionComponent} from '../raster-type-conversion/raster-type-conversion.component';
@@ -116,6 +117,14 @@ export class OperatorListComponent implements OnInit, OnChanges {
                 ICON_URL: createIconDataUrl('Rasterization'),
             },
             description: 'Rasterize points',
+        },
+        {
+            component: PolygonRasterizationComponent,
+            type: {
+                NAME: 'Polygon Rasterization',
+                ICON_URL: createIconDataUrl('Polygon Rasterization'),
+            },
+            description: 'Rasterize polygons, e.g., to clip a raster',
         },
         // {
         //     component: RasterPolygonClipOperatorComponent,

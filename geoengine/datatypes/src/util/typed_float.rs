@@ -135,6 +135,12 @@ typed_f64_proxy!(
 );
 
 typed_f64_proxy!(
+    /// An `f64` that is finite, i.e., neither NaN nor infinite.
+    FiniteF64,
+    tf64::NonNaNFinite
+);
+
+typed_f64_proxy!(
     /// An `f64` that is finite and not zero.
     NonZeroFiniteF64,
     tf64::NonZeroNonNaNFinite
@@ -181,6 +187,12 @@ mod tests {
         assert!(NonNanF64::new(f64::INFINITY).is_ok());
         assert!(NonNanF64::new(f64::NAN).is_err());
 
+        assert!(FiniteF64::new(-1.0).is_ok());
+        assert!(FiniteF64::new(0.0).is_ok());
+        for invalid in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            assert!(FiniteF64::new(invalid).is_err(), "{invalid}");
+        }
+
         assert!(NonZeroFiniteF64::new(-1.0).is_ok());
         assert!(NonZeroFiniteF64::new(1.0).is_ok());
         for invalid in [0.0, -0.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
@@ -211,6 +223,8 @@ mod tests {
         assert!(serde_json::from_str::<PositiveFiniteF64>("-1.0").is_err());
         assert!(serde_json::from_str::<NonZeroFiniteF64>("0.0").is_err());
         assert!(serde_json::from_str::<NonZeroFiniteF64>("-1.0").is_ok());
+        assert!(serde_json::from_str::<FiniteF64>("-1.5").is_ok());
+        assert!(serde_json::from_str::<FiniteF64>("1e999").is_err());
     }
 
     #[test]
