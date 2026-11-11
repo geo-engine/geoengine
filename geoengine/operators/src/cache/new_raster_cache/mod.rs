@@ -11,6 +11,7 @@ use crate::optimization::OptimizationError;
 use crate::source::gdal_read::{UnitRead, UnitResult};
 use crate::util::{Result, safe_lock_mutex, safe_read_rwlock, safe_write_rwlock};
 use async_trait::async_trait;
+use dashmap::DashSet;
 use futures::Stream;
 use futures::StreamExt;
 use futures::stream;
@@ -58,7 +59,7 @@ impl TestDefault for NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(8_589_934_592)),
                 total_size: Arc::new(AtomicUsize::new(0)),
-                storing: Mutex::default(),
+                storing: DashSet::default(),
                 block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
@@ -82,7 +83,7 @@ impl NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
-                storing: Mutex::default(),
+                storing: DashSet::default(),
                 block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
@@ -96,7 +97,7 @@ impl NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(LruEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
-                storing: Mutex::default(),
+                storing: DashSet::default(),
                 block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
@@ -686,7 +687,7 @@ pub struct InMemoryCacheStore<SF, ES> {
     total_size: Arc<AtomicUsize>,
     /// Keys whose value an insert is storing, so that concurrent inserts of the same key, e.g. of
     /// callers that got the same result, store it once. Never locked together with the others.
-    storing: Mutex<HashSet<Arc<CacheKey>>>,
+    storing: DashSet<Arc<CacheKey>>,
     /// See [`NewRasterCacheEnum::block_reads`].
     block_reads: SingleRead<BlockKey, UnitRead>,
     counters: CacheCounters,
@@ -729,14 +730,14 @@ impl<SF, ES> InMemoryCacheStore<SF, ES> {
 /// Claims a key in [`InMemoryCacheStore::storing`] and releases it when the insert ends, also if
 /// it is cancelled.
 struct StoringGuard<'a> {
-    storing: &'a Mutex<HashSet<Arc<CacheKey>>>,
+    storing: &'a DashSet<Arc<CacheKey>>,
     key: Arc<CacheKey>,
 }
 
 impl<'a> StoringGuard<'a> {
     /// `None` if another insert stores the key.
-    fn claim(storing: &'a Mutex<HashSet<Arc<CacheKey>>>, key: &Arc<CacheKey>) -> Option<Self> {
-        let claimed = safe_lock_mutex(storing).insert(key.clone());
+    fn claim(storing: &'a DashSet<Arc<CacheKey>>, key: &Arc<CacheKey>) -> Option<Self> {
+        let claimed = storing.insert(key.clone());
         claimed.then(|| Self {
             storing,
             key: key.clone(),
@@ -746,7 +747,7 @@ impl<'a> StoringGuard<'a> {
 
 impl Drop for StoringGuard<'_> {
     fn drop(&mut self) {
-        safe_lock_mutex(self.storing).remove(&self.key);
+        self.storing.remove(&self.key);
     }
 }
 

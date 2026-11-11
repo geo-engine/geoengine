@@ -1,11 +1,10 @@
 use crate::cache::error::CacheError;
-use crate::util::safe_lock_mutex;
+use dashmap::{DashMap, mapref::entry::Entry};
 use futures::FutureExt;
-use futures::future::{BoxFuture, WeakShared};
-use std::collections::HashMap;
+use futures::future::{BoxFuture, Shared, WeakShared};
 use std::hash::Hash;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use tokio_util::task::AbortOnDropHandle;
 
 /// Runs a read once for all concurrent callers with the same key and gives each the result, e.g.
@@ -19,10 +18,13 @@ pub struct SingleRead<K, V> {
 }
 
 /// Only the callers hold a read strongly, so that it ends with the last of them. `None` once a
-/// read's task panicked.
-type RunningReads<K, V> = Arc<Mutex<HashMap<K, WeakShared<BoxFuture<'static, Option<V>>>>>>;
+/// read's task panicked. Every operation touches one key, so reads of different keys only share a
+/// shard lock.
+type RunningReads<K, V> = Arc<DashMap<K, WeakShared<SharedRead<V>>>>;
 
-impl<K, V> Default for SingleRead<K, V> {
+type SharedRead<V> = BoxFuture<'static, Option<V>>;
+
+impl<K: Eq + Hash, V> Default for SingleRead<K, V> {
     fn default() -> Self {
         Self {
             running: Arc::default(),
@@ -33,7 +35,7 @@ impl<K, V> Default for SingleRead<K, V> {
 
 impl<K, V> SingleRead<K, V>
 where
-    K: Clone + Eq + Hash + Send + 'static,
+    K: Clone + Eq + Hash + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
     /// The value of `read`, or of the read another caller of `key` is running.
@@ -44,31 +46,47 @@ where
     where
         F: Future<Output = V> + Send + 'static,
     {
-        let shared_read = {
-            let mut running = safe_lock_mutex(&self.running);
-            if let Some(running_read) = running.get(&key).and_then(WeakShared::upgrade) {
-                self.joined.fetch_add(1, Ordering::Relaxed);
-                running_read
-            } else {
-                // shortcut: the guard of an aborted read may remove a newer read of its key, which
-                // then runs once more for later callers; harmless, as they read the same data
-                let done = RunningReadGuard {
-                    running: self.running.clone(),
-                    key: key.clone(),
-                };
-                let task = AbortOnDropHandle::new(tokio::spawn(async move {
-                    let _done = done;
-                    read.await
-                }));
-                let running_read = task.map(Result::ok).boxed().shared();
+        // holds the shard lock of the key until the entry is dropped
+        let shared_read = match self.running.entry(key) {
+            Entry::Occupied(mut occupied) => {
+                if let Some(running_read) = occupied.get().upgrade() {
+                    self.joined.fetch_add(1, Ordering::Relaxed);
+                    running_read
+                } else {
+                    let running_read = self.start(occupied.key().clone(), read);
+                    if let Some(weak) = running_read.downgrade() {
+                        occupied.insert(weak);
+                    }
+                    running_read
+                }
+            }
+            Entry::Vacant(vacant) => {
+                let running_read = self.start(vacant.key().clone(), read);
                 if let Some(weak) = running_read.downgrade() {
-                    running.insert(key, weak);
+                    vacant.insert(weak);
                 }
                 running_read
             }
         };
 
         shared_read.await.ok_or(CacheError::SharedReadFailed)
+    }
+
+    fn start<F>(&self, key: K, read: F) -> Shared<SharedRead<V>>
+    where
+        F: Future<Output = V> + Send + 'static,
+    {
+        // shortcut: the guard of an aborted read may remove a newer read of its key, which then
+        // runs once more for later callers; harmless, as they read the same data
+        let done = RunningReadGuard {
+            running: self.running.clone(),
+            key,
+        };
+        let task = AbortOnDropHandle::new(tokio::spawn(async move {
+            let _done = done;
+            read.await
+        }));
+        task.map(Result::ok).boxed().shared()
     }
 
     /// Callers that waited for a read another caller had started.
@@ -85,7 +103,7 @@ struct RunningReadGuard<K: Eq + Hash, V> {
 
 impl<K: Eq + Hash, V> Drop for RunningReadGuard<K, V> {
     fn drop(&mut self) {
-        safe_lock_mutex(&self.running).remove(&self.key);
+        self.running.remove(&self.key);
     }
 }
 

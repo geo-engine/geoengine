@@ -1,4 +1,5 @@
 use crate::util::safe_lock_mutex;
+use dashmap::{DashMap, mapref::entry::Entry};
 use lru::LruCache;
 use snafu::Snafu;
 use std::collections::VecDeque;
@@ -313,8 +314,8 @@ type SharedResult = Option<
     )>,
 >;
 
-/// Sender of an in-flight read. Followers `subscribe()` to it while holding the `in_flight_tiles`
-/// lock, so its receiver count only changes under that lock. The map holds the sender, not a
+/// Sender of an in-flight read. Followers `subscribe()` to it while holding the shard lock of its
+/// key in `in_flight_tiles`, so its receiver count only changes under that lock. The map holds the sender, not a
 /// receiver: a stored receiver would keep the count at one or more, so the leader could not
 /// notice that all callers gave up.
 type InFlightTile = Arc<tokio::sync::watch::Sender<SharedResult>>;
@@ -322,9 +323,10 @@ type InFlightTile = Arc<tokio::sync::watch::Sender<SharedResult>>;
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
     /// Reads in progress by tile, to deduplicate them. Used by the callers' tasks on any runtime
-    /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
-    /// held only briefly and never across an `.await`.
-    in_flight_tiles: Mutex<FastHashMap<u64, InFlightRead>>,
+    /// thread and by the leader tasks, not by the single-threaded broker, hence the locks. Every
+    /// operation touches one key, so reads of different tiles only share a shard lock. A shard
+    /// lock is held only briefly and never across an `.await`.
+    in_flight_tiles: DashMap<u64, InFlightRead, BuildHasherDefault<FxHasher>>,
     raster_infos: RasterInfos,
     counters: PoolCounters,
 }
@@ -500,7 +502,7 @@ impl GdalProcessPool {
 
         Arc::new(Self {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
             raster_infos: RasterInfos::new(header_cache_entries),
             counters: PoolCounters::default(),
         })
@@ -1202,16 +1204,12 @@ impl Drop for LeaderCleanupGuard {
     fn drop(&mut self) {
         // This is guaranteed to run whether the function succeeds, errors,
         // panics, or is abruptly cancelled by Tokio.
-        if let Ok(mut lock) = self.pool.in_flight_tiles.lock() {
-            remove_in_flight(&mut lock, self.tile_key, &self.tx);
-        }
-    }
-}
-
-/// Removes the entry only if it still belongs to `tx`, never a newer leader's entry for the same key.
-fn remove_in_flight(map: &mut FastHashMap<u64, InFlightRead>, tile_key: u64, tx: &InFlightTile) {
-    if map.get(&tile_key).is_some_and(|r| Arc::ptr_eq(&r.tx, tx)) {
-        map.remove(&tile_key);
+        // only its own entry, never a newer leader's entry for the same key
+        self.pool
+            .in_flight_tiles
+            .remove_if(&self.tile_key, |_, in_flight| {
+                Arc::ptr_eq(&in_flight.tx, &self.tx)
+            });
     }
 }
 
@@ -1238,15 +1236,19 @@ async fn await_read_or_abandon(
         tokio::select! {
             res = &mut oneshot_rx => break res,
             () = tx.closed() => {
-                let Ok(mut lock) = pool.in_flight_tiles.lock() else {
-                    break (&mut oneshot_rx).await;
-                };
-                // A follower may have subscribed between `closed()` and taking the lock. Followers
-                // only subscribe under this lock, so the count is stable here: if it is 0, removing
-                // the entry guarantees that later callers start a new leader instead of joining
-                // this abandoned one. Otherwise, keep waiting for the result.
-                if tx.receiver_count() == 0 {
-                    remove_in_flight(&mut lock, tile_key, tx);
+                // A follower may have subscribed between `closed()` and here. Followers only
+                // subscribe under the shard lock of the key, which `remove_if` holds while it
+                // checks, so the count is stable: if it is 0, removing the entry guarantees that
+                // later callers start a new leader instead of joining this abandoned one.
+                // Otherwise, keep waiting for the result.
+                let mut abandoned = None;
+                pool.in_flight_tiles.remove_if(&tile_key, |_, in_flight| {
+                    let no_callers = tx.receiver_count() == 0;
+                    abandoned = Some(no_callers);
+                    no_callers && Arc::ptr_eq(&in_flight.tx, tx)
+                });
+                // without an entry for the key, no follower can subscribe
+                if abandoned.unwrap_or_else(|| tx.receiver_count() == 0) {
                     tracing::trace!("All callers gave up on fetch: {tile_key}");
                     return None;
                 }
@@ -1366,33 +1368,30 @@ impl GdalPoolDispatcher {
         let tile_key = s.finish();
 
         let mut rx = {
-            let mut lock = self
-                .pool
-                .in_flight_tiles
-                .lock()
-                .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+            // holds the shard lock of the key until the entry is dropped
+            let entry = self.pool.in_flight_tiles.entry(tile_key);
 
             // test if data is already read
-            let in_flight = lock.get(&tile_key);
+            let in_flight = match &entry {
+                Entry::Occupied(occupied) => Some(occupied.get()),
+                Entry::Vacant(_) => None,
+            };
             if let Some(in_flight) = in_flight.filter(|r| same_read(&r.request, &request)) {
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
                 self.pool.counters.count(&request, true);
                 in_flight.tx.subscribe()
             } else {
                 self.pool.counters.count(&request, false);
-                // a different request with the same hash reads on its own, unregistered
-                let registered = in_flight.is_none();
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
                 let (tx, rx) = tokio::sync::watch::channel(None);
                 let tx = Arc::new(tx);
-                if registered {
-                    lock.insert(
-                        tile_key,
-                        InFlightRead {
-                            request: request.clone(),
-                            tx: tx.clone(),
-                        },
-                    );
+                // a different request with the same hash reads on its own, unregistered; either
+                // way the shard lock is released here, before the leader is spawned
+                if let Entry::Vacant(vacant) = entry {
+                    vacant.insert(InFlightRead {
+                        request: request.clone(),
+                        tx: tx.clone(),
+                    });
                 }
 
                 let pool_clone = self.pool.clone();
@@ -1717,7 +1716,7 @@ mod tests {
         (
             GdalProcessPool {
                 broker_tx,
-                in_flight_tiles: Mutex::new(FastHashMap::default()),
+                in_flight_tiles: DashMap::default(),
                 raster_infos: RasterInfos::default(),
                 counters: PoolCounters::default(),
             },
@@ -2509,7 +2508,7 @@ mod tests {
         });
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
             raster_infos: RasterInfos::default(),
             counters: PoolCounters::default(),
         });
@@ -2530,7 +2529,7 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(1), queued.respond_to.closed())
             .await
             .expect("the leader should abandon the read once its only caller is gone");
-        assert!(pool.in_flight_tiles.lock().unwrap().is_empty());
+        assert!(pool.in_flight_tiles.is_empty());
     }
 
     #[tokio::test]
@@ -2615,7 +2614,7 @@ mod tests {
 
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
             raster_infos: RasterInfos::default(),
             counters: PoolCounters::default(),
         });
@@ -2668,7 +2667,7 @@ mod tests {
 
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
             raster_infos: RasterInfos::default(),
             counters: PoolCounters::default(),
         });

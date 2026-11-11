@@ -2809,6 +2809,7 @@ dependencies = [
  "codspeed-criterion-compat",
  "config",
  "csv",
+ "dashmap",
  "float-cmp",
  "futures",
  "gdal",
