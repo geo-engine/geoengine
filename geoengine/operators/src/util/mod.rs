@@ -17,8 +17,7 @@ mod wrap_with_projection_and_resample;
 
 use crate::error::Error;
 use std::collections::HashSet;
-use std::ops::Deref;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub use self::async_util::{
     QUERY_TASK_CHANNEL_CAPACITY, abortable_query_execution, spawn, spawn_blocking,
@@ -32,14 +31,18 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Get a lock for mutex and recover from poisoning
 /// TODO: proper poisoning handling
-pub fn safe_lock_mutex<M, T>(lock: &M) -> MutexGuard<'_, T>
-where
-    M: Deref<Target = Mutex<T>>,
-{
-    match lock.deref().lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    }
+pub fn safe_lock_mutex<T: ?Sized>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
+    lock.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Get a read lock for a `RwLock` and recover from poisoning, like [`safe_lock_mutex`]
+pub fn safe_read_rwlock<T: ?Sized>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    lock.read().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Get a write lock for a `RwLock` and recover from poisoning, like [`safe_lock_mutex`]
+pub fn safe_write_rwlock<T: ?Sized>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    lock.write().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

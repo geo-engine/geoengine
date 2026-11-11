@@ -7,7 +7,7 @@ use crate::engine::{
     RasterResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
-use crate::util::Result;
+use crate::util::{Result, safe_lock_mutex, safe_read_rwlock, safe_write_rwlock};
 use async_trait::async_trait;
 use futures::Stream;
 use futures::StreamExt;
@@ -25,9 +25,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter;
 use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::sync::RwLock;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub struct NewRasterCache<Store> {
     store: Store,
@@ -47,8 +46,10 @@ impl TestDefault for NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DFifo(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: Arc::new(RwLock::new(FifoEvictionStrategy::new(8_589_934_592))),
+                eviction_strategy: Mutex::new(FifoEvictionStrategy::new(8_589_934_592)),
                 total_size: Arc::new(AtomicUsize::new(0)),
+                storing: Mutex::default(),
+                counters: CacheCounters::default(),
             },
         })
     }
@@ -56,10 +57,10 @@ impl TestDefault for NewRasterCacheEnum {
 
 impl NewRasterCacheEnum {
     /// Remove all tiles and eviction records. Pinned tiles remain accounted for until released.
-    pub async fn clear(&self) {
+    pub fn clear(&self) {
         match self {
-            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.store.clear().await,
-            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.store.clear().await,
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.store.clear(),
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.store.clear(),
         }
     }
 
@@ -67,8 +68,10 @@ impl NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DFifo(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: Arc::new(RwLock::new(FifoEvictionStrategy::new(capacity_bytes))),
+                eviction_strategy: Mutex::new(FifoEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
+                storing: Mutex::default(),
+                counters: CacheCounters::default(),
             },
         })
     }
@@ -77,8 +80,10 @@ impl NewRasterCacheEnum {
         Self::InMemoryCompressedRasterTile2DLru(NewRasterCache {
             store: InMemoryCacheStore {
                 cache: RwLock::new(HashMap::new()),
-                eviction_strategy: Arc::new(RwLock::new(LruEvictionStrategy::new(capacity_bytes))),
+                eviction_strategy: Mutex::new(LruEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
+                storing: Mutex::default(),
+                counters: CacheCounters::default(),
             },
         })
     }
@@ -105,6 +110,17 @@ impl NewRasterCacheEnum {
             }
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => {
                 cache.store.insert(key, tile).await
+            }
+        }
+    }
+
+    pub fn stats(&self) -> CacheStats {
+        match self {
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
+                cache.store.counters.snapshot()
+            }
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => {
+                cache.store.counters.snapshot()
             }
         }
     }
@@ -136,10 +152,7 @@ trait EvictionStrategy: Send + Sync + 'static {
     fn record_access(&mut self, key: &Arc<CacheKey>, size: usize, cache_hint: CacheHint);
     fn record_removal(&mut self, key: &Arc<CacheKey>);
 
-    fn record_hit(
-        strategy: Arc<RwLock<Self>>,
-        key: &CacheKey,
-    ) -> impl std::future::Future<Output = ()> + Send;
+    fn record_hit(&mut self, key: &CacheKey);
 
     fn capacity(&self) -> usize;
 
@@ -200,7 +213,7 @@ impl EvictionStrategy for FifoEvictionStrategy {
         );
     }
 
-    async fn record_hit(_strategy: Arc<RwLock<Self>>, _key: &CacheKey) {
+    fn record_hit(&mut self, _key: &CacheKey) {
         // FIFO doesn't track hits
     }
 
@@ -371,11 +384,10 @@ impl EvictionStrategy for LruEvictionStrategy {
         self.free.push(idx);
     }
 
-    async fn record_hit(strategy: Arc<RwLock<Self>>, key: &CacheKey) {
-        let mut s = strategy.write().await;
-        if let Some(&idx) = s.index.get(key) {
-            s.detach(idx);
-            s.attach_front(idx);
+    fn record_hit(&mut self, key: &CacheKey) {
+        if let Some(&idx) = self.index.get(key) {
+            self.detach(idx);
+            self.attach_front(idx);
         }
     }
 
@@ -452,7 +464,6 @@ mod eviction_strategy_tests {
     use super::{CacheKey, EvictionStrategy, FifoEvictionStrategy, LruEvictionStrategy, TileIndex};
     use geoengine_datatypes::primitives::{CacheExpiration, CacheHint, TimeInterval};
     use std::sync::Arc;
-    use tokio::sync::RwLock;
 
     fn expired_hint() -> CacheHint {
         CacheHint::with_created_and_expires(
@@ -508,8 +519,8 @@ mod eviction_strategy_tests {
         assert_eq!(plan.freed_bytes, 40);
     }
 
-    #[tokio::test]
-    async fn lru_evicts_expired_pinned_key_without_counting_its_bytes_as_freed() {
+    #[test]
+    fn lru_evicts_expired_pinned_key_without_counting_its_bytes_as_freed() {
         let mut strategy = LruEvictionStrategy::new(100);
         let key_a = key("a");
         let key_b = key("b");
@@ -522,10 +533,8 @@ mod eviction_strategy_tests {
         strategy.record_access(&key_b_arc, 30, CacheHint::max_duration());
         strategy.record_access(&key_c_arc, 30, CacheHint::max_duration());
 
-        let strategy_arc = Arc::new(RwLock::new(strategy));
-        LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
+        strategy.record_hit(&key_c);
 
-        let strategy = strategy_arc.read().await;
         let plan = strategy
             .plan_eviction(100, 20, |k| k.as_ref() == &key_a)
             .unwrap();
@@ -551,8 +560,8 @@ mod eviction_strategy_tests {
         assert_eq!(plan.freed_bytes, 60);
     }
 
-    #[tokio::test]
-    async fn lru_correct_eviction_target_with_partial_cache() {
+    #[test]
+    fn lru_correct_eviction_target_with_partial_cache() {
         let mut strategy = LruEvictionStrategy::new(100);
         let key_a = key("a");
         let key_b = key("b");
@@ -565,10 +574,8 @@ mod eviction_strategy_tests {
         strategy.record_access(&key_b_arc, 20, CacheHint::max_duration());
         strategy.record_access(&key_c_arc, 10, CacheHint::max_duration());
 
-        let strategy_arc = Arc::new(RwLock::new(strategy));
-        LruEvictionStrategy::record_hit(strategy_arc.clone(), &key_c).await;
+        strategy.record_hit(&key_c);
 
-        let strategy = strategy_arc.read().await;
         let plan = strategy.plan_eviction(60, 70, |_| false).unwrap();
 
         assert_eq!(plan.keys_to_remove, vec![key_a_arc]);
@@ -607,19 +614,94 @@ impl<SF> Drop for SizeTrackedEntry<SF> {
     }
 }
 
+/// The entries and their eviction order. Both locks are taken in this order and never held
+/// across an `.await`: a future that is not polled again, e.g. in a stream nobody reads, must not
+/// keep the cache locked.
 pub struct InMemoryCacheStore<SF, ES> {
     cache: RwLock<HashMap<Arc<CacheKey>, Arc<SizeTrackedEntry<SF>>>>,
-    eviction_strategy: Arc<RwLock<ES>>,
+    eviction_strategy: Mutex<ES>,
     total_size: Arc<AtomicUsize>,
+    /// Keys whose value an insert is storing, so that concurrent inserts of the same key, e.g. of
+    /// callers that got the same result, store it once. Never locked together with the others.
+    storing: Mutex<HashSet<Arc<CacheKey>>>,
+    counters: CacheCounters,
+}
+
+#[derive(Default)]
+struct CacheCounters {
+    hits: AtomicU64,
+    misses: AtomicU64,
+    stored: AtomicU64,
+    inserts_joined: AtomicU64,
+}
+
+/// What a cache was asked since it was created.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    /// inserts that stored their value
+    pub stored: u64,
+    /// inserts of a key that another insert stored or is storing
+    pub inserts_joined: u64,
+}
+
+impl CacheStats {
+    /// The counts since an earlier snapshot.
+    #[must_use]
+    pub fn since(self, earlier: Self) -> Self {
+        Self {
+            hits: self.hits - earlier.hits,
+            misses: self.misses - earlier.misses,
+            stored: self.stored - earlier.stored,
+            inserts_joined: self.inserts_joined - earlier.inserts_joined,
+        }
+    }
+}
+
+impl CacheCounters {
+    fn snapshot(&self) -> CacheStats {
+        CacheStats {
+            hits: self.hits.load(Ordering::Relaxed),
+            misses: self.misses.load(Ordering::Relaxed),
+            stored: self.stored.load(Ordering::Relaxed),
+            inserts_joined: self.inserts_joined.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Claims a key in [`InMemoryCacheStore::storing`] and releases it when the insert ends, also if
+/// it is cancelled.
+struct StoringGuard<'a> {
+    storing: &'a Mutex<HashSet<Arc<CacheKey>>>,
+    key: Arc<CacheKey>,
+}
+
+impl<'a> StoringGuard<'a> {
+    /// `None` if another insert stores the key.
+    fn claim(storing: &'a Mutex<HashSet<Arc<CacheKey>>>, key: &Arc<CacheKey>) -> Option<Self> {
+        let claimed = safe_lock_mutex(storing).insert(key.clone());
+        claimed.then(|| Self {
+            storing,
+            key: key.clone(),
+        })
+    }
+}
+
+impl Drop for StoringGuard<'_> {
+    fn drop(&mut self) {
+        safe_lock_mutex(self.storing).remove(&self.key);
+    }
 }
 
 impl<SF, ES> InMemoryCacheStore<SF, ES> {
-    async fn clear(&self)
+    fn clear(&self)
     where
         ES: EvictionStrategy,
     {
-        let mut cache = self.cache.write().await;
-        let mut strategy = self.eviction_strategy.write().await;
+        // clearing leaves a consistent state even after a panic
+        let mut cache = safe_write_rwlock(&self.cache);
+        let mut strategy = safe_lock_mutex(&self.eviction_strategy);
         strategy.clear();
         cache.clear();
     }
@@ -636,7 +718,10 @@ fn cache_key_byte_size(key: &CacheKey) -> usize {
 trait StorageFormat: Send + Sync + Sized + 'static {
     fn store(tile: TypedRasterTile2D) -> impl std::future::Future<Output = Result<Self>> + Send;
 
-    fn load(&self) -> impl std::future::Future<Output = Result<TypedRasterTile2D>> + Send;
+    /// Takes the entry, not a copy of its value, into the thread that decompresses it.
+    fn load(
+        entry: Arc<SizeTrackedEntry<Self>>,
+    ) -> impl std::future::Future<Output = Result<TypedRasterTile2D>> + Send;
 
     fn byte_size(&self) -> impl std::future::Future<Output = Result<usize>> + Send;
 
@@ -726,38 +811,37 @@ impl StorageFormat for TypedCompressedRasterTile2D {
         .map_err(|source| CacheError::CouldNotRunCompressionTask { source })?
     }
 
-    async fn load(&self) -> Result<TypedRasterTile2D> {
-        let compressed = self.clone();
-        tokio::task::spawn_blocking(move || match compressed {
+    async fn load(entry: Arc<SizeTrackedEntry<Self>>) -> Result<TypedRasterTile2D> {
+        tokio::task::spawn_blocking(move || match &entry.value {
             TypedCompressedRasterTile2D::I8(compressed) => Ok(TypedRasterTile2D::I8(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::I16(compressed) => Ok(TypedRasterTile2D::I16(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::I32(compressed) => Ok(TypedRasterTile2D::I32(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::I64(compressed) => Ok(TypedRasterTile2D::I64(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U8(compressed) => Ok(TypedRasterTile2D::U8(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U16(compressed) => Ok(TypedRasterTile2D::U16(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U32(compressed) => Ok(TypedRasterTile2D::U32(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::U64(compressed) => Ok(TypedRasterTile2D::U64(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::F32(compressed) => Ok(TypedRasterTile2D::F32(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
             TypedCompressedRasterTile2D::F64(compressed) => Ok(TypedRasterTile2D::F64(
-                CompressedRasterTile2D::decompress_tile(&compressed)?,
+                CompressedRasterTile2D::decompress_tile(compressed)?,
             )),
         })
         .await
@@ -808,14 +892,14 @@ where
 
     async fn get(&self, key: &CacheKey) -> Result<Option<Arc<Self::SF>>> {
         let hit = {
-            let cache = self.cache.read().await;
+            let cache = safe_read_rwlock(&self.cache);
             cache.get(key).map(Arc::clone)
         };
 
         if let Some(entry) = &hit {
             if entry.value.is_expired().await {
-                let mut cache = self.cache.write().await;
-                let mut eviction_strategy = self.eviction_strategy.write().await;
+                let mut cache = safe_write_rwlock(&self.cache);
+                let mut eviction_strategy = safe_lock_mutex(&self.eviction_strategy);
 
                 if cache.contains_key(key) {
                     let arc_key = Arc::new(key.clone());
@@ -823,10 +907,14 @@ where
                     eviction_strategy.record_removal(&arc_key);
                 }
 
+                self.counters.misses.fetch_add(1, Ordering::Relaxed);
                 return Ok(None);
             }
 
-            ES::record_hit(self.eviction_strategy.clone(), key).await;
+            safe_lock_mutex(&self.eviction_strategy).record_hit(key);
+            self.counters.hits.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.counters.misses.fetch_add(1, Ordering::Relaxed);
         }
 
         Ok(hit)
@@ -834,12 +922,17 @@ where
 
     async fn insert(&self, key: Arc<CacheKey>, tile: TypedRasterTile2D) -> Result<()> {
         {
-            let cache = self.cache.read().await;
+            let cache = safe_read_rwlock(&self.cache);
             if cache.contains_key(&key) {
-                ES::record_hit(self.eviction_strategy.clone(), &key).await;
+                safe_lock_mutex(&self.eviction_strategy).record_hit(&key);
+                self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
                 return Ok(());
             }
         }
+        let Some(_storing) = StoringGuard::claim(&self.storing, &key) else {
+            self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
+            return Ok(());
+        };
 
         let cache_hint = tile.cache_hint();
         let value = SF::store(tile).await?;
@@ -848,12 +941,13 @@ where
         let key_size = cache_key_byte_size(&key);
         let required_space = value_size + key_size;
 
-        let mut cache = self.cache.write().await;
+        let mut cache = safe_write_rwlock(&self.cache);
         if cache.contains_key(&key) {
+            self.counters.inserts_joined.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         }
 
-        let mut eviction_strategy = self.eviction_strategy.write().await;
+        let mut eviction_strategy = safe_lock_mutex(&self.eviction_strategy);
         let current_size = self.total_size.load(Ordering::SeqCst);
 
         let eviction_plan =
@@ -880,9 +974,13 @@ where
                 self.total_size.clone(),
             )),
         );
+        self.counters.stored.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 }
+
+/// Tiles a query looks up or computes at the same time, like the read-ahead of the GDAL sources.
+const TILE_READ_AHEAD: usize = 16;
 
 pub struct RasterCacheOperator<Source>
 where
@@ -1018,76 +1116,62 @@ where
                     }
                 };
 
-                Box::pin(stream::unfold((work, 0), move |(work, idx)| async move {
-                    if idx >= work.len() {
-                        return None;
-                    }
-
-                    let job = &work[idx];
-
-                    let key = (
-                        self.canonic_operator_name.clone(),
-                        job.band,
-                        time_interval,
-                        job.tile_info.global_upper_left_pixel_idx(),
-                    );
-
-                    let cache_store = ctx
-                        .new_raster_cache()
-                        .expect("Cache should have been created for this operator");
-
-                    match cache_store.get(&key).await {
-                        Err(err) => Some((Err(err), (work, idx + 1))),
-                        Ok(Some(stored_tile)) => {
-                            tracing::trace!("Cache HIT for tile {:?}", key);
-                            let tile = stored_tile.load().await;
-
-                            let tile: Result<RasterTile2D<T>> = match tile {
-                                Ok(tile) => T::map_enum_to_tile(tile),
-                                Err(err) => Err(err)
-                            };
-
-                            Some((
-                                tile,
-                                (work, idx + 1),
-                            ))
-                        }
-                        Ok(None) => {
-                            tracing::trace!("Cache MISS for tile {:?}", key);
-
-                            let source_query = self.source.query(
-                                RasterQueryRectangle::new(
-                                    job.tile_info.global_pixel_bounds(),
-                                    time_interval,
-                                    BandSelection::new_single(job.band)
-                                ),
-                                ctx,
-                            ).await;
-
-                            let mut stream = match source_query {
-                                Ok(stream) => stream,
-                                Err(err) => return Some((Err(err), (work, idx + 1))),
-                            };
-
-                            match stream.next().await {
-                                Some(Ok(tile)) => {
-                                    let tile_to_cache = T::map_tile_to_enum(tile.clone());
-                                    if let Err(err) = cache_store.insert(key, tile_to_cache).await {
-                                        tracing::warn!("Failed to populate raster cache: {err}");
-                                    }
-                                    Some((Ok(tile), (work, idx + 1)))
-                                }
-                                Some(Err(err)) => Some((Err(err), (work, idx + 1))),
-                                None => Some((
-                                    Err(CacheError::SourceProducedNoTile.into()),
-                                    (work, idx + 1),
-                                )),
-                            }
-                        }
-                    }
-                }))
+                Box::pin(
+                    stream::iter(0..work.len())
+                        .map(move |idx| {
+                            let work = work.clone();
+                            async move { self.cached_tile(&work[idx], time_interval, ctx).await }
+                        })
+                        .buffered(TILE_READ_AHEAD),
+                )
             },
         ))
+    }
+
+    async fn cached_tile(
+        &self,
+        job: &WorkItem,
+        time_interval: TimeInterval,
+        ctx: &dyn QueryContext,
+    ) -> Result<RasterTile2D<T>> {
+        let key = (
+            self.canonic_operator_name.clone(),
+            job.band,
+            time_interval,
+            job.tile_info.global_upper_left_pixel_idx(),
+        );
+
+        let cache_store = ctx
+            .new_raster_cache()
+            .expect("Cache should have been created for this operator");
+
+        if let Some(stored_tile) = cache_store.get(&key).await? {
+            tracing::trace!("Cache HIT for tile {:?}", key);
+            return T::map_enum_to_tile(StorageFormat::load(stored_tile).await?);
+        }
+        tracing::trace!("Cache MISS for tile {:?}", key);
+
+        let mut stream = self
+            .source
+            .query(
+                RasterQueryRectangle::new(
+                    job.tile_info.global_pixel_bounds(),
+                    time_interval,
+                    BandSelection::new_single(job.band),
+                ),
+                ctx,
+            )
+            .await?;
+        let tile = stream
+            .next()
+            .await
+            .ok_or(CacheError::SourceProducedNoTile)??;
+
+        let tile_to_cache = T::map_tile_to_enum(tile.clone());
+        if let Err(err) = cache_store.insert(key, tile_to_cache).await {
+            tracing::warn!("Failed to populate raster cache: {err}");
+        }
+        Ok(tile)
     }
 }
 #[async_trait]
@@ -1269,6 +1353,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_skips_storing_a_key_that_another_insert_stores() {
+        let cache = NewRasterCacheEnum::new_lru(1 << 20);
+        let NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(lru) = &cache else {
+            unreachable!("new_lru builds an LRU cache");
+        };
+        let key = make_cache_key(0, 0);
+
+        let other_insert = StoringGuard::claim(&lru.store.storing, &Arc::new(key.clone())).unwrap();
+        cache
+            .insert(key.clone(), make_tile(1, CacheHint::max_duration()))
+            .await
+            .unwrap();
+        assert!(cache.get(&key).await.unwrap().is_none());
+
+        drop(other_insert);
+        cache
+            .insert(key.clone(), make_tile(1, CacheHint::max_duration()))
+            .await
+            .unwrap();
+        assert!(cache.get(&key).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
     async fn it_clears_tiles_and_preserves_pinned_accounting() {
         for cache in [
             NewRasterCacheEnum::new_fifo(1_000_000),
@@ -1282,7 +1389,7 @@ mod tests {
             let pinned = cache.get(&key).await.unwrap().unwrap();
             let size = cache.byte_size();
             assert!(size > 0);
-            cache.clear().await;
+            cache.clear();
             assert!(cache.get(&key).await.unwrap().is_none());
             assert_eq!(cache.byte_size(), size);
             drop(pinned);
@@ -1292,7 +1399,7 @@ mod tests {
                 .await
                 .unwrap();
             assert!(cache.get(&key).await.unwrap().is_some());
-            cache.clear().await;
+            cache.clear();
             assert_eq!(cache.byte_size(), 0);
         }
     }
@@ -1319,7 +1426,7 @@ mod tests {
             .await
             .unwrap()
             .expect("tile should be cached");
-        let loaded = entry.load().await.unwrap();
+        let loaded = StorageFormat::load(entry).await.unwrap();
 
         match (loaded, tile) {
             (TypedRasterTile2D::U8(loaded), TypedRasterTile2D::U8(original)) => {
@@ -1328,6 +1435,28 @@ mod tests {
             _ => panic!("unexpected tile type"),
         }
         assert_eq!(cache.byte_size(), size);
+    }
+
+    #[tokio::test]
+    async fn it_counts_hits_misses_and_joined_inserts() {
+        let cache = NewRasterCacheEnum::new_lru(1 << 20);
+        let key = make_cache_key(0, 0);
+        let tile = make_tile(42, CacheHint::max_duration());
+
+        assert!(cache.get(&key).await.unwrap().is_none());
+        cache.insert(key.clone(), tile.clone()).await.unwrap();
+        cache.insert(key.clone(), tile).await.unwrap();
+        assert!(cache.get(&key).await.unwrap().is_some());
+
+        assert_eq!(
+            cache.stats(),
+            CacheStats {
+                hits: 1,
+                misses: 1,
+                stored: 1,
+                inserts_joined: 1,
+            }
+        );
     }
 
     #[tokio::test]
@@ -1731,9 +1860,7 @@ mod tests {
             .expect("cache lookup should succeed")
             .expect("tile should be cached after query");
 
-        let cached_tile_typed = cached_compressed
-            .value
-            .load()
+        let cached_tile_typed = StorageFormat::load(cached_compressed)
             .await
             .expect("decompression should succeed");
         match cached_tile_typed {
