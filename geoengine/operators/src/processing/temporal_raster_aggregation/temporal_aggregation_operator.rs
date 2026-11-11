@@ -1,14 +1,7 @@
-use super::aggregators::{
-    CountPixelAggregator, CountPixelAggregatorIngoringNoData, FirstPixelAggregatorIngoringNoData,
-    GlobalStateTemporalRasterPixelAggregator, LastPixelAggregatorIngoringNoData,
-    MaxPixelAggregator, MaxPixelAggregatorIngoringNoData, MeanPixelAggregator, MinPixelAggregator,
-    MinPixelAggregatorIngoringNoData, SumPixelAggregator, SumPixelAggregatorIngoringNoData,
-    TemporalRasterPixelAggregator,
-};
 use super::first_last_subquery::{
     TemporalRasterAggregationSubQueryNoDataOnly, first_tile_fold_future, last_tile_fold_future,
 };
-use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
+use super::subquery::{TemporalRasterAggregationSubQuery, subquery_all_tiles_fold_fn};
 use crate::adapters::SimpleRasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator,
@@ -16,7 +9,10 @@ use crate::engine::{
     TimeDescriptor, TypedRasterOperator,
 };
 use crate::optimization::OptimizationError;
-use crate::processing::temporal_raster_aggregation::aggregators::PercentileEstimateAggregator;
+use crate::util::pixel_aggregation::{
+    CountAggregator, FirstAggregator, LastAggregator, MaxAggregator, MeanAggregator, MinAggregator,
+    PercentileEstimateAggregator, PixelAggregator, PropagateNoData, SumAggregator,
+};
 use crate::{
     adapters::SubQueryTileAggregator,
     engine::{
@@ -262,26 +258,13 @@ where
         }
     }
 
-    fn create_subquery<F: TemporalRasterPixelAggregator<P> + 'static, FoldFn>(
+    fn create_subquery<A: PixelAggregator<P> + 'static, FoldFn>(
+        aggregator: A,
         fold_fn: FoldFn,
-    ) -> super::subquery::TemporalRasterAggregationSubQuery<FoldFn, P, F> {
-        super::subquery::TemporalRasterAggregationSubQuery {
-            fold_fn,
-            _phantom_pixel_type: PhantomData,
-        }
-    }
-
-    fn create_global_state_subquery<
-        F: GlobalStateTemporalRasterPixelAggregator<P> + 'static,
-        FoldFn,
-    >(
-        aggregator: F,
-        fold_fn: FoldFn,
-    ) -> GlobalStateTemporalRasterAggregationSubQuery<FoldFn, P, F> {
-        GlobalStateTemporalRasterAggregationSubQuery {
+    ) -> TemporalRasterAggregationSubQuery<FoldFn, P, A> {
+        TemporalRasterAggregationSubQuery {
             aggregator: Arc::new(aggregator),
             fold_fn,
-
             _phantom_pixel_type: PhantomData,
         }
     }
@@ -332,53 +315,38 @@ where
             >,
         > = self.time_query(query.time_interval(), ctx).await?;
 
+        // aggregates all tiles with the aggregator, which ignores or propagates no-data
+        macro_rules! aggregate {
+            ($aggregator:expr) => {
+                Self::create_subquery($aggregator, subquery_all_tiles_fold_fn)
+                    .into_raster_subquery_adapter(
+                        &self.source,
+                        query,
+                        ctx,
+                        tiling_strategy,
+                        time_stream,
+                    )
+                    .box_pin()
+            };
+            ($aggregator:expr, ignore_no_data: $ignore_no_data:expr) => {
+                if $ignore_no_data {
+                    aggregate!($aggregator)
+                } else {
+                    aggregate!(PropagateNoData($aggregator))
+                }
+            };
+        }
+
         Ok(match self.aggregation_type {
-            Aggregation::Min {
-                ignore_no_data: true,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregatorIngoringNoData>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-            Aggregation::Min {
-                ignore_no_data: false,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregator>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-            Aggregation::Max {
-                ignore_no_data: true,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregatorIngoringNoData>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-            Aggregation::Max {
-                ignore_no_data: false,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregator>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
+            Aggregation::Min { ignore_no_data } => {
+                aggregate!(MinAggregator::default(), ignore_no_data: ignore_no_data)
+            }
+            Aggregation::Max { ignore_no_data } => {
+                aggregate!(MaxAggregator::default(), ignore_no_data: ignore_no_data)
+            }
             Aggregation::First {
                 ignore_no_data: true,
-            } => {
-                Self::create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        FirstPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(
-                    &self.source,
-                    query,
-                    ctx,
-                    tiling_strategy,
-                    time_stream,
-                )
-                .box_pin()
-            }
+            } => aggregate!(FirstAggregator::default()),
             Aggregation::First {
                 ignore_no_data: false,
             } => Self::create_subquery_first(first_tile_fold_future::<P>)
@@ -392,11 +360,7 @@ where
                 .box_pin(),
             Aggregation::Last {
                 ignore_no_data: true,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, LastPixelAggregatorIngoringNoData>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
+            } => aggregate!(LastAggregator::default()),
             Aggregation::Last {
                 ignore_no_data: false,
             } => Self::create_subquery_last(last_tile_fold_future::<P>)
@@ -408,79 +372,22 @@ where
                     time_stream,
                 )
                 .box_pin(),
-            Aggregation::Mean {
-                ignore_no_data: true,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<true>>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-            Aggregation::Mean {
-                ignore_no_data: false,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<false>>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-
-            Aggregation::Sum {
-                ignore_no_data: true,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregatorIngoringNoData>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-            Aggregation::Sum {
-                ignore_no_data: false,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregator>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-
-            Aggregation::Count {
-                ignore_no_data: true,
-            } => {
-                Self::create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        CountPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(
-                    &self.source,
-                    query,
-                    ctx,
-                    tiling_strategy,
-                    time_stream,
-                )
-                .box_pin()
+            Aggregation::Mean { ignore_no_data } => {
+                aggregate!(MeanAggregator, ignore_no_data: ignore_no_data)
             }
-            Aggregation::Count {
-                ignore_no_data: false,
-            } => Self::create_subquery(
-                super::subquery::subquery_all_tiles_fold_fn::<P, CountPixelAggregator>,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
+            Aggregation::Sum { ignore_no_data } => {
+                aggregate!(SumAggregator::default(), ignore_no_data: ignore_no_data)
+            }
+            Aggregation::Count { ignore_no_data } => {
+                aggregate!(CountAggregator::default(), ignore_no_data: ignore_no_data)
+            }
             Aggregation::PercentileEstimate {
-                ignore_no_data: true,
+                ignore_no_data,
                 percentile,
-            } => Self::create_global_state_subquery(
-                PercentileEstimateAggregator::<true>::new(percentile),
-                super::subquery::subquery_all_tiles_global_state_fold_fn,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
-            Aggregation::PercentileEstimate {
-                ignore_no_data: false,
-                percentile,
-            } => Self::create_global_state_subquery(
-                PercentileEstimateAggregator::<false>::new(percentile),
-                super::subquery::subquery_all_tiles_global_state_fold_fn,
-            )
-            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
-            .box_pin(),
+            } => aggregate!(
+                PercentileEstimateAggregator::new(percentile),
+                ignore_no_data: ignore_no_data
+            ),
         })
     }
 }

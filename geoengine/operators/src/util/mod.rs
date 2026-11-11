@@ -4,6 +4,7 @@ mod gdal_config_options;
 pub mod input;
 pub mod math;
 pub mod number_statistics;
+pub mod pixel_aggregation;
 pub mod raster_stream_to_geotiff;
 pub mod raster_stream_to_png;
 mod rayon;

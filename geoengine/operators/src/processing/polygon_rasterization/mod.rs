@@ -1,12 +1,7 @@
 //! Rasterization of (multi) polygons.
 
-mod accumulator;
 mod scanline;
 
-use self::accumulator::{
-    ConstantAccumulator, CountAccumulator, FoldAccumulator, MeanAccumulator, MedianAccumulator,
-    NoDataPropagatingAccumulator, PixelAccumulator,
-};
 use self::scanline::{PixelGrid, row_spans};
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
@@ -18,6 +13,11 @@ use crate::engine::{
 };
 use crate::error::{self, Error};
 use crate::optimization::{OptimizableOperator, OptimizationError};
+use crate::util::pixel_aggregation::{
+    Boxed, ConstantAggregator, CountAggregator, FirstAggregator, LastAggregator, MaxAggregator,
+    MeanAggregator, MinAggregator, PercentileEstimateAggregator, PixelAggregator, PropagateNoData,
+    SumAggregator, finish_states, values_to_grid,
+};
 use crate::util::{Result, spawn_blocking_with_thread_pool};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -32,8 +32,8 @@ use geoengine_datatypes::primitives::{
     TimeStep, VectorQueryRectangle, find_next_best_overview_level_resolution,
 };
 use geoengine_datatypes::raster::{
-    GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridShape2D, GridSize, MaskedGrid2D,
-    Pixel, RasterDataType, RasterTile2D, TileInformation,
+    GeoTransform, GridBoundingBox2D, GridOrEmpty, GridSize, Pixel, RasterDataType, RasterTile2D,
+    TileInformation,
 };
 use geoengine_datatypes::util::FiniteF64;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
@@ -543,7 +543,11 @@ impl<T: Pixel> PolygonRasterizationQueryProcessor<T> {
         let grid_array = match values {
             Some(values) => {
                 spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-                    values_to_grid::<T>(shape, &values)
+                    let values: Vec<Option<T>> = values
+                        .into_iter()
+                        .map(|value| value.map(T::from_))
+                        .collect();
+                    values_to_grid(shape, &values)
                 })
                 .await??
             }
@@ -556,26 +560,8 @@ impl<T: Pixel> PolygonRasterizationQueryProcessor<T> {
     }
 }
 
-/// Converts the pixel values into a grid, masking `None` as no-data.
-fn values_to_grid<T: Pixel>(
-    shape: GridShape2D,
-    values: &[Option<f64>],
-) -> Result<GridOrEmpty<GridShape2D, T>> {
-    if values.iter().all(Option::is_none) {
-        return Ok(GridOrEmpty::new_empty_shape(shape));
-    }
-
-    let data = values
-        .iter()
-        .map(|value| T::from_(value.unwrap_or_default()))
-        .collect();
-    let mask = values.iter().map(Option::is_some).collect();
-
-    Ok(MaskedGrid2D::new(Grid2D::new(shape, data)?, Grid2D::new(shape, mask)?)?.into())
-}
-
 impl SharedQueryState {
-    /// Burns the features into the pixels of the tile with the accumulator of the configured value.
+    /// Burns the features into the pixels of the tile with the aggregator of the configured value.
     async fn burn_value(
         &self,
         time_slice: TimeInterval,
@@ -587,7 +573,7 @@ impl SharedQueryState {
             BurnValue::Constant { value } => {
                 return self
                     .burn(
-                        ConstantAccumulator((*value).into()),
+                        ConstantAggregator((*value).into()),
                         time_slice,
                         tile_info,
                         grid,
@@ -597,7 +583,7 @@ impl SharedQueryState {
             }
             BurnValue::Count => {
                 return self
-                    .burn(CountAccumulator, time_slice, tile_info, grid, ctx)
+                    .burn(CountAggregator::default(), time_slice, tile_info, grid, ctx)
                     .await;
             }
             BurnValue::Attribute {
@@ -608,9 +594,9 @@ impl SharedQueryState {
         };
 
         macro_rules! burn_attribute {
-            ($accumulator:expr) => {
+            ($aggregator:expr) => {
                 self.burn_attribute(
-                    $accumulator,
+                    $aggregator,
                     ignore_no_data,
                     time_slice,
                     tile_info,
@@ -622,22 +608,25 @@ impl SharedQueryState {
         }
 
         match aggregation {
-            OverlapAggregation::First => burn_attribute!(FoldAccumulator::first()),
-            OverlapAggregation::Last => burn_attribute!(FoldAccumulator::last()),
-            OverlapAggregation::Min => burn_attribute!(FoldAccumulator::min()),
-            OverlapAggregation::Max => burn_attribute!(FoldAccumulator::max()),
-            OverlapAggregation::Sum => burn_attribute!(FoldAccumulator::sum()),
-            OverlapAggregation::Mean => burn_attribute!(MeanAccumulator),
-            OverlapAggregation::MedianEstimate => burn_attribute!(MedianAccumulator),
+            OverlapAggregation::First => burn_attribute!(FirstAggregator::default()),
+            OverlapAggregation::Last => burn_attribute!(LastAggregator::default()),
+            OverlapAggregation::Min => burn_attribute!(MinAggregator::default()),
+            OverlapAggregation::Max => burn_attribute!(MaxAggregator::default()),
+            OverlapAggregation::Sum => burn_attribute!(SumAggregator::default()),
+            OverlapAggregation::Mean => burn_attribute!(MeanAggregator),
+            // the estimator is much larger than a value, and most pixels of a tile are usually not covered
+            OverlapAggregation::MedianEstimate => {
+                burn_attribute!(Boxed(PercentileEstimateAggregator::new(0.5)))
+            }
         }
     }
 
-    /// Burns the attribute values with `accumulator`.
+    /// Burns the attribute values with `aggregator`.
     ///
     /// Unless `ignore_no_data` is set, a feature with a null value makes all pixels it covers no-data.
-    async fn burn_attribute<A: PixelAccumulator + 'static>(
+    async fn burn_attribute<A: PixelAggregator<f64> + 'static>(
         &self,
-        accumulator: A,
+        aggregator: A,
         ignore_no_data: bool,
         time_slice: TimeInterval,
         tile_info: TileInformation,
@@ -645,11 +634,11 @@ impl SharedQueryState {
         ctx: &dyn QueryContext,
     ) -> Result<(Option<Vec<Option<f64>>>, CacheHint)> {
         if ignore_no_data {
-            self.burn(accumulator, time_slice, tile_info, grid, ctx)
+            self.burn(aggregator, time_slice, tile_info, grid, ctx)
                 .await
         } else {
             self.burn(
-                NoDataPropagatingAccumulator(accumulator),
+                PropagateNoData(aggregator),
                 time_slice,
                 tile_info,
                 grid,
@@ -662,9 +651,9 @@ impl SharedQueryState {
     /// Burns all features that intersect the tile and the time slice into the pixels of the tile.
     ///
     /// Returns `None` if no feature intersects the tile.
-    async fn burn<A: PixelAccumulator + 'static>(
+    async fn burn<A: PixelAggregator<f64> + 'static>(
         &self,
-        accumulator: A,
+        aggregator: A,
         time_slice: TimeInterval,
         tile_info: TileInformation,
         grid: PixelGrid,
@@ -692,7 +681,7 @@ impl SharedQueryState {
         );
         let mut chunks = self.input.query(vector_query, ctx).await?;
 
-        let accumulator = Arc::new(accumulator);
+        let aggregator = Arc::new(aggregator);
         let mut states: Option<Vec<A::State>> = None;
         let mut cache_hint = CacheHint::max_duration();
 
@@ -700,11 +689,11 @@ impl SharedQueryState {
             let chunk = chunk?;
             cache_hint.merge_with(&chunk.cache_hint);
 
-            let accumulator = accumulator.clone();
+            let aggregator = aggregator.clone();
             let column = column.clone();
             states = spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
                 burn_chunk(
-                    accumulator.as_ref(),
+                    aggregator.as_ref(),
                     states,
                     &chunk,
                     &grid,
@@ -721,10 +710,7 @@ impl SharedQueryState {
         };
 
         let values = spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-            states
-                .iter()
-                .map(|state| accumulator.finish(state))
-                .collect::<Vec<_>>()
+            finish_states(aggregator.as_ref(), &states)
         })
         .await?;
 
@@ -879,13 +865,14 @@ impl BoundaryScan {
 /// A feature of a chunk that covers pixels of the tile
 struct FeatureToBurn<'c> {
     geometry: MultiPolygonRef<'c>,
-    value: f64,
+    /// `None` for no-data
+    value: Option<f64>,
     rows: Range<usize>,
 }
 
 /// Burns the features of `chunk` into `states`, creating them on the first covered pixel.
-fn burn_chunk<A: PixelAccumulator>(
-    accumulator: &A,
+fn burn_chunk<A: PixelAggregator<f64>>(
+    aggregator: &A,
     states: Option<Vec<A::State>>,
     chunk: &MultiPolygonCollection,
     grid: &PixelGrid,
@@ -906,12 +893,12 @@ fn burn_chunk<A: PixelAccumulator>(
 
         let value = match &values {
             Some(values) => match values[index] {
-                Some(value) if value.is_finite() => value,
-                // null (or non-finite) values are skipped or marked as no-data by NaN
+                Some(value) if value.is_finite() => Some(value),
+                // null (or non-finite) values are no-data, which covers no pixel if it is ignored
                 _ if ignore_no_data => continue,
-                _ => f64::NAN,
+                _ => None,
             },
-            None => 1.,
+            None => Some(1.),
         };
 
         let Some(bbox) = geometry.bbox() else {
@@ -951,7 +938,7 @@ fn burn_chunk<A: PixelAccumulator>(
 
                 for span in spans.iter() {
                     for state in &mut row_states[span.clone()] {
-                        accumulator.add(state, feature.value);
+                        aggregator.add(state, feature.value);
                     }
                 }
             }
