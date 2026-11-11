@@ -8,10 +8,16 @@
 //! One 256 px EPSG:3857 map tile from a UTM COG, along the WMS path (projection and resampling
 //! wrapper, PNG encoding) without loading the processing graph from the database.
 //! Prints the mean wall time per stage (the spans of the map path) for each zoom level, warm and
-//! cold (GDAL worker caches cleared before each tile).
+//! cold (GDAL worker caches cleared before each tile), plus the stream metrics per operator.
+//! Setup and metrics come from the operator benches' `common` module: server settings, operators
+//! wrapped as in the server.
 //!
 //! `cargo build --release --bin gdalsource-process && cargo bench --bench map_tile`
 
+#[path = "../../operators/benches/common/mod.rs"]
+mod common;
+
+use common::{Env, metrics};
 use criterion::{Criterion, criterion_group, criterion_main};
 use gdal::{
     DriverManager,
@@ -19,25 +25,17 @@ use gdal::{
     spatial_ref::SpatialRef,
 };
 use geoengine_datatypes::{
-    dataset::{DataId, DatasetId, NamedData},
     operations::image::RasterColorizer,
     primitives::{
         AxisAlignedRectangle, BandSelection, DateTime, RasterQueryRectangle, SpatialPartition2D,
         SpatialResolution, TimeInterval,
     },
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
-    util::{Identifier, test::TestDefault},
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{
-        ChunkByteSize, ExecutionContext, MockExecutionContext, ProcessingGraphOperatorPath,
-        TypedRasterOperator,
-    },
-    source::{
-        GdalMetaDataStatic, GdalProcessPool, GdalSource, GdalSourceParameters,
-        gdal_worker_process::WorkerConfig,
-    },
+    engine::{ExecutionContext, ProcessingGraphOperatorPath, TypedRasterOperator},
+    source::{GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     util::{
         WrapWithProjectionAndResample,
         gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
@@ -45,13 +43,10 @@ use geoengine_operators::{
     },
 };
 use std::{
-    collections::BTreeMap,
     path::{Path, PathBuf},
-    sync::{LazyLock, Mutex},
     time::{Duration, Instant},
 };
-use tracing::{Instrument, Subscriber, span};
-use tracing_subscriber::{Layer, filter::LevelFilter, layer::Context, prelude::*};
+use tracing::Instrument;
 
 const TILE_SIZE: u32 = 256;
 /// Sentinel-2 like: 10980² pixels of 10 m in UTM 32N, centered near Frankfurt
@@ -62,31 +57,6 @@ const CENTER: (f64, f64) = (931_677., 6_456_124.);
 const ZOOM_LEVELS: [u8; 3] = [9, 12, 15];
 const STAGE_RUNS: u32 = 20;
 const WRITE_ROWS: usize = 512;
-
-/// Sum and count of the wall time of closed spans by name
-static STAGES: LazyLock<Mutex<BTreeMap<&'static str, (Duration, u32)>>> =
-    LazyLock::new(Default::default);
-
-struct StageTimes;
-
-impl<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>> Layer<S> for StageTimes {
-    fn on_new_span(&self, _attrs: &span::Attributes<'_>, id: &span::Id, ctx: Context<'_, S>) {
-        if let Some(span) = ctx.span(id) {
-            span.extensions_mut().insert(Instant::now());
-        }
-    }
-
-    fn on_close(&self, id: span::Id, ctx: Context<'_, S>) {
-        let Some(span) = ctx.span(&id) else { return };
-        let Some(start) = span.extensions().get::<Instant>().copied() else {
-            return;
-        };
-        let mut stages = STAGES.lock().unwrap();
-        let entry = stages.entry(span.name()).or_default();
-        entry.0 += start.elapsed();
-        entry.1 += 1;
-    }
-}
 
 /// Writes a synthetic `u16` COG once and returns its path
 fn utm_cog() -> PathBuf {
@@ -153,7 +123,8 @@ fn tile_bounds(zoom: u8) -> SpatialPartition2D {
 }
 
 /// Same steps as `queries::raster_grid` for a WMS `GetMap`, after loading the processing graph
-async fn render_tile(exec_ctx: &MockExecutionContext, source: TypedRasterOperator, zoom: u8) {
+async fn render_tile(env: &Env, source: TypedRasterOperator, zoom: u8) {
+    let exec_ctx = &env.exe_ctx;
     let crs = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
     let bounds = tile_bounds(zoom);
     let resolution = SpatialResolution::new(
@@ -186,7 +157,7 @@ async fn render_tile(exec_ctx: &MockExecutionContext, source: TypedRasterOperato
     let time = TimeInterval::new_instant(DateTime::new_utc(2024, 6, 1, 0, 0, 0)).unwrap();
     let query = RasterQueryRectangle::new(grid_bounds, time, BandSelection::first());
 
-    let mut query_ctx = exec_ctx.mock_query_context(ChunkByteSize::test_default());
+    let mut query_ctx = env.new_query_ctx();
     query_ctx.new_raster_cache = None; // measure computation, not cache hits
     // TODO: use a real colorizer for the input range
     let colorizer = RasterColorizer::SingleBand {
@@ -212,19 +183,21 @@ async fn render_tile(exec_ctx: &MockExecutionContext, source: TypedRasterOperato
 }
 
 /// Cold: the GDAL workers close their datasets before each tile; the OS page cache stays warm
-async fn clear_caches(exec_ctx: &MockExecutionContext, cold: bool) {
+async fn clear_caches(env: &Env, cold: bool) {
     if cold {
-        exec_ctx.gdal_process_pool.clear_caches().await.unwrap();
+        env.exe_ctx
+            .inner
+            .gdal_process_pool
+            .clear_caches()
+            .await
+            .unwrap();
     }
 }
 
 fn map_tile(c: &mut Criterion) {
-    tracing_subscriber::registry()
-        .with(StageTimes.with_filter(LevelFilter::DEBUG))
-        .init();
-
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let _guard = runtime.enter();
+    // the stage times are the point of this bench, so it records them without the opt-in
+    metrics::install();
+    let mut env = Env::new();
 
     let cog = utm_cog();
     let dataset = gdal_open_dataset(&cog).unwrap();
@@ -235,57 +208,33 @@ fn map_tile(c: &mut Criterion) {
         cache_ttl: None,
     };
     drop(dataset);
-
-    let mut exec_ctx = MockExecutionContext::new_with_tiling_spec(TestDefault::test_default());
-    // server defaults of `[gdal_process_pool]`
-    exec_ctx.gdal_process_pool = GdalProcessPool::new(32, 16, 8, WorkerConfig::default());
-    let name = NamedData::with_system_name("utm_cog");
-    exec_ctx.add_meta_data(
-        DataId::from(DatasetId::new()),
-        name.clone(),
-        Box::new(meta_data),
-    );
     let source = TypedRasterOperator::from(GdalSource {
-        params: GdalSourceParameters::new(name),
+        params: GdalSourceParameters::new(env.add_data("utm_cog", Box::new(meta_data))),
     });
 
-    let (exec_ctx, source) = (&exec_ctx, &source);
+    let (env, source) = (&env, &source);
     let mut group = c.benchmark_group("map_tile");
     for (cold, suffix) in [(false, ""), (true, "_cold")] {
         for zoom in ZOOM_LEVELS {
             group.bench_function(format!("z{zoom}{suffix}"), |b| {
-                b.to_async(&runtime).iter_custom(|iters| async move {
+                b.to_async(&env.runtime).iter_custom(|iters| async move {
                     let mut elapsed = Duration::ZERO;
                     for _ in 0..iters {
-                        clear_caches(exec_ctx, cold).await;
+                        clear_caches(env, cold).await;
                         let start = Instant::now();
-                        render_tile(exec_ctx, source.clone(), zoom).await;
+                        render_tile(env, source.clone(), zoom).await;
                         elapsed += start.elapsed();
                     }
                     elapsed
                 });
             });
-
-            let mut stages = BTreeMap::new();
-            for _ in 0..STAGE_RUNS {
-                runtime.block_on(clear_caches(exec_ctx, cold));
-                STAGES.lock().unwrap().clear();
-                runtime.block_on(render_tile(exec_ctx, source.clone(), zoom));
-                for (name, (total, count)) in STAGES.lock().unwrap().iter() {
-                    let entry: &mut (Duration, u32) = stages.entry(*name).or_default();
-                    entry.0 += *total;
-                    entry.1 += count;
-                }
-            }
-            println!("map_tile/z{zoom}{suffix}: mean wall time per tile over {STAGE_RUNS} tiles");
-            println!("  {:<32} {:>8} {:>12}", "span", "count", "ms");
-            for (name, (total, count)) in &stages {
-                println!(
-                    "  {name:<32} {:>8.1} {:>12.3}",
-                    f64::from(*count) / f64::from(STAGE_RUNS),
-                    total.as_secs_f64() * 1000. / f64::from(STAGE_RUNS)
-                );
-            }
+            // clearing the caches is part of these runs, but it opens no spans or streams
+            metrics::record(&format!("map_tile/z{zoom}{suffix}"), STAGE_RUNS, || {
+                env.runtime.block_on(async {
+                    clear_caches(env, cold).await;
+                    render_tile(env, source.clone(), zoom).await;
+                });
+            });
         }
     }
     group.finish();

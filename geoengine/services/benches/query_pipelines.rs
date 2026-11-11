@@ -8,14 +8,20 @@
 //!
 //! Each case registers a processing graph on the local NDVI test dataset and times
 //! `GetMap` requests through the full actix app (handler, processing graph, operators, PNG encoding).
-//! Needs the Postgres from `Settings-default.toml` and must run from `geoengine/`; every run uses its own temporary schema.
+//! Needs the Postgres from `Settings-default.toml`; every run uses its own temporary schema.
 //!
 //! Compare build settings with criterion baselines, e.g. `-- --save-baseline fat` on one build and `-- --baseline fat` on the other.
 //! The output hash printed per case must match between builds.
 
+#[path = "../../operators/benches/common/mod.rs"]
+mod common;
+
 use actix_web::http::header;
 use actix_web_httpauth::headers::authorization::Bearer;
+use common::{downsample, gdal_source, interpolate, mean, mercator, neighborhood_sum, scale};
 use criterion::{Criterion, SamplingMode, criterion_group, criterion_main};
+use geoengine_datatypes::{dataset::NamedData, primitives::TimeStep};
+use geoengine_operators::engine::{TypedOperator, TypedRasterOperator};
 use geoengine_services::{
     contexts::{ApplicationContext, PostgresContext, Session, SessionContext},
     processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
@@ -35,62 +41,49 @@ const WORLD: &str = "-90,-180,90,180";
 
 struct Case {
     name: &'static str,
-    operator: String,
+    /// built with the operator benches' builders, so both run the same workloads
+    operator: TypedRasterOperator,
     /// `crs`, `bbox`, `width`, `height`
     query: (&'static str, &'static str, u32, u32),
 }
 
-fn ndvi() -> &'static str {
-    r#"{"type": "GdalSource", "params": {"data": "NDVI"}}"#
-}
-
 fn cases() -> Vec<Case> {
-    let raster = |operator: &str, source: &str| {
-        format!(r#"{{"type": "{operator}", "sources": {{"raster": {source}}}, "params": "#)
-    };
+    // the NDVI test dataset as `add_ndvi_to_datasets` registers it
+    let ndvi = || gdal_source(NamedData::with_system_name("NDVI"));
     vec![
         Case {
             name: "source",
-            operator: ndvi().to_string(),
+            operator: ndvi(),
             query: ("EPSG:4326", EUROPE_AFRICA, 1200, 1200),
         },
         Case {
             name: "scaling",
-            operator: raster("RasterScaling", ndvi())
-                + r#"{"slope": {"type": "constant", "value": 2}, "offset": {"type": "constant", "value": 1},
-                      "outputMeasurement": null, "scalingMode": "mulSlopeAddOffset"}}"#,
+            operator: scale(ndvi(), 2., 1.),
             query: ("EPSG:4326", EUROPE_AFRICA, 1200, 1200),
         },
         Case {
             name: "neighborhood_sum_5x5",
-            operator: raster("NeighborhoodAggregate", ndvi())
-                + r#"{"neighborhood": {"type": "rectangle", "dimensions": [5, 5]}, "aggregateFunction": "sum"}}"#,
+            operator: neighborhood_sum(ndvi(), 5),
             query: ("EPSG:4326", EUROPE_AFRICA, 1200, 1200),
         },
         Case {
             name: "interpolation_bilinear_x2",
-            operator: raster("Interpolation", ndvi())
-                + r#"{"interpolation": "biLinear", "outputResolution": {"type": "fraction", "x": 2, "y": 2}}}"#,
+            operator: interpolate(ndvi(), 2.),
             query: ("EPSG:4326", SMALL, 1200, 1200),
         },
         Case {
             name: "downsampling_x2",
-            operator: raster("Downsampling", ndvi())
-                + r#"{"samplingMethod": "nearestNeighbor", "outputResolution": {"type": "fraction", "x": 2, "y": 2}}}"#,
+            operator: downsample(ndvi(), 2.),
             query: ("EPSG:4326", WORLD, 1800, 900),
         },
         Case {
             name: "temporal_mean_6_months",
-            operator: raster("TemporalRasterAggregation", ndvi())
-                + r#"{"aggregation": {"type": "mean", "ignoreNoData": true}, "window": {"granularity": "months", "step": 6}}}"#,
+            operator: mean(ndvi(), TimeStep::months(6).unwrap()),
             query: ("EPSG:4326", EUROPE_AFRICA, 1200, 1200),
         },
         Case {
             name: "reprojection_3857",
-            operator: format!(
-                r#"{{"type": "Reprojection", "sources": {{"source": {}}}, "params": {{"targetSpatialReference": "EPSG:3857", "deriveOutSpec": "projectionBounds"}}}}"#,
-                ndvi()
-            ),
+            operator: mercator(ndvi()),
             query: (
                 "EPSG:3857",
                 "-2226389,-4865942,11131949,9349764",
@@ -104,10 +97,11 @@ fn cases() -> Vec<Case> {
 async fn register(
     app_ctx: &PostgresContext<NoTls>,
     session: UserSession,
-    operator: &str,
+    operator: TypedRasterOperator,
 ) -> String {
-    let graph: ProcessingGraph =
-        serde_json::from_str(&format!(r#"{{"type": "Raster", "operator": {operator}}}"#)).unwrap();
+    let graph = ProcessingGraph {
+        operator: TypedOperator::Raster(operator),
+    };
     app_ctx
         .session_context(session)
         .db()
@@ -130,6 +124,8 @@ async fn get_map(app_ctx: PostgresContext<NoTls>, uri: &str, token: &str) -> act
 }
 
 fn query_pipelines(c: &mut Criterion) {
+    // `services::config` reads the settings from the working directory, but `cargo bench` starts in `services/`
+    std::env::set_current_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/..")).unwrap();
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
     // `with_temp_context` needs a `'static` closure, so it runs as a task that keeps the schema
@@ -142,7 +138,7 @@ fn query_pipelines(c: &mut Criterion) {
         let session = admin_login(&app_ctx).await;
         let mut uris = Vec::new();
         for case in cases() {
-            let id = register(&app_ctx, session.clone(), &case.operator).await;
+            let id = register(&app_ctx, session.clone(), case.operator).await;
             let (crs, bbox, width, height) = case.query;
             uris.push((case.name, format!(
                 "/wms/{id}?request=GetMap&service=WMS&version=1.3.0&layers={id}&bbox={bbox}&width={width}&height={height}&crs={crs}&styles=&format=image/png&time=2014-01-01T00:00:00.0Z"

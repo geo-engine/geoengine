@@ -46,21 +46,25 @@ use geoengine_datatypes::{
     },
     raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
     spatial_reference::SpatialReference,
+    util::Identifier,
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        GdalReadAhead, InitializedRasterOperator, MockExecutionContext, MockQueryContext,
+        GdalReadAhead, InitializedRasterOperator, MetaData, MockExecutionContext, MockQueryContext,
         MultipleRasterSources, ProcessingGraphOperatorPath, QueryContext, RasterOperator,
-        RasterQueryProcessor, SingleRasterOrVectorSource, SingleRasterSource,
+        RasterQueryProcessor, ResultDescriptor, SingleRasterOrVectorSource, SingleRasterSource,
         StatisticsWrappingMockExecutionContext, TypedRasterOperator, TypedRasterQueryProcessor,
     },
     meta::quota::{QuotaCheck, QuotaTracking},
     processing::{
-        Aggregation, BandFilter, BandFilterParams, BandsByNameOrIndex, DeriveOutRasterSpecsSource,
-        Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Expression,
-        ExpressionParams, Fraction, RasterStacker, RasterStackerParams, Reprojection,
-        ReprojectionParams, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        AggregateFunctionParams, Aggregation, BandFilter, BandFilterParams, BandsByNameOrIndex,
+        DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
+        DownsamplingResolution, Expression, ExpressionParams, Fraction, Interpolation,
+        InterpolationMethod, InterpolationParams, InterpolationResolution, NeighborhoodAggregate,
+        NeighborhoodAggregateParams, NeighborhoodParams, RasterScaling, RasterScalingParams,
+        RasterStacker, RasterStackerParams, Reprojection, ReprojectionParams, ScalingMode,
+        SlopeOffsetSelection, TemporalRasterAggregation, TemporalRasterAggregationParameters,
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
@@ -119,6 +123,74 @@ pub fn downsample(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperat
                 y: factor,
             }),
             output_origin_reference: None,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// A GDAL source of `data`.
+pub fn gdal_source(data: NamedData) -> TypedRasterOperator {
+    GdalSource {
+        params: GdalSourceParameters::new(data),
+    }
+    .typed()
+}
+
+/// `value * slope + offset` with constant slope and offset.
+pub fn scale(raster: TypedRasterOperator, slope: f64, offset: f64) -> TypedRasterOperator {
+    RasterScaling {
+        params: RasterScalingParams {
+            slope: SlopeOffsetSelection::Constant { value: slope },
+            offset: SlopeOffsetSelection::Constant { value: offset },
+            output_measurement: None,
+            scaling_mode: ScalingMode::MulSlopeAddOffset,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// The sum over a `size` × `size` neighbourhood of each pixel.
+pub fn neighborhood_sum(raster: TypedRasterOperator, size: usize) -> TypedRasterOperator {
+    NeighborhoodAggregate {
+        params: NeighborhoodAggregateParams {
+            neighborhood: NeighborhoodParams::Rectangle {
+                dimensions: [size, size],
+            },
+            aggregate_function: AggregateFunctionParams::Sum,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// Bilinear interpolation to `factor` times the resolution in x and y.
+pub fn interpolate(raster: TypedRasterOperator, factor: f64) -> TypedRasterOperator {
+    Interpolation {
+        params: InterpolationParams {
+            interpolation: InterpolationMethod::BiLinear,
+            output_resolution: InterpolationResolution::Fraction(Fraction {
+                x: factor,
+                y: factor,
+            }),
+            output_origin_reference: None,
+        },
+        sources: SingleRasterSource { raster },
+    }
+    .typed()
+}
+
+/// The mean over windows of `window`, ignoring no data.
+pub fn mean(raster: TypedRasterOperator, window: TimeStep) -> TypedRasterOperator {
+    TemporalRasterAggregation {
+        params: TemporalRasterAggregationParameters {
+            aggregation: Aggregation::Mean {
+                ignore_no_data: true,
+            },
+            window,
+            window_reference: None,
+            output_type: None,
         },
         sources: SingleRasterSource { raster },
     }
@@ -270,6 +342,34 @@ impl Env {
         }
     }
 
+    /// A new query context like `query_ctx`, for APIs that take one by value.
+    pub fn new_query_ctx(&self) -> MockQueryContext {
+        query_ctx(
+            &self.runtime,
+            &self.exe_ctx.inner,
+            self.exe_ctx.inner.thread_pool.clone(),
+            self.read_ahead,
+        )
+    }
+
+    /// Registers more data under `name`, e.g. a COG of a bench, next to the raster.
+    pub fn add_data<L, R, Q>(
+        &mut self,
+        name: &str,
+        meta_data: Box<dyn MetaData<L, R, Q>>,
+    ) -> NamedData
+    where
+        L: Send + Sync + 'static,
+        R: Send + Sync + 'static + ResultDescriptor,
+        Q: Send + Sync + 'static,
+    {
+        let data = NamedData::with_system_name(name);
+        self.exe_ctx
+            .inner
+            .add_meta_data(DataId::from(DatasetId::new()), data.clone(), meta_data);
+        data
+    }
+
     /// A query context like `query_ctx`, but with its own Rayon pool of `threads` threads
     /// (0 = one per core).
     pub fn query_ctx_with_rayon_threads(&self, threads: usize) -> Arc<MockQueryContext> {
@@ -283,10 +383,7 @@ impl Env {
 
     /// A GDAL source of the raster dataset.
     pub fn raster(&self) -> TypedRasterOperator {
-        GdalSource {
-            params: GdalSourceParameters::new(self.raster.clone()),
-        }
-        .typed()
+        gdal_source(self.raster.clone())
     }
 
     /// The 4th time step of the raster: 2014-04-01 for NDVI.
@@ -301,18 +398,7 @@ impl Env {
 
     /// The mean over windows of six time steps of the raster, ignoring no data.
     pub fn six_step_mean(&self, raster: TypedRasterOperator) -> TypedRasterOperator {
-        TemporalRasterAggregation {
-            params: TemporalRasterAggregationParameters {
-                aggregation: Aggregation::Mean {
-                    ignore_no_data: true,
-                },
-                window: self.step * 6,
-                window_reference: None,
-                output_type: None,
-            },
-            sources: SingleRasterSource { raster },
-        }
-        .typed()
+        mean(raster, self.step * 6)
     }
 
     /// Initializes the operator and queries all of its bands in `area` and `time`.
@@ -322,6 +408,27 @@ impl Env {
 
     /// Like `case`, but `wrap` gets the initialized operator, e.g. to put a cache around it.
     pub fn wrapped_case(
+        &self,
+        operator: TypedRasterOperator,
+        area: Area,
+        time: TimeInterval,
+        wrap: impl FnOnce(Box<dyn InitializedRasterOperator>) -> Box<dyn InitializedRasterOperator>,
+    ) -> Case {
+        let mut case = self.unprimed_case(operator, area, time, wrap);
+        (case.tiles, case.empty) = self.runtime.block_on(count_tiles(
+            &case.processor,
+            case.query.clone(),
+            self.query_ctx.as_ref(),
+        ));
+        case
+    }
+
+    /// Like `case`, but without the first query, so the first run reads cold; the counts stay 0.
+    pub fn cold_case(&self, operator: TypedRasterOperator, area: Area, time: TimeInterval) -> Case {
+        self.unprimed_case(operator, area, time, |initialized| initialized)
+    }
+
+    fn unprimed_case(
         &self,
         operator: TypedRasterOperator,
         area: Area,
@@ -362,17 +469,11 @@ impl Env {
             time,
             BandSelection::new((0..descriptor.bands.count()).collect()).unwrap(),
         );
-        let processor = Arc::new(initialized.query_processor().unwrap());
-        let (tiles, empty) = self.runtime.block_on(count_tiles(
-            &processor,
-            query.clone(),
-            self.query_ctx.as_ref(),
-        ));
         Case {
-            processor,
+            processor: Arc::new(initialized.query_processor().unwrap()),
             query,
-            tiles,
-            empty,
+            tiles: 0,
+            empty: 0,
         }
     }
 
