@@ -27,14 +27,9 @@ import {SpatialReferenceService} from '../spatial-references/spatial-reference.s
 /** One request covers at most this many time steps of the dataset. */
 const WINDOW_TIME_STEPS = 100;
 const VIEWPORT_DEBOUNCE_MS = 500;
-/**
- * The overlay asks for this many view widths and heights more on each side. The boxes are clipped to the
- * requested area, so a scene larger than the view would otherwise be drawn as the view itself, which
- * looks like a shape that moves with the map. The area, and with it the number of catalog searches,
- * grows with the square of this, so it stays small.
- */
+/** Extra view widths and heights the overlay asks for on each side, so a scene larger than the view is not drawn as the view. */
 const OVERLAY_MARGIN = 0.5;
-/** The view is a rectangle of the map's projection, so its bounds in the layer's projection need its edges, not only its corners. */
+/** A view is a rectangle in the map's projection only, so its bounds in the layer's projection need its edges. */
 const EXTENT_EDGE_STOPS = 16;
 
 /** The raster layer an app wants to know the footprints of. */
@@ -129,10 +124,7 @@ export class FootprintsService {
         },
     });
 
-    /**
-     * The boxes of the selected time step alone. One step costs what a map at that zoom costs and gives
-     * the boxes of the data, which the window of the calendar does not.
-     */
+    /** The boxes of the selected time step alone, which the availability of the calendar window does not have. */
     private readonly overlayStepResource = resource({
         params: () => {
             const layer = this.layer();
@@ -265,8 +257,7 @@ export class FootprintsService {
         source?.clear();
         if (!source || !mapSpatialReference || !time || !this.overlayVisible()) return;
 
-        // The window only says which days have data. Its boxes are the whole view, so the overlay
-        // draws the boxes of its own request for the selected step.
+        // the calendar window only has availability, so the boxes come from the request of the overlay
         const footprints = this.overlayFootprints();
         if (!footprints) return;
 

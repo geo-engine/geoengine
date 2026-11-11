@@ -6,10 +6,7 @@ export interface TimeRange {
     end: number;
 }
 
-/**
- * The calendar's dates are UTC dates written into the local fields of a `Date` (see `setDate` in the
- * layers component), so the UTC range of a cell comes from the local fields of its date.
- */
+/** The calendar's dates are UTC dates in the local fields of a `Date` (see `setDate` in the layers component). */
 export function calendarCellRange(date: Date, view: MatCalendarView): TimeRange {
     const [year, month, day] = [date.getFullYear(), date.getMonth(), date.getDate()];
     switch (view) {
@@ -46,10 +43,7 @@ export function cellClasses(steps: ReadonlyArray<TimeStepFootprint>, date: Date,
     return [starts ? CELL_WITH_DATA_CLASS : CELL_WITH_DATA_CONTINUED_CLASS, ...(goesOn ? [CELL_BAND_AFTER_CLASS] : [])];
 }
 
-/**
- * The calendar view that shows one cell per time step: days for steps of a day or less, because a
- * calendar does not go below days, months for steps of months and years for steps of years.
- */
+/** The calendar view with one cell per time step: days for steps of a day or less, months, or years. */
 export function calendarStartView(unit: string | undefined): MatCalendarView {
     if (unit === 'month' || unit === 'months') return 'year';
     if (unit === 'year' || unit === 'years') return 'multi-year';

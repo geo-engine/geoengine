@@ -52,10 +52,7 @@ export function overlayStyle(): Style {
 
 const BOX_EDGE_STEPS = 16;
 
-/**
- * The outline of a box with points along its edges. A box of one projection is no rectangle in another,
- * and the outline would otherwise be straight between the corners, leaving gaps at the edges of the map.
- */
+/** The outline of a box with points along its edges, because a box is no rectangle in another projection. */
 export function boxRing([minX, minY, maxX, maxY]: [number, number, number, number]): [number, number][] {
     const along = (from: number, to: number, i: number): number => from + ((to - from) * i) / BOX_EDGE_STEPS;
     const steps = Array.from({length: BOX_EDGE_STEPS}, (_, i) => i);
