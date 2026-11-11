@@ -5,10 +5,13 @@ All URIs are relative to *https://geoengine.io/api*
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
 | [**collection**](OGCAPIApi.md#collection) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata |
+| [**collectionCoverageTileset**](OGCAPIApi.md#collectioncoveragetileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId} | OGC API Collection Coverage Tileset Metadata |
+| [**collectionCoverageTilesets**](OGCAPIApi.md#collectioncoveragetilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles | OGC API Collection Coverage Tilesets List |
 | [**collectionTileset**](OGCAPIApi.md#collectiontileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata |
 | [**collectionTilesets**](OGCAPIApi.md#collectiontilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List |
 | [**collections**](OGCAPIApi.md#collections) | **GET** /ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List |
 | [**conformance**](OGCAPIApi.md#conformance) | **GET** /ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes |
+| [**coverageTile**](OGCAPIApi.md#coveragetile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Coverage Tile |
 | [**landingPage**](OGCAPIApi.md#landingpage) | **GET** /ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page |
 | [**tile**](OGCAPIApi.md#tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile |
 | [**tileMatrixSet**](OGCAPIApi.md#tilematrixset) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition |
@@ -86,6 +89,159 @@ example().catch(console.error);
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## collectionCoverageTileset
+
+> TileSet collectionCoverageTileset(dataConnectorId, layerId, tileMatrixSetId)
+
+OGC API Collection Coverage Tileset Metadata
+
+Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+### Example
+
+```ts
+import {
+  Configuration,
+  OGCAPIApi,
+} from '@geoengine/api-client';
+import type { CollectionCoverageTilesetRequest } from '@geoengine/api-client';
+
+async function example() {
+  console.log("🚀 Testing @geoengine/api-client SDK...");
+  const config = new Configuration({ 
+    // Configure HTTP bearer authorization: session_token
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new OGCAPIApi(config);
+
+  const body = {
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
+    // TileMatrixSetId | Tile matrix set identifier
+    tileMatrixSetId: ...,
+  } satisfies CollectionCoverageTilesetRequest;
+
+  try {
+    const data = await api.collectionCoverageTileset(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
+| **tileMatrixSetId** | [](.md) | Tile matrix set identifier | [Defaults to `undefined`] |
+
+### Return type
+
+[**TileSet**](TileSet.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | OK |  -  |
+| **404** | Collection or tile matrix set not found |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## collectionCoverageTilesets
+
+> TileSets collectionCoverageTilesets(dataConnectorId, layerId)
+
+OGC API Collection Coverage Tilesets List
+
+Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+### Example
+
+```ts
+import {
+  Configuration,
+  OGCAPIApi,
+} from '@geoengine/api-client';
+import type { CollectionCoverageTilesetsRequest } from '@geoengine/api-client';
+
+async function example() {
+  console.log("🚀 Testing @geoengine/api-client SDK...");
+  const config = new Configuration({ 
+    // Configure HTTP bearer authorization: session_token
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new OGCAPIApi(config);
+
+  const body = {
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
+  } satisfies CollectionCoverageTilesetsRequest;
+
+  try {
+    const data = await api.collectionCoverageTilesets(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
+
+### Return type
+
+[**TileSets**](TileSets.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | OK |  -  |
+| **404** | Collection not found |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
@@ -399,6 +555,103 @@ example().catch(console.error);
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 | **200** | OK |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## coverageTile
+
+> Blob coverageTile(dataConnectorId, layerId, tileMatrixSetId, tileMatrix, tileRow, tileCol, datetime, properties, excludeProperties)
+
+OGC API Coverage Tile
+
+Returns the raw values of the tile as &#x60;GeoTIFF&#x60;, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+
+### Example
+
+```ts
+import {
+  Configuration,
+  OGCAPIApi,
+} from '@geoengine/api-client';
+import type { CoverageTileRequest } from '@geoengine/api-client';
+
+async function example() {
+  console.log("🚀 Testing @geoengine/api-client SDK...");
+  const config = new Configuration({ 
+    // Configure HTTP bearer authorization: session_token
+    accessToken: "YOUR BEARER TOKEN",
+  });
+  const api = new OGCAPIApi(config);
+
+  const body = {
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
+    // TileMatrixSetId | Tile matrix set identifier
+    tileMatrixSetId: ...,
+    // number | Tile matrix level
+    tileMatrix: 56,
+    // number | Tile row
+    tileRow: 789,
+    // number | Tile column
+    tileCol: 789,
+    // string | Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`). (optional)
+    datetime: 2018-02-12T23:20:50Z,
+    // string | Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`. (optional)
+    properties: red,green,blue,
+    // string | Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`. (optional)
+    excludeProperties: alpha,
+  } satisfies CoverageTileRequest;
+
+  try {
+    const data = await api.coverageTile(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
+| **tileMatrixSetId** | [](.md) | Tile matrix set identifier | [Defaults to `undefined`] |
+| **tileMatrix** | `number` | Tile matrix level | [Defaults to `undefined`] |
+| **tileRow** | `number` | Tile row | [Defaults to `undefined`] |
+| **tileCol** | `number` | Tile column | [Defaults to `undefined`] |
+| **datetime** | `string` | Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (&#x60;..&#x60;). | [Optional] [Defaults to `undefined`] |
+| **properties** | `string` | Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with &#x60;exclude-properties&#x60;. | [Optional] [Defaults to `undefined`] |
+| **excludeProperties** | `string` | Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with &#x60;properties&#x60;. | [Optional] [Defaults to `undefined`] |
+
+### Return type
+
+**Blob**
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: `image/tiff; application=geotiff`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | GeoTIFF Image |  -  |
+| **400** | Invalid tile coordinates, datetime or field selection |  -  |
+| **404** | Collection or tile matrix set not found |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 

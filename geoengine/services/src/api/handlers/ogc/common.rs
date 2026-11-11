@@ -44,6 +44,8 @@ use utoipa::{IntoParams, ToSchema};
 
 // TODO: add to [`ogcapi_types::common::link_rel`] and use from there
 const MAP_TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets-map";
+// TODO: add to [`ogcapi_types::common::link_rel`] and use from there
+const COVERAGE_TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets-coverage";
 
 const MAX_NUMBER_OF_TIME_INTERVALS: usize = 256;
 
@@ -159,15 +161,16 @@ pub async fn landing_page_head<C: ApplicationContext>(
             example = json!({
                 "conformsTo": [
                     "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
                     "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
                     "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/geodata-tilesets",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tiff",
                     "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
                     "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset",
                 ]
@@ -199,7 +202,9 @@ pub async fn conformance<C: ApplicationContext>(
         "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
         "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
         "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+        "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/geodata-tilesets",
         "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+        "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tiff",
         "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
         "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset",
     ])))
@@ -485,6 +490,11 @@ async fn build_collection(
                 MAP_TILESETS_REL,
                 JSON,
             )?,
+            create_link(
+                &format!("collections/{collection_id}/coverage/tiles"),
+                COVERAGE_TILESETS_REL,
+                JSON,
+            )?,
         ],
         extent: Some(Extent {
             spatial: Some(SpatialExtent {
@@ -617,7 +627,9 @@ mod tests {
                 "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
                 "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
                 "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/geodata-tilesets",
                 "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tiff",
                 "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
                 "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset",
               ]
@@ -671,6 +683,11 @@ mod tests {
                         {
                             "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles"),
                             "rel": MAP_TILESETS_REL,
+                            "type": "application/json"
+                        },
+                        {
+                            "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/coverage/tiles"),
+                            "rel": COVERAGE_TILESETS_REL,
                             "type": "application/json"
                         }
                     ]
@@ -732,6 +749,11 @@ mod tests {
                     {
                         "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles"),
                         "rel": MAP_TILESETS_REL,
+                        "type": "application/json"
+                    },
+                    {
+                        "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/coverage/tiles"),
+                        "rel": COVERAGE_TILESETS_REL,
                         "type": "application/json"
                     }
                 ]
