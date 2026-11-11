@@ -82,7 +82,6 @@ import {EOdysseyLayerService} from './layers.service';
 
         <section class="panel-section time-selection" aria-labelledby="time-heading">
             <h2 id="time-heading">Time Selection</h2>
-            <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">Auto select time</mat-checkbox>
             <div class="time-controls">
                 <button
                     matIconButton
@@ -138,6 +137,9 @@ import {EOdysseyLayerService} from './layers.service';
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
                 <span class="stripe-swatch" aria-hidden="true"></span>
                 Show scenes of this date on the map
+            </mat-checkbox>
+            <mat-checkbox [checked]="autoSelectTime()" (change)="autoSelectTime.set($event.checked)">
+                Use the default date of the data source when showing it
             </mat-checkbox>
         </section>
         <mat-divider></mat-divider>
