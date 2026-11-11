@@ -128,6 +128,10 @@ pub struct Web {
     #[serde(deserialize_with = "deserialize_api_prefix")]
     pub api_prefix: String,
     pub version_api: bool,
+    /// HTTP worker threads, `0` for actix' default (one per core)
+    pub workers: usize,
+    /// Max. blocking threads of each HTTP worker, `0` for `max(512 / workers, 32)`
+    pub max_blocking_threads_per_worker: usize,
 }
 
 impl Web {
@@ -195,6 +199,19 @@ pub struct QueryContext {
     pub chunk_byte_size: usize,
     /// Threads of the Rayon pool for operators, `0` for one per core
     pub rayon_threads: usize,
+    /// GDAL tile reads a `GdalSource` query keeps in flight
+    pub gdal_source_read_ahead: NonZeroUsize,
+    /// GDAL tile reads a `MultiBandGdalSource` query keeps in flight
+    pub multi_band_gdal_source_read_ahead: NonZeroUsize,
+}
+
+impl QueryContext {
+    pub fn gdal_read_ahead(&self) -> geoengine_operators::engine::GdalReadAhead {
+        geoengine_operators::engine::GdalReadAhead {
+            gdal_source: self.gdal_source_read_ahead.get(),
+            multi_band_gdal_source: self.multi_band_gdal_source_read_ahead.get(),
+        }
+    }
 }
 
 impl ConfigElement for QueryContext {
@@ -230,6 +247,18 @@ impl From<Expression> for ExpressionCacheConfig {
             workspace_path: config.workspace_path,
         }
     }
+}
+
+/// The Tokio runtime of the server, which runs the queries
+#[derive(Debug, Deserialize)]
+pub struct ProcessingRuntime {
+    /// Worker threads, `0` for one per core
+    pub worker_threads: usize,
+    pub max_blocking_threads: NonZeroUsize,
+}
+
+impl ConfigElement for ProcessingRuntime {
+    const KEY: &'static str = "processing_runtime";
 }
 
 #[derive(Debug, Deserialize)]
@@ -880,5 +909,60 @@ mod tests {
     fn it_accepts_limits_above_the_number_of_processes() {
         assert!(pool(8, 16, 8).validate().is_ok());
         assert!(pool(32, 8, 16).validate().is_ok());
+    }
+
+    fn default_element<T: ConfigElement + for<'a> Deserialize<'a>>() -> T {
+        default_settings().get(T::KEY).unwrap()
+    }
+
+    fn rejects<T: ConfigElement + for<'a> Deserialize<'a>>(key: &str, value: i64) -> bool {
+        Config::builder()
+            .add_source(default_settings())
+            .set_override(format!("{}.{key}", T::KEY), value)
+            .unwrap()
+            .build()
+            .unwrap()
+            .get::<T>(T::KEY)
+            .is_err()
+    }
+
+    #[test]
+    fn it_processing_runtime_defaults_are_the_tokio_defaults() {
+        let config: ProcessingRuntime = default_element();
+        // not set, so Tokio uses one per core
+        assert_eq!(config.worker_threads, 0);
+        assert_eq!(config.max_blocking_threads.get(), 512);
+
+        assert!(rejects::<ProcessingRuntime>("max_blocking_threads", 0));
+        assert!(!rejects::<ProcessingRuntime>("worker_threads", 0));
+    }
+
+    #[test]
+    fn it_gdal_read_ahead_defaults_are_the_previous_values() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.gdal_read_ahead(),
+            geoengine_operators::engine::GdalReadAhead {
+                gdal_source: 8,
+                multi_band_gdal_source: 16,
+            }
+        );
+        assert_eq!(
+            config.gdal_read_ahead(),
+            geoengine_operators::engine::GdalReadAhead::default()
+        );
+
+        assert!(rejects::<QueryContext>("gdal_source_read_ahead", 0));
+        assert!(rejects::<QueryContext>(
+            "multi_band_gdal_source_read_ahead",
+            0
+        ));
+    }
+
+    #[test]
+    fn it_web_pool_defaults_are_the_previous_values() {
+        let config: Web = default_element();
+        assert_eq!(config.workers, 0);
+        assert_eq!(config.max_blocking_threads_per_worker, 0);
     }
 }

@@ -21,6 +21,7 @@ Name | Type
 `pageLimit` | number
 `cacheTtlSecs` | number
 `stacGrid` | [StacGrid](StacGrid.md)
+`maxConcurrentCellSearches` | number
 
 ## Example
 
@@ -44,6 +45,7 @@ const example = {
   "pageLimit": null,
   "cacheTtlSecs": null,
   "stacGrid": null,
+  "maxConcurrentCellSearches": null,
 } satisfies StacDataProviderDefinition
 
 console.log(example)

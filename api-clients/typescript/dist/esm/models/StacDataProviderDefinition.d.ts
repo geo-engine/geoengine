@@ -79,6 +79,10 @@ export interface StacDataProviderDefinition {
      * Target number of square search cells per dataset CRS projected area of use; omitted values use 512.
      */
     stacGrid?: StacGrid | null;
+    /**
+     * STAC searches one loading info request runs in parallel; omitted values use 8.
+     */
+    maxConcurrentCellSearches?: number | null;
 }
 /**
  * @export

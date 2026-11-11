@@ -28,6 +28,20 @@ pub use loading_info::StacMultiBandMetaData;
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
+const DEFAULT_MAX_CONCURRENT_CELL_SEARCHES: usize = 8;
+
+/// The positive number of parallel cell searches, since a limit of zero would never make progress
+fn validate_max_concurrent_cell_searches(limit: Option<i32>) -> crate::error::Result<usize> {
+    let Some(limit) = limit else {
+        return Ok(DEFAULT_MAX_CONCURRENT_CELL_SEARCHES);
+    };
+    usize::try_from(limit)
+        .ok()
+        .filter(|limit| *limit > 0)
+        .ok_or_else(|| crate::error::Error::InvalidConfig {
+            reason: "STAC max concurrent cell searches must be positive".to_owned(),
+        })
+}
 
 fn validate_authentication(
     authentication: Option<&StacProviderAuthentication>,
@@ -90,6 +104,9 @@ pub struct StacDataProviderDefinition {
     /// Target square cell count per dataset CRS projected area of use for STAC metadata searches.
     #[serde(default)]
     pub stac_grid: Option<StacGrid>,
+    /// STAC searches one loading info request runs in parallel; omitted values use 8.
+    #[serde(default)]
+    pub max_concurrent_cell_searches: Option<i32>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -287,6 +304,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                 validate_authentication(new.authentication.as_ref())?;
                 validate_s3_config(new.s3_config.as_ref())?;
                 new.stac_grid.unwrap_or_default().validate()?;
+                validate_max_concurrent_cell_searches(new.max_concurrent_cell_searches)?;
                 validate_time_dimension(new.time_dimension)?;
 
                 TypedDataProviderDefinition::StacDataProviderDefinition(new)
@@ -313,6 +331,8 @@ pub struct StacDataProvider {
     /// In-memory cache for complete STAC cell results, keyed by dataset, integer
     /// projected-grid index, and regular layer time step.
     query_cache: Arc<StacQueryCache>,
+    /// STAC searches one loading info request runs in parallel
+    max_concurrent_cell_searches: usize,
     grid: StacGrid,
 }
 
@@ -335,6 +355,8 @@ impl StacDataProvider {
         validate_s3_config(definition.s3_config.as_ref())?;
         validate_time_dimension(definition.time_dimension)?;
         let grid = definition.stac_grid.unwrap_or_default().validate()?;
+        let max_concurrent_cell_searches =
+            validate_max_concurrent_cell_searches(definition.max_concurrent_cell_searches)?;
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(
@@ -356,6 +378,7 @@ impl StacDataProvider {
             client,
             cache_ttl_secs: definition.cache_ttl_secs,
             query_cache: Arc::new(StacQueryCache::default()),
+            max_concurrent_cell_searches,
             grid,
         })
     }
@@ -784,6 +807,7 @@ mod tests {
         api.stac_grid = Some(
             serde_json::from_value(serde_json::json!({"targetNumberOfCells":259_200})).unwrap(),
         );
+        api.max_concurrent_cell_searches = Some(4);
         let mut definition = StacDataProviderDefinition::from(api);
         let id = db
             .add_layer_provider(definition.clone().into())
@@ -808,6 +832,13 @@ mod tests {
             db.get_layer_provider_definition(id).await.unwrap(),
             definition.clone().into()
         );
+        let mut invalid = definition.clone();
+        invalid.max_concurrent_cell_searches = Some(0);
+        assert!(
+            db.update_layer_provider_definition(id, invalid.into())
+                .await
+                .is_err()
+        );
         definition
             .stac_grid
             .as_mut()
@@ -820,6 +851,14 @@ mod tests {
             db.get_layer_provider_definition(id).await.unwrap(),
             definition.into()
         );
+    }
+
+    #[test]
+    fn it_validates_max_concurrent_cell_searches() {
+        assert_eq!(validate_max_concurrent_cell_searches(None).unwrap(), 8);
+        assert_eq!(validate_max_concurrent_cell_searches(Some(4)).unwrap(), 4);
+        assert!(validate_max_concurrent_cell_searches(Some(0)).is_err());
+        assert!(validate_max_concurrent_cell_searches(Some(-1)).is_err());
     }
 
     #[tokio::test]

@@ -32,7 +32,7 @@ use geoengine_operators::{
         shared_cache::SharedCache,
     },
     engine::{
-        ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
+        ChunkByteSize, CreateSpan, ExecutionContext, GdalReadAhead, InitializedPlotOperator,
         InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
         QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
     },
@@ -153,6 +153,7 @@ pub struct QueryContextImpl {
     abort_registration: QueryAbortRegistration,
     abort_trigger: Option<QueryAbortTrigger>,
     gdal_process_pool: Arc<GdalProcessPool>,
+    gdal_read_ahead: GdalReadAhead,
     processing_runtime: tokio::runtime::Handle,
 }
 
@@ -163,6 +164,7 @@ impl QueryContextImpl {
         thread_pool: Arc<ThreadPool>,
         gdal_process_pool: Arc<GdalProcessPool>,
         default_cache_ttl: CacheTtlSeconds,
+        gdal_read_ahead: GdalReadAhead,
         processing_runtime: tokio::runtime::Handle,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
@@ -178,6 +180,7 @@ impl QueryContextImpl {
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
+            gdal_read_ahead,
             processing_runtime,
         }
     }
@@ -193,6 +196,7 @@ impl QueryContextImpl {
         new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
+        gdal_read_ahead: GdalReadAhead,
         processing_runtime: tokio::runtime::Handle,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
@@ -208,6 +212,7 @@ impl QueryContextImpl {
             abort_registration,
             abort_trigger: Some(abort_trigger),
             gdal_process_pool,
+            gdal_read_ahead,
             processing_runtime,
         }
     }
@@ -259,6 +264,10 @@ impl QueryContext for QueryContextImpl {
 
     fn processing_runtime(&self) -> tokio::runtime::Handle {
         self.processing_runtime.clone()
+    }
+
+    fn gdal_read_ahead(&self) -> GdalReadAhead {
+        self.gdal_read_ahead
     }
 }
 

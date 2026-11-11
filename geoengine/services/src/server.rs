@@ -21,28 +21,44 @@ use geoengine_operators::{
     engine::ChunkByteSize, machine_learning::onnx_util::OrtEnvironment,
     processing::ExpressionEnvironment, util::gdal::register_gdal_drivers_from_list,
 };
-use std::{net::SocketAddr, path::PathBuf};
+use std::path::PathBuf;
 use tracing_actix_web::TracingLogger;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
-    bind_address: SocketAddr,
-    api_prefix: String,
-    version_api: bool,
+    web_config: config::Web,
     app_ctx: C,
 ) -> Result<(), Error>
 where
     C: ApplicationContext<Session = UserSession>,
     C::Session: FromRequest,
 {
+    let workers = web_config.workers;
+    let max_blocking_threads_per_worker = if web_config.max_blocking_threads_per_worker > 0 {
+        web_config.max_blocking_threads_per_worker
+    } else {
+        calculate_max_blocking_threads_per_worker(workers)
+    };
+
+    tracing::info!(
+        workers = if workers > 0 {
+            workers
+        } else {
+            // actix' default
+            std::thread::available_parallelism().map_or(2, std::num::NonZeroUsize::get)
+        },
+        max_blocking_threads_per_worker,
+        "HTTP workers"
+    );
+
     let wrapped_ctx = web::Data::new(app_ctx);
 
     let openapi = ApiDoc::openapi();
 
-    HttpServer::new(move || {
-        let mut api = web::scope(&api_prefix)
+    let server = HttpServer::new(move || {
+        let mut api = web::scope(&web_config.api_prefix)
             .configure(configure_extractors)
             .configure(handlers::datasets::init_dataset_routes::<C>)
             .configure(handlers::layers::init_layer_routes::<C>)
@@ -92,7 +108,7 @@ where
 
         api = api.service(SwaggerUi::new("/swagger-ui/{_:.*}").urls(api_urls));
 
-        if version_api {
+        if web_config.version_api {
             api = api.route(
                 "/info",
                 web::get().to(crate::util::server::server_info_handler),
@@ -113,13 +129,19 @@ where
             )
             .wrap(TracingLogger::<CustomRootSpanBuilder>::new())
             .service(api)
-    })
-    .worker_max_blocking_threads(calculate_max_blocking_threads_per_worker())
-    .on_connect(connection_init)
-    .bind(bind_address)?
-    .run()
-    .await
-    .map_err(Into::into)
+    });
+    let server = if workers > 0 {
+        server.workers(workers)
+    } else {
+        server
+    };
+    server
+        .worker_max_blocking_threads(max_blocking_threads_per_worker)
+        .on_connect(connection_init)
+        .bind(web_config.bind_address)?
+        .run()
+        .await
+        .map_err(Into::into)
 }
 
 ///
@@ -201,13 +223,6 @@ async fn start_postgres(
         )
         .await?;
 
-        start(
-            static_files_dir,
-            web_config.bind_address,
-            web_config.api_prefix,
-            web_config.version_api,
-            ctx,
-        )
-        .await
+        start(static_files_dir, web_config, ctx).await
     }
 }

@@ -25,6 +25,22 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ChunkByteSize(usize);
 
+/// GDAL tile reads that a source keeps in flight per query
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct GdalReadAhead {
+    pub gdal_source: usize,
+    pub multi_band_gdal_source: usize,
+}
+
+impl Default for GdalReadAhead {
+    fn default() -> Self {
+        Self {
+            gdal_source: 8,
+            multi_band_gdal_source: 16,
+        }
+    }
+}
+
 impl ChunkByteSize {
     pub const MIN: ChunkByteSize = ChunkByteSize(usize::MIN);
     pub const MAX: ChunkByteSize = ChunkByteSize(usize::MAX);
@@ -61,6 +77,10 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;
+
+    fn gdal_read_ahead(&self) -> GdalReadAhead {
+        GdalReadAhead::default()
+    }
 
     fn quota_tracking(&self) -> Option<&QuotaTracking>;
 
@@ -197,6 +217,8 @@ pub struct MockQueryContext {
     pub quota_tracking: Option<QuotaTracking>,
     pub quota_checker: Option<QuotaChecker>,
     pub new_raster_cache: Option<Arc<crate::cache::new_raster_cache::NewRasterCacheEnum>>,
+    /// see [`QueryContext::gdal_read_ahead`]; the server reads it from `[query_context]`
+    pub gdal_read_ahead: GdalReadAhead,
 
     pub abort_registration: QueryAbortRegistration,
     pub abort_trigger: Option<QueryAbortTrigger>,
@@ -227,6 +249,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            gdal_read_ahead: GdalReadAhead::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             processing_runtime: tokio::runtime::Handle::current(),
@@ -255,6 +278,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            gdal_read_ahead: GdalReadAhead::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             processing_runtime: tokio::runtime::Handle::current(),
@@ -282,6 +306,7 @@ impl MockQueryContext {
             new_raster_cache: Some(Arc::new(
                 crate::cache::new_raster_cache::NewRasterCacheEnum::new_fifo(1_073_741_824),
             )),
+            gdal_read_ahead: GdalReadAhead::default(),
             abort_registration,
             abort_trigger: Some(abort_trigger),
             processing_runtime: tokio::runtime::Handle::current(),
@@ -304,6 +329,10 @@ impl QueryContext for MockQueryContext {
 
     fn default_cache_ttl(&self) -> CacheTtlSeconds {
         self.default_cache_ttl
+    }
+
+    fn gdal_read_ahead(&self) -> GdalReadAhead {
+        self.gdal_read_ahead
     }
 
     fn abort_registration(&self) -> &QueryAbortRegistration {
