@@ -10,13 +10,11 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
-use crate::source::gdal_worker_process::process_common::GdalIpcBytePayload;
-
 use super::{
     GdalProcessPoolAccess,
     process_common::{
-        GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult, WorkerRequest,
-        WorkerResponse,
+        GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
+        IpcProcessRasterResult, WorkerRequest, WorkerResponse,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
@@ -103,7 +101,8 @@ struct WorkerJob {
 struct WorkerAffinity {
     dataset_hash: u64,
     band: usize,
-    spatial_window: GridBoundingBox2D,
+    /// `None` after a header read, which has no pixel window
+    spatial_window: Option<GridBoundingBox2D>,
     timestamp: Instant,
 }
 
@@ -144,7 +143,7 @@ impl WorkerAffinity {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        window: Option<&GridBoundingBox2D>,
         now: Instant,
         holders: &FastHashMap<u64, usize>,
     ) -> WorkerRank {
@@ -155,9 +154,14 @@ impl WorkerAffinity {
             };
         }
 
+        // a header read has no pixel window, so it has no nearer worker
+        let distance = match (&self.spatial_window, window) {
+            (Some(last), Some(window)) => calculate_grid_distance(last, window),
+            _ => u64::MAX,
+        };
         WorkerRank::Hit {
             same_band: self.band == band,
-            distance: std::cmp::Reverse(calculate_grid_distance(&self.spatial_window, window)),
+            distance: std::cmp::Reverse(distance),
         }
     }
 }
@@ -177,7 +181,7 @@ impl WorkerProcess {
         &self,
         dataset_hash: u64,
         band: usize,
-        window: &GridBoundingBox2D,
+        window: Option<&GridBoundingBox2D>,
         now: Instant,
         holders: &FastHashMap<u64, usize>,
     ) -> WorkerRank {
@@ -271,7 +275,7 @@ enum BrokerCommand {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        window: Option<GridBoundingBox2D>,
         read_failed: bool,
     },
     WorkerCachesCleared {
@@ -293,7 +297,7 @@ enum BrokerCommand {
 
 type SharedResult = Option<
     Arc<(
-        Result<GdalIpcBytePayload, GdalProcessPoolError>,
+        Result<IpcChannelResult, GdalProcessPoolError>,
         Option<tracing::Span>,
     )>,
 >;
@@ -498,7 +502,7 @@ impl GdalProcessPool {
                     continue;
                 }
             };
-            let window = job.request.0.read_advise.read_window_bounds;
+            let window = job.request.0.read_window_bounds();
             let band = job.request.0.dataset_params.rasterband_channel;
             let dataset_hash = job.dataset_hash;
 
@@ -823,7 +827,7 @@ impl BrokerState {
         worker_id: usize,
         dataset_hash: u64,
         band: usize,
-        window: GridBoundingBox2D,
+        window: Option<GridBoundingBox2D>,
         read_failed: bool,
     ) {
         self.release_read_capacity(dataset_hash);
@@ -990,7 +994,7 @@ impl BrokerState {
         req: &QueuedRequest,
         now: Instant,
     ) -> Option<(usize, WorkerRank)> {
-        let window = &req.request.0.read_advise.read_window_bounds;
+        let window = req.request.0.read_window_bounds();
         let band = req.request.0.dataset_params.rasterband_channel;
 
         let mut best: Option<(usize, WorkerRank)> = None;
@@ -999,7 +1003,13 @@ impl BrokerState {
                 .workers
                 .get(worker_id)
                 .expect("Idle worker ID missing from registry - invariant broken")
-                .rank_for_job(dataset_hash, band, window, now, &self.dataset_holders);
+                .rank_for_job(
+                    dataset_hash,
+                    band,
+                    window.as_ref(),
+                    now,
+                    &self.dataset_holders,
+                );
             if best.is_none_or(|(_, best_rank)| rank > best_rank) {
                 best = Some((idle_idx, rank));
             }
@@ -1040,7 +1050,7 @@ impl BrokerState {
         let busy_affinity = WorkerAffinity {
             dataset_hash: req.dataset_hash,
             band: req.request.0.dataset_params.rasterband_channel,
-            spatial_window: req.request.0.read_advise.read_window_bounds,
+            spatial_window: req.request.0.read_window_bounds(),
             timestamp: now,
         };
 
@@ -1118,7 +1128,7 @@ async fn await_read_or_abandon(
     tx: &InFlightTile,
     mut oneshot_rx: oneshot::Receiver<ReadResult>,
 ) -> Option<(
-    Result<GdalIpcBytePayload, GdalProcessPoolError>,
+    Result<IpcChannelResult, GdalProcessPoolError>,
     Option<tracing::Span>,
 )> {
     let res = loop {
@@ -1174,13 +1184,58 @@ impl GdalPoolDispatcher {
         &self,
         request: IpcChannelMessage,
     ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
-        self.read_data_dedup(request).await
+        let shared_res = self.dispatch_dedup(request).await?;
+
+        let result_ref = shared_res.0.as_ref().map_err(Clone::clone)?;
+
+        let IpcChannelResult::Raster(byte_payload) = result_ref else {
+            return Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "expected a raster result but got a header".to_string(),
+                },
+            });
+        };
+
+        let payload: GdalIpcPayload<P> =
+            byte_payload
+                .try_into()
+                .map_err(|e: bytemuck::PodCastError| {
+                    tracing::error!("Failed to cast payload: {:?}", e);
+                    GdalProcessPoolError::IpcProcessError {
+                        source: IpcProcessError::PocCastError {
+                            error: e.to_string(),
+                        },
+                    }
+                })?;
+
+        Ok(payload)
     }
 
-    async fn read_data_dedup<P: Pixel>(
+    /// Read a header (`GdalRequest::Header`) without pixel
+    /// data. Uses the same leader/follower deduplication as [`Self::read_data`].
+    ///
+    /// # Panics
+    /// This function will panic if a required channel is dropped unexpectedly.
+    pub async fn read_header(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
+    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
+        let shared_res = self.dispatch_dedup(request).await?;
+        shared_res.0.clone()
+    }
+
+    /// Shared leader/follower dispatch: hashes the request, coalesces identical
+    /// concurrent requests, submits to the broker and waits for the result.
+    async fn dispatch_dedup(
+        &self,
+        request: IpcChannelMessage,
+    ) -> Result<
+        Arc<(
+            Result<IpcChannelResult, GdalProcessPoolError>,
+            Option<tracing::Span>,
+        )>,
+        GdalProcessPoolError,
+    > {
         let mut s = rustc_hash::FxHasher::default();
         request.full_hash(&mut s);
         let tile_key = s.finish();
@@ -1274,27 +1329,7 @@ impl GdalPoolDispatcher {
             tracing::Span::current().follows_from(span.id());
         }
 
-        let byte_payload_ref =
-            shared_res
-                .0
-                .as_ref()
-                .map_err(|e| GdalProcessPoolError::IpcProcessError {
-                    source: IpcProcessError::IpcOther { msg: e.to_string() },
-                })?;
-
-        let payload: GdalIpcPayload<P> =
-            byte_payload_ref
-                .try_into()
-                .map_err(|e: bytemuck::PodCastError| {
-                    tracing::error!("DEBUG: Failed to cast payload: {:?}", e);
-                    GdalProcessPoolError::IpcProcessError {
-                        source: IpcProcessError::PocCastError {
-                            error: e.to_string(),
-                        },
-                    }
-                })?;
-
-        Ok(payload)
+        Ok(shared_res)
     }
 }
 
@@ -1350,7 +1385,7 @@ mod tests {
         WorkerAffinity {
             dataset_hash,
             band,
-            spatial_window: window,
+            spatial_window: Some(window),
             timestamp: Instant::now(),
         }
     }
@@ -1366,7 +1401,7 @@ mod tests {
     ) -> WorkerRank {
         let w = window([0, 0], [7, 7]);
         let now = aff.timestamp + Duration::from_secs(idle_secs);
-        aff.rank(dataset_hash, band, &w, now, &FastHashMap::default())
+        aff.rank(dataset_hash, band, Some(&w), now, &FastHashMap::default())
     }
 
     #[test]
@@ -1376,10 +1411,21 @@ mod tests {
         for idle in IDLE_SECS {
             let now = aff.timestamp + Duration::from_secs(idle);
             assert_eq!(
-                aff.rank(42, 1, &w, now, &FastHashMap::default()),
+                aff.rank(42, 1, Some(&w), now, &FastHashMap::default()),
                 WorkerRank::BEST
             );
         }
+    }
+
+    /// A header read only needs the file open, so any window of the dataset counts as a hit, but
+    /// never as the best one that stops the search for a worker with the same band.
+    #[test]
+    fn rank_header_read_is_a_hit_without_distance() {
+        let w = window([100, 100], [200, 200]);
+        let aff = make_affinity(42, 1, w);
+        let rank = aff.rank(42, 1, None, aff.timestamp, &FastHashMap::default());
+        assert!(rank > WorkerRank::Fresh);
+        assert!(rank < WorkerRank::BEST);
     }
 
     /// Opening a dataset costs the most, so any hit beats a fresh worker, and a fresh worker beats
@@ -1396,7 +1442,7 @@ mod tests {
             assert!(worst_hit > WorkerRank::Fresh);
             for evict_idle in IDLE_SECS {
                 let now = evict.timestamp + Duration::from_secs(evict_idle);
-                let best_evict = evict.rank(42, 1, &window([0, 0], [7, 7]), now, &duplicates);
+                let best_evict = evict.rank(42, 1, Some(&window([0, 0], [7, 7])), now, &duplicates);
                 assert!(WorkerRank::Fresh > best_evict);
             }
         }
@@ -1430,14 +1476,19 @@ mod tests {
         let unique_long_idle = aff.rank(
             42,
             1,
-            &w,
+            Some(&w),
             aff.timestamp + Duration::from_secs(3600),
             &holders,
         );
-        let unique_short_idle =
-            aff.rank(42, 1, &w, aff.timestamp + Duration::from_secs(1), &holders);
+        let unique_short_idle = aff.rank(
+            42,
+            1,
+            Some(&w),
+            aff.timestamp + Duration::from_secs(1),
+            &holders,
+        );
         holders.insert(99, 2);
-        let duplicate = aff.rank(42, 1, &w, aff.timestamp, &holders);
+        let duplicate = aff.rank(42, 1, Some(&w), aff.timestamp, &holders);
 
         assert!(duplicate > unique_long_idle);
         assert!(unique_long_idle > unique_short_idle);
@@ -1449,8 +1500,8 @@ mod tests {
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
     };
     use crate::source::gdal_worker_process::process_common::{
-        GdalDataGridByteVariant, GdalIpcRasterProperties, GdalReadAdvise, GdalReadWindow,
-        IpcChannelMessage, IpcChannelMessagePayload,
+        GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
+        GdalReadWindow, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
@@ -1535,7 +1586,7 @@ mod tests {
                 panic!("Expected second clear");
             };
             if active_read {
-                state.release_worker(0, 100, 1, bounds, false);
+                state.release_worker(0, 100, 1, Some(bounds), false);
             }
             let (next, _next_response) = make_request(200, 1, bounds);
             state.enqueue_request(next);
@@ -1579,7 +1630,7 @@ mod tests {
         let second = read_job(jobs1.try_recv().unwrap());
 
         let _cleared = state.clear_caches();
-        state.release_worker(0, first.dataset_hash, 1, bounds, false);
+        state.release_worker(0, first.dataset_hash, 1, Some(bounds), false);
         state.remove_worker(0);
         assert_eq!(state.global_active_count, 1);
         assert_eq!(state.dataset_registry[&second.dataset_hash].active_count, 1);
@@ -1674,6 +1725,9 @@ mod tests {
                 .result
                 .unwrap()
                 .unwrap();
+            let IpcChannelResult::Raster(bytes) = bytes else {
+                panic!("expected a classic raster result");
+            };
             let payload: GdalIpcPayload<u8> = (&bytes).try_into().unwrap();
             match payload.data_variant {
                 GdalDataGridVariant::AllValid { data }
@@ -1719,6 +1773,9 @@ mod tests {
                 .await
                 .unwrap();
             let bytes = rx.await.unwrap().result.unwrap().unwrap();
+            let IpcChannelResult::Raster(bytes) = bytes else {
+                panic!("expected a classic raster result");
+            };
             let payload: GdalIpcPayload<u8> = (&bytes).try_into().unwrap();
             let data = match payload.data_variant {
                 GdalDataGridVariant::AllValid { data }
@@ -1941,13 +1998,18 @@ mod tests {
                 ("GDAL_DISABLE_READDIR_ON_OPEN".into(), "EMPTY_DIR".into()),
                 ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS".into(), ".tif".into()),
             ]);
-            request.request.0.read_advise.gdal_read_widow =
-                GdalReadWindow::new([0, 0].into(), [1, 1].into());
+            let GdalRequest::Read { read_advise, .. } = &mut request.request.0.request else {
+                panic!("expected a pixel read request");
+            };
+            read_advise.gdal_read_widow = GdalReadWindow::new([0, 0].into(), [1, 1].into());
             pool.broker_tx
                 .send(BrokerCommand::Read(request))
                 .await
                 .unwrap();
             let bytes = response.await.unwrap().result.unwrap().unwrap();
+            let IpcChannelResult::Raster(bytes) = bytes else {
+                panic!("expected a classic raster result");
+            };
             let payload: GdalIpcPayload<u8> = (&bytes).try_into().unwrap();
             assert!(matches!(payload.data_variant,
                 super::super::process_common::GdalDataGridVariant::AllValid { data } if data == vec![1]));
@@ -1962,17 +2024,19 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         let msg = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
             dataset_params: make_params("test.tif", band),
-            read_advise: GdalReadAdvise {
-                gdal_read_widow: GdalReadWindow::new(
-                    GridIdx2D::new([0, 0]),
-                    GridShape2D::new([256, 256]),
-                ),
-                read_window_bounds: w,
-                bounds_of_target: w,
-                flip_y: false,
-            },
-            data_type: RasterDataType::U8,
             read_id: None,
+            request: GdalRequest::Read {
+                read_advise: GdalReadAdvise {
+                    gdal_read_widow: GdalReadWindow::new(
+                        GridIdx2D::new([0, 0]),
+                        GridShape2D::new([256, 256]),
+                    ),
+                    read_window_bounds: w,
+                    bounds_of_target: w,
+                    flip_y: false,
+                },
+                data_type: RasterDataType::U8,
+            },
         });
         let req = Box::new(QueuedRequest {
             dataset_hash,
@@ -2019,7 +2083,13 @@ mod tests {
         // a busy worker already counts as a holder of the dataset it reads
         assert_eq!(state.dataset_holders.get(&100), Some(&1));
 
-        state.release_worker(0, job.dataset_hash, 1, window([0, 0], [255, 255]), false);
+        state.release_worker(
+            0,
+            job.dataset_hash,
+            1,
+            Some(window([0, 0], [255, 255])),
+            false,
+        );
 
         assert_eq!(state.idle_workers.len(), 1);
         assert_eq!(state.idle_workers[0], 0);
@@ -2048,7 +2118,7 @@ mod tests {
         let first = read_job(rx0.try_recv().unwrap()).dataset_hash;
         assert_eq!(state.global_active_count, 1);
 
-        state.release_worker(0, first, 1, window([0, 0], [255, 255]), false);
+        state.release_worker(0, first, 1, Some(window([0, 0], [255, 255])), false);
         state.try_dispatch();
         let second = read_job(rx0.try_recv().unwrap()).dataset_hash;
 
@@ -2168,7 +2238,7 @@ mod tests {
         state.enqueue_request(req);
         state.try_dispatch();
         let job = read_job(rx0.try_recv().unwrap());
-        state.release_worker(0, job.dataset_hash, 1, w, true);
+        state.release_worker(0, job.dataset_hash, 1, Some(w), true);
 
         assert!(state.workers[0].affinity.is_none());
         assert!(state.dataset_holders.is_empty());
@@ -2214,7 +2284,7 @@ mod tests {
 
     fn empty_read_result() -> ReadResult {
         ReadResult {
-            result: Ok(Ok(GdalIpcBytePayload {
+            result: Ok(Ok(IpcChannelResult::Raster(GdalIpcBytePayload {
                 dimensions: window([0, 0], [7, 7]),
                 properties: GdalIpcRasterProperties {
                     offset: None,
@@ -2223,7 +2293,7 @@ mod tests {
                     properties_map: vec![],
                 },
                 data_variant: GdalDataGridByteVariant::Empty,
-            })),
+            }))),
             companion_span: None,
         }
     }
@@ -2380,6 +2450,51 @@ mod tests {
             read_count.load(std::sync::atomic::Ordering::SeqCst),
             1,
             "only one BrokerCommand::Read should have been sent (dedup)"
+        );
+    }
+
+    #[tokio::test]
+    async fn file_not_found_error_survives_dispatcher() {
+        use crate::source::gdal_worker_process::process_common::IpcProcessGdalErrorKind;
+
+        let (broker_tx, mut broker_rx) = mpsc::channel::<BrokerCommand>(64);
+
+        let pool = Arc::new(GdalProcessPool {
+            broker_tx,
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        });
+
+        // Mock broker: respond with a FileNotFound error.
+        tokio::spawn(async move {
+            while let Some(cmd) = broker_rx.recv().await {
+                if let BrokerCommand::Read(req) = cmd {
+                    let _ = req.respond_to.send(ReadResult {
+                        result: Ok(Err(IpcProcessError::GdalError {
+                            kind: IpcProcessGdalErrorKind::FileNotFound,
+                            details: "not found".to_string(),
+                        })),
+                        companion_span: None,
+                    });
+                }
+            }
+        });
+
+        let dispatcher = GdalPoolDispatcher::new(pool);
+        let w = window([0, 0], [255, 255]);
+        let (msg, _) = make_request(42, 1, w);
+        let result = dispatcher.read_data::<u8>(msg.request).await;
+
+        assert!(
+            matches!(
+                result,
+                Err(GdalProcessPoolError::IpcProcessError {
+                    source: IpcProcessError::GdalError {
+                        kind: IpcProcessGdalErrorKind::FileNotFound,
+                        ..
+                    }
+                })
+            ),
+            "dispatcher must preserve the structured FileNotFound error, got {result:?}"
         );
     }
 }

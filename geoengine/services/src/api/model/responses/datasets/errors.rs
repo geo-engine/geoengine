@@ -132,11 +132,7 @@ pub enum AddDatasetTilesError {
         file_path: String,
     },
     CannotOpenTileFile {
-        source: geoengine_operators::error::Error,
-        file_path: String,
-    },
-    CannotGetRasterDescriptorFromTileFile {
-        source: geoengine_operators::error::Error,
+        source: geoengine_operators::source::GdalProcessPoolError,
         file_path: String,
     },
     TileFileDataTypeMismatch {

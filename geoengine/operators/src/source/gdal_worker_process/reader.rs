@@ -7,8 +7,8 @@ use crate::source::gdal_worker_process::{
     FileNotFoundHandling, GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError,
     GridAndProperties,
     process_common::{
-        GdalReadAdvise, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-        IpcProcessGdalErrorKind,
+        GdalReadAdvise, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+        IpcProcessError, IpcProcessGdalErrorKind, RasterInfo,
     },
 };
 
@@ -73,49 +73,101 @@ impl GdalPoolReader {
             .read_data(IpcChannelMessage::new_request_tile_message(
                 IpcChannelMessagePayload {
                     dataset_params,
-                    read_advise,
-                    data_type: T::TYPE,
                     read_id: Some(read_id),
+                    request: GdalRequest::Read {
+                        read_advise,
+                        data_type: T::TYPE,
+                    },
                 },
             ))
             .instrument(span)
             .await;
 
-        match res {
-            Ok(t) => {
-                // First, convert response to GridAndProperties
-                let GridAndProperties { grid, properties } = t.into();
-                // Second, flip y-axis if necessary
-                let grid = if read_advise.flip_y {
-                    match grid {
-                        GridOrEmpty::Grid(MaskedGrid {
-                            inner_grid,
-                            validity_mask,
-                        }) => GridOrEmpty::new_grid(
-                            MaskedGrid::new(
-                                inner_grid.reversed_y_axis_grid(),
-                                validity_mask.reversed_y_axis_grid(),
-                            )
-                            .expect("The bounds of the input grid should be the same after reversing the y axis, so this should never fail"),
-                        ),
-                        GridOrEmpty::Empty(e) => GridOrEmpty::new_empty(e),
-                    }
-                } else {
-                    grid
-                };
-                Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
-                    grid,
-                    properties,
-                })))
+        let Some(t) = read_result_or_no_data(res, file_not_found_as_no_data)? else {
+            return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
+        };
+
+        let GridAndProperties { grid, properties } = t.into();
+        let grid = if read_advise.flip_y {
+            match grid {
+                GridOrEmpty::Grid(MaskedGrid {
+                    inner_grid,
+                    validity_mask,
+                }) => GridOrEmpty::new_grid(
+                    MaskedGrid::new(
+                        inner_grid.reversed_y_axis_grid(),
+                        validity_mask.reversed_y_axis_grid(),
+                    )
+                    .expect("The bounds of the input grid should be the same after reversing the y axis, so this should never fail"),
+                ),
+                GridOrEmpty::Empty(e) => GridOrEmpty::new_empty(e),
             }
-            Err(GdalProcessPoolError::IpcProcessError {
-                source:
-                    IpcProcessError::GdalError {
-                        kind: IpcProcessGdalErrorKind::FileNotFound,
-                        details: _details,
-                    },
-            }) if file_not_found_as_no_data => Ok(GdalProcessReadResult::FileNotFoundAsNoData),
-            Err(other_err) => Err(other_err),
+        } else {
+            grid
+        };
+        Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
+            grid,
+            properties,
+        })))
+    }
+
+    /// Reads the data type of the `rasterband_channel` band and the CRS of a raster in a worker,
+    /// so the server never opens the file itself. A missing file is an error here, whatever
+    /// `file_not_found_handling` says: there is no header to report.
+    ///
+    /// # Errors
+    /// Returns a `GdalProcessPoolError` if the file or band cannot be opened or the data type is
+    /// not supported.
+    pub async fn read_raster_info(
+        &self,
+        dataset_params: GdalDatasetParameters,
+    ) -> Result<RasterInfo, GdalProcessPoolError> {
+        match self.read_header(dataset_params).await? {
+            IpcChannelResult::RasterInfo(info) => Ok(info),
+            IpcChannelResult::Raster(_) => Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "the worker answered a header read with a raster".to_string(),
+                },
+            }),
         }
+    }
+
+    async fn read_header(
+        &self,
+        dataset_params: GdalDatasetParameters,
+    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
+        let span = tracing::info_span!(
+            "gdal_pool_read_header",
+            dataset = %dataset_params.file_path.display(),
+        );
+        let request = IpcChannelMessage::new_request_tile_message(IpcChannelMessagePayload {
+            dataset_params,
+            read_id: None,
+            request: GdalRequest::Header,
+        });
+
+        self.dispatcher()
+            .read_header(request)
+            .instrument(span)
+            .await
+    }
+}
+
+/// Unwraps a worker read result, turning a `FileNotFound` error into `None` when the
+/// dataset is configured to treat a missing file as no-data.
+fn read_result_or_no_data<T>(
+    res: Result<T, GdalProcessPoolError>,
+    file_not_found_as_no_data: bool,
+) -> Result<Option<T>, GdalProcessPoolError> {
+    match res {
+        Ok(value) => Ok(Some(value)),
+        Err(GdalProcessPoolError::IpcProcessError {
+            source:
+                IpcProcessError::GdalError {
+                    kind: IpcProcessGdalErrorKind::FileNotFound,
+                    details: _details,
+                },
+        }) if file_not_found_as_no_data => Ok(None),
+        Err(other_err) => Err(other_err),
     }
 }
