@@ -9,6 +9,7 @@ export * from './lib/core.module';
 export * from './lib/backend/backend.service';
 export * from './lib/config.service';
 export * from './lib/datasets/dataset.service';
+export * from './lib/footprints/footprints.service';
 export * from './lib/layout.service';
 export * from './lib/map/map.service';
 export * from './lib/project/project.service';
@@ -34,6 +35,7 @@ export * from './lib/dialogs/dialog-help/dialog-help.component';
 export * from './lib/dialogs/dialog-section-heading/dialog-section-heading.component';
 export * from './lib/dialogs/dialog-splash-checkbox/dialog-splash-checkbox.component';
 export * from './lib/download-layer/download-layer.component';
+export * from './lib/footprints/footprint-calendar-header.component';
 export * from './lib/layer-collections/layer-collection-selection.component';
 export * from './lib/layers/layer-list/layer-list-element/layer-list-element.component';
 export * from './lib/layers/layer-list/layer-list-menu/layer-list-menu.component';
@@ -130,8 +132,3 @@ export * from './lib/users/user.model';
 // Misc
 export * from './lib/util/directives/if-guest.directive';
 export * from './lib/util/directives/if-logged-in.directive';
-
-// Footprints
-export * from './lib/footprints/footprint-calendar-header.component';
-export * from './lib/footprints/footprints';
-export * from './lib/footprints/footprints.service';
