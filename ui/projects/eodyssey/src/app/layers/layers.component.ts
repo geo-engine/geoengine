@@ -182,7 +182,7 @@ import {EOdysseyLayerService} from './layers.service';
         <mat-divider></mat-divider>
 
         <section class="panel-section" aria-labelledby="presets-heading">
-            <h2 id="presets-heading">Visualization Presets</h2>
+            <h2 id="presets-heading">Visualization</h2>
             @if (eodysseyLayerService.catalogueLoading() || eodysseyLayerService.variantLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading visualization presets"></mat-spinner>
@@ -211,6 +211,11 @@ import {EOdysseyLayerService} from './layers.service';
                         [style.backgroundImage]="'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'"
                     >
                         <span matListItemTitle>{{ preset.displayName }}</span>
+                        @if (isOnMap(preset)) {
+                            <span class="preset-on-map-indicator" role="img" aria-label="On map" matTooltip="On map">
+                                <mat-icon aria-hidden="true">visibility</mat-icon>
+                            </span>
+                        }
                         @if (preset === eodysseyLayerService.selectedPreset()) {
                             <span matListItemMeta class="preset-selected-indicator" aria-hidden="true">
                                 <mat-icon>check</mat-icon>
@@ -220,31 +225,33 @@ import {EOdysseyLayerService} from './layers.service';
                 }
             </mat-nav-list>
             <div class="apply-preset-action">
-                <p class="catalogue-message on-map-status" role="status">
-                    @if (eodysseyLayerService.appliedPreset(); as applied) {
+                @if (eodysseyLayerService.appliedPreset(); as applied) {
+                    <p class="catalogue-message on-map-status" role="status">
                         <span>On map: {{ applied.displayName }}</span>
                         <button
                             mat-stroked-button
                             type="button"
                             class="remove-visualization"
+                            aria-label="Remove from map"
                             (click)="eodysseyLayerService.removeVisualization()"
                         >
-                            Remove from map
+                            Remove
                         </button>
-                    } @else {
-                        <span>Nothing on the map yet.</span>
-                    }
-                </p>
-                <button
-                    mat-flat-button
-                    color="primary"
-                    type="button"
-                    class="apply-visualization"
-                    [disabled]="!eodysseyLayerService.canApplyPreset()"
-                    (click)="applySelectedPreset()"
-                >
-                    {{ applyLabel() }}
-                </button>
+                    </p>
+                }
+                <!-- nothing to apply while the selected preset is the one on the map -->
+                @if (!eodysseyLayerService.appliedPreset() || eodysseyLayerService.canApplyPreset()) {
+                    <button
+                        mat-flat-button
+                        color="primary"
+                        type="button"
+                        class="apply-visualization"
+                        [disabled]="!eodysseyLayerService.canApplyPreset()"
+                        (click)="applySelectedPreset()"
+                    >
+                        {{ eodysseyLayerService.appliedPreset() ? 'Update map' : 'Show on map' }}
+                    </button>
+                }
             </div>
         </section>
 
@@ -553,6 +560,27 @@ import {EOdysseyLayerService} from './layers.service';
                 }
             }
 
+            .preset-on-map-indicator {
+                position: absolute;
+                top: 0.25rem;
+                left: 0.25rem;
+                z-index: 1;
+                display: grid;
+                place-items: center;
+                width: 1.5rem;
+                height: 1.5rem;
+                border-radius: 50%;
+                background-color: white;
+                color: black;
+
+                mat-icon {
+                    width: 1rem;
+                    height: 1rem;
+                    font-size: 1rem;
+                    line-height: 1;
+                }
+            }
+
             .apply-preset-action {
                 display: flex;
                 flex-direction: column;
@@ -648,13 +676,6 @@ export class LayersComponent {
                 return undefined;
         }
     });
-    /** The apply button says what it does: show the selected preset, switch to it, or that it is on the map. */
-    readonly applyLabel = computed(() => {
-        const selected = this.eodysseyLayerService.selectedPreset();
-        if (!selected) return 'Show on map';
-        if (!this.eodysseyLayerService.appliedPreset()) return `Show ${selected.displayName} on map`;
-        return this.eodysseyLayerService.canApplyPreset() ? `Switch to ${selected.displayName}` : 'On map';
-    });
     /** The areas the coverage on the map shows, once they are known. */
     readonly areasText = computed<string | undefined>(() => {
         const areas = this.footprintsService.overlayVisible() ? this.footprintsService.overlayAreaCount() : undefined;
@@ -720,6 +741,12 @@ export class LayersComponent {
     constructor() {
         this.footprintsService.datesNeeded.set(true);
         inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
+    }
+
+    /** A preset of another region or data source has other ids, so the eye only shows on the tile that is on the map. */
+    isOnMap(preset: {connectorId: string; layerId: string}): boolean {
+        const applied = this.eodysseyLayerService.appliedPreset();
+        return preset.connectorId === applied?.connectorId && preset.layerId === applied.layerId;
     }
 
     /** The time step of a data source is applied with it, the date is only offered, see `featuredDate`. */
