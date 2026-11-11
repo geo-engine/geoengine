@@ -22,16 +22,14 @@ export function calendarCellRange(date: Date, view: MatCalendarView): TimeRange 
 const CELL_WITH_DATA_CLASS = 'geoengine-calendar-cell-with-data';
 const CELL_WITH_DATA_CONTINUED_CLASS = 'geoengine-calendar-cell-with-data-continued';
 const CELL_BAND_AFTER_CLASS = 'geoengine-calendar-cell-band-after';
-const CELL_FEATURED_CLASS = 'geoengine-calendar-cell-featured';
 
 /**
  * The classes of a calendar cell, which the styles of the calendar header turn into a disc on the day a time
  * step starts and a band over the days it goes on. A step can be valid for many days, and then marks every
- * day, month or year cell it overlaps. The cell of the featured time gets a star.
+ * day, month or year cell it overlaps.
  */
-export function cellClasses(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView, featuredMs?: number): string[] {
+export function cellClasses(steps: ReadonlyArray<TimeStepFootprint>, date: Date, view: MatCalendarView): string[] {
     const cell = calendarCellRange(date, view);
-    const featured = featuredMs !== undefined && cell.start <= featuredMs && featuredMs < cell.end ? [CELL_FEATURED_CLASS] : [];
     let hasData = false;
     let starts = false;
     let goesOn = false;
@@ -41,8 +39,8 @@ export function cellClasses(steps: ReadonlyArray<TimeStepFootprint>, date: Date,
         starts ||= step.time.start >= cell.start;
         goesOn ||= step.time.end > cell.end;
     }
-    if (!hasData) return featured;
-    return [starts ? CELL_WITH_DATA_CLASS : CELL_WITH_DATA_CONTINUED_CLASS, ...(goesOn ? [CELL_BAND_AFTER_CLASS] : []), ...featured];
+    if (!hasData) return [];
+    return [starts ? CELL_WITH_DATA_CLASS : CELL_WITH_DATA_CONTINUED_CLASS, ...(goesOn ? [CELL_BAND_AFTER_CLASS] : [])];
 }
 
 /** The calendar view with one cell per time step: days for steps of a day or less, months, or years. */

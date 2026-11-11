@@ -22,14 +22,6 @@ describe('footprints', () => {
         expect(cellClasses([data], new Date(2026, 0, 1), 'multi-year')).toEqual([WITH_DATA]);
     });
 
-    it('marks the cell of the featured time, with and without data', () => {
-        const featured = Date.UTC(2026, 2, 15);
-        expect(cellClasses([], new Date(2026, 2, 15), 'month', featured)).toEqual(['geoengine-calendar-cell-featured']);
-        expect(cellClasses([], new Date(2026, 2, 1), 'year', featured)).toEqual(['geoengine-calendar-cell-featured']);
-        expect(cellClasses([], new Date(2026, 2, 16), 'month', featured)).toEqual([]);
-        expect(cellClasses([data], new Date(2026, 2, 15), 'month', featured)).toEqual([WITH_DATA, 'geoengine-calendar-cell-featured']);
-    });
-
     it('does not mark other days', () => {
         expect(cellClasses([data], new Date(2026, 2, 14), 'month')).toEqual([]);
         expect(cellClasses([data], new Date(2026, 2, 16), 'month')).toEqual([]);

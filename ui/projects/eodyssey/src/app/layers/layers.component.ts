@@ -135,9 +135,6 @@ import {EOdysseyLayerService} from './layers.service';
                 <p class="date-status" role="status">
                     <span class="status-dot" [class.empty]="footprintsService.dateStatus() === 'empty'" aria-hidden="true"></span>
                     {{ text }}
-                    @if (isFeaturedDateShown()) {
-                        <span class="featured-mark"><mat-icon aria-hidden="true">star</mat-icon>Featured date</span>
-                    }
                 </p>
                 @if (footprintsService.dateStatus() === 'empty' && (previousDateWithData() || nextDateWithData())) {
                     <p id="nearest-dates-label" class="catalogue-message">Nearest dates with data:</p>
@@ -157,23 +154,24 @@ import {EOdysseyLayerService} from './layers.service';
                     </div>
                 }
             }
-            @if (featuredDate(); as featured) {
-                @if (!isFeaturedDateShown()) {
+            @if (exampleDate(); as example) {
+                @if (!isExampleDateShown()) {
                     <button
                         mat-stroked-button
                         type="button"
-                        class="featured-date"
-                        [matTooltip]="'A good date to look at ' + featured.source"
-                        (click)="goTo(featured.time)"
+                        class="example-date"
+                        [matTooltip]="'A date on which ' + example.source + ' has data'"
+                        (click)="goTo(example.time)"
                     >
-                        <mat-icon>star</mat-icon>
-                        Featured: {{ featured.time.start.format('DD.MM.YYYY') }}
+                        Example date: {{ example.time.start.format('DD.MM.YYYY') }}
                     </button>
                 }
             }
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
-                <span class="stripe-swatch" aria-hidden="true"></span>
-                Show coverage on map
+                <span class="coverage-label">
+                    <span class="stripe-swatch" aria-hidden="true"></span>
+                    Show coverage on map
+                </span>
             </mat-checkbox>
             @if (areasText(); as text) {
                 <p class="catalogue-message" role="status">{{ text }}</p>
@@ -322,24 +320,10 @@ import {EOdysseyLayerService} from './layers.service';
                 color: var(--geoengine-foreground-secondary-text-color);
             }
 
-            .featured-date {
+            .example-date {
+                align-self: flex-start;
                 border-radius: 0.5rem;
                 font-size: $text2;
-                color: var(--geoengine-primary-color);
-                border-color: var(--geoengine-primary-color);
-            }
-
-            .featured-mark {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.25rem;
-                color: var(--geoengine-primary-color);
-
-                mat-icon {
-                    width: 1rem;
-                    height: 1rem;
-                    font-size: 1rem;
-                }
             }
 
             .date-status {
@@ -378,12 +362,17 @@ import {EOdysseyLayerService} from './layers.service';
                 }
             }
 
+            // a wrapped label continues next to the swatch, not below it
+            .coverage-label {
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+            }
+
             .stripe-swatch {
-                display: inline-block;
+                flex: none;
                 width: 0.9rem;
                 height: 0.9rem;
-                margin-right: 0.4rem;
-                vertical-align: text-bottom;
                 border: 1px solid var(--geoengine-accent-color);
                 background: repeating-linear-gradient(
                     45deg,
@@ -659,12 +648,12 @@ export class LayersComponent {
     });
 
     /** The default date of the selected data source, which is always one click away. The date never changes by itself. */
-    readonly featuredDate = computed<{source: string; time: Time} | undefined>(() => {
+    readonly exampleDate = computed<{source: string; time: Time} | undefined>(() => {
         const source = this.eodysseyLayerService.selectedDataSource();
         return source?.defaultTime === undefined ? undefined : {source: source.name, time: new Time(new Date(source.defaultTime))};
     });
-    readonly isFeaturedDateShown = computed(
-        () => this.currentTime()?.start.valueOf() === this.featuredDate()?.time.start.valueOf() && !!this.featuredDate(),
+    readonly isExampleDateShown = computed(
+        () => this.currentTime()?.start.valueOf() === this.exampleDate()?.time.start.valueOf() && !!this.exampleDate(),
     );
     readonly dateStatusText = computed<string | undefined>(() => {
         switch (this.footprintsService.dateStatus()) {
@@ -749,7 +738,7 @@ export class LayersComponent {
         return preset.connectorId === applied?.connectorId && preset.layerId === applied.layerId;
     }
 
-    /** The time step of a data source is applied with it, the date is only offered, see `featuredDate`. */
+    /** The time step of a data source is applied with it, the date is only offered, see `exampleDate`. */
     private applyDataSourceTimeStep(dataSource: DataSourceDefinition): void {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }
