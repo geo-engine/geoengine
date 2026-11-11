@@ -130,6 +130,12 @@ export class MainComponent {
             this.footprintsService.timeStepOverride.set(isNewSource ? source?.defaultTimeStep : undefined);
         });
 
+        // the calendar marks the default date of the selected data source as its featured date
+        effect(() => {
+            const defaultTime = this.eodysseyLayerService.selectedDataSource()?.defaultTime;
+            this.footprintsService.featuredTime.set(defaultTime === undefined ? undefined : new Time(new Date(defaultTime)));
+        });
+
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());

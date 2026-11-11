@@ -70,6 +70,8 @@ export class FootprintsService {
     /** A step to use instead of the project's, e.g. the one of a layer that is not applied yet. Set by the app. */
     readonly timeStepOverride = signal<TimeStepDuration | undefined>(undefined);
     readonly timeStep = computed(() => this.timeStepOverride() ?? this.projectTimeStep());
+    /** A date the app recommends for the layer, which the calendar marks with a star. Set by the app. */
+    readonly featuredTime = signal<Time | undefined>(undefined);
     /** The calendar view that has one cell per time step. */
     readonly calendarStartView = computed(() => calendarStartView(this.timeStep()?.durationUnit));
     private readonly viewport = toSignal(this.mapService.getViewportSizeStream().pipe(debounceTime(VIEWPORT_DEBOUNCE_MS)));
@@ -281,7 +283,8 @@ export class FootprintsService {
         return {processingGraphId, spatialBounds: spatialBounds.join(',')};
     }
 
-    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) => cellClasses(this.steps(), date, view);
+    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) =>
+        cellClasses(this.steps(), date, view, this.featuredTime()?.start.valueOf());
 
     /** Loads the window of `date` unless it is loaded already. Takes a calendar date. */
     showDate(date: Date): void {
