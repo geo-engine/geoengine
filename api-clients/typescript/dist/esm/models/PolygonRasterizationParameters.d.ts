@@ -52,7 +52,7 @@ export interface PolygonRasterizationParameters {
     /**
      * How the time slices of the output raster are derived from the features.
      *
-     * If omitted, the slices are bounded by the start and end times of the features.
+     * If omitted, every start and end time of a feature is a slice boundary (`featureTimes`).
      */
     time?: PolygonRasterizationTime;
 }

@@ -38,7 +38,7 @@ class PolygonRasterizationParameters(BaseModel):
     value: Optional[PolygonRasterizationValue] = Field(default=None, description="The value that a polygon burns into the pixels it covers.  If omitted, each covered pixel gets the value `1`.")
     output_type: Optional[RasterDataType] = Field(default=None, description="Optional output raster data type.  If omitted, it is `U8` for a constant, `U32` for a count and `F64` for an attribute.", alias="outputType")
     output_measurement: Optional[Measurement] = Field(default=None, description="Optional measurement of the output band.  If omitted, it is derived from the value: unitless for a constant, `count` for a count, and the measurement of the column for an attribute (unitless for a classification that is summed or averaged).", alias="outputMeasurement")
-    time: Optional[PolygonRasterizationTime] = Field(default=None, description="How the time slices of the output raster are derived from the features.  If omitted, the slices are bounded by the start and end times of the features.")
+    time: Optional[PolygonRasterizationTime] = Field(default=None, description="How the time slices of the output raster are derived from the features.  If omitted, every start and end time of a feature is a slice boundary (`featureTimes`).")
     __properties: ClassVar[List[str]] = ["spatialResolution", "originCoordinate", "value", "outputType", "outputMeasurement", "time"]
 
     model_config = ConfigDict(

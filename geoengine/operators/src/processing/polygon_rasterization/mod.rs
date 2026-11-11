@@ -127,7 +127,10 @@ pub enum OverlapAggregation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum RasterizationTime {
-    /// The time slices are bounded by the start and end times of the features
+    /// Every start and end time of a feature is a slice boundary, i.e., the slices are the
+    /// intervals between consecutive boundaries.
+    /// For example, features valid during `[0, 10)` and `[5, 20)` yield the slices `[0, 5)`,
+    /// `[5, 10)` and `[10, 20)`, plus the slices without features before and after them.
     #[default]
     FeatureTimes,
     /// Regular time slices of length `step`, aligned to `reference` (default: Unix epoch).
@@ -685,7 +688,7 @@ impl SharedQueryState {
         Ok((Some(values), cache_hint))
     }
 
-    /// The time slices bounded by all start and end times of the features.
+    /// The time slices between consecutive start and end times of all features.
     ///
     /// The vector stream is not sorted by time, so the next slice boundary is only known after
     /// reading all features.

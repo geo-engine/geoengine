@@ -27,7 +27,7 @@ pub struct PolygonRasterizationParameters {
     /// Optional measurement of the output band.  If omitted, it is derived from the value: unitless for a constant, `count` for a count, and the measurement of the column for an attribute (unitless for a classification that is summed or averaged).
     #[serde(rename = "outputMeasurement", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub output_measurement: Option<Option<Box<models::Measurement>>>,
-    /// How the time slices of the output raster are derived from the features.  If omitted, the slices are bounded by the start and end times of the features.
+    /// How the time slices of the output raster are derived from the features.  If omitted, every start and end time of a feature is a slice boundary (`featureTimes`).
     #[serde(rename = "time", skip_serializing_if = "Option::is_none")]
     pub time: Option<Box<models::PolygonRasterizationTime>>,
 }

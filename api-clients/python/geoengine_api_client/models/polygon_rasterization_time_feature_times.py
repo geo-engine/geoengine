@@ -25,7 +25,7 @@ from pydantic_core import to_jsonable_python
 
 class PolygonRasterizationTimeFeatureTimes(BaseModel):
     """
-    The time slices are bounded by the start and end times of the features.
+    Every start and end time of a feature is a slice boundary, i.e., the slices are the intervals between consecutive boundaries.
     """ # noqa: E501
     type: StrictStr
     __properties: ClassVar[List[str]] = ["type"]

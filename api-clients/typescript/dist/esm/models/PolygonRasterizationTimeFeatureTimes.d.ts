@@ -9,7 +9,8 @@
  * Do not edit the class manually.
  */
 /**
- * The time slices are bounded by the start and end times of the features.
+ * Every start and end time of a feature is a slice boundary, i.e., the slices are the intervals
+ * between consecutive boundaries.
  * @export
  * @interface PolygonRasterizationTimeFeatureTimes
  */

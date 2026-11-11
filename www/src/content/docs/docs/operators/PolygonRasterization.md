@@ -19,7 +19,9 @@ The value of the covered pixels is
 
 The time slices of the output raster are
 
-- `featureTimes` (default): bounded by the start and end times of the features.
+- `featureTimes` (default): every start and end time of a feature is a slice boundary,
+  i.e., the slices are the intervals between consecutive boundaries.
+  For example, features valid during `[0, 10)` and `[5, 20)` yield the slices `[0, 5)`, `[5, 10)` and `[10, 20)`.
   Each slice contains exactly the features that are valid during it, and slices without features are NO DATA.
   This needs to scan the times of all features of the source for each query, so prefer `regular` for large data.
 - `regular`: slices of a fixed time step, each containing all features whose time intersects it.
@@ -42,14 +44,14 @@ or the constant value cannot be represented by the output type, an error will be
 
 ## Parameters
 
-| Name              | Type                      | Description                                                                                                                                                   | Examples                                                                                                                          |
-| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| spatialResolution | SpatialResolution         | Spatial resolution of the output grid in x/y direction.                                                                                                       | `{"x":10,"y":10}`                                                                                                                 |
-| originCoordinate  | Coordinate2D              | Origin coordinate to which the raster grid is aligned.<br><br>If omitted, the grid is aligned to `(0, 0)`.                                                    | `{"x":0,"y":0}`                                                                                                                   |
-| value             | PolygonRasterizationValue | The value that a polygon burns into the pixels it covers.<br><br>If omitted, each covered pixel gets the value `1`.                                           | `{"value":1}`<br>`{"column":"class","ignoreNoData":true}`<br>`{"type":"attribute","column":"landCoverClass","aggregation":"max"}` |
-| outputType        | RasterDataType or null    |                                                                                                                                                               | `"U8"`                                                                                                                            |
-| outputMeasurement | Measurement or null       |                                                                                                                                                               |                                                                                                                                   |
-| time              | PolygonRasterizationTime  | How the time slices of the output raster are derived from the features.<br><br>If omitted, the slices are bounded by the start and end times of the features. | `{"type":"regular","step":{"granularity":"years","step":1}}`                                                                      |
+| Name              | Type                      | Description                                                                                                                                                            | Examples                                                                                                                          |
+| ----------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| spatialResolution | SpatialResolution         | Spatial resolution of the output grid in x/y direction.                                                                                                                | `{"x":10,"y":10}`                                                                                                                 |
+| originCoordinate  | Coordinate2D              | Origin coordinate to which the raster grid is aligned.<br><br>If omitted, the grid is aligned to `(0, 0)`.                                                             | `{"x":0,"y":0}`                                                                                                                   |
+| value             | PolygonRasterizationValue | The value that a polygon burns into the pixels it covers.<br><br>If omitted, each covered pixel gets the value `1`.                                                    | `{"value":1}`<br>`{"column":"class","ignoreNoData":true}`<br>`{"type":"attribute","column":"landCoverClass","aggregation":"max"}` |
+| outputType        | RasterDataType or null    |                                                                                                                                                                        | `"U8"`                                                                                                                            |
+| outputMeasurement | Measurement or null       |                                                                                                                                                                        |                                                                                                                                   |
+| time              | PolygonRasterizationTime  | How the time slices of the output raster are derived from the features.<br><br>If omitted, every start and end time of a feature is a slice boundary (`featureTimes`). | `{"type":"regular","step":{"granularity":"years","step":1}}`                                                                      |
 
 ## Sources
 
