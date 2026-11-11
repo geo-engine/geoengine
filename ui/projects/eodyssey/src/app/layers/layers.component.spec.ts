@@ -4,7 +4,7 @@ import {provideNativeDateAdapter} from '@angular/material/core';
 import type {MatDatepicker} from '@angular/material/datepicker';
 import View from 'ol/View';
 import {Observable, of} from 'rxjs';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it, type Mock, vi} from 'vitest';
 import type {CollectionItem} from '@geoengine/api-client';
 import {LAYER_DB_ROOT_COLLECTION_ID, LayersService, Time, TimeStepDuration} from '@geoengine/common';
 import {FootprintsService, MapService, ProjectService} from '@geoengine/core';
@@ -153,6 +153,12 @@ describe('LayersComponent', () => {
                         hasError: signal(false),
                         steps: signal([]),
                         calendarStartView: signal('month'),
+                        time: signal(undefined),
+                        datesNeeded: signal(false),
+                        dateStatus: signal(undefined),
+                        dateWithData: vi.fn(),
+                        isLoading: signal(false),
+                        overlayLoading: signal(false),
                         showDate: vi.fn(),
                     },
                 },
@@ -324,6 +330,46 @@ describe('LayersComponent', () => {
 
             expect(picker.close).not.toHaveBeenCalled();
             expect(setTime).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('dates of the layer', () => {
+        interface FootprintsMock {time: WritableSignal<Time | undefined>; dateStatus: WritableSignal<string | undefined>; dateWithData: Mock}
+        const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
+
+        it('tells whether the date has scenes in view', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().dateStatus.set('data');
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect((fixture.nativeElement as HTMLElement).textContent).toContain('Scenes in view on 01.04.2026.');
+
+            footprints().dateStatus.set('empty');
+            fixture.detectChanges();
+            expect((fixture.nativeElement as HTMLElement).textContent).toContain('No scenes in view on 01.04.2026.');
+        });
+
+        it('goes to the next date with data and remembers that the user chose the date', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().dateWithData.mockImplementation((direction: number) =>
+                direction === 1 ? new Time(Date.UTC(2026, 3, 17)) : undefined,
+            );
+            setTime.mockClear();
+
+            await fixture.componentInstance.timeForward();
+
+            expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 17)));
+            expect(eodysseyLayerService.userChoseTime()).toBe(true);
+        });
+
+        it('steps by the time step when no date with data is known', async () => {
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            footprints().dateWithData.mockReturnValue(undefined);
+            setTime.mockClear();
+
+            await fixture.componentInstance.timeBackwards();
+
+            expect(setTime).toHaveBeenCalledOnce();
         });
     });
 

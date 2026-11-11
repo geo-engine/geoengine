@@ -1,4 +1,4 @@
-import {computed, effect, inject, resource, Service, signal} from '@angular/core';
+import {computed, effect, inject, resource, Service, signal, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatCalendarCellClassFunction, MatCalendarView} from '@angular/material/datepicker';
 import OlFeature from 'ol/Feature';
@@ -8,7 +8,7 @@ import OlSourceVector from 'ol/source/Vector';
 import {Style} from 'ol/style';
 import {firstValueFrom} from 'rxjs';
 import {debounceTime} from 'rxjs/operators';
-import {RasterFootprints, RasterFootprintsPrecision} from '@geoengine/api-client';
+import {RasterFootprints, RasterFootprintsPrecision, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {
     LayersService,
     ProcessingGraphsService,
@@ -19,7 +19,16 @@ import {
     UUID,
 } from '@geoengine/common';
 import {boxFeatures, overlayStyle} from './footprint-overlay';
-import {TimeRange, calendarStartView, cellClasses, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
+import {
+    TimeRange,
+    calendarStartView,
+    cellClasses,
+    mergeFootprints,
+    monthStartOfTime,
+    monthStartUtc,
+    stepAt,
+    windowRequests,
+} from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
@@ -56,7 +65,8 @@ export class FootprintsService {
     private readonly projectTime = toSignal(this.projectService.getTimeStream());
     /** A time to use instead of the project's, e.g. the default time of a dataset that is not applied yet. Set by the app. */
     readonly timeOverride = signal<Time | undefined>(undefined);
-    private readonly time = computed(() => this.timeOverride() ?? this.projectTime());
+    /** The time the footprints are for. */
+    readonly time = computed(() => this.timeOverride() ?? this.projectTime());
     private readonly projectTimeStep = toSignal(this.projectService.getTimeStepDurationStream());
     /** The layer to show the footprints of. Set by the app. */
     readonly layer = signal<FootprintLayer | undefined>(undefined);
@@ -70,6 +80,8 @@ export class FootprintsService {
     private readonly graphs = new Map<string, Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}>>();
 
     readonly calendarOpen = signal(false);
+    /** The app shows the dates of the layer outside of the calendar, e.g. next to the date with arrows. Set by the app. */
+    readonly datesNeeded = signal(false);
     readonly overlayVisible = signal(false);
     private readonly windowStart = signal<number | undefined>(undefined);
     /** The visible month of a window while the rest of it loads. */
@@ -82,7 +94,7 @@ export class FootprintsService {
             const timeStep = this.timeStep();
             const viewport = this.viewport();
             const windowStart = this.windowStart();
-            const isNeeded = this.calendarOpen();
+            const isNeeded = this.calendarOpen() || this.datesNeeded();
 
             if (!isNeeded || !layer || !mapSpatialReference || !timeStep || !viewport || windowStart === undefined) {
                 return undefined;
@@ -187,8 +199,39 @@ export class FootprintsService {
     /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
     private overlayStyleCache?: Style;
 
+    /** Whether the selected time has data in view, undefined until the window is loaded. */
+    readonly dateStatus = computed(() => {
+        const time = this.time();
+        return time ? stepAt(this.steps(), time.start.valueOf())?.status : undefined;
+    });
+
     constructor() {
         effect(() => this.updateOverlay());
+        // while the calendar is closed, the window follows the selected time; the calendar header moves it when open
+        effect(() => {
+            const time = this.time();
+            if (!time || this.calendarOpen() || !this.datesNeeded()) return;
+            untracked(() => {
+                if (!stepAt(this.steps(), time.start.valueOf())) this.windowStart.set(monthStartOfTime(time.start.valueOf()));
+            });
+        });
+    }
+
+    /**
+     * The nearest time step with data before (-1) or after (1) the selected time, in the loaded window.
+     * shortcut: no search beyond the window (100 steps), the caller steps by one then and the window follows.
+     */
+    dateWithData(direction: 1 | -1): Time | undefined {
+        const time = this.time();
+        if (!time) return undefined;
+        const now = time.start.valueOf();
+        const currentStart = stepAt(this.steps(), now)?.time.start ?? now;
+        const withData = this.steps().filter(
+            (step) =>
+                step.status === TimeStepFootprintStatus.Data && (direction === 1 ? step.time.start > now : step.time.start < currentStart),
+        );
+        const found = direction === 1 ? withData[0] : withData[withData.length - 1];
+        return found && new Time(new Date(found.time.start));
     }
 
     /** The graph and the metadata of a layer. They do not change while the page is open, so they are asked for once. */

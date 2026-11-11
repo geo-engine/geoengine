@@ -126,7 +126,10 @@ export class MainComponent {
             const isNewSource = source !== this.eodysseyLayerService.dataSourceOfTime();
             this.footprintsService.timeStepOverride.set(isNewSource ? source?.defaultTimeStep : undefined);
             this.footprintsService.timeOverride.set(
-                isNewSource && this.eodysseyLayerService.autoSelectTime() && source?.defaultTime
+                isNewSource &&
+                    this.eodysseyLayerService.autoSelectTime() &&
+                    !this.eodysseyLayerService.userChoseTime() &&
+                    source?.defaultTime
                     ? new Time(new Date(source.defaultTime))
                     : undefined,
             );
