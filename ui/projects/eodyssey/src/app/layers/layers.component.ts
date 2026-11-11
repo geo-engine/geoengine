@@ -81,7 +81,7 @@ import {EOdysseyLayerService} from './layers.service';
         }
 
         <section class="panel-section time-selection" aria-labelledby="time-heading">
-            <h2 id="time-heading">Time Selection</h2>
+            <h2 id="time-heading">Date</h2>
             <div class="time-controls">
                 <button
                     matIconButton
@@ -123,16 +123,35 @@ import {EOdysseyLayerService} from './layers.service';
                 </button>
             </div>
             @if (footprintsService.tooLarge()) {
-                <p class="catalogue-message" role="status">Zoom in to see when and where scenes are available.</p>
+                <p class="catalogue-message" role="status">Zoom in to see when and where data is available.</p>
             } @else if (footprintsService.hasError()) {
-                <p class="catalogue-message catalogue-error" role="alert">Could not load the scene availability.</p>
-            } @else if (footprintsService.overlayLoading() || (footprintsService.isLoading() && !footprintsService.dateStatus())) {
+                <p class="catalogue-message catalogue-error" role="alert">Could not load the data availability.</p>
+            } @else if (footprintsService.isLoading() && !footprintsService.dateStatus()) {
                 <p class="catalogue-message coverage-status" role="status">
                     <mat-spinner [diameter]="16"></mat-spinner>
-                    Checking for scenes…
+                    Checking for data…
                 </p>
-            } @else if (scenesText(); as text) {
-                <p class="catalogue-message" role="status">{{ text }}</p>
+            } @else if (footprintsService.dateStatus() === 'data') {
+                <p class="date-status" role="status"><span class="status-dot" aria-hidden="true"></span>Data in view</p>
+            } @else if (footprintsService.dateStatus() === 'empty') {
+                <p class="date-status" role="status"><span class="status-dot empty" aria-hidden="true"></span>No data in view</p>
+                @if (previousDateWithData() || nextDateWithData()) {
+                    <p id="nearest-dates-label" class="catalogue-message">Nearest dates with data:</p>
+                    <div class="nearest-dates" role="group" aria-labelledby="nearest-dates-label">
+                        @if (previousDateWithData(); as previous) {
+                            <button mat-stroked-button type="button" (click)="goTo(previous)">
+                                <mat-icon>navigate_before</mat-icon>
+                                {{ previous.start.format('DD.MM.YYYY') }}
+                            </button>
+                        }
+                        @if (nextDateWithData(); as next) {
+                            <button mat-stroked-button type="button" (click)="goTo(next)">
+                                {{ next.start.format('DD.MM.YYYY') }}
+                                <mat-icon iconPositionEnd>navigate_next</mat-icon>
+                            </button>
+                        }
+                    </div>
+                }
             }
             @if (suggestedDate(); as suggestion) {
                 <p class="catalogue-message suggested-date">
@@ -141,7 +160,7 @@ import {EOdysseyLayerService} from './layers.service';
                         mat-stroked-button
                         type="button"
                         [matTooltip]="'Default date of ' + suggestion.source"
-                        (click)="useSuggestedDate()"
+                        (click)="goTo(suggestion.time)"
                     >
                         Go to {{ suggestion.text }}
                     </button>
@@ -149,8 +168,11 @@ import {EOdysseyLayerService} from './layers.service';
             }
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
                 <span class="stripe-swatch" aria-hidden="true"></span>
-                Show scenes of this date on the map
+                Show coverage on map
             </mat-checkbox>
+            @if (areasText(); as text) {
+                <p class="catalogue-message" role="status">{{ text }}</p>
+            }
         </section>
         <mat-divider></mat-divider>
 
@@ -293,6 +315,42 @@ import {EOdysseyLayerService} from './layers.service';
                 flex-wrap: wrap;
                 align-items: center;
                 gap: 0.25rem;
+            }
+
+            .date-status {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                margin: 0;
+                font-size: $text2;
+                line-height: 1.5;
+            }
+
+            .status-dot {
+                box-sizing: border-box;
+                flex: none;
+                width: 0.65rem;
+                height: 0.65rem;
+                border-radius: 50%;
+                background-color: var(--geoengine-accent-color);
+
+                &.empty {
+                    border: 2px solid var(--geoengine-foreground-secondary-text-color);
+                    background-color: transparent;
+                }
+            }
+
+            .nearest-dates {
+                display: flex;
+                gap: 0.5rem;
+
+                button {
+                    flex: 1;
+                    min-width: 0;
+                    padding: 0 0.5rem;
+                    border-radius: 0.5rem;
+                    font-size: $text2;
+                }
             }
 
             .stripe-swatch {
@@ -569,30 +627,22 @@ export class LayersComponent {
         if (!this.eodysseyLayerService.appliedPreset()) return `Show ${selected.displayName} on map`;
         return this.eodysseyLayerService.canApplyPreset() ? `Switch to ${selected.displayName}` : 'On map';
     });
-    /** What is known about the scenes of the date in view: the boxes of the overlay if it is on, else the calendar window. */
-    readonly scenesText = computed<string | undefined>(() => {
-        const date = this.formattedTime();
+    /** The areas the coverage on the map shows, once they are known. */
+    readonly areasText = computed<string | undefined>(() => {
         const areas = this.footprintsService.overlayVisible() ? this.footprintsService.overlayAreaCount() : undefined;
-        if (areas !== undefined) {
-            return areas === 0 ? `No scenes in view on ${date}.` : `${areas} scene ${areas === 1 ? 'area' : 'areas'} in view on ${date}.`;
-        }
-        switch (this.footprintsService.dateStatus()) {
-            case 'data':
-                return `Scenes in view on ${date}.`;
-            case 'empty':
-                return `No scenes in view on ${date}.`;
-            default:
-                return undefined;
-        }
+        if (areas === undefined) return undefined;
+        return `${areas} ${areas === 1 ? 'area' : 'areas'} in view on this date.`;
     });
+    readonly previousDateWithData = computed(() => this.footprintsService.dateWithData(-1));
+    readonly nextDateWithData = computed(() => this.footprintsService.dateWithData(1));
     /** The arrows go to the next date with data when it is known, else by one time step. */
     readonly backwardsLabel = computed(() =>
-        this.footprintsService.dateWithData(-1)
+        this.previousDateWithData()
             ? 'Previous date with data'
             : `Backwards ${this.timeStepDuration()?.durationAmount} ${this.timeStepDuration()?.durationUnit}`,
     );
     readonly forwardLabel = computed(() =>
-        this.footprintsService.dateWithData(1)
+        this.nextDateWithData()
             ? 'Next date with data'
             : `Forward ${this.timeStepDuration()?.durationAmount} ${this.timeStepDuration()?.durationUnit}`,
     );
@@ -649,9 +699,8 @@ export class LayersComponent {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }
 
-    async useSuggestedDate(): Promise<void> {
-        const suggestion = this.suggestedDate();
-        if (suggestion) await this.projectService.setTime(suggestion.time);
+    async goTo(time: Time): Promise<void> {
+        await this.projectService.setTime(time);
     }
 
     applySelectedPreset(): void {
