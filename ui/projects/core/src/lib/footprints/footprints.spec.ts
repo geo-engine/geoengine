@@ -1,16 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-import {
-    boxRing,
-    calendarStartView,
-    cellHasData,
-    cellHasStepAfter,
-    cellHasStepStart,
-    mergeFootprints,
-    monthStartUtc,
-    stepAt,
-    windowRequests,
-} from './footprints';
+import {boxRing, calendarStartView, cellClasses, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
     return {time: {start: Date.parse(startIso), end: Date.parse(endIso)}, status, bounds: []};
@@ -21,45 +11,54 @@ describe('footprints', () => {
     const empty = step('2026-04-01T00:00:00Z', '2026-04-02T00:00:00Z', TimeStepFootprintStatus.Empty);
     const unknown = step('2027-01-01T00:00:00Z', '2027-01-02T00:00:00Z', TimeStepFootprintStatus.Unknown);
 
-    it('marks a time step with data in all calendar views', () => {
-        expect(cellHasData([data], new Date(2026, 2, 15), 'month')).toBe(true);
-        expect(cellHasData([data], new Date(2026, 2, 1), 'year')).toBe(true);
-        expect(cellHasData([data], new Date(2026, 0, 1), 'multi-year')).toBe(true);
+    const WITH_DATA = 'geoengine-calendar-cell-with-data';
+    const CONTINUED = 'geoengine-calendar-cell-with-data-continued';
+    const BAND_AFTER = 'geoengine-calendar-cell-band-after';
+    const eightDays = step('2026-03-30T00:00:00Z', '2026-04-07T00:00:00Z', TimeStepFootprintStatus.Data);
+
+    it('marks the day of a time step with data in all calendar views', () => {
+        expect(cellClasses([data], new Date(2026, 2, 15), 'month')).toEqual([WITH_DATA]);
+        expect(cellClasses([data], new Date(2026, 2, 1), 'year')).toEqual([WITH_DATA]);
+        expect(cellClasses([data], new Date(2026, 0, 1), 'multi-year')).toEqual([WITH_DATA]);
     });
 
     it('does not mark other days', () => {
-        expect(cellHasData([data], new Date(2026, 2, 14), 'month')).toBe(false);
-        expect(cellHasData([data], new Date(2026, 2, 16), 'month')).toBe(false);
-        expect(cellHasData([data], new Date(2026, 3, 15), 'month')).toBe(false);
+        expect(cellClasses([data], new Date(2026, 2, 14), 'month')).toEqual([]);
+        expect(cellClasses([data], new Date(2026, 2, 16), 'month')).toEqual([]);
+        expect(cellClasses([data], new Date(2026, 3, 15), 'month')).toEqual([]);
     });
 
-    it('marks every day, month and year a long time step covers', () => {
-        const eightDays = step('2026-03-30T00:00:00Z', '2026-04-07T00:00:00Z', TimeStepFootprintStatus.Data);
-        const days = [29, 30, 31, 32, 37, 38].map((day) => cellHasData([eightDays], new Date(2026, 2, day), 'month'));
-        expect(days).toEqual([false, true, true, true, true, false]);
-
-        const month = step('2026-01-01T00:00:00Z', '2026-03-01T00:00:00Z', TimeStepFootprintStatus.Data);
-        expect([0, 1, 2].map((m) => cellHasData([month], new Date(2026, m, 1), 'year'))).toEqual([true, true, false]);
-        expect(cellHasData([month], new Date(2025, 0, 1), 'multi-year')).toBe(false);
+    it('gives a long time step a disc on its first day, a band over the days between and an end on its last day', () => {
+        const days = [29, 30, 31, 32, 36, 37, 38].map((day) => cellClasses([eightDays], new Date(2026, 2, day), 'month'));
+        expect(days).toEqual([
+            [],
+            [WITH_DATA, BAND_AFTER],
+            [CONTINUED, BAND_AFTER],
+            [CONTINUED, BAND_AFTER],
+            [CONTINUED, BAND_AFTER],
+            [CONTINUED],
+            [],
+        ]);
     });
 
-    it('tells the day a long time step starts in from the days it only continues in', () => {
-        const eightDays = step('2026-03-30T00:00:00Z', '2026-04-07T00:00:00Z', TimeStepFootprintStatus.Data);
-        const starts = [29, 30, 31, 32].map((day) => cellHasStepStart([eightDays], new Date(2026, 2, day), 'month'));
-        expect(starts).toEqual([false, true, false, false]);
-        expect(cellHasStepStart([empty], new Date(2026, 3, 1), 'month')).toBe(false);
+    it('marks every month and year a long time step covers', () => {
+        const months = step('2026-01-01T00:00:00Z', '2026-03-01T00:00:00Z', TimeStepFootprintStatus.Data);
+        expect([0, 1, 2].map((m) => cellClasses([months], new Date(2026, m, 1), 'year'))).toEqual([
+            [WITH_DATA, BAND_AFTER],
+            [CONTINUED],
+            [],
+        ]);
+        expect(cellClasses([months], new Date(2025, 0, 1), 'multi-year')).toEqual([]);
     });
 
-    it('tells the days a long time step goes on after from its last day', () => {
-        const eightDays = step('2026-03-30T00:00:00Z', '2026-04-07T00:00:00Z', TimeStepFootprintStatus.Data);
-        const after = [29, 30, 31, 37, 38].map((day) => cellHasStepAfter([eightDays], new Date(2026, 2, day), 'month'));
-        expect(after).toEqual([false, true, true, false, false]);
-        expect(cellHasStepAfter([data], new Date(2026, 2, 15), 'month')).toBe(false);
+    it('prefers the disc where one step starts and another goes on', () => {
+        const startsOnDay32 = step('2026-04-01T00:00:00Z', '2026-04-02T00:00:00Z', TimeStepFootprintStatus.Data);
+        expect(cellClasses([eightDays, startsOnDay32], new Date(2026, 2, 32), 'month')).toEqual([WITH_DATA, BAND_AFTER]);
     });
 
     it('marks neither empty nor unknown time steps', () => {
-        expect(cellHasData([empty, unknown], new Date(2026, 3, 1), 'month')).toBe(false);
-        expect(cellHasData([empty, unknown], new Date(2027, 0, 1), 'multi-year')).toBe(false);
+        expect(cellClasses([empty, unknown], new Date(2026, 3, 1), 'month')).toEqual([]);
+        expect(cellClasses([empty, unknown], new Date(2027, 0, 1), 'multi-year')).toEqual([]);
     });
 
     it('opens the calendar on the cell size of the time step', () => {

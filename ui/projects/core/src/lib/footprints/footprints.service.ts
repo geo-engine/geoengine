@@ -19,18 +19,7 @@ import {
     TimeStepDuration,
     UUID,
 } from '@geoengine/common';
-import {
-    TimeRange,
-    boxRing,
-    calendarStartView,
-    cellHasData,
-    cellHasStepAfter,
-    cellHasStepStart,
-    mergeFootprints,
-    monthStartUtc,
-    stepAt,
-    windowRequests,
-} from './footprints';
+import {TimeRange, boxRing, calendarStartView, cellClasses, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
@@ -55,12 +44,6 @@ export interface FootprintLayer {
     /** The id of the processing graph, registering the layer first if it is not one yet. */
     processingGraphId: () => Promise<UUID>;
 }
-
-export const CELL_WITH_DATA_CLASS = 'geoengine-calendar-cell-with-data';
-/** The time step of the cell goes on in the next cell, so a band joins them. */
-export const CELL_BAND_AFTER_CLASS = 'geoengine-calendar-cell-band-after';
-/** A cell a time step reaches into from an earlier cell. The cell where the step starts has a disc, the others a band. */
-export const CELL_WITH_DATA_CONTINUED_CLASS = 'geoengine-calendar-cell-with-data-continued';
 
 /** Period and line width of the stripes of the overlay in CSS pixels. */
 const STRIPE_PERIOD = 10;
@@ -310,14 +293,7 @@ export class FootprintsService {
         return {processingGraphId, spatialBounds: spatialBounds.join(',')};
     }
 
-    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) => {
-        const steps = this.steps();
-        if (!cellHasData(steps, date, view)) return '';
-        return [
-            cellHasStepStart(steps, date, view) ? CELL_WITH_DATA_CLASS : CELL_WITH_DATA_CONTINUED_CLASS,
-            ...(cellHasStepAfter(steps, date, view) ? [CELL_BAND_AFTER_CLASS] : []),
-        ];
-    };
+    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) => cellClasses(this.steps(), date, view);
 
     /** Loads the window of `date` unless it is loaded already. Takes a calendar date. */
     showDate(date: Date): void {
