@@ -55,6 +55,12 @@ export function stepAt(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number):
     return steps.find((step) => step.time.start <= timeMs && timeMs < step.time.end);
 }
 
+/** The first of the month of a UTC time. */
+export function monthStartOfTime(timeMs: number): number {
+    const date = new Date(timeMs);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+}
+
 /** The first of the month of `date`, which is a calendar date, as a UTC time. */
 export function monthStartUtc(date: Date): number {
     return Date.UTC(date.getFullYear(), date.getMonth(), 1);

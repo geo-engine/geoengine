@@ -1,7 +1,7 @@
 import {TestBed} from '@angular/core/testing';
 import {BehaviorSubject, Observable, of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {RasterFootprints, RasterFootprintsPrecision} from '@geoengine/api-client';
+import {RasterFootprints, RasterFootprintsPrecision, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {LayersService, ProcessingGraphsService, RasterLayerMetadata, Time} from '@geoengine/common';
 import {FootprintsService} from './footprints.service';
 import {MapService} from '../map/map.service';
@@ -186,5 +186,55 @@ describe('FootprintsService overlay', () => {
             expect.objectContaining({timeInterval: new Time(Date.UTC(2024, 5, 1)).asRequestString()}),
             expect.anything(),
         );
+    });
+
+    describe('dates of the layer next to the calendar', () => {
+        const day = (d: number, status: TimeStepFootprintStatus): RasterFootprints['steps'][number] => ({
+            time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+            status,
+            bounds: [],
+        });
+        const steps = [
+            day(-3, TimeStepFootprintStatus.Data),
+            day(-1, TimeStepFootprintStatus.Empty),
+            day(1, TimeStepFootprintStatus.Data),
+            day(3, TimeStepFootprintStatus.Data),
+            day(9, TimeStepFootprintStatus.Data),
+        ];
+
+        it('loads the window of the selected time without the calendar when the app needs the dates', async () => {
+            const service = createService();
+            expect(service.dateStatus()).toBeUndefined();
+
+            service.datesNeeded.set(true);
+            await settle();
+
+            const windowRequests = getFootprints.mock.calls.filter(([, query]) => query.limit === 100);
+            expect(windowRequests.length).toBeGreaterThan(0);
+            expect(windowRequests.every(([, query]) => query.precision === RasterFootprintsPrecision.Availability)).toBe(true);
+        });
+
+        it('tells whether the selected time has data and finds the nearest dates with data around it', async () => {
+            getFootprints.mockResolvedValueOnce({...FOOTPRINTS, steps}).mockResolvedValue(FOOTPRINTS);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+
+            expect(service.dateStatus()).toBe(TimeStepFootprintStatus.Data);
+            expect(service.dateWithData(1)?.start.valueOf()).toBe(Date.UTC(2026, 3, 3));
+            expect(service.dateWithData(-1)?.start.valueOf()).toBe(Date.UTC(2026, 3, -3));
+        });
+
+        it('finds no date with data beyond the loaded window', async () => {
+            getFootprints
+                .mockResolvedValueOnce({...FOOTPRINTS, steps: [day(1, TimeStepFootprintStatus.Data)]})
+                .mockResolvedValue(FOOTPRINTS);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+
+            expect(service.dateWithData(1)).toBeUndefined();
+            expect(service.dateWithData(-1)).toBeUndefined();
+        });
     });
 });

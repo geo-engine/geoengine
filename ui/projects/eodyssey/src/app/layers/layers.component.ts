@@ -1,5 +1,5 @@
 import {A11yModule} from '@angular/cdk/a11y';
-import {ChangeDetectionStrategy, Component, computed, inject, resource} from '@angular/core';
+import {ChangeDetectionStrategy, Component, DestroyRef, computed, inject, resource} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {MatCalendarView, MatDatepicker, MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
@@ -87,9 +87,9 @@ import {EOdysseyLayerService} from './layers.service';
                 <button
                     matIconButton
                     type="button"
-                    aria-label="Previous time step"
+                    [attr.aria-label]="backwardsLabel()"
                     (click)="timeBackwards()"
-                    matTooltip="Backwards {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
+                    [matTooltip]="backwardsLabel()"
                 >
                     <mat-icon>navigate_before</mat-icon>
                 </button>
@@ -116,32 +116,30 @@ import {EOdysseyLayerService} from './layers.service';
                 <button
                     matIconButton
                     type="button"
-                    aria-label="Next time step"
+                    [attr.aria-label]="forwardLabel()"
                     (click)="timeForward()"
-                    matTooltip="Forward {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
+                    [matTooltip]="forwardLabel()"
                 >
                     <mat-icon>navigate_next</mat-icon>
                 </button>
             </div>
-            <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
-                Show scene coverage on map
-            </mat-checkbox>
             @if (footprintsService.tooLarge()) {
                 <p class="catalogue-message" role="status">Zoom in to see when and where scenes are available.</p>
             } @else if (footprintsService.hasError()) {
                 <p class="catalogue-message catalogue-error" role="alert">Could not load the scene availability.</p>
-            } @else if (footprintsService.overlayVisible()) {
-                @if (footprintsService.overlayLoading()) {
-                    <p class="catalogue-message coverage-status" role="status">
-                        <mat-spinner [diameter]="16"></mat-spinner>
-                        Loading scene coverage…
-                    </p>
-                } @else if (footprintsService.overlayAreaCount() === 0) {
-                    <p class="catalogue-message" role="status">No scenes in view at the selected time.</p>
-                } @else if (footprintsService.overlayAreaCount() !== undefined) {
-                    <p class="catalogue-message" role="status">The highlighted areas on the map have scenes at the selected time.</p>
-                }
+            } @else if (footprintsService.overlayLoading() || (footprintsService.isLoading() && !footprintsService.dateStatus())) {
+                <p class="catalogue-message coverage-status" role="status">
+                    <mat-spinner [diameter]="16"></mat-spinner>
+                    Checking for scenes…
+                </p>
+            } @else if (footprintsService.dateStatus() === 'data') {
+                <p class="catalogue-message" role="status">Scenes in view on {{ formattedTime() }}.</p>
+            } @else if (footprintsService.dateStatus() === 'empty') {
+                <p class="catalogue-message" role="status">No scenes in view on {{ formattedTime() }}.</p>
             }
+            <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
+                Show scene coverage on map
+            </mat-checkbox>
         </section>
         <mat-divider></mat-divider>
 
@@ -490,11 +488,12 @@ export class LayersComponent {
     readonly footprintCalendarHeader = FootprintCalendarHeaderComponent;
     private readonly layerService = inject(LayersService);
 
-    readonly currentTime = toSignal(this.projectService.getTimeStream());
+    /** The time the date field shows: the one the footprints are for, which is the default time of a selected data source until it is applied. */
+    readonly currentTime = this.footprintsService.time;
     readonly formattedTime = computed<string>(() => {
-        const projectTime = this.currentTime();
-        if (!projectTime) return '';
-        return projectTime.start.format('DD.MM.YYYY');
+        const time = this.currentTime();
+        if (!time) return '';
+        return time.start.format('DD.MM.YYYY');
     });
     readonly timeStepDuration = toSignal(this.projectService.getTimeStepDurationStream());
     /** The calendar opens on the cell size of the time step: days, months or years. */
@@ -505,6 +504,17 @@ export class LayersComponent {
     });
 
     readonly autoSelectTime = this.eodysseyLayerService.autoSelectTime;
+    /** The arrows go to the next date with data when it is known, else by one time step. */
+    readonly backwardsLabel = computed(() =>
+        this.footprintsService.dateWithData(-1)
+            ? 'Previous date with data'
+            : `Backwards ${this.timeStepDuration()?.durationAmount} ${this.timeStepDuration()?.durationUnit}`,
+    );
+    readonly forwardLabel = computed(() =>
+        this.footprintsService.dateWithData(1)
+            ? 'Next date with data'
+            : `Forward ${this.timeStepDuration()?.durationAmount} ${this.timeStepDuration()?.durationUnit}`,
+    );
 
     readonly legendLayer = resource({
         params: () => ({layerId: this.eodysseyLayerService.mapTileLayer()}),
@@ -548,8 +558,15 @@ export class LayersComponent {
             (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
     );
 
+    constructor() {
+        this.footprintsService.datesNeeded.set(true);
+        inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
+    }
+
     private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
-        if (this.autoSelectTime() && dataSource.defaultTime) await this.projectService.setTime(new Time(new Date(dataSource.defaultTime)));
+        if (this.autoSelectTime() && !this.eodysseyLayerService.userChoseTime() && dataSource.defaultTime) {
+            await this.projectService.setTime(new Time(new Date(dataSource.defaultTime)));
+        }
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
     }
 
@@ -563,23 +580,29 @@ export class LayersComponent {
     }
 
     async timeForward(): Promise<void> {
-        const time = this.currentTime();
-        const timeStepDuration = this.timeStepDuration();
-
-        if (!time || !timeStepDuration) return;
-
-        const updatedTime = time.add(timeStepDuration.durationAmount, timeStepDuration.durationUnit);
-        await this.projectService.setTime(updatedTime);
+        await this.stepTime(1);
     }
 
     async timeBackwards(): Promise<void> {
+        await this.stepTime(-1);
+    }
+
+    private async stepTime(direction: 1 | -1): Promise<void> {
         const time = this.currentTime();
         const timeStepDuration = this.timeStepDuration();
 
         if (!time || !timeStepDuration) return;
 
-        const updatedTime = time.subtract(timeStepDuration.durationAmount, timeStepDuration.durationUnit);
-        await this.projectService.setTime(updatedTime);
+        const step =
+            direction === 1
+                ? time.add(timeStepDuration.durationAmount, timeStepDuration.durationUnit)
+                : time.subtract(timeStepDuration.durationAmount, timeStepDuration.durationUnit);
+        await this.setTime(this.footprintsService.dateWithData(direction) ?? step);
+    }
+
+    private async setTime(time: Time): Promise<void> {
+        this.eodysseyLayerService.userChoseTime.set(true);
+        await this.projectService.setTime(time);
     }
 
     async setDate(event: MatDatepickerInputEvent<Date>): Promise<void> {
@@ -596,6 +619,6 @@ export class LayersComponent {
 
     private async setCalendarDate(date: Date): Promise<void> {
         const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        await this.projectService.setTime(new Time(utcDate));
+        await this.setTime(new Time(utcDate));
     }
 }
