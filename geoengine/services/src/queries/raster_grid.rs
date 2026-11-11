@@ -54,7 +54,7 @@ pub enum RasterEncoding {
         height: u32,
         colorizer: RasterColorizer,
     },
-    /// The first band as `GeoTIFF`, at most `[wcs] tile_limit` tiles. Unlike a PNG it has no
+    /// The query's bands as `GeoTIFF`, at most `[wcs] tile_limit` tiles. Unlike a PNG it has no
     /// requested size: its pixels are the query's grid, i.e. `bounds` at `resolution`.
     GeoTiff { no_data_value: Option<f64> },
 }
@@ -66,9 +66,22 @@ pub async fn raster_grid<C: SessionContext>(
     encoding: RasterEncoding,
 ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
-    let tiling_spec = execution_context.tiling_specification();
 
     let wrapped = load_on_grid(&ctx, &query, &execution_context).await?;
+
+    raster_grid_from_operator(ctx, query, wrapped, encoding).await
+}
+
+/// Queries `query` from `wrapped`, which is already projected and resampled onto the query's grid,
+/// and encodes the result as `encoding`
+pub async fn raster_grid_from_operator<C: SessionContext>(
+    ctx: C,
+    query: RasterGridQuery,
+    wrapped: WrapWithProjectionAndResample,
+    encoding: RasterEncoding,
+) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
+    let execution_context = ctx.execution_context()?;
+    let tiling_spec = execution_context.tiling_specification();
 
     let grid_bounds = wrapped
         .result_descriptor
