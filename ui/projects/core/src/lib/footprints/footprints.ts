@@ -56,24 +56,6 @@ export function calendarStartView(unit: string | undefined): MatCalendarView {
     return 'month';
 }
 
-const BOX_EDGE_STEPS = 16;
-
-/**
- * The outline of a box with points along its edges. A box of one projection is no rectangle in another,
- * and the outline would otherwise be straight between the corners, leaving gaps at the edges of the map.
- */
-export function boxRing([minX, minY, maxX, maxY]: [number, number, number, number]): [number, number][] {
-    const along = (from: number, to: number, i: number): number => from + ((to - from) * i) / BOX_EDGE_STEPS;
-    const steps = Array.from({length: BOX_EDGE_STEPS}, (_, i) => i);
-    const ring: [number, number][] = [
-        ...steps.map((i): [number, number] => [along(minX, maxX, i), minY]),
-        ...steps.map((i): [number, number] => [maxX, along(minY, maxY, i)]),
-        ...steps.map((i): [number, number] => [along(maxX, minX, i), maxY]),
-        ...steps.map((i): [number, number] => [minX, along(maxY, minY, i)]),
-    ];
-    return [...ring, ring[0]];
-}
-
 /** The time step containing `timeMs`, or starting there for instants. */
 export function stepAt(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number): TimeStepFootprint | undefined {
     return steps.find((step) => step.time.start <= timeMs && timeMs < step.time.end);

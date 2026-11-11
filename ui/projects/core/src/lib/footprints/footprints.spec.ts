@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-import {boxRing, calendarStartView, cellClasses, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
+import {calendarStartView, cellClasses, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
     return {time: {start: Date.parse(startIso), end: Date.parse(endIso)}, status, bounds: []};
@@ -103,17 +103,5 @@ describe('footprints', () => {
         expect(merged.steps).toEqual([data, empty]);
         expect(merged.next).toBe(next);
         expect(merged.tooLarge).toBe(true);
-    });
-
-    it('puts points along the edges of a box, from its corner around back to it', () => {
-        const ring = boxRing([0, 0, 16, 8]);
-
-        expect(ring.length).toBe(4 * 16 + 1);
-        expect(ring[0]).toEqual([0, 0]);
-        expect(ring[16]).toEqual([16, 0]);
-        expect(ring[32]).toEqual([16, 8]);
-        expect(ring[48]).toEqual([0, 8]);
-        expect(ring[64]).toEqual(ring[0]);
-        expect(ring.every(([x, y]) => x >= 0 && x <= 16 && y >= 0 && y <= 8)).toBe(true);
     });
 });
