@@ -43,17 +43,43 @@ class TestProject(unittest.TestCase):
                 description = '',
                 layers = [
                     geoengine_api_client.models.project_layer.ProjectLayer(
-                        processing_graph = '', 
+                        id = null, 
                         name = '', 
+                        description = '', 
+                        processing_graph = null, 
+                        symbology = null, 
+                        properties = [
+                            [
+                                ''
+                                ]
+                            ], 
+                        metadata = {
+                            'key' : ''
+                            }, 
                         visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                             data = True, 
                             legend = True, ), 
-                        symbology = null, )
+                        source = null, )
                     ],
                 plots = [
-                    geoengine_api_client.models.plot.Plot(
-                        processing_graph = '', 
-                        name = '', )
+                    geoengine_api_client.models.project_layer.ProjectLayer(
+                        id = null, 
+                        name = '', 
+                        description = '', 
+                        processing_graph = null, 
+                        symbology = null, 
+                        properties = [
+                            [
+                                ''
+                                ]
+                            ], 
+                        metadata = {
+                            'key' : ''
+                            }, 
+                        visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
+                            data = True, 
+                            legend = True, ), 
+                        source = null, )
                     ],
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(
                     spatial_reference = '', 
@@ -81,17 +107,43 @@ class TestProject(unittest.TestCase):
                 description = '',
                 layers = [
                     geoengine_api_client.models.project_layer.ProjectLayer(
-                        processing_graph = '', 
+                        id = null, 
                         name = '', 
+                        description = '', 
+                        processing_graph = null, 
+                        symbology = null, 
+                        properties = [
+                            [
+                                ''
+                                ]
+                            ], 
+                        metadata = {
+                            'key' : ''
+                            }, 
                         visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                             data = True, 
                             legend = True, ), 
-                        symbology = null, )
+                        source = null, )
                     ],
                 plots = [
-                    geoengine_api_client.models.plot.Plot(
-                        processing_graph = '', 
-                        name = '', )
+                    geoengine_api_client.models.project_layer.ProjectLayer(
+                        id = null, 
+                        name = '', 
+                        description = '', 
+                        processing_graph = null, 
+                        symbology = null, 
+                        properties = [
+                            [
+                                ''
+                                ]
+                            ], 
+                        metadata = {
+                            'key' : ''
+                            }, 
+                        visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
+                            data = True, 
+                            legend = True, ), 
+                        source = null, )
                     ],
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(
                     spatial_reference = '', 

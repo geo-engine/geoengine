@@ -47,21 +47,29 @@
                     @if (layer.layerType === 'vector') {
                         <geoengine-ol-vector-layer
                             [layerId]="layer.id"
-                            [workflow]="layer.workflowId"
+                            [processingGraph]="layer.workflowId"
                             [symbology]="$any(layer.symbology)"
                             [isVisible]="layer.isVisible"
                             (mapRedraw)="map.layerForcesRedraw()"
                         ></geoengine-ol-vector-layer>
                     }
                     @if (layer.layerType === 'raster') {
-                        <geoengine-ol-raster-layer
-                            [layerId]="layer.id"
-                            [workflow]="layer.workflowId"
-                            [symbology]="$any(layer.symbology)"
-                            [isVisible]="layer.isVisible"
-                            [sessionToken]="sessionToken"
-                            (mapRedraw)="map.layerForcesRedraw()"
-                        ></geoengine-ol-raster-layer>
+                        @let projectTime = projectService.projectTime();
+                        @let projectSpatialReference = projectService.projectSpatialReference();
+                        @if (projectTime && projectSpatialReference) {
+                            <geoengine-ol-ogc-api-map-tile-layer
+                                [layerId]="layer.id"
+                                [dataConnectorId]="projectService.projectsDataConnectorId"
+                                [processingGraph]="layer.workflowId"
+                                [symbology]="$any(layer.symbology)"
+                                [isVisible]="layer.isVisible"
+                                [sessionToken]="sessionToken"
+                                [spatialReference]="projectSpatialReference"
+                                [time]="projectTime"
+                                (loadState)="projectService.reportRasterLayerLoadState(layer.id, $event)"
+                                (mapRedraw)="map.layerForcesRedraw()"
+                            ></geoengine-ol-ogc-api-map-tile-layer>
+                        }
                     }
                 }
             }

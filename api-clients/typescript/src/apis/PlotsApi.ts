@@ -18,6 +18,37 @@ import {
     WrappedPlotOutputToJSON,
 } from '../models/WrappedPlotOutput';
 
+export interface GetLayerPlotHandlerRequest {
+    /**
+     * 
+     */
+    bbox: string;
+    /**
+     * 
+     */
+    time: string;
+    /**
+     * Data provider id
+     */
+    provider: string;
+    /**
+     * Layer id
+     */
+    layer: string;
+    /**
+     * 
+     */
+    crs?: string | null;
+    /**
+     * Optional resolution (in the units of `crs`) at which the plot may be computed.
+     * 
+     * If set, raster inputs are read at the coarsest overview level that is not coarser than
+     * this resolution, which speeds up plots of large areas at the cost of exactness.
+     * If omitted, raster inputs are read at their native resolution.
+     */
+    spatialResolution?: string | null;
+}
+
 export interface GetPlotHandlerRequest {
     /**
      * 
@@ -49,6 +80,97 @@ export interface GetPlotHandlerRequest {
  * 
  */
 export class PlotsApi extends runtime.BaseAPI {
+
+    /**
+     * Creates request options for getLayerPlotHandler without sending the request
+     */
+    async getLayerPlotHandlerRequestOpts(requestParameters: GetLayerPlotHandlerRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['bbox'] == null) {
+            throw new runtime.RequiredError(
+                'bbox',
+                'Required parameter "bbox" was null or undefined when calling getLayerPlotHandler().'
+            );
+        }
+
+        if (requestParameters['time'] == null) {
+            throw new runtime.RequiredError(
+                'time',
+                'Required parameter "time" was null or undefined when calling getLayerPlotHandler().'
+            );
+        }
+
+        if (requestParameters['provider'] == null) {
+            throw new runtime.RequiredError(
+                'provider',
+                'Required parameter "provider" was null or undefined when calling getLayerPlotHandler().'
+            );
+        }
+
+        if (requestParameters['layer'] == null) {
+            throw new runtime.RequiredError(
+                'layer',
+                'Required parameter "layer" was null or undefined when calling getLayerPlotHandler().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['bbox'] != null) {
+            queryParameters['bbox'] = requestParameters['bbox'];
+        }
+
+        if (requestParameters['crs'] != null) {
+            queryParameters['crs'] = requestParameters['crs'];
+        }
+
+        if (requestParameters['time'] != null) {
+            queryParameters['time'] = requestParameters['time'];
+        }
+
+        if (requestParameters['spatialResolution'] != null) {
+            queryParameters['spatialResolution'] = requestParameters['spatialResolution'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/plot/{provider}/{layer}`;
+        urlPath = urlPath.replace('{provider}', encodeURIComponent(String(requestParameters['provider'])));
+        urlPath = urlPath.replace('{layer}', encodeURIComponent(String(requestParameters['layer'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Generates the plot of a layer, e.g. of a plot in a project.
+     */
+    async getLayerPlotHandlerRaw(requestParameters: GetLayerPlotHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WrappedPlotOutput>> {
+        const requestOptions = await this.getLayerPlotHandlerRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WrappedPlotOutputFromJSON(jsonValue));
+    }
+
+    /**
+     * Generates the plot of a layer, e.g. of a plot in a project.
+     */
+    async getLayerPlotHandler(requestParameters: GetLayerPlotHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WrappedPlotOutput> {
+        const response = await this.getLayerPlotHandlerRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * Creates request options for getPlotHandler without sending the request

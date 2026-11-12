@@ -2,15 +2,18 @@ use super::error::PostgresProjectDbError;
 use super::error::ProjectDbError;
 use crate::contexts::PostgresDb;
 use crate::error::Result;
+use crate::layers::layer::{Layer, ProviderLayerId};
 use crate::permissions::Permission;
 use crate::permissions::TxPermissionDb;
-use crate::processing_graphs::processing_graph::ProcessingGraphId;
+use crate::processing_graphs::processing_graph::{ProcessingGraph, ProcessingGraphId};
 use crate::projects::LoadVersion;
-use crate::projects::Plot;
 use crate::projects::ProjectLayer;
+use crate::projects::VecUpdate;
 use crate::projects::error::{
-    AccessFailedProjectDbError, Bb8ProjectDbError, ProjectNotFoundProjectDbError,
+    AccessFailedProjectDbError, Bb8ProjectDbError, InvalidProcessingGraphProjectDbError,
+    ProjectNotFoundProjectDbError,
 };
+use crate::projects::parse_layer_uuid;
 use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
@@ -22,9 +25,13 @@ use bb8_postgres::tokio_postgres::Transaction;
 use bb8_postgres::{
     tokio_postgres::Socket, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
 };
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
+use geoengine_datatypes::util::HashMapTextTextDbType;
 use snafu::{ResultExt, ensure};
+use std::collections::HashMap;
 use tokio_postgres::Row;
+use uuid::Uuid;
 
 #[async_trait]
 impl<Tls> ProjectDb for PostgresDb<Tls>
@@ -134,7 +141,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn update_project(&self, update: UpdateProject) -> Result<(), ProjectDbError> {
+    async fn update_project(&self, update: UpdateProject) -> Result<Project, ProjectDbError> {
         let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
 
         let trans = conn
@@ -168,7 +175,7 @@ where
 
         trans.commit().await.context(PostgresProjectDbError)?;
 
-        Ok(())
+        Ok(project)
     }
 
     async fn delete_project(&self, project: ProjectId) -> Result<(), ProjectDbError> {
@@ -216,7 +223,7 @@ where
             .await
             .context(PostgresProjectDbError)?;
 
-        self.ensure_permission_in_tx(project.into(), Permission::Owner, &trans)
+        self.ensure_permission_in_tx(project.into(), Permission::Read, &trans)
             .await
             .boxed_context(AccessFailedProjectDbError { project })?;
 
@@ -295,33 +302,6 @@ where
         let changed = row.get(6);
         let _author_id = UserId(row.get(7));
 
-        let stmt = trans
-            .prepare(
-                "
-        SELECT  
-            name, processing_graph_id, symbology, visibility
-        FROM project_version_layers
-        WHERE project_version_id = $1
-        ORDER BY layer_index ASC",
-            )
-            .await
-            .context(PostgresProjectDbError)?;
-
-        let rows = trans
-            .query(&stmt, &[&version_id])
-            .await
-            .context(PostgresProjectDbError)?;
-
-        let mut layers = vec![];
-        for row in rows {
-            layers.push(ProjectLayer {
-                processing_graph: ProcessingGraphId(row.get(1)),
-                name: row.get(0),
-                symbology: row.get(2),
-                visibility: row.get(3),
-            });
-        }
-
         let project = Project {
             id: project_id,
             version: ProjectVersion {
@@ -330,8 +310,8 @@ where
             },
             name,
             description,
-            layers,
-            plots: load_plots(&trans, &version_id).await?,
+            layers: load_layers(&trans, LayerTable::Layers, &version_id).await?,
+            plots: load_layers(&trans, LayerTable::Plots, &version_id).await?,
             bounds,
             time_step,
         };
@@ -339,6 +319,30 @@ where
         trans.commit().await.context(PostgresProjectDbError)?;
 
         Ok(project)
+    }
+
+    async fn load_project_layer(&self, layer: &LayerId) -> Result<ProjectLayer, ProjectDbError> {
+        let mut conn = self.conn_pool.get().await.context(Bb8ProjectDbError)?;
+        let trans = conn
+            .build_transaction()
+            .start()
+            .await
+            .context(PostgresProjectDbError)?;
+
+        let (project, project_layer) =
+            load_latest_project_layer(&trans, layer)
+                .await?
+                .ok_or_else(|| ProjectDbError::LayerNotFound {
+                    layer: layer.clone(),
+                })?;
+
+        self.ensure_permission_in_tx(project.into(), Permission::Read, &trans)
+            .await
+            .boxed_context(AccessFailedProjectDbError { project })?;
+
+        trans.commit().await.context(PostgresProjectDbError)?;
+
+        Ok(project_layer)
     }
 
     async fn list_project_versions(
@@ -411,20 +415,91 @@ pub async fn list_plots(
     Ok(plot_names)
 }
 
-pub async fn load_plots(
+/// The tables that store the layers and the plots of a project version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LayerTable {
+    Layers,
+    Plots,
+}
+
+impl LayerTable {
+    fn table(self) -> &'static str {
+        match self {
+            LayerTable::Layers => "project_version_layers",
+            LayerTable::Plots => "project_version_plots",
+        }
+    }
+
+    fn index_column(self) -> &'static str {
+        match self {
+            LayerTable::Layers => "layer_index",
+            LayerTable::Plots => "plot_index",
+        }
+    }
+
+    /// Plots have no symbology, so their column is always `NULL`.
+    fn symbology_column(self) -> &'static str {
+        match self {
+            LayerTable::Layers => "l.symbology",
+            LayerTable::Plots => "NULL::\"Symbology\"",
+        }
+    }
+}
+
+/// The columns that [`project_layer_from_row`] reads, for a table aliased `l` that is joined with
+/// `processing_graphs` aliased `g`.
+fn project_layer_columns(table: LayerTable) -> String {
+    format!(
+        "l.layer_id, l.name, l.description, g.processing_graph, {symbology},
+        l.properties, l.metadata, l.visibility, l.source_provider_id, l.source_layer_id",
+        symbology = table.symbology_column()
+    )
+}
+
+fn project_layer_from_row(row: &Row, offset: usize) -> Result<ProjectLayer, ProjectDbError> {
+    let processing_graph: ProcessingGraph = serde_json::from_value(row.get(offset + 3))
+        .context(InvalidProcessingGraphProjectDbError)?;
+
+    let source_provider_id: Option<Uuid> = row.get(offset + 8);
+    let source_layer_id: Option<String> = row.get(offset + 9);
+    let source = source_provider_id
+        .zip(source_layer_id)
+        .map(|(provider_id, layer_id)| ProviderLayerId {
+            provider_id: DataProviderId(provider_id),
+            layer_id: LayerId(layer_id),
+        });
+
+    Ok(ProjectLayer {
+        layer: Layer {
+            id: ProjectLayer::provider_layer_id(row.get(offset)),
+            name: row.get(offset + 1),
+            description: row.get(offset + 2),
+            processing_graph,
+            symbology: row.get(offset + 4),
+            properties: row.get(offset + 5),
+            metadata: row.get::<_, HashMapTextTextDbType>(offset + 6).into(),
+        },
+        visibility: row.get(offset + 7),
+        source,
+    })
+}
+
+pub async fn load_layers(
     trans: &Transaction<'_>,
+    table: LayerTable,
     project_version_id: &ProjectVersionId,
-) -> Result<Vec<Plot>, ProjectDbError> {
+) -> Result<Vec<ProjectLayer>, ProjectDbError> {
     let stmt = trans
-        .prepare(
+        .prepare(&format!(
             "
-                SELECT  
-                    name, processing_graph_id
-                FROM project_version_plots
-                WHERE project_version_id = $1
-                ORDER BY plot_index ASC
-                ",
-        )
+            SELECT {columns}
+            FROM {table} l JOIN processing_graphs g ON (l.processing_graph_id = g.id)
+            WHERE l.project_version_id = $1
+            ORDER BY l.{index} ASC",
+            columns = project_layer_columns(table),
+            table = table.table(),
+            index = table.index_column(),
+        ))
         .await
         .context(PostgresProjectDbError)?;
 
@@ -433,55 +508,188 @@ pub async fn load_plots(
         .await
         .context(PostgresProjectDbError)?;
 
-    let plots = rows
-        .into_iter()
-        .map(|row| Plot {
-            processing_graph: ProcessingGraphId(row.get(1)),
-            name: row.get(0),
-        })
-        .collect();
-
-    Ok(plots)
+    rows.iter()
+        .map(|row| project_layer_from_row(row, 0))
+        .collect()
 }
 
-pub async fn update_plots(
+/// Loads a layer or plot from the latest version of its project.
+///
+/// Returns the project of the layer, so that the caller can check the permissions.
+pub async fn load_latest_project_layer(
     trans: &Transaction<'_>,
+    layer: &LayerId,
+) -> Result<Option<(ProjectId, ProjectLayer)>, ProjectDbError> {
+    let layer_uuid = parse_layer_uuid(layer)?;
+
+    for table in [LayerTable::Layers, LayerTable::Plots] {
+        let stmt = trans
+            .prepare(&format!(
+                "
+                SELECT l.project_id, {columns}
+                FROM {table} l JOIN processing_graphs g ON (l.processing_graph_id = g.id)
+                WHERE l.layer_id = $1 AND l.project_version_id = (
+                    SELECT v.id
+                    FROM project_versions v
+                    WHERE v.project_id = l.project_id
+                    ORDER BY v.changed DESC
+                    LIMIT 1
+                )",
+                columns = project_layer_columns(table),
+                table = table.table(),
+            ))
+            .await
+            .context(PostgresProjectDbError)?;
+
+        let row = trans
+            .query_opt(&stmt, &[&layer_uuid])
+            .await
+            .context(PostgresProjectDbError)?;
+
+        if let Some(row) = row {
+            return Ok(Some((
+                ProjectId(row.get(0)),
+                project_layer_from_row(&row, 1)?,
+            )));
+        }
+    }
+
+    Ok(None)
+}
+
+pub async fn insert_layers(
+    trans: &Transaction<'_>,
+    table: LayerTable,
     project_id: &ProjectId,
     project_version_id: &ProjectVersionId,
-    plots: &[Plot],
+    layers: &[ProjectLayer],
 ) -> Result<(), ProjectDbError> {
-    for (idx, plot) in plots.iter().enumerate() {
-        let stmt = trans
-            .prepare(
-                "
-                    INSERT INTO project_version_plots (
-                        project_id,
-                        project_version_id,
-                        plot_index,
-                        name,
-                        processing_graph_id)
-                    VALUES ($1, $2, $3, $4, $5);
-                    ",
+    let (symbology_column, symbology_value) = match table {
+        LayerTable::Layers => (", symbology", ", $13"),
+        LayerTable::Plots => ("", ""),
+    };
+
+    let stmt = trans
+        .prepare(&format!(
+            "
+            INSERT INTO {table} (
+                project_id,
+                project_version_id,
+                {index},
+                layer_id,
+                name,
+                description,
+                processing_graph_id,
+                properties,
+                metadata,
+                visibility,
+                source_provider_id,
+                source_layer_id
+                {symbology_column})
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 {symbology_value});",
+            table = table.table(),
+            index = table.index_column(),
+        ))
+        .await
+        .context(PostgresProjectDbError)?;
+
+    // The id of a processing graph is its hash. Older processing graphs may be stored under
+    // another id, so make sure that the graph is also registered under its hash.
+    let register_stmt = trans
+        .prepare(
+            "INSERT INTO processing_graphs (id, processing_graph) VALUES ($1, $2)
+            ON CONFLICT DO NOTHING;",
+        )
+        .await
+        .context(PostgresProjectDbError)?;
+
+    for (idx, layer) in layers.iter().enumerate() {
+        let index = idx as i32;
+        let processing_graph_id = ProcessingGraphId::from_hash(&layer.layer.processing_graph);
+        trans
+            .execute(
+                &register_stmt,
+                &[
+                    &processing_graph_id,
+                    &serde_json::to_value(&layer.layer.processing_graph)
+                        .context(InvalidProcessingGraphProjectDbError)?,
+                ],
             )
             .await
             .context(PostgresProjectDbError)?;
 
+        let layer_uuid = layer.layer_uuid()?;
+        let metadata = HashMapTextTextDbType::from(&layer.layer.metadata);
+        let source_provider_id = layer.source.as_ref().map(|source| source.provider_id);
+        let source_layer_id = layer
+            .source
+            .as_ref()
+            .map(|source| source.layer_id.0.clone());
+
+        let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![
+            project_id,
+            project_version_id,
+            &index,
+            &layer_uuid,
+            &layer.layer.name,
+            &layer.layer.description,
+            &processing_graph_id,
+            &layer.layer.properties,
+            &metadata,
+            &layer.visibility,
+            &source_provider_id,
+            &source_layer_id,
+        ];
+        if table == LayerTable::Layers {
+            params.push(&layer.layer.symbology);
+        }
+
         trans
-            .execute(
-                &stmt,
-                &[
-                    project_id,
-                    project_version_id,
-                    &(idx as i32),
-                    &plot.name,
-                    &plot.processing_graph,
-                ],
-            )
+            .execute(&stmt, &params)
             .await
             .context(PostgresProjectDbError)?;
     }
 
     Ok(())
+}
+
+/// Loads the processing graphs that the layers and plots of an update refer to.
+async fn load_update_processing_graphs(
+    trans: &Transaction<'_>,
+    update: &UpdateProject,
+) -> Result<HashMap<ProcessingGraphId, ProcessingGraph>, ProjectDbError> {
+    let ids: Vec<Uuid> = update
+        .layers
+        .iter()
+        .chain(update.plots.iter())
+        .flatten()
+        .filter_map(|layer_update| match layer_update {
+            VecUpdate::UpdateOrInsert(layer) => Some(layer.processing_graph.0),
+            VecUpdate::None(_) | VecUpdate::Delete(_) => None,
+        })
+        .collect();
+
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let stmt = trans
+        .prepare("SELECT id, processing_graph FROM processing_graphs WHERE id = ANY($1);")
+        .await
+        .context(PostgresProjectDbError)?;
+
+    let rows = trans
+        .query(&stmt, &[&ids])
+        .await
+        .context(PostgresProjectDbError)?;
+
+    rows.iter()
+        .map(|row| {
+            let processing_graph =
+                serde_json::from_value(row.get(1)).context(InvalidProcessingGraphProjectDbError)?;
+            Ok((ProcessingGraphId(row.get(0)), processing_graph))
+        })
+        .collect()
 }
 
 pub async fn project_listings_from_rows(
@@ -578,7 +786,9 @@ pub async fn update_project(
     project: &Project,
     update: UpdateProject,
 ) -> Result<Project, ProjectDbError> {
-    let project = project.update_project(update)?;
+    let processing_graphs = load_update_processing_graphs(trans, &update).await?;
+
+    let project = project.update_project(update, &processing_graphs)?;
 
     let stmt = trans
         .prepare(
@@ -591,7 +801,7 @@ pub async fn update_project(
                 bounds,
                 time_step,
                 changed)
-            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP);",
+            VALUES ($1, $2, $3, $4, $5, $6, $7);",
         )
         .await
         .context(PostgresProjectDbError)?;
@@ -606,46 +816,29 @@ pub async fn update_project(
                 &project.description,
                 &project.bounds,
                 &project.time_step,
+                &project.version.changed,
             ],
         )
         .await
         .context(PostgresProjectDbError)?;
 
-    for (idx, layer) in project.layers.iter().enumerate() {
-        let stmt = trans
-            .prepare(
-                "
-            INSERT INTO project_version_layers (
-                project_id,
-                project_version_id,
-                layer_index,
-                name,
-                processing_graph_id,
-                symbology,
-                visibility)
-            VALUES ($1, $2, $3, $4, $5, $6, $7);",
-            )
-            .await
-            .context(PostgresProjectDbError)?;
+    insert_layers(
+        trans,
+        LayerTable::Layers,
+        &project.id,
+        &project.version.id,
+        &project.layers,
+    )
+    .await?;
 
-        trans
-            .execute(
-                &stmt,
-                &[
-                    &project.id,
-                    &project.version.id,
-                    &(idx as i32),
-                    &layer.name,
-                    &layer.processing_graph,
-                    &layer.symbology,
-                    &layer.visibility,
-                ],
-            )
-            .await
-            .context(PostgresProjectDbError)?;
-    }
-
-    update_plots(trans, &project.id, &project.version.id, &project.plots).await?;
+    insert_layers(
+        trans,
+        LayerTable::Plots,
+        &project.id,
+        &project.version.id,
+        &project.plots,
+    )
+    .await?;
 
     Ok(project)
 }

@@ -79,6 +79,7 @@ export class DatasetService {
     addDatasetToMapWithSourceProcessingGraph(dataset: Dataset, processingGraph: ProcessingGraph): Observable<void> {
         return this.createLayerFromDatasetWithProcessingGraph(dataset, processingGraph).pipe(
             mergeMap((layer) => this.projectService.addLayer(layer)),
+            map(() => undefined),
         );
     }
 

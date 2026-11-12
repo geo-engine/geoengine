@@ -244,11 +244,9 @@ from geoengine_api_client.models.permission_request import PermissionRequest
 from geoengine_api_client.models.pie_chart import PieChart
 from geoengine_api_client.models.pie_chart_count_type import PieChartCountType
 from geoengine_api_client.models.pie_chart_parameters import PieChartParameters
-from geoengine_api_client.models.plot import Plot
 from geoengine_api_client.models.plot_operator import PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat
 from geoengine_api_client.models.plot_result_descriptor import PlotResultDescriptor
-from geoengine_api_client.models.plot_update import PlotUpdate
 from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter
 from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology
@@ -267,7 +265,9 @@ from geoengine_api_client.models.polygon_symbology import PolygonSymbology
 from geoengine_api_client.models.processing_graph import ProcessingGraph
 from geoengine_api_client.models.project import Project
 from geoengine_api_client.models.project_layer import ProjectLayer
+from geoengine_api_client.models.project_layer_update import ProjectLayerUpdate
 from geoengine_api_client.models.project_listing import ProjectListing
+from geoengine_api_client.models.project_order_by import ProjectOrderBy
 from geoengine_api_client.models.project_resource import ProjectResource
 from geoengine_api_client.models.project_update_token import ProjectUpdateToken
 from geoengine_api_client.models.project_version import ProjectVersion

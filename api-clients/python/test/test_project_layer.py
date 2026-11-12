@@ -35,21 +35,43 @@ class TestProjectLayer(unittest.TestCase):
         model = ProjectLayer()
         if include_optional:
             return ProjectLayer(
-                processing_graph = '',
+                id = '',
                 name = '',
+                description = '',
+                processing_graph = '',
+                symbology = None,
+                properties = [
+                    [
+                        ''
+                        ]
+                    ],
+                metadata = {
+                    'key' : ''
+                    },
                 visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                     data = True, 
                     legend = True, ),
-                symbology = None
+                source = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
+                    provider_id = '', 
+                    layer_id = '', )
             )
         else:
             return ProjectLayer(
-                processing_graph = '',
+                id = '',
                 name = '',
+                description = '',
+                processing_graph = '',
+                properties = [
+                    [
+                        ''
+                        ]
+                    ],
+                metadata = {
+                    'key' : ''
+                    },
                 visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                     data = True, 
                     legend = True, ),
-                symbology = None,
         )
         """
 

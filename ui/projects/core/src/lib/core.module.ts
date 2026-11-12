@@ -66,7 +66,7 @@ import {SymbologyEditorComponent} from './layers/symbology/symbology-editor/symb
 import {VatLogoComponent} from './logo.component';
 import {MapContainerComponent} from './map/map-container/map-container.component';
 import {MapResolutionExtentOverlayComponent} from './map/map-info/map-resolution-extent-overlay.component';
-import {OlOgcApiMapTileLayerComponent, OlRasterLayerComponent, OlVectorLayerComponent} from './map/map-layer.component';
+import {OlOgcApiMapTileLayerComponent, OlWmsLayerComponent, OlVectorLayerComponent} from './map/map-layer.component';
 import {ZoomHandlesComponent} from './map/zoom-handles/zoom-handles.component';
 import {BandNeighborhoodAggregateComponent} from './operators/dialogs/band-neighborhood-aggregate/band-neighborhood-aggregate.component';
 import {BandwiseExpressionOperatorComponent} from './operators/dialogs/bandwise-expression-operator/bandwise-expression-operator.component';
@@ -221,7 +221,7 @@ const CORE_COMPONENTS = [
     NotificationsComponent,
     OidcComponent,
     OlOgcApiMapTileLayerComponent,
-    OlRasterLayerComponent,
+    OlWmsLayerComponent,
     OlVectorLayerComponent,
     OperatorListComponent,
     PieChartComponent,

@@ -18,7 +18,6 @@ exports.ProjectFromJSONTyped = ProjectFromJSONTyped;
 exports.ProjectToJSON = ProjectToJSON;
 exports.ProjectToJSONTyped = ProjectToJSONTyped;
 const TimeStep_1 = require("./TimeStep");
-const Plot_1 = require("./Plot");
 const ProjectVersion_1 = require("./ProjectVersion");
 const STRectangle_1 = require("./STRectangle");
 const ProjectLayer_1 = require("./ProjectLayer");
@@ -57,7 +56,7 @@ function ProjectFromJSONTyped(json, ignoreDiscriminator) {
         'name': json['name'],
         'description': json['description'],
         'layers': (json['layers'].map(ProjectLayer_1.ProjectLayerFromJSON)),
-        'plots': (json['plots'].map(Plot_1.PlotFromJSON)),
+        'plots': (json['plots'].map(ProjectLayer_1.ProjectLayerFromJSON)),
         'bounds': (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
         'timeStep': (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
     };
@@ -75,7 +74,7 @@ function ProjectToJSONTyped(value, ignoreDiscriminator = false) {
         'name': value['name'],
         'description': value['description'],
         'layers': (value['layers'].map(ProjectLayer_1.ProjectLayerToJSON)),
-        'plots': (value['plots'].map(Plot_1.PlotToJSON)),
+        'plots': (value['plots'].map(ProjectLayer_1.ProjectLayerToJSON)),
         'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
         'timeStep': (0, TimeStep_1.TimeStepToJSON)(value['timeStep']),
     };

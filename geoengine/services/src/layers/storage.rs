@@ -13,6 +13,10 @@ use validator::Validate;
 pub const INTERNAL_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0xce5e_84db_cbf9_48a2_9a32_d4b7_cc56_ea74);
 
+/// The data connector that lists projects as collections and their layers and plots as layers.
+pub const PROJECTS_PROVIDER_ID: DataProviderId =
+    DataProviderId::from_u128(0xa7fd_61d6_d2d6_4684_a933_3a21_2989_5237);
+
 pub const INTERNAL_LAYER_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x0510_2bb3_a855_4a37_8a8a_3002_6a91_fef1);
 

@@ -7,14 +7,15 @@ import Tile from 'ol/Tile';
 import TileQueue, {getTilePriority} from 'ol/TileQueue';
 import TileState from 'ol/TileState';
 import View from 'ol/View';
-import {NEVER} from 'rxjs';
+import {NEVER, of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {SpatialReference, Time} from '@geoengine/common';
+import {NotificationService, SpatialReference, Time} from '@geoengine/common';
 import {BackendService} from '../backend/backend.service';
 import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
 import {OlOgcApiMapTileLayerComponent} from './map-layer.component';
 import {MapService} from './map.service';
 import {ProjectService} from '../project/project.service';
+import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 
 /** Exercise the native renderer's protected queue-building step without drawing a canvas. */
 interface TileEnqueuer {
@@ -65,9 +66,8 @@ describe('OGC map tile minimum matrix index', () => {
     function createLayer(): void {
         fixture = TestBed.createComponent(OlOgcApiMapTileLayerComponent);
         for (const [key, value] of Object.entries({
-            layerId: 0,
             dataConnectorId: 'provider',
-            dataLayerId: 'layer',
+            layerId: 'layer',
             sessionToken: 'token',
             spatialReference: new SpatialReference('EPSG:3857'),
             time: new Time(new Date('2026-04-01T00:00:00Z')),
@@ -140,6 +140,8 @@ describe('OGC map tile minimum matrix index', () => {
                 {provide: CoreConfig, useValue: {MAP: {DEBUG_TILES: false}}},
                 {provide: BackendService, useValue: {ogcApiBaseUrl: 'https://tiles.test/ogc'}},
                 {provide: ProjectService, useValue: {createQueryAbortStream: (): typeof NEVER => NEVER}},
+                {provide: NotificationService, useValue: {error: (): void => undefined}},
+                {provide: SpatialReferenceService, useValue: {}},
             ],
         }).compileComponents();
         mapService = TestBed.inject(MapService);
@@ -487,12 +489,13 @@ describe('OGC map tile projection switching', () => {
                 {provide: BackendService, useValue: {ogcApiBaseUrl: 'https://example.com/ogc'}},
                 {provide: CoreConfig, useValue: DEFAULT_CORE_CONFIG},
                 {provide: ProjectService, useValue: {createQueryAbortStream: vi.fn().mockReturnValue(NEVER)}},
+                {provide: NotificationService, useValue: {error: vi.fn()}},
+                {provide: SpatialReferenceService, useValue: {getSpatialReferenceSpecification: vi.fn().mockReturnValue(of(undefined))}},
             ],
         });
         fixture = TestBed.createComponent(OlOgcApiMapTileLayerComponent);
-        fixture.componentRef.setInput('layerId', 0);
         fixture.componentRef.setInput('dataConnectorId', 'data');
-        fixture.componentRef.setInput('dataLayerId', 'layer');
+        fixture.componentRef.setInput('layerId', 'layer');
         fixture.componentRef.setInput('sessionToken', 'session');
         fixture.componentRef.setInput('spatialReference', new SpatialReference('EPSG:3857'));
         fixture.componentRef.setInput('time', new Time(new Date('2026-04-01T00:00:00Z')));
