@@ -30,7 +30,7 @@ use geoengine_datatypes::primitives::{
     CacheHint, SpatialResolution, TimeInterval, find_next_best_overview_level,
 };
 use geoengine_datatypes::raster::{
-    BoundedGrid, ChangeGridBounds, EmptyGrid, GridBoundingBox2D, GridIdx2D, GridOrEmpty,
+    BoundedGrid, ChangeGridBounds, EmptyGrid, GridBlit, GridBoundingBox2D, GridIdx2D, GridOrEmpty,
     GridShapeAccess, Pixel, RasterTile2D, TileInformation,
 };
 use num::FromPrimitive;
@@ -135,6 +135,9 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
         if raster.is_empty() && file_data.grid.bounding_box() == tile_bounds {
             // nothing to merge with: take the grid instead of copying it
             raster = file_data.grid;
+        } else if raster.is_empty() {
+            // nothing to merge with either: copy whole rows, the merge below checks each pixel
+            raster.grid_blit_from(&file_data.grid);
         } else {
             raster.grid_blit_fill_no_data(&file_data.grid);
         }
