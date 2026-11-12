@@ -144,6 +144,7 @@ pub trait GeoEngineDb:
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
     footprint_boxes_per_step_limit: usize,
+    footprint_skipping: bool,
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     default_cache_ttl: CacheTtlSeconds,
@@ -173,6 +174,7 @@ impl QueryContextImpl {
             chunk_byte_size,
             footprint_boxes_per_step_limit:
                 geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_skipping: false,
             tiling_specification,
             thread_pool,
             default_cache_ttl,
@@ -207,6 +209,7 @@ impl QueryContextImpl {
             chunk_byte_size,
             footprint_boxes_per_step_limit:
                 geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
+            footprint_skipping: false,
             tiling_specification,
             thread_pool,
             default_cache_ttl,
@@ -231,6 +234,13 @@ impl QueryContextImpl {
         self.footprint_boxes_per_step_limit = footprint_boxes_per_step_limit;
         self
     }
+
+    /// Sets whether operators skip the tiles where their source has no data.
+    #[must_use]
+    pub fn with_footprint_skipping(mut self, footprint_skipping: bool) -> Self {
+        self.footprint_skipping = footprint_skipping;
+        self
+    }
 }
 
 #[async_trait::async_trait]
@@ -241,6 +251,10 @@ impl QueryContext for QueryContextImpl {
 
     fn footprint_boxes_per_step_limit(&self) -> usize {
         self.footprint_boxes_per_step_limit
+    }
+
+    fn footprint_skipping(&self) -> bool {
+        self.footprint_skipping
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {

@@ -401,14 +401,18 @@ where
 
         let time_stream = self.time_query(query.time_interval(), ctx).await?;
 
-        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
-            &self.source,
-            query,
-            tiling_strategy,
-            ctx,
-            sub_query,
-            time_stream,
-        )))
+        Ok(Box::pin(
+            RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+                &self.source,
+                query,
+                tiling_strategy,
+                ctx,
+                sub_query,
+                time_stream,
+            )
+            .skip_tiles_without_data()
+            .await?,
+        ))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

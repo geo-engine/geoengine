@@ -377,8 +377,9 @@ mod tests {
     use crate::{
         adapters::RasterSubQueryAdapter,
         engine::{
-            MockExecutionContext, ProcessingGraphOperatorPath, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
+            Footprint, FootprintBounds, MockExecutionContext, ProcessingGraphOperatorPath,
+            RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+            TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -604,5 +605,142 @@ mod tests {
         assert_eq_two_list_of_tiles_u8(&data[..2], &res[..2], false);
         assert_eq!(res[2].tile_position, [-1, 2].into());
         assert!(res[2].is_empty());
+    }
+
+    /// Two tiles with data in each of two time steps, queried through the adapter.
+    async fn two_steps_through_adapter(
+        footprint_skipping: bool,
+        footprints: Option<Vec<Footprint>>,
+    ) -> (Vec<RasterTile2D<u8>>, Vec<RasterTile2D<u8>>) {
+        let projection = SpatialReference::epsg_4326();
+
+        let tile = |start: i64, x: isize, values: Vec<u8>| RasterTile2D {
+            time: TimeInterval::new_unchecked(start, start + 5),
+            tile_position: [-1, x].into(),
+            band: 0,
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([2, 2].into(), values).unwrap().into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::no_cache(),
+        };
+        let data = vec![
+            tile(0, 0, vec![1, 2, 3, 4]),
+            tile(0, 1, vec![5, 6, 7, 8]),
+            tile(5, 0, vec![9, 10, 11, 12]),
+            tile(5, 1, vec![13, 14, 15, 16]),
+        ];
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 2.), 1., -1.),
+                GridShape::new_2d(2, 4).bounding_box(),
+            )),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let tiling_spec = TilingSpecification::new(GridShape2D::new([2, 2]));
+        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec);
+        let mut query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
+        query_ctx.footprint_skipping = footprint_skipping;
+
+        let qp = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data.clone(),
+                result_descriptor,
+            },
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        .await
+        .unwrap()
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+
+        let state_gen = TileReprojectionSubQuery {
+            in_srs: projection,
+            out_srs: projection,
+            fold_fn: fold_by_coordinate_lookup_future,
+            state: TileReprojectionSubqueryGridInfo {
+                in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+                out_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+            },
+            _phantom_data: PhantomData,
+        };
+
+        let time_stream = qp
+            .time_query(query_rect.time_interval(), &query_ctx)
+            .await
+            .unwrap();
+
+        let adapter = RasterSubQueryAdapter::new(
+            &qp,
+            query_rect,
+            tiling_grid.generate_data_tiling_strategy(),
+            &query_ctx,
+            state_gen,
+            time_stream,
+        );
+        let adapter = match footprints {
+            Some(footprints) => adapter
+                .with_footprints(futures::stream::iter(footprints.into_iter().map(Ok)).boxed()),
+            None => adapter.skip_tiles_without_data().await.unwrap(),
+        };
+
+        (data, adapter.map(Result::unwrap).collect::<Vec<_>>().await)
+    }
+
+    #[tokio::test]
+    async fn it_returns_the_same_tiles_with_footprint_skipping() {
+        for footprint_skipping in [false, true] {
+            let (data, res) = two_steps_through_adapter(footprint_skipping, None).await;
+            assert_eq_two_list_of_tiles_u8(&data, &res, false);
+        }
+    }
+
+    #[tokio::test]
+    async fn it_skips_the_tiles_where_the_footprint_has_no_data() {
+        let left_tile = GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap();
+        // the footprints deny the data of the right tile in the first step and of both in the second
+        let footprints = vec![
+            Footprint {
+                time: TimeInterval::new_unchecked(0, 5),
+                bounds: FootprintBounds::from_boxes([left_tile], 8),
+            },
+            Footprint {
+                time: TimeInterval::new_unchecked(5, 10),
+                bounds: FootprintBounds::from_boxes([], 8),
+            },
+        ];
+
+        let (data, res) = two_steps_through_adapter(false, Some(footprints)).await;
+
+        assert_eq!(res.len(), 4);
+        assert_eq_two_list_of_tiles_u8(&data[..1], &res[..1], false);
+        assert!(res[1..].iter().all(RasterTile2D::is_empty));
+    }
+
+    #[tokio::test]
+    async fn it_skips_nothing_when_the_footprints_have_other_time_steps() {
+        let footprints = vec![Footprint {
+            time: TimeInterval::new_unchecked(0, 10),
+            bounds: FootprintBounds::from_boxes([], 8),
+        }];
+
+        let (data, res) = two_steps_through_adapter(false, Some(footprints)).await;
+
+        assert_eq_two_list_of_tiles_u8(&data, &res, false);
     }
 }

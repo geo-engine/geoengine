@@ -62,6 +62,7 @@ where
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     query_ctx_footprint_boxes_per_step_limit: usize,
+    query_ctx_footprint_skipping: bool,
     task_manager: Arc<TypedTaskManagerBackend>,
     oidc_manager: OidcManager,
     quota: QuotaTrackingFactory,
@@ -168,6 +169,8 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
+                .footprint_skipping,
             oidc_manager,
             quota,
             pool,
@@ -237,6 +240,8 @@ where
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
+                .footprint_skipping,
             oidc_manager: oidc_db,
             quota,
             pool,
@@ -321,6 +326,8 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
+                .footprint_skipping,
             oidc_manager: OidcManager::from(oidc_config),
             quota,
             pool,
@@ -581,7 +588,8 @@ where
             self.context.gdal_read_ahead,
             self.context.processing_runtime.clone(),
         )
-        .with_footprint_boxes_per_step_limit(self.context.query_ctx_footprint_boxes_per_step_limit))
+        .with_footprint_boxes_per_step_limit(self.context.query_ctx_footprint_boxes_per_step_limit)
+        .with_footprint_skipping(self.context.query_ctx_footprint_skipping))
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
