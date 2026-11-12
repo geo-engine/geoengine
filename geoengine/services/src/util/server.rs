@@ -361,13 +361,8 @@ fn peek_socket(fd: std::os::unix::prelude::RawFd, data: &mut [u8; 1]) -> nix::Re
 /// overwritten when the fd number is re-used, so the map stays bounded by the fd limit.
 #[cfg(target_os = "linux")]
 static MONITORED_FDS: std::sync::LazyLock<
-    std::sync::Mutex<
-        std::collections::HashMap<
-            std::os::unix::prelude::RawFd,
-            std::sync::Arc<std::sync::atomic::AtomicBool>,
-        >,
-    >,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    dashmap::DashMap<std::os::unix::prelude::RawFd, std::sync::Arc<std::sync::atomic::AtomicBool>>,
+> = std::sync::LazyLock::new(dashmap::DashMap::new);
 
 /// attach the connection's socket file descriptor and its "still open" flag to the connection data
 #[cfg(target_os = "linux")]
@@ -387,14 +382,9 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
             // immediately instead of polling the fd of an unrelated, live connection forever
             // (which would delay cancellation).
             let still_open = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-            {
-                let mut monitored = MONITORED_FDS
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if let Some(previous) = monitored.insert(fd, still_open.clone()) {
-                    // the fd is re-used: the old connection is definitely gone
-                    previous.store(false, std::sync::atomic::Ordering::SeqCst);
-                }
+            if let Some(previous) = MONITORED_FDS.insert(fd, still_open.clone()) {
+                // the fd is re-used: the old connection is definitely gone
+                previous.store(false, std::sync::atomic::Ordering::SeqCst);
             }
 
             data.insert(SocketFd { fd, still_open });
