@@ -41,8 +41,8 @@ use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     primitives::{
-        BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
-        TimeInterval, TimeStep,
+        BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInstance, TimeInterval, TimeStep,
     },
     raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -70,7 +70,10 @@ use geoengine_operators::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
         gdal_worker_process::WorkerConfig,
     },
-    util::{create_rayon_thread_pool, gdal::create_ndvi_meta_data_with_cache_ttl},
+    util::{
+        WrapWithProjectionAndResample, create_rayon_thread_pool,
+        gdal::create_ndvi_meta_data_with_cache_ttl,
+    },
 };
 use rayon::ThreadPool;
 use serde::de::DeserializeOwned;
@@ -399,6 +402,31 @@ impl Env {
     /// The mean over windows of six time steps of the raster, ignoring no data.
     pub fn six_step_mean(&self, raster: TypedRasterOperator) -> TypedRasterOperator {
         mean(raster, self.step * 6)
+    }
+
+    /// The operator as the server wraps it for a query in `srs` with `resolution`, e.g. for a WMS
+    /// `GetMap` request (`WrapWithProjectionAndResample`, as in `services::queries::raster_grid`).
+    pub fn resample(
+        &self,
+        operator: TypedRasterOperator,
+        srs: SpatialReference,
+        resolution: SpatialResolution,
+    ) -> TypedRasterOperator {
+        self.runtime.block_on(async {
+            let initialized = operator
+                .clone()
+                .initialize(
+                    ProcessingGraphOperatorPath::initialize_root(),
+                    &self.exe_ctx,
+                )
+                .await
+                .unwrap();
+            WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
+                .wrap_with_projection_and_resample(None, Some(resolution), srs, &self.exe_ctx)
+                .await
+                .unwrap()
+                .operator
+        })
     }
 
     /// Initializes the operator and queries all of its bands in `area` and `time`.
