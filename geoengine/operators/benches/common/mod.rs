@@ -53,9 +53,10 @@ use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
         GdalReadAhead, InitializedRasterOperator, MetaData, MockExecutionContext, MockQueryContext,
-        MultipleRasterSources, ProcessingGraphOperatorPath, QueryContext, RasterOperator,
-        RasterQueryProcessor, ResultDescriptor, SingleRasterOrVectorSource, SingleRasterSource,
-        StatisticsWrappingMockExecutionContext, TypedRasterOperator, TypedRasterQueryProcessor,
+        MultipleRasterSources, ProcessingGraphOperatorPath, QueryContext, QueryParallelism,
+        RasterOperator, RasterQueryProcessor, ResultDescriptor, SingleRasterOrVectorSource,
+        SingleRasterSource, StatisticsWrappingMockExecutionContext, TypedRasterOperator,
+        TypedRasterQueryProcessor,
     },
     meta::quota::{QuotaCheck, QuotaTracking},
     processing::{
@@ -258,6 +259,8 @@ pub struct Env {
     step: TimeStep,
     /// the read-ahead of the settings, for further query contexts
     read_ahead: GdalReadAhead,
+    /// `available_parallelism_per_query` of the settings, for further query contexts
+    parallelism: usize,
 }
 
 impl Env {
@@ -331,11 +334,18 @@ impl Env {
                 16,
             ),
         };
+        // the server default, not the parallel test default of the mock query context
+        let parallelism = setting(
+            &settings,
+            "query_context.available_parallelism_per_query",
+            1,
+        );
         let query_ctx = Arc::new(query_ctx(
             &runtime,
             &exe_ctx,
             exe_ctx.thread_pool.clone(),
             read_ahead,
+            parallelism,
         ));
         Self {
             runtime,
@@ -345,6 +355,7 @@ impl Env {
             start,
             step,
             read_ahead,
+            parallelism,
         }
     }
 
@@ -355,6 +366,7 @@ impl Env {
             &self.exe_ctx.inner,
             self.exe_ctx.inner.thread_pool.clone(),
             self.read_ahead,
+            self.parallelism,
         )
     }
 
@@ -384,6 +396,7 @@ impl Env {
             &self.exe_ctx.inner,
             create_rayon_thread_pool(threads),
             self.read_ahead,
+            self.parallelism,
         ))
     }
 
@@ -638,6 +651,7 @@ fn query_ctx(
     exe_ctx: &MockExecutionContext,
     thread_pool: Arc<ThreadPool>,
     read_ahead: GdalReadAhead,
+    parallelism: usize,
 ) -> MockQueryContext {
     // the query context takes the processing runtime from the current one
     let mut query_ctx = {
@@ -646,6 +660,7 @@ fn query_ctx(
     };
     query_ctx.thread_pool = thread_pool;
     query_ctx.gdal_read_ahead = read_ahead;
+    query_ctx.parallelism = QueryParallelism::new(parallelism);
     // the statistics wrapper reports work units like in the server, whose quota manager drains them
     let (quota_sender, mut quota_receiver) = tokio::sync::mpsc::unbounded_channel();
     runtime.spawn(async move { while quota_receiver.recv().await.is_some() {} });

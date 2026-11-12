@@ -51,6 +51,9 @@ rayon_threads = 0
 gdal_source_read_ahead = 8
 # GDAL tile reads a MultiBandGdalSource query keeps in flight
 multi_band_gdal_source_read_ahead = 16
+# Sub-queries of one query that may run at once. 1 = sequential (default); e.g. 4 runs the
+# sub-queries of reprojection, downsampling etc. in parallel. A query always gets at least one.
+available_parallelism_per_query = 1
 
 [expression]
 # seconds a compiled expression stays in the cache without being requested; running queries keep

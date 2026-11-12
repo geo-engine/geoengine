@@ -1,5 +1,5 @@
 //! Raster reprojection of the bench raster (see `common`; NDVI in EPSG:4326) to EPSG:3857: the whole extent, a
-//! chain of two reprojections, a WMS tile and the cases where sub-queries of a tile share work:
+//! chain of two reprojections, a downsampled overview, a WMS tile and the cases where sub-queries of a tile share work:
 //! several bands of a tile, and several time steps of a single tile, like a time slider.
 //!
 //! `cargo bench -p geoengine-operators --bench reprojection`
@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{Area, Env, mercator, reproject, stack};
+use common::{Area, Env, downsample, mercator, reproject, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::{
     primitives::{Coordinate2D, SpatialPartition2D},
@@ -56,6 +56,15 @@ fn reprojection(c: &mut Criterion) {
                 "chained",
                 env.case(
                     reproject(mercator(env.raster()), SpatialReference::epsg_4326()),
+                    Area::Extent,
+                    env.one_step(),
+                ),
+            ),
+            // a zoomed-out map of the whole world: downsampling nested over the reprojection
+            (
+                "overview",
+                env.case(
+                    downsample(mercator(env.raster()), 4.),
                     Area::Extent,
                     env.one_step(),
                 ),
