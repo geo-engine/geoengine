@@ -2808,6 +2808,7 @@ dependencies = [
  "chrono",
  "codspeed-criterion-compat",
  "config",
+ "crs-constants",
  "csv",
  "float-cmp",
  "futures",
@@ -2816,6 +2817,7 @@ dependencies = [
  "geo",
  "geoengine-datatypes",
  "geoengine-expression",
+ "geotiff-writer",
  "httptest",
  "indoc",
  "ipc-channel",
@@ -2992,6 +2994,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "geotiff-core"
+version = "0.11.1"
+source = "git+https://github.com/ChristianBeilschmidt/geotiff-rust?branch=feat%2Fgeotiff-builder-extra-tags#992d7145f8cbaab185cac28f5820566483adb9ba"
+
+[[package]]
+name = "geotiff-writer"
+version = "0.11.1"
+source = "git+https://github.com/ChristianBeilschmidt/geotiff-rust?branch=feat%2Fgeotiff-builder-extra-tags#992d7145f8cbaab185cac28f5820566483adb9ba"
+dependencies = [
+ "geotiff-core",
+ "ndarray",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tiff-core",
+ "tiff-writer",
+]
+
+[[package]]
 name = "geozero"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3060,7 +3080,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee8cfcc411d9adbbaba82fb72661cc1bcca13e8bba98b364e62b2dba8f960159"
 dependencies = [
  "color_quant",
- "weezl",
+ "weezl 0.1.12",
 ]
 
 [[package]]
@@ -3926,6 +3946,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "jpeg-encoder"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b454d911ac55068f53495488d8ccd0646eaa540c033a28ee15b07838afafb01f"
+
+[[package]]
 name = "js-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4024,6 +4050,21 @@ name = "lebe"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
+
+[[package]]
+name = "lerc-core"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a393a8871cff51fc7469d84a96c4b2ddba887d85d89609b1689364baac8cd881"
+
+[[package]]
+name = "lerc-writer"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0386d9f86240d1d3e386b0a6478b280c8971585d3e45fdcd25e324c189a7607c"
+dependencies = [
+ "lerc-core",
+]
 
 [[package]]
 name = "lexical-core"
@@ -6332,6 +6373,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "ruzstd"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
+dependencies = [
+ "twox-hash",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7144,8 +7194,31 @@ dependencies = [
  "flate2",
  "half",
  "quick-error",
- "weezl",
+ "weezl 0.1.12",
  "zune-jpeg",
+]
+
+[[package]]
+name = "tiff-core"
+version = "0.11.1"
+source = "git+https://github.com/ChristianBeilschmidt/geotiff-rust?branch=feat%2Fgeotiff-builder-extra-tags#992d7145f8cbaab185cac28f5820566483adb9ba"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tiff-writer"
+version = "0.11.1"
+source = "git+https://github.com/ChristianBeilschmidt/geotiff-rust?branch=feat%2Fgeotiff-builder-extra-tags#992d7145f8cbaab185cac28f5820566483adb9ba"
+dependencies = [
+ "flate2",
+ "jpeg-encoder",
+ "lerc-core",
+ "lerc-writer",
+ "ruzstd",
+ "thiserror 2.0.21",
+ "tiff-core",
+ "weezl 0.2.1",
 ]
 
 [[package]]
@@ -8155,6 +8228,12 @@ name = "weezl"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
+
+[[package]]
+name = "weezl"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4ca08e5ef825b65b056d9efbd95c8750683f0a6d0466d02e96dc2e4e360f3d2"
 
 [[package]]
 name = "whoami"

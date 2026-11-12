@@ -504,6 +504,10 @@ pub enum Error {
         band_order: Vec<u32>,
         band_selection: Vec<u32>,
     },
+    #[snafu(display("Writing the GeoTIFF with geotiff-writer failed: {message}"))]
+    RustGeoTiffWriter {
+        message: String,
+    },
     #[snafu(display("MachineLearning error: {}", source))]
     MachineLearning {
         // TODO: make `source: MachineLearningError`, once pro features is removed

@@ -1,5 +1,6 @@
 //! OGC API tiles of a layer: map tiles as PNG and coverage tiles as `GeoTIFF`.
 
+use crate::config::{self, get_config_element};
 use crate::{
     api::handlers::ogc::{
         OgcApiResult, error,
@@ -33,7 +34,10 @@ use geoengine_operators::{
         ExecutionContext, InitializedRasterOperator, RasterBandDescriptors,
         TypedRasterQueryProcessor,
     },
-    util::{WrapWithProjectionAndResample, raster_stream_to_png::raster_stream_to_png_bytes},
+    util::{
+        WrapWithProjectionAndResample, raster_stream_to_geotiff_rust::GeoTiffWriter,
+        raster_stream_to_png::raster_stream_to_png_bytes,
+    },
 };
 use ogcapi_types::tiles::TileMatrixSetId;
 use std::collections::HashSet;
@@ -373,9 +377,19 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
         RasterEncoding::GeoTiff {
             no_data_value: None,
             band_order: Some(band_order),
+            writer: coverage_geotiff_writer(),
         },
     )
     .await?)
+}
+
+/// The library that writes coverage tiles, from `[ogc.tiles] coverage_geotiff_writer`
+fn coverage_geotiff_writer() -> GeoTiffWriter {
+    get_config_element::<config::Ogc>()
+        .ok()
+        .and_then(|ogc| ogc.tiles)
+        .and_then(|tiles| tiles.coverage_geotiff_writer)
+        .unwrap_or_default()
 }
 
 /// Shrinks `bounds` by half a pixel on each side, so that they span from the center of the

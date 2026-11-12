@@ -68,16 +68,7 @@ where
 
     let band_order = band_order.unwrap_or_else(|| query_rect.attributes().as_vec());
     let geotiff_band_positions = geotiff_band_positions(query_rect.attributes(), &band_order)?;
-    let band_names = band_order
-        .iter()
-        .map(|&band| {
-            result_descriptor
-                .bands
-                .bands()
-                .get(band as usize)
-                .map_or_else(|| band.to_string(), |band| band.name.clone())
-        })
-        .collect::<Vec<_>>();
+    let band_names = band_names(result_descriptor, &band_order);
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
     let runtime = query_ctx.processing_runtime();
@@ -106,8 +97,25 @@ where
     .await
 }
 
+/// The names of the raster bands in `band_order`
+pub(crate) fn band_names(
+    result_descriptor: &crate::engine::RasterResultDescriptor,
+    band_order: &[u32],
+) -> Vec<String> {
+    band_order
+        .iter()
+        .map(|&band| {
+            result_descriptor
+                .bands
+                .bands()
+                .get(band as usize)
+                .map_or_else(|| band.to_string(), |band| band.name.clone())
+        })
+        .collect()
+}
+
 /// For each band of `band_selection`, in ascending order, its position in `band_order`
-fn geotiff_band_positions(
+pub(crate) fn geotiff_band_positions(
     band_selection: &BandSelection,
     band_order: &[u32],
 ) -> Result<Vec<usize>> {
@@ -130,7 +138,7 @@ fn geotiff_band_positions(
 ///
 /// `band_names` are the names of the `GeoTIFF` bands of one time step, and
 /// `geotiff_band_positions` maps the `i`-th selected band, in stream order, to its `GeoTIFF` band.
-async fn write_multiband_geotiff_bytes<T>(
+pub(crate) async fn write_multiband_geotiff_bytes<T>(
     tiles: Vec<RasterTile2D<T>>,
     query_rect: &RasterQueryRectangle,
     band_names: Vec<String>,
@@ -341,14 +349,14 @@ where
     Ok((initial_tile_time, file_path, dataset, writer))
 }
 
-async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
+pub(crate) async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
     processor: BoxRasterQueryProcessor<T>,
     query_rect: geoengine_datatypes::primitives::RasterQueryRectangle,
     query_ctx: C,
     tile_limit: Option<usize>,
 ) -> Result<Vec<RasterTile2D<T>>>
 where
-    T: Pixel + GdalType,
+    T: Pixel,
 {
     let mut tile_stream = processor
         .query_into_owned_boxed_stream(query_rect, Box::new(query_ctx))

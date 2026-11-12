@@ -27,6 +27,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_operators::engine::{InitializedRasterOperator, ProcessingGraphOperatorPath};
+use geoengine_operators::util::raster_stream_to_geotiff_rust::GeoTiffWriter;
 use serde::Deserialize;
 use snafu::ensure;
 use std::{str::FromStr, time::Duration};
@@ -396,6 +397,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
     let encoding = RasterEncoding::GeoTiff {
         no_data_value: request.nodatavalue,
         band_order: None,
+        writer: GeoTiffWriter::Gdal,
     };
 
     let ctx = app_ctx.session_context(session);
