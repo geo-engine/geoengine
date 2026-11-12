@@ -1,8 +1,8 @@
-//! We need to run this in a separate process since it changes the global state of the GDAL driver
+//! Changes the global GDAL driver state, so it must not share a process with in-process GDAL tests.
 
 use gdal::{Dataset, DriverManager};
-use geoengine_datatypes::test_data;
 use geoengine_operators::util::gdal::register_gdal_drivers_from_list;
+use geoengine_services::test_data;
 use std::collections::HashSet;
 
 #[test]

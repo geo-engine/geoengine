@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
-
 use assert_cmd::cargo_bin;
 use geoengine_services::test_data;
 use pretty_assertions::assert_eq;
@@ -22,7 +20,7 @@ async fn it_has_the_latest_openapi_schema_stored_in_the_repository() {
     );
 
     let spec_from_cli = String::from_utf8(startup_result.stdout).unwrap();
-    let spec_from_file = include_str!("../../../openapi.json");
+    let spec_from_file = include_str!("../../../../openapi.json");
 
     assert_eq!(spec_from_cli, spec_from_file);
 }

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
-
 use assert_cmd::cargo_bin;
 use geoengine_services::test_data;
 use std::process::{ChildStderr, Command, Stdio};

@@ -8,8 +8,9 @@ use crate::{
         middleware::OutputRequestId,
         postgres::DatabaseConnectionConfig,
         server::{
-            CustomRootSpanBuilder, calculate_max_blocking_threads_per_worker, configure_extractors,
-            connection_init, log_server_info, render_404, render_405, serve_openapi_json,
+            CustomRootSpanBuilder, ServerInfo, calculate_max_blocking_threads_per_worker,
+            configure_extractors, connection_init, log_server_info, render_404, render_405,
+            serve_openapi_json,
         },
     },
 };
@@ -29,6 +30,7 @@ use utoipa_swagger_ui::SwaggerUi;
 async fn start<C>(
     static_files_dir: Option<PathBuf>,
     web_config: config::Web,
+    server_info: ServerInfo,
     app_ctx: C,
 ) -> Result<(), Error>
 where
@@ -54,6 +56,7 @@ where
     );
 
     let wrapped_ctx = web::Data::new(app_ctx);
+    let server_info = web::Data::new(server_info);
 
     let openapi = ApiDoc::openapi();
 
@@ -121,6 +124,7 @@ where
 
         App::new()
             .app_data(wrapped_ctx.clone())
+            .app_data(server_info.clone())
             .wrap(OutputRequestId)
             .wrap(
                 middleware::ErrorHandlers::default()
@@ -147,8 +151,11 @@ where
 ///
 ///  Starts the webserver for the Geo Engine API.
 ///
-pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
-    log_server_info()?;
+pub async fn start_server(
+    static_files_dir: Option<PathBuf>,
+    server_info: ServerInfo,
+) -> Result<()> {
+    log_server_info(&server_info)?;
 
     let oidc_config: crate::config::Oidc = get_config_element()?;
     let web_config: crate::config::Web = get_config_element()?;
@@ -176,6 +183,7 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
         cache_config,
         quota_config,
         gdal_process_pool_config,
+        server_info,
     )
     .await
 }
@@ -192,6 +200,7 @@ async fn start_postgres(
     cache_config: crate::config::Cache,
     quota_config: crate::config::Quota,
     gdal_process_pool_config: crate::config::GdalProcessPool,
+    server_info: ServerInfo,
 ) -> Result<()> {
     {
         let db_config: DatabaseConnectionConfig =
@@ -223,6 +232,6 @@ async fn start_postgres(
         )
         .await?;
 
-        start(static_files_dir, web_config, ctx).await
+        start(static_files_dir, web_config, server_info, ctx).await
     }
 }

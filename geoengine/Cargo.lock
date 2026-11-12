@@ -514,7 +514,6 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-cast",
- "arrow-csv",
  "arrow-data",
  "arrow-ipc",
  "arrow-json",
@@ -599,21 +598,6 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",
-]
-
-[[package]]
-name = "arrow-csv"
-version = "60.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ad83176cc677f996096d694a3cccd7310069faeee4b3df9e2dabf92fdcf8b4b"
-dependencies = [
- "arrow-array",
- "arrow-cast",
- "arrow-schema",
- "chrono",
- "csv",
- "csv-core",
- "regex",
 ]
 
 [[package]]
@@ -1399,12 +1383,6 @@ dependencies = [
  "tokio",
  "walkdir",
 ]
-
-[[package]]
-name = "color_quant"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "colorchoice"
@@ -2858,6 +2836,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "geoengine-server"
+version = "0.10.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "gdal",
+ "geoengine-operators",
+ "geoengine-services",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "pretty_assertions",
+ "tokio",
+ "tokio-metrics",
+ "tokio-postgres",
+ "tracing",
+ "tracing-appender",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "vergen",
+ "vergen-gitcl",
+]
+
+[[package]]
 name = "geoengine-services"
 version = "0.10.0"
 dependencies = [
@@ -2870,7 +2873,6 @@ dependencies = [
  "actix-ws",
  "aes-gcm",
  "anyhow",
- "assert_cmd",
  "async-trait",
  "base64 0.23.1",
  "bb8-postgres",
@@ -2904,9 +2906,7 @@ dependencies = [
  "oauth2",
  "ogcapi-types",
  "openidconnect",
- "opentelemetry",
  "opentelemetry-otlp",
- "opentelemetry_sdk",
  "ort",
  "paste",
  "pbkdf2",
@@ -2933,13 +2933,11 @@ dependencies = [
  "strum_macros",
  "tempfile",
  "tokio",
- "tokio-metrics",
  "tokio-postgres",
  "tokio-util",
  "tracing",
  "tracing-actix-web",
  "tracing-appender",
- "tracing-opentelemetry",
  "tracing-subscriber",
  "typed_floats",
  "url",
@@ -2947,8 +2945,6 @@ dependencies = [
  "utoipa-swagger-ui",
  "uuid 1.29.0",
  "validator",
- "vergen",
- "vergen-gitcl",
  "walkdir",
  "wkt 0.14.0",
  "xml",
@@ -3051,16 +3047,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eecf2d5dc9b66b732b97707a0210906b1d30523eb773193ab777c0c84b3e8d5"
 dependencies = [
  "polyval",
-]
-
-[[package]]
-name = "gif"
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee8cfcc411d9adbbaba82fb72661cc1bcca13e8bba98b364e62b2dba8f960159"
-dependencies = [
- "color_quant",
- "weezl",
 ]
 
 [[package]]
@@ -3676,30 +3662,13 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
- "color_quant",
  "exr",
- "gif",
- "image-webp",
  "moxcms",
  "num-traits",
  "png",
- "qoi",
  "ravif",
  "rayon",
- "rgb",
  "tiff",
- "zune-core",
- "zune-jpeg",
-]
-
-[[package]]
-name = "image-webp"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
-dependencies = [
- "byteorder-lite",
- "quick-error",
 ]
 
 [[package]]
@@ -4855,32 +4824,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry-http"
-version = "0.33.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "302249bd8ee804789faaa7b5b2cbf79bc61cb864714079c644e3828af5b7e811"
-dependencies = [
- "async-trait",
- "bytes",
- "http 1.5.0",
- "opentelemetry",
- "reqwest 0.13.5",
-]
-
-[[package]]
 name = "opentelemetry-otlp"
 version = "0.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0756af24841e367128ef31c831999937b8b5c5197d47914590d8f4e2e88c2e1a"
 dependencies = [
  "http 1.5.0",
- "httpdate",
  "opentelemetry",
- "opentelemetry-http",
  "opentelemetry-proto",
  "opentelemetry_sdk",
  "prost",
- "reqwest 0.13.5",
  "thiserror 2.0.21",
  "tokio",
  "tonic",
@@ -5644,15 +5597,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
-name = "qoi"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6d64c71eb498fe9eae14ce4ec935c555749aef511cca85b5568910d6e48001"
-dependencies = [
- "bytemuck",
-]
-
-[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6076,7 +6020,6 @@ checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
  "base64 0.23.1",
  "bytes",
- "futures-channel",
  "futures-core",
  "futures-util",
  "http 1.5.0",
