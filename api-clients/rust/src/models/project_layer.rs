@@ -10,25 +10,48 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
+/// ProjectLayer : A layer or plot of a project.  It is also a layer of the projects data connector, with the same `id`. Only the visibility is specific to the project.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectLayer {
-    #[serde(rename = "processingGraph")]
-    pub processing_graph: uuid::Uuid,
+    /// The id of the layer, stable across project versions.
+    #[serde(rename = "id")]
+    pub id: String,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    /// The id of the processing graph of the layer.
+    #[serde(rename = "processingGraph")]
+    pub processing_graph: uuid::Uuid,
+    /// The symbology of the layer, which plots do not have.
+    #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub symbology: Option<Option<Box<models::Symbology>>>,
+    /// properties, for instance, to be rendered in the UI
+    #[serde(rename = "properties")]
+    pub properties: Vec<Vec<String>>,
+    /// metadata used for loading the data
+    #[serde(rename = "metadata")]
+    pub metadata: std::collections::HashMap<String, String>,
     #[serde(rename = "visibility")]
     pub visibility: Box<models::LayerVisibility>,
-    #[serde(rename = "symbology")]
-    pub symbology: Box<models::Symbology>,
+    /// The catalog layer this layer was copied from, if any.
+    #[serde(rename = "source", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub source: Option<Option<Box<models::ProviderLayerId>>>,
 }
 
 impl ProjectLayer {
-    pub fn new(processing_graph: uuid::Uuid, name: String, visibility: models::LayerVisibility, symbology: models::Symbology) -> ProjectLayer {
+    /// A layer or plot of a project.  It is also a layer of the projects data connector, with the same `id`. Only the visibility is specific to the project.
+    pub fn new(id: String, name: String, description: String, processing_graph: uuid::Uuid, properties: Vec<Vec<String>>, metadata: std::collections::HashMap<String, String>, visibility: models::LayerVisibility) -> ProjectLayer {
         ProjectLayer {
-            processing_graph,
+            id,
             name,
+            description,
+            processing_graph,
+            symbology: None,
+            properties,
+            metadata,
             visibility: Box::new(visibility),
-            symbology: Box::new(symbology),
+            source: None,
         }
     }
 }

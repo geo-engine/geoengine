@@ -8,14 +8,14 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { ProjectLayer } from './ProjectLayer';
+import type { ProjectLayerUpdate } from './ProjectLayerUpdate';
 import type { ProjectUpdateToken } from './ProjectUpdateToken';
 /**
  * @type LayerUpdate
  *
  * @export
  */
-export type LayerUpdate = ProjectLayer | ProjectUpdateToken;
+export type LayerUpdate = ProjectLayerUpdate | ProjectUpdateToken;
 export declare function LayerUpdateFromJSON(json: any): LayerUpdate;
 export declare function LayerUpdateFromJSONTyped(json: any, ignoreDiscriminator: boolean): LayerUpdate;
 export declare function LayerUpdateToJSON(json: any): any;

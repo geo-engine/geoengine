@@ -105,7 +105,7 @@ export class ColumnRangeFilterComponent implements OnDestroy {
 
     private subscriptions: Array<Subscription> = [];
     private columnTypes = new Map<string, VectorColumnDataType | undefined>();
-    private currentLayerid = -1;
+    private currentLayerid = '';
     private dataType: VectorDataType = VectorDataTypes.MultiPoint;
 
     constructor() {
@@ -322,15 +322,17 @@ export class ColumnRangeFilterComponent implements OnDestroy {
     }
 
     createLayer(workflowId: string, name: string): Observable<void> {
-        return this.projectService.addLayer(
-            new VectorLayer({
-                processingGraphId: workflowId,
-                name,
-                isVisible: true,
-                isLegendVisible: false,
-                symbology: createVectorSymbology(this.dataType.getCode(), this.randomColorService.getRandomColorRgba()),
-            }),
-        );
+        return this.projectService
+            .addLayer(
+                new VectorLayer({
+                    processingGraphId: workflowId,
+                    name,
+                    isVisible: true,
+                    isLegendVisible: false,
+                    symbology: createVectorSymbology(this.dataType.getCode(), this.randomColorService.getRandomColorRgba()),
+                }),
+            )
+            .pipe(map(() => undefined));
     }
 
     addHistogram(filterIndex: number, attribute: string): void {

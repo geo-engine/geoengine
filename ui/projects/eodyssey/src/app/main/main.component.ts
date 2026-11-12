@@ -124,7 +124,7 @@ export class MainComponent {
         this.topToolbarHeight.set(this.topToolbar().nativeElement.offsetHeight);
     }
 
-    idFromLayer(index: number, layer: Layer): number {
+    idFromLayer(index: number, layer: Layer): string {
         return layer.id;
     }
 

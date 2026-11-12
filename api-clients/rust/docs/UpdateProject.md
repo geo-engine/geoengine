@@ -8,7 +8,7 @@ Name | Type | Description | Notes
 **name** | Option<**String**> |  | [optional]
 **description** | Option<**String**> |  | [optional]
 **layers** | Option<[**Vec<models::LayerUpdate>**](LayerUpdate.md)> |  | [optional]
-**plots** | Option<[**Vec<models::PlotUpdate>**](PlotUpdate.md)> |  | [optional]
+**plots** | Option<[**Vec<models::LayerUpdate>**](LayerUpdate.md)> |  | [optional]
 **bounds** | Option<[**models::StRectangle**](STRectangle.md)> |  | [optional]
 **time_step** | Option<[**models::TimeStep**](TimeStep.md)> |  | [optional]
 

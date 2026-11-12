@@ -80,7 +80,7 @@ List all projects accessible to the user that match the selected criteria.
 
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
-**order** | [**OrderBy**](OrderBy.md) |  | [required] |
+**order** | [**ProjectOrderBy**](ProjectOrderBy.md) |  | [required] |
 **offset** | **i32** |  | [required] |
 **limit** | **i32** |  | [required] |
 
@@ -187,7 +187,7 @@ Name | Type | Description  | Required | Notes
 
 ## update_project_handler
 
-> update_project_handler(project, update_project)
+> models::Project update_project_handler(project, update_project)
 Updates a project. This will create a new version.
 
 ### Parameters
@@ -200,7 +200,7 @@ Name | Type | Description  | Required | Notes
 
 ### Return type
 
- (empty response body)
+[**models::Project**](Project.md)
 
 ### Authorization
 
@@ -209,7 +209,7 @@ Name | Type | Description  | Required | Notes
 ### HTTP request headers
 
 - **Content-Type**: application/json
-- **Accept**: Not defined
+- **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

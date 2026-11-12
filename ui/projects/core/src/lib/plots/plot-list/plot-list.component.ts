@@ -67,7 +67,7 @@ export class PlotListComponent implements AfterViewInit, OnDestroy {
         this.layoutService.setSidenavContentComponent(this.operatorsListConfig());
     }
 
-    idOfPlot(index: number, plot: Plot): number {
+    idOfPlot(index: number, plot: Plot): string {
         return plot.id;
     }
 }

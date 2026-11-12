@@ -276,11 +276,9 @@ __all__ = [
     "PieChart",
     "PieChartCountType",
     "PieChartParameters",
-    "Plot",
     "PlotOperator",
     "PlotOutputFormat",
     "PlotResultDescriptor",
-    "PlotUpdate",
     "PointInPolygonFilter",
     "PointInPolygonFilterSource",
     "PointSymbology",
@@ -299,7 +297,9 @@ __all__ = [
     "ProcessingGraph",
     "Project",
     "ProjectLayer",
+    "ProjectLayerUpdate",
     "ProjectListing",
+    "ProjectOrderBy",
     "ProjectResource",
     "ProjectUpdateToken",
     "ProjectVersion",
@@ -759,11 +759,9 @@ from geoengine_api_client.models.permission_request import PermissionRequest as 
 from geoengine_api_client.models.pie_chart import PieChart as PieChart
 from geoengine_api_client.models.pie_chart_count_type import PieChartCountType as PieChartCountType
 from geoengine_api_client.models.pie_chart_parameters import PieChartParameters as PieChartParameters
-from geoengine_api_client.models.plot import Plot as Plot
 from geoengine_api_client.models.plot_operator import PlotOperator as PlotOperator
 from geoengine_api_client.models.plot_output_format import PlotOutputFormat as PlotOutputFormat
 from geoengine_api_client.models.plot_result_descriptor import PlotResultDescriptor as PlotResultDescriptor
-from geoengine_api_client.models.plot_update import PlotUpdate as PlotUpdate
 from geoengine_api_client.models.point_in_polygon_filter import PointInPolygonFilter as PointInPolygonFilter
 from geoengine_api_client.models.point_in_polygon_filter_source import PointInPolygonFilterSource as PointInPolygonFilterSource
 from geoengine_api_client.models.point_symbology import PointSymbology as PointSymbology
@@ -782,7 +780,9 @@ from geoengine_api_client.models.polygon_symbology import PolygonSymbology as Po
 from geoengine_api_client.models.processing_graph import ProcessingGraph as ProcessingGraph
 from geoengine_api_client.models.project import Project as Project
 from geoengine_api_client.models.project_layer import ProjectLayer as ProjectLayer
+from geoengine_api_client.models.project_layer_update import ProjectLayerUpdate as ProjectLayerUpdate
 from geoengine_api_client.models.project_listing import ProjectListing as ProjectListing
+from geoengine_api_client.models.project_order_by import ProjectOrderBy as ProjectOrderBy
 from geoengine_api_client.models.project_resource import ProjectResource as ProjectResource
 from geoengine_api_client.models.project_update_token import ProjectUpdateToken as ProjectUpdateToken
 from geoengine_api_client.models.project_version import ProjectVersion as ProjectVersion

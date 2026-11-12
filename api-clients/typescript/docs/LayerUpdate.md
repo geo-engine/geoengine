@@ -6,10 +6,15 @@
 
 Name | Type
 ------------ | -------------
-`processingGraph` | string
+`id` | string
 `name` | string
-`visibility` | [LayerVisibility](LayerVisibility.md)
+`description` | string
+`processingGraph` | string
 `symbology` | [Symbology](Symbology.md)
+`properties` | Array&lt;Array&lt;string&gt;&gt;
+`metadata` | { [key: string]: string; }
+`visibility` | [LayerVisibility](LayerVisibility.md)
+`source` | [ProviderLayerId](ProviderLayerId.md)
 
 ## Example
 
@@ -18,10 +23,15 @@ import type { LayerUpdate } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "processingGraph": null,
+  "id": null,
   "name": null,
-  "visibility": null,
+  "description": null,
+  "processingGraph": null,
   "symbology": null,
+  "properties": null,
+  "metadata": null,
+  "visibility": null,
+  "source": null,
 } satisfies LayerUpdate
 
 console.log(example)

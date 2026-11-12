@@ -170,7 +170,7 @@ pub(crate) async fn list_projects_handler<C: ApplicationContext>(
     path = "/project/{project}",
     request_body = UpdateProject,
     responses(
-        (status = 200, description = "OK")
+        (status = 200, description = "The updated project", body = Project)
     ),
     params(
         ("project" = ProjectId, description = "Project id")
@@ -187,13 +187,13 @@ pub(crate) async fn update_project_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse, ProjectHandlerError> {
     let mut update: crate::projects::UpdateProject = update.into_inner().into();
     update.id = project.into_inner(); // TODO: avoid passing project id in path AND body
-    app_ctx
+    let project = app_ctx
         .session_context(session)
         .db()
         .update_project(update)
         .await
         .context(error::UpdateProject)?;
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::Ok().json(Project::from(project)))
 }
 
 /// Deletes a project.
@@ -398,22 +398,26 @@ pub(crate) async fn project_versions_handler<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::processing_graphs::ProcessingGraphId;
-    use crate::api::model::projects::{LayerUpdate, Plot, PlotUpdate, ProjectLayer};
+    use crate::api::model::projects::ProjectLayer;
     use crate::contexts::PostgresContext;
     use crate::contexts::Session;
     use crate::ge_context;
+    use crate::layers::layer::ProviderLayerId;
+    use crate::permissions::{Permission, PermissionDb};
+    use crate::processing_graphs::processing_graph::ProcessingGraphId;
     use crate::projects::{
         LayerVisibility, ProjectId, ProjectListing, RasterSymbology, STRectangle, Symbology,
     };
     use crate::users::{UserAuth, UserSession};
     use crate::util::Identifier;
     use crate::util::tests::{
-        check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
+        check_allowed_http_methods, create_project_helper,
+        register_project_layer_processing_graph_helper, send_test_request, update_project_helper,
     };
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::dataset::{DataProviderId, LayerId};
     use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer};
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -696,8 +700,16 @@ mod tests {
 
         let session = ctx.session().clone();
         let project = create_project_helper(&ctx).await;
+        let processing_graph = register_project_layer_processing_graph_helper(&ctx.db()).await;
 
-        let update = UpdateProject::from(update_project_helper(project));
+        let update = json!({
+            "id": project,
+            "name": "TestUpdate",
+            "layers": [{
+                "name": "L1",
+                "processingGraph": processing_graph,
+            }],
+        });
 
         let req = test::TestRequest::default()
             .method(method)
@@ -716,6 +728,8 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
+        let updated: Project = test::read_body_json(res).await;
+
         let loaded = app_ctx
             .session_context(session)
             .db()
@@ -724,6 +738,11 @@ mod tests {
             .unwrap();
         assert_eq!(loaded.name, "TestUpdate");
         assert_eq!(loaded.layers.len(), 1);
+        // compare the JSON, because it has a lower precision for the version timestamp
+        assert_eq!(
+            serde_json::to_value(updated).unwrap(),
+            serde_json::to_value(Project::from(loaded)).unwrap()
+        );
     }
 
     #[ge_context::test]
@@ -759,150 +778,235 @@ mod tests {
         let session = ctx.session().clone();
         let project = create_project_helper(&ctx).await;
 
-        let update = json!({
-            "name": "TestUpdate",
-            "description": None::<String>,
-            "layers": vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-                processing_graph: ProcessingGraphId::new(),
-                name: "L1".to_string(),
-                visibility: Default::default(),
-                symbology: Symbology::Raster(RasterSymbology {
-                    r#type: Default::default(),
-                    opacity: 1.0,
-                    raster_colorizer: RasterColorizer::SingleBand {
-                        band: 0,
-                        band_colorizer: Colorizer::test_default(),
-                    }
-                })
-            })],
-            "bounds": None::<String>,
-            "time_step": None::<String>,
-        });
-
         let req = test::TestRequest::patch()
             .uri(&format!("/project/{project}"))
+            .append_header((header::CONTENT_TYPE, mime::APPLICATION_JSON))
             .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-            .set_json(&update);
+            .set_payload(r#"{"name":"TestUpdate"}"#);
         let res = send_test_request(req, app_ctx).await;
 
         ErrorResponse::assert(
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: missing field `id` at line 1 column 499",
+            "Error in user input: missing field `id` at line 1 column 21",
         )
         .await;
     }
 
-    #[ge_context::test]
-    #[allow(clippy::too_many_lines)]
-    async fn update_layers(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest(
-            app_ctx: &PostgresContext<NoTls>,
-            session: &UserSession,
-            project_id: ProjectId,
-            update: UpdateProject,
-        ) -> Vec<ProjectLayer> {
-            let req = test::TestRequest::patch()
-                .uri(&format!("/project/{project_id}"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-                .set_json(&update);
-            let res = send_test_request(req, app_ctx.clone()).await;
+    /// Sends a layer or plot update (`field` is `layers` or `plots`) and returns the layers or
+    /// plots of the response, after checking that they match the stored project.
+    async fn send_layer_update(
+        app_ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+        field: &str,
+        updates: serde_json::Value,
+    ) -> ServiceResponse {
+        let req = test::TestRequest::patch()
+            .uri(&format!("/project/{project_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .set_json(json!({
+                "id": project_id,
+                field: updates,
+            }));
+        send_test_request(req, app_ctx.clone()).await
+    }
 
-            assert_eq!(res.status(), 200);
+    async fn update_and_load_latest(
+        app_ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+        field: &str,
+        updates: serde_json::Value,
+    ) -> Vec<ProjectLayer> {
+        let res = send_layer_update(app_ctx, session, project_id, field, updates).await;
+        assert_eq!(res.status(), 200);
+        let updated: Project = test::read_body_json(res).await;
 
-            let loaded = app_ctx
+        let loaded = Project::from(
+            app_ctx
                 .session_context(session.clone())
                 .db()
                 .load_project(project_id)
                 .await
-                .unwrap();
+                .unwrap(),
+        );
+        // compare the JSON, because it has a lower precision for the version timestamp
+        assert_eq!(
+            serde_json::to_value(&updated).unwrap(),
+            serde_json::to_value(&loaded).unwrap()
+        );
 
-            loaded.layers.into_iter().map(Into::into).collect()
+        if field == "layers" {
+            loaded.layers
+        } else {
+            loaded.plots
         }
+    }
 
+    #[allow(clippy::too_many_lines)]
+    async fn check_layer_updates(app_ctx: PostgresContext<NoTls>, field: &str) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
         let session = ctx.session().clone();
         let project = create_project_helper(&ctx).await;
+        let processing_graph = register_project_layer_processing_graph_helper(&ctx.db()).await;
 
-        let layer_1 = ProjectLayer {
-            processing_graph: ProcessingGraphId::new(),
-            name: "L1".to_string(),
-            visibility: LayerVisibility {
-                data: true,
-                legend: false,
-            },
-            symbology: Symbology::Raster(RasterSymbology {
+        let symbology = (field == "layers").then(|| {
+            Symbology::Raster(RasterSymbology {
                 r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
                     band_colorizer: Colorizer::test_default(),
                 },
-            }),
+            })
+        });
+
+        let source = ProviderLayerId {
+            provider_id: DataProviderId::new(),
+            layer_id: LayerId("catalog-layer".to_string()),
         };
 
-        let layer_2 = ProjectLayer {
-            processing_graph: ProcessingGraphId::new(),
-            name: "L2".to_string(),
-            visibility: LayerVisibility {
+        // add first layer, the server assigns the id
+        let layers = update_and_load_latest(
+            &app_ctx,
+            &session,
+            project,
+            field,
+            json!([{
+                "name": "L1",
+                "description": "D1",
+                "processingGraph": processing_graph,
+                "symbology": symbology,
+                "properties": [["key", "value"]],
+                "metadata": {"key": "value"},
+                "source": source,
+            }]),
+        )
+        .await;
+        assert_eq!(layers.len(), 1);
+        let layer_1 = layers[0].clone();
+        assert_eq!(layer_1.name, "L1");
+        assert_eq!(layer_1.description, "D1");
+        assert_eq!(layer_1.processing_graph, processing_graph.into());
+        assert_eq!(layer_1.symbology, symbology);
+        assert_eq!(
+            layer_1.properties,
+            vec![("key".to_string(), "value".to_string()).into()]
+        );
+        assert_eq!(
+            layer_1.metadata,
+            [("key".to_string(), "value".to_string())].into()
+        );
+        assert_eq!(layer_1.visibility, LayerVisibility::default());
+        assert_eq!(layer_1.source, Some(source));
+
+        // add second layer, the first one keeps its id
+        let layers = update_and_load_latest(
+            &app_ctx,
+            &session,
+            project,
+            field,
+            json!([
+                "none",
+                {
+                    "name": "L2",
+                    "processingGraph": processing_graph,
+                    "visibility": {"data": false, "legend": true},
+                },
+            ]),
+        )
+        .await;
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0], layer_1);
+        let layer_2 = layers[1].clone();
+        assert_ne!(layer_2.id, layer_1.id);
+        assert_eq!(
+            layer_2.visibility,
+            LayerVisibility {
                 data: false,
-                legend: true,
-            },
-            symbology: Symbology::Raster(RasterSymbology {
-                r#type: Default::default(),
-                opacity: 1.0,
-                raster_colorizer: RasterColorizer::SingleBand {
-                    band: 0,
-                    band_colorizer: Colorizer::test_default(),
+                legend: true
+            }
+        );
+
+        // swap the layers and rename the first one, both keep their ids
+        let layers = update_and_load_latest(
+            &app_ctx,
+            &session,
+            project,
+            field,
+            json!([
+                {
+                    "id": layer_2.id,
+                    "name": "L2",
+                    "processingGraph": processing_graph,
+                    "visibility": {"data": false, "legend": true},
                 },
-            }),
-        };
+                {
+                    "id": layer_1.id,
+                    "name": "L1 renamed",
+                    "description": "D1",
+                    "processingGraph": processing_graph,
+                    "symbology": symbology,
+                },
+            ]),
+        )
+        .await;
+        assert_eq!(layers[0], layer_2);
+        assert_eq!(layers[1].id, layer_1.id);
+        assert_eq!(layers[1].name, "L1 renamed");
+        assert_eq!(layers[1].source, None);
+        let layer_1 = layers[1].clone();
 
-        // add first layer
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![LayerUpdate::UpdateOrInsert(layer_1.clone())]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![layer_1.clone()]
-        );
+        // unknown ids are rejected
+        let res = send_layer_update(
+            &app_ctx,
+            &session,
+            project,
+            field,
+            json!([{
+                "id": "6c8e9d61-0d7b-4f5b-9a8a-3f1f9e3b2a10",
+                "name": "L3",
+                "processingGraph": processing_graph,
+            }]),
+        )
+        .await;
+        assert_eq!(res.status(), 400);
 
-        // add second layer
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![
-                        LayerUpdate::None(Default::default()),
-                        LayerUpdate::UpdateOrInsert(layer_2.clone())
-                    ]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![layer_1.clone(), layer_2.clone()]
-        );
+        // duplicate ids are rejected
+        let res = send_layer_update(
+            &app_ctx,
+            &session,
+            project,
+            field,
+            json!([
+                "none",
+                {
+                    "id": layer_2.id,
+                    "name": "L2",
+                    "processingGraph": processing_graph,
+                },
+            ]),
+        )
+        .await;
+        assert_eq!(res.status(), 400);
+
+        // unknown processing graphs are rejected
+        let res = send_layer_update(
+            &app_ctx,
+            &session,
+            project,
+            field,
+            json!([{
+                "name": "L3",
+                "processingGraph": ProcessingGraphId::new(),
+            }]),
+        )
+        .await;
+        assert_eq!(res.status(), 400);
 
         // remove first layer
         assert_eq!(
@@ -910,172 +1014,57 @@ mod tests {
                 &app_ctx,
                 &session,
                 project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![
-                        LayerUpdate::Delete(Default::default()),
-                        LayerUpdate::None(Default::default()),
-                    ]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
+                field,
+                json!(["delete", "none"])
             )
             .await,
-            vec![layer_2.clone()]
+            vec![layer_1]
         );
 
         // clear layers
         assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: Some(vec![]),
-                    plots: None,
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
+            update_and_load_latest(&app_ctx, &session, project, field, json!([])).await,
             vec![]
         );
     }
 
     #[ge_context::test]
-    #[allow(clippy::too_many_lines)]
+    async fn update_layers(app_ctx: PostgresContext<NoTls>) {
+        check_layer_updates(app_ctx, "layers").await;
+    }
+
+    #[ge_context::test]
     async fn update_plots(app_ctx: PostgresContext<NoTls>) {
-        async fn update_and_load_latest(
-            app_ctx: &PostgresContext<NoTls>,
-            session: &UserSession,
-            project_id: ProjectId,
-            update: UpdateProject,
-        ) -> Vec<Plot> {
-            let req = test::TestRequest::patch()
-                .uri(&format!("/project/{project_id}"))
-                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
-                .set_json(&update);
-            let res = send_test_request(req, app_ctx.clone()).await;
+        check_layer_updates(app_ctx, "plots").await;
+    }
 
-            assert_eq!(res.status(), 200);
+    #[ge_context::test]
+    async fn it_loads_shared_projects_with_read_permission(app_ctx: PostgresContext<NoTls>) {
+        let owner_session = app_ctx.create_anonymous_session().await.unwrap();
+        let owner_ctx = app_ctx.session_context(owner_session.clone());
+        let project = create_project_helper(&owner_ctx).await;
 
-            let loaded = app_ctx
-                .session_context(session.clone())
-                .db()
-                .load_project(project_id)
-                .await
-                .unwrap();
+        let reader_session = app_ctx.create_anonymous_session().await.unwrap();
 
-            loaded.plots.into_iter().map(Into::into).collect()
-        }
-
-        let session = app_ctx.create_anonymous_session().await.unwrap();
-        let ctx = app_ctx.session_context(session.clone());
-
-        let session = ctx.session().clone();
-        let project = create_project_helper(&ctx).await;
-
-        let plot_1 = Plot {
-            processing_graph: ProcessingGraphId::new(),
-            name: "P1".to_string(),
+        let load = |session: UserSession| {
+            let app_ctx = app_ctx.clone();
+            async move {
+                let req = test::TestRequest::get()
+                    .uri(&format!("/project/{project}"))
+                    .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+                send_test_request(req, app_ctx).await
+            }
         };
 
-        let plot_2 = Plot {
-            processing_graph: ProcessingGraphId::new(),
-            name: "P2".to_string(),
-        };
+        assert_eq!(load(reader_session.clone()).await.status(), 400);
 
-        // add first plot
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![PlotUpdate::UpdateOrInsert(plot_1.clone())]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![plot_1.clone()]
-        );
+        owner_ctx
+            .db()
+            .add_permission(reader_session.user.id.into(), project, Permission::Read)
+            .await
+            .unwrap();
 
-        // add second plot
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![
-                        PlotUpdate::None(Default::default()),
-                        PlotUpdate::UpdateOrInsert(plot_2.clone())
-                    ]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![plot_1.clone(), plot_2.clone()]
-        );
-
-        // remove first plot
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![
-                        PlotUpdate::Delete(Default::default()),
-                        PlotUpdate::None(Default::default()),
-                    ]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![plot_2.clone()]
-        );
-
-        // clear plots
-        assert_eq!(
-            update_and_load_latest(
-                &app_ctx,
-                &session,
-                project,
-                UpdateProject {
-                    id: project,
-                    name: None,
-                    description: None,
-                    layers: None,
-                    plots: Some(vec![]),
-                    bounds: None,
-                    time_step: None,
-                }
-            )
-            .await,
-            vec![]
-        );
+        assert_eq!(load(reader_session).await.status(), 200);
     }
 
     #[ge_context::test]
@@ -1122,7 +1111,8 @@ mod tests {
 
         let db = ctx.db();
 
-        db.update_project(update_project_helper(project))
+        let processing_graph = register_project_layer_processing_graph_helper(&db).await;
+        db.update_project(update_project_helper(project, processing_graph))
             .await
             .unwrap();
 
@@ -1181,7 +1171,8 @@ mod tests {
 
         let db = ctx.db();
 
-        db.update_project(update_project_helper(project))
+        let processing_graph = register_project_layer_processing_graph_helper(&db).await;
+        db.update_project(update_project_helper(project, processing_graph))
             .await
             .unwrap();
 

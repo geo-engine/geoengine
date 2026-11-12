@@ -577,6 +577,8 @@ CREATE TYPE "MetaDataDefinition" AS (
     gdal_multi_band "GdalMultiBand"
 );
 
+CREATE TYPE "PropertyType" AS (key text, value text);
+
 -- seperate table for projects used in foreign key constraints
 CREATE TABLE projects (id uuid PRIMARY KEY);
 
@@ -599,6 +601,11 @@ CREATE TYPE "LayerType" AS ENUM ('Raster', 'Vector');
 
 CREATE TYPE "LayerVisibility" AS (data BOOLEAN, legend BOOLEAN);
 
+CREATE TABLE processing_graphs (
+    id uuid PRIMARY KEY,
+    processing_graph json NOT NULL
+);
+
 CREATE TABLE project_version_layers (
     layer_index integer NOT NULL,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
@@ -606,16 +613,27 @@ CREATE TABLE project_version_layers (
         id
     ) ON DELETE CASCADE NOT NULL,
     name character varying(256) NOT NULL,
-    processing_graph_id uuid NOT NULL,
-    -- TODO: REFERENCES processing_graphs(id)
+    processing_graph_id uuid REFERENCES processing_graphs (id) NOT NULL,
     symbology "Symbology",
     visibility "LayerVisibility" NOT NULL,
+    -- stable across project versions
+    layer_id uuid NOT NULL,
+    description text NOT NULL,
+    properties "PropertyType"[] NOT NULL,
+    metadata "TextTextKeyValue"[] NOT NULL,
+    -- optional reference to the catalog layer this layer was copied from
+    source_provider_id uuid,
+    source_layer_id text,
     PRIMARY KEY (
         project_id,
         project_version_id,
         layer_index
     )
 );
+
+-- PG01: cannot use CONCURRENTLY in transaction block
+CREATE INDEX project_version_layers_layer_id_idx -- noqa: PG01
+ON project_version_layers (layer_id);
 
 CREATE TABLE project_version_plots (
     plot_index integer NOT NULL,
@@ -624,8 +642,16 @@ CREATE TABLE project_version_plots (
         id
     ) ON DELETE CASCADE NOT NULL,
     name character varying(256) NOT NULL,
-    processing_graph_id uuid NOT NULL,
-    -- TODO: REFERENCES processing_graphs(id)
+    processing_graph_id uuid REFERENCES processing_graphs (id) NOT NULL,
+    -- stable across project versions
+    layer_id uuid NOT NULL,
+    description text NOT NULL,
+    properties "PropertyType"[] NOT NULL,
+    metadata "TextTextKeyValue"[] NOT NULL,
+    -- optional reference to the catalog layer this plot was copied from
+    source_provider_id uuid,
+    source_layer_id text,
+    visibility "LayerVisibility" NOT NULL,
     PRIMARY KEY (
         project_id,
         project_version_id,
@@ -633,10 +659,9 @@ CREATE TABLE project_version_plots (
     )
 );
 
-CREATE TABLE processing_graphs (
-    id uuid PRIMARY KEY,
-    processing_graph json NOT NULL
-);
+-- PG01: cannot use CONCURRENTLY in transaction block
+CREATE INDEX project_version_plots_layer_id_idx -- noqa: PG01
+ON project_version_plots (layer_id);
 
 -- TODO: add constraint not null
 
@@ -681,8 +706,6 @@ CREATE TABLE uploads (
     -- user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
     files "FileUpload"[] NOT NULL
 );
-
-CREATE TYPE "PropertyType" AS (key text, value text);
 
 CREATE TABLE layer_collections (
     id uuid PRIMARY KEY,

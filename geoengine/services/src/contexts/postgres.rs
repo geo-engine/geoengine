@@ -719,9 +719,9 @@ mod tests {
         permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId},
         processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
         projects::{
-            CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
-            ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
-            UpdateProject,
+            CreateProject, LayerUpdate, LoadVersion, OrderBy, PlotUpdate, PointSymbology,
+            ProjectDb, ProjectId, ProjectLayerUpdate, ProjectListOptions, ProjectListing,
+            STRectangle, UpdateProject,
         },
         users::{
             OidcTokens, RoleDb, SessionTokenStore, UserClaims, UserCredentials, UserDb, UserId,
@@ -1028,6 +1028,25 @@ mod tests {
     }
 
     #[allow(clippy::too_many_lines)]
+    fn project_layer_update(
+        name: &str,
+        processing_graph: crate::processing_graphs::processing_graph::ProcessingGraphId,
+        symbology: Option<crate::projects::Symbology>,
+    ) -> ProjectLayerUpdate {
+        ProjectLayerUpdate {
+            id: None,
+            name: name.into(),
+            description: String::new(),
+            processing_graph,
+            symbology,
+            properties: vec![],
+            metadata: Default::default(),
+            visibility: Default::default(),
+            source: None,
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
     async fn update_projects(
         app_ctx: &PostgresContext<NoTls>,
         session: &UserSession,
@@ -1088,16 +1107,16 @@ mod tests {
             id: project.id,
             name: Some("Test9 Updated".into()),
             description: None,
-            layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-                processing_graph: layer_processing_graph_id,
-                name: "TestLayer".into(),
-                symbology: PointSymbology::default().into(),
-                visibility: Default::default(),
-            })]),
-            plots: Some(vec![PlotUpdate::UpdateOrInsert(Plot {
-                processing_graph: plot_processing_graph_id,
-                name: "Test Plot".into(),
-            })]),
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(project_layer_update(
+                "TestLayer",
+                layer_processing_graph_id,
+                Some(PointSymbology::default().into()),
+            ))]),
+            plots: Some(vec![PlotUpdate::UpdateOrInsert(project_layer_update(
+                "Test Plot",
+                plot_processing_graph_id,
+                None,
+            ))]),
             bounds: None,
             time_step: None,
         };
@@ -1111,21 +1130,22 @@ mod tests {
             id: project.id,
             name: Some("Test9 Updated".into()),
             description: None,
-            layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-                processing_graph: layer_processing_graph_id,
-                name: "TestLayer".into(),
-                symbology: PointSymbology::default().into(),
-                visibility: Default::default(),
-            })]),
+            layers: Some(vec![LayerUpdate::UpdateOrInsert(project_layer_update(
+                "TestLayer",
+                layer_processing_graph_id,
+                Some(PointSymbology::default().into()),
+            ))]),
             plots: Some(vec![
-                PlotUpdate::UpdateOrInsert(Plot {
-                    processing_graph: plot_processing_graph_id,
-                    name: "Test Plot".into(),
-                }),
-                PlotUpdate::UpdateOrInsert(Plot {
-                    processing_graph: plot_processing_graph_id,
-                    name: "Test Plot".into(),
-                }),
+                PlotUpdate::UpdateOrInsert(project_layer_update(
+                    "Test Plot",
+                    plot_processing_graph_id,
+                    None,
+                )),
+                PlotUpdate::UpdateOrInsert(project_layer_update(
+                    "Test Plot",
+                    plot_processing_graph_id,
+                    None,
+                )),
             ]),
             bounds: None,
             time_step: None,

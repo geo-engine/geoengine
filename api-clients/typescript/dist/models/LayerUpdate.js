@@ -16,7 +16,7 @@ exports.LayerUpdateFromJSON = LayerUpdateFromJSON;
 exports.LayerUpdateFromJSONTyped = LayerUpdateFromJSONTyped;
 exports.LayerUpdateToJSON = LayerUpdateToJSON;
 exports.LayerUpdateToJSONTyped = LayerUpdateToJSONTyped;
-const ProjectLayer_1 = require("./ProjectLayer");
+const ProjectLayerUpdate_1 = require("./ProjectLayerUpdate");
 const ProjectUpdateToken_1 = require("./ProjectUpdateToken");
 function LayerUpdateFromJSON(json) {
     return LayerUpdateFromJSONTyped(json, false);
@@ -28,8 +28,8 @@ function LayerUpdateFromJSONTyped(json, ignoreDiscriminator) {
     if (typeof json !== 'object') {
         return json;
     }
-    if ((0, ProjectLayer_1.instanceOfProjectLayer)(json)) {
-        return (0, ProjectLayer_1.ProjectLayerFromJSONTyped)(json, true);
+    if ((0, ProjectLayerUpdate_1.instanceOfProjectLayerUpdate)(json)) {
+        return (0, ProjectLayerUpdate_1.ProjectLayerUpdateFromJSONTyped)(json, true);
     }
     if ((0, ProjectUpdateToken_1.instanceOfProjectUpdateToken)(json)) {
         return (0, ProjectUpdateToken_1.ProjectUpdateTokenFromJSONTyped)(json, true);
@@ -46,8 +46,8 @@ function LayerUpdateToJSONTyped(value, ignoreDiscriminator = false) {
     if (typeof value !== 'object') {
         return value;
     }
-    if (typeof value === 'object' && (0, ProjectLayer_1.instanceOfProjectLayer)(value)) {
-        return (0, ProjectLayer_1.ProjectLayerToJSON)(value);
+    if (typeof value === 'object' && (0, ProjectLayerUpdate_1.instanceOfProjectLayerUpdate)(value)) {
+        return (0, ProjectLayerUpdate_1.ProjectLayerUpdateToJSON)(value);
     }
     if ((0, ProjectUpdateToken_1.instanceOfProjectUpdateToken)(value)) {
         return (0, ProjectUpdateToken_1.ProjectUpdateTokenToJSON)(value);

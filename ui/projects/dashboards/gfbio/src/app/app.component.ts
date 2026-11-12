@@ -54,7 +54,7 @@ import {
     SmallTimeInteractionComponent,
     LayerListComponent,
     OlVectorLayerComponent,
-    OlRasterLayerComponent,
+    OlOgcApiMapTileLayerComponent,
     MapResolutionExtentOverlayComponent,
     TabsComponent,
 } from '@geoengine/core';
@@ -83,7 +83,7 @@ import {SplashDialogComponent} from './splash-dialog/splash-dialog.component';
         LayerListComponent,
         MapContainerComponent,
         OlVectorLayerComponent,
-        OlRasterLayerComponent,
+        OlOgcApiMapTileLayerComponent,
         MapResolutionExtentOverlayComponent,
         TabsComponent,
         AsyncPipe,
@@ -201,7 +201,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.layoutService.setLayerDetailViewVisibility(true);
     }
 
-    idFromLayer(index: number, layer: Layer): number {
+    idFromLayer(index: number, layer: Layer): string {
         return layer.id;
     }
 

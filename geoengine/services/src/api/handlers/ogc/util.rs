@@ -11,11 +11,7 @@ use crate::{
         },
     },
     contexts::{ApplicationContext, SessionContext},
-    layers::{
-        layer::Layer,
-        listing::LayerCollectionProvider,
-        storage::{INTERNAL_PROVIDER_ID, LayerProviderDb},
-    },
+    layers::layer::Layer,
     processing_graphs::processing_graph::ProcessingGraph,
 };
 use geoengine_datatypes::{
@@ -141,21 +137,7 @@ pub async fn load_layer<C: ApplicationContext>(
     let data_connector_id = data_connector_id.into();
     let layer_id = layer_id.into();
 
-    if data_connector_id == INTERNAL_PROVIDER_ID {
-        return ctx
-            .db()
-            .load_layer(&layer_id)
-            .await
-            .context(error::LayerNotFound {
-                data_connector_id,
-                layer_id,
-            });
-    }
-
-    ctx.db()
-        .load_layer_provider(data_connector_id)
-        .await?
-        .load_layer(&layer_id)
+    crate::layers::dispatch::load_layer(&ctx.db(), data_connector_id, &layer_id)
         .await
         .context(error::LayerNotFound {
             data_connector_id,

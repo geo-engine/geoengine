@@ -462,20 +462,26 @@ async fn wfs_get_feature<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
+    let ctx = app_ctx.session_context(session);
+
     let type_names = match request.type_names.namespace.as_deref() {
-        None => ServicesProcessingGraphId::from_str(&request.type_names.feature_type)?,
+        None => {
+            let type_names = ServicesProcessingGraphId::from_str(&request.type_names.feature_type)?;
+            ensure!(
+                endpoint == type_names,
+                error::WFSEndpointTypeNamesMissmatch {
+                    endpoint,
+                    type_names
+                }
+            );
+            type_names
+        }
+        // `layer:<providerId>:<layerId>` addresses the layer of a data connector, e.g. a project layer
+        Some("layer") => processing_graph_of_layer(&ctx, &request.type_names.feature_type).await?,
         Some(_) => {
             return Err(error::Error::InvalidNamespace);
         }
     };
-
-    ensure!(
-        endpoint == type_names,
-        error::WFSEndpointTypeNamesMissmatch {
-            endpoint,
-            type_names
-        }
-    );
 
     // TODO: validate request further
 
@@ -502,7 +508,6 @@ async fn wfs_get_feature<C: ApplicationContext>(
             .map_or_else(config::default_time_from_config::<config::Wfs>, Into::into),
     };
 
-    let ctx = app_ctx.session_context(session);
     let (json, cache_hint, computation_id) =
         run_query(&ctx, conn_closed, features_geojson(ctx.clone(), query)).await?;
 
@@ -510,6 +515,22 @@ async fn wfs_get_feature<C: ApplicationContext>(
         .append_header(cache_hint.cache_control_header())
         .append_header(computation_id)
         .json(json))
+}
+
+/// Registers the processing graph of the layer `<providerId>:<layerId>` and returns its id.
+async fn processing_graph_of_layer<C: SessionContext>(
+    ctx: &C,
+    provider_and_layer: &str,
+) -> Result<ServicesProcessingGraphId> {
+    let (provider, layer) = provider_and_layer
+        .split_once(':')
+        .ok_or(error::Error::InvalidNamespace)?;
+    let provider = geoengine_datatypes::dataset::DataProviderId::from_str(provider)?;
+    let layer = geoengine_datatypes::dataset::LayerId(layer.to_string());
+
+    let db = ctx.db();
+    let layer = crate::layers::dispatch::load_layer(&db, provider, &layer).await?;
+    db.register_processing_graph(layer.processing_graph).await
 }
 
 // Define GeoJson types purely for modelling the output of the WFS handler for OpenAPI

@@ -348,7 +348,11 @@ export class LineageGraphComponent implements AfterViewInit {
         }
 
         for (const key of Object.keys(params)) {
-            let value = JSON.stringify(params[key], null, 2);
+            // optional parameters that are not set have no JSON representation
+            let value: string | undefined = JSON.stringify(params[key], null, 2);
+            if (value === undefined) {
+                continue;
+            }
 
             if (value.startsWith('"') && value.endsWith('"')) {
                 value = value.substr(1, value.length - 2);

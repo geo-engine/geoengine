@@ -28,7 +28,7 @@ use crate::{
         registry::ProcessingGraphRegistry,
     },
     projects::{
-        CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology,
+        CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayerUpdate, RasterSymbology,
         STRectangle, Symbology, UpdateProject,
     },
     quota::ComputationId,
@@ -114,24 +114,58 @@ pub async fn create_project_helper(
         .unwrap()
 }
 
-pub fn update_project_helper(project: ProjectId) -> UpdateProject {
+/// Registers a raster processing graph that project layers in tests can refer to.
+#[allow(clippy::missing_panics_doc)]
+pub async fn register_project_layer_processing_graph_helper<D: ProcessingGraphRegistry>(
+    db: &D,
+) -> ProcessingGraphId {
+    db.register_processing_graph(ProcessingGraph {
+        operator: TypedOperator::Raster(
+            GdalSource {
+                params: GdalSourceParameters::new(NamedData::with_system_name("test")),
+            }
+            .typed(),
+        ),
+    })
+    .await
+    .unwrap()
+}
+
+pub fn project_layer_update_helper(
+    name: &str,
+    processing_graph: ProcessingGraphId,
+) -> ProjectLayerUpdate {
+    ProjectLayerUpdate {
+        id: None,
+        name: name.to_string(),
+        description: String::new(),
+        processing_graph,
+        symbology: Some(Symbology::Raster(RasterSymbology {
+            r#type: Default::default(),
+            opacity: 1.0,
+            raster_colorizer: RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: Colorizer::test_default(),
+            },
+        })),
+        properties: vec![],
+        metadata: Default::default(),
+        visibility: Default::default(),
+        source: None,
+    }
+}
+
+pub fn update_project_helper(
+    project: ProjectId,
+    processing_graph: ProcessingGraphId,
+) -> UpdateProject {
     UpdateProject {
         id: project,
         name: Some("TestUpdate".to_string()),
         description: None,
-        layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayer {
-            processing_graph: ProcessingGraphId::new(),
-            name: "L1".to_string(),
-            visibility: Default::default(),
-            symbology: Symbology::Raster(RasterSymbology {
-                r#type: Default::default(),
-                opacity: 1.0,
-                raster_colorizer: RasterColorizer::SingleBand {
-                    band: 0,
-                    band_colorizer: Colorizer::test_default(),
-                },
-            }),
-        })]),
+        layers: Some(vec![LayerUpdate::UpdateOrInsert(
+            project_layer_update_helper("L1", processing_graph),
+        )]),
         plots: None,
         bounds: None,
         time_step: None,

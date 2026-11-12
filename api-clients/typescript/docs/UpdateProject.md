@@ -10,7 +10,7 @@ Name | Type
 `name` | string
 `description` | string
 `layers` | [Array&lt;LayerUpdate&gt;](LayerUpdate.md)
-`plots` | [Array&lt;PlotUpdate&gt;](PlotUpdate.md)
+`plots` | [Array&lt;LayerUpdate&gt;](LayerUpdate.md)
 `bounds` | [STRectangle](STRectangle.md)
 `timeStep` | [TimeStep](TimeStep.md)
 

@@ -11,7 +11,6 @@
  * Do not edit the class manually.
  */
 import { TimeStepFromJSON, TimeStepToJSON, } from './TimeStep';
-import { PlotUpdateFromJSON, PlotUpdateToJSON, } from './PlotUpdate';
 import { STRectangleFromJSON, STRectangleToJSON, } from './STRectangle';
 import { LayerUpdateFromJSON, LayerUpdateToJSON, } from './LayerUpdate';
 /**
@@ -34,7 +33,7 @@ export function UpdateProjectFromJSONTyped(json, ignoreDiscriminator) {
         'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
         'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
         'layers': json['layers'] === undefined ? undefined : json['layers'] === null ? null : (json['layers'].map(LayerUpdateFromJSON)),
-        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : (json['plots'].map(PlotUpdateFromJSON)),
+        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : (json['plots'].map(LayerUpdateFromJSON)),
         'bounds': json['bounds'] === undefined ? undefined : json['bounds'] === null ? null : STRectangleFromJSON(json['bounds']),
         'timeStep': json['timeStep'] === undefined ? undefined : json['timeStep'] === null ? null : TimeStepFromJSON(json['timeStep']),
     };
@@ -51,7 +50,7 @@ export function UpdateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         'name': value['name'],
         'description': value['description'],
         'layers': value['layers'] == null ? undefined : (value['layers'].map(LayerUpdateToJSON)),
-        'plots': value['plots'] == null ? undefined : (value['plots'].map(PlotUpdateToJSON)),
+        'plots': value['plots'] == null ? undefined : (value['plots'].map(LayerUpdateToJSON)),
         'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };

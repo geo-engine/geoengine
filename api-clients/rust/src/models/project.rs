@@ -22,8 +22,9 @@ pub struct Project {
     pub description: String,
     #[serde(rename = "layers")]
     pub layers: Vec<models::ProjectLayer>,
+    /// Plots are project layers without symbology.
     #[serde(rename = "plots")]
-    pub plots: Vec<models::Plot>,
+    pub plots: Vec<models::ProjectLayer>,
     #[serde(rename = "bounds")]
     pub bounds: Box<models::StRectangle>,
     #[serde(rename = "timeStep")]
@@ -31,7 +32,7 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn new(id: uuid::Uuid, version: models::ProjectVersion, name: String, description: String, layers: Vec<models::ProjectLayer>, plots: Vec<models::Plot>, bounds: models::StRectangle, time_step: models::TimeStep) -> Project {
+    pub fn new(id: uuid::Uuid, version: models::ProjectVersion, name: String, description: String, layers: Vec<models::ProjectLayer>, plots: Vec<models::ProjectLayer>, bounds: models::StRectangle, time_step: models::TimeStep) -> Project {
         Project {
             id,
             version: Box::new(version),

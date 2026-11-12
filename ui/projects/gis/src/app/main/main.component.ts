@@ -166,7 +166,7 @@ export class MainComponent implements OnInit, AfterViewInit {
         this.layoutService.setLayerDetailViewVisibility(true);
     }
 
-    idFromLayer(index: number, layer: Layer): number {
+    idFromLayer(index: number, layer: Layer): string {
         return layer.id;
     }
 

@@ -1,3 +1,6 @@
+use crate::layers::dispatch::{layer_collection_provider, load_layer};
+use crate::layers::storage::PROJECTS_PROVIDER_ID;
+use crate::projects::layer_provider::ProjectsLayerProvider;
 use crate::{
     api::{
         handlers::tasks::TaskResponse,
@@ -216,6 +219,23 @@ async fn get_layer_providers<C: ApplicationContext>(
         options.limit -= 1;
     }
 
+    if options.offset == 0 && options.limit > 0 {
+        let db = app_ctx.session_context(session.clone()).db();
+        let projects = ProjectsLayerProvider(&db);
+        providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
+            id: ProviderLayerCollectionId {
+                provider_id: PROJECTS_PROVIDER_ID,
+                collection_id: projects.get_root_layer_collection_id().await?,
+            },
+            name: projects.name().to_string(),
+            description: projects.description().to_string(),
+            properties: Default::default(),
+        }));
+
+        options.limit -= 1;
+    }
+
     let external = app_ctx.session_context(session).db();
     for provider_listing in external
         .list_layer_providers(LayerProviderListingOptions {
@@ -340,16 +360,7 @@ async fn list_collection_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
-        let collection = db
-            .load_layer_collection(&item, options.into_inner())
-            .await?;
-
-        return Ok(web::Json(collection));
-    }
-
-    let collection = db
-        .load_layer_provider(provider)
+    let collection = layer_collection_provider(&db, provider)
         .await?
         .load_layer_collection(&item, options.into_inner())
         .await?;
@@ -399,10 +410,9 @@ async fn provider_capabilities_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    let capabilities = match provider {
-        crate::layers::storage::INTERNAL_PROVIDER_ID => LayerCollectionProvider::capabilities(&db),
-        provider => db.load_layer_provider(provider).await?.capabilities(),
-    };
+    let capabilities = layer_collection_provider(&db, provider)
+        .await?
+        .capabilities();
 
     Ok(web::Json(capabilities))
 }
@@ -473,17 +483,10 @@ async fn search_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    let collection = match provider {
-        crate::layers::storage::INTERNAL_PROVIDER_ID => {
-            LayerCollectionProvider::search(&db, &collection, options.into_inner()).await?
-        }
-        provider => {
-            db.load_layer_provider(provider)
-                .await?
-                .search(&collection, options.into_inner())
-                .await?
-        }
-    };
+    let collection = layer_collection_provider(&db, provider)
+        .await?
+        .search(&collection, options.into_inner())
+        .await?;
 
     Ok(web::Json(collection))
 }
@@ -523,18 +526,10 @@ async fn autocomplete_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    let suggestions = match provider {
-        crate::layers::storage::INTERNAL_PROVIDER_ID => {
-            LayerCollectionProvider::autocomplete_search(&db, &collection, options.into_inner())
-                .await?
-        }
-        provider => {
-            db.load_layer_provider(provider)
-                .await?
-                .autocomplete_search(&collection, options.into_inner())
-                .await?
-        }
-    };
+    let suggestions = layer_collection_provider(&db, provider)
+        .await?
+        .autocomplete_search(&collection, options.into_inner())
+        .await?;
 
     Ok(web::Json(suggestions))
 }
@@ -710,14 +705,7 @@ async fn layer_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    let layer = if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
-        db.load_layer(&item.into()).await?
-    } else {
-        db.load_layer_provider(provider)
-            .await?
-            .load_layer(&item.into())
-            .await?
-    };
+    let layer = load_layer(&db, provider, &item.into()).await?;
 
     Ok(web::Json(Layer::try_from(layer)?))
 }
@@ -746,15 +734,7 @@ async fn layer_to_processing_graph_id_handler<C: ApplicationContext>(
     let (provider, item) = path.into_inner();
 
     let db = app_ctx.session_context(session.clone()).db();
-    let layer = match provider {
-        crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item.into()).await?,
-        _ => {
-            db.load_layer_provider(provider)
-                .await?
-                .load_layer(&item.into())
-                .await?
-        }
-    };
+    let layer = load_layer(&db, provider, &item.into()).await?;
 
     let db = app_ctx.session_context(session).db();
     let processing_graph_id: ProcessingGraphId = db
@@ -797,15 +777,7 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let db = ctx.db();
 
-    let layer = match provider {
-        crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
-        _ => {
-            db.load_layer_provider(provider)
-                .await?
-                .load_layer(&item)
-                .await?
-        }
-    };
+    let layer = load_layer(&db, provider, &item).await?;
 
     let processing_graph_id = db
         .register_processing_graph(layer.processing_graph.clone())
@@ -2189,6 +2161,19 @@ mod tests {
             properties: vec![],
         });
 
+        let projects_item = CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
+            id: ProviderLayerCollectionId {
+                provider_id: PROJECTS_PROVIDER_ID,
+                collection_id: LayerCollectionId("projects".to_string()),
+            },
+            name: "Projects".to_string(),
+            description:
+                "The layers and plots of your projects and of the projects shared with you"
+                    .to_string(),
+            properties: vec![],
+        });
+
         let collection = LayerCollection {
             id: ProviderLayerCollectionId {
                 provider_id: ROOT_PROVIDER_ID,
@@ -2198,6 +2183,7 @@ mod tests {
             description: "All available Geo Engine layer providers".to_string(),
             items: vec![
                 data_catalog_item.clone(),
+                projects_item.clone(),
                 CollectionItem::Collection(LayerCollectionListing {
                     r#type: Default::default(),
                     id: ProviderLayerCollectionId {
@@ -2240,7 +2226,7 @@ mod tests {
             serde_json::from_str::<LayerCollection>(&read_body_string(response).await).unwrap();
 
         let collection = LayerCollection {
-            items: vec![data_catalog_item],
+            items: vec![data_catalog_item, projects_item],
             ..collection
         };
 

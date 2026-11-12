@@ -84,6 +84,7 @@ Class | Method | HTTP request | Description
 *PermissionsApi* | [**add_permission_handler**](docs/PermissionsApi.md#add_permission_handler) | **PUT** /permissions | Adds a new permission.
 *PermissionsApi* | [**get_resource_permissions_handler**](docs/PermissionsApi.md#get_resource_permissions_handler) | **GET** /permissions/resources/{resource_type}/{resource_id} | Lists permission for a given resource.
 *PermissionsApi* | [**remove_permission_handler**](docs/PermissionsApi.md#remove_permission_handler) | **DELETE** /permissions | Removes an existing permission.
+*PlotsApi* | [**get_layer_plot_handler**](docs/PlotsApi.md#get_layer_plot_handler) | **GET** /plot/{provider}/{layer} | Generates the plot of a layer, e.g. of a plot in a project.
 *PlotsApi* | [**get_plot_handler**](docs/PlotsApi.md#get_plot_handler) | **GET** /plot/{id} | Generates a plot.
 *ProcessingGraphsApi* | [**dataset_from_processing_graph_handler**](docs/ProcessingGraphsApi.md#dataset_from_processing_graph_handler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its `id` and the dataset parameters in the request body. Returns the id of the created task
 *ProcessingGraphsApi* | [**get_processing_graph_all_metadata_zip_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_all_metadata_zip_handler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata.
@@ -363,11 +364,9 @@ Class | Method | HTTP request | Description
  - [PieChart](docs/PieChart.md)
  - [PieChartCountType](docs/PieChartCountType.md)
  - [PieChartParameters](docs/PieChartParameters.md)
- - [Plot](docs/Plot.md)
  - [PlotOperator](docs/PlotOperator.md)
  - [PlotOutputFormat](docs/PlotOutputFormat.md)
  - [PlotResultDescriptor](docs/PlotResultDescriptor.md)
- - [PlotUpdate](docs/PlotUpdate.md)
  - [PointInPolygonFilter](docs/PointInPolygonFilter.md)
  - [PointInPolygonFilterSource](docs/PointInPolygonFilterSource.md)
  - [PointSymbology](docs/PointSymbology.md)
@@ -386,7 +385,9 @@ Class | Method | HTTP request | Description
  - [ProcessingGraph](docs/ProcessingGraph.md)
  - [Project](docs/Project.md)
  - [ProjectLayer](docs/ProjectLayer.md)
+ - [ProjectLayerUpdate](docs/ProjectLayerUpdate.md)
  - [ProjectListing](docs/ProjectListing.md)
+ - [ProjectOrderBy](docs/ProjectOrderBy.md)
  - [ProjectResource](docs/ProjectResource.md)
  - [ProjectUpdateToken](docs/ProjectUpdateToken.md)
  - [ProjectVersion](docs/ProjectVersion.md)

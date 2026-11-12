@@ -2,8 +2,8 @@ import {TestBed} from '@angular/core/testing';
 import moment from 'moment';
 import {firstValueFrom, NEVER, of, BehaviorSubject} from 'rxjs';
 import {first, map, mergeMap, tap} from 'rxjs/operators';
-import {beforeEach, describe, expect, it, vi, type Mock} from 'vitest';
-import {Configuration, DefaultConfig} from '@geoengine/api-client';
+import {afterEach, beforeEach, describe, expect, it, vi, type Mock, type MockInstance} from 'vitest';
+import {Configuration, DefaultConfig, Project as ProjectDict, ProjectsApi, SessionApi} from '@geoengine/api-client';
 import {
     LayersService,
     NotificationService,
@@ -11,11 +11,12 @@ import {
     RasterSymbology,
     SpatialReferenceSpecification,
     Time,
+    timeStepDurationToTimeStepDict,
     UserService,
 } from '@geoengine/common';
 import {Project} from './project.model';
 import {ProjectService} from './project.service';
-import {CreateProjectResponseDict, UUID} from '../backend/backend.model';
+import {UUID} from '../backend/backend.model';
 import {BackendService} from '../backend/backend.service';
 import {CoreConfig, DEFAULT_CORE_CONFIG} from '../config.service';
 import {MapService, ViewportSize} from '../map/map.service';
@@ -31,12 +32,10 @@ describe('test project methods in projectService', () => {
         getViewportSizeStream: Mock;
     };
     let backendSpy: {
-        createProject: Mock;
-        listProjects: Mock;
-        setSessionProject: Mock;
-        updateProject: Mock;
         getWorkflowMetadata: Mock;
     };
+    let createProjectSpy: MockInstance<ProjectsApi['createProjectHandler']>;
+    let updateProjectSpy: MockInstance<ProjectsApi['updateProjectHandler']>;
     let userServiceSpy: {
         getSessionStream: Mock;
         getSessionTokenStream: Mock;
@@ -51,6 +50,10 @@ describe('test project methods in projectService', () => {
 
     let projectService: ProjectService;
 
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     beforeEach(() => {
         notificationServiceSpy = {
             error: vi.fn().mockName('NotificationService.error'),
@@ -59,10 +62,6 @@ describe('test project methods in projectService', () => {
             getViewportSizeStream: vi.fn().mockName('MapService.getViewportSizeStream'),
         };
         backendSpy = {
-            createProject: vi.fn().mockName('BackendService.createProject'),
-            listProjects: vi.fn().mockName('BackendService.listProjects'),
-            setSessionProject: vi.fn().mockName('BackendService.setSessionProject'),
-            updateProject: vi.fn().mockName('BackendService.updateProject'),
             getWorkflowMetadata: vi.fn().mockName('BackendService.getWorkflowMetadata'),
         };
         userServiceSpy = {
@@ -127,19 +126,31 @@ describe('test project methods in projectService', () => {
         );
 
         // for constructor
-        backendSpy.listProjects.mockReturnValue(NEVER); // never complete and set any project
+        vi.spyOn(ProjectsApi.prototype, 'listProjectsHandler').mockReturnValue(new Promise(() => undefined)); // never set any project
+
+        vi.spyOn(SessionApi.prototype, 'sessionProjectHandler').mockResolvedValue(undefined);
 
         backendSpy.getWorkflowMetadata.mockReturnValue(NEVER); // layer metadata is not of interest here
 
-        backendSpy.createProject.mockReturnValue(
-            of<CreateProjectResponseDict>({
-                id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
-            }),
-        );
+        createProjectSpy = vi.spyOn(ProjectsApi.prototype, 'createProjectHandler').mockResolvedValue({
+            id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
+        });
 
-        backendSpy.updateProject.mockReturnValue(
-            of<CreateProjectResponseDict>({
-                id: 'dddddddd-dddd-4ddd-addd-dddddddddddd',
+        // the backend returns the stored project, here: the cloned default project
+        updateProjectSpy = vi.spyOn(ProjectsApi.prototype, 'updateProjectHandler').mockImplementation(async ({project}) =>
+            Promise.resolve<ProjectDict>({
+                id: project,
+                name: 'newTestName',
+                description: 'Default project',
+                version: {id: '0', changed: new Date()},
+                bounds: {
+                    spatialReference: 'EPSG:4326',
+                    boundingBox: {lowerLeftCoordinate: {x: -180, y: -90}, upperRightCoordinate: {x: 180, y: 90}},
+                    timeInterval: new Time(moment.utc('2014-04-01 12:00:00')).toDict(),
+                },
+                layers: [],
+                plots: [],
+                timeStep: timeStepDurationToTimeStepDict({durationAmount: 1, durationUnit: 'month'}),
             }),
         );
 
@@ -181,9 +192,9 @@ describe('test project methods in projectService', () => {
                 },
             }).toDict(),
         );
-        expect(backendSpy.createProject).toHaveBeenCalledTimes(1);
-        expect(backendSpy.createProject).toHaveBeenCalledWith(
-            {
+        expect(createProjectSpy).toHaveBeenCalledTimes(1);
+        expect(createProjectSpy).toHaveBeenCalledWith({
+            createProject: {
                 name: 'Default',
                 description: 'Default project',
                 bounds: {
@@ -205,8 +216,7 @@ describe('test project methods in projectService', () => {
                     granularity: 'months',
                 },
             },
-            'ffffffff-ffff-4fff-afff-ffffffffffff',
-        );
+        });
     });
 
     it('#createProject should create a project', async () => {
@@ -411,6 +421,38 @@ describe('test project methods in projectService', () => {
         );
     });
 
+    it('#addLayer should return the layer with the id the server assigned', async () => {
+        const project = await firstValueFrom(projectService.createDefaultProject());
+        projectService.setProject(project);
+
+        const layer = new RasterLayer({
+            name: 'test',
+            processingGraphId: 'ffffffff-ffff-4fff-afff-ffffffffffff',
+            isVisible: true,
+            isLegendVisible: true,
+            symbology: {opacity: 1, toDict: () => ({})} as unknown as RasterSymbology,
+        });
+
+        updateProjectSpy.mockImplementation(async ({project: projectId}) =>
+            Promise.resolve({
+                ...project.toDict(),
+                id: projectId,
+                layers: [{...layer.toProjectLayerDict(), id: 'stored-layer-id'}],
+            }),
+        );
+
+        const savedLayer = await firstValueFrom(projectService.addLayer(layer));
+
+        expect(savedLayer.id).toBe('stored-layer-id');
+        expect(savedLayer.name).toBe('test');
+        // the new layer is sent without id
+        const layerUpdate = updateProjectSpy.mock.lastCall?.[0].updateProject.layers?.[0];
+        expect(typeof layerUpdate === 'object' ? layerUpdate.id : 'not a layer').toBeUndefined();
+
+        const storedProject = await firstValueFrom(projectService.getProjectOnce());
+        expect(storedProject.layers.map((l) => l.id)).toEqual(['stored-layer-id']);
+    });
+
     describe('#createQueryAbortStream', () => {
         let viewportSize$: BehaviorSubject<ViewportSize>;
 
@@ -436,7 +478,7 @@ describe('test project methods in projectService', () => {
 
         const makeLayer = (): RasterLayer =>
             new RasterLayer({
-                id: 1,
+                id: 'layer-1',
                 name: 'test',
                 processingGraphId: 'ffffffff-ffff-4fff-afff-ffffffffffff',
                 isVisible: true,
@@ -456,7 +498,7 @@ describe('test project methods in projectService', () => {
 
         it('does not abort on a viewport change, which is watched per rendered frame instead', () => {
             let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1).subscribe(() => (aborted = true));
+            const subscription = projectService.createQueryAbortStream('layer-1').subscribe(() => (aborted = true));
 
             // neither a pan that moves the tile away nor a zoom may abort here: `TileLoader.cancelUnwanted`
             // decides that per tile, because the viewport alone cannot tell whether a tile is still wanted
@@ -469,7 +511,7 @@ describe('test project methods in projectService', () => {
 
         it('aborts when the project time changes', () => {
             let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1).subscribe(() => (aborted = true));
+            const subscription = projectService.createQueryAbortStream('layer-1').subscribe(() => (aborted = true));
 
             projectService.setProject(makeProject(new Time(moment.utc('2014-04-02 12:00:00'))));
 
@@ -481,7 +523,7 @@ describe('test project methods in projectService', () => {
             projectService.setProject(makeProject(new Time(moment.utc('2014-04-01 12:00:00')), [makeLayer()]));
 
             let aborted = false;
-            const subscription = projectService.createQueryAbortStream(1).subscribe(() => (aborted = true));
+            const subscription = projectService.createQueryAbortStream('layer-1').subscribe(() => (aborted = true));
 
             // setting a project without the layer completes its layer stream
             projectService.setProject(makeProject(new Time(moment.utc('2014-04-01 12:00:00'))));

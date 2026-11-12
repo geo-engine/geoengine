@@ -119,8 +119,8 @@ export class Project implements ToDict<ProjectDict> {
             description: this.description,
             version: this.version, // TODO: get rid of version?
             bounds: this.toBoundsDict(),
-            layers: this._layers.map((layer) => layer.toDict()),
-            plots: this._plots.map((plot) => plot.toDict()),
+            layers: this._layers.map((layer) => layer.toProjectLayerDict()),
+            plots: this._plots.map((plot) => plot.toProjectLayerDict()),
             timeStep: timeStepDurationToTimeStepDict(this.timeStepDuration),
         };
     }

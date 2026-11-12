@@ -17,12 +17,12 @@ use crate::{
     config::{self},
     contexts::{ApplicationContext, SessionContext},
     queries::{
-        ogc_tile::{TileQuery, render_tile},
+        ogc_tile::{TileQuery, load_tile_layer, render_tile, tile_etag},
         run_query,
     },
     util::server::{CacheControlHeader, connection_closed},
 };
-use actix_web::{HttpRequest, HttpResponse, web};
+use actix_web::{HttpRequest, HttpResponse, http::header, web};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, TimeInstance, TimeInterval};
 use geoengine_operators::engine::ExecutionContext;
 use ogcapi_types::{
@@ -371,18 +371,51 @@ pub async fn tile<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
+    let layer = load_tile_layer::<C>(&ctx, &query).await?;
+
+    // If the client has a matching `ETag`, the processing graph, symbology, tile and time are the
+    // same, so the tile is the same. Changes of the data are covered by the cache duration.
+    // The client keeps the `Cache-Control` of its stored response, so the 304 does not repeat it.
+    let etag = tile_etag(&layer, &query);
+    if if_none_match(&req, &etag) {
+        return Ok(HttpResponse::NotModified()
+            .append_header((header::ETAG, etag))
+            .finish());
+    }
+
     let (image_bytes, cache_hint, computation_id) = run_query(
         &ctx,
         connection_closed_handler,
-        render_tile::<C>(ctx.clone(), query),
+        render_tile::<C>(ctx.clone(), query, layer),
     )
     .await?;
 
+    // Within the cache duration, the client uses its cached tile. After that, it revalidates the
+    // tile with its `ETag`.
     Ok(HttpResponse::Ok()
         .content_type(mime::IMAGE_PNG)
+        .append_header((header::ETAG, etag))
         .append_header(cache_hint.cache_control_header())
         .append_header(computation_id)
         .body(image_bytes))
+}
+
+/// Whether the `If-None-Match` header of `req` contains `etag`.
+///
+/// `If-None-Match` uses the weak comparison, so the `W/` prefix is ignored on both sides.
+fn if_none_match(req: &HttpRequest, etag: &str) -> bool {
+    fn opaque_tag(tag: &str) -> &str {
+        let tag = tag.trim();
+        tag.strip_prefix("W/").unwrap_or(tag)
+    }
+
+    let etag = opaque_tag(etag);
+
+    req.headers()
+        .get_all(header::IF_NONE_MATCH)
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .any(|tag| tag.trim() == "*" || opaque_tag(tag) == etag)
 }
 
 fn ensure_matching_collection(layer_id: &LayerId, collection_id: LayerId) -> OgcApiResult<()> {
@@ -436,7 +469,8 @@ mod tests {
     use super::*;
     use crate::{
         api::handlers::ogc::test_util::{
-            session_and_3857_layer_id, session_and_4326_layer_id, session_and_4326_rgb_layer_id,
+            session_and_3857_layer_id, session_and_4326_layer_id,
+            session_and_4326_project_layer_id, session_and_4326_rgb_layer_id,
             session_and_native_3857_layer_id, session_and_ndvi_multi_band_layer_id,
         },
         contexts::PostgresContext,
@@ -620,6 +654,214 @@ mod tests {
         save_test_bytes_if_not_exists(&image_bytes, &file_path);
 
         assert_image_equals(&file_path, &image_bytes);
+    }
+
+    #[ge_context::test]
+    async fn it_renders_tile_png_of_a_project_layer(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, data_connector_id, layer_id) =
+            session_and_4326_project_layer_id(&app_ctx).await;
+
+        assert_eq!(
+            data_connector_id,
+            crate::layers::storage::PROJECTS_PROVIDER_ID.into()
+        );
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/2/1/4?datetime=2014-04-01T00:00:00Z",
+                TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        assert_eq!(status, 200);
+
+        // the project layer is a copy of the catalog layer, so it renders the same tile
+        assert_image_equals(test_data!("ogc/tiles/ndvi_2_1_4.png"), &image_bytes);
+    }
+
+    /// Creates a project with an NDVI layer whose data has the cache TTL `cache_ttl`.
+    /// Returns the session, the project, and the uri of a tile of the layer.
+    async fn ndvi_project_layer_tile(
+        app_ctx: &PostgresContext<NoTls>,
+        cache_ttl: geoengine_datatypes::primitives::CacheTtlSeconds,
+    ) -> (crate::users::UserSession, crate::projects::Project, String) {
+        use crate::projects::{LayerUpdate, ProjectDb, ProjectLayerUpdate, UpdateProject};
+        use crate::util::tests::{
+            admin_login, create_project_helper, ndvi_255_symbology,
+            register_ndvi_processing_graph_helper_with_cache_ttl,
+        };
+
+        let (_, processing_graph) =
+            register_ndvi_processing_graph_helper_with_cache_ttl(app_ctx, cache_ttl).await;
+
+        let session = admin_login(app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+        let project = create_project_helper(&ctx).await;
+
+        let project = ctx
+            .db()
+            .update_project(UpdateProject {
+                id: project,
+                name: None,
+                description: None,
+                layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayerUpdate {
+                    id: None,
+                    name: "NDVI".to_string(),
+                    description: String::new(),
+                    processing_graph,
+                    symbology: Some(ndvi_255_symbology()),
+                    properties: vec![],
+                    metadata: Default::default(),
+                    visibility: Default::default(),
+                    source: None,
+                })]),
+                plots: None,
+                bounds: None,
+                time_step: None,
+            })
+            .await
+            .unwrap();
+
+        let layer_id = &project.layers[0].layer.id.layer_id;
+        let uri = format!(
+            "/ogc/{PROJECTS_PROVIDER_ID}/{layer_id}/collections/{layer_id}/map/tiles/{TILE_MATRIX_SET_ID}/2/1/4?datetime=2014-04-01T00:00:00Z",
+            PROJECTS_PROVIDER_ID = crate::layers::storage::PROJECTS_PROVIDER_ID,
+            TILE_MATRIX_SET_ID = CustomNativeTMS::TILE_MATRIX_SET_ID
+        );
+
+        (session, project, uri)
+    }
+
+    async fn get_tile(
+        app_ctx: &PostgresContext<NoTls>,
+        session: &crate::users::UserSession,
+        uri: &str,
+        if_none_match: Option<&str>,
+    ) -> actix_web::dev::ServiceResponse {
+        let mut req = actix_web::test::TestRequest::get()
+            .uri(uri)
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id.to_string())));
+        if let Some(etag) = if_none_match {
+            req = req.append_header((header::IF_NONE_MATCH, etag));
+        }
+        send_test_request(req, app_ctx.clone()).await
+    }
+
+    fn header_value(
+        res: &actix_web::dev::ServiceResponse,
+        name: header::HeaderName,
+    ) -> Option<String> {
+        res.headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(ToOwned::to_owned)
+    }
+
+    #[ge_context::test]
+    async fn it_revalidates_tiles_with_an_etag(app_ctx: PostgresContext<NoTls>) {
+        use crate::projects::{LayerUpdate, ProjectDb, ProjectLayerUpdate, UpdateProject};
+
+        let (session, project, uri) = ndvi_project_layer_tile(
+            &app_ctx,
+            geoengine_datatypes::primitives::CacheTtlSeconds::new(0),
+        )
+        .await;
+
+        // the first request renders the tile and returns an `ETag`
+        let res = get_tile(&app_ctx, &session, &uri, None).await;
+        assert_eq!(res.status(), 200);
+        assert_eq!(
+            header_value(&res, header::CACHE_CONTROL).as_deref(),
+            Some("no-cache")
+        );
+        let etag = header_value(&res, header::ETAG).expect("should have an ETag");
+        assert!(etag.starts_with("W/\""), "{etag}");
+
+        // the tile has not changed, so it is not rendered again
+        let res = get_tile(&app_ctx, &session, &uri, Some(&etag)).await;
+        assert_eq!(header_value(&res, header::ETAG), Some(etag.clone()));
+        assert_eq!(res.status(), 304);
+        assert_eq!(header_value(&res, header::CACHE_CONTROL), None);
+        assert!(actix_web::test::read_body(res).await.is_empty());
+
+        // the strong form of the tag and a list of tags match too
+        let res = get_tile(
+            &app_ctx,
+            &session,
+            &uri,
+            Some(&format!(
+                "\"other\", {}",
+                etag.strip_prefix("W/").expect("should be a weak ETag")
+            )),
+        )
+        .await;
+        assert_eq!(res.status(), 304);
+
+        // changing the symbology changes the tile
+        let layer = &project.layers[0];
+        let mut symbology = crate::util::tests::ndvi_255_symbology();
+        if let crate::projects::Symbology::Raster(raster) = &mut symbology {
+            raster.opacity = 0.5;
+        }
+
+        app_ctx
+            .session_context(session.clone())
+            .db()
+            .update_project(UpdateProject {
+                id: project.id,
+                name: None,
+                description: None,
+                layers: Some(vec![LayerUpdate::UpdateOrInsert(ProjectLayerUpdate {
+                    id: Some(layer.layer.id.layer_id.clone()),
+                    name: layer.layer.name.clone(),
+                    description: layer.layer.description.clone(),
+                    processing_graph:
+                        crate::processing_graphs::processing_graph::ProcessingGraphId::from_hash(
+                            &layer.layer.processing_graph,
+                        ),
+                    symbology: Some(symbology),
+                    properties: vec![],
+                    metadata: Default::default(),
+                    visibility: Default::default(),
+                    source: None,
+                })]),
+                plots: None,
+                bounds: None,
+                time_step: None,
+            })
+            .await
+            .unwrap();
+
+        let res = get_tile(&app_ctx, &session, &uri, Some(&etag)).await;
+        assert_eq!(res.status(), 200);
+        let new_etag = header_value(&res, header::ETAG).expect("should have an ETag");
+        assert_ne!(new_etag, etag);
+    }
+
+    #[ge_context::test]
+    async fn it_sends_an_etag_with_the_cache_duration_of_the_data(app_ctx: PostgresContext<NoTls>) {
+        let (session, _project, uri) = ndvi_project_layer_tile(
+            &app_ctx,
+            geoengine_datatypes::primitives::CacheTtlSeconds::new(60),
+        )
+        .await;
+
+        let res = get_tile(&app_ctx, &session, &uri, None).await;
+        assert_eq!(res.status(), 200);
+        let etag = header_value(&res, header::ETAG).expect("should have an ETag");
+        let cache_control = header_value(&res, header::CACHE_CONTROL).unwrap();
+        assert!(
+            cache_control.starts_with("private, max-age="),
+            "{cache_control}"
+        );
+
+        // after the cache duration, the browser revalidates the tile
+        let res = get_tile(&app_ctx, &session, &uri, Some(&etag)).await;
+        assert_eq!(res.status(), 304);
     }
 
     #[ge_context::test]

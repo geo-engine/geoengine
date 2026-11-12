@@ -107,6 +107,7 @@ All URIs are relative to *https://geoengine.io/api*
 *PermissionsApi* | [**addPermissionHandler**](docs/PermissionsApi.md#addpermissionhandler) | **PUT** /permissions | Adds a new permission.
 *PermissionsApi* | [**getResourcePermissionsHandler**](docs/PermissionsApi.md#getresourcepermissionshandler) | **GET** /permissions/resources/{resource_type}/{resource_id} | Lists permission for a given resource.
 *PermissionsApi* | [**removePermissionHandler**](docs/PermissionsApi.md#removepermissionhandler) | **DELETE** /permissions | Removes an existing permission.
+*PlotsApi* | [**getLayerPlotHandler**](docs/PlotsApi.md#getlayerplothandler) | **GET** /plot/{provider}/{layer} | Generates the plot of a layer, e.g. of a plot in a project.
 *PlotsApi* | [**getPlotHandler**](docs/PlotsApi.md#getplothandler) | **GET** /plot/{id} | Generates a plot.
 *ProcessingGraphsApi* | [**datasetFromProcessingGraphHandler**](docs/ProcessingGraphsApi.md#datasetfromprocessinggraphhandler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its &#x60;id&#x60; and the dataset parameters in the request body. Returns the id of the created task
 *ProcessingGraphsApi* | [**getProcessingGraphAllMetadataZipHandler**](docs/ProcessingGraphsApi.md#getprocessinggraphallmetadataziphandler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata.
@@ -386,11 +387,9 @@ All URIs are relative to *https://geoengine.io/api*
 - [PieChart](docs/PieChart.md)
 - [PieChartCountType](docs/PieChartCountType.md)
 - [PieChartParameters](docs/PieChartParameters.md)
-- [Plot](docs/Plot.md)
 - [PlotOperator](docs/PlotOperator.md)
 - [PlotOutputFormat](docs/PlotOutputFormat.md)
 - [PlotResultDescriptor](docs/PlotResultDescriptor.md)
-- [PlotUpdate](docs/PlotUpdate.md)
 - [PointInPolygonFilter](docs/PointInPolygonFilter.md)
 - [PointInPolygonFilterSource](docs/PointInPolygonFilterSource.md)
 - [PointSymbology](docs/PointSymbology.md)
@@ -409,7 +408,9 @@ All URIs are relative to *https://geoengine.io/api*
 - [ProcessingGraph](docs/ProcessingGraph.md)
 - [Project](docs/Project.md)
 - [ProjectLayer](docs/ProjectLayer.md)
+- [ProjectLayerUpdate](docs/ProjectLayerUpdate.md)
 - [ProjectListing](docs/ProjectListing.md)
+- [ProjectOrderBy](docs/ProjectOrderBy.md)
 - [ProjectResource](docs/ProjectResource.md)
 - [ProjectUpdateToken](docs/ProjectUpdateToken.md)
 - [ProjectVersion](docs/ProjectVersion.md)

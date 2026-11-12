@@ -4,14 +4,16 @@ use crate::{
         ogc::util::{parse_bbox, parse_time},
     },
     config,
-    contexts::ApplicationContext,
+    contexts::{ApplicationContext, SessionContext},
     error::Result,
-    processing_graphs::processing_graph::ProcessingGraphId,
+    layers::dispatch::load_layer,
+    processing_graphs::{processing_graph::ProcessingGraphId, registry::ProcessingGraphRegistry},
     queries::{plot::plot, run_query},
     util::{parsing::parse_spatial_resolution_option, server::connection_closed},
 };
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::{
+    dataset::{DataProviderId, LayerId},
     plots::PlotOutputFormat,
     primitives::{BoundingBox2D, SpatialResolution},
     spatial_reference::SpatialReference,
@@ -26,7 +28,11 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(web::resource("/plot/{id}").route(web::get().to(get_plot_handler::<C>)));
+    cfg.service(web::resource("/plot/{id}").route(web::get().to(get_plot_handler::<C>)))
+        .service(
+            web::resource("/plot/{provider}/{layer}")
+                .route(web::get().to(get_layer_plot_handler::<C>)),
+        );
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, IntoParams)]
@@ -118,6 +124,56 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let ctx = app_ctx.session_context(session);
     let processing_graph_id = ProcessingGraphId(id.into_inner());
+    let (output, computation_id) = run_query(
+        &ctx,
+        conn_closed,
+        plot(ctx.clone(), processing_graph_id, params.into_inner()),
+    )
+    .await?;
+
+    Ok(HttpResponse::Ok()
+        .append_header(computation_id)
+        .json(output))
+}
+
+/// Generates the plot of a layer, e.g. of a plot in a project.
+#[utoipa::path(
+    tag = "Plots",
+    get,
+    path = "/plot/{provider}/{layer}",
+    responses(
+        (status = 200, description = "OK", body = WrappedPlotOutput)
+    ),
+    params(
+        GetPlot,
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id"),
+        ("layer" = crate::api::model::datatypes::LayerId, description = "Layer id")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn get_layer_plot_handler<C: ApplicationContext>(
+    req: HttpRequest,
+    path: web::Path<(DataProviderId, LayerId)>,
+    params: web::Query<GetPlot>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder> {
+    let conn_closed = connection_closed(
+        &req,
+        config::get_config_element::<config::Plots>()?
+            .request_timeout_seconds
+            .map(Duration::from_secs),
+    );
+
+    let (provider, layer) = path.into_inner();
+
+    let ctx = app_ctx.session_context(session);
+    let db = ctx.db();
+    let layer = load_layer(&db, provider, &layer).await?;
+    let processing_graph_id = db.register_processing_graph(layer.processing_graph).await?;
+
     let (output, computation_id) = run_query(
         &ctx,
         conn_closed,

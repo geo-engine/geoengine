@@ -9,7 +9,6 @@
  * Do not edit the class manually.
  */
 import type { TimeStep } from './TimeStep';
-import type { Plot } from './Plot';
 import type { ProjectVersion } from './ProjectVersion';
 import type { STRectangle } from './STRectangle';
 import type { ProjectLayer } from './ProjectLayer';
@@ -40,9 +39,9 @@ export interface Project {
      */
     layers: Array<ProjectLayer>;
     /**
-     *
+     * Plots are project layers without symbology.
      */
-    plots: Array<Plot>;
+    plots: Array<ProjectLayer>;
     /**
      *
      */

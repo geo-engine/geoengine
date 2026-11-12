@@ -18,9 +18,11 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from uuid import UUID
 from geoengine_api_client.models.layer_visibility import LayerVisibility
+from geoengine_api_client.models.provider_layer_id import ProviderLayerId
 from geoengine_api_client.models.symbology import Symbology
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,13 +30,18 @@ from pydantic_core import to_jsonable_python
 
 class ProjectLayer(BaseModel):
     """
-    ProjectLayer
+    A layer or plot of a project.  It is also a layer of the projects data connector, with the same `id`. Only the visibility is specific to the project.
     """ # noqa: E501
-    processing_graph: UUID = Field(alias="processingGraph")
+    id: StrictStr = Field(description="The id of the layer, stable across project versions.")
     name: StrictStr
+    description: StrictStr
+    processing_graph: UUID = Field(description="The id of the processing graph of the layer.", alias="processingGraph")
+    symbology: Optional[Symbology] = Field(default=None, description="The symbology of the layer, which plots do not have.")
+    properties: List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]] = Field(description="properties, for instance, to be rendered in the UI")
+    metadata: Dict[str, StrictStr] = Field(description="metadata used for loading the data")
     visibility: LayerVisibility
-    symbology: Symbology
-    __properties: ClassVar[List[str]] = ["processingGraph", "name", "visibility", "symbology"]
+    source: Optional[ProviderLayerId] = Field(default=None, description="The catalog layer this layer was copied from, if any.")
+    __properties: ClassVar[List[str]] = ["id", "name", "description", "processingGraph", "symbology", "properties", "metadata", "visibility", "source"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -75,12 +82,25 @@ class ProjectLayer(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of visibility
-        if self.visibility:
-            _dict['visibility'] = self.visibility.to_dict()
         # override the default output from pydantic by calling `to_dict()` of symbology
         if self.symbology:
             _dict['symbology'] = self.symbology.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of visibility
+        if self.visibility:
+            _dict['visibility'] = self.visibility.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of source
+        if self.source:
+            _dict['source'] = self.source.to_dict()
+        # set to None if symbology (nullable) is None
+        # and model_fields_set contains the field
+        if self.symbology is None and "symbology" in self.model_fields_set:
+            _dict['symbology'] = None
+
+        # set to None if source (nullable) is None
+        # and model_fields_set contains the field
+        if self.source is None and "source" in self.model_fields_set:
+            _dict['source'] = None
+
         return _dict
 
     @classmethod
@@ -93,10 +113,15 @@ class ProjectLayer(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "processingGraph": obj.get("processingGraph"),
+            "id": obj.get("id"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
+            "processingGraph": obj.get("processingGraph"),
+            "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
+            "properties": obj.get("properties"),
+            "metadata": obj.get("metadata"),
             "visibility": LayerVisibility.from_dict(obj["visibility"]) if obj.get("visibility") is not None else None,
-            "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None
+            "source": ProviderLayerId.from_dict(obj["source"]) if obj.get("source") is not None else None
         })
         return _obj
 
