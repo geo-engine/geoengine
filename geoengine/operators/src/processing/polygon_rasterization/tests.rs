@@ -1024,6 +1024,7 @@ fn clip(raster: TypedRasterOperator, mask: TypedRasterOperator) -> TypedRasterOp
             raster: RasterStacker {
                 params: RasterStackerParams {
                     rename_bands: RenameBands::Default,
+                    output_origin: None,
                 },
                 sources: MultipleRasterSources {
                     rasters: vec![raster, mask],

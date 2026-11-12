@@ -21,7 +21,7 @@ use futures::{
     stream::{self, BoxStream, StreamExt},
 };
 use gdal::raster::GdalType;
-use geoengine_datatypes::raster::{ChangeGridBounds, TileSize};
+use geoengine_datatypes::raster::TileSize;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
@@ -29,8 +29,8 @@ use geoengine_datatypes::{
         TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
     },
     raster::{
-        EmptyGrid, GridBoundingBox2D, Pixel, RasterDataType, RasterProperties, RasterTile2D,
-        SpatialGridDefinition, TileInformation, TilingGrid, TilingSpecification, TilingStrategy,
+        GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition, TilingGrid,
+        TilingStrategy,
     },
 };
 use itertools::Itertools;

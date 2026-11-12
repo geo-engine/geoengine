@@ -48,8 +48,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        ExecutionContext, ProcessingGraphOperatorPath, RasterBandDescriptor, RasterBandDescriptors,
-        RasterOperator, SingleRasterSource, StaticMetaData, TypedRasterOperator,
+        ProcessingGraphOperatorPath, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+        SingleRasterSource, StaticMetaData, TypedRasterOperator,
     },
     processing::{BandFilter, BandFilterParams, BandsByNameOrIndex},
     source::{
@@ -380,8 +380,8 @@ async fn render_tile(
     let grid_bounds = wrapped
         .result_descriptor
         .spatial_grid_descriptor()
-        .tiling_grid_definition(exec_ctx.tiling_specification())
-        .tiling_spatial_grid_definition()
+        .tiling_grid_definition()
+        .to_spatial_grid()
         .spatial_bounds_to_compatible_spatial_grid(bounds)
         .grid_bounds();
     let time = TimeInterval::new_instant(DateTime::new_utc(2024, 6, 1, 0, 0, 0)).unwrap();

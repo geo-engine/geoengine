@@ -452,8 +452,8 @@ async fn run(
         .unwrap();
     let scene = processor
         .result_descriptor()
-        .tiling_grid_definition(env.exe_ctx.inner.tiling_specification)
-        .tiling_grid_bounds();
+        .tiling_grid_definition()
+        .pixel_bounds;
     let processor = processor.query_processor().unwrap();
 
     // the windows are relative to the file, the query is in the tiling grid

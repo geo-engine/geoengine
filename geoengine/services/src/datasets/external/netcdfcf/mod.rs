@@ -2152,6 +2152,7 @@ mod tests {
                         [9, 9]  // 10
                     )
                     .unwrap(),
+                    TileSize::default_512(),
                 )
                 // the overview files have no overviews of their own
                 .with_max_overview_level(Some(1)),
