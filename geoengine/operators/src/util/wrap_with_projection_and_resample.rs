@@ -295,7 +295,7 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::primitives::TimeInterval;
-    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
 
     async fn wrap_with_resample(target_resolution: SpatialResolution) -> TypedRasterOperator {
@@ -310,6 +310,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.).unwrap(),
                         GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
+                        TileSize::default_512(),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },

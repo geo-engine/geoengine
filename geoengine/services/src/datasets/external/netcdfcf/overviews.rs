@@ -833,6 +833,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                        TileSize::default_512(),
                     )
                     .with_max_overview_level(Some(1)),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -1011,6 +1012,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                        TileSize::default_512(),
                     )
                     .with_max_overview_level(Some(1)),
                     bands: RasterBandDescriptors::new_single_band(),

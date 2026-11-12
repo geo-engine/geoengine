@@ -75,7 +75,7 @@ mod tests {
     use super::*;
     use geoengine_datatypes::{
         primitives::{TimeInterval, TimeStep},
-        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType, TileSize},
         util::test::TestDefault,
     };
 
@@ -110,6 +110,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::test_default(),
                     GridBoundingBox2D::new([-2, 0], [-1, 5]).unwrap(),
+                    TileSize::new_unchecked(2, 3),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             }

@@ -196,7 +196,7 @@ impl<'a> AsciiRasterTiles<'a> {
     ///
     /// If the text is malformed.
     pub fn tiling_specification(&self) -> TilingSpecification {
-        TilingSpecification::with_zero_origin(tile_size_of(parse(self.text).tile_size))
+        TilingSpecification::new(tile_size_of(parse(self.text).tile_size))
     }
 
     /// Returns the properties of the described raster, e.g., to build a result descriptor.
@@ -920,7 +920,7 @@ mod tests {
         assert_eq!(*tiles[0].grid_array.shape_ref(), [2, 3].into());
         assert_eq!(
             AsciiRasterTiles::new(TWO_BY_TWO_TILES).tiling_specification(),
-            TilingSpecification::with_zero_origin(TileSize::new_unchecked(2, 3))
+            TilingSpecification::new(TileSize::new_unchecked(2, 3))
         );
 
         let GridOrEmpty::Grid(upper_left) = &tiles[0].grid_array else {

@@ -443,14 +443,21 @@ mod tests {
 
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::{
-        primitives::{TimeInstance, TimeInterval, TimeStep},
-        raster::{GridBoundingBox2D, RasterDataType},
+        primitives::{CacheHint, Coordinate2D, TimeInstance, TimeInterval, TimeStep},
+        raster::{
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, TileIdx, TileSize,
+            TilesEqualIgnoringCacheHint,
+        },
+        spatial_reference::SpatialReference,
         util::test::{AsciiRasterTiles, TestDefault, assert_raster_tiles_eq_ascii},
     };
     use indoc::indoc;
 
     use crate::{
-        engine::{MockExecutionContext, SingleRasterSource, TimeDescriptor, TypedRasterOperator},
+        engine::{
+            MockExecutionContext, RasterBandDescriptors, SingleRasterSource, SpatialGridDescriptor,
+            TimeDescriptor, TypedRasterOperator,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams},
         source::{GdalSource, GdalSourceParameters},
@@ -610,6 +617,7 @@ mod tests {
         let stacker = RasterStacker {
             params: RasterStackerParams {
                 rename_bands: RenameBands::Default,
+                output_origin: None,
             },
             sources: MultipleRasterSources {
                 rasters: vec![
