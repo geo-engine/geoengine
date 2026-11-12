@@ -212,15 +212,6 @@ mod tests {
 
     #[tokio::test]
     async fn it_logs_stream_metrics_once_with_the_completion() {
-        let log = Log::default();
-        let writer = log.clone();
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(Level::DEBUG)
-            .with_ansi(false)
-            .with_writer(move || writer.clone())
-            .finish();
-        let _guard = tracing::subscriber::set_default(subscriber);
-
         let (tx, _rx) = unbounded_channel::<QuotaMessage>();
         let quota = QuotaTracking::new(tx, Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
         let adapter = |items: Vec<Result<i32, ()>>| {
@@ -233,6 +224,21 @@ mod tests {
                 None,
             )
         };
+
+        // With a single registered dispatcher, tracing caches the interest of a callsite from the
+        // thread that hits it first. Tests on other threads (without subscriber) would then disable
+        // the adapter's `debug!` for this test, too. A second dispatcher makes tracing ask all of them.
+        let _second_dispatcher =
+            tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
+
+        let log = Log::default();
+        let writer = log.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(Level::DEBUG)
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
 
         let mut completed = adapter(vec![Ok(1)]);
         while completed.next().await.is_some() {}
