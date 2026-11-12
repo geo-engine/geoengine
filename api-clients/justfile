@@ -221,6 +221,7 @@ test-rust: common::_clear
 test-typescript: common::_clear
     npm install
     npm run build
+    node --test '../tests/typescript/*.test.mjs'
 
 # Publish the Python API client to PyPI. Usage: `just repo publish-python`. Use the `--dry-run` flag to publish to TestPyPI instead.
 [arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
