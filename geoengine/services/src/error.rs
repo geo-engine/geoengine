@@ -390,6 +390,11 @@ pub enum Error {
         source: crate::layers::LayerDbError,
     },
 
+    #[snafu(context(false), display("{source}"))]
+    ProjectDb {
+        source: crate::projects::error::ProjectDbError,
+    },
+
     #[snafu(display("Operator '{operator}' is unknown"))]
     UnknownOperator {
         operator: String,

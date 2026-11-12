@@ -29,21 +29,21 @@
                     @if (layer.layerType === 'vector') {
                         <geoengine-ol-vector-layer
                             [layerId]="layer.id"
-                            [workflow]="layer.workflowId"
+                            [processingGraph]="layer.workflowId"
                             [symbology]="$any(layer.symbology)"
                             [isVisible]="layer.isVisible"
                             (mapRedraw)="map.layerForcesRedraw()"
                         ></geoengine-ol-vector-layer>
                     }
                     @if (layer.layerType === 'raster') {
-                        <geoengine-ol-raster-layer
+                        <geoengine-ol-wms-layer
                             [layerId]="layer.id"
-                            [workflow]="layer.workflowId"
+                            [processingGraph]="layer.workflowId"
                             [symbology]="$any(layer.symbology)"
                             [isVisible]="layer.isVisible"
                             [sessionToken]="sessionToken"
                             (mapRedraw)="map.layerForcesRedraw()"
-                        ></geoengine-ol-raster-layer>
+                        ></geoengine-ol-wms-layer>
                     }
                 }
             }

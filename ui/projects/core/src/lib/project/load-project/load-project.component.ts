@@ -16,9 +16,9 @@ import {MatProgressSpinner} from '@angular/material/progress-spinner';
 import {MatRadioGroup, MatRadioButton} from '@angular/material/radio';
 import {BehaviorSubject, ReplaySubject} from 'rxjs';
 import {map, mergeMap} from 'rxjs/operators';
-import {NotificationService, UserService, FxLayoutDirective, FxFlexDirective} from '@geoengine/common';
+import {ProjectsApi} from '@geoengine/api-client';
+import {NotificationService, UserService, FxLayoutDirective, FxFlexDirective, apiConfigurationWithAccessKey} from '@geoengine/common';
 import {UUID} from '../../backend/backend.model';
-import {BackendService} from '../../backend/backend.service';
 import {SidenavHeaderComponent} from '../../sidenav/sidenav-header/sidenav-header.component';
 import {ProjectService} from '../project.service';
 
@@ -62,7 +62,6 @@ interface ProjectListing {
 })
 export class LoadProjectComponent implements AfterViewInit {
     protected projectService = inject(ProjectService);
-    protected backend = inject(BackendService);
     protected userService = inject(UserService);
     protected notificationService = inject(NotificationService);
     protected formBuilder = inject(NonNullableFormBuilder);
@@ -90,16 +89,11 @@ export class LoadProjectComponent implements AfterViewInit {
             .getSessionTokenForRequest()
             .pipe(
                 mergeMap((sessionToken) =>
-                    this.backend.listProjects(
-                        {
-                            permissions: ['Owner'], // TODO: allow others to be selected
-                            filter: 'None', // TODO: add filter search
-                            order: 'DateAsc', // TODO: provide options
-                            offset: 0,
-                            limit: 20, // TODO: paginate
-                        },
-                        sessionToken,
-                    ),
+                    new ProjectsApi(apiConfigurationWithAccessKey(sessionToken)).listProjectsHandler({
+                        order: 'DateAsc', // TODO: provide options
+                        offset: 0,
+                        limit: 20, // TODO: paginate
+                    }),
                 ),
                 map((projectListingDicts) =>
                     projectListingDicts.map((projectListingDict) => ({

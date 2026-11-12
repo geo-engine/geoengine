@@ -19,13 +19,6 @@ import {
     TimeStepToJSON,
     TimeStepToJSONTyped,
 } from './TimeStep';
-import type { Plot } from './Plot';
-import {
-    PlotFromJSON,
-    PlotFromJSONTyped,
-    PlotToJSON,
-    PlotToJSONTyped,
-} from './Plot';
 import type { ProjectVersion } from './ProjectVersion';
 import {
     ProjectVersionFromJSON,
@@ -75,9 +68,9 @@ export interface Project {
      */
     layers: Array<ProjectLayer>;
     /**
-     * 
+     * Plots are project layers without symbology.
      */
-    plots: Array<Plot>;
+    plots: Array<ProjectLayer>;
     /**
      * 
      */
@@ -118,7 +111,7 @@ export function ProjectFromJSONTyped(json: any, ignoreDiscriminator: boolean): P
         'name': json['name'],
         'description': json['description'],
         'layers': ((json['layers'] as Array<any>).map(ProjectLayerFromJSON)),
-        'plots': ((json['plots'] as Array<any>).map(PlotFromJSON)),
+        'plots': ((json['plots'] as Array<any>).map(ProjectLayerFromJSON)),
         'bounds': STRectangleFromJSON(json['bounds']),
         'timeStep': TimeStepFromJSON(json['timeStep']),
     };
@@ -140,7 +133,7 @@ export function ProjectToJSONTyped(value?: Project | null, ignoreDiscriminator: 
         'name': value['name'],
         'description': value['description'],
         'layers': ((value['layers'] as Array<any>).map(ProjectLayerToJSON)),
-        'plots': ((value['plots'] as Array<any>).map(PlotToJSON)),
+        'plots': ((value['plots'] as Array<any>).map(ProjectLayerToJSON)),
         'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };

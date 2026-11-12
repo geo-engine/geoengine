@@ -19,13 +19,6 @@ import {
     TimeStepToJSON,
     TimeStepToJSONTyped,
 } from './TimeStep';
-import type { PlotUpdate } from './PlotUpdate';
-import {
-    PlotUpdateFromJSON,
-    PlotUpdateFromJSONTyped,
-    PlotUpdateToJSON,
-    PlotUpdateToJSONTyped,
-} from './PlotUpdate';
 import type { STRectangle } from './STRectangle';
 import {
     STRectangleFromJSON,
@@ -66,7 +59,7 @@ export interface UpdateProject {
     /**
      * 
      */
-    plots?: Array<PlotUpdate> | null;
+    plots?: Array<LayerUpdate> | null;
     /**
      * 
      */
@@ -99,7 +92,7 @@ export function UpdateProjectFromJSONTyped(json: any, ignoreDiscriminator: boole
         'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
         'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
         'layers': json['layers'] === undefined ? undefined : json['layers'] === null ? null : ((json['layers'] as Array<any>).map(LayerUpdateFromJSON)),
-        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : ((json['plots'] as Array<any>).map(PlotUpdateFromJSON)),
+        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : ((json['plots'] as Array<any>).map(LayerUpdateFromJSON)),
         'bounds': json['bounds'] === undefined ? undefined : json['bounds'] === null ? null : STRectangleFromJSON(json['bounds']),
         'timeStep': json['timeStep'] === undefined ? undefined : json['timeStep'] === null ? null : TimeStepFromJSON(json['timeStep']),
     };
@@ -120,7 +113,7 @@ export function UpdateProjectToJSONTyped(value?: UpdateProject | null, ignoreDis
         'name': value['name'],
         'description': value['description'],
         'layers': value['layers'] == null ? undefined : ((value['layers'] as Array<any>).map(LayerUpdateToJSON)),
-        'plots': value['plots'] == null ? undefined : ((value['plots'] as Array<any>).map(PlotUpdateToJSON)),
+        'plots': value['plots'] == null ? undefined : ((value['plots'] as Array<any>).map(LayerUpdateToJSON)),
         'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };

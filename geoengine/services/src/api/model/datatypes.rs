@@ -15,7 +15,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use snafu::ResultExt;
 use std::borrow::Cow;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     fmt::{Debug, Formatter},
     str::FromStr,
 };
@@ -1919,8 +1919,8 @@ impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterCol
 /// It is assumed that is has at least one and at most 256 entries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
-#[schema(value_type = HashMap<f64, RgbaColor>)]
-pub struct Palette(pub HashMap<NonNaN, RgbaColor>);
+#[schema(value_type = BTreeMap<f64, RgbaColor>)]
+pub struct Palette(pub BTreeMap<NonNaN, RgbaColor>);
 
 impl From<geoengine_datatypes::operations::image::Palette> for Palette {
     fn from(palette: geoengine_datatypes::operations::image::Palette) -> Self {
@@ -1949,7 +1949,7 @@ impl From<Palette> for geoengine_datatypes::operations::image::Palette {
 /// A type that is solely for serde's serializability.
 /// You cannot serialize floats as JSON map keys.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SerializablePalette(HashMap<String, RgbaColor>);
+pub struct SerializablePalette(BTreeMap<String, RgbaColor>);
 
 impl From<Palette> for SerializablePalette {
     fn from(palette: Palette) -> Self {
@@ -1967,7 +1967,7 @@ impl TryFrom<SerializablePalette> for Palette {
     type Error = <NonNaN as FromStr>::Err;
 
     fn try_from(palette: SerializablePalette) -> Result<Self, Self::Error> {
-        let mut inner = HashMap::<NonNaN, RgbaColor>::with_capacity(palette.0.len());
+        let mut inner = BTreeMap::<NonNaN, RgbaColor>::new();
         for (k, v) in palette.0 {
             inner.insert(k.parse()?, v);
         }

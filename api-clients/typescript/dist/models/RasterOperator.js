@@ -146,10 +146,10 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return value;
     }
 }
+const RasterOperatorTypes = new Set(['BandFilter', 'BandNeighborhoodAggregate', 'BandwiseExpression', 'Downsampling', 'Expression', 'GdalSource', 'Interpolation', 'MultiBandGdalSource', 'NeighborhoodAggregate', 'Onnx', 'PolygonRasterization', 'Radiance', 'RasterScaling', 'RasterStacker', 'RasterTypeConversion', 'Rasterization', 'Reflectance', 'Reprojection', 'Temperature', 'TemporalRasterAggregation', 'TimeShift']);
 /**
 * Check if a given object implements the RasterOperator interface.
 */
 function instanceOfRasterOperator(value) {
-    return (0, Expression_1.instanceOfExpression)(value)
-        || (0, GdalSource_1.instanceOfGdalSource)(value);
+    return 'type' in value && typeof value.type === 'string' && RasterOperatorTypes.has(value.type);
 }

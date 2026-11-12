@@ -11,9 +11,9 @@
 import * as runtime from '../runtime';
 import { type CreateProject } from '../models/CreateProject';
 import { type IdResponse } from '../models/IdResponse';
-import { type OrderBy } from '../models/OrderBy';
 import { type Project } from '../models/Project';
 import { type ProjectListing } from '../models/ProjectListing';
+import { type ProjectOrderBy } from '../models/ProjectOrderBy';
 import { type ProjectVersion } from '../models/ProjectVersion';
 import { type UpdateProject } from '../models/UpdateProject';
 export interface CreateProjectHandlerRequest {
@@ -32,7 +32,7 @@ export interface ListProjectsHandlerRequest {
     /**
      *
      */
-    order: OrderBy;
+    order: ProjectOrderBy;
     /**
      *
      */
@@ -157,9 +157,9 @@ export declare class ProjectsApi extends runtime.BaseAPI {
     /**
      * Updates a project. This will create a new version.
      */
-    updateProjectHandlerRaw(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>>;
+    updateProjectHandlerRaw(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>>;
     /**
      * Updates a project. This will create a new version.
      */
-    updateProjectHandler(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void>;
+    updateProjectHandler(requestParameters: UpdateProjectHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project>;
 }

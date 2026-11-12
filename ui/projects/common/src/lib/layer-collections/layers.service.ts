@@ -123,8 +123,22 @@ export class LayersService {
         });
     }
 
-    async resolveLayer(layerId: ProviderLayerId): Promise<Layer> {
+    /**
+     * Creates a project layer that is a copy of the catalog layer `layerId`.
+     *
+     * With `keepReference`, the copy refers to the catalog layer as its source.
+     * The copy is always independent of later changes of the catalog layer.
+     */
+    async resolveLayer(layerId: ProviderLayerId, options?: {keepReference?: boolean}): Promise<Layer> {
         const layer = await this.getLayer(layerId.providerId, layerId.layerId);
+
+        const copiedFields = {
+            name: layer.name,
+            description: layer.description,
+            properties: (layer.properties ?? []).map(([key, value]): [string, string] => [key, value]),
+            metadata: layer.metadata ?? {},
+            source: options?.keepReference ? layerId : undefined,
+        };
 
         const processingGraphId = await this.registerAndGetLayerProcessingGraphId(layerId.providerId, layerId.layerId);
 
@@ -132,7 +146,7 @@ export class LayersService {
 
         if (metadata instanceof VectorLayerMetadata) {
             return new VectorLayer({
-                name: layer.name,
+                ...copiedFields,
                 processingGraphId,
                 isVisible: true,
                 isLegendVisible: false,
@@ -142,7 +156,7 @@ export class LayersService {
             });
         } else if (metadata instanceof RasterLayerMetadata) {
             return new RasterLayer({
-                name: layer.name,
+                ...copiedFields,
                 processingGraphId,
                 isVisible: true,
                 isLegendVisible: false,

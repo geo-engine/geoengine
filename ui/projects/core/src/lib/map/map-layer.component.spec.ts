@@ -8,12 +8,13 @@ import TileState from 'ol/TileState';
 import View from 'ol/View';
 import {NEVER} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {SpatialReference, Time} from '@geoengine/common';
+import {NotificationService, SpatialReference, Time} from '@geoengine/common';
 import {BackendService} from '../backend/backend.service';
 import {CoreConfig} from '../config.service';
 import {OlOgcApiMapTileLayerComponent} from './map-layer.component';
 import {MapService} from './map.service';
 import {ProjectService} from '../project/project.service';
+import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 
 /** Exercise the native renderer's protected queue-building step without drawing a canvas. */
 interface TileEnqueuer {
@@ -64,9 +65,8 @@ describe('OGC map tile minimum matrix index', () => {
     function createLayer(): void {
         fixture = TestBed.createComponent(OlOgcApiMapTileLayerComponent);
         for (const [key, value] of Object.entries({
-            layerId: 0,
             dataConnectorId: 'provider',
-            dataLayerId: 'layer',
+            layerId: 'layer',
             sessionToken: 'token',
             spatialReference: new SpatialReference('EPSG:3857'),
             time: new Time(new Date('2026-04-01T00:00:00Z')),
@@ -139,6 +139,8 @@ describe('OGC map tile minimum matrix index', () => {
                 {provide: CoreConfig, useValue: {MAP: {DEBUG_TILES: false}}},
                 {provide: BackendService, useValue: {ogcApiBaseUrl: 'https://tiles.test/ogc'}},
                 {provide: ProjectService, useValue: {createQueryAbortStream: (): typeof NEVER => NEVER}},
+                {provide: NotificationService, useValue: {error: (): void => undefined}},
+                {provide: SpatialReferenceService, useValue: {}},
             ],
         }).compileComponents();
         mapService = TestBed.inject(MapService);

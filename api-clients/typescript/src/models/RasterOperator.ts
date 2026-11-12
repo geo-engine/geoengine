@@ -280,10 +280,11 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
 }
 
 
+const RasterOperatorTypes: ReadonlySet<string> = new Set(['BandFilter', 'BandNeighborhoodAggregate', 'BandwiseExpression', 'Downsampling', 'Expression', 'GdalSource', 'Interpolation', 'MultiBandGdalSource', 'NeighborhoodAggregate', 'Onnx', 'PolygonRasterization', 'Radiance', 'RasterScaling', 'RasterStacker', 'RasterTypeConversion', 'Rasterization', 'Reflectance', 'Reprojection', 'Temperature', 'TemporalRasterAggregation', 'TimeShift']);
+
 /**
 * Check if a given object implements the RasterOperator interface.
 */
 export function instanceOfRasterOperator(value: object): value is RasterOperator {
-    return instanceOfExpression(value)
-        || instanceOfGdalSource(value);
+    return 'type' in value && typeof value.type === 'string' && RasterOperatorTypes.has(value.type);
 }

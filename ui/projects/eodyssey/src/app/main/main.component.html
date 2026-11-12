@@ -78,9 +78,8 @@
                 @let mapTileDate = currentTime();
                 @if (activeLayer && currentSessionToken && currentSpatialReference && mapTileDate) {
                     <geoengine-ol-ogc-api-map-tile-layer
-                        [layerId]="0"
+                        [layerId]="activeLayer.layerId"
                         [dataConnectorId]="activeLayer.dataConnectorId"
-                        [dataLayerId]="activeLayer.layerId"
                         [sessionToken]="currentSessionToken"
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"

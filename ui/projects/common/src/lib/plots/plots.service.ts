@@ -51,4 +51,29 @@ export class PlotsService {
             {signal},
         );
     }
+
+    /**
+     * Get the plot of a layer of a data connector, e.g. a plot of a project.
+     */
+    async getLayerPlot(
+        provider: UUID,
+        layer: string,
+        bbox: BoundingBox2D,
+        time: Time,
+        crs?: SpatialReference,
+        signal?: AbortSignal,
+    ): Promise<WrappedPlotOutput> {
+        const plotApi = await firstValueFrom(this.plotApi);
+
+        return plotApi.getLayerPlotHandler(
+            {
+                bbox: bboxDictToExtent(bbox).join(','),
+                time: time.asRequestString(),
+                provider,
+                layer,
+                crs: crs?.srsString,
+            },
+            {signal},
+        );
+    }
 }

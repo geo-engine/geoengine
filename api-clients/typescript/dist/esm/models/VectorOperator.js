@@ -12,10 +12,10 @@
  */
 import { ColumnRangeFilterFromJSONTyped, ColumnRangeFilterToJSON, } from './ColumnRangeFilter';
 import { LineSimplificationFromJSONTyped, LineSimplificationToJSON, } from './LineSimplification';
-import { instanceOfMockPointSource, MockPointSourceFromJSONTyped, MockPointSourceToJSON, } from './MockPointSource';
+import { MockPointSourceFromJSONTyped, MockPointSourceToJSON, } from './MockPointSource';
 import { OgrSourceFromJSONTyped, OgrSourceToJSON, } from './OgrSource';
 import { PointInPolygonFilterFromJSONTyped, PointInPolygonFilterToJSON, } from './PointInPolygonFilter';
-import { instanceOfRasterVectorJoin, RasterVectorJoinFromJSONTyped, RasterVectorJoinToJSON, } from './RasterVectorJoin';
+import { RasterVectorJoinFromJSONTyped, RasterVectorJoinToJSON, } from './RasterVectorJoin';
 import { ReprojectionFromJSONTyped, ReprojectionToJSON, } from './Reprojection';
 import { TimeProjectionFromJSONTyped, TimeProjectionToJSON, } from './TimeProjection';
 import { TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
@@ -94,10 +94,10 @@ export function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return value;
     }
 }
+const VectorOperatorTypes = new Set(['ColumnRangeFilter', 'LineSimplification', 'MockPointSource', 'OgrSource', 'PointInPolygonFilter', 'RasterVectorJoin', 'Reprojection', 'TimeProjection', 'TimeShift', 'VectorExpression', 'VectorJoin', 'VisualPointClustering']);
 /**
 * Check if a given object implements the VectorOperator interface.
 */
 export function instanceOfVectorOperator(value) {
-    return instanceOfMockPointSource(value)
-        || instanceOfRasterVectorJoin(value);
+    return 'type' in value && typeof value.type === 'string' && VectorOperatorTypes.has(value.type);
 }

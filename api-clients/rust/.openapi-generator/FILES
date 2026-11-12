@@ -243,11 +243,9 @@ docs/PermissionsApi.md
 docs/PieChart.md
 docs/PieChartCountType.md
 docs/PieChartParameters.md
-docs/Plot.md
 docs/PlotOperator.md
 docs/PlotOutputFormat.md
 docs/PlotResultDescriptor.md
-docs/PlotUpdate.md
 docs/PlotsApi.md
 docs/PointInPolygonFilter.md
 docs/PointInPolygonFilterSource.md
@@ -268,7 +266,9 @@ docs/ProcessingGraph.md
 docs/ProcessingGraphsApi.md
 docs/Project.md
 docs/ProjectLayer.md
+docs/ProjectLayerUpdate.md
 docs/ProjectListing.md
+docs/ProjectOrderBy.md
 docs/ProjectResource.md
 docs/ProjectUpdateToken.md
 docs/ProjectVersion.md
@@ -723,11 +723,9 @@ src/models/permission_request.rs
 src/models/pie_chart.rs
 src/models/pie_chart_count_type.rs
 src/models/pie_chart_parameters.rs
-src/models/plot.rs
 src/models/plot_operator.rs
 src/models/plot_output_format.rs
 src/models/plot_result_descriptor.rs
-src/models/plot_update.rs
 src/models/point_in_polygon_filter.rs
 src/models/point_in_polygon_filter_source.rs
 src/models/point_symbology.rs
@@ -746,7 +744,9 @@ src/models/polygon_symbology.rs
 src/models/processing_graph.rs
 src/models/project.rs
 src/models/project_layer.rs
+src/models/project_layer_update.rs
 src/models/project_listing.rs
+src/models/project_order_by.rs
 src/models/project_resource.rs
 src/models/project_update_token.rs
 src/models/project_version.rs

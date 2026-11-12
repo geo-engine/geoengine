@@ -19,17 +19,24 @@ exports.ProjectLayerToJSON = ProjectLayerToJSON;
 exports.ProjectLayerToJSONTyped = ProjectLayerToJSONTyped;
 const LayerVisibility_1 = require("./LayerVisibility");
 const Symbology_1 = require("./Symbology");
+const ProviderLayerId_1 = require("./ProviderLayerId");
 /**
  * Check if a given object implements the ProjectLayer interface.
  */
 function instanceOfProjectLayer(value) {
-    if (!('processingGraph' in value) || value['processingGraph'] === undefined)
+    if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('visibility' in value) || value['visibility'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
         return false;
-    if (!('symbology' in value) || value['symbology'] === undefined)
+    if (!('processingGraph' in value) || value['processingGraph'] === undefined)
+        return false;
+    if (!('properties' in value) || value['properties'] === undefined)
+        return false;
+    if (!('metadata' in value) || value['metadata'] === undefined)
+        return false;
+    if (!('visibility' in value) || value['visibility'] === undefined)
         return false;
     return true;
 }
@@ -41,10 +48,15 @@ function ProjectLayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'processingGraph': json['processingGraph'],
+        'id': json['id'],
         'name': json['name'],
+        'description': json['description'],
+        'processingGraph': json['processingGraph'],
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'properties': json['properties'],
+        'metadata': json['metadata'],
         'visibility': (0, LayerVisibility_1.LayerVisibilityFromJSON)(json['visibility']),
-        'symbology': (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'source': json['source'] === undefined ? undefined : json['source'] === null ? null : (0, ProviderLayerId_1.ProviderLayerIdFromJSON)(json['source']),
     };
 }
 function ProjectLayerToJSON(json) {
@@ -55,9 +67,14 @@ function ProjectLayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'processingGraph': value['processingGraph'],
+        'id': value['id'],
         'name': value['name'],
-        'visibility': (0, LayerVisibility_1.LayerVisibilityToJSON)(value['visibility']),
+        'description': value['description'],
+        'processingGraph': value['processingGraph'],
         'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
+        'properties': value['properties'],
+        'metadata': value['metadata'],
+        'visibility': (0, LayerVisibility_1.LayerVisibilityToJSON)(value['visibility']),
+        'source': (0, ProviderLayerId_1.ProviderLayerIdToJSON)(value['source']),
     };
 }

@@ -26,6 +26,13 @@ class TestPlotsApi(unittest.TestCase):
     def tearDown(self) -> None:
         pass
 
+    def test_get_layer_plot_handler(self) -> None:
+        """Test case for get_layer_plot_handler
+
+        Generates the plot of a layer, e.g. of a plot in a project.
+        """
+        pass
+
     def test_get_plot_handler(self) -> None:
         """Test case for get_plot_handler
 

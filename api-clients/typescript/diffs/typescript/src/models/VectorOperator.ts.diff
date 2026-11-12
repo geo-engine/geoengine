@@ -1,14 +1,15 @@
 --- typescript/src/models/VectorOperator.ts
 +++ typescript/src/models/VectorOperator.ts
-@@ -181,3 +181,11 @@
+@@ -181,3 +181,12 @@
      }
  }
  
++
++const VectorOperatorTypes: ReadonlySet<string> = new Set(['ColumnRangeFilter', 'LineSimplification', 'MockPointSource', 'OgrSource', 'PointInPolygonFilter', 'RasterVectorJoin', 'Reprojection', 'TimeProjection', 'TimeShift', 'VectorExpression', 'VectorJoin', 'VisualPointClustering']);
 +
 +/**
 +* Check if a given object implements the VectorOperator interface.
 +*/
 +export function instanceOfVectorOperator(value: object): value is VectorOperator {
-+    return instanceOfMockPointSource(value)
-+        || instanceOfRasterVectorJoin(value);
++    return 'type' in value && typeof value.type === 'string' && VectorOperatorTypes.has(value.type);
 +}

@@ -3432,6 +3432,95 @@
         ]
       }
     },
+    "/plot/{provider}/{layer}": {
+      "get": {
+        "tags": [
+          "Plots"
+        ],
+        "summary": "Generates the plot of a layer, e.g. of a plot in a project.",
+        "operationId": "get_layer_plot_handler",
+        "parameters": [
+          {
+            "name": "bbox",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "0,-0.3,0.2,0"
+          },
+          {
+            "name": "crs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "EPSG:4326"
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2020-01-01T00:00:00.0Z"
+          },
+          {
+            "name": "spatialResolution",
+            "in": "query",
+            "description": "Optional resolution (in the units of `crs`) at which the plot may be computed.\n\nIf set, raster inputs are read at the coarsest overview level that is not coarser than\nthis resolution, which speeds up plots of large areas at the cost of exactness.\nIf omitted, raster inputs are read at their native resolution.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "0.1,0.1"
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "Data provider id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layer",
+            "in": "path",
+            "description": "Layer id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WrappedPlotOutput"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/processingGraphs": {
       "post": {
         "tags": [
@@ -3911,7 +4000,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "The updated project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4062,16 +4158,16 @@
         "parameters": [
           {
             "name": "order",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/OrderBy"
+              "$ref": "#/components/schemas/ProjectOrderBy"
             },
             "example": "NameAsc"
           },
           {
             "name": "offset",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "integer",
@@ -4082,7 +4178,7 @@
           },
           {
             "name": "limit",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "integer",
@@ -9929,7 +10025,7 @@
             "$ref": "#/components/schemas/ProjectUpdateToken"
           },
           {
-            "$ref": "#/components/schemas/ProjectLayer"
+            "$ref": "#/components/schemas/ProjectLayerUpdate"
           }
         ]
       },
@@ -11883,21 +11979,6 @@
           }
         }
       },
-      "Plot": {
-        "type": "object",
-        "required": [
-          "processingGraph",
-          "name"
-        ],
-        "properties": {
-          "processingGraph": {
-            "$ref": "#/components/schemas/ProcessingGraphId"
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
       "PlotOperator": {
         "oneOf": [
           {
@@ -11979,16 +12060,6 @@
             ]
           }
         }
-      },
-      "PlotUpdate": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/ProjectUpdateToken"
-          },
-          {
-            "$ref": "#/components/schemas/Plot"
-          }
-        ]
       },
       "PointInPolygonFilter": {
         "type": "object",
@@ -12603,8 +12674,9 @@
           "plots": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Plot"
-            }
+              "$ref": "#/components/schemas/ProjectLayer"
+            },
+            "description": "Plots are project layers without symbology."
           },
           "bounds": {
             "$ref": "#/components/schemas/STRectangle"
@@ -12620,24 +12692,142 @@
       },
       "ProjectLayer": {
         "type": "object",
+        "description": "A layer or plot of a project.\n\nIt is also a layer of the projects data connector, with the same `id`.\nOnly the visibility is specific to the project.",
         "required": [
-          "processingGraph",
+          "id",
           "name",
-          "visibility",
-          "symbology"
+          "description",
+          "processingGraph",
+          "properties",
+          "metadata",
+          "visibility"
         ],
         "properties": {
-          "processingGraph": {
-            "$ref": "#/components/schemas/ProcessingGraphId"
+          "id": {
+            "$ref": "#/components/schemas/LayerId",
+            "description": "The id of the layer, stable across project versions."
           },
           "name": {
             "type": "string"
           },
+          "description": {
+            "type": "string"
+          },
+          "processingGraph": {
+            "$ref": "#/components/schemas/ProcessingGraphId",
+            "description": "The id of the processing graph of the layer."
+          },
+          "symbology": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Symbology",
+                "description": "The symbology of the layer, which plots do not have."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            },
+            "description": "properties, for instance, to be rendered in the UI"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "metadata used for loading the data",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "visibility": {
             "$ref": "#/components/schemas/LayerVisibility"
           },
+          "source": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProviderLayerId",
+                "description": "The catalog layer this layer was copied from, if any."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ProjectLayerUpdate": {
+        "type": "object",
+        "description": "A layer or plot that is added to or changed in a project.\n\nWithout `id`, it is a new layer and the server assigns an id.\nWith `id`, it replaces the layer of the project with this id, so layers can also be moved.",
+        "required": [
+          "name",
+          "processingGraph"
+        ],
+        "properties": {
+          "id": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LayerId",
+                "description": "The id of an existing layer of the project, or none for a new layer."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "processingGraph": {
+            "$ref": "#/components/schemas/ProcessingGraphId",
+            "description": "The id of a registered processing graph."
+          },
           "symbology": {
-            "$ref": "#/components/schemas/Symbology"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Symbology"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Property"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/LayerVisibility"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProviderLayerId",
+                "description": "The catalog layer this layer was copied from, if any."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -12678,6 +12868,16 @@
             "format": "date-time"
           }
         }
+      },
+      "ProjectOrderBy": {
+        "type": "string",
+        "description": "The order of a project listing.",
+        "enum": [
+          "DateAsc",
+          "DateDesc",
+          "NameAsc",
+          "NameDesc"
+        ]
       },
       "ProjectResource": {
         "type": "object",
@@ -16734,7 +16934,7 @@
               "null"
             ],
             "items": {
-              "$ref": "#/components/schemas/PlotUpdate"
+              "$ref": "#/components/schemas/LayerUpdate"
             }
           },
           "bounds": {
@@ -16765,6 +16965,7 @@
             {
               "processingGraph": "100ee39c-761c-4218-9d85-ec861a8f3097",
               "name": "L1",
+              "description": "",
               "visibility": {
                 "data": true,
                 "legend": false
@@ -16772,46 +16973,50 @@
               "symbology": {
                 "type": "raster",
                 "opacity": 1.0,
-                "colorizer": {
-                  "type": "linearGradient",
-                  "breakpoints": [
-                    {
-                      "value": 1.0,
-                      "color": [
-                        255,
-                        255,
-                        255,
-                        255
-                      ]
-                    },
-                    {
-                      "value": 2.0,
-                      "color": [
-                        0,
-                        0,
-                        0,
-                        255
-                      ]
-                    }
-                  ],
-                  "noDataColor": [
-                    0,
-                    0,
-                    0,
-                    0
-                  ],
-                  "overColor": [
-                    255,
-                    255,
-                    255,
-                    255
-                  ],
-                  "underColor": [
-                    0,
-                    0,
-                    0,
-                    255
-                  ]
+                "rasterColorizer": {
+                  "type": "singleBand",
+                  "band": 0,
+                  "bandColorizer": {
+                    "type": "linearGradient",
+                    "breakpoints": [
+                      {
+                        "value": 1.0,
+                        "color": [
+                          255,
+                          255,
+                          255,
+                          255
+                        ]
+                      },
+                      {
+                        "value": 2.0,
+                        "color": [
+                          0,
+                          0,
+                          0,
+                          255
+                        ]
+                      }
+                    ],
+                    "noDataColor": [
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "overColor": [
+                      255,
+                      255,
+                      255,
+                      255
+                    ],
+                    "underColor": [
+                      0,
+                      0,
+                      0,
+                      255
+                    ]
+                  }
                 }
               }
             }

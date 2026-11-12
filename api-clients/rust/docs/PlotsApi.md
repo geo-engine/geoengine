@@ -4,8 +4,42 @@ All URIs are relative to *https://geoengine.io/api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
+[**get_layer_plot_handler**](PlotsApi.md#get_layer_plot_handler) | **GET** /plot/{provider}/{layer} | Generates the plot of a layer, e.g. of a plot in a project.
 [**get_plot_handler**](PlotsApi.md#get_plot_handler) | **GET** /plot/{id} | Generates a plot.
 
+
+
+## get_layer_plot_handler
+
+> models::WrappedPlotOutput get_layer_plot_handler(bbox, time, provider, layer, crs, spatial_resolution)
+Generates the plot of a layer, e.g. of a plot in a project.
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**bbox** | **String** |  | [required] |
+**time** | **String** |  | [required] |
+**provider** | **uuid::Uuid** | Data provider id | [required] |
+**layer** | **String** | Layer id | [required] |
+**crs** | Option<**String**> |  |  |
+**spatial_resolution** | Option<**String**> | Optional resolution (in the units of `crs`) at which the plot may be computed.  If set, raster inputs are read at the coarsest overview level that is not coarser than this resolution, which speeds up plots of large areas at the cost of exactness. If omitted, raster inputs are read at their native resolution. |  |
+
+### Return type
+
+[**models::WrappedPlotOutput**](WrappedPlotOutput.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 
 ## get_plot_handler

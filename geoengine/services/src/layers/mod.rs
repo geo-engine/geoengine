@@ -1,4 +1,5 @@
 pub mod add_from_directory;
+pub mod dispatch;
 pub mod error; // pub to export all Snafu-generated errors
 pub mod external;
 pub mod layer;

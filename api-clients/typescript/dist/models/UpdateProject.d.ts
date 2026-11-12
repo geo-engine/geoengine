@@ -9,7 +9,6 @@
  * Do not edit the class manually.
  */
 import type { TimeStep } from './TimeStep';
-import type { PlotUpdate } from './PlotUpdate';
 import type { STRectangle } from './STRectangle';
 import type { LayerUpdate } from './LayerUpdate';
 /**
@@ -37,7 +36,7 @@ export interface UpdateProject {
     /**
      *
      */
-    plots?: Array<PlotUpdate> | null;
+    plots?: Array<LayerUpdate> | null;
     /**
      *
      */

@@ -20,7 +20,7 @@ import {
     TimeStepSelectorComponent,
     ZoomHandlesComponent,
     OlVectorLayerComponent,
-    OlRasterLayerComponent,
+    OlWmsLayerComponent,
 } from '@geoengine/core';
 import {AppConfig} from './app-config.service';
 import {DataSelectionService} from './data-selection.service';
@@ -43,7 +43,7 @@ import {LegendComponent} from './legend/legend.component';
         LegendComponent,
         MapContainerComponent,
         OlVectorLayerComponent,
-        OlRasterLayerComponent,
+        OlWmsLayerComponent,
         MatSidenav,
         SidenavContainerComponent,
         MatProgressBar,
@@ -104,7 +104,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.mapComponent().resize();
     }
 
-    idFromLayer(index: number, layer: Layer): number {
+    idFromLayer(index: number, layer: Layer): string {
         return layer.id;
     }
 

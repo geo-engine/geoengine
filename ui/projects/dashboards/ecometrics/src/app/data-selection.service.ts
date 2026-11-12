@@ -87,13 +87,14 @@ export class DataSelectionService {
             }),
             tap(() => this._rasterLayer.next(undefined)),
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => {
-                this._rasterLayer.next(layer);
+            tap((savedLayer) => {
+                this._rasterLayer.next(savedLayer);
                 this.timeSteps.next(timeSteps);
                 this.timeFormat.next(estimateTimeFormat(timeSteps));
                 void this.projectService.setTime(timeSteps[0]);
                 this.dataRange.next(dataRange);
             }),
+            map(() => undefined),
         );
     }
 
@@ -124,7 +125,8 @@ export class DataSelectionService {
             }),
             tap(() => this._polygonLayer.next(undefined)),
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => this._polygonLayer.next(layer)),
+            tap((savedLayer) => this._polygonLayer.next(savedLayer)),
+            map(() => undefined),
         );
     }
 }

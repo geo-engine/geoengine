@@ -20,7 +20,6 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List
 from uuid import UUID
-from geoengine_api_client.models.plot import Plot
 from geoengine_api_client.models.project_layer import ProjectLayer
 from geoengine_api_client.models.project_version import ProjectVersion
 from geoengine_api_client.models.st_rectangle import STRectangle
@@ -38,7 +37,7 @@ class Project(BaseModel):
     name: StrictStr
     description: StrictStr
     layers: List[ProjectLayer]
-    plots: List[Plot]
+    plots: List[ProjectLayer] = Field(description="Plots are project layers without symbology.")
     bounds: STRectangle
     time_step: TimeStep = Field(alias="timeStep")
     __properties: ClassVar[List[str]] = ["id", "version", "name", "description", "layers", "plots", "bounds", "timeStep"]
@@ -120,7 +119,7 @@ class Project(BaseModel):
             "name": obj.get("name"),
             "description": obj.get("description"),
             "layers": [ProjectLayer.from_dict(_item) for _item in obj["layers"]] if obj.get("layers") is not None else None,
-            "plots": [Plot.from_dict(_item) for _item in obj["plots"]] if obj.get("plots") is not None else None,
+            "plots": [ProjectLayer.from_dict(_item) for _item in obj["plots"]] if obj.get("plots") is not None else None,
             "bounds": STRectangle.from_dict(obj["bounds"]) if obj.get("bounds") is not None else None,
             "timeStep": TimeStep.from_dict(obj["timeStep"]) if obj.get("timeStep") is not None else None
         })

@@ -1,10 +1,12 @@
 use crate::{
-    api::model::processing_graphs::ProcessingGraphId,
+    api::model::{datatypes::LayerId, processing_graphs::ProcessingGraphId},
+    layers::layer::{Property, ProviderLayerId},
     projects::{LayerVisibility, ProjectId, ProjectVersion, STRectangle, Symbology, VecUpdate},
 };
 use geoengine_datatypes::primitives::TimeStep;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use utoipa::{PartialSchema, ToSchema};
 use validator::Validate;
 
@@ -16,7 +18,8 @@ pub struct Project {
     pub name: String,
     pub description: String,
     pub layers: Vec<ProjectLayer>,
-    pub plots: Vec<Plot>,
+    /// Plots are project layers without symbology.
+    pub plots: Vec<ProjectLayer>,
     pub bounds: STRectangle,
     #[schema(value_type = crate::api::model::datatypes::TimeStep)]
     pub time_step: TimeStep,
@@ -37,73 +40,90 @@ impl From<crate::projects::Project> for Project {
     }
 }
 
-impl From<Project> for crate::projects::Project {
-    fn from(value: Project) -> Self {
-        Self {
-            id: value.id,
-            version: value.version,
-            name: value.name,
-            description: value.description,
-            layers: value.layers.into_iter().map(Into::into).collect(),
-            plots: value.plots.into_iter().map(Into::into).collect(),
-            bounds: value.bounds,
-            time_step: value.time_step,
-        }
-    }
-}
-
+/// A layer or plot of a project.
+///
+/// It is also a layer of the projects data connector, with the same `id`.
+/// Only the visibility is specific to the project.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectLayer {
-    pub processing_graph: ProcessingGraphId,
+    /// The id of the layer, stable across project versions.
+    pub id: LayerId,
     pub name: String,
+    pub description: String,
+    /// The id of the processing graph of the layer.
+    pub processing_graph: ProcessingGraphId,
+    /// The symbology of the layer, which plots do not have.
+    pub symbology: Option<Symbology>,
+    /// properties, for instance, to be rendered in the UI
+    pub properties: Vec<Property>,
+    /// metadata used for loading the data
+    pub metadata: HashMap<String, String>,
     pub visibility: LayerVisibility,
-    pub symbology: Symbology,
+    /// The catalog layer this layer was copied from, if any.
+    pub source: Option<ProviderLayerId>,
 }
 
 impl From<crate::projects::ProjectLayer> for ProjectLayer {
     fn from(value: crate::projects::ProjectLayer) -> Self {
         Self {
-            processing_graph: value.processing_graph.into(),
-            name: value.name,
+            id: LayerId(value.layer.id.layer_id.0),
+            name: value.layer.name,
+            description: value.layer.description,
+            processing_graph:
+                crate::processing_graphs::processing_graph::ProcessingGraphId::from_hash(
+                    &value.layer.processing_graph,
+                )
+                .into(),
+            symbology: value.layer.symbology,
+            properties: value.layer.properties,
+            metadata: value.layer.metadata,
             visibility: value.visibility,
-            symbology: value.symbology,
+            source: value.source,
         }
     }
 }
 
-impl From<ProjectLayer> for crate::projects::ProjectLayer {
-    fn from(value: ProjectLayer) -> Self {
-        Self {
-            processing_graph: value.processing_graph.into(),
-            name: value.name,
-            visibility: value.visibility,
-            symbology: value.symbology,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+/// A layer or plot that is added to or changed in a project.
+///
+/// Without `id`, it is a new layer and the server assigns an id.
+/// With `id`, it replaces the layer of the project with this id, so layers can also be moved.
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct Plot {
-    pub processing_graph: ProcessingGraphId,
+pub struct ProjectLayerUpdate {
+    /// The id of an existing layer of the project, or none for a new layer.
+    #[serde(default)]
+    pub id: Option<LayerId>,
     pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// The id of a registered processing graph.
+    pub processing_graph: ProcessingGraphId,
+    #[serde(default)]
+    pub symbology: Option<Symbology>,
+    #[serde(default)]
+    pub properties: Vec<Property>,
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+    #[serde(default)]
+    pub visibility: LayerVisibility,
+    /// The catalog layer this layer was copied from, if any.
+    #[serde(default)]
+    pub source: Option<ProviderLayerId>,
 }
 
-impl From<crate::projects::Plot> for Plot {
-    fn from(value: crate::projects::Plot) -> Self {
+impl From<ProjectLayerUpdate> for crate::projects::ProjectLayerUpdate {
+    fn from(value: ProjectLayerUpdate) -> Self {
         Self {
-            processing_graph: value.processing_graph.into(),
+            id: value.id.map(Into::into),
             name: value.name,
-        }
-    }
-}
-
-impl From<Plot> for crate::projects::Plot {
-    fn from(value: Plot) -> Self {
-        Self {
+            description: value.description,
             processing_graph: value.processing_graph.into(),
-            name: value.name,
+            symbology: value.symbology,
+            properties: value.properties,
+            metadata: value.metadata,
+            visibility: value.visibility,
+            source: value.source,
         }
     }
 }
@@ -117,6 +137,7 @@ impl From<Plot> for crate::projects::Plot {
         {
             "processingGraph": "100ee39c-761c-4218-9d85-ec861a8f3097",
             "name": "L1",
+            "description": "",
             "visibility": {
                 "data": true,
                 "legend": false
@@ -124,21 +145,25 @@ impl From<Plot> for crate::projects::Plot {
             "symbology": {
                 "type": "raster",
                 "opacity": 1.0,
-                "colorizer": {
-                    "type": "linearGradient",
-                    "breakpoints": [
-                        {
-                            "value": 1.0,
-                            "color": [255, 255, 255, 255],
-                        },
-                        {
-                            "value": 2.0,
-                            "color": [0, 0, 0, 255],
-                        },
-                    ],
-                    "noDataColor": [0, 0, 0, 0],
-                    "overColor": [255, 255, 255, 255],
-                    "underColor": [0, 0, 0, 255],
+                "rasterColorizer": {
+                    "type": "singleBand",
+                    "band": 0,
+                    "bandColorizer": {
+                        "type": "linearGradient",
+                        "breakpoints": [
+                            {
+                                "value": 1.0,
+                                "color": [255, 255, 255, 255],
+                            },
+                            {
+                                "value": 2.0,
+                                "color": [0, 0, 0, 255],
+                            },
+                        ],
+                        "noDataColor": [0, 0, 0, 0],
+                        "overColor": [255, 255, 255, 255],
+                        "underColor": [0, 0, 0, 255],
+                    }
                 }
             }
         }
@@ -151,28 +176,10 @@ pub struct UpdateProject {
     #[validate(length(min = 1))]
     pub description: Option<String>,
     pub layers: Option<Vec<LayerUpdate>>,
-    pub plots: Option<Vec<PlotUpdate>>,
+    pub plots: Option<Vec<LayerUpdate>>,
     pub bounds: Option<STRectangle>,
     #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
-}
-
-impl From<crate::projects::UpdateProject> for UpdateProject {
-    fn from(value: crate::projects::UpdateProject) -> Self {
-        Self {
-            id: value.id,
-            name: value.name,
-            description: value.description,
-            layers: value
-                .layers
-                .map(|layers| layers.into_iter().map(convert_vec_update).collect()),
-            plots: value
-                .plots
-                .map(|plots| plots.into_iter().map(convert_vec_update).collect()),
-            bounds: value.bounds,
-            time_step: value.time_step,
-        }
-    }
 }
 
 impl From<UpdateProject> for crate::projects::UpdateProject {
@@ -201,8 +208,8 @@ fn convert_vec_update<A, B: From<A>>(update: VecUpdate<A>) -> VecUpdate<B> {
     }
 }
 
-pub type LayerUpdate = VecUpdate<ProjectLayer>;
-pub type PlotUpdate = VecUpdate<Plot>;
+/// An update of one position in the layer or plot list of a project.
+pub type LayerUpdate = VecUpdate<ProjectLayerUpdate>;
 
 impl ToSchema for LayerUpdate {
     fn name() -> Cow<'static, str> {
@@ -215,23 +222,7 @@ impl PartialSchema for LayerUpdate {
         use utoipa::openapi::*;
         OneOfBuilder::new()
             .item(Ref::from_schema_name("ProjectUpdateToken"))
-            .item(Ref::from_schema_name("ProjectLayer"))
-            .into()
-    }
-}
-
-impl ToSchema for PlotUpdate {
-    fn name() -> Cow<'static, str> {
-        "PlotUpdate".into()
-    }
-}
-
-impl PartialSchema for PlotUpdate {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
-        use utoipa::openapi::*;
-        OneOfBuilder::new()
-            .item(Ref::from_schema_name("ProjectUpdateToken"))
-            .item(Ref::from_schema_name("Plot"))
+            .item(Ref::from_schema_name("ProjectLayerUpdate"))
             .into()
     }
 }
@@ -298,21 +289,26 @@ mod tests {
                 .to_string()
             )
             .unwrap(),
-            LayerUpdate::UpdateOrInsert(ProjectLayer {
+            LayerUpdate::UpdateOrInsert(ProjectLayerUpdate {
+                id: None,
                 processing_graph,
                 name: "L2".to_string(),
+                description: String::new(),
                 visibility: LayerVisibility {
                     data: true,
                     legend: false,
                 },
-                symbology: Symbology::Raster(RasterSymbology {
+                symbology: Some(Symbology::Raster(RasterSymbology {
                     r#type: Default::default(),
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
                         band_colorizer: Colorizer::test_default(),
                     },
-                })
+                })),
+                properties: vec![],
+                metadata: HashMap::new(),
+                source: None,
             })
         );
     }
@@ -326,30 +322,43 @@ mod tests {
             layers: Some(vec![
                 LayerUpdate::None(Default::default()),
                 LayerUpdate::Delete(Default::default()),
-                LayerUpdate::UpdateOrInsert(ProjectLayer {
+                LayerUpdate::UpdateOrInsert(ProjectLayerUpdate {
+                    id: None,
                     processing_graph: ProcessingGraphId::new(),
                     name: "vector layer".to_string(),
+                    description: "description".to_string(),
                     visibility: Default::default(),
-                    symbology: Symbology::Raster(RasterSymbology {
+                    symbology: Some(Symbology::Raster(RasterSymbology {
                         r#type: Default::default(),
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
                             band_colorizer: Colorizer::test_default(),
                         },
-                    }),
+                    })),
+                    properties: vec![("key".to_string(), "value".to_string()).into()],
+                    metadata: HashMap::from([("key".to_string(), "value".to_string())]),
+                    source: None,
                 }),
-                LayerUpdate::UpdateOrInsert(ProjectLayer {
+                LayerUpdate::UpdateOrInsert(ProjectLayerUpdate {
+                    id: Some(LayerId("9f5a4f8c-25b6-4bd4-a2a3-b1c1ac2c2d0b".to_string())),
                     processing_graph: ProcessingGraphId::new(),
                     name: "raster layer".to_string(),
+                    description: "description".to_string(),
                     visibility: Default::default(),
-                    symbology: Symbology::Raster(RasterSymbology {
+                    symbology: Some(Symbology::Raster(RasterSymbology {
                         r#type: Default::default(),
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
                             band_colorizer: Colorizer::test_default(),
                         },
+                    })),
+                    properties: vec![("key".to_string(), "value".to_string()).into()],
+                    metadata: HashMap::from([("key".to_string(), "value".to_string())]),
+                    source: Some(ProviderLayerId {
+                        provider_id: geoengine_datatypes::dataset::DataProviderId::new(),
+                        layer_id: geoengine_datatypes::dataset::LayerId("layer".to_string()),
                     }),
                 }),
             ]),

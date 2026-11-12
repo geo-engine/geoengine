@@ -140,6 +140,15 @@ class ProjectsApi extends runtime.BaseAPI {
                 throw new runtime.RequiredError('limit', 'Required parameter "limit" was null or undefined when calling listProjectsHandler().');
             }
             const queryParameters = {};
+            if (requestParameters['order'] != null) {
+                queryParameters['order'] = requestParameters['order'];
+            }
+            if (requestParameters['offset'] != null) {
+                queryParameters['offset'] = requestParameters['offset'];
+            }
+            if (requestParameters['limit'] != null) {
+                queryParameters['limit'] = requestParameters['limit'];
+            }
             const headerParameters = {};
             if (this.configuration && this.configuration.accessToken) {
                 const token = this.configuration.accessToken;
@@ -149,9 +158,6 @@ class ProjectsApi extends runtime.BaseAPI {
                 }
             }
             let urlPath = `/projects`;
-            urlPath = urlPath.replace('{order}', encodeURIComponent(String(requestParameters['order'])));
-            urlPath = urlPath.replace('{offset}', encodeURIComponent(String(requestParameters['offset'])));
-            urlPath = urlPath.replace('{limit}', encodeURIComponent(String(requestParameters['limit'])));
             return {
                 path: urlPath,
                 method: 'GET',
@@ -360,7 +366,7 @@ class ProjectsApi extends runtime.BaseAPI {
         return __awaiter(this, void 0, void 0, function* () {
             const requestOptions = yield this.updateProjectHandlerRequestOpts(requestParameters);
             const response = yield this.request(requestOptions, initOverrides);
-            return new runtime.VoidApiResponse(response);
+            return new runtime.JSONApiResponse(response, (jsonValue) => (0, Project_1.ProjectFromJSON)(jsonValue));
         });
     }
     /**
@@ -368,7 +374,8 @@ class ProjectsApi extends runtime.BaseAPI {
      */
     updateProjectHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
-            yield this.updateProjectHandlerRaw(requestParameters, initOverrides);
+            const response = yield this.updateProjectHandlerRaw(requestParameters, initOverrides);
+            return yield response.value();
         });
     }
 }

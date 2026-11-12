@@ -25,7 +25,7 @@ import {unByKey} from 'ol/Observable';
 import {equivalent, get as olGetProj} from 'ol/proj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
 import TileGrid from 'ol/tilegrid/TileGrid';
-import {Observable, Subject, Subscription} from 'rxjs';
+import {Observable, Subject, Subscription, firstValueFrom} from 'rxjs';
 import {NotificationService} from '@geoengine/common';
 import {
     RasterColorizer,
@@ -55,6 +55,7 @@ import {
 import {BackendService} from '../backend/backend.service';
 import {LoadingState} from '../project/loading-state.model';
 import {ProjectService} from '../project/project.service';
+import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 
 /**
  * The `ol-layer` component represents a single layer object of open layers.
@@ -64,9 +65,13 @@ import {ProjectService} from '../project/project.service';
 export abstract class MapLayerComponent<OL extends OlLayer<OS, any>, OS extends OlSource, S extends Symbology> {
     protected projectService = inject(ProjectService);
 
-    readonly layerId = input.required<number>();
+    /**
+     * The id of the layer. Layers of a project are layers of the projects data connector with
+     * the same id, which the project service also uses for their data and state.
+     */
+    readonly layerId = input.required<string>();
     readonly isVisible = input(true);
-    readonly workflow = input<UUID>();
+    readonly processingGraph = input<UUID>();
     readonly symbology = input<S>();
 
     /**
@@ -242,12 +247,12 @@ export class OlVectorLayerComponent
             this.updateOlLayer({
                 isVisible: this.extractChange<boolean>(changes.isVisible),
                 symbology: this.extractChange<VectorSymbology>(changes.symbology),
-                workflow: this.extractChange<UUID>(changes.workflow),
+                processingGraph: this.extractChange<UUID>(changes.processingGraph),
             });
         }
     }
 
-    private updateOlLayer(changes: {isVisible?: boolean; symbology?: VectorSymbology; workflow?: UUID}): void {
+    private updateOlLayer(changes: {isVisible?: boolean; symbology?: VectorSymbology; processingGraph?: UUID}): void {
         if (changes.isVisible !== undefined) {
             this.mapLayer.setVisible(this.isVisible());
             this.mapRedraw.emit();
@@ -261,15 +266,18 @@ export class OlVectorLayerComponent
 }
 
 /**
- * This component reflects a raster layer on the map
+ * This component reflects a raster processing graph on the map via WMS.
+ *
+ * The symbology is sent with every request, so it does not have to be stored.
+ * Raster layers of a project use {@link OlOgcApiMapTileLayerComponent} instead.
  */
 @Component({
-    selector: 'geoengine-ol-raster-layer',
+    selector: 'geoengine-ol-wms-layer',
     template: '',
-    providers: [{provide: MapLayerComponent, useExisting: OlRasterLayerComponent}],
+    providers: [{provide: MapLayerComponent, useExisting: OlWmsLayerComponent}],
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class OlRasterLayerComponent
+export class OlWmsLayerComponent
     extends MapLayerComponent<OlLayerTile<OlTileWmsSource>, OlTileWmsSource, RasterSymbology>
     implements OnInit, OnDestroy, OnChanges
 {
@@ -328,7 +336,7 @@ export class OlRasterLayerComponent
             this.updateOlLayer({
                 isVisible: this.extractChange<boolean>(changes.isVisible),
                 symbology: this.extractChange<RasterSymbology>(changes.symbology),
-                workflow: this.extractChange<UUID>(changes.workflow),
+                processingGraph: this.extractChange<UUID>(changes.processingGraph),
             });
         }
     }
@@ -353,7 +361,7 @@ export class OlRasterLayerComponent
         return olExtentToTuple(this._mapLayer.getExtent() ?? [0, 0, 0, 0]);
     }
 
-    private updateOlLayer(changes: {isVisible?: boolean; symbology?: RasterSymbology; workflow?: UUID; sessionToken?: UUID}): void {
+    private updateOlLayer(changes: {isVisible?: boolean; symbology?: RasterSymbology; processingGraph?: UUID; sessionToken?: UUID}): void {
         if (this.source === undefined || this._mapLayer === undefined) {
             return;
         }
@@ -370,7 +378,7 @@ export class OlRasterLayerComponent
                 STYLES: this.stylesFromColorizer(symbology.rasterColorizer),
             });
         }
-        if (changes.workflow !== undefined || changes.sessionToken !== undefined) {
+        if (changes.processingGraph !== undefined || changes.sessionToken !== undefined) {
             this.initializeOrReplaceOlSource();
         }
 
@@ -420,9 +428,9 @@ export class OlRasterLayerComponent
         this.loader?.abortAll();
 
         const source = new OlTileWmsSource({
-            url: `${this.backend.wmsBaseUrl}/${this.workflow()}`,
+            url: `${this.backend.wmsBaseUrl}/${this.processingGraph()}`,
             params: {
-                layers: this.workflow(),
+                layers: this.processingGraph(),
                 time: this.time.asRequestString(),
                 STYLES: this.stylesFromColorizer(symbology.rasterColorizer),
                 EXCEPTIONS: 'application/json',
@@ -487,6 +495,27 @@ export class OlRasterLayerComponent
 }
 
 /**
+ * The link relation of the tiling scheme of an OGC API tile matrix set.
+ */
+const TILING_SCHEME_REL = 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme';
+
+/**
+ * A short fingerprint of what determines the tiles of a project layer besides the data:
+ * its processing graph and its symbology.
+ */
+export function tileVersion(processingGraphId: UUID | undefined, symbology: RasterSymbology | undefined): string {
+    const json = JSON.stringify([processingGraphId ?? null, symbology?.toDict() ?? null]);
+
+    // polynomial rolling hash, modulo the largest prime below 2^32
+    const modulus = 4_294_967_291;
+    let hash = 0;
+    for (let i = 0; i < json.length; i++) {
+        hash = (hash * 31 + json.charCodeAt(i)) % modulus;
+    }
+    return hash.toString(16);
+}
+
+/**
  * All TMS ids that are supported by the backend. The TMS id is used to request the correct tile matrix set from the backend.
  */
 export type TMSId = 'Custom' | 'CustomWebMercator' | 'WebMercatorQuad';
@@ -505,13 +534,18 @@ export class OlOgcApiMapTileLayerComponent
     implements OnDestroy
 {
     protected readonly backend = inject(BackendService);
+    protected readonly notificationService = inject(NotificationService);
+    protected readonly spatialReferenceService = inject(SpatialReferenceService);
 
     readonly dataConnectorId = input.required<UUID>();
-    readonly dataLayerId = input.required<string>();
     readonly sessionToken = input.required<UUID>();
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
-    readonly tmsId = input<TMSId>('Custom');
+    /**
+     * The tile matrix set. By default, the backend renders web mercator tiles for a web mercator
+     * map and tiles in the projection of the data otherwise, which OpenLayers reprojects.
+     */
+    readonly tmsId = input<TMSId>();
     /** Minimum source matrix index. Ignored with a warning when source and view projections differ. */
     readonly minTileMatrixIndex = input(0);
     readonly zoomRequired = output<boolean>();
@@ -526,17 +560,35 @@ export class OlOgcApiMapTileLayerComponent
     /** Emits `true` while any tile in this layer is loading, `false` when all tiles are loaded. */
     readonly loading = output<boolean>();
 
+    /** Emits the load state of the tiles, e.g. to report it for a project layer. */
+    readonly loadState = output<TileLoadState>();
+
+    /**
+     * A version of the processing graph and the symbology, if the processing graph is known.
+     * It is part of the tile URLs, so that a changed layer does not use cached tiles.
+     */
+    private readonly layerVersion = computed(() => {
+        const processingGraph = this.processingGraph();
+        return processingGraph ? tileVersion(processingGraph, this.symbology()) : undefined;
+    });
+
+    private readonly effectiveTmsId = computed<TMSId>(
+        () => this.tmsId() ?? (this.spatialReference().srsString === 'EPSG:3857' ? 'CustomWebMercator' : 'Custom'),
+    );
+
     /** Loads the tiles of the current source. The resource signal already aborts it, this keeps teardown local. */
     private loader?: TileLoader;
 
     readonly tileSource = resource({
         params: () => ({
             dataConnectorId: this.dataConnectorId(),
-            layerId: this.dataLayerId(),
+            layerId: this.layerId(),
             sessionToken: this.sessionToken(),
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
             minTileMatrixIndex: this.minTileMatrixIndex(),
+            tmsId: this.effectiveTmsId(),
+            layerVersion: this.layerVersion(),
         }),
         loader: async ({abortSignal, params}): Promise<OGCMapTile> => {
             this.sourceMaxResolution.set(undefined);
@@ -570,6 +622,10 @@ export class OlOgcApiMapTileLayerComponent
                         this.unwatchViewportFrames(loader);
                     }
                     this.loading.emit(state === 'loading');
+                    this.loadState.emit(state);
+                },
+                onError: (message): void => {
+                    this.notificationService.error(message);
                 },
                 onDiagnostic: (diagnostic): void => this.reportTileDiagnostic(diagnostic),
                 tileExtentInView: (tile): TileInView => ({
@@ -677,19 +733,39 @@ export class OlOgcApiMapTileLayerComponent
      */
     private async tmsUrl(loader: TileLoader, abortSignal: AbortSignal): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
-        const layerId = this.dataLayerId();
-        const tms = this.tmsId();
+        const layerId = this.layerId();
+        const tms = this.effectiveTmsId();
+        const version = this.layerVersion();
 
         const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 
         return loader.jsonUrl(tmsUrl, abortSignal, async (metadata) => {
             const links = (metadata as {links?: Array<{rel: string; href: string}>}).links ?? [];
             for (const link of links) {
-                if (link.rel === 'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme') {
-                    link.href = await loader.jsonUrl(link.href, abortSignal);
+                if (link.rel === TILING_SCHEME_REL) {
+                    link.href = await loader.jsonUrl(link.href, abortSignal, async (tileMatrixSet) => this.useRegisteredCrs(tileMatrixSet));
+                } else if (version && link.href.includes('{datetime}')) {
+                    link.href += `&v=${version}`;
                 }
             }
         });
+    }
+
+    /**
+     * OpenLayers only knows EPSG:4326 and EPSG:3857 by their CRS URI. Registers the projection of
+     * the tile matrix set and refers to it by its code instead.
+     */
+    private async useRegisteredCrs(metadata: unknown): Promise<void> {
+        const tileMatrixSet = metadata as {crs?: string | {uri?: string}};
+        const uri = typeof tileMatrixSet.crs === 'string' ? tileMatrixSet.crs : tileMatrixSet.crs?.uri;
+        const code = uri?.match(/\/EPSG\/0\/(\d+)$/)?.[1];
+        if (!code || code === '4326' || code === '3857') {
+            return;
+        }
+
+        const srsString = `EPSG:${code}`;
+        await firstValueFrom(this.spatialReferenceService.getSpatialReferenceSpecification(srsString));
+        tileMatrixSet.crs = srsString;
     }
 
     getExtent(): [number, number, number, number] {

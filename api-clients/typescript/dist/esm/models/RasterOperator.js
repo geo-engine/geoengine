@@ -14,8 +14,8 @@ import { BandFilterFromJSONTyped, BandFilterToJSON, } from './BandFilter';
 import { BandNeighborhoodAggregateFromJSONTyped, BandNeighborhoodAggregateToJSON, } from './BandNeighborhoodAggregate';
 import { BandwiseExpressionFromJSONTyped, BandwiseExpressionToJSON, } from './BandwiseExpression';
 import { DownsamplingFromJSONTyped, DownsamplingToJSON, } from './Downsampling';
-import { instanceOfExpression, ExpressionFromJSONTyped, ExpressionToJSON, } from './Expression';
-import { instanceOfGdalSource, GdalSourceFromJSONTyped, GdalSourceToJSON, } from './GdalSource';
+import { ExpressionFromJSONTyped, ExpressionToJSON, } from './Expression';
+import { GdalSourceFromJSONTyped, GdalSourceToJSON, } from './GdalSource';
 import { InterpolationFromJSONTyped, InterpolationToJSON, } from './Interpolation';
 import { MultiBandGdalSourceFromJSONTyped, MultiBandGdalSourceToJSON, } from './MultiBandGdalSource';
 import { NeighborhoodAggregateFromJSONTyped, NeighborhoodAggregateToJSON, } from './NeighborhoodAggregate';
@@ -139,10 +139,10 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return value;
     }
 }
+const RasterOperatorTypes = new Set(['BandFilter', 'BandNeighborhoodAggregate', 'BandwiseExpression', 'Downsampling', 'Expression', 'GdalSource', 'Interpolation', 'MultiBandGdalSource', 'NeighborhoodAggregate', 'Onnx', 'PolygonRasterization', 'Radiance', 'RasterScaling', 'RasterStacker', 'RasterTypeConversion', 'Rasterization', 'Reflectance', 'Reprojection', 'Temperature', 'TemporalRasterAggregation', 'TimeShift']);
 /**
 * Check if a given object implements the RasterOperator interface.
 */
 export function instanceOfRasterOperator(value) {
-    return instanceOfExpression(value)
-        || instanceOfGdalSource(value);
+    return 'type' in value && typeof value.type === 'string' && RasterOperatorTypes.has(value.type);
 }

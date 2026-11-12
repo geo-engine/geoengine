@@ -181,10 +181,11 @@ export function VectorOperatorToJSONTyped(value?: VectorOperator | null, ignoreD
 }
 
 
+const VectorOperatorTypes: ReadonlySet<string> = new Set(['ColumnRangeFilter', 'LineSimplification', 'MockPointSource', 'OgrSource', 'PointInPolygonFilter', 'RasterVectorJoin', 'Reprojection', 'TimeProjection', 'TimeShift', 'VectorExpression', 'VectorJoin', 'VisualPointClustering']);
+
 /**
 * Check if a given object implements the VectorOperator interface.
 */
 export function instanceOfVectorOperator(value: object): value is VectorOperator {
-    return instanceOfMockPointSource(value)
-        || instanceOfRasterVectorJoin(value);
+    return 'type' in value && typeof value.type === 'string' && VectorOperatorTypes.has(value.type);
 }

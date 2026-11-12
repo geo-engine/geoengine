@@ -17,13 +17,13 @@ import json
 import pprint
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 from typing import Any, List, Optional
-from geoengine_api_client.models.project_layer import ProjectLayer
+from geoengine_api_client.models.project_layer_update import ProjectLayerUpdate
 from geoengine_api_client.models.project_update_token import ProjectUpdateToken
 from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-LAYERUPDATE_ONE_OF_SCHEMAS = ["ProjectLayer", "ProjectUpdateToken"]
+LAYERUPDATE_ONE_OF_SCHEMAS = ["ProjectLayerUpdate", "ProjectUpdateToken"]
 
 class LayerUpdate(BaseModel):
     """
@@ -31,10 +31,10 @@ class LayerUpdate(BaseModel):
     """
     # data type: ProjectUpdateToken
     oneof_schema_1_validator: Optional[ProjectUpdateToken] = None
-    # data type: ProjectLayer
-    oneof_schema_2_validator: Optional[ProjectLayer] = None
-    actual_instance: Optional[Union[ProjectLayer, ProjectUpdateToken]] = None
-    one_of_schemas: Set[str] = { "ProjectLayer", "ProjectUpdateToken" }
+    # data type: ProjectLayerUpdate
+    oneof_schema_2_validator: Optional[ProjectLayerUpdate] = None
+    actual_instance: Optional[Union[ProjectLayerUpdate, ProjectUpdateToken]] = None
+    one_of_schemas: Set[str] = { "ProjectLayerUpdate", "ProjectUpdateToken" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -62,17 +62,17 @@ class LayerUpdate(BaseModel):
             error_messages.append(f"Error! Input type `{type(v)}` is not `ProjectUpdateToken`")
         else:
             match += 1
-        # validate data type: ProjectLayer
-        if not isinstance(v, ProjectLayer):
-            error_messages.append(f"Error! Input type `{type(v)}` is not `ProjectLayer`")
+        # validate data type: ProjectLayerUpdate
+        if not isinstance(v, ProjectLayerUpdate):
+            error_messages.append(f"Error! Input type `{type(v)}` is not `ProjectLayerUpdate`")
         else:
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in LayerUpdate with oneOf schemas: ProjectLayer, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in LayerUpdate with oneOf schemas: ProjectLayerUpdate, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in LayerUpdate with oneOf schemas: ProjectLayer, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in LayerUpdate with oneOf schemas: ProjectLayerUpdate, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -93,19 +93,19 @@ class LayerUpdate(BaseModel):
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
-        # deserialize data into ProjectLayer
+        # deserialize data into ProjectLayerUpdate
         try:
-            instance.actual_instance = ProjectLayer.from_json(json_str)
+            instance.actual_instance = ProjectLayerUpdate.from_json(json_str)
             match += 1
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into LayerUpdate with oneOf schemas: ProjectLayer, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into LayerUpdate with oneOf schemas: ProjectLayerUpdate, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into LayerUpdate with oneOf schemas: ProjectLayer, ProjectUpdateToken. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into LayerUpdate with oneOf schemas: ProjectLayerUpdate, ProjectUpdateToken. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -119,7 +119,7 @@ class LayerUpdate(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], ProjectLayer, ProjectUpdateToken]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], ProjectLayerUpdate, ProjectUpdateToken]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

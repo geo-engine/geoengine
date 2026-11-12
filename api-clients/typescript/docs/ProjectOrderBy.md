@@ -1,24 +1,21 @@
 
-# PlotUpdate
+# ProjectOrderBy
 
+The order of a project listing.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`processingGraph` | string
-`name` | string
 
 ## Example
 
 ```typescript
-import type { PlotUpdate } from '@geoengine/api-client'
+import type { ProjectOrderBy } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "processingGraph": null,
-  "name": null,
-} satisfies PlotUpdate
+} satisfies ProjectOrderBy
 
 console.log(example)
 
@@ -27,7 +24,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as PlotUpdate
+const exampleParsed = JSON.parse(exampleJSON) as ProjectOrderBy
 console.log(exampleParsed)
 ```
 

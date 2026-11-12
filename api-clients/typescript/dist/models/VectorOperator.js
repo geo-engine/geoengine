@@ -101,10 +101,10 @@ function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return value;
     }
 }
+const VectorOperatorTypes = new Set(['ColumnRangeFilter', 'LineSimplification', 'MockPointSource', 'OgrSource', 'PointInPolygonFilter', 'RasterVectorJoin', 'Reprojection', 'TimeProjection', 'TimeShift', 'VectorExpression', 'VectorJoin', 'VisualPointClustering']);
 /**
 * Check if a given object implements the VectorOperator interface.
 */
 function instanceOfVectorOperator(value) {
-    return (0, MockPointSource_1.instanceOfMockPointSource)(value)
-        || (0, RasterVectorJoin_1.instanceOfRasterVectorJoin)(value);
+    return 'type' in value && typeof value.type === 'string' && VectorOperatorTypes.has(value.type);
 }

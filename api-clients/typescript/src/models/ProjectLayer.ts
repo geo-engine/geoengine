@@ -26,17 +26,27 @@ import {
     SymbologyToJSON,
     SymbologyToJSONTyped,
 } from './Symbology';
+import type { ProviderLayerId } from './ProviderLayerId';
+import {
+    ProviderLayerIdFromJSON,
+    ProviderLayerIdFromJSONTyped,
+    ProviderLayerIdToJSON,
+    ProviderLayerIdToJSONTyped,
+} from './ProviderLayerId';
 
 /**
+ * A layer or plot of a project.
  * 
+ * It is also a layer of the projects data connector, with the same `id`.
+ * Only the visibility is specific to the project.
  * @export
  * @interface ProjectLayer
  */
 export interface ProjectLayer {
     /**
-     * 
+     * The id of the layer, stable across project versions.
      */
-    processingGraph: string;
+    id: string;
     /**
      * 
      */
@@ -44,21 +54,44 @@ export interface ProjectLayer {
     /**
      * 
      */
-    visibility: LayerVisibility;
+    description: string;
+    /**
+     * The id of the processing graph of the layer.
+     */
+    processingGraph: string;
+    /**
+     * The symbology of the layer, which plots do not have.
+     */
+    symbology?: Symbology | null;
+    /**
+     * properties, for instance, to be rendered in the UI
+     */
+    properties: Array<Array<string>>;
+    /**
+     * metadata used for loading the data
+     */
+    metadata: { [key: string]: string; };
     /**
      * 
      */
-    symbology: Symbology;
+    visibility: LayerVisibility;
+    /**
+     * The catalog layer this layer was copied from, if any.
+     */
+    source?: ProviderLayerId | null;
 }
 
 /**
  * Check if a given object implements the ProjectLayer interface.
  */
 export function instanceOfProjectLayer(value: object): value is ProjectLayer {
-    if (!('processingGraph' in value) || value['processingGraph'] === undefined) return false;
+    if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('processingGraph' in value) || value['processingGraph'] === undefined) return false;
+    if (!('properties' in value) || value['properties'] === undefined) return false;
+    if (!('metadata' in value) || value['metadata'] === undefined) return false;
     if (!('visibility' in value) || value['visibility'] === undefined) return false;
-    if (!('symbology' in value) || value['symbology'] === undefined) return false;
     return true;
 }
 
@@ -72,10 +105,15 @@ export function ProjectLayerFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
-        'processingGraph': json['processingGraph'],
+        'id': json['id'],
         'name': json['name'],
+        'description': json['description'],
+        'processingGraph': json['processingGraph'],
+        'symbology': json['symbology'] === undefined ? undefined : json['symbology'] === null ? null : SymbologyFromJSON(json['symbology']),
+        'properties': json['properties'],
+        'metadata': json['metadata'],
         'visibility': LayerVisibilityFromJSON(json['visibility']),
-        'symbology': SymbologyFromJSON(json['symbology']),
+        'source': json['source'] === undefined ? undefined : json['source'] === null ? null : ProviderLayerIdFromJSON(json['source']),
     };
 }
 
@@ -90,10 +128,15 @@ export function ProjectLayerToJSONTyped(value?: ProjectLayer | null, ignoreDiscr
 
     return {
         
-        'processingGraph': value['processingGraph'],
+        'id': value['id'],
         'name': value['name'],
-        'visibility': LayerVisibilityToJSON(value['visibility']),
+        'description': value['description'],
+        'processingGraph': value['processingGraph'],
         'symbology': SymbologyToJSON(value['symbology']),
+        'properties': value['properties'],
+        'metadata': value['metadata'],
+        'visibility': LayerVisibilityToJSON(value['visibility']),
+        'source': ProviderLayerIdToJSON(value['source']),
     };
 }
 

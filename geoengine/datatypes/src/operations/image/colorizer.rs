@@ -7,7 +7,7 @@ use crate::util::test::TestDefault;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use typed_floats::{InvalidNumber, tf64::NonNaN};
@@ -211,7 +211,7 @@ impl Colorizer {
     /// A palette maps values as classes to a certain color.
     /// Unmapped values results in the NO DATA color
     pub fn palette(
-        colors: HashMap<NonNaN, RgbaColor>,
+        colors: BTreeMap<NonNaN, RgbaColor>,
         no_data_color: RgbaColor,
         default_color: RgbaColor,
     ) -> Result<Self> {
@@ -678,18 +678,20 @@ pub type Breakpoints = Vec<Breakpoint>;
 /// It is assumed that is has at least one and at most 256 entries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
-pub struct Palette(HashMap<NonNaN, RgbaColor>);
+///
+/// It is ordered by value, so that it always serializes the same, e.g. for hashing.
+pub struct Palette(BTreeMap<NonNaN, RgbaColor>);
 
 impl Palette {
-    pub fn new(map: HashMap<NonNaN, RgbaColor>) -> Self {
+    pub fn new(map: BTreeMap<NonNaN, RgbaColor>) -> Self {
         Self(map)
     }
 
-    pub fn into_inner(self) -> HashMap<NonNaN, RgbaColor> {
+    pub fn into_inner(self) -> BTreeMap<NonNaN, RgbaColor> {
         self.0
     }
 
-    pub fn inner(&self) -> &HashMap<NonNaN, RgbaColor> {
+    pub fn inner(&self) -> &BTreeMap<NonNaN, RgbaColor> {
         &self.0
     }
 }
@@ -697,7 +699,7 @@ impl Palette {
 /// A type that is solely for serde's serializability.
 /// You cannot serialize floats as JSON map keys.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SerializablePalette(HashMap<String, RgbaColor>);
+pub struct SerializablePalette(BTreeMap<String, RgbaColor>);
 
 impl From<Palette> for SerializablePalette {
     fn from(palette: Palette) -> Self {
@@ -715,7 +717,7 @@ impl TryFrom<SerializablePalette> for Palette {
     type Error = <NonNaN as FromStr>::Err;
 
     fn try_from(palette: SerializablePalette) -> Result<Self, Self::Error> {
-        let mut inner = HashMap::<NonNaN, RgbaColor>::with_capacity(palette.0.len());
+        let mut inner = BTreeMap::<NonNaN, RgbaColor>::new();
         for (k, v) in palette.0 {
             inner.insert(k.parse()?, v);
         }
