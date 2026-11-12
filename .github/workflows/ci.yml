@@ -360,7 +360,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.19.x, 22.12.x, 24.0.x]
+        node-version: [22.12.x, 24.x, 26.x]
 
     permissions:
       contents: read
