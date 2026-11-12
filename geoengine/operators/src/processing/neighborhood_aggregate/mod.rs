@@ -302,7 +302,9 @@ where
                     ctx,
                     sub_query,
                     time_stream,
-                );
+                )
+                .skip_tiles_without_data()
+                .await?;
                 Ok(sq.box_pin())
             },
         )

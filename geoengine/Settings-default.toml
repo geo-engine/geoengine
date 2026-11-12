@@ -55,6 +55,11 @@ multi_band_gdal_source_read_ahead = 16
 # for one time step. If a step has more, the boxes that add the least empty area are merged. Combining
 # footprints, e.g. in an expression, takes time in the product of the numbers of boxes.
 footprint_boxes_per_step_limit = 64
+# Operators that query their source once per output tile (reprojection, neighborhood aggregate, downsampling,
+# interpolation) first ask the source where it has data and skip the tiles without. This saves the reads of
+# sparse data, e.g. satellite swaths, and costs one footprint query per query. On a STAC source that query
+# searches the catalogue for the whole area the query reads.
+footprint_skipping = false
 
 [expression]
 # seconds a compiled expression stays in the cache without being requested; running queries keep
