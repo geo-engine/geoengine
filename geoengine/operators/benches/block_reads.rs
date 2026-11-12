@@ -887,7 +887,9 @@ fn block_reads(c: &mut Criterion) {
         .map_or(CACHE_BYTES, |mb| mb.parse::<usize>().unwrap() << 20);
     // blocks live longer than a run, so that warm runs stay warm
     let cache = Arc::new(
-        NewRasterCacheEnum::new_lru(cache_bytes).with_min_block_ttl(CacheTtlSeconds::new(3600)),
+        NewRasterCacheEnum::new_lru(cache_bytes)
+            .with_min_block_ttl(CacheTtlSeconds::new(3600))
+            .with_block_reads(true),
     );
     let hashes: Mutex<BTreeMap<String, u64>> = Mutex::default();
 

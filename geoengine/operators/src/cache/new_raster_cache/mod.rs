@@ -37,6 +37,8 @@ pub struct NewRasterCache<Store> {
     store: Store,
     /// the least time file blocks and headers stay cached, see [`NewRasterCacheEnum::min_block_ttl`]
     min_block_ttl: CacheTtlSeconds,
+    /// whether GDAL sources read through file blocks, see [`NewRasterCacheEnum::reads_blocks`]
+    block_reads: bool,
 }
 
 /// The least time file blocks and headers stay cached unless set otherwise, so that the tiles of a
@@ -64,6 +66,7 @@ impl TestDefault for NewRasterCacheEnum {
                 counters: CacheCounters::default(),
             },
             min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
+            block_reads: false,
         })
     }
 }
@@ -88,6 +91,7 @@ impl NewRasterCacheEnum {
                 counters: CacheCounters::default(),
             },
             min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
+            block_reads: false,
         })
     }
 
@@ -102,6 +106,7 @@ impl NewRasterCacheEnum {
                 counters: CacheCounters::default(),
             },
             min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
+            block_reads: false,
         })
     }
 
@@ -119,6 +124,24 @@ impl NewRasterCacheEnum {
         match &mut self {
             Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.min_block_ttl = min_block_ttl,
             Self::InMemoryCompressedRasterTile2DLru(cache) => cache.min_block_ttl = min_block_ttl,
+        }
+        self
+    }
+
+    /// Whether GDAL sources read through cached file blocks instead of windows. Off unless set:
+    /// on small local files, block reads cost more than they save.
+    pub fn reads_blocks(&self) -> bool {
+        match self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_reads,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_reads,
+        }
+    }
+
+    #[must_use]
+    pub fn with_block_reads(mut self, block_reads: bool) -> Self {
+        match &mut self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_reads = block_reads,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_reads = block_reads,
         }
         self
     }

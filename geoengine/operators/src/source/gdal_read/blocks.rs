@@ -115,12 +115,14 @@ impl BlockIo {
         }
     }
 
-    /// Block reads need the raster cache; without it, sources read windows.
+    /// Block reads need the raster cache with block reads switched on; else sources read windows.
     pub fn from_query_context(ctx: &dyn QueryContext) -> Option<Self> {
-        ctx.new_raster_cache().map(|cache| {
-            let min_ttl = cache.min_block_ttl();
-            Self::new(cache, ctx.get_gdal_worker(), min_ttl)
-        })
+        ctx.new_raster_cache()
+            .filter(|cache| cache.reads_blocks())
+            .map(|cache| {
+                let min_ttl = cache.min_block_ttl();
+                Self::new(cache, ctx.get_gdal_worker(), min_ttl)
+            })
     }
 
     /// Whether blocks read for `cache_hint` stay in the cache. If they do not, each tile reads

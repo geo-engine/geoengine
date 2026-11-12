@@ -80,7 +80,7 @@ mod tests {
         }
     }
 
-    /// With `[cache] enable_new_raster_cache`, the second map reads its blocks and header again.
+    /// With `[cache] block_reads`, the second map reads its blocks and header again.
     #[ge_context::test]
     async fn it_renders_the_same_map_after_clearing(app_ctx: PostgresContext<NoTls>) {
         let admin = admin_login(&app_ctx).await;

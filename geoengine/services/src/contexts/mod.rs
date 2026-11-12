@@ -354,6 +354,7 @@ where
         span: CreateSpan,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
         let reads_cached_blocks = op.reads_cached_blocks();
+        // `reads_cached_blocks` only says the operator can read blocks; the settings decide
         let wrapped = Box::new(InitializedOperatorWrapper::new(op, span))
             as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
 
@@ -365,7 +366,9 @@ where
             && cache_config.enable_new_raster_cache
             && self.new_raster_cache.is_some()
         {
-            if reads_cached_blocks || !cache_config.caches_raster_operator(wrapped.name()) {
+            if (cache_config.block_reads && reads_cached_blocks)
+                || !cache_config.caches_raster_operator(wrapped.name())
+            {
                 return wrapped;
             }
             return Box::new(RasterCacheOperator::wrap_operator(wrapped));
