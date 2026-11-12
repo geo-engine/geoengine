@@ -6,6 +6,7 @@ use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::processing::ExpressionCacheConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
+use geoengine_operators::util::raster_stream_to_geotiff_rust::GeoTiffWriter;
 use serde::Deserialize;
 use snafu::ResultExt;
 use std::collections::{HashMap, HashSet};
@@ -385,6 +386,8 @@ impl ConfigElement for Ogc {
 #[derive(Debug, Deserialize)]
 pub struct OgcApiTilesConfig {
     pub request_timeout_seconds: Option<u64>,
+    /// The library that writes the `GeoTIFF` coverage tiles, GDAL if not set
+    pub coverage_geotiff_writer: Option<GeoTiffWriter>,
 }
 
 #[derive(Debug, Deserialize)]

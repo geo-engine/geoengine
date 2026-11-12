@@ -29,6 +29,9 @@ use geoengine_operators::{
             GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
             raster_stream_to_multiband_geotiff_bytes,
         },
+        raster_stream_to_geotiff_rust::{
+            GeoTiffWriter, raster_stream_to_multiband_geotiff_bytes_rust,
+        },
         raster_stream_to_png::raster_stream_to_png_bytes,
     },
 };
@@ -60,6 +63,8 @@ pub enum RasterEncoding {
         no_data_value: Option<f64>,
         /// The order of the query's bands in the `GeoTIFF`; `None` keeps the ascending order of the stream
         band_order: Option<Vec<u32>>,
+        /// The library that writes the `GeoTIFF`
+        writer: GeoTiffWriter,
     },
 }
 
@@ -232,25 +237,48 @@ async fn encode<Q: QueryContext + 'static>(
         RasterEncoding::GeoTiff {
             no_data_value,
             band_order,
-        } => call_on_generic_raster_processor_gdal_types!(processor, p =>
-                raster_stream_to_multiband_geotiff_bytes(
-                    p,
-                    query_rect,
-                    band_order,
-                    query_ctx,
-                    GdalGeoTiffDatasetMetadata {
-                        no_data_value,
-                        spatial_reference: crs,
-                    },
-                    GdalGeoTiffOptions {
-                        compression_num_threads: get_config_element::<config::Gdal>()?.compression_num_threads,
-                        as_cog: false,
-                        force_big_tiff: false,
-                    },
-                    Some(get_config_element::<config::Wcs>()?.tile_limit),
-                    not_canceled,
-                    tiling_spec,
-                )
-                .await)??,
+            writer,
+        } => {
+            let gdal_tiff_metadata = GdalGeoTiffDatasetMetadata {
+                no_data_value,
+                spatial_reference: crs,
+            };
+            let gdal_tiff_options = GdalGeoTiffOptions {
+                compression_num_threads: get_config_element::<config::Gdal>()?
+                    .compression_num_threads,
+                as_cog: false,
+                force_big_tiff: false,
+            };
+            let tile_limit = Some(get_config_element::<config::Wcs>()?.tile_limit);
+
+            match writer {
+                GeoTiffWriter::Gdal => call_on_generic_raster_processor_gdal_types!(processor, p =>
+                    raster_stream_to_multiband_geotiff_bytes(
+                        p,
+                        query_rect,
+                        band_order,
+                        query_ctx,
+                        gdal_tiff_metadata,
+                        gdal_tiff_options,
+                        tile_limit,
+                        not_canceled,
+                        tiling_spec,
+                    )
+                    .await)??,
+                GeoTiffWriter::Rust => call_on_generic_raster_processor_gdal_types!(processor, p =>
+                    raster_stream_to_multiband_geotiff_bytes_rust(
+                        p,
+                        query_rect,
+                        band_order,
+                        query_ctx,
+                        gdal_tiff_metadata,
+                        gdal_tiff_options,
+                        tile_limit,
+                        not_canceled,
+                        tiling_spec,
+                    )
+                    .await)??,
+            }
+        }
     })
 }

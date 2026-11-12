@@ -112,6 +112,13 @@ allow_origin = "*"
 allow_headers = ["Authorization", "Content-Type"]
 allow_methods = ["GET", "OPTIONS", "HEAD"]
 
+[ogc.tiles]
+# request_timeout_seconds = 3600
+# The library that writes the GeoTIFF coverage tiles: "gdal" or "rust".
+# "rust" is a prototype with the pure-Rust geotiff-writer crate. It falls back to GDAL for
+# spatial references without EPSG code and for masked integer rasters without no-data value.
+coverage_geotiff_writer = "gdal"
+
 [wcs]
 # max number of tiles to be produced for generating output tiff
 tile_limit = 4

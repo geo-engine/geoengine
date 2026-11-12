@@ -124,6 +124,7 @@ geo = "0.33.1" # when changing geo version also adapt the Cargo.toml in the expr
 geo-types = "0.7.20" # important for compatibility when linking expressions
 geodesy = { version = "0.15" }
 geojson = { version = "1.0", features = ["geo-types"] }
+geotiff-writer = "0.11.1"
 httptest = "0.16"
 image = "0.25"
 indoc = "2.0"
@@ -200,3 +201,8 @@ walkdir = "2.5"
 wkt = "0.14"
 xml = "1.4"
 zip = "9.1"
+
+# TODO(prototype): `GeoTiffBuilder::tag` is not released yet (roteiro-gis/geotiff-rust#128).
+# Remove once it is in a release.
+[patch.crates-io]
+geotiff-writer = { git = "https://github.com/ChristianBeilschmidt/geotiff-rust", branch = "feat/geotiff-builder-extra-tags" }
