@@ -23,7 +23,9 @@
 //! the blocks and headers of its files.
 
 use super::level_read_advise;
-use crate::cache::new_raster_cache::{BlockKey, NewRasterCacheEnum, SupportedRasterDataType};
+use crate::cache::new_raster_cache::{
+    BlockKey, BlockReadMode, NewRasterCacheEnum, SupportedRasterDataType,
+};
 use crate::engine::QueryContext;
 use crate::source::gdal_worker_process::process_common::{
     GdalReadAdvise, GdalReadWindow, IpcProcessError,
@@ -62,6 +64,8 @@ pub struct BlockIo {
     cache: Arc<NewRasterCacheEnum>,
     reader: GdalPoolReader,
     min_ttl: CacheTtlSeconds,
+    /// read only remote files through blocks, see [`BlockReadMode::Auto`]
+    remote_only: bool,
 }
 
 /// The part of one level of a file that a read covers at native size.
@@ -112,17 +116,29 @@ impl BlockIo {
             cache,
             reader: GdalPoolReader::from(gdal_worker),
             min_ttl,
+            remote_only: false,
         }
     }
 
-    /// Block reads need the raster cache with block reads switched on; else sources read windows.
+    /// Block reads need the raster cache with a [`BlockReadMode`] other than `Off`; else sources
+    /// read windows.
     pub fn from_query_context(ctx: &dyn QueryContext) -> Option<Self> {
-        ctx.new_raster_cache()
-            .filter(|cache| cache.reads_blocks())
-            .map(|cache| {
-                let min_ttl = cache.min_block_ttl();
-                Self::new(cache, ctx.get_gdal_worker(), min_ttl)
-            })
+        let cache = ctx.new_raster_cache()?;
+        let mode = cache.block_read_mode();
+        if mode == BlockReadMode::Off {
+            return None;
+        }
+        let min_ttl = cache.min_block_ttl();
+        Some(Self {
+            remote_only: mode == BlockReadMode::Auto,
+            ..Self::new(cache, ctx.get_gdal_worker(), min_ttl)
+        })
+    }
+
+    /// Whether the file of `params` is read through blocks: with [`BlockReadMode::Auto`] only
+    /// remote files.
+    pub fn reads(&self, params: &GdalDatasetParameters) -> bool {
+        !self.remote_only || params.is_remote()
     }
 
     /// Whether blocks read for `cache_hint` stay in the cache. If they do not, each tile reads

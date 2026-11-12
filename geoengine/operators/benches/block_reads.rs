@@ -77,7 +77,7 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::{
-    cache::new_raster_cache::{CacheStats, NewRasterCacheEnum},
+    cache::new_raster_cache::{BlockReadMode, CacheStats, NewRasterCacheEnum},
     engine::{
         BoxRasterQueryProcessor, InitializedRasterOperator, MetaData, ProcessingGraphOperatorPath,
         QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
@@ -889,7 +889,7 @@ fn block_reads(c: &mut Criterion) {
     let cache = Arc::new(
         NewRasterCacheEnum::new_lru(cache_bytes)
             .with_min_block_ttl(CacheTtlSeconds::new(3600))
-            .with_block_reads(true),
+            .with_block_read_mode(BlockReadMode::On),
     );
     let hashes: Mutex<BTreeMap<String, u64>> = Mutex::default();
 

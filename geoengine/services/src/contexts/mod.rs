@@ -28,7 +28,7 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     cache::{
         cache_operator::InitializedCacheOperator,
-        new_raster_cache::{NewRasterCacheEnum, RasterCacheOperator},
+        new_raster_cache::{BlockReadMode, NewRasterCacheEnum, RasterCacheOperator},
         shared_cache::SharedCache,
     },
     engine::{
@@ -354,7 +354,8 @@ where
         span: CreateSpan,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
         let reads_cached_blocks = op.reads_cached_blocks();
-        // `reads_cached_blocks` only says the operator can read blocks; the settings decide
+        // `reads_cached_blocks` only says the operator can read blocks. Only with `On` do all its
+        // files go through blocks; with `Auto`, local files read windows, so its tiles are cached
         let wrapped = Box::new(InitializedOperatorWrapper::new(op, span))
             as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
 
@@ -366,7 +367,7 @@ where
             && cache_config.enable_new_raster_cache
             && self.new_raster_cache.is_some()
         {
-            if (cache_config.block_reads && reads_cached_blocks)
+            if (cache_config.block_reads == BlockReadMode::On && reads_cached_blocks)
                 || !cache_config.caches_raster_operator(wrapped.name())
             {
                 return wrapped;

@@ -37,8 +37,22 @@ pub struct NewRasterCache<Store> {
     store: Store,
     /// the least time file blocks and headers stay cached, see [`NewRasterCacheEnum::min_block_ttl`]
     min_block_ttl: CacheTtlSeconds,
-    /// whether GDAL sources read through file blocks, see [`NewRasterCacheEnum::reads_blocks`]
-    block_reads: bool,
+    /// which files GDAL sources read through file blocks, see [`BlockReadMode`]
+    block_read_mode: BlockReadMode,
+}
+
+/// Which files the GDAL sources read through cached file blocks instead of windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BlockReadMode {
+    /// windows for all files
+    #[default]
+    Off,
+    /// blocks for remote files (HTTP, S3 and the other remote GDAL file systems), windows for
+    /// local ones: blocks save requests over the network, but on local files they are slower
+    Auto,
+    /// blocks for all files
+    On,
 }
 
 /// The least time file blocks and headers stay cached unless set otherwise, so that the tiles of a
@@ -66,7 +80,7 @@ impl TestDefault for NewRasterCacheEnum {
                 counters: CacheCounters::default(),
             },
             min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
-            block_reads: false,
+            block_read_mode: BlockReadMode::Off,
         })
     }
 }
@@ -91,7 +105,7 @@ impl NewRasterCacheEnum {
                 counters: CacheCounters::default(),
             },
             min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
-            block_reads: false,
+            block_read_mode: BlockReadMode::Off,
         })
     }
 
@@ -106,7 +120,7 @@ impl NewRasterCacheEnum {
                 counters: CacheCounters::default(),
             },
             min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
-            block_reads: false,
+            block_read_mode: BlockReadMode::Off,
         })
     }
 
@@ -128,20 +142,20 @@ impl NewRasterCacheEnum {
         self
     }
 
-    /// Whether GDAL sources read through cached file blocks instead of windows. Off unless set:
-    /// on small local files, block reads cost more than they save.
-    pub fn reads_blocks(&self) -> bool {
+    /// Which files GDAL sources read through cached file blocks instead of windows. Off unless
+    /// set: on local files, block reads cost more than they save.
+    pub fn block_read_mode(&self) -> BlockReadMode {
         match self {
-            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_reads,
-            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_reads,
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_read_mode,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_read_mode,
         }
     }
 
     #[must_use]
-    pub fn with_block_reads(mut self, block_reads: bool) -> Self {
+    pub fn with_block_read_mode(mut self, mode: BlockReadMode) -> Self {
         match &mut self {
-            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_reads = block_reads,
-            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_reads = block_reads,
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_read_mode = mode,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_read_mode = mode,
         }
         self
     }

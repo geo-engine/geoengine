@@ -5,7 +5,7 @@ use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::new_raster_cache::{
-    DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
+    BlockReadMode, DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
 };
 use geoengine_operators::processing::ExpressionCacheConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
@@ -741,8 +741,8 @@ pub struct Cache {
     pub raster_operators: Vec<String>,
     /// Default cache lifetime for values without an explicit cache TTL.
     pub default_ttl_seconds: u32,
-    /// With the new raster cache, whether GDAL sources read through cached file blocks
-    pub block_reads: bool,
+    /// With the new raster cache, which files GDAL sources read through cached file blocks
+    pub block_reads: BlockReadMode,
     /// With block reads, the least time file blocks and headers stay cached
     pub min_block_ttl_seconds: u32,
 }
@@ -769,7 +769,7 @@ impl Cache {
             Arc::new(
                 NewRasterCacheEnum::new_lru(self.new_raster_cache_size_in_bytes())
                     .with_min_block_ttl(CacheTtlSeconds::new(self.min_block_ttl_seconds))
-                    .with_block_reads(self.block_reads),
+                    .with_block_read_mode(self.block_reads),
             )
         })
     }
@@ -786,7 +786,7 @@ impl Cache {
     fn blocks_outlive_default_ttl(&self) -> bool {
         self.enabled
             && self.enable_new_raster_cache
-            && self.block_reads
+            && self.block_reads != BlockReadMode::Off
             && self.default_ttl_seconds < self.min_block_ttl_seconds
     }
 
@@ -837,7 +837,7 @@ impl TestDefault for Cache {
             raster_cache_size_ratio: 0.5,
             raster_operators: vec!["*".to_string()],
             default_ttl_seconds: 0,
-            block_reads: false,
+            block_reads: BlockReadMode::Auto,
             min_block_ttl_seconds: DEFAULT_MIN_BLOCK_TTL_SECONDS,
         }
     }
@@ -1043,7 +1043,7 @@ mod tests {
             |enabled, enable_new_raster_cache, default_ttl_seconds, min_block_ttl_seconds| Cache {
                 enabled,
                 enable_new_raster_cache,
-                block_reads: true,
+                block_reads: BlockReadMode::Auto,
                 default_ttl_seconds,
                 min_block_ttl_seconds,
                 ..Cache::test_default()
@@ -1057,7 +1057,7 @@ mod tests {
         assert!(!cache(false, true, 0, 60).blocks_outlive_default_ttl());
         assert!(
             !Cache {
-                block_reads: false,
+                block_reads: BlockReadMode::Off,
                 ..cache(true, true, 0, 60)
             }
             .blocks_outlive_default_ttl()
@@ -1087,15 +1087,16 @@ mod tests {
         };
         let raster_cache = cache.new_raster_cache().unwrap();
         assert_eq!(raster_cache.min_block_ttl().seconds(), 7);
-        assert!(!raster_cache.reads_blocks());
-        assert!(
+        assert_eq!(raster_cache.block_read_mode(), BlockReadMode::Auto);
+        assert_eq!(
             Cache {
-                block_reads: true,
+                block_reads: BlockReadMode::On,
                 ..cache
             }
             .new_raster_cache()
             .unwrap()
-            .reads_blocks()
+            .block_read_mode(),
+            BlockReadMode::On
         );
     }
 }

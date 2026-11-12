@@ -309,17 +309,19 @@ enable_new_raster_cache = false
 # vector and raster data and gets the full `size_in_mb`.
 raster_cache_size_ratio = 0.5
 # names of the raster operators whose tiles the new raster cache stores, "*" for all. With
-# `block_reads`, GDAL sources that read through file blocks are not wrapped, as the blocks are cached
-# already. Set this list in a settings file: as an environment variable, it stops the server at
+# `block_reads = "on"`, GDAL sources that read through file blocks are not wrapped, as the blocks are
+# cached already. Set this list in a settings file: as an environment variable, it stops the server at
 # startup.
 raster_operators = ["*"]
-# With `enable_new_raster_cache`, GDAL sources read whole file blocks and cache them, instead of
-# reading the window of each tile. This pays off for remote files (fewer, larger requests) and for
-# views whose tiles share blocks; on local files it is slower than reading windows.
-block_reads = false
-# With `block_reads`, the least time in seconds that file blocks and headers stay cached, also for
-# data whose TTL is shorter or 0, so that the tiles of a view share them. The server warns at
-# startup if `default_ttl_seconds` is lower. With 0, data with a TTL of 0 is read in windows.
+# With `enable_new_raster_cache`, which files GDAL sources read as whole, cached file blocks instead
+# of reading the window of each tile: "off", "auto" or "on". Blocks pay off for remote files (fewer,
+# larger requests, shared by the tiles of a view and of later pans); on local files they are slower
+# than windows. "auto" reads remote files (HTTP, S3 and the other remote GDAL file systems) through
+# blocks and local ones in windows, "on" all files through blocks.
+block_reads = "auto"
+# Unless `block_reads` is "off", the least time in seconds that file blocks and headers stay cached,
+# also for data whose TTL is shorter or 0, so that the tiles of a view share them. The server warns
+# at startup if `default_ttl_seconds` is lower. With 0, data with a TTL of 0 is read in windows.
 min_block_ttl_seconds = 60
 
 [stac_cache]

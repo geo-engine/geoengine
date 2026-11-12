@@ -97,7 +97,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             continue;
         }
 
-        let read = match (level_factor, blocks) {
+        let read = match (level_factor, blocks.filter(|blocks| blocks.reads(&params))) {
             (Some(factor), Some(blocks)) => {
                 blocks
                     .read::<T>(&params, read_advise, factor, plan.cache_hint)
@@ -284,7 +284,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::new_raster_cache::NewRasterCacheEnum;
+    use crate::cache::new_raster_cache::{BlockReadMode, NewRasterCacheEnum};
     use crate::source::gdal_worker_process::{
         DEFAULT_HEADER_CACHE_ENTRIES, FileNotFoundHandling, GdalDatasetGeoTransform,
         GdalMetadataMapping, GdalProcessPool, GdalProcessPoolAccess, OverviewReaderState,
@@ -297,7 +297,44 @@ mod tests {
     };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::NonZeroFiniteF64;
+    use geoengine_datatypes::util::test::TestDefault;
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn it_reads_only_remote_files_through_blocks_in_auto_mode() {
+        let remote = |path: &str| GdalDatasetParameters {
+            file_path: path.into(),
+            ..ndvi_jan_2014_params()
+        };
+        let local = ndvi_jan_2014_params();
+        let remote_paths = [
+            "https://example.com/a.tif",
+            "s3://bucket/a.tif",
+            "/vsicurl/https://example.com/a.tif",
+            "/vsis3/bucket/a.tif",
+            "SENTINEL2_L2A:/vsis3/eodata/MTD_MSIL2A.xml:10m:EPSG_32632",
+            "/vsizip//vsicurl/https://example.com/a.zip/a.tif",
+        ];
+        let blocks = |mode| {
+            let mut ctx = crate::engine::MockExecutionContext::test_default()
+                .mock_query_context_test_default();
+            ctx.new_raster_cache = Some(Arc::new(
+                NewRasterCacheEnum::new_lru(1_000_000).with_block_read_mode(mode),
+            ));
+            BlockIo::from_query_context(&ctx)
+        };
+
+        assert!(blocks(BlockReadMode::Off).is_none());
+        let auto = blocks(BlockReadMode::Auto).unwrap();
+        assert!(!auto.reads(&local));
+        assert!(!auto.reads(&remote("/vsizip/local.zip/a.tif")));
+        for path in remote_paths {
+            assert!(auto.reads(&remote(path)), "{path}");
+        }
+        let on = blocks(BlockReadMode::On).unwrap();
+        assert!(on.reads(&local));
+        assert!(on.reads(&remote(remote_paths[0])));
+    }
 
     fn ndvi_jan_2014_params() -> GdalDatasetParameters {
         GdalDatasetParameters {
