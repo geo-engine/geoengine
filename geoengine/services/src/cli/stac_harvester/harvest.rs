@@ -1286,7 +1286,7 @@ fn try_create_tile_for_band(
 
     let actual_dataset_name = dataset_name_for_harvest(&provider_def.collection_name, dataset);
 
-    let geo_transform = common::geo_transform_from_fields(&asset.additional_fields)?;
+    let geo_transform = common::geo_transform_from_asset_or_item(asset, item)?;
 
     if (geo_transform.x_pixel_size().get().abs() - dataset.resolution.x().get()).abs() > 1e-9
         || (geo_transform.y_pixel_size().get().abs() - dataset.resolution.y().get()).abs() > 1e-9
@@ -1294,7 +1294,7 @@ fn try_create_tile_for_band(
         return None;
     }
 
-    let (height, width) = common::proj_shape_from_fields(&asset.additional_fields)?;
+    let (height, width) = common::proj_shape_from_asset_or_item(asset, item)?;
 
     let rasterband_channel = common::rasterband_channel_for_dataset_band(
         asset,

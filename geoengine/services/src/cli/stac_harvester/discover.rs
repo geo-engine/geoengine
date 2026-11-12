@@ -314,7 +314,7 @@ async fn fetch_sample_items(
     if params.filter_item_fields {
         query_params.push((
             "fields".to_string(),
-            "stac_version,stac_extensions,properties.datetime,properties.updated,properties.gsd,properties.proj:epsg,properties.proj:code,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.eo:bands,assets.*.raster:bands,assets.*.proj:epsg,assets.*.proj:code,assets.*.proj:transform,assets.*.proj:shape,assets.*.gsd,assets.*.type".to_string(),
+            "stac_version,stac_extensions,properties.datetime,properties.updated,properties.gsd,properties.proj:epsg,properties.proj:code,properties.proj:shape,properties.proj:transform,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.eo:bands,assets.*.raster:bands,assets.*.proj:epsg,assets.*.proj:code,assets.*.proj:transform,assets.*.proj:shape,assets.*.gsd,assets.*.type".to_string(),
         ));
     }
     if let Some(bbox) = &params.bbox
@@ -385,7 +385,8 @@ fn process_sample_assets(
                 continue;
             }
 
-            let geo_transform = common::geo_transform_from_fields(&asset.additional_fields);
+            let geo_transform = common::geo_transform_from_asset_or_item(asset, item);
+            let proj_shape = common::proj_shape_from_asset_or_item(asset, item);
 
             let data_type = common::data_type_from_asset_v1_1_0(asset)
                 .or_else(|| common::data_type_from_asset_v1_0_0_fallback(asset));
@@ -453,7 +454,7 @@ fn process_sample_assets(
                     .entry(dataset_key)
                     .or_insert(DiscoveredDatasetInfo {
                         geo_transform,
-                        proj_shape: common::proj_shape_from_fields(&asset.additional_fields),
+                        proj_shape,
                         srs: SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg),
                         asset_count: 0,
                     });
@@ -462,7 +463,7 @@ fn process_sample_assets(
             // sampled asset of the same dataset did not provide it.
             if info_entry.geo_transform.is_none() {
                 info_entry.geo_transform = geo_transform;
-                info_entry.proj_shape = common::proj_shape_from_fields(&asset.additional_fields);
+                info_entry.proj_shape = proj_shape;
             }
         }
     }
@@ -1359,6 +1360,72 @@ mod tests {
         assert!(datasets.iter().all(|dataset| {
             dataset.spatial_grid.geo_transform().origin_coordinate == (0.0, 0.0).into()
         }));
+    }
+
+    #[test]
+    fn it_discovers_grid_from_item_level_projection_fields() {
+        // CLMS WSI items on CODE-DE declare `proj:code`, `proj:shape` and a 9-element
+        // `proj:transform` only in `properties`, not on the assets.
+        let items: stac::ItemCollection = serde_json::from_value(serde_json::json!({
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "stac_version": "1.1.0",
+                "id": "CLMS_WSI_WCD_100m_E42N30_20250901P1Y_COMB_V100",
+                "geometry": null,
+                "properties": {
+                    "datetime": "2025-09-01T00:00:00Z",
+                    "proj:code": "EPSG:3035",
+                    "proj:shape": [1000, 1000],
+                    "proj:transform": [100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1]
+                },
+                "links": [],
+                "assets": {
+                    "WCD": {
+                        "href": "https://example.com/WCD.tif",
+                        "title": "WCD",
+                        "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                        "data_type": "uint16"
+                    }
+                }
+            }]
+        }))
+        .expect("valid items");
+
+        let (discovered_datasets, sample_band_info) =
+            process_sample_assets(&items, &[ImportFileType::Cog], &[3035]);
+        let expected_transform =
+            GeoTransform::new_unchecked((4_200_000.0, 3_100_000.0).into(), 100.0, -100.0);
+        assert_eq!(discovered_datasets.len(), 1);
+        let (dataset_key, info) = discovered_datasets.iter().next().unwrap();
+        assert_eq!(dataset_key.epsg, 3035);
+        assert_eq!(dataset_key.data_type, RasterDataType::U16);
+        assert_eq!(
+            dataset_key.resolution,
+            PositiveFiniteF64::new_unchecked(100.0)
+        );
+        assert_eq!(info.geo_transform, Some(expected_transform));
+        assert_eq!(info.proj_shape, Some((1000, 1000)));
+
+        let datasets = build_datasets(
+            &discovered_datasets,
+            &HashMap::new(),
+            &sample_band_info,
+            false,
+            "clms_wsi_water-cover-duration_europe_laea_100m_yearly_v1",
+        );
+        assert_eq!(datasets.len(), 1);
+        assert_eq!(datasets[0].spatial_grid.geo_transform(), expected_transform);
+        assert_eq!(
+            datasets[0].spatial_grid.grid_shape(),
+            geoengine_datatypes::raster::GridShape2D::new([1000, 1000])
+        );
+
+        // With the full projection grid, the bounds cover the whole EPSG:3035 area of use.
+        let spatial_grid = build_dataset_spatial_grid(info, dataset_key, true);
+        assert_eq!(spatial_grid.geo_transform(), expected_transform);
+        let [full_height, full_width] = spatial_grid.grid_shape().shape_array;
+        assert!(full_height > 1000 && full_width > 1000);
     }
 
     #[test]
