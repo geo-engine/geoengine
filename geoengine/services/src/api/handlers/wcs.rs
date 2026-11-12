@@ -395,6 +395,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
     };
     let encoding = RasterEncoding::GeoTiff {
         no_data_value: request.nodatavalue,
+        band_order: None,
     };
 
     let ctx = app_ctx.session_context(session);

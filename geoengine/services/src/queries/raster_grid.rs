@@ -56,7 +56,11 @@ pub enum RasterEncoding {
     },
     /// The query's bands as `GeoTIFF`, at most `[wcs] tile_limit` tiles. Unlike a PNG it has no
     /// requested size: its pixels are the query's grid, i.e. `bounds` at `resolution`.
-    GeoTiff { no_data_value: Option<f64> },
+    GeoTiff {
+        no_data_value: Option<f64>,
+        /// The order of the query's bands in the `GeoTIFF`; `None` keeps the ascending order of the stream
+        band_order: Option<Vec<u32>>,
+    },
 }
 
 /// Queries `query` and encodes the result as `encoding`
@@ -225,11 +229,14 @@ async fn encode<Q: QueryContext + 'static>(
                 p => raster_stream_to_png_bytes(p, query_rect, query_ctx, width, height, Some(time), Some(colorizer), not_canceled).await
             )?
         }
-        RasterEncoding::GeoTiff { no_data_value } => {
-            call_on_generic_raster_processor_gdal_types!(processor, p =>
+        RasterEncoding::GeoTiff {
+            no_data_value,
+            band_order,
+        } => call_on_generic_raster_processor_gdal_types!(processor, p =>
                 raster_stream_to_multiband_geotiff_bytes(
                     p,
                     query_rect,
+                    band_order,
                     query_ctx,
                     GdalGeoTiffDatasetMetadata {
                         no_data_value,
@@ -244,7 +251,6 @@ async fn encode<Q: QueryContext + 'static>(
                     not_canceled,
                     tiling_spec,
                 )
-                .await)??
-        }
+                .await)??,
     })
 }

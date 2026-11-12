@@ -497,6 +497,13 @@ pub enum Error {
     BandDoesNotExist {
         band_idx: u32,
     },
+    #[snafu(display(
+        "The GeoTIFF band order {band_order:?} must contain each band of the band selection {band_selection:?} exactly once."
+    ))]
+    GeoTiffBandOrderMustMatchBandSelection {
+        band_order: Vec<u32>,
+        band_selection: Vec<u32>,
+    },
     #[snafu(display("MachineLearning error: {}", source))]
     MachineLearning {
         // TODO: make `source: MachineLearningError`, once pro features is removed

@@ -1576,8 +1576,8 @@ mod tests {
     }
 
     #[test]
-    fn it_resolves_field_selection_to_band_selection() {
-        use geoengine_datatypes::primitives::{BandSelection, Measurement};
+    fn it_resolves_field_selection_to_band_order() {
+        use geoengine_datatypes::primitives::Measurement;
         use geoengine_operators::engine::{RasterBandDescriptor, RasterBandDescriptors};
 
         let bands = RasterBandDescriptors::new(
@@ -1588,15 +1588,11 @@ mod tests {
         )
         .unwrap();
 
-        let band_selection =
-            |selection: FieldSelection| selection.band_selection(&bands).map(|s| s.as_vec());
+        let band_order = |selection: FieldSelection| selection.band_order(&bands);
 
+        assert_eq!(band_order(FieldSelection::All).unwrap(), vec![0, 1, 2]);
         assert_eq!(
-            band_selection(FieldSelection::All).unwrap(),
-            BandSelection::first_n(3).as_vec()
-        );
-        assert_eq!(
-            band_selection(FieldSelection::Include(vec![
+            band_order(FieldSelection::Include(vec![
                 "red".to_string(),
                 "blue".to_string()
             ]))
@@ -1604,30 +1600,30 @@ mod tests {
             vec![2, 0]
         );
         assert_eq!(
-            band_selection(FieldSelection::Exclude(vec!["green".to_string()])).unwrap(),
+            band_order(FieldSelection::Exclude(vec!["green".to_string()])).unwrap(),
             vec![0, 2]
         );
         assert_eq!(
-            band_selection(FieldSelection::Exclude(vec![])).unwrap(),
+            band_order(FieldSelection::Exclude(vec![])).unwrap(),
             vec![0, 1, 2]
         );
         assert!(matches!(
-            band_selection(FieldSelection::Include(vec!["alpha".to_string()])),
+            band_order(FieldSelection::Include(vec!["alpha".to_string()])),
             Err(OgcApiError::UnknownField { .. })
         ));
         assert!(matches!(
-            band_selection(FieldSelection::Include(vec![
+            band_order(FieldSelection::Include(vec![
                 "red".to_string(),
                 "red".to_string()
             ])),
             Err(OgcApiError::DuplicateField { .. })
         ));
         assert!(matches!(
-            band_selection(FieldSelection::Include(vec![])),
+            band_order(FieldSelection::Include(vec![])),
             Err(OgcApiError::EmptyFieldSelection)
         ));
         assert!(matches!(
-            band_selection(FieldSelection::Exclude(vec![
+            band_order(FieldSelection::Exclude(vec![
                 "blue".to_string(),
                 "green".to_string(),
                 "red".to_string()

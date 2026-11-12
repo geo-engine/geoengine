@@ -110,8 +110,12 @@ impl FieldSelection {
         }
     }
 
-    /// Resolves the field names to the band indices of `bands`
-    pub fn band_selection(&self, bands: &RasterBandDescriptors) -> OgcApiResult<BandSelection> {
+    /// Resolves the field names to the band indices of `bands`, in the order of the response.
+    ///
+    /// For `properties`, this is the requested order, as required by
+    /// [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html), Requirement 58 C.
+    /// The raster query itself takes the bands as a sorted [`BandSelection`].
+    pub fn band_order(&self, bands: &RasterBandDescriptors) -> OgcApiResult<Vec<u32>> {
         let band_index = |field: &String| -> OgcApiResult<u32> {
             bands
                 .iter()
@@ -158,9 +162,7 @@ impl FieldSelection {
             return Err(OgcApiError::EmptyFieldSelection);
         }
 
-        BandSelection::new(band_indices).map_err(|source| OgcApiError::Internal {
-            source: source.into(),
-        })
+        Ok(band_indices)
     }
 }
 
@@ -316,7 +318,10 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
     } = load_tile_source::<C>(&ctx, &execution_context, &query).await?;
 
     let result_descriptor = initialized_operator.result_descriptor();
-    let bands = field_selection.band_selection(&result_descriptor.bands)?;
+    let band_order = field_selection.band_order(&result_descriptor.bands)?;
+    let bands = BandSelection::new(band_order.clone()).map_err(|source| OgcApiError::Internal {
+        source: source.into(),
+    })?;
     let spatial_reference = result_descriptor
         .spatial_reference
         .as_option()
@@ -367,6 +372,7 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
         wrapped,
         RasterEncoding::GeoTiff {
             no_data_value: None,
+            band_order: Some(band_order),
         },
     )
     .await?)
