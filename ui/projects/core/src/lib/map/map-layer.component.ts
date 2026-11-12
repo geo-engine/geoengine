@@ -22,8 +22,9 @@ import OlFeature from 'ol/Feature';
 import OlImageTile from 'ol/ImageTile';
 import {Layer as OlLayer, Tile as OlLayerTile, Vector as OlLayerVector} from 'ol/layer';
 import {unByKey} from 'ol/Observable';
-import {equivalent, get as olGetProj} from 'ol/proj';
+import {equivalent, get as olGetProj, type Projection} from 'ol/proj';
 import {Source as OlSource, TileWMS as OlTileWmsSource, Vector as OlVectorSource, OGCMapTile, TileDebug, ImageTile} from 'ol/source';
+import {getTileSetInfo} from 'ol/source/ogcTileUtil';
 import TileGrid from 'ol/tilegrid/TileGrid';
 import {Observable, Subject, Subscription} from 'rxjs';
 import {NotificationService} from '@geoengine/common';
@@ -512,13 +513,18 @@ export class OlOgcApiMapTileLayerComponent
     readonly spatialReference = input.required<SpatialReference>(); // TODO: do we need this?
     readonly time = input.required<Time>();
     readonly tmsId = input<TMSId>('Custom');
-    /** Minimum source matrix index. Ignored with a warning when source and view projections differ. */
+    /** Minimum matrix index in minTileMatrixSetId, or the imagery's matrix set when omitted.
+     * Ignored with a warning if that grid and the map use different projections.
+     */
     readonly minTileMatrixIndex = input(0);
+    /** Keep the map cutoff tied to this grid when imagery switches to a different tile matrix set. */
+    readonly minTileMatrixSetId = input<TMSId>();
     readonly zoomRequired = output<boolean>();
     private readonly mapService = inject(MapService);
     private readonly destroyRef = inject(DestroyRef);
     private readonly viewport = toSignal(this.mapService.getViewportSizeStream(), {requireSync: true});
-    private readonly sourceMaxResolution = signal<number | undefined>(undefined);
+    private readonly limitMaxResolution = signal<number | undefined>(undefined);
+    private readonly limitProjection = signal<Projection | undefined>(undefined);
 
     // Show tile debug info instead of the actual layer. This is useful for debugging tile loading issues.
     readonly debug = input(false);
@@ -537,10 +543,14 @@ export class OlOgcApiMapTileLayerComponent
             spatialReference: this.spatialReference(),
             time: this.time(), // no way to just update `context` field in OGCMapTile…
             minTileMatrixIndex: this.minTileMatrixIndex(),
+            minTileMatrixSetId: this.minTileMatrixSetId(),
             tmsId: this.tmsId(),
         }),
         loader: async ({abortSignal, params}): Promise<OGCMapTile> => {
-            this.sourceMaxResolution.set(undefined);
+            this.limitMaxResolution.set(undefined);
+            this.limitProjection.set(undefined);
+            const limitTms = params.minTileMatrixSetId ?? params.tmsId;
+            const separateLimitGrid = limitTms !== params.tmsId;
             // `source` is assigned after the await below, so the closures that read it must only
             // run once the source exists. Hoisting avoids a temporal-dead-zone reference.
             // eslint-disable-next-line prefer-const -- assigned after the await; `const` would move it before the closures that need it
@@ -555,7 +565,7 @@ export class OlOgcApiMapTileLayerComponent
             const loader: TileLoader = new TileLoader({
                 signal: abortSignal,
                 acceptsTile: (tile): boolean =>
-                    this.effectiveMaxResolution() === Infinity || tile.getTileCoord()[0] >= params.minTileMatrixIndex,
+                    separateLimitGrid || this.effectiveMaxResolution() === Infinity || tile.getTileCoord()[0] >= params.minTileMatrixIndex,
                 canLoad: (): boolean => {
                     const view = this.mapService.view();
                     return view.isDef() && this._mapLayer.isVisible(view);
@@ -585,8 +595,16 @@ export class OlOgcApiMapTileLayerComponent
             });
             this.loader = loader;
 
+            // The catalogue's index belongs to a particular grid. Native imagery may use other
+            // units, resolutions, and even fewer matrices, so never apply that index to its grid.
+            const limitInfo =
+                separateLimitGrid && params.minTileMatrixIndex !== 0
+                    ? await getTileSetInfo({url: await this.tmsUrl(loader, abortSignal, limitTms)})
+                    : undefined;
+            const url = await this.tmsUrl(loader, abortSignal, params.tmsId);
+            abortSignal.throwIfAborted();
             source = new OGCMapTile({
-                url: await this.tmsUrl(loader, abortSignal),
+                url,
                 context: {
                     datetime: this.time().asRequestString(),
                 },
@@ -597,8 +615,9 @@ export class OlOgcApiMapTileLayerComponent
 
             source.once('change', () => {
                 // The grid is assigned before OGCMapTile emits its first successful change.
-                const grid = source.getTileGrid();
+                const grid = limitInfo?.grid ?? source.getTileGrid();
                 if (abortSignal.aborted || !grid) return;
+                this.limitProjection.set(limitInfo?.projection ?? source.getProjection()!);
                 const index = params.minTileMatrixIndex;
                 const resolution = grid.getResolution(index);
                 if (
@@ -608,12 +627,12 @@ export class OlOgcApiMapTileLayerComponent
                     console.warn(
                         `Invalid minTileMatrixIndex ${index}: expected 0 or a source matrix index from ${grid.getMinZoom()} to ${grid.getMaxZoom()}. Tile loading is disabled.`,
                     );
-                    this.sourceMaxResolution.set(0);
+                    this.limitMaxResolution.set(0);
                     return;
                 }
                 // Deliberately use the matrix resolution as an exclusive cutoff. This can require
                 // one extra view zoom level; do not widen it to the nearest-matrix midpoint.
-                this.sourceMaxResolution.set(index === 0 ? Infinity : resolution);
+                this.limitMaxResolution.set(index === 0 ? Infinity : resolution);
             });
 
             return source;
@@ -621,8 +640,8 @@ export class OlOgcApiMapTileLayerComponent
     });
 
     private readonly effectiveMaxResolution = computed(() => {
-        const maxResolution = this.sourceMaxResolution();
-        const projection = this.tileSource.value()?.getProjection();
+        const maxResolution = this.limitMaxResolution();
+        const projection = this.limitProjection();
         if (
             maxResolution !== undefined &&
             maxResolution > 0 &&
@@ -630,7 +649,7 @@ export class OlOgcApiMapTileLayerComponent
             projection &&
             !equivalent(projection, this.mapService.view().getProjection())
         ) {
-            console.warn('Ignoring minTileMatrixIndex because source and view projections differ.');
+            console.warn('Ignoring minTileMatrixIndex because the limit grid and view projections differ.');
             return Infinity;
         }
         return maxResolution;
@@ -676,10 +695,9 @@ export class OlOgcApiMapTileLayerComponent
      * source can read on its own. OpenLayers reads it without authentication headers, so it has
      * to be served as an object URL. The same applies to the tiling scheme it links to.
      */
-    private async tmsUrl(loader: TileLoader, abortSignal: AbortSignal): Promise<string> {
+    private async tmsUrl(loader: TileLoader, abortSignal: AbortSignal, tms: TMSId): Promise<string> {
         const dataConnectorId = this.dataConnectorId();
         const layerId = this.dataLayerId();
-        const tms = this.tmsId();
 
         const tmsUrl = `${this.backend.ogcApiBaseUrl}/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 

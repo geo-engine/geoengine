@@ -341,7 +341,7 @@ describe('OGC map tile minimum matrix index', () => {
         publishViewport(replacement);
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(warn).toHaveBeenCalledWith('Ignoring minTileMatrixIndex because source and view projections differ.');
+        expect(warn).toHaveBeenCalledWith('Ignoring minTileMatrixIndex because the limit grid and view projections differ.');
         expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(Infinity);
         expect(zoomRequired).toHaveBeenLastCalledWith(false);
         const tile = source.getTile(3, 0, 0, 1, getProjection('EPSG:3857')!);
@@ -396,12 +396,16 @@ describe('OGC map tile minimum matrix index', () => {
 describe('OGC map tile projection switching', () => {
     let fixture: ComponentFixture<OlOgcApiMapTileLayerComponent>;
     let nativeEpsg: number;
+    let nativeMatrixCount: number;
+    let tileRequests: AbortSignal[];
     let revokeObjectUrl: ReturnType<typeof vi.spyOn>;
     let fetchMock: ReturnType<typeof vi.fn>;
     const baseUrl = 'https://example.com/ogc/data/layer';
 
     beforeEach(() => {
         nativeEpsg = 4326;
+        nativeMatrixCount = 1;
+        tileRequests = [];
         const documents = new Map<string, Blob>();
         vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
             const url = `blob:metadata-${documents.size}`;
@@ -433,7 +437,13 @@ describe('OGC map tile projection switching', () => {
                 }
             },
         );
-        fetchMock = vi.fn((url: string) => {
+        fetchMock = vi.fn((url: string, init: RequestInit) => {
+            if (url.includes('?datetime=')) {
+                tileRequests.push(init.signal!);
+                return new Promise((_resolve, reject) => {
+                    init.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+                });
+            }
             const tms = url.endsWith('/CustomWebMercator') ? 'CustomWebMercator' : 'Custom';
             const epsg = tms === 'CustomWebMercator' ? 3857 : nativeEpsg;
             const crs = `http://www.opengis.net/def/crs/EPSG/0/${epsg}`;
@@ -442,22 +452,18 @@ describe('OGC map tile projection switching', () => {
                       id: tms,
                       crs,
                       orderedAxes: epsg === 4326 ? ['Lon', 'Lat'] : ['X', 'Y'],
-                      tileMatrices: [
-                          {
-                              id: '0',
-                              cellSize: epsg === 4326 ? 360 / 256 : epsg === 3857 ? 40075016.68557849 / 256 : 10000,
-                              pointOfOrigin:
-                                  epsg === 4326
-                                      ? [-180, 90]
-                                      : epsg === 3857
-                                        ? [-20037508.342789244, 20037508.342789244]
-                                        : [-1000000, 11000000],
-                              tileWidth: 256,
-                              tileHeight: 256,
-                              matrixWidth: 4,
-                              matrixHeight: 4,
-                          },
-                      ],
+                      tileMatrices: Array.from({length: tms === 'CustomWebMercator' ? 6 : nativeMatrixCount}, (_, index) => ({
+                          id: String(index),
+                          cellSize:
+                              (epsg === 4326 ? 360 / 256 : epsg === 3857 ? 40075016.68557849 / (tms === 'Custom' ? 512 : 256) : 10000) /
+                              2 ** index,
+                          pointOfOrigin:
+                              epsg === 4326 ? [-180, 90] : epsg === 3857 ? [-20037508.342789244, 20037508.342789244] : [-1000000, 11000000],
+                          tileWidth: 256,
+                          tileHeight: 256,
+                          matrixWidth: 4 * 2 ** index,
+                          matrixHeight: 4 * 2 ** index,
+                      })),
                   }
                 : {
                       dataType: 'map',
@@ -507,6 +513,70 @@ describe('OGC map tile projection switching', () => {
         });
         return fixture.componentInstance.tileSource.value()!;
     }
+
+    it.each([4326, 32632, 32755, 3857].flatMap((epsg) => [1, 6].map((matrices) => ({epsg, matrices}))))(
+        'keeps the Web Mercator cutoff for EPSG:$epsg imagery with $matrices native matrices',
+        async ({epsg, matrices}) => {
+            nativeEpsg = epsg;
+            nativeMatrixCount = matrices;
+            const mapService = TestBed.inject(MapService);
+            const cutoff = 40075016.68557849 / 256 / 2 ** 4;
+            const view = new View({center: fromLonLat(epsg === 32755 ? [147, -30] : [9, 50]), resolution: cutoff * 2});
+            mapService.setView(view);
+            const zoomRequired = vi.fn();
+            fixture.componentInstance.zoomRequired.subscribe(zoomRequired);
+            fixture.componentRef.setInput('minTileMatrixIndex', 4);
+            fixture.componentRef.setInput('minTileMatrixSetId', 'CustomWebMercator');
+
+            async function setResolution(resolution: number): Promise<void> {
+                view.setResolution(resolution);
+                mapService.setViewportSize({extent: [0, 0, 1, 1], resolution});
+                fixture.detectChanges();
+                await fixture.whenStable();
+            }
+
+            await setResolution(cutoff * 2);
+            await readySource();
+            expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(cutoff);
+            expect(zoomRequired).toHaveBeenLastCalledWith(true);
+            fixture.componentRef.setInput('tmsId', 'Custom');
+            const nativeSource = await readySource();
+            expect(nativeSource.getTileGrid()!.getMaxZoom()).toBe(matrices - 1);
+            expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(cutoff);
+            expect(zoomRequired).toHaveBeenLastCalledWith(true);
+
+            const tile = nativeSource.getTile(0, 0, 0, 1, nativeSource.getProjection()!);
+            tile.load();
+            expect(tileRequests).toHaveLength(0);
+            await setResolution(cutoff);
+            expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(false);
+            await setResolution(cutoff / 2);
+            expect(fixture.componentInstance.mapLayer.isVisible(view)).toBe(true);
+            expect(zoomRequired).toHaveBeenLastCalledWith(false);
+            tile.load();
+            expect(tileRequests).toHaveLength(1);
+            expect(tile.getState()).toBe(TileState.LOADING);
+            await setResolution(cutoff * 2);
+            expect(tileRequests[0].aborted).toBe(true);
+            await vi.waitFor(() => expect(tile.getState()).toBe(TileState.IDLE));
+            await setResolution(cutoff / 2);
+            const projection = view.getProjection();
+            const displayGrid = nativeSource.getTileGridForProjection(projection);
+            const [z, x, y] = displayGrid.getTileCoordForCoordAndResolution(view.getCenter()!, view.getResolution()!);
+            const displayTile = nativeSource.getTile(z, x, y, 1, projection);
+            if (epsg !== 3857) expect(displayTile).toBeInstanceOf(ReprojTile);
+            displayTile.load();
+            expect(tileRequests.length).toBeGreaterThan(1);
+            expect(tileRequests[1].aborted).toBe(false);
+
+            fixture.componentRef.setInput('tmsId', 'CustomWebMercator');
+            await readySource();
+            expect(tileRequests[1].aborted).toBe(true);
+            expect(fixture.componentInstance.mapLayer.getMaxResolution()).toBe(cutoff);
+            await setResolution(cutoff * 2);
+            expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        },
+    );
 
     it.each([4326, 32632, 32633, 32755])('reloads native EPSG:%s tiles for OpenLayers reprojection and switches back', async (epsg) => {
         nativeEpsg = epsg;

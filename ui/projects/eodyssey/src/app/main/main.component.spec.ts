@@ -58,7 +58,7 @@ describe('EOdyssey debug reprojection', () => {
                     useValue: {
                         mapTileLayer: vi.fn().mockReturnValue({dataConnectorId: 'data', layerId: 'layer'}),
                         catalogueLoading: vi.fn().mockReturnValue(false),
-                        appliedMinTileMatrixIndex: vi.fn().mockReturnValue(0),
+                        appliedMinTileMatrixIndex: vi.fn().mockReturnValue(4),
                     },
                 },
             ],
@@ -108,6 +108,9 @@ describe('EOdyssey debug reprojection', () => {
 
         selectFrontend();
         expect(tms()).toBe('Custom');
+        const layerProperties = fixture.debugElement.query(By.css('geoengine-ol-ogc-api-map-tile-layer')).properties;
+        expect(layerProperties['minTileMatrixIndex']).toBe(4);
+        expect(layerProperties['minTileMatrixSetId']).toBe('CustomWebMercator');
         expect(fixture.componentInstance.spatialReference()?.srsString).toBe('EPSG:3857');
         expect(fixture.componentInstance.mapTileLayer()).toBe(layer);
         expect(fixture.componentInstance.currentTime()).toBe(time);
