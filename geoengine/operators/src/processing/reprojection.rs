@@ -813,6 +813,8 @@ where
             sub_query_spec,
             time_stream,
         )
+        .skip_tiles_without_data()
+        .await?
         .box_pin())
     }
 

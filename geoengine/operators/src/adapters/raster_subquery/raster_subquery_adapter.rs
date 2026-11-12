@@ -1,14 +1,16 @@
-use crate::engine::{QueryContext, RasterQueryProcessor};
+use crate::engine::{
+    Footprint, FootprintBounds, FootprintPrecision, QueryContext, RasterQueryProcessor,
+};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::Stream;
 use futures::future::BoxFuture;
 use futures::{Future, stream::FusedStream};
 use futures::{
     FutureExt, TryFuture, TryStreamExt, ready,
     stream::{BoxStream, TryFold},
 };
+use futures::{Stream, StreamExt};
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
@@ -121,12 +123,21 @@ where
     query_rect_to_answer: RasterQueryRectangle,
     /// The pixel bounds of the source data. Sub-queries outside of it produce empty tiles without querying the source.
     source_data_bounds: GridBoundingBox2D,
+    /// The tiles of the query, to find the area of the source they read
+    tiling_strategy: TilingStrategy,
 
     /// The `SubQuery` defines what this adapter does.
     sub_query: SubQuery,
 
     /// This `TimeInterval` is the time currently worked on
     current_time: TimeInterval,
+
+    /// Where the source has data per time step, in step with the time stream.
+    footprint_stream: Option<BoxStream<'a, Result<Footprint>>>,
+    /// An answer of the footprint stream that waits for its time step.
+    next_footprint: Option<Footprint>,
+    /// Where the source has data in the current time step.
+    current_bounds: FootprintBounds,
 
     band_tile_iter: TileInformationBandCrossProductIter,
 
@@ -172,8 +183,12 @@ where
 
         Self {
             current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!
+            footprint_stream: None,
+            next_footprint: None,
+            current_bounds: FootprintBounds::Unknown,
             query_rect_to_answer,
             source_data_bounds,
+            tiling_strategy,
             band_tile_iter,
             query_ctx,
             source_processor,
@@ -181,6 +196,77 @@ where
             sub_query,
             time_stream,
         }
+    }
+
+    /// Asks the source where it has data in the area the tiles of this query read, and skips the tiles
+    /// without. Does nothing unless the query context turns footprint skipping on.
+    ///
+    /// Only helps sub-queries that read the time step they produce: a time step that is not a time step
+    /// of the source is not skipped.
+    pub async fn skip_tiles_without_data(self) -> Result<Self> {
+        if !self.query_ctx.footprint_skipping() {
+            return Ok(self);
+        }
+        let Some(source_query) = self.source_query_rectangle()? else {
+            return Ok(self);
+        };
+        let footprints = self
+            .source_processor
+            .footprint_query(source_query, FootprintPrecision::Coverage, self.query_ctx)
+            .await?;
+        Ok(self.with_footprints(footprints))
+    }
+
+    /// Skips the tiles where `footprints` have no data. They must be the footprints of the source in its
+    /// pixel space. A time step of the time stream that differs from their time steps is not skipped.
+    #[must_use]
+    pub fn with_footprints(mut self, footprints: BoxStream<'a, Result<Footprint>>) -> Self {
+        self.footprint_stream = Some(footprints);
+        self
+    }
+
+    /// The area of the source that the tiles of the query together read, for all bands and the whole
+    /// time of the query. `None` if no tile reads the source.
+    fn source_query_rectangle(&self) -> Result<Option<RasterQueryRectangle>> {
+        let query = &self.query_rect_to_answer;
+        let Some(band) = query.attributes().as_slice().first().copied() else {
+            return Ok(None);
+        };
+
+        let mut hull: Option<GridBoundingBox2D> = None;
+        for tile in self
+            .tiling_strategy
+            .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
+        {
+            // the sub-queries of a tile differ in time and band, not in space
+            let Some(tile_query) = self.sub_query.tile_query_rectangle(
+                tile,
+                query.clone(),
+                query.time_interval(),
+                band,
+            )?
+            else {
+                continue;
+            };
+            let bounds = tile_query.spatial_bounds();
+            hull = Some(match hull {
+                None => bounds,
+                Some(hull) => GridBoundingBox2D::new_unchecked(
+                    [
+                        hull.y_min().min(bounds.y_min()),
+                        hull.x_min().min(bounds.x_min()),
+                    ],
+                    [
+                        hull.y_max().max(bounds.y_max()),
+                        hull.x_max().max(bounds.x_max()),
+                    ],
+                ),
+            });
+        }
+
+        Ok(hull.map(|bounds| {
+            RasterQueryRectangle::new(bounds, query.time_interval(), query.attributes().clone())
+        }))
     }
 
     pub fn box_pin(self) -> BoxStream<'a, Result<RasterTile2D<PixelType>>>
@@ -265,6 +351,20 @@ where
         }
 
         if matches!(*this.state, StateInner::CreateNextTime) {
+            // the answer waits here if the time stream is not ready, so it is not lost
+            if this.next_footprint.is_none()
+                && let Some(footprints) = this.footprint_stream.as_mut()
+            {
+                match ready!(footprints.poll_next_unpin(cx)) {
+                    Some(Ok(footprint)) => *this.next_footprint = Some(footprint),
+                    Some(Err(e)) => {
+                        this.state.set(StateInner::Ended);
+                        return Poll::Ready(Some(Err(e)));
+                    }
+                    None => *this.footprint_stream = None,
+                }
+            }
+
             let time_future = ready!(this.time_stream.poll_next(cx));
             match time_future {
                 None => {
@@ -277,6 +377,15 @@ where
                 }
                 Some(Ok(time)) => {
                     *this.current_time = time;
+                    *this.current_bounds = match this.next_footprint.take() {
+                        Some(footprint) if footprint.time == time => footprint.bounds,
+                        // the steps differ, so the footprints cannot be trusted from here on
+                        Some(_) => {
+                            *this.footprint_stream = None;
+                            FootprintBounds::Unknown
+                        }
+                        None => FootprintBounds::Unknown,
+                    };
                     this.band_tile_iter.reset();
                     let (tile, band) = this
                         .band_tile_iter
@@ -310,7 +419,10 @@ where
                     if raster_query_rect
                         .spatial_bounds()
                         .intersection(this.source_data_bounds)
-                        .is_some() =>
+                        .is_some()
+                        && this
+                            .current_bounds
+                            .intersects(&raster_query_rect.spatial_bounds()) =>
                 {
                     let tile_query_stream_fut = this
                         .source_processor
