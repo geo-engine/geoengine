@@ -66,6 +66,9 @@ _build-typescript-postprocess:
     echo "node_modules" > typescript/.gitignore
     echo "typings" > typescript/.gitignore
     find ./typescript -name "*.ts" -exec sed -i '/The version of the OpenAPI document/d' {} +
+    # hand-written tests in `typescript/test/`, which the generator leaves untouched
+    cd typescript && npm pkg set scripts.test="node --test 'test/*.test.mjs'"
+    printf '\ntest\n' >> typescript/.npmignore
     cd typescript && npm install
     rm \
         typescript/.openapi-generator/FILES \
@@ -221,7 +224,7 @@ test-rust: common::_clear
 test-typescript: common::_clear
     npm install
     npm run build
-    node --test '../tests/typescript/*.test.mjs'
+    npm test
 
 # Publish the Python API client to PyPI. Usage: `just repo publish-python`. Use the `--dry-run` flag to publish to TestPyPI instead.
 [arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]

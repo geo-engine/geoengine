@@ -1,7 +1,7 @@
 // Tests for the generated TypeScript client that guard the post-processing in
 // `.generation/post-process/typescript.py`.
 //
-// Run with `just api-clients test-typescript` (after building the client).
+// Run with `npm test` (after `npm run build`) or `just api-clients test-typescript`.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { createRequire } from "node:module";
 import { test } from "node:test";
 
 const require = createRequire(import.meta.url);
-const client = require("../../typescript/dist/index.js");
+const client = require("../dist/index.js");
 const schemas = JSON.parse(
   readFileSync(new URL("../../../openapi.json", import.meta.url), "utf8"),
 ).components.schemas;
