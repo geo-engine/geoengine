@@ -13,6 +13,8 @@ import { type IdResponse } from '../models/IdResponse';
 import { type ProcessingGraph } from '../models/ProcessingGraph';
 import { type ProvenanceEntry } from '../models/ProvenanceEntry';
 import { type RasterDatasetFromProcessingGraph } from '../models/RasterDatasetFromProcessingGraph';
+import { type RasterFootprints } from '../models/RasterFootprints';
+import { type RasterFootprintsPrecision } from '../models/RasterFootprintsPrecision';
 import { type RasterStreamWebsocketResultType } from '../models/RasterStreamWebsocketResultType';
 import { type SpatialPartition2D } from '../models/SpatialPartition2D';
 import { type TaskResponse } from '../models/TaskResponse';
@@ -32,6 +34,32 @@ export interface GetProcessingGraphAllMetadataZipHandlerRequest {
      * Processing graph id
      */
     id: string;
+}
+export interface GetProcessingGraphFootprintsHandlerRequest {
+    /**
+     * Processing graph id
+     */
+    id: string;
+    /**
+     * `minX,minY,maxX,maxY` in the spatial reference of the processing graph.
+     */
+    spatialBounds: string;
+    /**
+     *
+     */
+    timeInterval: string;
+    /**
+     *
+     */
+    attributes: string;
+    /**
+     * The number of time steps to answer. At most, and by default, 100.
+     */
+    limit?: number;
+    /**
+     * How exact the boxes have to be. By default `coverage`.
+     */
+    precision?: RasterFootprintsPrecision;
 }
 export interface GetProcessingGraphMetadataHandlerRequest {
     /**
@@ -107,6 +135,18 @@ export declare class ProcessingGraphsApi extends runtime.BaseAPI {
      * Gets a ZIP archive of the processing graph, its provenance and the output metadata.
      */
     getProcessingGraphAllMetadataZipHandler(requestParameters: GetProcessingGraphAllMetadataZipHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile>;
+    /**
+     * Creates request options for getProcessingGraphFootprintsHandler without sending the request
+     */
+    getProcessingGraphFootprintsHandlerRequestOpts(requestParameters: GetProcessingGraphFootprintsHandlerRequest): Promise<runtime.RequestOpts>;
+    /**
+     * Gets when and where the data of a raster processing graph may exist.
+     */
+    getProcessingGraphFootprintsHandlerRaw(requestParameters: GetProcessingGraphFootprintsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RasterFootprints>>;
+    /**
+     * Gets when and where the data of a raster processing graph may exist.
+     */
+    getProcessingGraphFootprintsHandler(requestParameters: GetProcessingGraphFootprintsHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RasterFootprints>;
     /**
      * Creates request options for getProcessingGraphMetadataHandler without sending the request
      */
