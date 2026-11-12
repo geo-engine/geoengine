@@ -731,6 +731,7 @@
         "tags": [
           "Datasets"
         ],
+        "summary": "Updates the dataset's provenance.",
         "operationId": "update_dataset_provenance_handler",
         "parameters": [
           {
@@ -2014,6 +2015,7 @@
         "tags": [
           "Layers"
         ],
+        "summary": "Returns the capabilities of the given provider, e.g., whether it supports listing and search.",
         "operationId": "provider_capabilities_handler",
         "parameters": [
           {
@@ -4609,6 +4611,7 @@
         "tags": [
           "Session"
         ],
+        "summary": "Sets the view (spatial and temporal extent) of the current session.",
         "operationId": "session_view_handler",
         "requestBody": {
           "content": {
@@ -4637,6 +4640,7 @@
         "tags": [
           "Spatial References"
         ],
+        "summary": "Returns the name, PROJ string, extent and axis order of a spatial reference.",
         "operationId": "get_spatial_reference_specification_handler",
         "parameters": [
           {
@@ -13415,9 +13419,12 @@
           {
             "type": "RasterVectorJoin",
             "params": {
-              "names": [
-                "NDVI"
-              ],
+              "names": {
+                "type": "names",
+                "values": [
+                  "NDVI"
+                ]
+              },
               "featureAggregation": "first",
               "temporalAggregation": "mean",
               "temporalAggregationIgnoreNoData": true

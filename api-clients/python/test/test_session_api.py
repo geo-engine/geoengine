@@ -85,6 +85,7 @@ class TestSessionApi(unittest.TestCase):
     def test_session_view_handler(self) -> None:
         """Test case for session_view_handler
 
+        Sets the view (spatial and temporal extent) of the current session.
         """
         pass
 

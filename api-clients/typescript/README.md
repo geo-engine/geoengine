@@ -61,7 +61,7 @@ All URIs are relative to *https://geoengine.io/api*
 *DatasetsApi* | [**listVolumesHandler**](docs/DatasetsApi.md#listvolumeshandler) | **GET** /dataset/volumes | Lists available volumes.
 *DatasetsApi* | [**suggestMetaDataHandler**](docs/DatasetsApi.md#suggestmetadatahandler) | **POST** /dataset/suggest | Inspects an upload and suggests metadata that can be used when creating a new dataset based on it. Tries to automatically detect the main file and layer name if not specified.
 *DatasetsApi* | [**updateDatasetHandler**](docs/DatasetsApi.md#updatedatasethandler) | **POST** /dataset/{dataset} | Update details about a dataset using the internal name.
-*DatasetsApi* | [**updateDatasetProvenanceHandler**](docs/DatasetsApi.md#updatedatasetprovenancehandler) | **PUT** /dataset/{dataset}/provenance | 
+*DatasetsApi* | [**updateDatasetProvenanceHandler**](docs/DatasetsApi.md#updatedatasetprovenancehandler) | **PUT** /dataset/{dataset}/provenance | Updates the dataset\&#39;s provenance.
 *DatasetsApi* | [**updateDatasetSymbologyHandler**](docs/DatasetsApi.md#updatedatasetsymbologyhandler) | **PUT** /dataset/{dataset}/symbology | Updates the dataset\&#39;s symbology
 *DatasetsApi* | [**updateLoadingInfoHandler**](docs/DatasetsApi.md#updateloadinginfohandler) | **PUT** /dataset/{dataset}/loadingInfo | Updates the dataset\&#39;s loading info
 *GeneralApi* | [**availableHandler**](docs/GeneralApi.md#availablehandler) | **GET** /available | Server availablity check.
@@ -80,7 +80,7 @@ All URIs are relative to *https://geoengine.io/api*
 *LayersApi* | [**listCollectionHandler**](docs/LayersApi.md#listcollectionhandler) | **GET** /layers/collections/{provider}/{collection} | List the contents of the collection of the given provider
 *LayersApi* | [**listProviders**](docs/LayersApi.md#listproviders) | **GET** /layerDb/providers | List all providers
 *LayersApi* | [**listRootCollectionsHandler**](docs/LayersApi.md#listrootcollectionshandler) | **GET** /layers/collections | List all layer collections
-*LayersApi* | [**providerCapabilitiesHandler**](docs/LayersApi.md#providercapabilitieshandler) | **GET** /layers/{provider}/capabilities | 
+*LayersApi* | [**providerCapabilitiesHandler**](docs/LayersApi.md#providercapabilitieshandler) | **GET** /layers/{provider}/capabilities | Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 *LayersApi* | [**removeCollection**](docs/LayersApi.md#removecollection) | **DELETE** /layerDb/collections/{collection} | Remove a collection
 *LayersApi* | [**removeCollectionFromCollection**](docs/LayersApi.md#removecollectionfromcollection) | **DELETE** /layerDb/collections/{parent}/collections/{collection} | Delete a collection from a collection
 *LayersApi* | [**removeLayer**](docs/LayersApi.md#removelayer) | **DELETE** /layerDb/layers/{layer} | Remove a collection
@@ -130,8 +130,8 @@ All URIs are relative to *https://geoengine.io/api*
 *SessionApi* | [**registerUserHandler**](docs/SessionApi.md#registeruserhandler) | **POST** /user | Registers a user.
 *SessionApi* | [**sessionHandler**](docs/SessionApi.md#sessionhandler) | **GET** /session | Retrieves details about the current session.
 *SessionApi* | [**sessionProjectHandler**](docs/SessionApi.md#sessionprojecthandler) | **POST** /session/project/{project} | Sets the active project of the session.
-*SessionApi* | [**sessionViewHandler**](docs/SessionApi.md#sessionviewhandler) | **POST** /session/view | 
-*SpatialReferencesApi* | [**getSpatialReferenceSpecificationHandler**](docs/SpatialReferencesApi.md#getspatialreferencespecificationhandler) | **GET** /spatialReferenceSpecification/{srsString} | 
+*SessionApi* | [**sessionViewHandler**](docs/SessionApi.md#sessionviewhandler) | **POST** /session/view | Sets the view (spatial and temporal extent) of the current session.
+*SpatialReferencesApi* | [**getSpatialReferenceSpecificationHandler**](docs/SpatialReferencesApi.md#getspatialreferencespecificationhandler) | **GET** /spatialReferenceSpecification/{srsString} | Returns the name, PROJ string, extent and axis order of a spatial reference.
 *TasksApi* | [**abortHandler**](docs/TasksApi.md#aborthandler) | **DELETE** /tasks/{id} | Abort a running task.
 *TasksApi* | [**listHandler**](docs/TasksApi.md#listhandler) | **GET** /tasks/list | Retrieve the status of all tasks.
 *TasksApi* | [**statusHandler**](docs/TasksApi.md#statushandler) | **GET** /tasks/{id}/status | Retrieve the status of a task.

@@ -669,7 +669,7 @@ pub async fn update_dataset_symbology_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok())
 }
 
-// Updates the dataset's provenance
+/// Updates the dataset's provenance.
 #[utoipa::path(
     tag = "Datasets",
     put,
