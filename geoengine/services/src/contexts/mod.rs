@@ -143,6 +143,7 @@ pub trait GeoEngineDb:
 
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
+    footprint_boxes_per_step_limit: usize,
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     default_cache_ttl: CacheTtlSeconds,
@@ -170,6 +171,8 @@ impl QueryContextImpl {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            footprint_boxes_per_step_limit:
+                geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
             tiling_specification,
             thread_pool,
             default_cache_ttl,
@@ -202,6 +205,8 @@ impl QueryContextImpl {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            footprint_boxes_per_step_limit:
+                geoengine_operators::engine::DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT,
             tiling_specification,
             thread_pool,
             default_cache_ttl,
@@ -216,12 +221,26 @@ impl QueryContextImpl {
             processing_runtime,
         }
     }
+
+    /// Sets the most boxes a footprint of one time step keeps.
+    #[must_use]
+    pub fn with_footprint_boxes_per_step_limit(
+        mut self,
+        footprint_boxes_per_step_limit: usize,
+    ) -> Self {
+        self.footprint_boxes_per_step_limit = footprint_boxes_per_step_limit;
+        self
+    }
 }
 
 #[async_trait::async_trait]
 impl QueryContext for QueryContextImpl {
     fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
+    }
+
+    fn footprint_boxes_per_step_limit(&self) -> usize {
+        self.footprint_boxes_per_step_limit
     }
 
     fn thread_pool(&self) -> &Arc<ThreadPool> {

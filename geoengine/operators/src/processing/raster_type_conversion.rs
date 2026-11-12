@@ -195,6 +195,17 @@ where
     {
         self.query_processor.time_query(query, ctx).await
     }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<crate::engine::Footprint>>> {
+        self.query_processor
+            .footprint_query(query, precision, ctx)
+            .await
+    }
 }
 
 #[cfg(test)]
