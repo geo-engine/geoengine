@@ -67,7 +67,7 @@ _build-typescript-postprocess:
     echo "typings" > typescript/.gitignore
     find ./typescript -name "*.ts" -exec sed -i '/The version of the OpenAPI document/d' {} +
     # hand-written tests in `typescript/test/`, which the generator leaves untouched
-    cd typescript && npm pkg set scripts.test="node --test 'test/*.test.mjs'"
+    cd typescript && npm pkg set scripts.test="node --test test/*.test.mjs"
     printf '\ntest\n' >> typescript/.npmignore
     cd typescript && npm install
     rm \
