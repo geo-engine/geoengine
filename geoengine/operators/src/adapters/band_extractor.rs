@@ -8,7 +8,8 @@ use futures::{Stream, ready};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
 
-/// This adapter extracts the specified bands from a raster stream and adjusts the band number of the output tiles to 0..n.
+/// This adapter extracts the specified bands from a raster stream.
+/// The output tiles keep their band numbers, so the selected bands must be ascending, like a [`BandSelection`](geoengine_datatypes::primitives::BandSelection).
 #[pin_project(project = BandExtractorProjection)]
 pub struct BandExtractor<S, T>
 where
@@ -88,7 +89,7 @@ where
         // loop until we find a tile that has a band that we want to output
         loop {
             let tile = ready!(stream.as_mut().poll_next(cx));
-            let mut tile = match tile {
+            let tile = match tile {
                 Some(Ok(tile)) => tile,
                 Some(Err(e)) => {
                     *finished = true;
@@ -105,8 +106,6 @@ where
             let selected_band = selected_bands[*current_output_band_idx as usize];
 
             if tile.band == selected_band {
-                tile.band = *current_output_band_idx;
-
                 *current_output_band_idx += 1;
                 if *current_output_band_idx >= selected_bands.len() as u32 {
                     // all output bands produced, next tile starts with output band 0
@@ -215,7 +214,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
-                band: 0,
+                band: 1,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![2, 3, 4, 5]).unwrap().into(),
                 properties: Default::default(),
@@ -224,16 +223,7 @@ mod tests {
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::no_cache(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 0,
+                band: 2,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
                 properties: Default::default(),
@@ -243,6 +233,15 @@ mod tests {
                 time: TimeInterval::new_unchecked(0, 5),
                 tile_position: [-1, 1].into(),
                 band: 1,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::no_cache(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 2,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
                 properties: Default::default(),

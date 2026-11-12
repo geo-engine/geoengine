@@ -71,8 +71,7 @@ impl RasterColorizer {
                         bands.push(band);
                     }
                 }
-                bands.sort_unstable(); // bands will be returned in ascending order anyway
-                BandSelection::new_unchecked(bands)
+                BandSelection::new_unchecked(bands) // sorts the bands
             }
         }
     }

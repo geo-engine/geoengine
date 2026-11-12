@@ -93,7 +93,10 @@ Supporting crates: `expression` (used by `operators` and `services`), `macros` (
      Sources fill gaps with no-data slices.
   2. **Tile position**: all tiles that intersect the query's spatial bounds, row by row from the upper-left tile (x runs fastest, then y).
      Tiles without data are emitted as empty tiles.
-  3. **Band**: one tile per selected band, in the order of the query's band selection (not necessarily sorted).
+  3. **Band**: one tile per selected band, ascending by band number.
+     `BandSelection` is a sorted set, so the order in which a query lists its bands does not matter.
+     Only sources define a band order (plus the input order of `RasterStacker`, which appends the bands of its inputs).
+     Operators that select bands, such as `BandFilter`, treat the selection as a set and keep the native order.
 
   Example with 2 time slices, 2×2 tiles and bands `[0, 1]`: `t0 (0,0) b0`, `t0 (0,0) b1`, `t0 (0,1) b0`, `t0 (0,1) b1`, `t0 (1,0) b0`, …, `t1 (1,1) b1`.
 

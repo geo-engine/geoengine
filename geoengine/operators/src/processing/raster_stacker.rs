@@ -364,7 +364,7 @@ where
 
             sources.push(RasterStackerSource {
                 queryable: QueryWrapper { p: source, ctx },
-                band_idxs: bands.as_vec(),
+                band_idxs: bands,
             });
         }
 
@@ -864,6 +864,118 @@ mod tests {
                 +-------+-------+
                 | 16 17 | 20 21 |
                 | 18 19 | 22 23 |
+                +-------+-------+
+                [5, 10) band 1
+                +-------+-------+
+                | 24 25 | 28 29 |
+                | 26 27 | 30 31 |
+                +-------+-------+
+                "})
+            .tile_origin([-1, 0]),
+        );
+    }
+
+    #[tokio::test]
+    async fn it_answers_unsorted_band_selection_in_ascending_order() {
+        it_answers_unsorted_band_selection_in_ascending_order_impl(TimeDescriptor::new_irregular(
+            None,
+        ))
+        .await;
+    }
+
+    #[tokio::test]
+    async fn it_answers_unsorted_band_selection_in_ascending_order_regular() {
+        it_answers_unsorted_band_selection_in_ascending_order_impl(
+            TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(5).unwrap(),
+            ),
+        )
+        .await;
+    }
+
+    /// Both stacker paths must answer `[1, 0]` like `[0, 1]`, with the band numbers at the right data.
+    async fn it_answers_unsorted_band_selection_in_ascending_order_impl(time: TimeDescriptor) {
+        let raster1 = AsciiRasterTiles::new(indoc! {"
+            [0, 5)
+            +-------+-------+
+            |  0  1 |  4  5 |
+            |  2  3 |  6  7 |
+            +-------+-------+
+            [5, 10)
+            +-------+-------+
+            |  8  9 | 12 13 |
+            | 10 11 | 14 15 |
+            +-------+-------+
+            "})
+        .tile_origin([-1, 0]);
+
+        let raster2 = AsciiRasterTiles::new(indoc! {"
+            [0, 5)
+            +-------+-------+
+            | 16 17 | 20 21 |
+            | 18 19 | 22 23 |
+            +-------+-------+
+            [5, 10)
+            +-------+-------+
+            | 24 25 | 28 29 |
+            | 26 27 | 30 31 |
+            +-------+-------+
+            "})
+        .tile_origin([-1, 0]);
+
+        let stacker = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![mock_source(&raster1, time), mock_source(&raster2, time)],
+            },
+        }
+        .typed();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(raster1.tiling_specification());
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            vec![1, 0].try_into().unwrap(),
+        );
+
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+
+        let op = stacker
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_u8().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [0, 5)
+                +-------+-------+
+                |  0  1 |  4  5 |
+                |  2  3 |  6  7 |
+                +-------+-------+
+                [0, 5) band 1
+                +-------+-------+
+                | 16 17 | 20 21 |
+                | 18 19 | 22 23 |
+                +-------+-------+
+                [5, 10)
+                +-------+-------+
+                |  8  9 | 12 13 |
+                | 10 11 | 14 15 |
                 +-------+-------+
                 [5, 10) band 1
                 +-------+-------+

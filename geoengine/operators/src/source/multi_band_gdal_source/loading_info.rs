@@ -44,8 +44,13 @@ impl MultiBandGdalLoadingInfo {
         debug_assert!(!time_steps.is_empty(), "time_steps must not be empty");
 
         debug_assert!(
-            time_steps.windows(2).all(|w| w[0] <= w[1]),
-            "time_steps must be sorted"
+            time_steps.windows(2).all(|w| w[0] < w[1]),
+            "time_steps must be sorted and must not contain duplicates"
+        );
+
+        debug_assert!(
+            time_steps.windows(2).all(|w| w[0].end() == w[1].start()),
+            "time_steps must be gap-free: each step must start where the previous one ends"
         );
 
         #[cfg(debug_assertions)]
