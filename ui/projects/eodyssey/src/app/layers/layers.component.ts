@@ -320,10 +320,14 @@ import {EOdysseyLayerService} from './layers.service';
                 color: var(--geoengine-foreground-secondary-text-color);
             }
 
+            // smaller than the date button above it, which is the main control of the section
             .example-date {
                 align-self: flex-start;
+                height: 2rem;
+                padding: 0 0.5rem;
                 border-radius: 0.5rem;
-                font-size: $text2;
+                font-size: 0.75rem;
+                color: var(--geoengine-foreground-secondary-text-color);
             }
 
             .date-status {
@@ -451,10 +455,13 @@ import {EOdysseyLayerService} from './layers.service';
                 }
 
                 .calendar-open {
+                    flex: 1;
                     min-width: 0;
+                    height: 2.75rem;
                     padding: 0 0.5rem;
                     border-radius: 0.5rem;
-                    font-size: $text2;
+                    font-size: $text1;
+                    font-weight: 600;
                 }
 
                 button[matIconButton] {
