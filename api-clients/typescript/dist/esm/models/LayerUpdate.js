@@ -10,7 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { instanceOfProjectLayer, ProjectLayerFromJSONTyped, ProjectLayerToJSON, } from './ProjectLayer';
+import { instanceOfProjectLayerUpdate, ProjectLayerUpdateFromJSONTyped, ProjectLayerUpdateToJSON, } from './ProjectLayerUpdate';
 import { instanceOfProjectUpdateToken, ProjectUpdateTokenFromJSONTyped, ProjectUpdateTokenToJSON, } from './ProjectUpdateToken';
 export function LayerUpdateFromJSON(json) {
     return LayerUpdateFromJSONTyped(json, false);
@@ -22,8 +22,8 @@ export function LayerUpdateFromJSONTyped(json, ignoreDiscriminator) {
     if (typeof json !== 'object') {
         return json;
     }
-    if (instanceOfProjectLayer(json)) {
-        return ProjectLayerFromJSONTyped(json, true);
+    if (instanceOfProjectLayerUpdate(json)) {
+        return ProjectLayerUpdateFromJSONTyped(json, true);
     }
     if (instanceOfProjectUpdateToken(json)) {
         return ProjectUpdateTokenFromJSONTyped(json, true);
@@ -40,8 +40,8 @@ export function LayerUpdateToJSONTyped(value, ignoreDiscriminator = false) {
     if (typeof value !== 'object') {
         return value;
     }
-    if (typeof value === 'object' && instanceOfProjectLayer(value)) {
-        return ProjectLayerToJSON(value);
+    if (typeof value === 'object' && instanceOfProjectLayerUpdate(value)) {
+        return ProjectLayerUpdateToJSON(value);
     }
     if (instanceOfProjectUpdateToken(value)) {
         return ProjectUpdateTokenToJSON(value);

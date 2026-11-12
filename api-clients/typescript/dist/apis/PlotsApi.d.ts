@@ -10,6 +10,36 @@
  */
 import * as runtime from '../runtime';
 import { type WrappedPlotOutput } from '../models/WrappedPlotOutput';
+export interface GetLayerPlotHandlerRequest {
+    /**
+     *
+     */
+    bbox: string;
+    /**
+     *
+     */
+    time: string;
+    /**
+     * Data provider id
+     */
+    provider: string;
+    /**
+     * Layer id
+     */
+    layer: string;
+    /**
+     *
+     */
+    crs?: string | null;
+    /**
+     * Optional resolution (in the units of `crs`) at which the plot may be computed.
+     *
+     * If set, raster inputs are read at the coarsest overview level that is not coarser than
+     * this resolution, which speeds up plots of large areas at the cost of exactness.
+     * If omitted, raster inputs are read at their native resolution.
+     */
+    spatialResolution?: string | null;
+}
 export interface GetPlotHandlerRequest {
     /**
      *
@@ -40,6 +70,18 @@ export interface GetPlotHandlerRequest {
  *
  */
 export declare class PlotsApi extends runtime.BaseAPI {
+    /**
+     * Creates request options for getLayerPlotHandler without sending the request
+     */
+    getLayerPlotHandlerRequestOpts(requestParameters: GetLayerPlotHandlerRequest): Promise<runtime.RequestOpts>;
+    /**
+     * Generates the plot of a layer, e.g. of a plot in a project.
+     */
+    getLayerPlotHandlerRaw(requestParameters: GetLayerPlotHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WrappedPlotOutput>>;
+    /**
+     * Generates the plot of a layer, e.g. of a plot in a project.
+     */
+    getLayerPlotHandler(requestParameters: GetLayerPlotHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WrappedPlotOutput>;
     /**
      * Creates request options for getPlotHandler without sending the request
      */

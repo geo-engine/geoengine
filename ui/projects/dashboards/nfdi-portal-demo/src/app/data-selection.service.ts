@@ -116,10 +116,11 @@ export class DataSelectionService {
             }),
             tap(() => this.rasterLayer.next(undefined)),
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => {
-                this.rasterLayer.next(layer);
+            tap((savedLayer) => {
+                this.rasterLayer.next(savedLayer);
                 this.dataRange.next(dataRange);
             }),
+            map(() => undefined),
         );
     }
 
@@ -156,9 +157,10 @@ export class DataSelectionService {
 
         return removeOperation.pipe(
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => {
-                this.intensityLayer.next(layer);
+            tap((savedLayer) => {
+                this.intensityLayer.next(savedLayer);
             }),
+            map(() => undefined),
         );
     }
 
@@ -174,7 +176,8 @@ export class DataSelectionService {
             }),
             tap(() => this.speciesLayer1.next(undefined)),
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => this.speciesLayer1.next(layer)),
+            tap((savedLayer) => this.speciesLayer1.next(savedLayer)),
+            map(() => undefined),
         );
     }
 
@@ -204,7 +207,8 @@ export class DataSelectionService {
             }),
             tap(() => this.speciesLayer2.next(undefined)),
             mergeMap(() => this.projectService.addLayer(layer)),
-            tap(() => this.speciesLayer2.next(layer)),
+            tap((savedLayer) => this.speciesLayer2.next(savedLayer)),
+            map(() => undefined),
         );
     }
 

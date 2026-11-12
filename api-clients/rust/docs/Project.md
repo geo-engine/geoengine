@@ -9,7 +9,7 @@ Name | Type | Description | Notes
 **name** | **String** |  | 
 **description** | **String** |  | 
 **layers** | [**Vec<models::ProjectLayer>**](ProjectLayer.md) |  | 
-**plots** | [**Vec<models::Plot>**](Plot.md) |  | 
+**plots** | [**Vec<models::ProjectLayer>**](ProjectLayer.md) | Plots are project layers without symbology. | 
 **bounds** | [**models::StRectangle**](STRectangle.md) |  | 
 **time_step** | [**models::TimeStep**](TimeStep.md) |  | 
 

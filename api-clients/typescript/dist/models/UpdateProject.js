@@ -18,7 +18,6 @@ exports.UpdateProjectFromJSONTyped = UpdateProjectFromJSONTyped;
 exports.UpdateProjectToJSON = UpdateProjectToJSON;
 exports.UpdateProjectToJSONTyped = UpdateProjectToJSONTyped;
 const TimeStep_1 = require("./TimeStep");
-const PlotUpdate_1 = require("./PlotUpdate");
 const STRectangle_1 = require("./STRectangle");
 const LayerUpdate_1 = require("./LayerUpdate");
 /**
@@ -41,7 +40,7 @@ function UpdateProjectFromJSONTyped(json, ignoreDiscriminator) {
         'name': json['name'] === undefined ? undefined : json['name'] === null ? null : json['name'],
         'description': json['description'] === undefined ? undefined : json['description'] === null ? null : json['description'],
         'layers': json['layers'] === undefined ? undefined : json['layers'] === null ? null : (json['layers'].map(LayerUpdate_1.LayerUpdateFromJSON)),
-        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : (json['plots'].map(PlotUpdate_1.PlotUpdateFromJSON)),
+        'plots': json['plots'] === undefined ? undefined : json['plots'] === null ? null : (json['plots'].map(LayerUpdate_1.LayerUpdateFromJSON)),
         'bounds': json['bounds'] === undefined ? undefined : json['bounds'] === null ? null : (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
         'timeStep': json['timeStep'] === undefined ? undefined : json['timeStep'] === null ? null : (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
     };
@@ -58,7 +57,7 @@ function UpdateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         'name': value['name'],
         'description': value['description'],
         'layers': value['layers'] == null ? undefined : (value['layers'].map(LayerUpdate_1.LayerUpdateToJSON)),
-        'plots': value['plots'] == null ? undefined : (value['plots'].map(PlotUpdate_1.PlotUpdateToJSON)),
+        'plots': value['plots'] == null ? undefined : (value['plots'].map(LayerUpdate_1.LayerUpdateToJSON)),
         'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
         'timeStep': (0, TimeStep_1.TimeStepToJSON)(value['timeStep']),
     };

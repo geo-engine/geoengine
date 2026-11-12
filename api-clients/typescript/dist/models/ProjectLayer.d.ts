@@ -10,16 +10,20 @@
  */
 import type { LayerVisibility } from './LayerVisibility';
 import type { Symbology } from './Symbology';
+import type { ProviderLayerId } from './ProviderLayerId';
 /**
+ * A layer or plot of a project.
  *
+ * It is also a layer of the projects data connector, with the same `id`.
+ * Only the visibility is specific to the project.
  * @export
  * @interface ProjectLayer
  */
 export interface ProjectLayer {
     /**
-     *
+     * The id of the layer, stable across project versions.
      */
-    processingGraph: string;
+    id: string;
     /**
      *
      */
@@ -27,11 +31,33 @@ export interface ProjectLayer {
     /**
      *
      */
-    visibility: LayerVisibility;
+    description: string;
+    /**
+     * The id of the processing graph of the layer.
+     */
+    processingGraph: string;
+    /**
+     * The symbology of the layer, which plots do not have.
+     */
+    symbology?: Symbology | null;
+    /**
+     * properties, for instance, to be rendered in the UI
+     */
+    properties: Array<Array<string>>;
+    /**
+     * metadata used for loading the data
+     */
+    metadata: {
+        [key: string]: string;
+    };
     /**
      *
      */
-    symbology: Symbology;
+    visibility: LayerVisibility;
+    /**
+     * The catalog layer this layer was copied from, if any.
+     */
+    source?: ProviderLayerId | null;
 }
 /**
  * Check if a given object implements the ProjectLayer interface.

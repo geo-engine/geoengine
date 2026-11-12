@@ -132,21 +132,18 @@ pub async fn delete_project_handler(configuration: &configuration::Configuration
     }
 }
 
-pub async fn list_projects_handler(configuration: &configuration::Configuration, order: models::OrderBy, offset: i32, limit: i32) -> Result<Vec<models::ProjectListing>, Error<ListProjectsHandlerError>> {
+pub async fn list_projects_handler(configuration: &configuration::Configuration, order: models::ProjectOrderBy, offset: i32, limit: i32) -> Result<Vec<models::ProjectListing>, Error<ListProjectsHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_order = order;
-    let p_path_offset = offset;
-    let p_path_limit = limit;
+    let p_query_order = order;
+    let p_query_offset = offset;
+    let p_query_limit = limit;
 
-                    let uri_str = format!(
-                        "{}/projects?order={}&offset={}&limit={}",
-                        configuration.base_path,
-                        p_path_order.to_string(),
-                        p_path_offset,
-                        p_path_limit
-                    );
-                let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+    let uri_str = format!("{}/projects", configuration.base_path);
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
+    req_builder = req_builder.query(&[("order", &p_query_order.to_string())]);
+    req_builder = req_builder.query(&[("offset", &p_query_offset.to_string())]);
+    req_builder = req_builder.query(&[("limit", &p_query_limit.to_string())]);
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
@@ -297,7 +294,7 @@ pub async fn project_versions_handler(configuration: &configuration::Configurati
     }
 }
 
-pub async fn update_project_handler(configuration: &configuration::Configuration, project: &str, update_project: models::UpdateProject) -> Result<(), Error<UpdateProjectHandlerError>> {
+pub async fn update_project_handler(configuration: &configuration::Configuration, project: &str, update_project: models::UpdateProject) -> Result<models::Project, Error<UpdateProjectHandlerError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_project = project;
     let p_body_update_project = update_project;
@@ -317,9 +314,20 @@ pub async fn update_project_handler(configuration: &configuration::Configuration
     let resp = configuration.client.execute(req).await?;
 
     let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
 
     if !status.is_client_error() && !status.is_server_error() {
-        Ok(())
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::Project`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::Project`")))),
+        }
     } else {
         let content = resp.text().await?;
         let entity: Option<UpdateProjectHandlerError> = serde_json::from_str(&content).ok();

@@ -1,24 +1,11 @@
 import {HttpClient, HttpEvent, HttpHeaders, HttpParams} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
-import {Observable, Subject} from 'rxjs';
-import {
-    ProjectLayer as ProjectLayerDict,
-    Project as ProjectDict,
-    Dataset as DatasetDict,
-    Layer as LayerDict,
-    Plot as PlotDict,
-} from '@geoengine/api-client';
+import {Observable} from 'rxjs';
+import {Dataset as DatasetDict, Layer as LayerDict} from '@geoengine/api-client';
 import {bboxDictToExtent, unixTimestampToIsoString} from '@geoengine/common';
 import {CoreConfig} from '../config.service';
 import {
-    CreateProjectResponseDict,
-    ProjectFilterDict,
-    ProjectListingDict,
-    ProjectOrderByDict,
-    ProjectPermissionDict,
-    STRectangleDict,
     SrsString,
-    TimeStepDict,
     UUID,
     UploadResponseDict,
     AutoCreateDatasetDict,
@@ -57,77 +44,6 @@ export class BackendService {
         return `${this.config.API_URL}/ogc`;
     }
 
-    createProject(
-        request: {
-            name: string;
-            description: string;
-            bounds: STRectangleDict;
-            timeStep: TimeStepDict;
-        },
-        sessionId: UUID,
-    ): Observable<CreateProjectResponseDict> {
-        return this.http.post<CreateProjectResponseDict>(this.config.API_URL + '/project', request, {
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
-    updateProject(
-        request: {
-            id: UUID;
-            name?: string;
-            description?: string;
-            layers?: Array<ProjectLayerDict | 'none' | 'delete'>;
-            plots?: Array<PlotDict | 'none' | 'delete'>;
-            bounds?: STRectangleDict;
-            timeStep?: TimeStepDict;
-        },
-        sessionId: UUID,
-    ): Observable<void> {
-        return this.http.patch<void>(`${this.config.API_URL}/project/${request.id}`, request, {
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
-    deleteProject(projectId: UUID, sessionId: UUID): Observable<void> {
-        return this.http.get<void>(`${this.config.API_URL}/project/${projectId}`, {
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
-    loadProject(projectId: UUID, sessionId: UUID, projectVersionId?: UUID): Observable<ProjectDict> {
-        let requestUri = `${this.config.API_URL}/project/${projectId}`;
-        if (projectVersionId) {
-            requestUri += `/${projectVersionId}`;
-        }
-
-        return this.http.get<ProjectDict>(requestUri, {
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
-    listProjects(
-        request: {
-            permissions: Array<ProjectPermissionDict>;
-            filter: ProjectFilterDict;
-            order: ProjectOrderByDict;
-            offset: number;
-            limit: number;
-        },
-        sessionId: UUID,
-    ): Observable<Array<ProjectListingDict>> {
-        const params = new NullDiscardingHttpParams();
-        params.setMapped('permissions', request.permissions, JSON.stringify);
-        params.setMapped('filter', request.filter, (filter) => (filter === 'None' ? 'None' : JSON.stringify(filter)));
-        params.set('order', request.order);
-        params.setMapped('offset', request.offset, JSON.stringify);
-        params.setMapped('limit', request.limit, JSON.stringify);
-
-        return this.http.get<Array<ProjectListingDict>>(this.config.API_URL + '/projects', {
-            params: params.httpParams,
-            headers: BackendService.authorizationHeader(sessionId),
-        });
-    }
-
     getBackendInfo(): Observable<BackendInfoDict> {
         return this.http.get<BackendInfoDict>(this.config.API_URL + '/info');
     }
@@ -160,16 +76,6 @@ export class BackendService {
             reportProgress: true,
             observe: 'events',
         });
-    }
-
-    setSessionProject(projectId: UUID, sessionId: UUID): Observable<void> {
-        const response = new Subject<void>();
-        this.http
-            .post<void>(`${this.config.API_URL}/session/project/${projectId}`, null, {
-                headers: BackendService.authorizationHeader(sessionId),
-            })
-            .subscribe(response);
-        return response;
     }
 
     wfsGetFeature(request: WfsParamsDict, sessionId: UUID): Observable<Record<string, unknown>> {
