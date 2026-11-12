@@ -79,6 +79,8 @@ use geoengine_operators::{
         VectorJoinSources as OperatorsVectorJoinSources, VectorJoinType as OperatorsVectorJoinType,
         VisualPointClustering as OperatorsVisualPointClustering,
         VisualPointClusteringParams as OperatorsVisualPointClusteringParameters,
+        Warp as OperatorsWarp, WarpMethod as OperatorsWarpMethod,
+        WarpParams as OperatorsWarpParameters,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -983,6 +985,96 @@ impl TryFrom<Downsampling> for OperatorsDownsampling {
                 sampling_method: value.params.sampling_method.into(),
                 output_resolution: value.params.output_resolution.into(),
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
+            },
+            sources: (*value.sources).try_into()?,
+        })
+    }
+}
+
+/// The `Warp` operator puts a raster onto another grid in one step: another spatial reference,
+/// another resolution and another grid origin, in any combination.
+///
+/// For each output pixel, the operator uses the value of the input pixel under the center of the
+/// output pixel. The output resolution can be coarser or finer than the input resolution, also
+/// coarser in one axis and finer in the other.
+///
+/// Geo Engine uses `Warp` to answer queries, e.g., WMS requests, in a spatial reference or at a
+/// resolution that differs from the processing graph's.
+///
+/// ## Errors
+///
+/// The operator returns an error if the input has no spatial reference or if the input data
+/// cannot be reprojected to the target spatial reference.
+#[api_operator(
+    title = "Warp",
+    examples(json!({
+        "type": "Warp",
+        "params": {
+            "targetSpatialReference": "EPSG:3857",
+            "outputResolution": { "x": 20000.0, "y": 10000.0 }
+        },
+        "sources": {
+            "raster": {
+                "type": "GdalSource",
+                "params": { "data": "ndvi" }
+            }
+        }
+    }))
+)]
+pub struct Warp {
+    pub params: WarpParameters,
+    pub sources: Box<SingleRasterSource>,
+}
+
+/// Parameters for the `Warp` operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WarpParameters {
+    /// Target spatial reference system. Defaults to the spatial reference of the input.
+    #[schema(value_type = Option<String>, examples("EPSG:3857"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_spatial_reference: Option<SpatialReference>,
+    /// Output resolution (`x`, `y`) in units of the target spatial reference.
+    /// Defaults to the resolution of the (reprojected) input.
+    #[schema(examples(json!({ "x": 20000.0, "y": 10000.0 })))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_resolution: Option<SpatialResolution>,
+    /// Optional reference point used to align the output grid origin.
+    #[schema(examples(json!({ "x": 0.0, "y": 0.0 })))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_origin_reference: Option<Coordinate2D>,
+    /// Resampling method.
+    #[schema(examples("nearestNeighbor"))]
+    #[serde(default)]
+    pub method: WarpMethod,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Default, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum WarpMethod {
+    /// The value of the input pixel under the center of the output pixel.
+    #[default]
+    NearestNeighbor,
+}
+
+impl From<WarpMethod> for OperatorsWarpMethod {
+    fn from(value: WarpMethod) -> Self {
+        match value {
+            WarpMethod::NearestNeighbor => Self::NearestNeighbor,
+        }
+    }
+}
+
+impl TryFrom<Warp> for OperatorsWarp {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Warp) -> Result<Self, Self::Error> {
+        Ok(OperatorsWarp {
+            params: OperatorsWarpParameters {
+                target_spatial_reference: value.params.target_spatial_reference.map(Into::into),
+                output_resolution: value.params.output_resolution.map(Into::into),
+                output_origin_reference: value.params.output_origin_reference.map(Into::into),
+                method: value.params.method.into(),
             },
             sources: (*value.sources).try_into()?,
         })
@@ -3665,6 +3757,42 @@ mod tests {
         assert_eq!(
             ops.params.output_origin_reference,
             Some(geoengine_datatypes::primitives::Coordinate2D::new(0.0, 0.0))
+        );
+    }
+
+    #[test]
+    fn it_converts_warp_params() {
+        let api: Warp = serde_json::from_value(serde_json::json!({
+            "type": "Warp",
+            "params": {
+                "targetSpatialReference": "EPSG:3857",
+                "outputResolution": { "x": 20000.0, "y": 10000.0 }
+            },
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": { "data": "ndvi" }
+                }
+            }
+        }))
+        .expect("valid warp");
+
+        let ops = OperatorsWarp::try_from(api).expect("conversion failed");
+
+        assert_eq!(
+            ops.params,
+            OperatorsWarpParameters {
+                target_spatial_reference: Some(
+                    geoengine_datatypes::spatial_reference::SpatialReference::web_mercator()
+                ),
+                output_resolution: Some(
+                    geoengine_datatypes::primitives::SpatialResolution::new_unchecked(
+                        20_000., 10_000.
+                    )
+                ),
+                output_origin_reference: None,
+                method: OperatorsWarpMethod::NearestNeighbor,
+            }
         );
     }
 
