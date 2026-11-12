@@ -1,5 +1,16 @@
 import {A11yModule} from '@angular/cdk/a11y';
-import {ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, signal, viewChild} from '@angular/core';
+import {
+    ChangeDetectionStrategy,
+    Component,
+    ElementRef,
+    afterNextRender,
+    computed,
+    effect,
+    inject,
+    Injector,
+    signal,
+    viewChild,
+} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatButtonModule} from '@angular/material/button';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
@@ -9,8 +20,16 @@ import {MatSidenavModule} from '@angular/material/sidenav';
 import {MatToolbar, MatToolbarModule} from '@angular/material/toolbar';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {isActive, Router, RouterModule} from '@angular/router';
-import {Layer, Time, UserService} from '@geoengine/common';
-import {ProjectService, MapService, MapContainerComponent, CoreModule, SpatialReferenceService, WGS_84} from '@geoengine/core';
+import {Layer, LayersService, Time, UserService, UUID} from '@geoengine/common';
+import {
+    FootprintsService,
+    ProjectService,
+    MapService,
+    MapContainerComponent,
+    CoreModule,
+    SpatialReferenceService,
+    WGS_84,
+} from '@geoengine/core';
 import {MeasureDirective, MeasurementType} from './measure.directive';
 import {AppConfig} from '../app-config.service';
 import {addCitationToMapImage} from './map-image-export';
@@ -42,11 +61,14 @@ import {EOdysseyLayerService} from '../layers/layers.service';
 })
 export class MainComponent {
     readonly config = inject(AppConfig);
+    private readonly injector = inject(Injector);
+    private readonly footprintsService = inject(FootprintsService);
     readonly projectService = inject(ProjectService);
     readonly userService = inject(UserService);
     private readonly mapService = inject(MapService);
     private readonly router = inject(Router);
     private readonly eodysseyLayerService = inject(EOdysseyLayerService);
+    private readonly layersService = inject(LayersService);
 
     private readonly spatialReferenceService = inject(SpatialReferenceService);
 
@@ -83,9 +105,43 @@ export class MainComponent {
     readonly testIsVisible = signal(true);
 
     constructor() {
+        // The selected preset, so availability is shown before the visualization is applied. Else the layer on the map.
+        effect(() => {
+            const preset = this.eodysseyLayerService.selectedPreset();
+            const layer = preset
+                ? {dataConnectorId: preset.connectorId, layerId: preset.layerId}
+                : this.eodysseyLayerService.mapTileLayer();
+            this.footprintsService.layer.set(
+                layer && {
+                    key: `${layer.dataConnectorId}/${layer.layerId}`,
+                    processingGraphId: (): Promise<UUID> =>
+                        this.layersService.registerAndGetLayerProcessingGraphId(layer.dataConnectorId, layer.layerId),
+                },
+            );
+        });
+
+        // the stripes would hide the imagery of the layer on the map
+        effect(() => this.footprintsService.overlayLight.set(!!this.eodysseyLayerService.mapTileLayer()));
+
+        // The step of the selected data source until it is applied, because the project keeps the step of the applied one.
+        effect(() => {
+            const source = this.eodysseyLayerService.selectedDataSource();
+            const isNewSource = source !== this.eodysseyLayerService.dataSourceOfTime();
+            this.footprintsService.timeStepOverride.set(isNewSource ? source?.defaultTimeStep : undefined);
+        });
+
         afterNextRender({
             read: () => {
                 this.mapService.registerMapComponent(this.mapComponent());
+
+                // the map component is only available after the first render
+                effect(
+                    () =>
+                        this.mapComponent().dataOverlayLayer.set(
+                            this.footprintsService.overlayVisible() ? this.footprintsService.overlayLayer : undefined,
+                        ),
+                    {injector: this.injector},
+                );
 
                 this.zoomToGermany();
 
