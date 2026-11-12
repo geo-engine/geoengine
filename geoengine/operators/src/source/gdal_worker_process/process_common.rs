@@ -7,6 +7,7 @@ use geoengine_datatypes::raster::{
 use ipc_channel::IpcError;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::num::NonZeroUsize;
 use std::{
     borrow::Cow,
     hash::{Hash, Hasher},
@@ -73,8 +74,14 @@ pub enum GdalRequest {
         read_advise: GdalReadAdvise,
         /// We use this to know what type we serialize
         data_type: RasterDataType,
+        /// `None`: read `gdal_read_widow` from the full-resolution band, resampled to
+        /// `read_window_bounds`. `Some(factor)`: read it at one level of the band, at native size
+        /// and without resampling: 1 is the full resolution, `f` the overview of size
+        /// `ceil(size / f)`, see [`RasterInfo::level_of_factor`]. `read_window_bounds` must have
+        /// the window's size. A missing level is an error, never a resampled read.
+        level_factor: Option<NonZeroUsize>,
     },
-    /// Read the data type of band `rasterband_channel` and the dataset's CRS.
+    /// Read the data type and levels of band `rasterband_channel` and the dataset's CRS.
     Header,
 }
 
@@ -107,12 +114,69 @@ pub enum IpcChannelResult {
     RasterInfo(RasterInfo),
 }
 
-/// The data type of one band and the CRS of a raster, as read from its header.
+/// The data type and levels of one band and the CRS of a raster, as read from its header.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RasterInfo {
     pub data_type: RasterDataType,
     /// unreferenced if the file declares no CRS
     pub spatial_reference: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
+    /// level 0 is the full resolution, level `i` the overview `i - 1` in GDAL's order
+    pub levels: Vec<RasterLevelLayout>,
+}
+
+impl RasterInfo {
+    /// See [`level_of_factor`].
+    pub fn level_of_factor(&self, factor: NonZeroUsize) -> Option<usize> {
+        level_of_factor(&self.levels, factor)
+    }
+
+    /// The first of the power-of-two overview levels `2..=max_overview_level` the band lacks.
+    pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<u32> {
+        let missing = largest_overview_level(&self.levels).checked_mul(2)?;
+        (missing <= max_overview_level).then_some(missing)
+    }
+}
+
+/// The index in `levels`, the full resolution first, of the level `factor` times coarser than the
+/// full resolution. GDAL drivers size an overview `ceil(size / factor)` (`gdaladdo`, COG, JPEG2000
+/// resolution levels), so its pixel `i` covers the full-resolution pixels
+/// `[i * factor, (i + 1) * factor)`.
+pub fn level_of_factor(levels: &[RasterLevelLayout], factor: NonZeroUsize) -> Option<usize> {
+    let full = levels.first()?;
+    if factor.get() == 1 {
+        return Some(0);
+    }
+    let size = (
+        full.size_x.div_ceil(factor.get()),
+        full.size_y.div_ceil(factor.get()),
+    );
+    levels
+        .iter()
+        .skip(1)
+        .position(|level| (level.size_x, level.size_y) == size)
+        .map(|index| index + 1)
+}
+
+/// The largest power-of-two level `f` such that `levels` has all the overviews `2, 4, …, f`. 1 if
+/// it has none.
+pub fn largest_overview_level(levels: &[RasterLevelLayout]) -> u32 {
+    std::iter::successors(Some(2_u32), |level| level.checked_mul(2))
+        .take_while(|level| {
+            NonZeroUsize::new(*level as usize)
+                .and_then(|factor| level_of_factor(levels, factor))
+                .is_some()
+        })
+        .last()
+        .unwrap_or(1)
+}
+
+/// The size and the natural block size of one level of a band, in pixels.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub struct RasterLevelLayout {
+    pub size_x: usize,
+    pub size_y: usize,
+    pub block_size_x: usize,
+    pub block_size_y: usize,
 }
 
 pub type IpcProcessRasterResult = Result<IpcChannelResult, IpcProcessError>;
@@ -485,6 +549,9 @@ pub enum IpcProcessError {
 
     #[snafu(display("Unhandled worker exception: {msg}"))]
     IpcOther { msg: String },
+
+    #[snafu(display("File {file} has no overview level {factor}, but its dataset declares it"))]
+    MissingOverviewLevel { file: String, factor: NonZeroUsize },
 
     #[snafu(display("Gdal buffer len {buffer_len} does not match grid shape {shape:?}"))]
     ShapeBufferMissmatch {

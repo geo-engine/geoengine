@@ -44,13 +44,20 @@ pub enum SpatialGridDescriptorState {
 pub struct SpatialGridDescriptor {
     pub spatial_grid: SpatialGridDefinition,
     pub descriptor: SpatialGridDescriptorState,
+    /// The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset.
+    /// Sources read only these and downsample further themselves. Unset: the levels are unknown
+    /// and GDAL chooses, which may resample.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 0)]
+    pub max_overview_level: Option<u32>,
 }
 
 impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDescriptor {
     fn from(value: SpatialGridDescriptor) -> Self {
         let sp = geoengine_operators::engine::SpatialGridDescriptor::new_source(
             value.spatial_grid.into(),
-        );
+        )
+        .with_max_overview_level(value.max_overview_level);
         match value.descriptor {
             SpatialGridDescriptorState::Source => sp,
             SpatialGridDescriptorState::Derived => sp.as_derived(),
@@ -65,6 +72,7 @@ impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDes
             return SpatialGridDescriptor {
                 spatial_grid: sp.into(),
                 descriptor: SpatialGridDescriptorState::Source,
+                max_overview_level: value.max_overview_level(),
             };
         }
         let sp = value
@@ -73,6 +81,7 @@ impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDes
         SpatialGridDescriptor {
             spatial_grid: sp.into(),
             descriptor: SpatialGridDescriptorState::Derived,
+            max_overview_level: None,
         }
     }
 }

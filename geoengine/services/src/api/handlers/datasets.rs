@@ -358,6 +358,18 @@ async fn validate_tile(
         }
     );
 
+    // sources read the declared overview levels as they are, so every tile must have them
+    if let Some(overview_level) = dataset_descriptor
+        .spatial_grid
+        .max_overview_level()
+        .and_then(|declared| rd.missing_overview_level(declared))
+    {
+        return Err(AddDatasetTilesError::TileFileMissingOverviewLevel {
+            overview_level,
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        });
+    }
+
     // TODO: also check that the tiles bbox (from the tile definition, and not the actual gdal dataset of the tile's file) fits into the dataset's spatial grid?
     let tile_geotransform = geoengine_datatypes::raster::GeoTransform::from(
         geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
@@ -5447,6 +5459,7 @@ mod tests {
                                 },
                             },
                             descriptor: SpatialGridDescriptorState::Source,
+                            max_overview_level: None,
                         },
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor {
                             name: "band_1".to_string(),
@@ -5550,6 +5563,7 @@ mod tests {
                     },
                 },
                 descriptor: SpatialGridDescriptorState::Source,
+                max_overview_level: None,
             }
             .into()
         );
@@ -5643,6 +5657,7 @@ mod tests {
                     },
                 },
                 descriptor: SpatialGridDescriptorState::Source,
+                max_overview_level: None,
             }
             .into()
         );

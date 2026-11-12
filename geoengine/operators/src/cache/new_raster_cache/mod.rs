@@ -1,36 +1,63 @@
 use crate::cache::cache_tiles::CompressedRasterTile2D;
 use crate::cache::cache_tiles::CompressedRasterTileExt;
 use crate::cache::error::CacheError;
+use crate::cache::single_read::SingleRead;
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator,
     ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterQueryProcessor,
     RasterResultDescriptor, TypedRasterOperator, TypedRasterQueryProcessor,
 };
 use crate::optimization::OptimizationError;
+use crate::source::gdal_read::{UnitRead, UnitResult};
 use crate::util::{Result, safe_lock_mutex, safe_read_rwlock, safe_write_rwlock};
 use async_trait::async_trait;
+use dashmap::DashSet;
 use futures::Stream;
 use futures::StreamExt;
 use futures::stream;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, QueryRectangle, RasterQueryRectangle, SpatialResolution, TimeInterval,
+    BandSelection, CacheHint, CacheTtlSeconds, QueryRectangle, RasterQueryRectangle,
+    SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridIdx2D, Pixel, RasterTile2D, TileInformation,
+    GridBoundingBox2D, GridIdx2D, Pixel, RasterDataType, RasterTile2D, TileInformation,
 };
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::util::test::TestDefault;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 pub struct NewRasterCache<Store> {
     store: Store,
+    /// the least time file blocks and headers stay cached, see [`NewRasterCacheEnum::min_block_ttl`]
+    min_block_ttl: CacheTtlSeconds,
+    /// which files GDAL sources read through file blocks, see [`BlockReadMode`]
+    block_read_mode: BlockReadMode,
 }
+
+/// Which files the GDAL sources read through cached file blocks instead of windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BlockReadMode {
+    /// windows for all files
+    #[default]
+    Off,
+    /// blocks for remote files (HTTP, S3 and the other remote GDAL file systems), windows for
+    /// local ones: blocks save requests over the network, but on local files they are slower
+    Auto,
+    /// blocks for all files
+    On,
+}
+
+/// The least time file blocks and headers stay cached unless set otherwise, so that the tiles of a
+/// view share them; the server takes it from `[cache] min_block_ttl_seconds`.
+pub const DEFAULT_MIN_BLOCK_TTL_SECONDS: u32 = 60;
 
 pub enum NewRasterCacheEnum {
     InMemoryCompressedRasterTile2DFifo(
@@ -48,9 +75,12 @@ impl TestDefault for NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(8_589_934_592)),
                 total_size: Arc::new(AtomicUsize::new(0)),
-                storing: Mutex::default(),
+                storing: DashSet::default(),
+                block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
+            min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
+            block_read_mode: BlockReadMode::Off,
         })
     }
 }
@@ -70,9 +100,12 @@ impl NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(FifoEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
-                storing: Mutex::default(),
+                storing: DashSet::default(),
+                block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
+            min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
+            block_read_mode: BlockReadMode::Off,
         })
     }
 
@@ -82,10 +115,49 @@ impl NewRasterCacheEnum {
                 cache: RwLock::new(HashMap::new()),
                 eviction_strategy: Mutex::new(LruEvictionStrategy::new(capacity_bytes)),
                 total_size: Arc::new(AtomicUsize::new(0)),
-                storing: Mutex::default(),
+                storing: DashSet::default(),
+                block_reads: SingleRead::default(),
                 counters: CacheCounters::default(),
             },
+            min_block_ttl: CacheTtlSeconds::new(DEFAULT_MIN_BLOCK_TTL_SECONDS),
+            block_read_mode: BlockReadMode::Off,
         })
+    }
+
+    /// The least time file blocks and headers stay cached, also for data with a shorter TTL. With
+    /// 0, sources read windows of data without a TTL, as its blocks would expire when stored.
+    pub fn min_block_ttl(&self) -> CacheTtlSeconds {
+        match self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.min_block_ttl,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.min_block_ttl,
+        }
+    }
+
+    #[must_use]
+    pub fn with_min_block_ttl(mut self, min_block_ttl: CacheTtlSeconds) -> Self {
+        match &mut self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.min_block_ttl = min_block_ttl,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.min_block_ttl = min_block_ttl,
+        }
+        self
+    }
+
+    /// Which files GDAL sources read through cached file blocks instead of windows. Off unless
+    /// set: on local files, block reads cost more than they save.
+    pub fn block_read_mode(&self) -> BlockReadMode {
+        match self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_read_mode,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_read_mode,
+        }
+    }
+
+    #[must_use]
+    pub fn with_block_read_mode(mut self, mode: BlockReadMode) -> Self {
+        match &mut self {
+            Self::InMemoryCompressedRasterTile2DFifo(cache) => cache.block_read_mode = mode,
+            Self::InMemoryCompressedRasterTile2DLru(cache) => cache.block_read_mode = mode,
+        }
+        self
     }
 
     async fn get(
@@ -114,14 +186,43 @@ impl NewRasterCacheEnum {
         }
     }
 
-    pub fn stats(&self) -> CacheStats {
+    /// Reads a block cached with [`Self::insert_block`].
+    pub(crate) async fn get_block<T: SupportedRasterDataType>(
+        &self,
+        key: BlockKey,
+    ) -> Result<Option<RasterTile2D<T>>> {
+        match self.get(&CacheKey::Block(key)).await? {
+            Some(entry) => T::map_enum_to_tile(StorageFormat::load(entry).await?).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// Caches a decoded file block, stored like a tile.
+    pub(crate) async fn insert_block<T: SupportedRasterDataType>(
+        &self,
+        key: BlockKey,
+        tile: RasterTile2D<T>,
+    ) -> Result<()> {
+        self.insert(CacheKey::Block(key), T::map_tile_to_enum(tile))
+            .await
+    }
+
+    /// The reads of block units that callers share: tiles that miss the same unit read it once.
+    pub(crate) fn block_reads(&self) -> &SingleRead<BlockKey, UnitRead> {
         match self {
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => {
-                cache.store.counters.snapshot()
+                &cache.store.block_reads
             }
             NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => {
-                cache.store.counters.snapshot()
+                &cache.store.block_reads
             }
+        }
+    }
+
+    pub fn stats(&self) -> CacheStats {
+        match self {
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DFifo(cache) => cache.store.stats(),
+            NewRasterCacheEnum::InMemoryCompressedRasterTile2DLru(cache) => cache.store.stats(),
         }
     }
 
@@ -475,12 +576,12 @@ mod eviction_strategy_tests {
     }
 
     fn key(name: &str) -> CacheKey {
-        (
+        CacheKey::Tile((
             crate::engine::CanonicOperatorName::new(&name).expect("must serialize"),
             0u32,
             TimeInterval::default(),
             TileIndex::from([0, 0]),
-        )
+        ))
     }
 
     #[test]
@@ -623,7 +724,9 @@ pub struct InMemoryCacheStore<SF, ES> {
     total_size: Arc<AtomicUsize>,
     /// Keys whose value an insert is storing, so that concurrent inserts of the same key, e.g. of
     /// callers that got the same result, store it once. Never locked together with the others.
-    storing: Mutex<HashSet<Arc<CacheKey>>>,
+    storing: DashSet<Arc<CacheKey>>,
+    /// See [`NewRasterCacheEnum::block_reads`].
+    block_reads: SingleRead<BlockKey, UnitRead>,
     counters: CacheCounters,
 }
 
@@ -644,28 +747,19 @@ pub struct CacheStats {
     pub stored: u64,
     /// inserts of a key that another insert stored or is storing
     pub inserts_joined: u64,
+    /// block reads that waited for a read of the same unit another caller had started
+    pub reads_joined: u64,
 }
 
-impl CacheStats {
-    /// The counts since an earlier snapshot.
-    #[must_use]
-    pub fn since(self, earlier: Self) -> Self {
-        Self {
-            hits: self.hits - earlier.hits,
-            misses: self.misses - earlier.misses,
-            stored: self.stored - earlier.stored,
-            inserts_joined: self.inserts_joined - earlier.inserts_joined,
-        }
-    }
-}
-
-impl CacheCounters {
-    fn snapshot(&self) -> CacheStats {
+impl<SF, ES> InMemoryCacheStore<SF, ES> {
+    fn stats(&self) -> CacheStats {
+        let counters = &self.counters;
         CacheStats {
-            hits: self.hits.load(Ordering::Relaxed),
-            misses: self.misses.load(Ordering::Relaxed),
-            stored: self.stored.load(Ordering::Relaxed),
-            inserts_joined: self.inserts_joined.load(Ordering::Relaxed),
+            hits: counters.hits.load(Ordering::Relaxed),
+            misses: counters.misses.load(Ordering::Relaxed),
+            stored: counters.stored.load(Ordering::Relaxed),
+            inserts_joined: counters.inserts_joined.load(Ordering::Relaxed),
+            reads_joined: self.block_reads.joined(),
         }
     }
 }
@@ -673,14 +767,14 @@ impl CacheCounters {
 /// Claims a key in [`InMemoryCacheStore::storing`] and releases it when the insert ends, also if
 /// it is cancelled.
 struct StoringGuard<'a> {
-    storing: &'a Mutex<HashSet<Arc<CacheKey>>>,
+    storing: &'a DashSet<Arc<CacheKey>>,
     key: Arc<CacheKey>,
 }
 
 impl<'a> StoringGuard<'a> {
     /// `None` if another insert stores the key.
-    fn claim(storing: &'a Mutex<HashSet<Arc<CacheKey>>>, key: &Arc<CacheKey>) -> Option<Self> {
-        let claimed = safe_lock_mutex(storing).insert(key.clone());
+    fn claim(storing: &'a DashSet<Arc<CacheKey>>, key: &Arc<CacheKey>) -> Option<Self> {
+        let claimed = storing.insert(key.clone());
         claimed.then(|| Self {
             storing,
             key: key.clone(),
@@ -690,7 +784,7 @@ impl<'a> StoringGuard<'a> {
 
 impl Drop for StoringGuard<'_> {
     fn drop(&mut self) {
-        safe_lock_mutex(self.storing).remove(&self.key);
+        self.storing.remove(&self.key);
     }
 }
 
@@ -707,12 +801,36 @@ impl<SF, ES> InMemoryCacheStore<SF, ES> {
     }
 }
 
-type CacheKey = (CanonicOperatorName, Band, TimeInterval, TileIndex);
+/// What the cache stores: the tiles of operators and the decoded blocks of files that GDAL
+/// sources read.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CacheKey {
+    Tile(TileKey),
+    Block(BlockKey),
+}
+
+type TileKey = (CanonicOperatorName, Band, TimeInterval, TileIndex);
 type Band = u32;
 type TileIndex = GridIdx2D;
 
+/// A block of one level of a file band, decoded as one data type.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct BlockKey {
+    /// the file and everything that changes how it is read, e.g. its band and no-data value
+    pub file: Arc<str>,
+    /// the level is this many times coarser than the full resolution
+    pub factor: NonZeroUsize,
+    /// block index, y then x
+    pub block: [usize; 2],
+    pub data_type: RasterDataType,
+}
+
 fn cache_key_byte_size(key: &CacheKey) -> usize {
-    std::mem::size_of_val(key) + key.0.heap_byte_size()
+    std::mem::size_of_val(key)
+        + match key {
+            CacheKey::Tile(tile) => tile.0.heap_byte_size(),
+            CacheKey::Block(block) => block.file.len(),
+        }
 }
 
 trait StorageFormat: Send + Sync + Sized + 'static {
@@ -729,7 +847,7 @@ trait StorageFormat: Send + Sync + Sized + 'static {
 }
 
 #[derive(Clone)]
-enum TypedRasterTile2D {
+pub enum TypedRasterTile2D {
     I8(RasterTile2D<i8>),
     I16(RasterTile2D<i16>),
     I32(RasterTile2D<i32>),
@@ -1134,12 +1252,12 @@ where
         time_interval: TimeInterval,
         ctx: &dyn QueryContext,
     ) -> Result<RasterTile2D<T>> {
-        let key = (
+        let key = CacheKey::Tile((
             self.canonic_operator_name.clone(),
             job.band,
             time_interval,
             job.tile_info.global_upper_left_pixel_idx(),
-        );
+        ));
 
         let cache_store = ctx
             .new_raster_cache()
@@ -1234,7 +1352,10 @@ where
     }
 }
 
-trait SupportedRasterDataType {
+/// Converts between the values of one pixel type and the enums over all pixel types that the cache
+/// stores: tiles as [`TypedRasterTile2D`], block units as [`UnitRead`]. Implemented for all
+/// [`Pixel`] types; the conversion back fails if the enum holds another pixel type.
+pub trait SupportedRasterDataType {
     fn map_enum_to_tile(tile: TypedRasterTile2D) -> Result<RasterTile2D<Self>>
     where
         Self: Sized;
@@ -1242,6 +1363,17 @@ trait SupportedRasterDataType {
     fn map_tile_to_enum(tile: RasterTile2D<Self>) -> TypedRasterTile2D
     where
         Self: Sized;
+
+    fn map_unit_to_enum(unit: UnitResult<Self>) -> UnitRead
+    where
+        Self: Sized + Pixel;
+
+    /// # Errors
+    /// Returns an error if the unit has another pixel type; unreachable for units read under a
+    /// [`BlockKey`], whose data type is the pixel type.
+    fn map_enum_to_unit(unit: UnitRead) -> Result<UnitResult<Self>>
+    where
+        Self: Sized + Pixel;
 }
 
 macro_rules! supported_raster_data_type_impl {
@@ -1257,6 +1389,17 @@ macro_rules! supported_raster_data_type_impl {
 
                 fn map_tile_to_enum(tile: RasterTile2D<Self>) -> TypedRasterTile2D {
                     return TypedRasterTile2D::$variant(tile);
+                }
+
+                fn map_unit_to_enum(unit: UnitResult<Self>) -> UnitRead {
+                    UnitRead::$variant(unit)
+                }
+
+                fn map_enum_to_unit(unit: UnitRead) -> Result<UnitResult<Self>> {
+                    match unit {
+                        UnitRead::$variant(unit) => Ok(unit),
+                        _ => Err(CacheError::InvalidTypeForRetrieval.into()),
+                    }
                 }
             }
         )*
@@ -1284,7 +1427,7 @@ mod tests {
     use std::str::FromStr;
 
     fn make_cache_key(band: u32, idx: isize) -> CacheKey {
-        (
+        CacheKey::Tile((
             CanonicOperatorName::new(&"test_op").unwrap(),
             band,
             TimeInterval::new_unchecked(
@@ -1292,7 +1435,7 @@ mod tests {
                 TimeInstance::from_str("2014-01-02T00:00:00.000Z").unwrap(),
             ),
             GridIdx2D::new([idx, 0]),
-        )
+        ))
     }
 
     #[test]
@@ -1304,10 +1447,13 @@ mod tests {
     #[test]
     fn test_cache_key_byte_size_includes_operator_name_heap_size() {
         let key = make_cache_key(0, 0);
+        let CacheKey::Tile(tile_key) = &key else {
+            unreachable!("a tile key")
+        };
 
         assert_eq!(
             cache_key_byte_size(&key),
-            std::mem::size_of_val(&key) + key.0.heap_byte_size()
+            std::mem::size_of_val(&key) + tile_key.0.heap_byte_size()
         );
         assert!(cache_key_byte_size(&key) > std::mem::size_of_val(&key));
     }
@@ -1455,6 +1601,7 @@ mod tests {
                 misses: 1,
                 stored: 1,
                 inserts_joined: 1,
+                reads_joined: 0,
             }
         );
     }
@@ -1817,12 +1964,12 @@ mod tests {
             .await
             .unwrap();
         let cached_op = RasterCacheOperator::wrap_operator(initialized_source);
-        let cache_key = (
+        let cache_key = CacheKey::Tile((
             cached_op.canonic_name(),
             0u32,
             TimeInterval::default(),
             GridIdx2D::new([0, 0]),
-        );
+        ));
 
         let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
             ChunkByteSize::test_default(),
@@ -1885,12 +2032,12 @@ mod tests {
             .await
             .unwrap();
         let cached_op = RasterCacheOperator::wrap_operator(initialized_source);
-        let key = (
+        let key = CacheKey::Tile((
             cached_op.canonic_name(),
             0u32,
             TimeInterval::default(),
             GridIdx2D::new([0, 0]),
-        );
+        ));
 
         let poisoned_tile = make_tile(99, CacheHint::max_duration());
 

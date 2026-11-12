@@ -146,6 +146,12 @@ pub trait InitializedRasterOperator: Send + Sync {
     /// Get the unique name of the operator
     fn name(&self) -> &'static str;
 
+    /// Whether its reads go through the file blocks of the raster cache, so that caching its tiles
+    /// as well would keep the same pixels twice.
+    fn reads_cached_blocks(&self) -> bool {
+        false
+    }
+
     // Get the path of the operator in the processing graph
     fn path(&self) -> ProcessingGraphOperatorPath;
 

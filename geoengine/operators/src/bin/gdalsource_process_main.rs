@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::num::NonZeroUsize;
 
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
@@ -267,10 +268,12 @@ fn handle_request(
         GdalRequest::Read {
             read_advise,
             data_type,
+            level_factor,
         } => raster_type_dispatch(
             &dataset_params,
             read_advise,
             data_type,
+            level_factor,
             dataset_cache,
             sender,
         ),
@@ -286,13 +289,20 @@ fn raster_type_dispatch(
     dataset_params: &GdalDatasetParameters,
     read_advise: GdalReadAdvise,
     data_type: geoengine_datatypes::raster::RasterDataType,
+    level_factor: Option<NonZeroUsize>,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
     use geoengine_datatypes::raster::RasterDataType as T;
     macro_rules! dispatch {
         ($t:ty) => {
-            read_and_send::<$t>(dataset_params, read_advise, dataset_cache, sender)
+            read_and_send::<$t>(
+                dataset_params,
+                read_advise,
+                level_factor,
+                dataset_cache,
+                sender,
+            )
         };
     }
     match data_type {
@@ -349,6 +359,7 @@ fn run(token: Token) {
 fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     dataset_params: &GdalDatasetParameters,
     read_advise: GdalReadAdvise,
+    level_factor: Option<NonZeroUsize>,
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<WorkerResponse>,
 ) -> Result<(), IpcProcessError> {
@@ -356,6 +367,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         dataset_cache,
         dataset_params,
         read_advise,
+        level_factor,
     )
     .and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into))
     .map(IpcChannelResult::Raster);

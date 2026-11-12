@@ -23,6 +23,7 @@ bytemuck = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
+dashmap = { workspace = true }
 float-cmp = { workspace = true }
 futures = { workspace = true }
 gdal = { workspace = true }
@@ -108,6 +109,10 @@ harness = false
 
 [[bench]]
 name = "bands_and_time"
+harness = false
+
+[[bench]]
+name = "block_reads"
 harness = false
 
 [lints]

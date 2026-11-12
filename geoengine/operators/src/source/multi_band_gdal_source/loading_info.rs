@@ -1,5 +1,6 @@
 use super::GdalDatasetParameters;
 use crate::engine::RasterResultDescriptor;
+use crate::source::gdal_read::TilePlan;
 use geoengine_datatypes::{
     primitives::{
         CacheHint, CacheTtlSeconds, SpatialPartition2D, SpatialPartitioned, TimeInterval,
@@ -102,5 +103,24 @@ impl MultiBandGdalLoadingInfo {
 
     pub fn cache_hint(&self, default_ttl: CacheTtlSeconds) -> CacheHint {
         self.cache_ttl.unwrap_or(default_ttl).into()
+    }
+
+    /// The plan of one output tile, with its files highest z-index first.
+    pub fn tile_plan(
+        &self,
+        time: TimeInterval,
+        tile: TileInformation,
+        band: u32,
+        default_ttl: CacheTtlSeconds,
+    ) -> TilePlan {
+        let mut files = self.tile_files(time, tile, band);
+        files.reverse();
+        TilePlan {
+            tile,
+            time,
+            band,
+            files,
+            cache_hint: self.cache_hint(default_ttl),
+        }
     }
 }
