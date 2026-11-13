@@ -206,6 +206,8 @@ pub struct QueryContext {
     pub gdal_source_read_ahead: NonZeroUsize,
     /// GDAL tile reads a `MultiBandGdalSource` query keeps in flight
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
+    /// Sub-queries of one query that may run at once, see `QueryParallelism`
+    pub available_parallelism_per_query: usize,
 }
 
 impl QueryContext {
