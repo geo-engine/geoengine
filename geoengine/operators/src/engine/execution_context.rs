@@ -496,12 +496,16 @@ mod db_types {
 /// A mock execution context that wraps all operators with a statistics operator.
 pub struct StatisticsWrappingMockExecutionContext {
     pub inner: MockExecutionContext,
+    /// Also wraps raster operators with the raster cache, as the server does with
+    /// `[cache] enable_new_raster_cache`. Queries then need a query context with a raster cache.
+    pub cache_raster_operators: bool,
 }
 
 impl TestDefault for StatisticsWrappingMockExecutionContext {
     fn test_default() -> Self {
         Self {
             inner: MockExecutionContext::test_default(),
+            cache_raster_operators: false,
         }
     }
 }
@@ -542,7 +546,13 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         op: Box<dyn InitializedRasterOperator>,
         span: CreateSpan,
     ) -> Box<dyn InitializedRasterOperator> {
-        InitializedOperatorWrapper::new(op, span).boxed()
+        let wrapped = InitializedOperatorWrapper::new(op, span).boxed();
+        if self.cache_raster_operators {
+            return Box::new(
+                crate::cache::new_raster_cache::RasterCacheOperator::wrap_operator(wrapped),
+            );
+        }
+        wrapped
     }
 
     fn wrap_initialized_vector_operator(

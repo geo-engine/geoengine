@@ -16,6 +16,12 @@
 //!   `MultiBandGdalSource` with one file per band, as the STAC provider delivers them. All
 //!   patterns read COGs (the mosaics, Landsat, Sentinel-1 and CLMS sources); the Sentinel-2
 //!   patterns also read JP2 (Sentinel-2 L2A), warm and cold.
+//! - `viewport`: the session of a map client on some of the layer patterns: a 3×3 view of map tiles,
+//!   then a pan by one column and by one row (15 tiles), one tile after the other or 6 at once like a
+//!   browser, without and with the raster cache around every operator, as the server wraps them with
+//!   `[cache] enable_new_raster_cache`. Each session starts with an empty cache, so it shows what the
+//!   whole tiles that operators compute give back to the next map tiles of the same view. Before
+//!   timing, it checks that the cache does not change the PNGs.
 //!
 //! The scenes are synthetic Sentinel-2 like `u16` bands, written once to `CARGO_TARGET_TMPDIR`
 //! (the first run takes a few minutes for the JP2 files).
@@ -31,6 +37,7 @@ use common::{Env, expression, metrics, stack};
 use criterion::{
     BenchmarkGroup, Criterion, criterion_group, criterion_main, measurement::WallTime,
 };
+use futures::StreamExt;
 use gdal::{
     DriverManager,
     raster::{Buffer, RasterCreationOptions},
@@ -40,12 +47,13 @@ use geoengine_datatypes::{
     dataset::NamedData,
     operations::image::{Colorizer, RasterColorizer, RgbParams, RgbaColor},
     primitives::{
-        AxisAlignedRectangle, DateTime, Measurement, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeInterval,
+        AxisAlignedRectangle, CacheTtlSeconds, DateTime, Measurement, RasterQueryRectangle,
+        SpatialPartition2D, SpatialResolution, TimeInterval,
     },
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use geoengine_operators::{
+    cache::new_raster_cache::NewRasterCacheEnum,
     call_on_generic_raster_processor,
     engine::{
         ExecutionContext, ProcessingGraphOperatorPath, RasterBandDescriptor, RasterBandDescriptors,
@@ -65,6 +73,7 @@ use geoengine_operators::{
 };
 use std::{
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tracing::Instrument;
@@ -80,6 +89,8 @@ const STAGE_RUNS: u32 = 20;
 const WRITE_ROWS: usize = 512;
 /// The bands of the synthetic scene, named after the Sentinel-2 bands the templates use
 const BANDS: [&str; 4] = ["B02", "B03", "B04", "B08"];
+/// The size of the raster cache of a `viewport` session; it holds all of its tiles
+const CACHE_BYTES: usize = 1 << 30;
 
 #[derive(Clone, Copy)]
 enum Format {
@@ -334,12 +345,13 @@ fn layer_patterns(data: &NamedData) -> Vec<(&'static str, TypedRasterOperator, R
     ]
 }
 
-/// The bounds of the EPSG:3857 tile at `zoom` that contains `CENTER`
-fn tile_bounds(zoom: u8) -> SpatialPartition2D {
+/// The bounds of the EPSG:3857 tile at `zoom`, `dx` columns right of and `dy` rows below the one
+/// that contains `CENTER`
+fn tile_bounds(zoom: u8, (dx, dy): (i32, i32)) -> SpatialPartition2D {
     const HALF_WORLD: f64 = 20_037_508.342_789_244;
     let size = 2. * HALF_WORLD / f64::from(1_u32 << zoom);
-    let x = ((CENTER.0 + HALF_WORLD) / size).floor();
-    let y = ((HALF_WORLD - CENTER.1) / size).floor();
+    let x = ((CENTER.0 + HALF_WORLD) / size).floor() + f64::from(dx);
+    let y = ((HALF_WORLD - CENTER.1) / size).floor() + f64::from(dy);
     SpatialPartition2D::new(
         (-HALF_WORLD + x * size, HALF_WORLD - y * size).into(),
         (-HALF_WORLD + (x + 1.) * size, HALF_WORLD - (y + 1.) * size).into(),
@@ -347,16 +359,18 @@ fn tile_bounds(zoom: u8) -> SpatialPartition2D {
     .unwrap()
 }
 
-/// Same steps as `queries::raster_grid` for a WMS `GetMap`, after loading the processing graph
+/// Same steps as `queries::raster_grid` for a WMS `GetMap`, after loading the processing graph.
+/// `cache` must be set if the execution context caches the raster operators.
 async fn render_tile(
     env: &Env,
     source: TypedRasterOperator,
-    zoom: u8,
+    (zoom, offset): (u8, (i32, i32)),
     colorizer: &RasterColorizer,
-) {
+    cache: Option<Arc<NewRasterCacheEnum>>,
+) -> Vec<u8> {
     let exec_ctx = &env.exe_ctx;
     let crs = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
-    let bounds = tile_bounds(zoom);
+    let bounds = tile_bounds(zoom, offset);
     let resolution = SpatialResolution::new(
         bounds.size_x() / f64::from(TILE_SIZE),
         bounds.size_y() / f64::from(TILE_SIZE),
@@ -389,7 +403,7 @@ async fn render_tile(
     let query = RasterQueryRectangle::new(grid_bounds, time, colorizer.band_selection());
 
     let mut query_ctx = env.new_query_ctx();
-    query_ctx.new_raster_cache = None; // measure computation, not cache hits
+    query_ctx.new_raster_cache = cache;
 
     let (png, _) = call_on_generic_raster_processor!(
         wrapped.initialized_operator.query_processor().unwrap(),
@@ -405,7 +419,7 @@ async fn render_tile(
         ).await
     )
     .unwrap();
-    std::hint::black_box(png);
+    png
 }
 
 /// Cold: the GDAL workers close their datasets before each tile; the OS page cache stays warm
@@ -436,7 +450,8 @@ fn bench_tile(
             for _ in 0..iters {
                 clear_caches(env, cold).await;
                 let start = Instant::now();
-                render_tile(env, source.clone(), zoom, colorizer).await;
+                // measure computation, not cache hits
+                render_tile(env, source.clone(), (zoom, (0, 0)), colorizer, None).await;
                 elapsed += start.elapsed();
             }
             elapsed
@@ -450,9 +465,138 @@ fn bench_tile(
     metrics::record(&format!("{group_name}/{name}"), STAGE_RUNS, || {
         env.runtime.block_on(async {
             clear_caches(env, cold).await;
-            render_tile(env, source.clone(), zoom, colorizer).await;
+            render_tile(env, source.clone(), (zoom, (0, 0)), colorizer, None).await;
         });
     });
+}
+
+/// The map tiles of a client session, as offsets from the center tile: a 3×3 view, then a pan by
+/// one column to the right and one row down
+fn viewport_tiles() -> Vec<(i32, i32)> {
+    let view = |x0: i32, y0: i32| (y0..y0 + 3).flat_map(move |y| (x0..x0 + 3).map(move |x| (x, y)));
+    let mut tiles: Vec<_> = view(-1, -1).collect();
+    for tile in view(0, -1).chain(view(0, 0)) {
+        if !tiles.contains(&tile) {
+            tiles.push(tile);
+        }
+    }
+    tiles
+}
+
+/// Renders the tiles of a session, `parallel` at once, all through `cache`, and returns their PNGs
+async fn render_session(
+    env: &Env,
+    (source, colorizer): (&TypedRasterOperator, &RasterColorizer),
+    zoom: u8,
+    parallel: usize,
+    cache: Option<Arc<NewRasterCacheEnum>>,
+) -> Vec<Vec<u8>> {
+    futures::stream::iter(viewport_tiles())
+        .map(|offset| {
+            render_tile(
+                env,
+                source.clone(),
+                (zoom, offset),
+                colorizer,
+                cache.clone(),
+            )
+        })
+        .buffered(parallel)
+        .collect()
+        .await
+}
+
+/// Times a session as `viewport/<name>`, each with an empty cache if `cached`, then prints what the
+/// cache did in one session and records the stages if the metrics are enabled
+fn bench_session(
+    group: &mut BenchmarkGroup<WallTime>,
+    env: &Env,
+    name: &str,
+    layer: (&TypedRasterOperator, &RasterColorizer),
+    zoom: u8,
+    parallel: usize,
+) {
+    let cached = env.exe_ctx.cache_raster_operators;
+    let new_cache = || cached.then(|| Arc::new(NewRasterCacheEnum::new_fifo(CACHE_BYTES)));
+    group.bench_function(name, |b| {
+        b.to_async(&env.runtime).iter_custom(|iters| async move {
+            let mut elapsed = Duration::ZERO;
+            for _ in 0..iters {
+                let cache = new_cache();
+                let start = Instant::now();
+                std::hint::black_box(render_session(env, layer, zoom, parallel, cache).await);
+                elapsed += start.elapsed();
+            }
+            elapsed
+        });
+    });
+    if let Some(cache) = new_cache() {
+        env.runtime.block_on(render_session(
+            env,
+            layer,
+            zoom,
+            parallel,
+            Some(cache.clone()),
+        ));
+        eprintln!("viewport/{name}: cache per session {:?}", cache.stats());
+    }
+    if common::metrics_enabled() {
+        metrics::record(&format!("viewport/{name}"), 3, || {
+            env.runtime
+                .block_on(render_session(env, layer, zoom, parallel, new_cache()));
+        });
+    }
+}
+
+fn viewport(
+    c: &mut Criterion,
+    env: &mut Env,
+    layers: &[(String, TypedRasterOperator, RasterColorizer)],
+) {
+    const ZOOMS: [u8; 2] = [12, 15];
+    // as `[cache] default_ttl_seconds`: with the default of 0, nothing would be cached
+    env.exe_ctx.inner.default_cache_ttl = CacheTtlSeconds::new(3600);
+
+    for (name, source, colorizer) in layers {
+        for zoom in ZOOMS {
+            env.exe_ctx.cache_raster_operators = false;
+            let uncached =
+                env.runtime
+                    .block_on(render_session(env, (source, colorizer), zoom, 1, None));
+            env.exe_ctx.cache_raster_operators = true;
+            let cache = Some(Arc::new(NewRasterCacheEnum::new_fifo(CACHE_BYTES)));
+            let cached =
+                env.runtime
+                    .block_on(render_session(env, (source, colorizer), zoom, 6, cache));
+            assert!(
+                uncached == cached,
+                "{name}/z{zoom}: the cache changes the PNGs"
+            );
+        }
+    }
+
+    let mut group = c.benchmark_group("viewport");
+    group.sample_size(10);
+    for cached in [false, true] {
+        env.exe_ctx.cache_raster_operators = cached;
+        let cache = if cached { "cache" } else { "no_cache" };
+        for (name, source, colorizer) in layers {
+            for zoom in ZOOMS {
+                for parallel in [1, 6] {
+                    bench_session(
+                        &mut group,
+                        env,
+                        &format!("{name}/z{zoom}/{cache}/parallel{parallel}"),
+                        (source, colorizer),
+                        zoom,
+                        parallel,
+                    );
+                }
+            }
+        }
+    }
+    group.finish();
+    env.exe_ctx.cache_raster_operators = false;
 }
 
 fn map_tile(c: &mut Criterion) {
@@ -471,7 +615,7 @@ fn map_tile(c: &mut Criterion) {
         params: GdalSourceParameters::new(env.add_data("utm_cog", Box::new(meta_data))),
     });
     // TODO: use a real colorizer for the input range
-    let colorizer = default_colorizer_gradient::<u16>().into();
+    let colorizer: RasterColorizer = default_colorizer_gradient::<u16>().into();
 
     let mut group = c.benchmark_group("map_tile");
     for (cold, suffix) in [(false, ""), (true, "_cold")] {
@@ -529,6 +673,26 @@ fn map_tile(c: &mut Criterion) {
         }
     }
     group.finish();
+
+    let mut layers = vec![("source_cog".to_string(), source, colorizer)];
+    for (data, format, patterns) in [
+        (
+            &cog,
+            "cog",
+            ["normalized_difference", "stacked_expressions"],
+        ),
+        (&jp2, "jp2", ["band_filter_rgb", "normalized_difference"]),
+    ] {
+        layers.extend(
+            layer_patterns(data)
+                .into_iter()
+                .filter(|(pattern, ..)| patterns.contains(pattern))
+                .map(|(pattern, source, colorizer)| {
+                    (format!("{pattern}_{format}"), source, colorizer)
+                }),
+        );
+    }
+    viewport(c, &mut env, &layers);
 }
 
 criterion_group!(benches, map_tile);
