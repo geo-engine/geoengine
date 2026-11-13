@@ -342,7 +342,10 @@ impl Env {
         ));
         Self {
             runtime,
-            exe_ctx: StatisticsWrappingMockExecutionContext { inner: exe_ctx },
+            exe_ctx: StatisticsWrappingMockExecutionContext {
+                inner: exe_ctx,
+                cache_raster_operators: false,
+            },
             query_ctx,
             raster,
             start,
