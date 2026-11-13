@@ -450,7 +450,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, TimeInstance, TimeInterval, TimeStep},
         raster::{
-            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, TileIdx, TileSize,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, TileIdx, TileOverlap, TileSize,
             TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,

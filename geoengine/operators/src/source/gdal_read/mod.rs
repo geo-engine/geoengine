@@ -392,6 +392,7 @@ mod tests {
         let tile_information = TileInformation {
             tile_size: TileSize::new_unchecked(8, 8),
             tile_position: [0, 0].into(),
+            overlap: geoengine_datatypes::raster::TileOverlap::zero(),
             global_geo_transform: GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
         };
 

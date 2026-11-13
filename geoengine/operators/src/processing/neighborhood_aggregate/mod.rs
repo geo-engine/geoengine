@@ -330,8 +330,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::raster::{TileIdx, TileOverlap, TileSize};
-
     use super::*;
     use crate::{
         engine::{MockExecutionContext, MultipleRasterSources, RasterOperator},
