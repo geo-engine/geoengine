@@ -8,8 +8,8 @@ An operator that produces raster data.
 Name | Type
 ------------ | -------------
 `type` | string
-`params` | [TimeShiftParameters](TimeShiftParameters.md)
-`sources` | [SingleRasterOrVectorSource](SingleRasterOrVectorSource.md)
+`params` | [WarpParameters](WarpParameters.md)
+`sources` | [SingleRasterSource](SingleRasterSource.md)
 
 ## Example
 

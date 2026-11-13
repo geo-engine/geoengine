@@ -38,6 +38,7 @@ const Reprojection_1 = require("./Reprojection");
 const Temperature_1 = require("./Temperature");
 const TemporalRasterAggregation_1 = require("./TemporalRasterAggregation");
 const TimeShift_1 = require("./TimeShift");
+const Warp_1 = require("./Warp");
 function RasterOperatorFromJSON(json) {
     return RasterOperatorFromJSONTyped(json, false);
 }
@@ -88,6 +89,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, TemporalRasterAggregation_1.TemporalRasterAggregationFromJSONTyped)(json, true), { type: 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, (0, TimeShift_1.TimeShiftFromJSONTyped)(json, true), { type: 'TimeShift' });
+        case 'Warp':
+            return Object.assign({}, (0, Warp_1.WarpFromJSONTyped)(json, true), { type: 'Warp' });
         default:
             return json;
     }
@@ -142,6 +145,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, TemporalRasterAggregation_1.TemporalRasterAggregationToJSON)(value), { 'type': 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, (0, TimeShift_1.TimeShiftToJSON)(value), { 'type': 'TimeShift' });
+        case 'Warp':
+            return Object.assign({}, (0, Warp_1.WarpToJSON)(value), { 'type': 'Warp' });
         default:
             return value;
     }

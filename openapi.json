@@ -13065,6 +13065,9 @@
           },
           {
             "$ref": "#/components/schemas/TimeShift"
+          },
+          {
+            "$ref": "#/components/schemas/Warp"
           }
         ],
         "description": "An operator that produces raster data.",
@@ -13091,7 +13094,8 @@
             "Reprojection": "#/components/schemas/Reprojection",
             "Temperature": "#/components/schemas/Temperature",
             "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation",
-            "TimeShift": "#/components/schemas/TimeShift"
+            "TimeShift": "#/components/schemas/TimeShift",
+            "Warp": "#/components/schemas/Warp"
           }
         }
       },
@@ -17580,6 +17584,98 @@
       },
       "VolumeName": {
         "type": "string"
+      },
+      "Warp": {
+        "type": "object",
+        "title": "Warp",
+        "description": "The `Warp` operator puts a raster onto another grid in one step: another spatial reference,\nanother resolution and another grid origin, in any combination.\n\nFor each output pixel, the operator uses the value of the input pixel under the center of the\noutput pixel. The output resolution can be coarser or finer than the input resolution, also\ncoarser in one axis and finer in the other.\n\nGeo Engine uses `Warp` to answer queries, e.g., WMS requests, in a spatial reference or at a\nresolution that differs from the processing graph's.\n\n## Errors\n\nThe operator returns an error if the input has no spatial reference or if the input data\ncannot be reprojected to the target spatial reference.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Warp"
+            ]
+          },
+          "params": {
+            "$ref": "#/components/schemas/WarpParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          }
+        },
+        "examples": [
+          {
+            "type": "Warp",
+            "params": {
+              "targetSpatialReference": "EPSG:3857",
+              "outputResolution": {
+                "x": 20000.0,
+                "y": 10000.0
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "WarpMethod": {
+        "type": "string",
+        "enum": [
+          "nearestNeighbor"
+        ]
+      },
+      "WarpParameters": {
+        "type": "object",
+        "description": "Parameters for the `Warp` operator.",
+        "properties": {
+          "targetSpatialReference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Target spatial reference system. Defaults to the spatial reference of the input.",
+            "examples": [
+              "EPSG:3857"
+            ]
+          },
+          "outputResolution": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SpatialResolution",
+                "description": "Output resolution (`x`, `y`) in units of the target spatial reference.\nDefaults to the resolution of the (reprojected) input."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outputOriginReference": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Optional reference point used to align the output grid origin."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "$ref": "#/components/schemas/WarpMethod",
+            "description": "Resampling method."
+          }
+        }
       },
       "WcsRequest": {
         "type": "string",
