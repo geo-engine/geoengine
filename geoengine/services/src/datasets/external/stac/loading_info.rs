@@ -485,7 +485,7 @@ impl StacMultiBandMetaData {
         let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
 
         for asset in item.assets.values() {
-            self.process_stac_asset(asset, item_epsg, time, z_index, files)?;
+            self.process_stac_asset(item, asset, item_epsg, time, z_index, files)?;
         }
 
         Ok(())
@@ -536,6 +536,7 @@ impl StacMultiBandMetaData {
 
     fn process_stac_asset(
         &self,
+        item: &Item,
         asset: &stac::Asset,
         item_epsg: Option<u32>,
         time: TimeInterval,
@@ -546,11 +547,11 @@ impl StacMultiBandMetaData {
             return Ok(());
         }
 
-        let Some(asset_epsg) = common::epsg_code_from_fields(
+        let Some(asset_epsg) = common::epsg_code_from_asset_or_item(
+            asset,
+            item_epsg,
             common::StacExtensionMajorVersion::V2,
-            &asset.additional_fields,
-        )
-        .or(item_epsg) else {
+        ) else {
             return Ok(());
         };
 
@@ -560,8 +561,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         }
 
-        let Some(geo_transform) = common::geo_transform_from_fields(&asset.additional_fields)
-        else {
+        let Some(geo_transform) = common::geo_transform_from_asset_or_item(asset, item) else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing geo transform",
                 asset.href
@@ -569,7 +569,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let Some((height, width)) = common::proj_shape_from_fields(&asset.additional_fields) else {
+        let Some((height, width)) = common::proj_shape_from_asset_or_item(asset, item) else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing projection shape",
                 asset.href
@@ -1396,6 +1396,104 @@ mod tests {
                 assert_eq!(info.tile_files(*step, tile, 0), [] as [_; 0]);
             }
         }
+    }
+
+    #[tokio::test]
+    async fn it_loads_assets_with_item_level_projection_fields() {
+        // CLMS WSI items on CODE-DE declare `proj:code`, `proj:shape` and a 9-element
+        // `proj:transform` only in `properties`, not on the assets.
+        let server = Server::run();
+        let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
+        let mut dataset = definition.datasets[0].clone();
+        dataset.resolution = SpatialResolution::new_unchecked(100.0, 100.0);
+        dataset.projection = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035);
+        dataset.spatial_grid = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::new_unchecked((4_200_000.0, 3_100_000.0).into(), 100.0, -100.0),
+            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([999, 999])).unwrap(),
+        );
+        dataset.bands = vec![crate::datasets::external::stac::StacProviderDatasetBand {
+            asset_band: crate::datasets::external::stac::StacAssetBand {
+                asset_title: "WCD".to_owned(),
+                band_name: Some("WCD".to_owned()),
+            },
+            band_descriptor: RasterBandDescriptor::new_unitless("WCD".to_owned()),
+        }];
+        let meta = StacMultiBandMetaData {
+            api_url: definition.api_url,
+            collection_name: definition.collection_name,
+            s3_config: None,
+            time_dimension: definition.time_dimension,
+            dataset,
+            page_limit: definition.page_limit,
+            client: StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
+            )
+            .unwrap(),
+            query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+            max_concurrent_cell_searches: 8,
+            grid: StacGrid::default(),
+            cache_ttl_secs: definition.cache_ttl_secs,
+        };
+
+        let item: Item = serde_json::from_value(serde_json::json!({
+            "type": "Feature",
+            "stac_version": "1.1.0",
+            "id": "CLMS_WSI_WCD_100m_E42N30_20250901P1Y_COMB_V100",
+            "geometry": null,
+            "properties": {
+                "datetime": "2025-09-01T00:00:00Z",
+                "proj:code": "EPSG:3035",
+                "proj:shape": [1000, 1000],
+                "proj:transform": [100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1]
+            },
+            "links": [],
+            "assets": {
+                "WCD": {
+                    "href": "https://example.com/WCD.tif",
+                    "title": "WCD",
+                    "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                    "data_type": "uint16"
+                },
+                // an explicit `null` CRS marks the asset as unlocated, so it must not inherit
+                // the item's projection fields even though title and data type match
+                "WCD_thumbnail": {
+                    "href": "https://example.com/WCD_thumbnail.tif",
+                    "title": "WCD",
+                    "type": "image/tiff; application=geotiff",
+                    "data_type": "uint16",
+                    "proj:code": null
+                }
+            }
+        }))
+        .unwrap();
+
+        let mut files = Vec::new();
+        meta.process_stac_item(&item, &mut files).unwrap();
+
+        assert_eq!(files.len(), 1, "only the located asset yields a file");
+        let file = &files[0];
+        assert_eq!(
+            file.params.file_path,
+            PathBuf::from("https://example.com/WCD.tif")
+        );
+        assert_eq!(file.params.width, 1000);
+        assert_eq!(file.params.height, 1000);
+        assert_eq!(
+            file.params.geo_transform.origin_coordinate,
+            (4_200_000.0, 3_100_000.0).into()
+        );
+        assert_eq!(file.params.geo_transform.x_pixel_size.get(), 100.0);
+        assert_eq!(file.params.geo_transform.y_pixel_size.get(), -100.0);
+        assert_eq!(
+            file.spatial_partition,
+            SpatialPartition2D::new(
+                (4_200_000.0, 3_100_000.0).into(),
+                (4_300_000.0, 3_000_000.0).into()
+            )
+            .unwrap()
+        );
     }
 
     fn stac_items_response() -> serde_json::Value {
