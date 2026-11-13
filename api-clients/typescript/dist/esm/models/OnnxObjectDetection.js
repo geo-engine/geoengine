@@ -16,13 +16,15 @@ import { SingleRasterSourceFromJSON, SingleRasterSourceToJSON, } from './SingleR
  * @export
  */
 export const OnnxObjectDetectionTypeEnum = {
-    OnnxObjectDetection: 'OnnxObjectDetection'
+    OnnxObjectDetection: 'OnnxObjectDetection',
 };
 /**
  * Check if a given object implements the OnnxObjectDetection interface.
  */
 export function instanceOfOnnxObjectDetection(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'OnnxObjectDetection')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

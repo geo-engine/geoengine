@@ -18,8 +18,6 @@
 export interface DetectionLayoutOneOfYoloBoxes {
     /**
      *
-     * @type {boolean}
-     * @memberof DetectionLayoutOneOfYoloBoxes
      */
     objectness: boolean;
 }

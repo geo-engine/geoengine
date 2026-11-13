@@ -16,8 +16,6 @@
 export interface AddTileOverlapParameters {
     /**
      * Overlap halo in pixels `[rows, columns]` added on every side of each tile.
-     * @type {Array<number>}
-     * @memberof AddTileOverlapParameters
      */
     overlap: Array<number>;
 }

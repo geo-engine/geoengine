@@ -17,51 +17,35 @@ import type { DetectionLayout } from './DetectionLayout';
 export interface OnnxObjectDetectionParameters {
     /**
      * The object-detection model to run.
-     * @type {string}
-     * @memberof OnnxObjectDetectionParameters
      */
     model: string;
     /**
      * The spatial resolution (in linear units per pixel) the model was trained at.
-     * @type {number}
-     * @memberof OnnxObjectDetectionParameters
      */
     expectedResolution: number;
     /**
      * Relative tolerance for the resolution check. A source is accepted when
      * `|actual - expected| / expected <= resolution_epsilon`.
-     * @type {number}
-     * @memberof OnnxObjectDetectionParameters
      */
     resolutionEpsilon: number;
     /**
      * How the model's raw output tensor is interpreted.
-     * @type {DetectionLayout}
-     * @memberof OnnxObjectDetectionParameters
      */
     layout: DetectionLayout;
     /**
      * Number of object classes the model can predict.
-     * @type {number}
-     * @memberof OnnxObjectDetectionParameters
      */
     numClasses: number;
     /**
      * Confidence threshold applied to decoded detections.
-     * @type {number}
-     * @memberof OnnxObjectDetectionParameters
      */
     confThreshold: number;
     /**
      * `IoU` threshold for non-maximum suppression.
-     * @type {number}
-     * @memberof OnnxObjectDetectionParameters
      */
     iouThreshold: number;
     /**
      * Optional human-readable class labels, indexed by class id.
-     * @type {Array<string>}
-     * @memberof OnnxObjectDetectionParameters
      */
     classNames?: Array<string>;
 }

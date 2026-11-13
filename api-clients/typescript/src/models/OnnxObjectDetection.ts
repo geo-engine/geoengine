@@ -47,20 +47,14 @@ import {
 export interface OnnxObjectDetection {
     /**
      * 
-     * @type {OnnxObjectDetectionTypeEnum}
-     * @memberof OnnxObjectDetection
      */
     type: OnnxObjectDetectionTypeEnum;
     /**
      * 
-     * @type {OnnxObjectDetectionParameters}
-     * @memberof OnnxObjectDetection
      */
     params: OnnxObjectDetectionParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof OnnxObjectDetection
      */
     sources: SingleRasterSource;
 }
@@ -70,7 +64,7 @@ export interface OnnxObjectDetection {
  * @export
  */
 export const OnnxObjectDetectionTypeEnum = {
-    OnnxObjectDetection: 'OnnxObjectDetection'
+    OnnxObjectDetection: 'OnnxObjectDetection',
 } as const;
 export type OnnxObjectDetectionTypeEnum = typeof OnnxObjectDetectionTypeEnum[keyof typeof OnnxObjectDetectionTypeEnum];
 
@@ -80,6 +74,8 @@ export type OnnxObjectDetectionTypeEnum = typeof OnnxObjectDetectionTypeEnum[key
  */
 export function instanceOfOnnxObjectDetection(value: object): value is OnnxObjectDetection {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'OnnxObjectDetection') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

@@ -12,6 +12,13 @@
  */
 
 import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
+import type { AddTileOverlap } from './AddTileOverlap';
+import {
+    instanceOfAddTileOverlap,
+    AddTileOverlapFromJSON,
+    AddTileOverlapFromJSONTyped,
+    AddTileOverlapToJSON,
+} from './AddTileOverlap';
 import type { BandFilter } from './BandFilter';
 import {
     instanceOfBandFilter,
@@ -173,20 +180,13 @@ import {
     TimeShiftFromJSONTyped,
     TimeShiftToJSON,
 } from './TimeShift';
-import type { Warp } from './Warp';
-import {
-    instanceOfWarp,
-    WarpFromJSON,
-    WarpFromJSONTyped,
-    WarpToJSON,
-} from './Warp';
 
 /**
  * @type RasterOperator
  * An operator that produces raster data.
  * @export
  */
-export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'PolygonRasterization' } & PolygonRasterization | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'ReTile' } & ReTile | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift | { type: 'Warp' } & Warp;
+export type RasterOperator = { type: 'AddTileOverlap' } & AddTileOverlap | { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'PolygonRasterization' } & PolygonRasterization | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'ReTile' } & ReTile | { type: 'Reflectance' } & Reflectance | { type: 'RemoveTileOverlap' } & RemoveTileOverlap | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
 
 export function RasterOperatorFromJSON(json: any): RasterOperator {
     return RasterOperatorFromJSONTyped(json, false);
@@ -245,8 +245,6 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, TemporalRasterAggregationFromJSONTyped(json, true), { type: 'TemporalRasterAggregation' } as const);
         case 'TimeShift':
             return Object.assign({}, TimeShiftFromJSONTyped(json, true), { type: 'TimeShift' } as const);
-        case 'Warp':
-            return Object.assign({}, WarpFromJSONTyped(json, true), { type: 'Warp' } as const);
         default:
             return json;
     }
@@ -262,7 +260,7 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
     }
     switch (value['type']) {
         case 'AddTileOverlap':
-            return Object.assign({}, AddTileOverlapToJSON(value), { type: 'AddTileOverlap' } as const);
+            return Object.assign({}, AddTileOverlapToJSON(value), { 'type': 'AddTileOverlap' } as const);
         case 'BandFilter':
             return Object.assign({}, BandFilterToJSON(value), { 'type': 'BandFilter' } as const);
         case 'BandNeighborhoodAggregate':
@@ -299,6 +297,8 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
             return Object.assign({}, ReTileToJSON(value), { 'type': 'ReTile' } as const);
         case 'Reflectance':
             return Object.assign({}, ReflectanceToJSON(value), { 'type': 'Reflectance' } as const);
+        case 'RemoveTileOverlap':
+            return Object.assign({}, RemoveTileOverlapToJSON(value), { 'type': 'RemoveTileOverlap' } as const);
         case 'Reprojection':
             return Object.assign({}, ReprojectionToJSON(value), { 'type': 'Reprojection' } as const);
         case 'Temperature':
@@ -307,8 +307,6 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
             return Object.assign({}, TemporalRasterAggregationToJSON(value), { 'type': 'TemporalRasterAggregation' } as const);
         case 'TimeShift':
             return Object.assign({}, TimeShiftToJSON(value), { 'type': 'TimeShift' } as const);
-        case 'Warp':
-            return Object.assign({}, WarpToJSON(value), { 'type': 'Warp' } as const);
         default:
             return value;
     }
@@ -319,27 +317,6 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
 * Check if a given object implements the RasterOperator interface.
 */
 export function instanceOfRasterOperator(value: object): value is RasterOperator {
-    return instanceOfBandFilter(value)
-        || instanceOfBandNeighborhoodAggregate(value)
-        || instanceOfBandwiseExpression(value)
-        || instanceOfDownsampling(value)
-        || instanceOfExpression(value)
-        || instanceOfGdalSource(value)
-        || instanceOfInterpolation(value)
-        || instanceOfMultiBandGdalSource(value)
-        || instanceOfNeighborhoodAggregate(value)
-        || instanceOfOnnx(value)
-        || instanceOfPolygonRasterization(value)
-        || instanceOfRadiance(value)
-        || instanceOfRasterScaling(value)
-        || instanceOfRasterStacker(value)
-        || instanceOfRasterTypeConversion(value)
-        || instanceOfRasterization(value)
-        || instanceOfReTile(value)
-        || instanceOfReflectance(value)
-        || instanceOfReprojection(value)
-        || instanceOfTemperature(value)
-        || instanceOfTemporalRasterAggregation(value)
-        || instanceOfTimeShift(value)
-        || instanceOfWarp(value);
+    return instanceOfExpression(value)
+        || instanceOfGdalSource(value);
 }

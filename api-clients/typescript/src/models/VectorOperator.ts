@@ -168,6 +168,8 @@ export function VectorOperatorToJSONTyped(value?: VectorOperator | null, ignoreD
             return Object.assign({}, MockPointSourceToJSON(value), { 'type': 'MockPointSource' } as const);
         case 'OgrSource':
             return Object.assign({}, OgrSourceToJSON(value), { 'type': 'OgrSource' } as const);
+        case 'OnnxObjectDetection':
+            return Object.assign({}, OnnxObjectDetectionToJSON(value), { 'type': 'OnnxObjectDetection' } as const);
         case 'PointInPolygonFilter':
             return Object.assign({}, PointInPolygonFilterToJSON(value), { 'type': 'PointInPolygonFilter' } as const);
         case 'RasterVectorJoin':

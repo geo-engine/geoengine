@@ -21,8 +21,6 @@ export interface RemoveTileOverlapParameters {
     /**
      * Halo cropped from every side in pixels `[rows, columns]`.
      * If `None`, all available overlap is removed.
-     * @type {Array<number>}
-     * @memberof RemoveTileOverlapParameters
      */
     amount?: Array<number> | null;
 }
@@ -44,7 +42,7 @@ export function RemoveTileOverlapParametersFromJSONTyped(json: any, ignoreDiscri
     }
     return {
         
-        'amount': json['amount'] == null ? undefined : json['amount'],
+        'amount': json['amount'] === undefined ? undefined : json['amount'] === null ? null : json['amount'],
     };
 }
 

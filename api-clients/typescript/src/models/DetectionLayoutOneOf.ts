@@ -30,8 +30,6 @@ import {
 export interface DetectionLayoutOneOf {
     /**
      * 
-     * @type {DetectionLayoutOneOfYoloBoxes}
-     * @memberof DetectionLayoutOneOf
      */
     yoloBoxes: DetectionLayoutOneOfYoloBoxes;
 }
