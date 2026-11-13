@@ -258,6 +258,7 @@ pub(crate) async fn session_project_handler<C: ApplicationContext<Session = User
     Ok(HttpResponse::Ok())
 }
 
+/// Sets the view (spatial and temporal extent) of the current session.
 // TODO: /view instead of /session/view
 #[utoipa::path(
     tag = "Session",

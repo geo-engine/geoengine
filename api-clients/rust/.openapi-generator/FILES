@@ -457,6 +457,9 @@ docs/VisualPointClustering.md
 docs/VisualPointClusteringParameters.md
 docs/Volume.md
 docs/VolumeFileLayersResponse.md
+docs/Warp.md
+docs/WarpMethod.md
+docs/WarpParameters.md
 docs/WcsRequest.md
 docs/WcsService.md
 docs/WcsVersion.md
@@ -929,6 +932,9 @@ src/models/visual_point_clustering.rs
 src/models/visual_point_clustering_parameters.rs
 src/models/volume.rs
 src/models/volume_file_layers_response.rs
+src/models/warp.rs
+src/models/warp_method.rs
+src/models/warp_parameters.rs
 src/models/wcs_request.rs
 src/models/wcs_service.rs
 src/models/wcs_version.rs

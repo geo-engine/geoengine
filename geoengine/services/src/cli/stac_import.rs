@@ -871,6 +871,7 @@ impl StacImporter {
                                 }, // TODO from  query bbox and asset proj:shape??
                             },
                             descriptor: SpatialGridDescriptorState::Source,
+                            max_overview_level: None,
                         },
                         bands: RasterBandDescriptors::new(bands.clone())
                             .context(format!("Failed to create band descriptors {bands:?}"))?,

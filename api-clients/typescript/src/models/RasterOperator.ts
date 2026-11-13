@@ -159,13 +159,20 @@ import {
     TimeShiftFromJSONTyped,
     TimeShiftToJSON,
 } from './TimeShift';
+import type { Warp } from './Warp';
+import {
+    instanceOfWarp,
+    WarpFromJSON,
+    WarpFromJSONTyped,
+    WarpToJSON,
+} from './Warp';
 
 /**
  * @type RasterOperator
  * An operator that produces raster data.
  * @export
  */
-export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'PolygonRasterization' } & PolygonRasterization | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift;
+export type RasterOperator = { type: 'BandFilter' } & BandFilter | { type: 'BandNeighborhoodAggregate' } & BandNeighborhoodAggregate | { type: 'BandwiseExpression' } & BandwiseExpression | { type: 'Downsampling' } & Downsampling | { type: 'Expression' } & Expression | { type: 'GdalSource' } & GdalSource | { type: 'Interpolation' } & Interpolation | { type: 'MultiBandGdalSource' } & MultiBandGdalSource | { type: 'NeighborhoodAggregate' } & NeighborhoodAggregate | { type: 'Onnx' } & Onnx | { type: 'PolygonRasterization' } & PolygonRasterization | { type: 'Radiance' } & Radiance | { type: 'RasterScaling' } & RasterScaling | { type: 'RasterStacker' } & RasterStacker | { type: 'RasterTypeConversion' } & RasterTypeConversion | { type: 'Rasterization' } & Rasterization | { type: 'Reflectance' } & Reflectance | { type: 'Reprojection' } & Reprojection | { type: 'Temperature' } & Temperature | { type: 'TemporalRasterAggregation' } & TemporalRasterAggregation | { type: 'TimeShift' } & TimeShift | { type: 'Warp' } & Warp;
 
 export function RasterOperatorFromJSON(json: any): RasterOperator {
     return RasterOperatorFromJSONTyped(json, false);
@@ -218,6 +225,8 @@ export function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: bool
             return Object.assign({}, TemporalRasterAggregationFromJSONTyped(json, true), { type: 'TemporalRasterAggregation' } as const);
         case 'TimeShift':
             return Object.assign({}, TimeShiftFromJSONTyped(json, true), { type: 'TimeShift' } as const);
+        case 'Warp':
+            return Object.assign({}, WarpFromJSONTyped(json, true), { type: 'Warp' } as const);
         default:
             return json;
     }
@@ -274,6 +283,8 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
             return Object.assign({}, TemporalRasterAggregationToJSON(value), { 'type': 'TemporalRasterAggregation' } as const);
         case 'TimeShift':
             return Object.assign({}, TimeShiftToJSON(value), { 'type': 'TimeShift' } as const);
+        case 'Warp':
+            return Object.assign({}, WarpToJSON(value), { 'type': 'Warp' } as const);
         default:
             return value;
     }
@@ -304,5 +315,6 @@ export function instanceOfRasterOperator(value: object): value is RasterOperator
         || instanceOfReprojection(value)
         || instanceOfTemperature(value)
         || instanceOfTemporalRasterAggregation(value)
-        || instanceOfTimeShift(value);
+        || instanceOfTimeShift(value)
+        || instanceOfWarp(value);
 }

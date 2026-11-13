@@ -1,0 +1,40 @@
+---
+title: Architecture
+sidebar:
+    order: 1
+---
+
+import ArchitectureDiagram from '../../../../components/docs/ArchitectureDiagram.astro';
+
+Geo Engine consists of a backend server and several clients that all use the same API.
+
+<ArchitectureDiagram />
+
+## Backend
+
+The backend is a Rust server.
+It is organized in three layers:
+
+- **Services** provide the REST API and the OGC services.
+  They manage the persistent state in PostgreSQL: datasets, layers and layer collections, projects, processing graphs, data connector definitions, users, roles, permissions and quotas.
+  The services translate requests into queries against the processing engine.
+- The **processing engine** evaluates [processing graphs](/docs/the-geo-engine/processing-graphs).
+  It contains the [operators](/docs/operators/) and building blocks for raster and vector streams.
+  Source operators load data from internal datasets, uploads and data connectors.
+- **Data types** define the primitives that operators exchange: raster tiles, feature collections (based on Apache Arrow), time intervals, bounding boxes, spatial references and plots.
+
+GDAL reads run in separate worker processes, not in the server process.
+A crash or a hanging read in GDAL therefore does not affect the server.
+
+## Clients
+
+- The **Python library** `geoengine` is the main interface for data scientists.
+  It returns results as GeoPandas data frames, xarray arrays or plots.
+  See the [Python Library](/docs/python/) reference.
+- The **web apps** are built with Angular and OpenLayers on shared libraries.
+  `gis` is the general app for exploring and analysing data, `eodyssey` and the dashboards target specific domains, and `manager` is for administrators.
+- **GIS software** like QGIS accesses Geo Engine through its [OGC services](/docs/api/ogc).
+- Other applications can use the [REST API](/docs/api/rest-api) directly or through the generated API clients for Python, Rust and TypeScript.
+
+The REST API is described by an OpenAPI specification.
+The specification is generated from the server code, and the API clients are generated from the specification.

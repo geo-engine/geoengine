@@ -1,6 +1,6 @@
 --- typescript/src/models/RasterOperator.ts
 +++ typescript/src/models/RasterOperator.ts
-@@ -280,3 +280,6 @@
+@@ -291,3 +291,6 @@
      }
  }
  
@@ -29,5 +29,6 @@ export function instanceOfRasterOperator(value: object): value is RasterOperator
         || instanceOfReprojection(value)
         || instanceOfTemperature(value)
         || instanceOfTemporalRasterAggregation(value)
-        || instanceOfTimeShift(value);
+        || instanceOfTimeShift(value)
+        || instanceOfWarp(value);
 +}

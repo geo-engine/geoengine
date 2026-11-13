@@ -449,6 +449,7 @@ async fn create_dataset_api(
                             },
                         },
                         descriptor: SpatialGridDescriptorState::Source,
+                        max_overview_level: None,
                     },
                     bands: RasterBandDescriptors::new(bands).context("Invalid band descriptors")?,
                 },

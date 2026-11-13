@@ -204,7 +204,7 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
     }
 }
 
-fn compute_output_spatial_grid(
+pub(crate) fn compute_output_spatial_grid(
     in_spatial_grid_descriptor: SpatialGridDescriptor,
     in_spatial_bounds: SpatialPartition2D,
     in_srs: SpatialReference,

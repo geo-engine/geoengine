@@ -13,6 +13,10 @@ import starlightLinksValidator from 'starlight-links-validator';
 export default defineConfig({
     site: 'https://www.geoengine.io',
 
+    redirects: {
+        '/docs/api/processing-graphs': '/docs/the-geo-engine/processing-graphs',
+    },
+
     vite: {
         plugins: [
             tailwindcss(),
@@ -36,6 +40,7 @@ export default defineConfig({
             input: '../openapi.json',
             operatorsOutputDir: './src/content/docs/docs/operators',
             plotsOutputDir: './src/content/docs/docs/plots',
+            endpointsOutputFile: './src/content/docs/docs/api/endpoints.md',
         }),
         pydocPlugin({
             outputDir: './src/content/docs/docs/python',
@@ -64,12 +69,17 @@ export default defineConfig({
                     link: '/docs/',
                 },
                 {
-                    label: 'The Geo Engine',
+                    label: 'Getting Started',
+                    items: [{autogenerate: {directory: 'docs/getting-started'}}],
+                    collapsed: false,
+                },
+                {
+                    label: 'Concepts',
                     items: [{autogenerate: {directory: 'docs/the-geo-engine'}}],
                     collapsed: false,
                 },
                 {
-                    label: 'API',
+                    label: 'Interfaces',
                     items: [{autogenerate: {directory: 'docs/api'}}],
                     collapsed: false,
                 },

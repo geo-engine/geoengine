@@ -6,7 +6,7 @@ import {LAYER_DB_PROVIDER_ID, LAYER_DB_ROOT_COLLECTION_ID, LayersService, timeSt
 import {MapService} from '@geoengine/core';
 import {coverageContains, parseCoverage} from './coverage';
 import type {GeographicCenter} from './coverage';
-import {DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
+import {DataSourceCategory, DataSourceDefinition, DataSourceLayer, DataSourceVariant, VisualizationPreset} from './data-sources';
 
 /**
  * Service for managing layers in the EOdyssey.
@@ -16,6 +16,13 @@ export class EOdysseyLayerService {
     readonly layerService = inject(LayersService);
     private readonly mapService = inject(MapService);
 
+    readonly selectedCategory = linkedSignal<DataSourceCategory[] | undefined, DataSourceCategory | undefined>({
+        source: () => (this.catalogueLoading() ? undefined : this.categories()),
+        computation: (categories, previous) => {
+            if (!categories) return previous?.value;
+            return categories.find((category) => category.key === previous?.value?.key) ?? categories[0];
+        },
+    });
     readonly selectedDataSource = linkedSignal<DataSourceDefinition[] | undefined, DataSourceDefinition | undefined>({
         source: () => (this.catalogueLoading() ? undefined : this.dataSources()),
         computation: (sources, previous) => {
@@ -87,12 +94,13 @@ export class EOdysseyLayerService {
         return error ? String(error) : undefined;
     });
 
-    private readonly catalogueResource: ResourceRef<DataSourceDefinition[] | undefined> = resource({
+    private readonly catalogueResource: ResourceRef<DataSourceCategory[] | undefined> = resource({
         params: () => LAYER_DB_ROOT_COLLECTION_ID,
         loader: ({params}) => this.loadCatalogue(params),
     });
 
-    readonly dataSources = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value() : []));
+    readonly categories = computed(() => (this.catalogueResource.hasValue() ? this.catalogueResource.value() : []));
+    readonly dataSources = computed(() => this.selectedCategory()?.sources ?? []);
     readonly catalogueLoading = computed(() => this.catalogueResource.isLoading());
     readonly currentVariants = computed(() => this.selectedDataSource()?.variants ?? []);
     readonly sortedVariants = computed(() =>
@@ -188,6 +196,11 @@ export class EOdysseyLayerService {
         untracked(() => void this.ensureVariantPresets(source, variant, true));
     }
 
+    setSelectedCategory(key: string): void {
+        const category = this.categories().find((candidate) => candidate.key === key);
+        if (category && category.key !== this.selectedCategory()?.key) this.selectedCategory.set(category);
+    }
+
     setSelectedDataSource(key: string): void {
         const dataSource = this.dataSources().find((source) => source.key === key);
         if (!dataSource || this.selectedDataSource()?.key === dataSource.key) {
@@ -227,15 +240,37 @@ export class EOdysseyLayerService {
         }
     }
 
-    /** Load the EDV -> data source -> region -> preset catalogue. */
-    private async loadCatalogue(rootCollectionId: string): Promise<DataSourceDefinition[]> {
+    /** Load EDV -> category -> data source -> region, leaving preset layers lazy. */
+    private async loadCatalogue(rootCollectionId: string): Promise<DataSourceCategory[]> {
         const edvCollection = await this.findItem(rootCollectionId, (item) => item.type === 'collection' && item.name === 'EDV');
         const edvCollectionId = edvCollection && getCollectionId(edvCollection);
         if (!edvCollectionId) {
             throw new Error('EDV collection was not found under the layer database root');
         }
-        const items = await this.allItems(edvCollectionId);
-        const sources = await Promise.all(items.filter(isCollection).map((item) => this.loadDataset(item)));
+        const items = (await this.allItems(edvCollectionId)).filter(isCollection);
+        // Keep existing deployments usable until their catalogue is bootstrapped with categories.
+        const legacySources = items.filter((item) => getProperties(item).has('edv:dataset'));
+        const categories = await Promise.all(
+            items
+                .filter((item) => !getProperties(item).has('edv:dataset'))
+                .map(async (item): Promise<DataSourceCategory> => ({
+                    key: item.id.collectionId,
+                    name: item.name,
+                    sources: await this.loadSources((await this.allItems(item.id.collectionId)).filter(isCollection)),
+                })),
+        );
+        if (legacySources.length) {
+            categories.push({key: edvCollectionId, name: 'Data Sources', sources: await this.loadSources(legacySources)});
+        }
+        requireUniqueKeys(
+            categories.flatMap((category) => category.sources),
+            'data source',
+        );
+        return categories.sort((a, b) => a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
+    }
+
+    private async loadSources(items: Extract<CollectionItem, {type: 'collection'}>[]): Promise<DataSourceDefinition[]> {
+        const sources = await Promise.all(items.map((item) => this.loadDataset(item)));
         requireUniqueKeys(sources, 'data source');
         return sources
             .filter((source) => source.variants.length > 0)

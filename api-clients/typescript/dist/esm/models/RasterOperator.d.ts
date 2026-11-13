@@ -29,6 +29,7 @@ import type { Reprojection } from './Reprojection';
 import type { Temperature } from './Temperature';
 import type { TemporalRasterAggregation } from './TemporalRasterAggregation';
 import type { TimeShift } from './TimeShift';
+import type { Warp } from './Warp';
 /**
  * @type RasterOperator
  * An operator that produces raster data.
@@ -76,7 +77,9 @@ export type RasterOperator = {
     type: 'TemporalRasterAggregation';
 } & TemporalRasterAggregation | {
     type: 'TimeShift';
-} & TimeShift;
+} & TimeShift | {
+    type: 'Warp';
+} & Warp;
 export declare function RasterOperatorFromJSON(json: any): RasterOperator;
 export declare function RasterOperatorFromJSONTyped(json: any, ignoreDiscriminator: boolean): RasterOperator;
 export declare function RasterOperatorToJSON(json: any): any;

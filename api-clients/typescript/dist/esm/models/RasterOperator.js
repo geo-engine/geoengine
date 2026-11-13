@@ -31,6 +31,7 @@ import { instanceOfReprojection, ReprojectionFromJSONTyped, ReprojectionToJSON, 
 import { instanceOfTemperature, TemperatureFromJSONTyped, TemperatureToJSON, } from './Temperature';
 import { instanceOfTemporalRasterAggregation, TemporalRasterAggregationFromJSONTyped, TemporalRasterAggregationToJSON, } from './TemporalRasterAggregation';
 import { instanceOfTimeShift, TimeShiftFromJSONTyped, TimeShiftToJSON, } from './TimeShift';
+import { instanceOfWarp, WarpFromJSONTyped, WarpToJSON, } from './Warp';
 export function RasterOperatorFromJSON(json) {
     return RasterOperatorFromJSONTyped(json, false);
 }
@@ -81,6 +82,8 @@ export function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, TemporalRasterAggregationFromJSONTyped(json, true), { type: 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, TimeShiftFromJSONTyped(json, true), { type: 'TimeShift' });
+        case 'Warp':
+            return Object.assign({}, WarpFromJSONTyped(json, true), { type: 'Warp' });
         default:
             return json;
     }
@@ -135,6 +138,8 @@ export function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, TemporalRasterAggregationToJSON(value), { 'type': 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, TimeShiftToJSON(value), { 'type': 'TimeShift' });
+        case 'Warp':
+            return Object.assign({}, WarpToJSON(value), { 'type': 'Warp' });
         default:
             return value;
     }
@@ -163,5 +168,6 @@ export function instanceOfRasterOperator(value) {
         || instanceOfReprojection(value)
         || instanceOfTemperature(value)
         || instanceOfTemporalRasterAggregation(value)
-        || instanceOfTimeShift(value);
+        || instanceOfTimeShift(value)
+        || instanceOfWarp(value);
 }

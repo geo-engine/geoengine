@@ -518,6 +518,7 @@ export class SessionApi extends runtime.BaseAPI {
     }
 
     /**
+     * Sets the view (spatial and temporal extent) of the current session.
      */
     async sessionViewHandlerRaw(requestParameters: SessionViewHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
         const requestOptions = await this.sessionViewHandlerRequestOpts(requestParameters);
@@ -527,6 +528,7 @@ export class SessionApi extends runtime.BaseAPI {
     }
 
     /**
+     * Sets the view (spatial and temporal extent) of the current session.
      */
     async sessionViewHandler(requestParameters: SessionViewHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
         await this.sessionViewHandlerRaw(requestParameters, initOverrides);
