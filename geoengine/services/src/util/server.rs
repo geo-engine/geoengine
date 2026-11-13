@@ -164,13 +164,14 @@ pub fn handle_json_payload_error(err: actix_web::error::JsonPayloadError) -> act
     }
 }
 
-#[derive(serde::Serialize, ToSchema)]
+// passed in by the binary, so build info changing on every commit does not recompile this library
+#[derive(Debug, Clone, Copy, serde::Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ServerInfo {
-    pub(crate) build_date: &'static str,
-    pub(crate) commit_hash: &'static str,
-    pub(crate) version: &'static str,
-    pub(crate) features: &'static str,
+pub struct ServerInfo {
+    pub build_date: &'static str,
+    pub commit_hash: &'static str,
+    pub version: &'static str,
+    pub features: &'static str,
 }
 
 /// Shows information about the server software version.
@@ -189,17 +190,10 @@ pub(crate) struct ServerInfo {
     )
 )]
 #[allow(clippy::unused_async)] // the function signature of request handlers requires it
-pub(crate) async fn server_info_handler() -> impl actix_web::Responder {
-    web::Json(server_info())
-}
-
-pub(crate) fn server_info() -> ServerInfo {
-    ServerInfo {
-        build_date: env!("VERGEN_BUILD_DATE"),
-        commit_hash: option_env!("VERGEN_GIT_SHA").unwrap_or("unknown"), // 'unknown' if not builded in git repository
-        version: env!("CARGO_PKG_VERSION"),
-        features: env!("VERGEN_CARGO_FEATURES"),
-    }
+pub(crate) async fn server_info_handler(
+    server_info: web::Data<ServerInfo>,
+) -> impl actix_web::Responder {
+    web::Json(**server_info)
 }
 
 /// Server availablity check.
@@ -278,7 +272,7 @@ pub fn serve_openapi_json<
     )
 }
 
-pub(crate) fn log_server_info() -> Result<()> {
+pub(crate) fn log_server_info(version: &ServerInfo) -> Result<()> {
     fn enabled_disabled(enabled: bool) -> &'static str {
         if enabled { "enabled" } else { "disabled" }
     }
@@ -298,7 +292,6 @@ pub(crate) fn log_server_info() -> Result<()> {
         web_config.bind_address, web_config.api_prefix
     ))?;
     let swagger_url = external_address.join("swagger-ui/")?;
-    let version = server_info();
 
     let mut cache_enabled = enabled_disabled(cache_config.enabled).to_string();
     if cache_config.enabled {
@@ -361,13 +354,8 @@ fn peek_socket(fd: std::os::unix::prelude::RawFd, data: &mut [u8; 1]) -> nix::Re
 /// overwritten when the fd number is re-used, so the map stays bounded by the fd limit.
 #[cfg(target_os = "linux")]
 static MONITORED_FDS: std::sync::LazyLock<
-    std::sync::Mutex<
-        std::collections::HashMap<
-            std::os::unix::prelude::RawFd,
-            std::sync::Arc<std::sync::atomic::AtomicBool>,
-        >,
-    >,
-> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    dashmap::DashMap<std::os::unix::prelude::RawFd, std::sync::Arc<std::sync::atomic::AtomicBool>>,
+> = std::sync::LazyLock::new(dashmap::DashMap::new);
 
 /// attach the connection's socket file descriptor and its "still open" flag to the connection data
 #[cfg(target_os = "linux")]
@@ -387,14 +375,9 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
             // immediately instead of polling the fd of an unrelated, live connection forever
             // (which would delay cancellation).
             let still_open = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-            {
-                let mut monitored = MONITORED_FDS
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if let Some(previous) = monitored.insert(fd, still_open.clone()) {
-                    // the fd is re-used: the old connection is definitely gone
-                    previous.store(false, std::sync::atomic::Ordering::SeqCst);
-                }
+            if let Some(previous) = MONITORED_FDS.insert(fd, still_open.clone()) {
+                // the fd is re-used: the old connection is definitely gone
+                previous.store(false, std::sync::atomic::Ordering::SeqCst);
             }
 
             data.insert(SocketFd { fd, still_open });
@@ -675,5 +658,37 @@ mod tests {
         );
 
         drop(client_b);
+    }
+
+    #[tokio::test]
+    async fn it_serves_the_server_info_passed_in_by_the_binary() {
+        use actix_web::{App, test};
+
+        let server_info = ServerInfo {
+            build_date: "2026-11-10",
+            commit_hash: "abc123",
+            version: "1.2.3",
+            features: "feature-a,feature-b",
+        };
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(server_info))
+                .route("/info", web::get().to(server_info_handler)),
+        )
+        .await;
+
+        let response: serde_json::Value =
+            test::call_and_read_body_json(&app, test::TestRequest::get().uri("/info").to_request())
+                .await;
+
+        assert_eq!(
+            response,
+            serde_json::json!({
+                "buildDate": "2026-11-10",
+                "commitHash": "abc123",
+                "version": "1.2.3",
+                "features": "feature-a,feature-b",
+            })
+        );
     }
 }

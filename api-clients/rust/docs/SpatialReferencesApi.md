@@ -4,14 +4,14 @@ All URIs are relative to *https://geoengine.io/api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**get_spatial_reference_specification_handler**](SpatialReferencesApi.md#get_spatial_reference_specification_handler) | **GET** /spatialReferenceSpecification/{srsString} | 
+[**get_spatial_reference_specification_handler**](SpatialReferencesApi.md#get_spatial_reference_specification_handler) | **GET** /spatialReferenceSpecification/{srsString} | Returns the name, PROJ string, extent and axis order of a spatial reference.
 
 
 
 ## get_spatial_reference_specification_handler
 
 > models::SpatialReferenceSpecification get_spatial_reference_specification_handler(srs_string)
-
+Returns the name, PROJ string, extent and axis order of a spatial reference.
 
 ### Parameters
 

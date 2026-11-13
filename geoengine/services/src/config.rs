@@ -2,8 +2,11 @@ use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
-use geoengine_datatypes::primitives::{MAX_CACHE_TTL_SECONDS, TimeInterval};
+use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::cache::new_raster_cache::{
+    BlockReadMode, DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
+};
 use geoengine_operators::processing::ExpressionCacheConfig;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
@@ -12,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
-use std::sync::{LazyLock, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 use url::Url;
 
@@ -495,6 +498,7 @@ impl ConfigElement for Gdal {
 /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
 /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
 /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+/// - `header_cache_entries`: The number of file headers kept for reads through cached blocks.
 /// - `worker`: Configuration passed to each GDAL worker process at spawn time.
 #[derive(Debug, Deserialize)]
 #[allow(clippy::struct_field_names)]
@@ -502,6 +506,8 @@ pub struct GdalProcessPool {
     pub number_of_processes: u64,
     pub max_active_processes: u64,
     pub max_dataset_processes: u64,
+    /// 0 is rejected when the settings are read
+    pub header_cache_entries: NonZeroUsize,
     #[serde(default)]
     pub worker: GdalProcessPoolWorkerConfig,
 }
@@ -718,7 +724,7 @@ impl ConfigElement for OpenTelemetry {
     const KEY: &'static str = "open_telemetry";
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Cache {
     pub enabled: bool,
     pub size_in_mb: usize,
@@ -731,17 +737,41 @@ pub struct Cache {
     /// Ignored if `enable_new_raster_cache` is `false`, in which case the old cache holds both
     /// vector and raster data and gets the full `size_in_mb`.
     pub raster_cache_size_ratio: f64,
+    /// names of the raster operators whose tiles the new raster cache stores, `"*"` for all
+    pub raster_operators: Vec<String>,
     /// Default cache lifetime for values without an explicit cache TTL.
     pub default_ttl_seconds: u32,
+    /// With the new raster cache, which files GDAL sources read through cached file blocks
+    pub block_reads: BlockReadMode,
+    /// With block reads, the least time file blocks and headers stay cached
+    pub min_block_ttl_seconds: u32,
 }
 
 impl Cache {
+    /// Whether the new raster cache stores the tiles of the operator `name`.
+    pub fn caches_raster_operator(&self, name: &str) -> bool {
+        self.raster_operators
+            .iter()
+            .any(|operator| operator == "*" || operator == name)
+    }
+
     pub fn shared_cache_size_in_mb(&self) -> usize {
         self.size_in_mb - self.new_raster_cache_size_in_mb()
     }
 
     pub fn new_raster_cache_size_in_bytes(&self) -> usize {
         self.new_raster_cache_size_in_mb() * 1024 * 1024
+    }
+
+    /// The new raster cache, if this config enables it.
+    pub fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
+        (self.enabled && self.enable_new_raster_cache).then(|| {
+            Arc::new(
+                NewRasterCacheEnum::new_lru(self.new_raster_cache_size_in_bytes())
+                    .with_min_block_ttl(CacheTtlSeconds::new(self.min_block_ttl_seconds))
+                    .with_block_read_mode(self.block_reads),
+            )
+        })
     }
 
     fn new_raster_cache_size_in_mb(&self) -> usize {
@@ -752,14 +782,38 @@ impl Cache {
         }
     }
 
+    /// Whether the file blocks of data without a TTL stay cached longer than its tiles.
+    fn blocks_outlive_default_ttl(&self) -> bool {
+        self.enabled
+            && self.enable_new_raster_cache
+            && self.block_reads != BlockReadMode::Off
+            && self.default_ttl_seconds < self.min_block_ttl_seconds
+    }
+
     pub fn validate(&self) -> Result<()> {
         if self.default_ttl_seconds > MAX_CACHE_TTL_SECONDS {
             return Err(crate::error::Error::InvalidConfig {
                 reason: format!(
-                    "default_ttl_seconds must be between 0 and {MAX_CACHE_TTL_SECONDS}, got {}",
+                    "default_ttl_seconds must be at most {MAX_CACHE_TTL_SECONDS}, got {}",
                     self.default_ttl_seconds
                 ),
             });
+        }
+        if self.min_block_ttl_seconds > MAX_CACHE_TTL_SECONDS {
+            return Err(crate::error::Error::InvalidConfig {
+                reason: format!(
+                    "min_block_ttl_seconds must be at most {MAX_CACHE_TTL_SECONDS}, got {}",
+                    self.min_block_ttl_seconds
+                ),
+            });
+        }
+        if self.blocks_outlive_default_ttl() {
+            tracing::warn!(
+                "[cache] default_ttl_seconds ({} s) is below min_block_ttl_seconds ({} s): the file blocks of data without its own TTL stay cached longer than its tiles, so changes to its files can take {} s to show",
+                self.default_ttl_seconds,
+                self.min_block_ttl_seconds,
+                self.min_block_ttl_seconds,
+            );
         }
         if !(0.0..=1.0).contains(&self.raster_cache_size_ratio) {
             return Err(crate::error::Error::InvalidConfig {
@@ -781,7 +835,10 @@ impl TestDefault for Cache {
             landing_zone_ratio: 0.1, // 10% of cache size
             enable_new_raster_cache: false,
             raster_cache_size_ratio: 0.5,
+            raster_operators: vec!["*".to_string()],
             default_ttl_seconds: 0,
+            block_reads: BlockReadMode::Auto,
+            min_block_ttl_seconds: DEFAULT_MIN_BLOCK_TTL_SECONDS,
         }
     }
 }
@@ -888,6 +945,8 @@ mod tests {
             number_of_processes,
             max_active_processes,
             max_dataset_processes,
+            header_cache_entries:
+                geoengine_operators::source::gdal_worker_process::DEFAULT_HEADER_CACHE_ENTRIES,
             worker: GdalProcessPoolWorkerConfig::default(),
         }
     }
@@ -964,5 +1023,80 @@ mod tests {
         let config: Web = default_element();
         assert_eq!(config.workers, 0);
         assert_eq!(config.max_blocking_threads_per_worker, 0);
+    }
+
+    #[test]
+    fn it_selects_the_raster_operators_to_cache_by_name() {
+        let cache = |operators: &[&str]| Cache {
+            raster_operators: operators.iter().map(ToString::to_string).collect(),
+            ..Cache::test_default()
+        };
+        assert!(default_element::<Cache>().caches_raster_operator("Expression"));
+        assert!(cache(&["Expression"]).caches_raster_operator("Expression"));
+        assert!(!cache(&["Expression"]).caches_raster_operator("Reprojection"));
+        assert!(!cache(&[]).caches_raster_operator("Expression"));
+    }
+
+    #[test]
+    fn it_warns_when_blocks_outlive_the_default_ttl_only_with_block_reads() {
+        let cache =
+            |enabled, enable_new_raster_cache, default_ttl_seconds, min_block_ttl_seconds| Cache {
+                enabled,
+                enable_new_raster_cache,
+                block_reads: BlockReadMode::Auto,
+                default_ttl_seconds,
+                min_block_ttl_seconds,
+                ..Cache::test_default()
+            };
+        assert!(cache(true, true, 0, 60).blocks_outlive_default_ttl());
+        assert!(cache(true, true, 0, 60).validate().is_ok());
+        assert!(!cache(true, true, 60, 60).blocks_outlive_default_ttl());
+        assert!(!cache(true, true, 300, 60).blocks_outlive_default_ttl());
+        assert!(!cache(true, true, 0, 0).blocks_outlive_default_ttl());
+        assert!(!cache(true, false, 0, 60).blocks_outlive_default_ttl());
+        assert!(!cache(false, true, 0, 60).blocks_outlive_default_ttl());
+        assert!(
+            !Cache {
+                block_reads: BlockReadMode::Off,
+                ..cache(true, true, 0, 60)
+            }
+            .blocks_outlive_default_ttl()
+        );
+        assert!(
+            cache(true, true, 0, MAX_CACHE_TTL_SECONDS + 1)
+                .validate()
+                .is_err()
+        );
+        assert!(
+            Cache {
+                default_ttl_seconds: MAX_CACHE_TTL_SECONDS + 1,
+                ..Cache::test_default()
+            }
+            .validate()
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn it_gives_the_new_raster_cache_the_block_settings() {
+        let cache = Cache {
+            enabled: true,
+            enable_new_raster_cache: true,
+            min_block_ttl_seconds: 7,
+            ..Cache::test_default()
+        };
+        let raster_cache = cache.new_raster_cache().unwrap();
+        assert_eq!(raster_cache.min_block_ttl().seconds(), 7);
+        assert_eq!(raster_cache.block_read_mode(), BlockReadMode::Auto);
+        assert_eq!(
+            Cache {
+                block_reads: BlockReadMode::On,
+                ..cache
+            }
+            .new_raster_cache()
+            .unwrap()
+            .block_read_mode(),
+            BlockReadMode::On
+        );
     }
 }

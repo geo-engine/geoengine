@@ -139,7 +139,8 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                                     bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
                                         y_idx = 56, 
                                         x_idx = 56, ), ), ), 
-                            descriptor = 'source', ), 
+                            descriptor = 'source', 
+                            max_overview_level = 0, ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                                 asset_band = null, 
@@ -230,7 +231,8 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                                     bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
                                         y_idx = 56, 
                                         x_idx = 56, ), ), ), 
-                            descriptor = 'source', ), 
+                            descriptor = 'source', 
+                            max_overview_level = 0, ), 
                         bands = [
                             geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                                 asset_band = null, 

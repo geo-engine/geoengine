@@ -6,9 +6,9 @@ use crate::{
         TaskListOptions, TaskManager, TaskStatus, TaskStatusWithId,
     },
 };
+use dashmap::DashMap;
 use futures::channel::oneshot;
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::RwLock;
+use std::sync::Arc;
 
 // TODO: implement real permissions on task types
 const ADMIN_ONLY_TASKS: [&str; 3] = [
@@ -19,7 +19,7 @@ const ADMIN_ONLY_TASKS: [&str; 3] = [
 
 pub struct TypedTaskManagerBackend {
     simple_task_manager: SimpleTaskManagerBackend,
-    task_type_by_id: RwLock<HashMap<TaskId, &'static str>>,
+    task_type_by_id: DashMap<TaskId, &'static str>,
 }
 
 impl TypedTaskManagerBackend {
@@ -27,7 +27,7 @@ impl TypedTaskManagerBackend {
     pub fn new(runtime: tokio::runtime::Handle) -> Self {
         Self {
             simple_task_manager: SimpleTaskManagerBackend::new(runtime),
-            task_type_by_id: RwLock::default(),
+            task_type_by_id: DashMap::default(),
         }
     }
 }
@@ -74,11 +74,7 @@ impl TaskManager<SimpleTaskManagerContext> for UserTaskManager {
             .schedule_task(task, notify)
             .await?;
 
-        self.backend
-            .task_type_by_id
-            .write()
-            .await
-            .insert(task_id, task_type);
+        self.backend.task_type_by_id.insert(task_id, task_type);
 
         Ok(task_id)
     }
@@ -88,9 +84,8 @@ impl TaskManager<SimpleTaskManagerContext> for UserTaskManager {
             &self.session,
             self.backend
                 .task_type_by_id
-                .read()
-                .await
                 .get(&task_id)
+                .map(|task_type| *task_type)
                 .ok_or(TaskError::TaskNotFound { task_id })?,
         )?;
 
@@ -118,13 +113,13 @@ impl TaskManager<SimpleTaskManagerContext> for UserTaskManager {
             })
             .await?;
 
-        let task_types = self.backend.task_type_by_id.read().await;
+        let task_types = &self.backend.task_type_by_id;
 
         Ok(tasks
             .iter()
             .filter(|t| {
                 if let Some(task_type) = task_types.get(&t.task_id) {
-                    return check_task_type_is_allowed(&self.session, task_type).is_ok();
+                    return check_task_type_is_allowed(&self.session, *task_type).is_ok();
                 }
                 false
             })
@@ -139,9 +134,8 @@ impl TaskManager<SimpleTaskManagerContext> for UserTaskManager {
             &self.session,
             self.backend
                 .task_type_by_id
-                .read()
-                .await
                 .get(&task_id)
+                .map(|task_type| *task_type)
                 .ok_or(TaskError::TaskNotFound { task_id })?,
         )?;
 

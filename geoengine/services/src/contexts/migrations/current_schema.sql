@@ -73,7 +73,10 @@ CREATE TYPE "SpatialGridDescriptorState" AS ENUM ('Source', 'Merged');
 
 CREATE TYPE "SpatialGridDescriptor" AS (
     "state" "SpatialGridDescriptorState",
-    spatial_grid "SpatialGridDefinition"
+    spatial_grid "SpatialGridDefinition",
+    -- overview levels 2 .. max_overview_level exist in every file,
+    -- NULL: unknown
+    max_overview_level integer
 );
 
 CREATE TYPE "DatasetName" AS (namespace text, name text);

@@ -155,6 +155,13 @@ pub enum AddDatasetTilesError {
         found: geoengine_datatypes::raster::GeoTransform,
         file_path: String,
     },
+    #[snafu(display(
+        "Tile file {file_path} has no overview level {overview_level}, but the dataset declares it"
+    ))]
+    TileFileMissingOverviewLevel {
+        overview_level: u32,
+        file_path: String,
+    },
 }
 
 impl ResponseError for AddDatasetTilesError {

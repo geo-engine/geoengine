@@ -8,6 +8,7 @@ Name | Type
 ------------ | -------------
 `spatialGrid` | [SpatialGridDefinition](SpatialGridDefinition.md)
 `descriptor` | [SpatialGridDescriptorState](SpatialGridDescriptorState.md)
+`maxOverviewLevel` | number
 
 ## Example
 
@@ -18,6 +19,7 @@ import type { SpatialGridDescriptor } from '@geoengine/api-client'
 const example = {
   "spatialGrid": null,
   "descriptor": null,
+  "maxOverviewLevel": null,
 } satisfies SpatialGridDescriptor
 
 console.log(example)

@@ -127,6 +127,7 @@ class TestLayersApi(unittest.TestCase):
     def test_provider_capabilities_handler(self) -> None:
         """Test case for provider_capabilities_handler
 
+        Returns the capabilities of the given provider, e.g., whether it supports listing and search.
         """
         pass
 

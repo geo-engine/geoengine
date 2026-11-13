@@ -2124,7 +2124,7 @@ class SessionApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> None:
-        """session_view_handler
+        """Sets the view (spatial and temporal extent) of the current session.
 
 
         :param st_rectangle: (required)
@@ -2190,7 +2190,7 @@ class SessionApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> ApiResponse[None]:
-        """session_view_handler
+        """Sets the view (spatial and temporal extent) of the current session.
 
 
         :param st_rectangle: (required)
@@ -2256,7 +2256,7 @@ class SessionApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> RESTResponseType:
-        """session_view_handler
+        """Sets the view (spatial and temporal extent) of the current session.
 
 
         :param st_rectangle: (required)

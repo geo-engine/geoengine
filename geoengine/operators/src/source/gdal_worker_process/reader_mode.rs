@@ -2,6 +2,7 @@ use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridShapeAccess, GridSize,
     SpatialGridDefinition,
 };
+use std::num::NonZeroUsize;
 use tracing::trace;
 
 use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
@@ -136,12 +137,28 @@ impl GdalReaderMode {
             }
         }
     }
+
+    /// The level of the files that reads map onto pixel by pixel: 1 for the full resolution,
+    /// the overview level if the dataset declares it. `None`: GDAL picks an overview and may
+    /// resample.
+    pub fn level_factor(&self) -> Option<NonZeroUsize> {
+        match self {
+            GdalReaderMode::OriginalResolution(_) => Some(NonZeroUsize::MIN),
+            GdalReaderMode::OverviewLevel(rs) if rs.files_have_level => {
+                Some(NonZeroUsize::new(rs.overview_level as usize).unwrap_or(NonZeroUsize::MIN))
+            }
+            GdalReaderMode::OverviewLevel(_) => None,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct OverviewReaderState {
     pub original_dataset_grid: SpatialGridDefinition,
     pub overview_level: u32,
+    /// The dataset declares its overview levels (`max_overview_level`), so every file has
+    /// `overview_level`: it is read from that level as is, never resampled.
+    pub files_have_level: bool,
 }
 
 impl OverviewReaderState {
@@ -579,6 +596,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 2,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -626,6 +644,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -673,6 +692,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -723,6 +743,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -776,6 +797,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -823,6 +845,7 @@ mod tests {
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
             overview_level: 4,
+            files_have_level: false,
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -872,6 +895,7 @@ mod tests {
                 grid_bounds: GridBoundingBox2D::new_unchecked([0, 0], [899, 1799]),
             },
             overview_level: 2,
+            files_have_level: false,
         };
 
         let actual_gdal_dataset_spatial_grid_definition = SpatialGridDefinition {
@@ -960,6 +984,7 @@ mod tests {
                 let reader_state = OverviewReaderState {
                     original_dataset_grid: mosaic_grid,
                     overview_level: overview_level as u32,
+                    files_have_level: false,
                 };
 
                 // global overview pixel grid with the tiling origin at (0, 0)

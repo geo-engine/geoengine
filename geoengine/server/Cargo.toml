@@ -1,0 +1,56 @@
+[package]
+name = "geoengine-server"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+license-file.workspace = true
+documentation.workspace = true
+repository.workspace = true
+default-run = "geoengine-server"
+
+# Only the binaries live here, so that the build info from `build.rs` changing on every commit
+# recompiles this small package instead of the whole services library.
+
+[[bin]]
+name = "geoengine-server"
+path = "src/bin/geoengine-server.rs"
+bench = false
+
+[[bin]]
+name = "geoengine-cli"
+path = "src/bin/geoengine-cli.rs"
+bench = false
+
+[features]
+# logs Tokio runtime metrics every second, see `README.md`
+runtime-metrics = ["dep:tokio-metrics"]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+gdal = { workspace = true }
+geoengine-operators = { path = "../operators" }
+geoengine-services = { path = "../services" }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+tokio = { workspace = true }
+tokio-metrics = { workspace = true, optional = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+pretty_assertions = { workspace = true }
+tokio-postgres = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+vergen = { workspace = true, features = ["build", "cargo", "emit_and_set"] }
+vergen-gitcl = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true

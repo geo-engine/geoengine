@@ -2148,7 +2148,9 @@ mod tests {
                         [9, 9]  // 10
                     )
                     .unwrap(),
-                ),
+                )
+                // the overview files have no overviews of their own
+                .with_max_overview_level(Some(1)),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );

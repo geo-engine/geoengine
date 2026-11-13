@@ -29,6 +29,7 @@ class TestSpatialReferencesApi(unittest.TestCase):
     def test_get_spatial_reference_specification_handler(self) -> None:
         """Test case for get_spatial_reference_specification_handler
 
+        Returns the name, PROJ string, extent and axis order of a spatial reference.
         """
         pass
 

@@ -12,7 +12,7 @@ All URIs are relative to *https://geoengine.io/api*
 | [**registerUserHandler**](SessionApi.md#registeruserhandler) | **POST** /user | Registers a user. |
 | [**sessionHandler**](SessionApi.md#sessionhandler) | **GET** /session | Retrieves details about the current session. |
 | [**sessionProjectHandler**](SessionApi.md#sessionprojecthandler) | **POST** /session/project/{project} | Sets the active project of the session. |
-| [**sessionViewHandler**](SessionApi.md#sessionviewhandler) | **POST** /session/view |  |
+| [**sessionViewHandler**](SessionApi.md#sessionviewhandler) | **POST** /session/view | Sets the view (spatial and temporal extent) of the current session. |
 
 
 
@@ -535,7 +535,7 @@ example().catch(console.error);
 
 > sessionViewHandler(sTRectangle)
 
-
+Sets the view (spatial and temporal extent) of the current session.
 
 ### Example
 

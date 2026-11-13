@@ -446,6 +446,16 @@ async fn add_dataset_and_tiles_to_geoengine(
     volume_name: &str,
     remote_data_dir: &str,
 ) -> anyhow::Result<Option<String>> {
+    // the dataset declares only the overview levels every file has
+    let mut result_descriptor = files[0].result_descriptor.clone();
+    result_descriptor.spatial_grid = result_descriptor.spatial_grid.with_max_overview_level(
+        files
+            .iter()
+            .map(|file| file.result_descriptor.spatial_grid.max_overview_level())
+            .min()
+            .flatten(),
+    );
+
     let create_dataset = CreateDataset {
         data_path: DataPath::Volume(VolumeName(volume_name.to_string())),
         definition: DatasetDefinition {
@@ -462,7 +472,7 @@ async fn add_dataset_and_tiles_to_geoengine(
             },
             meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                 r#type: crate::api::model::operators::GdalMultiBandTypeTag::GdalMultiBandTypeTag,
-                result_descriptor: files[0].result_descriptor.clone().into(),
+                result_descriptor: result_descriptor.into(),
                 cache_ttl: None,
             }),
         },
