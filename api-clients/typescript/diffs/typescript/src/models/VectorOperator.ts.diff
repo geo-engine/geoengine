@@ -1,14 +1,24 @@
 --- typescript/src/models/VectorOperator.ts
 +++ typescript/src/models/VectorOperator.ts
-@@ -181,3 +181,11 @@
+@@ -181,3 +181,6 @@
      }
  }
  
 +
-+/**
-+* Check if a given object implements the VectorOperator interface.
-+*/
-+export function instanceOfVectorOperator(value: object): value is VectorOperator {
-+    return instanceOfMockPointSource(value)
-+        || instanceOfRasterVectorJoin(value);
+/**
+* Check if a given object implements the VectorOperator interface.
+*/
+export function instanceOfVectorOperator(value: object): value is VectorOperator {
++    return instanceOfColumnRangeFilter(value)
+        || instanceOfLineSimplification(value)
+        || instanceOfMockPointSource(value)
+        || instanceOfOgrSource(value)
+        || instanceOfPointInPolygonFilter(value)
+        || instanceOfRasterVectorJoin(value)
+        || instanceOfReprojection(value)
+        || instanceOfTimeProjection(value)
+        || instanceOfTimeShift(value)
+        || instanceOfVectorExpression(value)
+        || instanceOfVectorJoin(value)
+        || instanceOfVisualPointClustering(value);
 +}

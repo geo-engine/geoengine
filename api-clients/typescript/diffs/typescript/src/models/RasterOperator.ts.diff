@@ -1,14 +1,34 @@
 --- typescript/src/models/RasterOperator.ts
 +++ typescript/src/models/RasterOperator.ts
-@@ -291,3 +291,11 @@
+@@ -291,3 +291,6 @@
      }
  }
  
 +
-+/**
-+* Check if a given object implements the RasterOperator interface.
-+*/
-+export function instanceOfRasterOperator(value: object): value is RasterOperator {
-+    return instanceOfExpression(value)
-+        || instanceOfGdalSource(value);
+/**
+* Check if a given object implements the RasterOperator interface.
+*/
+export function instanceOfRasterOperator(value: object): value is RasterOperator {
++    return instanceOfBandFilter(value)
+        || instanceOfBandNeighborhoodAggregate(value)
+        || instanceOfBandwiseExpression(value)
+        || instanceOfDownsampling(value)
+        || instanceOfExpression(value)
+        || instanceOfGdalSource(value)
+        || instanceOfInterpolation(value)
+        || instanceOfMultiBandGdalSource(value)
+        || instanceOfNeighborhoodAggregate(value)
+        || instanceOfOnnx(value)
+        || instanceOfPolygonRasterization(value)
+        || instanceOfRadiance(value)
+        || instanceOfRasterScaling(value)
+        || instanceOfRasterStacker(value)
+        || instanceOfRasterTypeConversion(value)
+        || instanceOfRasterization(value)
+        || instanceOfReflectance(value)
+        || instanceOfReprojection(value)
+        || instanceOfTemperature(value)
+        || instanceOfTemporalRasterAggregation(value)
+        || instanceOfTimeShift(value)
+        || instanceOfWarp(value);
 +}

@@ -295,6 +295,26 @@ export function RasterOperatorToJSONTyped(value?: RasterOperator | null, ignoreD
 * Check if a given object implements the RasterOperator interface.
 */
 export function instanceOfRasterOperator(value: object): value is RasterOperator {
-    return instanceOfExpression(value)
-        || instanceOfGdalSource(value);
+    return instanceOfBandFilter(value)
+        || instanceOfBandNeighborhoodAggregate(value)
+        || instanceOfBandwiseExpression(value)
+        || instanceOfDownsampling(value)
+        || instanceOfExpression(value)
+        || instanceOfGdalSource(value)
+        || instanceOfInterpolation(value)
+        || instanceOfMultiBandGdalSource(value)
+        || instanceOfNeighborhoodAggregate(value)
+        || instanceOfOnnx(value)
+        || instanceOfPolygonRasterization(value)
+        || instanceOfRadiance(value)
+        || instanceOfRasterScaling(value)
+        || instanceOfRasterStacker(value)
+        || instanceOfRasterTypeConversion(value)
+        || instanceOfRasterization(value)
+        || instanceOfReflectance(value)
+        || instanceOfReprojection(value)
+        || instanceOfTemperature(value)
+        || instanceOfTemporalRasterAggregation(value)
+        || instanceOfTimeShift(value)
+        || instanceOfWarp(value);
 }
