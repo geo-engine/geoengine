@@ -1269,15 +1269,17 @@ fn try_create_tile_for_band(
     }
 
     // Extract the item's actual EPSG code from the asset
-    let item_epsg = common::epsg_code_from_fields(proj_extension_version, &asset.additional_fields)
-        .or_else(|| {
-            // Also try to extract from serialized properties as fallback
-            let props_val = serde_json::to_value(&item.properties)
-                .ok()
-                .and_then(|v| v.as_object().cloned())
-                .unwrap_or_default();
-            common::epsg_code_from_fields(proj_extension_version, &props_val)
-        })?;
+    // Fall back to the item's EPSG from its serialized properties unless the asset declares
+    // its own CRS (an explicit `null` marks the asset as unlocated).
+    let props_val = serde_json::to_value(&item.properties)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    let item_epsg = common::epsg_code_from_asset_or_item(
+        asset,
+        common::epsg_code_from_fields(proj_extension_version, &props_val),
+        proj_extension_version,
+    )?;
 
     // Only process assets whose EPSG matches the dataset's projection
     if dataset.projection != SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg) {

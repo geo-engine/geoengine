@@ -547,11 +547,11 @@ impl StacMultiBandMetaData {
             return Ok(());
         }
 
-        let Some(asset_epsg) = common::epsg_code_from_fields(
+        let Some(asset_epsg) = common::epsg_code_from_asset_or_item(
+            asset,
+            item_epsg,
             common::StacExtensionMajorVersion::V2,
-            &asset.additional_fields,
-        )
-        .or(item_epsg) else {
+        ) else {
             return Ok(());
         };
 
@@ -1452,6 +1452,15 @@ mod tests {
                     "title": "WCD",
                     "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                     "data_type": "uint16"
+                },
+                // an explicit `null` CRS marks the asset as unlocated, so it must not inherit
+                // the item's projection fields even though title and data type match
+                "WCD_thumbnail": {
+                    "href": "https://example.com/WCD_thumbnail.tif",
+                    "title": "WCD",
+                    "type": "image/tiff; application=geotiff",
+                    "data_type": "uint16",
+                    "proj:code": null
                 }
             }
         }))
@@ -1460,7 +1469,7 @@ mod tests {
         let mut files = Vec::new();
         meta.process_stac_item(&item, &mut files).unwrap();
 
-        assert_eq!(files.len(), 1);
+        assert_eq!(files.len(), 1, "only the located asset yields a file");
         let file = &files[0];
         assert_eq!(
             file.params.file_path,

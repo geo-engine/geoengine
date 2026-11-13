@@ -206,6 +206,25 @@ pub fn epsg_code_from_item(
     epsg_code_from_fields(fallback_version, &properties)
 }
 
+/// Extract the EPSG code of an asset, falling back to `item_epsg` only if the asset declares
+/// neither `proj:code` nor `proj:epsg`.
+///
+/// Like the transform and shape fallback, whether the asset has the key decides precedence, not
+/// whether its value is valid. Per the STAC projection extension, an explicit `null` on an asset
+/// (e.g. a thumbnail) marks it as unlocated, so it must not inherit the item's CRS.
+pub fn epsg_code_from_asset_or_item(
+    asset: &stac::Asset,
+    item_epsg: Option<u32>,
+    proj_extension_version: StacExtensionMajorVersion,
+) -> Option<u32> {
+    let fields = &asset.additional_fields;
+    if fields.contains_key("proj:code") || fields.contains_key("proj:epsg") {
+        epsg_code_from_fields(proj_extension_version, fields)
+    } else {
+        item_epsg
+    }
+}
+
 /// Parse an EPSG code from a `proj:code` string like `"EPSG:32632"` or
 /// `"http://www.opengis.net/def/crs/EPSG/0/32632"`.
 pub fn parse_epsg_from_proj_code(code: &str) -> Option<u32> {
@@ -949,6 +968,47 @@ mod tests {
 
         assert!(geo_transform_from_asset_or_item(asset, &item).is_none());
         assert!(proj_shape_from_asset_or_item(asset, &item).is_none());
+    }
+
+    #[test]
+    fn it_falls_back_to_item_epsg_only_without_asset_crs_fields() {
+        let item = item_with_projection_properties(&serde_json::json!({
+            "href": "https://example.com/wcd.tif",
+            "title": "WCD"
+        }));
+        let version = StacExtensionMajorVersion::V2;
+        let item_epsg = epsg_code_from_item(&item, version);
+        assert_eq!(item_epsg, Some(3035));
+
+        // no CRS field on the asset: inherit the item's EPSG
+        assert_eq!(
+            epsg_code_from_asset_or_item(&item.assets["WCD"], item_epsg, version),
+            Some(3035)
+        );
+
+        // an explicit value on the asset wins
+        let item = item_with_projection_properties(&serde_json::json!({
+            "href": "https://example.com/wcd.tif",
+            "title": "WCD",
+            "proj:code": "EPSG:32632"
+        }));
+        assert_eq!(
+            epsg_code_from_asset_or_item(&item.assets["WCD"], item_epsg, version),
+            Some(32632)
+        );
+
+        // an explicit `null` marks the asset as unlocated
+        for key in ["proj:code", "proj:epsg"] {
+            let item = item_with_projection_properties(&serde_json::json!({
+                "href": "https://example.com/thumbnail.png",
+                "title": "WCD",
+                key: null
+            }));
+            assert!(
+                epsg_code_from_asset_or_item(&item.assets["WCD"], item_epsg, version).is_none(),
+                "{key}: null must not inherit the item's EPSG"
+            );
+        }
     }
 
     #[test]

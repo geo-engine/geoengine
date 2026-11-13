@@ -394,11 +394,11 @@ fn process_sample_assets(
                 continue;
             };
 
-            let epsg = common::epsg_code_from_fields(
+            let epsg = common::epsg_code_from_asset_or_item(
+                asset,
+                item_epsg,
                 common::StacExtensionMajorVersion::V2,
-                &asset.additional_fields,
-            )
-            .or(item_epsg);
+            );
             let Some(epsg) = epsg else {
                 continue;
             };
@@ -1426,6 +1426,41 @@ mod tests {
         assert_eq!(spatial_grid.geo_transform(), expected_transform);
         let [full_height, full_width] = spatial_grid.grid_shape().shape_array;
         assert!(full_height > 1000 && full_width > 1000);
+    }
+
+    #[test]
+    fn it_skips_assets_with_explicit_null_crs() {
+        // An explicit `proj:code: null` marks an asset as unlocated, so it must not inherit
+        // the item's projection fields.
+        let items: stac::ItemCollection = serde_json::from_value(serde_json::json!({
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "stac_version": "1.1.0",
+                "id": "item",
+                "geometry": null,
+                "properties": {
+                    "datetime": "2025-09-01T00:00:00Z",
+                    "proj:code": "EPSG:3035",
+                    "proj:shape": [1000, 1000],
+                    "proj:transform": [100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1]
+                },
+                "links": [],
+                "assets": {
+                    "thumbnail": {
+                        "href": "https://example.com/thumbnail.tif",
+                        "title": "thumbnail",
+                        "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                        "data_type": "uint8",
+                        "proj:code": null
+                    }
+                }
+            }]
+        }))
+        .expect("valid items");
+
+        let (discovered_datasets, _) = process_sample_assets(&items, &[ImportFileType::Cog], &[]);
+        assert!(discovered_datasets.is_empty());
     }
 
     #[test]
