@@ -7,6 +7,10 @@
 //! In the same spatial reference, it maps pixel indices directly, with the sub-query of
 //! `Interpolation` for finer outputs and the one of `Downsampling` otherwise; with another spatial
 //! reference, it uses the sub-query of `Reprojection`.
+//!
+//! `Reprojection` (raster), `Downsampling` and `Interpolation` (`NearestNeighbor`) keep their own
+//! parameters, validation and output grid, but initialize to an [`InitializedWarp`] onto that grid,
+//! so they share its processors and its `optimize`, which returns a `Warp`.
 
 use crate::adapters::TileReprojectionSubqueryGridInfo;
 use crate::engine::{
@@ -124,21 +128,37 @@ pub fn warped_spatial_grid(
         _ => in_grid,
     };
 
-    let grid = match params.output_resolution {
-        Some(resolution) if resolution != grid.spatial_resolution() => {
-            grid.with_changed_resolution(resolution).as_derived()
+    let resolution = params
+        .output_resolution
+        .unwrap_or_else(|| grid.spatial_resolution());
+    let changes_resolution = resolution != grid.spatial_resolution();
+    if !changes_resolution && params.output_origin_reference.is_none() {
+        return Ok(grid);
+    }
+
+    let with_resolution = |grid: SpatialGridDescriptor| {
+        if changes_resolution {
+            grid.with_changed_resolution(resolution)
+        } else {
+            grid
         }
-        _ => grid,
     };
+    let coarser = resolution.x() >= grid.spatial_resolution().x()
+        && resolution.y() >= grid.spatial_resolution().y();
 
     Ok(match params.output_origin_reference {
-        // a new grid aligned to that point
-        Some(origin) => grid
+        // a new grid aligned to that point: move the origin on the finer of the two grids, so the
+        // grid moves by less than half a fine pixel (as `Downsampling` and `Interpolation` do)
+        Some(origin) if coarser => with_resolution(
+            grid.with_moved_origin_to_nearest_grid_edge(origin)
+                .replace_origin(origin),
+        ),
+        Some(origin) => with_resolution(grid)
             .with_moved_origin_to_nearest_grid_edge(origin)
-            .as_derived()
             .replace_origin(origin),
-        None => grid,
-    })
+        None => with_resolution(grid),
+    }
+    .as_derived())
 }
 
 /// The input of a `Warp` from `source` with `params`: `source` rewritten to read the coarsest overview
@@ -196,15 +216,22 @@ fn source_srs(in_descriptor: &RasterResultDescriptor) -> Result<SpatialReference
 
 /// A `Warp` with its source initialized and the output grid computed.
 /// It produces the processor for the output grid: one sub-query per output tile.
+///
+/// `Reprojection` (raster), `Downsampling` and `Interpolation` (`NearestNeighbor`) initialize to it as
+/// well (see [`InitializedWarp::with_output_grid`]), so they share its processors and `optimize`.
 pub struct InitializedWarp<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
     path: ProcessingGraphOperatorPath,
+    /// the name of the operator this was initialized from, for statistics, logs and the cache config
+    operator_name: &'static str,
     result_descriptor: RasterResultDescriptor,
     params: WarpParams,
     source: O,
     state: TileReprojectionSubqueryGridInfo,
     source_srs: SpatialReference,
     target_srs: SpatialReference,
+    /// project the coordinates even within the same spatial reference, as `Reprojection` does
+    always_reproject: bool,
     tiling_specification: TilingSpecification,
 }
 
@@ -221,10 +248,43 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
         params: WarpParams,
         tiling_specification: TilingSpecification,
     ) -> Result<Self> {
+        let out_grid = warped_spatial_grid(source.result_descriptor(), &params)?;
+        Self::with_output_grid(
+            WarpOrigin {
+                name,
+                path,
+                operator_name: Warp::TYPE_NAME,
+                always_reproject: false,
+            },
+            source,
+            params,
+            out_grid,
+            tiling_specification,
+        )
+    }
+
+    /// A `Warp` of `source` onto `out_grid`, which the caller computed from `params`, e.g. with the
+    /// rules of the operator in `origin` that is mapped to a `Warp`. The target spatial reference is
+    /// the one of `params`, or the source's.
+    ///
+    /// # Errors
+    /// If the source has no spatial reference.
+    pub fn with_output_grid(
+        origin: WarpOrigin,
+        source: O,
+        params: WarpParams,
+        out_grid: SpatialGridDescriptor,
+        tiling_specification: TilingSpecification,
+    ) -> Result<Self> {
+        let WarpOrigin {
+            name,
+            path,
+            operator_name,
+            always_reproject,
+        } = origin;
         let in_descriptor = source.result_descriptor();
         let source_srs = source_srs(in_descriptor)?;
         let target_srs = params.target_spatial_reference.unwrap_or(source_srs);
-        let out_grid = warped_spatial_grid(in_descriptor, &params)?;
 
         let state = TileReprojectionSubqueryGridInfo {
             in_spatial_grid: in_descriptor
@@ -247,30 +307,45 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
         Ok(Self {
             name,
             path,
+            operator_name,
             result_descriptor,
             params,
             source,
             state,
             source_srs,
             target_srs,
+            always_reproject,
             tiling_specification,
         })
     }
+}
+
+/// The operator an [`InitializedWarp`] was initialized from.
+pub struct WarpOrigin {
+    /// the canonic name of that operator
+    pub name: CanonicOperatorName,
+    /// its path in the processing graph
+    pub path: ProcessingGraphOperatorPath,
+    /// its type name, e.g. `Downsampling`
+    pub operator_name: &'static str,
+    /// project the coordinates even within the same spatial reference, as `Reprojection` does
+    pub always_reproject: bool,
 }
 
 impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp<O> {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let source = self.source.query_processor()?;
 
+        let reproject = self.always_reproject || self.source_srs != self.target_srs;
+
         // the same grid: nothing to warp
-        if self.source_srs == self.target_srs
+        if !reproject
             && self.source.result_descriptor().spatial_grid.as_parts().1
                 == self.result_descriptor.spatial_grid.as_parts().1
         {
             return Ok(source);
         }
 
-        let reproject = self.source_srs != self.target_srs;
         let in_resolution = self
             .source
             .result_descriptor()
@@ -318,7 +393,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
     }
 
     fn name(&self) -> &'static str {
-        Warp::TYPE_NAME
+        self.operator_name
     }
 
     fn path(&self) -> ProcessingGraphOperatorPath {
@@ -345,12 +420,25 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
 
         let source = match source_at_overview_level(&self.source, &params) {
             Ok(Some(optimized)) => optimized,
-            Ok(None) => self.source.optimize(
-                self.source
-                    .result_descriptor()
-                    .spatial_grid
-                    .spatial_resolution(),
-            )?,
+            Ok(None) => {
+                let in_grid = &self.source.result_descriptor().spatial_grid;
+                let optimized_source = self.source.optimize(in_grid.spatial_resolution())?;
+
+                // the source is already on the output grid: nothing to warp
+                if self.source_srs == self.target_srs
+                    && in_grid.spatial_resolution() == target_resolution
+                    && in_grid.geo_transform().origin_coordinate
+                        == self
+                            .result_descriptor
+                            .spatial_grid
+                            .geo_transform()
+                            .origin_coordinate
+                {
+                    return Ok(optimized_source);
+                }
+
+                optimized_source
+            }
             Err(Error::Optimization { source }) => return Err(source),
             // the output grid cannot be computed for the optimized source
             Err(error) => {
@@ -460,6 +548,71 @@ mod tests {
             .collect()
             .await;
         (descriptor, tiles)
+    }
+
+    #[tokio::test]
+    async fn it_keeps_the_name_of_the_operator_it_was_initialized_from() {
+        let exe_ctx = mock_exe_ctx();
+        let source = || input().mock_raster_source::<u8>().typed();
+
+        let operators = [
+            (
+                warp(
+                    source(),
+                    resample_params(SpatialResolution::new_unchecked(2., 2.)),
+                ),
+                "Warp",
+            ),
+            (
+                Downsampling {
+                    params: DownsamplingParams {
+                        sampling_method: DownsamplingMethod::NearestNeighbor,
+                        output_resolution: DownsamplingResolution::Resolution(
+                            SpatialResolution::new_unchecked(2., 2.),
+                        ),
+                        output_origin_reference: None,
+                    },
+                    sources: SingleRasterSource { raster: source() },
+                }
+                .typed(),
+                "Downsampling",
+            ),
+            (
+                Interpolation {
+                    params: InterpolationParams {
+                        interpolation: InterpolationMethod::NearestNeighbor,
+                        output_resolution: InterpolationResolution::Resolution(
+                            SpatialResolution::new_unchecked(0.5, 0.5),
+                        ),
+                        output_origin_reference: None,
+                    },
+                    sources: SingleRasterSource { raster: source() },
+                }
+                .typed(),
+                "Interpolation",
+            ),
+            (
+                Reprojection {
+                    params: ReprojectionParams {
+                        target_spatial_reference: SpatialReference::web_mercator(),
+                        derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+                    },
+                    sources: SingleRasterOrVectorSource {
+                        source: source().into(),
+                    },
+                }
+                .typed(),
+                "Reprojection",
+            ),
+        ];
+
+        for (operator, name) in operators {
+            let initialized = operator
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .unwrap();
+            assert_eq!(initialized.name(), name);
+        }
     }
 
     #[tokio::test]

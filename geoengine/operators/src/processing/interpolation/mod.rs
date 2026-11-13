@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
+use crate::engine::SpatialGridDescriptor;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
@@ -14,6 +15,7 @@ use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
     Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Fraction,
 };
+use crate::processing::{InitializedWarp, WarpMethod, WarpOrigin, WarpParams};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -85,19 +87,104 @@ impl RasterOperator for Interpolation {
             .initialize_sources(path.clone(), context)
             .await?;
         let raster_source = initialized_sources.raster;
-        InitializedInterpolation::new_with_source_and_params(
-            name,
-            path,
-            raster_source,
-            &self.params,
-            context.tiling_specification(),
-        )
-        .map(InitializedRasterOperator::boxed)
+
+        match self.params.interpolation {
+            // `Warp` with nearest neighbour does the same, onto the grid of `Interpolation`
+            InterpolationMethod::NearestNeighbor => {
+                let out_grid = interpolated_spatial_grid(
+                    *raster_source.result_descriptor().spatial_grid_descriptor(),
+                    &self.params,
+                )?;
+                let warp_params = WarpParams {
+                    target_spatial_reference: None,
+                    output_resolution: Some(out_grid.spatial_resolution()),
+                    output_origin_reference: self.params.output_origin_reference,
+                    method: WarpMethod::NearestNeighbor,
+                };
+                InitializedWarp::with_output_grid(
+                    WarpOrigin {
+                        name,
+                        path,
+                        operator_name: Interpolation::TYPE_NAME,
+                        always_reproject: false,
+                    },
+                    raster_source,
+                    warp_params,
+                    out_grid,
+                    context.tiling_specification(),
+                )
+                .map(InitializedRasterOperator::boxed)
+            }
+            InterpolationMethod::BiLinear => InitializedInterpolation::new_with_source_and_params(
+                name,
+                path,
+                raster_source,
+                &self.params,
+                context.tiling_specification(),
+            )
+            .map(InitializedRasterOperator::boxed),
+        }
     }
 
     span_fn!(Interpolation);
 }
 
+/// The grid that `Interpolation` with `params` puts a raster with the grid `in_spatial_grid` on.
+///
+/// # Errors
+/// If the output would be coarser than the input in an axis, or a fraction is smaller than one.
+pub fn interpolated_spatial_grid(
+    in_spatial_grid: SpatialGridDescriptor,
+    params: &InterpolationParams,
+) -> Result<SpatialGridDescriptor> {
+    let output_resolution = match params.output_resolution {
+        InterpolationResolution::Resolution(res) => {
+            ensure!(
+                res.x().abs() <= in_spatial_grid.spatial_resolution().x().abs(),
+                error::OutputMustBeHigherResolutionThanInput {
+                    input: in_spatial_grid.spatial_resolution(),
+                    output: res
+                }
+            );
+            ensure!(
+                res.y().abs() <= in_spatial_grid.spatial_resolution().y().abs(),
+                error::OutputMustBeHigherResolutionThanInput {
+                    input: in_spatial_grid.spatial_resolution(),
+                    output: res
+                }
+            );
+            res
+        }
+
+        InterpolationResolution::Fraction(fraction) => {
+            ensure!(
+                fraction.x >= 1.0,
+                error::FractionMustBeOneOrLarger { f: fraction.x }
+            );
+            ensure!(
+                fraction.y >= 1.0,
+                error::FractionMustBeOneOrLarger { f: fraction.y }
+            );
+
+            SpatialResolution::new_unchecked(
+                in_spatial_grid.spatial_resolution().x().get() / fraction.x,
+                in_spatial_grid.spatial_resolution().y().get() / fraction.y,
+            )
+        }
+    };
+
+    Ok(if let Some(oc) = params.output_origin_reference {
+        in_spatial_grid
+            .with_changed_resolution(output_resolution)
+            .with_moved_origin_to_nearest_grid_edge(oc)
+            .replace_origin(oc)
+    } else {
+        in_spatial_grid.with_changed_resolution(output_resolution)
+    })
+}
+
+/// An `Interpolation` with `BiLinear`; with `NearestNeighbor`, it initializes to an
+/// [`InitializedWarp`].
 pub struct InitializedInterpolation<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
     output_result_descriptor: RasterResultDescriptor,
@@ -116,52 +203,8 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         tiling_specification: TilingSpecification,
     ) -> Result<Self> {
         let in_descriptor = raster_source.result_descriptor();
-        let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
-
-        let output_resolution = match params.output_resolution {
-            InterpolationResolution::Resolution(res) => {
-                ensure!(
-                    res.x().abs() <= in_spatial_grid.spatial_resolution().x().abs(),
-                    error::OutputMustBeHigherResolutionThanInput {
-                        input: in_spatial_grid.spatial_resolution(),
-                        output: res
-                    }
-                );
-                ensure!(
-                    res.y().abs() <= in_spatial_grid.spatial_resolution().y().abs(),
-                    error::OutputMustBeHigherResolutionThanInput {
-                        input: in_spatial_grid.spatial_resolution(),
-                        output: res
-                    }
-                );
-                res
-            }
-
-            InterpolationResolution::Fraction(fraction) => {
-                ensure!(
-                    fraction.x >= 1.0,
-                    error::FractionMustBeOneOrLarger { f: fraction.x }
-                );
-                ensure!(
-                    fraction.y >= 1.0,
-                    error::FractionMustBeOneOrLarger { f: fraction.y }
-                );
-
-                SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x().get() / fraction.x,
-                    in_spatial_grid.spatial_resolution().y().get() / fraction.y,
-                )
-            }
-        };
-
-        let out_spatial_grid = if let Some(oc) = params.output_origin_reference {
-            in_spatial_grid
-                .with_changed_resolution(output_resolution)
-                .with_moved_origin_to_nearest_grid_edge(oc)
-                .replace_origin(oc)
-        } else {
-            in_spatial_grid.with_changed_resolution(output_resolution)
-        };
+        let out_spatial_grid =
+            interpolated_spatial_grid(*in_descriptor.spatial_grid_descriptor(), params)?;
 
         let out_descriptor = RasterResultDescriptor {
             spatial_reference: in_descriptor.spatial_reference,

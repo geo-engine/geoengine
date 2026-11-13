@@ -37,7 +37,7 @@ pub use circle_merging_quadtree::{
 pub use column_range_filter::{ColumnRangeFilter, ColumnRangeFilterParams};
 pub use downsample::{
     Downsampling, DownsamplingError, DownsamplingMethod, DownsamplingParams,
-    DownsamplingResolution, Fraction, InitializedDownsampling,
+    DownsamplingResolution, Fraction, downsampled_spatial_grid,
 };
 pub use expression::{
     Expression, ExpressionCacheConfig, ExpressionEnvironment, ExpressionParams,
@@ -46,7 +46,7 @@ pub use expression::{
 };
 pub use interpolation::{
     InitializedInterpolation, Interpolation, InterpolationError, InterpolationMethod,
-    InterpolationParams, InterpolationResolution,
+    InterpolationParams, InterpolationResolution, interpolated_spatial_grid,
 };
 pub use line_simplification::{
     LineSimplification, LineSimplificationAlgorithm, LineSimplificationError,
@@ -78,8 +78,7 @@ pub use raster_vector_join::{
 };
 pub use rasterization::{DensityParams, Rasterization, RasterizationParams};
 pub use reprojection::{
-    DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
-    Reprojection, ReprojectionParams,
+    DeriveOutRasterSpecsSource, InitializedVectorReprojection, Reprojection, ReprojectionParams,
 };
 pub use temporal_raster_aggregation::{
     Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
@@ -88,5 +87,6 @@ pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionPar
 pub use time_shift::{TimeShift, TimeShiftError, TimeShiftParams};
 pub use vector_join::{VectorJoin, VectorJoinParams, VectorJoinSources, VectorJoinType};
 pub use warp::{
-    InitializedWarp, Warp, WarpMethod, WarpParams, source_at_overview_level, warped_spatial_grid,
+    InitializedWarp, Warp, WarpMethod, WarpOrigin, WarpParams, source_at_overview_level,
+    warped_spatial_grid,
 };
