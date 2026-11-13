@@ -459,9 +459,11 @@ fn process_sample_assets(
                         asset_count: 0,
                     });
             info_entry.asset_count += 1;
-            // Prefer an asset that provides the grid metadata if an earlier
-            // sampled asset of the same dataset did not provide it.
-            if info_entry.geo_transform.is_none() {
+            // Prefer the sampled asset with the most complete grid metadata, taking the
+            // transform and shape from the same sample.
+            if grid_metadata_rank(geo_transform, proj_shape)
+                > grid_metadata_rank(info_entry.geo_transform, info_entry.proj_shape)
+            {
                 info_entry.geo_transform = geo_transform;
                 info_entry.proj_shape = proj_shape;
             }
@@ -469,6 +471,19 @@ fn process_sample_assets(
     }
 
     (discovered_datasets, sample_band_info)
+}
+
+/// Rank the grid metadata of a sampled asset: a transform with a shape beats a transform alone.
+/// A shape without a transform is useless, since the grid origin is unknown.
+fn grid_metadata_rank(
+    geo_transform: Option<GeoTransform>,
+    proj_shape: Option<(usize, usize)>,
+) -> u8 {
+    match (geo_transform, proj_shape) {
+        (Some(_), Some(_)) => 2,
+        (Some(_), None) => 1,
+        (None, _) => 0,
+    }
 }
 
 /// Build the `StacProviderDataset` list from discovered datasets, collection bands,
@@ -1426,6 +1441,70 @@ mod tests {
         assert_eq!(spatial_grid.geo_transform(), expected_transform);
         let [full_height, full_width] = spatial_grid.grid_shape().shape_array;
         assert!(full_height > 1000 && full_width > 1000);
+    }
+
+    #[test]
+    fn it_prefers_samples_with_transform_and_shape() {
+        let item = |id: &str, with_shape: bool| {
+            let mut properties = serde_json::json!({
+                "datetime": "2025-09-01T00:00:00Z",
+                "proj:code": "EPSG:3035",
+                "proj:transform": [100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1]
+            });
+            if with_shape {
+                properties["proj:shape"] = serde_json::json!([500, 400]);
+            }
+            serde_json::json!({
+                "type": "Feature",
+                "stac_version": "1.1.0",
+                "id": id,
+                "geometry": null,
+                "properties": properties,
+                "links": [],
+                "assets": {
+                    "WCD": {
+                        "href": format!("https://example.com/{id}.tif"),
+                        "title": "WCD",
+                        "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                        "data_type": "uint16"
+                    }
+                }
+            })
+        };
+        let transform_only = item("transform_only", false);
+        let complete = item("complete", true);
+
+        for features in [
+            vec![transform_only.clone(), complete.clone()],
+            vec![complete.clone(), transform_only.clone()],
+        ] {
+            let items: stac::ItemCollection = serde_json::from_value(serde_json::json!({
+                "type": "FeatureCollection",
+                "features": features
+            }))
+            .expect("valid items");
+
+            let (discovered_datasets, _) =
+                process_sample_assets(&items, &[ImportFileType::Cog], &[3035]);
+            assert_eq!(discovered_datasets.len(), 1);
+            let (dataset_key, info) = discovered_datasets.iter().next().unwrap();
+            assert_eq!(info.asset_count, 2);
+            assert_eq!(
+                info.geo_transform,
+                Some(GeoTransform::new_unchecked(
+                    (4_200_000.0, 3_100_000.0).into(),
+                    100.0,
+                    -100.0
+                ))
+            );
+            assert_eq!(info.proj_shape, Some((500, 400)));
+
+            let spatial_grid = build_dataset_spatial_grid(info, dataset_key, false);
+            assert_eq!(
+                spatial_grid.grid_shape(),
+                geoengine_datatypes::raster::GridShape2D::new([500, 400])
+            );
+        }
     }
 
     #[test]
