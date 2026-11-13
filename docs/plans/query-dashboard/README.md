@@ -1,6 +1,6 @@
 # Experimental query dashboard
 
-Status: design proposal; implementation has not started. This experimental PR establishes the design and implementation checklist, rather than claiming a working dashboard.
+Status: planning stage; implementation has not started. This experimental PR will deliver the query dashboard, including data collection, the monitoring API and the manager UI. The linked plans are the first stage of that work; keep the PR in draft until implementation and validation are complete.
 
 ## Intended result
 
@@ -18,7 +18,7 @@ A query is one top-level execution, not a registered processing graph, an operat
 | 4     | [Manager UI design](04-manager-ui.md)              | Accessible overview and query detail, using the generated client and existing manager navigation.                                |
 | 5     | [Validation and rollout](05-validation-rollout.md) | Cross-entry-point evidence, measured overhead and explicit experimental limitations.                                             |
 
-Implementation order is 1 → 2 → 3 → 4 → 5. Subgoal 1 is investigated below and in its plan; remaining checkboxes describe future implementation work. Each detailed plan links back here and to its dependencies. Keep these documents updated in the implementation PR as decisions are validated.
+Implementation order is 1 → 2 → 3 → 4 → 5. Subgoal 1 is investigated below and in its plan; remaining checkboxes describe future implementation work. Each detailed plan links back here and to its dependencies. Keep these documents updated in this PR as implementation proceeds and decisions are validated.
 
 ## Architecture decision
 

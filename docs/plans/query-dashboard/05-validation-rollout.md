@@ -25,7 +25,7 @@ Parent: [whole PR](README.md). Validates [collection](01-data-collection.md), [c
 
 Use fake clocks for sampling, duration and retention; deterministic stream fixtures for success/error/drop; concurrent tests for exactly-once terminal transitions and snapshot races. Verify history deltas survive terminal eviction. Include an integration test for each audited production entry-point category, especially streaming transport ownership and plots. Add API tests for limits, counter serialization, disabled state and secret redaction. Add UI service/utility tests plus browser tests covering overview → detail → filtered return, keyboard navigation and stale/restart states.
 
-Run backend formatting/lints and the appropriate operator/services/server tests, then `just ci backend` before implementation is committed as required by backend instructions. Regenerate spec/clients and run generated freshness checks after API changes. Run manager lint/build/tests using repository recipes and the live local backend. This design-only PR changes Markdown; its current validation is Markdown formatting and local link integrity, with no claim that implementation tests ran.
+Run backend formatting/lints and the appropriate operator/services/server tests, then `just ci backend` before implementation is committed as required by backend instructions. Regenerate spec/clients and run generated freshness checks after API changes. Run manager lint/build/tests using repository recipes and the live local backend. At the current planning stage, this PR changes only Markdown; validation so far covers Markdown formatting and local link integrity. Implementation tests remain required before the dashboard PR is ready for review.
 
 ## Performance and rollout gate
 
