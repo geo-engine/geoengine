@@ -5432,6 +5432,63 @@ mod tests {
     }
 
     #[ge_context::test]
+    async fn it_rejects_tile_size_overrides_of_dataset_tiles(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let create = CreateDataset {
+            data_path: DataPath::Volume(VolumeName("test_data".to_string())),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor(true).into(),
+                    cache_ttl: None,
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+
+        let mut tiles = create_ndvi_tiles()[..1].to_vec();
+        tiles[0].params.tile_size = Some([256, 256].try_into().unwrap());
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 400, "response: {res:?}");
+        let read_body: ErrorResponse = actix_web::test::read_body_json(res).await;
+        assert_eq!(
+            read_body,
+            ErrorResponse {
+                error: "CannotAddTilesToDataset".to_string(),
+                message: "Cannot add tiles to dataset: Dataset tiles of files `[\"raster/modis_ndvi/tiled/MOD13A2_M_NDVI_2014-01-01_1_1.tif\"]` set a tile size, which multi-band datasets do not support".to_string(),
+            }
+        );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_extends_dataset_bounds_when_inserting_new_tiles(
         app_ctx: PostgresContext<NoTls>,

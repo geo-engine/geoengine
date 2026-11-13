@@ -596,6 +596,12 @@ pub enum Error {
     DatasetTileZIndexConflict {
         files: Vec<String>,
     },
+    #[snafu(display(
+        "Dataset tiles of files `{files:?}` set a tile size, which multi-band datasets do not support"
+    ))]
+    DatasetTileSizeNotSupported {
+        files: Vec<String>,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
