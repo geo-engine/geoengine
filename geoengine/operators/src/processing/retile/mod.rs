@@ -435,10 +435,10 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::raster::{
         GeoTransform, Grid, GridShape2D, RasterDataType, TileIdx, TileSize,
     };
+    use geoengine_datatypes::raster::{TileOverlap, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -750,6 +750,7 @@ mod tests {
                 tile_position: TileIdx::new_y_x(ty, tx),
                 band: 0,
                 global_geo_transform: geo_transform,
+                overlap: TileOverlap::zero(),
                 grid_array: Grid::new(
                     in_tile_size.grid_shape(),
                     (0..4)

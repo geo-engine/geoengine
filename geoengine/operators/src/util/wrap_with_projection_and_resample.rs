@@ -335,11 +335,11 @@ mod tests {
         MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::processing::{Expression, ExpressionParams};
     use geoengine_datatypes::primitives::TimeInterval;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
-    use crate::processing::{Expression, ExpressionParams};
-    use geoengine_datatypes::raster::TileOverlap;
 
     #[test]
     fn it_strips_only_overlapping_tiles() {
@@ -378,7 +378,6 @@ mod tests {
             Some(TypedRasterOperator::RemoveTileOverlap(_))
         ));
     }
-
 
     async fn wrap_with_resample(target_resolution: SpatialResolution) -> TypedRasterOperator {
         let exe_ctx = MockExecutionContext::test_default();
