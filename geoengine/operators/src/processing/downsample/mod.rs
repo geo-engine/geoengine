@@ -1,21 +1,19 @@
 use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
+use crate::engine::SpatialGridDescriptor;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterOperator,
-    TypedRasterQueryProcessor,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
 };
-use crate::optimization::{OptimizableOperator, OptimizationError};
+use crate::processing::{InitializedWarp, WarpMethod, WarpOrigin, WarpParams};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, Coordinate2D, find_next_best_overview_level_resolution,
-};
+use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
@@ -87,11 +85,32 @@ impl RasterOperator for Downsampling {
             .sources
             .initialize_sources(path.clone(), context)
             .await?;
-        InitializedDownsampling::new_with_source_and_params(
-            name,
-            path,
-            initialized_source.raster,
-            self.params,
+        let raster_source = initialized_source.raster;
+
+        let out_grid = downsampled_spatial_grid(
+            *raster_source.result_descriptor().spatial_grid_descriptor(),
+            &self.params,
+        )?;
+
+        // `Warp` with nearest neighbour does the same, onto the grid computed above
+        let DownsamplingMethod::NearestNeighbor = self.params.sampling_method;
+        let warp_params = WarpParams {
+            target_spatial_reference: None,
+            output_resolution: Some(out_grid.spatial_resolution()),
+            output_origin_reference: self.params.output_origin_reference,
+            method: WarpMethod::NearestNeighbor,
+        };
+
+        InitializedWarp::with_output_grid(
+            WarpOrigin {
+                name,
+                path,
+                operator_name: Downsampling::TYPE_NAME,
+                always_reproject: false,
+            },
+            raster_source,
+            warp_params,
+            out_grid,
             context.tiling_specification(),
         )
         .map(InitializedRasterOperator::boxed)
@@ -100,194 +119,58 @@ impl RasterOperator for Downsampling {
     span_fn!(Downsampling);
 }
 
-pub struct InitializedDownsampling<O: InitializedRasterOperator> {
-    name: CanonicOperatorName,
-    path: ProcessingGraphOperatorPath,
-    output_result_descriptor: RasterResultDescriptor,
-    raster_source: O,
-    sampling_method: DownsamplingMethod,
-    tiling_specification: TilingSpecification,
-}
-
-impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
-    pub fn new_with_source_and_params(
-        name: CanonicOperatorName,
-        path: ProcessingGraphOperatorPath,
-        raster_source: O,
-        params: DownsamplingParams,
-        tiling_specification: TilingSpecification,
-    ) -> Result<Self> {
-        let in_descriptor = raster_source.result_descriptor();
-
-        let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
-
-        let output_resolution = match params.output_resolution {
-            DownsamplingResolution::Resolution(res) => {
-                ensure!(
-                    res.x().abs() >= in_spatial_grid.spatial_resolution().x().abs(),
-                    error::OutputMustBeLowerResolutionThanInput {
-                        input: in_spatial_grid.spatial_resolution(),
-                        output: res
-                    }
-                );
-                ensure!(
-                    res.y().abs() >= in_spatial_grid.spatial_resolution().y().abs(), // TODO: allow neg y size in SpatialResolution
-                    error::OutputMustBeLowerResolutionThanInput {
-                        input: in_spatial_grid.spatial_resolution(),
-                        output: res
-                    }
-                );
-                res
-            }
-
-            DownsamplingResolution::Fraction(fraction) => {
-                ensure!(
-                    fraction.x >= 1.0,
-                    error::FractionMustBeOneOrLarger { f: fraction.x }
-                );
-                ensure!(
-                    fraction.y >= 1.0,
-                    error::FractionMustBeOneOrLarger { f: fraction.y }
-                );
-
-                SpatialResolution::new_unchecked(
-                    in_spatial_grid.spatial_resolution().x().get() * fraction.x,
-                    in_spatial_grid.spatial_resolution().y().get() * fraction.y, // TODO: allow negative size
-                )
-            }
-        };
-
-        let output_gspatial_grid = if let Some(oc) = params.output_origin_reference {
-            in_spatial_grid
-                .with_moved_origin_to_nearest_grid_edge(oc)
-                .replace_origin(oc)
-                .with_changed_resolution(output_resolution)
-        } else {
-            in_spatial_grid.with_changed_resolution(output_resolution)
-        };
-
-        let out_descriptor = RasterResultDescriptor {
-            spatial_reference: in_descriptor.spatial_reference,
-            data_type: in_descriptor.data_type, // TODO: datatype depends on resample method!
-            time: in_descriptor.time,
-            spatial_grid: output_gspatial_grid,
-            bands: in_descriptor.bands.clone(),
-        };
-
-        Ok(InitializedDownsampling {
-            name,
-            path,
-            output_result_descriptor: out_descriptor,
-            raster_source,
-            sampling_method: params.sampling_method,
-            tiling_specification,
-        })
-    }
-}
-
-impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDownsampling<O> {
-    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let source_processor = self.raster_source.query_processor()?;
-
-        let res = call_on_generic_raster_processor!(
-            source_processor, p => match self.sampling_method  {
-                DownsamplingMethod::NearestNeighbor => DownsampleProcessor::<_,_>::new(
-                        p,
-                        self.output_result_descriptor.clone(),
-                        self.tiling_specification,
-                    ).boxed()
-                    .into(),
-            }
-        );
-
-        Ok(res)
-    }
-
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.output_result_descriptor
-    }
-
-    fn canonic_name(&self) -> CanonicOperatorName {
-        self.name.clone()
-    }
-
-    fn name(&self) -> &'static str {
-        Downsampling::TYPE_NAME
-    }
-
-    fn path(&self) -> ProcessingGraphOperatorPath {
-        self.path.clone()
-    }
-
-    fn optimize(
-        &self,
-        target_resolution: SpatialResolution,
-    ) -> Result<TypedRasterOperator, OptimizationError> {
-        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
-
-        let out_descriptor = self.result_descriptor();
-        let in_descriptor = self.raster_source.result_descriptor();
-
-        let input_resolution = in_descriptor.spatial_grid.spatial_resolution();
-
-        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate
-            == out_descriptor
-                .spatial_grid
-                .geo_transform()
-                .origin_coordinate
-        {
-            None
-        } else {
-            Some(
-                out_descriptor
-                    .spatial_grid
-                    .geo_transform()
-                    .origin_coordinate,
-            )
-        };
-
-        if input_resolution == target_resolution {
-            // special case where downsampling becomes redundant, unless it also regrids
-
-            // TODO: source does not need to be optimized, but we need it as an `RasterOperator` and not `InitializedRasterOperator`
-            let optimzed_source = self.raster_source.optimize(target_resolution)?;
-
-            if new_origin.is_some() {
-                return Ok(Downsampling {
-                    params: DownsamplingParams {
-                        sampling_method: self.sampling_method,
-                        output_resolution: DownsamplingResolution::Resolution(target_resolution),
-                        output_origin_reference: new_origin,
-                    },
-                    sources: SingleRasterSource {
-                        raster: optimzed_source,
-                    },
+/// The grid that `Downsampling` with `params` puts a raster with the grid `in_spatial_grid` on.
+///
+/// # Errors
+/// If the output would be finer than the input in an axis, or a fraction is smaller than one.
+pub fn downsampled_spatial_grid(
+    in_spatial_grid: SpatialGridDescriptor,
+    params: &DownsamplingParams,
+) -> Result<SpatialGridDescriptor> {
+    let output_resolution = match params.output_resolution {
+        DownsamplingResolution::Resolution(res) => {
+            ensure!(
+                res.x().abs() >= in_spatial_grid.spatial_resolution().x().abs(),
+                error::OutputMustBeLowerResolutionThanInput {
+                    input: in_spatial_grid.spatial_resolution(),
+                    output: res
                 }
-                .typed());
-            }
-            return Ok(optimzed_source);
+            );
+            ensure!(
+                res.y().abs() >= in_spatial_grid.spatial_resolution().y().abs(), // TODO: allow neg y size in SpatialResolution
+                error::OutputMustBeLowerResolutionThanInput {
+                    input: in_spatial_grid.spatial_resolution(),
+                    output: res
+                }
+            );
+            res
         }
 
-        // target resolution must be coarser than input
-        debug_assert!(input_resolution < target_resolution);
+        DownsamplingResolution::Fraction(fraction) => {
+            ensure!(
+                fraction.x >= 1.0,
+                error::FractionMustBeOneOrLarger { f: fraction.x }
+            );
+            ensure!(
+                fraction.y >= 1.0,
+                error::FractionMustBeOneOrLarger { f: fraction.y }
+            );
 
-        let snapped_input_resolution =
-            find_next_best_overview_level_resolution(input_resolution, target_resolution);
-
-        let optimzed_source = self.raster_source.optimize(snapped_input_resolution)?;
-
-        Ok(Downsampling {
-            params: DownsamplingParams {
-                sampling_method: self.sampling_method,
-                output_resolution: DownsamplingResolution::Resolution(target_resolution),
-                output_origin_reference: new_origin,
-            },
-            sources: SingleRasterSource {
-                raster: optimzed_source,
-            },
+            SpatialResolution::new_unchecked(
+                in_spatial_grid.spatial_resolution().x().get() * fraction.x,
+                in_spatial_grid.spatial_resolution().y().get() * fraction.y, // TODO: allow negative size
+            )
         }
-        .typed())
-    }
+    };
+
+    Ok(if let Some(oc) = params.output_origin_reference {
+        in_spatial_grid
+            .with_moved_origin_to_nearest_grid_edge(oc)
+            .replace_origin(oc)
+            .with_changed_resolution(output_resolution)
+    } else {
+        in_spatial_grid.with_changed_resolution(output_resolution)
+    })
 }
 
 pub struct DownsampleProcessor<Q, P>
