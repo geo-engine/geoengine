@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use super::map_query::MapQueryProcessor;
+use crate::processing::{InitializedWarp, WarpMethod, WarpOrigin, WarpParams};
 use crate::{
     adapters::{
         RasterSubQueryAdapter, TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
@@ -10,16 +11,11 @@ use crate::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
         InitializedVectorOperator, Operator, OperatorName, ProcessingGraphOperatorPath,
         QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-        SingleRasterOrVectorSource, SingleRasterSource, SpatialGridDescriptor, TypedRasterOperator,
-        TypedRasterQueryProcessor, TypedVectorOperator, TypedVectorQueryProcessor, VectorOperator,
-        VectorQueryProcessor, VectorResultDescriptor,
+        SingleRasterOrVectorSource, SpatialGridDescriptor, TypedVectorOperator,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
     },
     error::{self, Error},
-    optimization::{OptimizableOperator, OptimizationError, ProjectionOptimizationFailed},
-    processing::{
-        Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
-        Interpolation, InterpolationMethod, InterpolationParams, InterpolationResolution,
-    },
+    optimization::OptimizationError,
     util::{Result, input::RasterOrVectorOperator},
 };
 use async_trait::async_trait;
@@ -27,18 +23,16 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, stream};
 use geoengine_datatypes::{
     collections::FeatureCollection,
-    error::BoxedResultExt,
     operations::reproject::{Reproject, ReprojectClipped, reproject_spatial_query},
     primitives::{
         BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, VectorQueryRectangle,
     },
-    raster::{GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
+    raster::{GridBoundingBox2D, Pixel, RasterTile2D},
     spatial_reference::{CoordinateProjection, DefaultCoordinateProjector, SpatialReference},
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use tracing::trace;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -71,17 +65,6 @@ pub struct InitializedVectorReprojection {
     result_descriptor: VectorResultDescriptor,
     params: ReprojectionParams,
     source: Box<dyn InitializedVectorOperator>,
-    source_srs: SpatialReference,
-    target_srs: SpatialReference,
-}
-
-pub struct InitializedRasterReprojection<O: InitializedRasterOperator> {
-    name: CanonicOperatorName,
-    path: ProcessingGraphOperatorPath,
-    result_descriptor: RasterResultDescriptor,
-    params: ReprojectionParams,
-    source: O,
-    state: TileReprojectionSubqueryGridInfo,
     source_srs: SpatialReference,
     target_srs: SpatialReference,
 }
@@ -129,75 +112,6 @@ impl InitializedVectorReprojection {
             result_descriptor: out_desc,
             params,
             source: source_vector_operator,
-            source_srs: in_srs,
-            target_srs: params.target_spatial_reference,
-        })
-    }
-}
-
-impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
-    pub fn try_new_with_input(
-        name: CanonicOperatorName,
-        path: ProcessingGraphOperatorPath,
-        params: ReprojectionParams,
-        source_raster_operator: O,
-        tiling_spec: TilingSpecification,
-    ) -> Result<Self> {
-        let in_desc: RasterResultDescriptor = source_raster_operator.result_descriptor().clone();
-        let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
-            .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
-
-        // calculate the intersection of input and output srs in both coordinate systems
-        let proj_from_to =
-            DefaultCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
-
-        let out_spatial_grid = match params.derive_out_spec {
-            DeriveOutRasterSpecsSource::DataBounds => in_desc
-                .spatial_grid_descriptor()
-                .reproject_clipped(&proj_from_to)?, // TODO: we could skip the intersection (clipped) and try to project larger area
-            DeriveOutRasterSpecsSource::ProjectionBounds => {
-                let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
-                let target_proj_total_grid = in_desc
-                    .spatial_grid_descriptor()
-                    .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
-                    .reproject_clipped(&proj_from_to)?;
-                // TODO: we could skip the intersection and try to project larger area
-                let spatial_bounds_proj =
-                    in_desc.spatial_bounds().reproject_clipped(&proj_from_to)?;
-                target_proj_total_grid.and_then(|x| {
-                    spatial_bounds_proj.map(|spb| x.spatial_bounds_to_compatible_spatial_grid(spb))
-                })
-            }
-        };
-
-        // Operator will return an error when there is no intersection between data and output projection bounds!
-        let out_spatial_grid = out_spatial_grid.ok_or(error::Error::ReprojectionFailed)?; // TODO: better error!
-
-        let out_desc = RasterResultDescriptor {
-            spatial_reference: params.target_spatial_reference.into(),
-            data_type: in_desc.data_type,
-            time: in_desc.time,
-            spatial_grid: out_spatial_grid,
-            bands: in_desc.bands.clone(),
-        };
-
-        let state = TileReprojectionSubqueryGridInfo {
-            in_spatial_grid: in_desc
-                .spatial_grid_descriptor()
-                .tiling_grid_definition(tiling_spec)
-                .tiling_spatial_grid_definition(),
-            out_spatial_grid: out_spatial_grid
-                .tiling_grid_definition(tiling_spec)
-                .tiling_spatial_grid_definition(),
-        };
-
-        Ok(InitializedRasterReprojection {
-            name,
-            path,
-            params,
-            result_descriptor: out_desc,
-            source: source_raster_operator,
-            state,
             source_srs: in_srs,
             target_srs: params.target_spatial_reference,
         })
@@ -462,276 +376,43 @@ impl RasterOperator for Reprojection {
             .initialize_sources(path.clone(), context)
             .await?;
 
-        let initialized_operator = InitializedRasterReprojection::try_new_with_input(
-            name,
-            path,
+        let raster_source = initialized_source.raster;
+        let in_descriptor = raster_source.result_descriptor();
+        let in_srs = Option::<SpatialReference>::from(in_descriptor.spatial_reference)
+            .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
+        let out_grid = compute_output_spatial_grid(
+            *in_descriptor.spatial_grid_descriptor(),
+            in_descriptor.spatial_bounds(),
+            in_srs,
             self.params,
-            initialized_source.raster,
-            context.tiling_specification(),
         )?;
 
-        Ok(initialized_operator.boxed())
+        // `Warp` with nearest neighbour does the same, onto the grid of `Reprojection`, which may
+        // be derived from the data bounds; it projects the coordinates even within the same spatial
+        // reference, so the output is clipped to the area of use
+        let warp_params = WarpParams {
+            target_spatial_reference: Some(self.params.target_spatial_reference),
+            output_resolution: None,
+            output_origin_reference: None,
+            method: WarpMethod::NearestNeighbor,
+        };
+
+        InitializedWarp::with_output_grid(
+            WarpOrigin {
+                name,
+                path,
+                operator_name: Reprojection::TYPE_NAME,
+                always_reproject: true,
+            },
+            raster_source,
+            warp_params,
+            out_grid,
+            context.tiling_specification(),
+        )
+        .map(InitializedRasterOperator::boxed)
     }
 
     span_fn!(Reprojection);
-}
-
-impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRasterReprojection<O> {
-    fn result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
-
-    // i know there is a macro somewhere. we need to re-work this when we have the no-data value anyway.
-    #[allow(clippy::too_many_lines)]
-    fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
-        let q = self.source.query_processor()?;
-
-        Ok(match self.result_descriptor.data_type {
-            geoengine_datatypes::raster::RasterDataType::U8 => {
-                let qt = q
-                    .get_u8()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::U8(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::U16 => {
-                let qt = q
-                    .get_u16()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::U16(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-
-            geoengine_datatypes::raster::RasterDataType::U32 => {
-                let qt = q
-                    .get_u32()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::U32(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::U64 => {
-                let qt = q
-                    .get_u64()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::U64(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::I8 => {
-                let qt = q
-                    .get_i8()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::I8(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::I16 => {
-                let qt = q
-                    .get_i16()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::I16(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::I32 => {
-                let qt = q
-                    .get_i32()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::I32(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::I64 => {
-                let qt = q
-                    .get_i64()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::I64(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::F32 => {
-                let qt = q
-                    .get_f32()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::F32(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-            geoengine_datatypes::raster::RasterDataType::F64 => {
-                let qt = q
-                    .get_f64()
-                    .expect("the result descriptor and query processor type should match");
-                TypedRasterQueryProcessor::F64(Box::new(RasterReprojectionProcessor::new(
-                    qt,
-                    self.result_descriptor.clone(),
-                    self.source_srs,
-                    self.target_srs,
-                    self.state,
-                )))
-            }
-        })
-    }
-
-    fn canonic_name(&self) -> CanonicOperatorName {
-        self.name.clone()
-    }
-
-    fn name(&self) -> &'static str {
-        Reprojection::TYPE_NAME
-    }
-
-    fn path(&self) -> ProcessingGraphOperatorPath {
-        self.path.clone()
-    }
-
-    fn optimize(
-        &self,
-        target_resolution: SpatialResolution,
-    ) -> Result<TypedRasterOperator, OptimizationError> {
-        // adjust input resolution relative to change in target resolution
-        // idea: optimization of reprojection snaps from one overview level to another, so do the same in the source
-        // if the result does not match, we need to interpolate or resample the result to match the target resolution
-
-        // TODO: validate the quality of this approach, especially if the output resolution is actually the target resolution
-
-        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
-
-        let current_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
-
-        // TODO: use `find_next_best_resolution_overview_level` instead?
-        let output_overview_level_factor = (target_resolution.x() / current_resolution.x())
-            .get()
-            .round() as u32;
-        // must be the same in x and y
-        debug_assert_eq!(
-            output_overview_level_factor,
-            (target_resolution.y() / current_resolution.y())
-                .get()
-                .round() as u32
-        );
-        // must be a power of 2
-        debug_assert!(output_overview_level_factor.is_power_of_two());
-
-        let input_descriptor = self.source.result_descriptor();
-
-        let input_resolution = input_descriptor.spatial_grid.spatial_resolution();
-        // a factor of 0 means the target is finer than the current resolution
-        let scaled_input_resolution = (input_resolution * f64::from(output_overview_level_factor))
-            .map_err(|_| {
-                OptimizationError::TargetResolutionMustNotBeSmallerThanSourceResolution {
-                    source_resolution: current_resolution,
-                    target_resolution,
-                }
-            })?;
-
-        let source_optimized = self.source.optimize(scaled_input_resolution)?;
-
-        // given the input resolution, derive_out_spec, input and output spatial reference, calculate the output spatial grid
-        // TODO: instead of repeating the logic here, we could attach the result descriptor to the result of the `optimize` method
-        let optimized_spatial_grid_descriptor = input_descriptor
-            .spatial_grid_descriptor()
-            .with_changed_resolution(scaled_input_resolution);
-
-        // TODO: check if these are the correct bounds
-        let optimized_spatial_bounds = optimized_spatial_grid_descriptor.spatial_partition();
-
-        let output_spatial_grid = compute_output_spatial_grid(
-            optimized_spatial_grid_descriptor,
-            optimized_spatial_bounds,
-            self.source_srs,
-            self.params,
-        )
-        .boxed_context(ProjectionOptimizationFailed)?;
-
-        let output_spatial_resolution = output_spatial_grid.spatial_resolution();
-        trace!(
-            "output_spatial_resolution: {output_spatial_resolution:?}, target_resolution: {target_resolution:?}"
-        );
-
-        let optimized_reprojection = RasterOperator::typed(Reprojection {
-            params: ReprojectionParams {
-                target_spatial_reference: self.target_srs,
-                derive_out_spec: self.params.derive_out_spec,
-            },
-            sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Raster(source_optimized),
-            },
-        });
-
-        if output_spatial_resolution == target_resolution {
-            return Ok(optimized_reprojection);
-        }
-
-        // depending on the reprojection, the reprojection of the optimized input might not perfectly match the target resolution, so we may need to fix it
-
-        if output_spatial_resolution > target_resolution {
-            // reprojected raster is too coarse, we need to interpolate
-            // TODO: in this case we could (should?) also decrease the `scaled_input_resolution` to the previous overview level to get a finer result
-            return Ok(Interpolation {
-                params: InterpolationParams {
-                    interpolation: InterpolationMethod::NearestNeighbor,
-                    output_resolution: InterpolationResolution::Resolution(target_resolution),
-                    output_origin_reference: None,
-                },
-                sources: SingleRasterSource {
-                    raster: optimized_reprojection,
-                },
-            }
-            .typed());
-        }
-
-        // reprojected raster is too fine, we need to downsample
-        Ok(Downsampling {
-            params: DownsamplingParams {
-                sampling_method: DownsamplingMethod::NearestNeighbor,
-                output_resolution: DownsamplingResolution::Resolution(target_resolution),
-                output_origin_reference: None,
-            },
-            sources: SingleRasterSource {
-                raster: optimized_reprojection,
-            },
-        }
-        .typed())
-    }
 }
 
 pub struct RasterReprojectionProcessor<Q, P>
@@ -863,6 +544,7 @@ mod tests {
         CacheHint, DateTimeParseFormat, SpatialResolution, TimeGranularity, TimeInstance,
     };
     use geoengine_datatypes::primitives::{Coordinate2D, TimeStep};
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::raster::{
         GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, SpatialGridDefinition,
         TilesEqualIgnoringCacheHint,
