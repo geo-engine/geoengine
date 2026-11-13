@@ -42,21 +42,25 @@ FORMAT_FILES := '\
     '
 
 # `--no-error-on-unmatched-pattern` skips tracked files that were deleted locally.
-PRETTIER := "xargs -0 npx prettier --no-error-on-unmatched-pattern"
+PRETTIER := "xargs -0 -r npx prettier --no-error-on-unmatched-pattern"
 
 # Check if markdown files are formatted correctly. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
+[script("bash")]
 format-md write="false": common::_clear
+    set -euo pipefail
     {{ FORMAT_FILES }} "*.md" \
-    | {{ PRETTIER }} {{ if write != "true" { "--check" } else { "--write" } }}
+    | {{ PRETTIER }} {{ if write != "true" { "--check" } else { "--write" } }} --
 
 # Check if JSON files are formatted correctly. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
+[script("bash")]
 format-json write="false": common::_clear
+    set -euo pipefail
     {{ FORMAT_FILES }} "*.json" \
-    | {{ PRETTIER }} {{ if write != "true" { "--check" } else { "--write" } }}
+    | {{ PRETTIER }} {{ if write != "true" { "--check" } else { "--write" } }} --
 
 VERSION_CMD := "cd geoengine && cargo metadata --manifest-path Cargo.toml --format-version=1 --no-deps | jq -r '.packages[0].version'"
 PYTHON_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.version"'
