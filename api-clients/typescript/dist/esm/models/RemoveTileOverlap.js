@@ -16,13 +16,15 @@ import { RemoveTileOverlapParametersFromJSON, RemoveTileOverlapParametersToJSON,
  * @export
  */
 export const RemoveTileOverlapTypeEnum = {
-    RemoveTileOverlap: 'RemoveTileOverlap'
+    RemoveTileOverlap: 'RemoveTileOverlap',
 };
 /**
  * Check if a given object implements the RemoveTileOverlap interface.
  */
 export function instanceOfRemoveTileOverlap(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'RemoveTileOverlap')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

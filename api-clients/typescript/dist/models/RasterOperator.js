@@ -110,7 +110,7 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
     }
     switch (value['type']) {
         case 'AddTileOverlap':
-            return Object.assign({}, (0, AddTileOverlap_1.AddTileOverlapToJSON)(value), { type: 'AddTileOverlap' });
+            return Object.assign({}, (0, AddTileOverlap_1.AddTileOverlapToJSON)(value), { 'type': 'AddTileOverlap' });
         case 'BandFilter':
             return Object.assign({}, (0, BandFilter_1.BandFilterToJSON)(value), { 'type': 'BandFilter' });
         case 'BandNeighborhoodAggregate':
@@ -147,6 +147,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, ReTile_1.ReTileToJSON)(value), { 'type': 'ReTile' });
         case 'Reflectance':
             return Object.assign({}, (0, Reflectance_1.ReflectanceToJSON)(value), { 'type': 'Reflectance' });
+        case 'RemoveTileOverlap':
+            return Object.assign({}, (0, RemoveTileOverlap_1.RemoveTileOverlapToJSON)(value), { 'type': 'RemoveTileOverlap' });
         case 'Reprojection':
             return Object.assign({}, (0, Reprojection_1.ReprojectionToJSON)(value), { 'type': 'Reprojection' });
         case 'Temperature':

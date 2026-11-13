@@ -24,13 +24,15 @@ const SingleRasterSource_1 = require("./SingleRasterSource");
  * @export
  */
 exports.OnnxObjectDetectionTypeEnum = {
-    OnnxObjectDetection: 'OnnxObjectDetection'
+    OnnxObjectDetection: 'OnnxObjectDetection',
 };
 /**
  * Check if a given object implements the OnnxObjectDetection interface.
  */
 function instanceOfOnnxObjectDetection(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'OnnxObjectDetection')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

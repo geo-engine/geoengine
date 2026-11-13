@@ -43,20 +43,14 @@ import {
 export interface AddTileOverlap {
     /**
      * 
-     * @type {AddTileOverlapTypeEnum}
-     * @memberof AddTileOverlap
      */
     type: AddTileOverlapTypeEnum;
     /**
      * 
-     * @type {AddTileOverlapParameters}
-     * @memberof AddTileOverlap
      */
     params: AddTileOverlapParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof AddTileOverlap
      */
     sources: SingleRasterSource;
 }
@@ -66,7 +60,7 @@ export interface AddTileOverlap {
  * @export
  */
 export const AddTileOverlapTypeEnum = {
-    AddTileOverlap: 'AddTileOverlap'
+    AddTileOverlap: 'AddTileOverlap',
 } as const;
 export type AddTileOverlapTypeEnum = typeof AddTileOverlapTypeEnum[keyof typeof AddTileOverlapTypeEnum];
 
@@ -76,6 +70,8 @@ export type AddTileOverlapTypeEnum = typeof AddTileOverlapTypeEnum[keyof typeof 
  */
 export function instanceOfAddTileOverlap(value: object): value is AddTileOverlap {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'AddTileOverlap') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

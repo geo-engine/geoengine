@@ -43,20 +43,14 @@ import {
 export interface RemoveTileOverlap {
     /**
      * 
-     * @type {RemoveTileOverlapTypeEnum}
-     * @memberof RemoveTileOverlap
      */
     type: RemoveTileOverlapTypeEnum;
     /**
      * 
-     * @type {RemoveTileOverlapParameters}
-     * @memberof RemoveTileOverlap
      */
     params: RemoveTileOverlapParameters;
     /**
      * 
-     * @type {SingleRasterSource}
-     * @memberof RemoveTileOverlap
      */
     sources: SingleRasterSource;
 }
@@ -66,7 +60,7 @@ export interface RemoveTileOverlap {
  * @export
  */
 export const RemoveTileOverlapTypeEnum = {
-    RemoveTileOverlap: 'RemoveTileOverlap'
+    RemoveTileOverlap: 'RemoveTileOverlap',
 } as const;
 export type RemoveTileOverlapTypeEnum = typeof RemoveTileOverlapTypeEnum[keyof typeof RemoveTileOverlapTypeEnum];
 
@@ -76,6 +70,8 @@ export type RemoveTileOverlapTypeEnum = typeof RemoveTileOverlapTypeEnum[keyof t
  */
 export function instanceOfRemoveTileOverlap(value: object): value is RemoveTileOverlap {
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (value['type'] !== 'RemoveTileOverlap') return false;
+    
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
     return true;

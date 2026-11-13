@@ -30,20 +30,14 @@ import type { SingleRasterSource } from './SingleRasterSource';
 export interface OnnxObjectDetection {
     /**
      *
-     * @type {OnnxObjectDetectionTypeEnum}
-     * @memberof OnnxObjectDetection
      */
     type: OnnxObjectDetectionTypeEnum;
     /**
      *
-     * @type {OnnxObjectDetectionParameters}
-     * @memberof OnnxObjectDetection
      */
     params: OnnxObjectDetectionParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof OnnxObjectDetection
      */
     sources: SingleRasterSource;
 }

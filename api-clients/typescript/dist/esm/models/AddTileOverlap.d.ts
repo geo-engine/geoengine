@@ -26,20 +26,14 @@ import type { AddTileOverlapParameters } from './AddTileOverlapParameters';
 export interface AddTileOverlap {
     /**
      *
-     * @type {AddTileOverlapTypeEnum}
-     * @memberof AddTileOverlap
      */
     type: AddTileOverlapTypeEnum;
     /**
      *
-     * @type {AddTileOverlapParameters}
-     * @memberof AddTileOverlap
      */
     params: AddTileOverlapParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof AddTileOverlap
      */
     sources: SingleRasterSource;
 }

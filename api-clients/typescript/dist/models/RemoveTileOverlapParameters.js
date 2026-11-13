@@ -31,7 +31,7 @@ function RemoveTileOverlapParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'amount': json['amount'] == null ? undefined : json['amount'],
+        'amount': json['amount'] === undefined ? undefined : json['amount'] === null ? null : json['amount'],
     };
 }
 function RemoveTileOverlapParametersToJSON(json) {

@@ -84,6 +84,8 @@ function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, MockPointSource_1.MockPointSourceToJSON)(value), { 'type': 'MockPointSource' });
         case 'OgrSource':
             return Object.assign({}, (0, OgrSource_1.OgrSourceToJSON)(value), { 'type': 'OgrSource' });
+        case 'OnnxObjectDetection':
+            return Object.assign({}, (0, OnnxObjectDetection_1.OnnxObjectDetectionToJSON)(value), { 'type': 'OnnxObjectDetection' });
         case 'PointInPolygonFilter':
             return Object.assign({}, (0, PointInPolygonFilter_1.PointInPolygonFilterToJSON)(value), { 'type': 'PointInPolygonFilter' });
         case 'RasterVectorJoin':

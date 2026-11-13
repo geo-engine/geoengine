@@ -17,8 +17,6 @@ export interface RemoveTileOverlapParameters {
     /**
      * Halo cropped from every side in pixels `[rows, columns]`.
      * If `None`, all available overlap is removed.
-     * @type {Array<number>}
-     * @memberof RemoveTileOverlapParameters
      */
     amount?: Array<number> | null;
 }

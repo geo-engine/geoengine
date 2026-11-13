@@ -16,13 +16,15 @@ import { AddTileOverlapParametersFromJSON, AddTileOverlapParametersToJSON, } fro
  * @export
  */
 export const AddTileOverlapTypeEnum = {
-    AddTileOverlap: 'AddTileOverlap'
+    AddTileOverlap: 'AddTileOverlap',
 };
 /**
  * Check if a given object implements the AddTileOverlap interface.
  */
 export function instanceOfAddTileOverlap(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'AddTileOverlap')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;

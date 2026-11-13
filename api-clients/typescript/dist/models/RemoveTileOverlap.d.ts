@@ -26,20 +26,14 @@ import type { RemoveTileOverlapParameters } from './RemoveTileOverlapParameters'
 export interface RemoveTileOverlap {
     /**
      *
-     * @type {RemoveTileOverlapTypeEnum}
-     * @memberof RemoveTileOverlap
      */
     type: RemoveTileOverlapTypeEnum;
     /**
      *
-     * @type {RemoveTileOverlapParameters}
-     * @memberof RemoveTileOverlap
      */
     params: RemoveTileOverlapParameters;
     /**
      *
-     * @type {SingleRasterSource}
-     * @memberof RemoveTileOverlap
      */
     sources: SingleRasterSource;
 }

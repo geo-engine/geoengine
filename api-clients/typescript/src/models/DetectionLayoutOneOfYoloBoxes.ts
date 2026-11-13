@@ -22,8 +22,6 @@ import { mapValues } from '../runtime';
 export interface DetectionLayoutOneOfYoloBoxes {
     /**
      * 
-     * @type {boolean}
-     * @memberof DetectionLayoutOneOfYoloBoxes
      */
     objectness: boolean;
 }

@@ -23,7 +23,7 @@ from pydantic import StrictStr, Field
 from typing import Union, List, Set, Optional, Dict
 from typing_extensions import Literal, Self
 
-RASTEROPERATOR_ONE_OF_SCHEMAS = ["BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift"]
+RASTEROPERATOR_ONE_OF_SCHEMAS = ["AddTileOverlap", "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "RemoveTileOverlap", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift"]
 
 class RasterOperator(BaseModel):
     """
@@ -57,24 +57,28 @@ class RasterOperator(BaseModel):
     oneof_schema_13_validator: Optional[RasterStacker] = None
     # data type: RasterTypeConversion
     oneof_schema_14_validator: Optional[RasterTypeConversion] = None
+    # data type: RemoveTileOverlap
+    oneof_schema_15_validator: Optional[RemoveTileOverlap] = None
+    # data type: AddTileOverlap
+    oneof_schema_16_validator: Optional[AddTileOverlap] = None
     # data type: ReTile
-    oneof_schema_15_validator: Optional[ReTile] = None
+    oneof_schema_17_validator: Optional[ReTile] = None
     # data type: Rasterization
-    oneof_schema_16_validator: Optional[Rasterization] = None
+    oneof_schema_18_validator: Optional[Rasterization] = None
     # data type: Reprojection
-    oneof_schema_17_validator: Optional[Reprojection] = None
+    oneof_schema_19_validator: Optional[Reprojection] = None
     # data type: Reflectance
-    oneof_schema_18_validator: Optional[Reflectance] = None
+    oneof_schema_20_validator: Optional[Reflectance] = None
     # data type: Radiance
-    oneof_schema_19_validator: Optional[Radiance] = None
+    oneof_schema_21_validator: Optional[Radiance] = None
     # data type: TemporalRasterAggregation
-    oneof_schema_20_validator: Optional[TemporalRasterAggregation] = None
+    oneof_schema_22_validator: Optional[TemporalRasterAggregation] = None
     # data type: Temperature
-    oneof_schema_21_validator: Optional[Temperature] = None
+    oneof_schema_23_validator: Optional[Temperature] = None
     # data type: TimeShift
-    oneof_schema_22_validator: Optional[TimeShift] = None
-    actual_instance: Optional[Union[BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]] = None
-    one_of_schemas: Set[str] = { "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift" }
+    oneof_schema_24_validator: Optional[TimeShift] = None
+    actual_instance: Optional[Union[AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]] = None
+    one_of_schemas: Set[str] = { "AddTileOverlap", "BandFilter", "BandNeighborhoodAggregate", "BandwiseExpression", "Downsampling", "Expression", "GdalSource", "Interpolation", "MultiBandGdalSource", "NeighborhoodAggregate", "Onnx", "PolygonRasterization", "Radiance", "RasterScaling", "RasterStacker", "RasterTypeConversion", "Rasterization", "ReTile", "Reflectance", "RemoveTileOverlap", "Reprojection", "Temperature", "TemporalRasterAggregation", "TimeShift" }
 
     model_config = ConfigDict(
         validate_assignment=True,
@@ -222,10 +226,10 @@ class RasterOperator(BaseModel):
             match += 1
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when setting `actual_instance` in RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when setting `actual_instance` in RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         else:
             return v
 
@@ -513,10 +517,10 @@ class RasterOperator(BaseModel):
 
         if match > 1:
             # more than 1 match
-            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("Multiple matches found when deserializing the JSON string into RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         elif match == 0:
             # no match
-            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
+            raise ValueError("No match found when deserializing the JSON string into RasterOperator with oneOf schemas: AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift. Details: " + ", ".join(error_messages))
         else:
             return instance
 
@@ -530,7 +534,7 @@ class RasterOperator(BaseModel):
         else:
             return json.dumps(self.actual_instance)
 
-    def to_dict(self) -> Optional[Union[Dict[str, Any], BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]]:
+    def to_dict(self) -> Optional[Union[Dict[str, Any], AddTileOverlap, BandFilter, BandNeighborhoodAggregate, BandwiseExpression, Downsampling, Expression, GdalSource, Interpolation, MultiBandGdalSource, NeighborhoodAggregate, Onnx, PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion, Rasterization, ReTile, Reflectance, RemoveTileOverlap, Reprojection, Temperature, TemporalRasterAggregation, TimeShift]]:
         """Returns the dict representation of the actual instance"""
         if self.actual_instance is None:
             return None

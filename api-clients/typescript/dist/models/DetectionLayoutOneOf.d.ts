@@ -19,8 +19,6 @@ import type { DetectionLayoutOneOfYoloBoxes } from './DetectionLayoutOneOfYoloBo
 export interface DetectionLayoutOneOf {
     /**
      *
-     * @type {DetectionLayoutOneOfYoloBoxes}
-     * @memberof DetectionLayoutOneOf
      */
     yoloBoxes: DetectionLayoutOneOfYoloBoxes;
 }

@@ -24,13 +24,15 @@ const AddTileOverlapParameters_1 = require("./AddTileOverlapParameters");
  * @export
  */
 exports.AddTileOverlapTypeEnum = {
-    AddTileOverlap: 'AddTileOverlap'
+    AddTileOverlap: 'AddTileOverlap',
 };
 /**
  * Check if a given object implements the AddTileOverlap interface.
  */
 function instanceOfAddTileOverlap(value) {
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (value['type'] !== 'AddTileOverlap')
         return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
