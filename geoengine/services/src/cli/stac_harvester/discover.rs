@@ -626,8 +626,8 @@ fn asset_shape_bounds(height: usize, width: usize) -> Result<GridBoundingBox2D, 
     GridBoundingBox2D::new(
         GridIdx2D::new([0, 0]),
         GridIdx2D::new([
-            width.saturating_sub(1) as isize,
             height.saturating_sub(1) as isize,
+            width.saturating_sub(1) as isize,
         ]),
     )
     .map_err(|_| ())
@@ -1376,7 +1376,7 @@ mod tests {
                 "properties": {
                     "datetime": "2025-09-01T00:00:00Z",
                     "proj:code": "EPSG:3035",
-                    "proj:shape": [1000, 1000],
+                    "proj:shape": [500, 400],
                     "proj:transform": [100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1]
                 },
                 "links": [],
@@ -1405,7 +1405,7 @@ mod tests {
             PositiveFiniteF64::new_unchecked(100.0)
         );
         assert_eq!(info.geo_transform, Some(expected_transform));
-        assert_eq!(info.proj_shape, Some((1000, 1000)));
+        assert_eq!(info.proj_shape, Some((500, 400)));
 
         let datasets = build_datasets(
             &discovered_datasets,
@@ -1418,7 +1418,7 @@ mod tests {
         assert_eq!(datasets[0].spatial_grid.geo_transform(), expected_transform);
         assert_eq!(
             datasets[0].spatial_grid.grid_shape(),
-            geoengine_datatypes::raster::GridShape2D::new([1000, 1000])
+            geoengine_datatypes::raster::GridShape2D::new([500, 400])
         );
 
         // With the full projection grid, the bounds cover the whole EPSG:3035 area of use.
