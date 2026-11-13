@@ -1132,6 +1132,7 @@ mod tests {
                             GeoTransform::test_default(),
                             geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [199, 199])
                                 .unwrap(),
+                            TileSize::default_512(),
                         ),
                         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                             "band".into(),
@@ -1404,9 +1405,7 @@ mod tests {
     }
 
     fn test_download_all_metadata_zip_tiling_spec() -> TilingSpecification {
-        TilingSpecification {
-            tile_size: TileSize::new_unchecked(600, 600),
-        }
+        TilingSpecification::new(TileSize::new_unchecked(600, 600))
     }
 
     #[ge_context::test(tiling_spec = "test_download_all_metadata_zip_tiling_spec")]

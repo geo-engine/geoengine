@@ -24,6 +24,7 @@ pub use crate::contexts::migrations::{
     migration_0037_rename_workflows_to_processing_graphs::Migration0037RenameWorkflowsToProcessingGraphs,
     migration_0038_stac_max_concurrent_cell_searches::Migration0038StacMaxConcurrentCellSearches,
     migration_0039_max_overview_level::Migration0039MaxOverviewLevel,
+    migration_0040_gdal_tile_size::Migration0040GdalTileSize,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -55,6 +56,7 @@ mod migration_0036_remove_aruna_provider;
 mod migration_0037_rename_workflows_to_processing_graphs;
 mod migration_0038_stac_max_concurrent_cell_searches;
 mod migration_0039_max_overview_level;
+mod migration_0040_gdal_tile_size;
 
 #[cfg(test)]
 mod schema_info;
@@ -100,6 +102,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0037RenameWorkflowsToProcessingGraphs),
         Box::new(Migration0038StacMaxConcurrentCellSearches),
         Box::new(Migration0039MaxOverviewLevel),
+        Box::new(Migration0040GdalTileSize),
     ]
 }
 

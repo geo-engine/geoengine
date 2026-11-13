@@ -50,6 +50,7 @@ export function GdalDatasetParametersFromJSONTyped(json, ignoreDiscriminator) {
         'gdalOpenOptions': json['gdalOpenOptions'] === undefined ? undefined : json['gdalOpenOptions'] === null ? null : json['gdalOpenOptions'],
         'gdalConfigOptions': json['gdalConfigOptions'] === undefined ? undefined : json['gdalConfigOptions'] === null ? null : json['gdalConfigOptions'],
         'allowAlphabandAsMask': json['allowAlphabandAsMask'] == null ? undefined : json['allowAlphabandAsMask'],
+        'tileSize': json['tileSize'] === undefined ? undefined : json['tileSize'] === null ? null : json['tileSize'],
     };
 }
 export function GdalDatasetParametersToJSON(json) {
@@ -71,5 +72,6 @@ export function GdalDatasetParametersToJSONTyped(value, ignoreDiscriminator = fa
         'gdalOpenOptions': value['gdalOpenOptions'],
         'gdalConfigOptions': value['gdalConfigOptions'],
         'allowAlphabandAsMask': value['allowAlphabandAsMask'],
+        'tileSize': value['tileSize'],
     };
 }

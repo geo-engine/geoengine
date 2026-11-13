@@ -1139,6 +1139,7 @@ where
         );
 
         self.check_dataset_namespace(&name)?;
+        meta_data.validate_tile_size()?;
 
         // TODO: check `data_path` exists?
 
@@ -1235,6 +1236,8 @@ where
         dataset: DatasetId,
         meta_data: &MetaDataDefinition,
     ) -> Result<()> {
+        meta_data.validate_tile_size()?;
+
         let mut conn = self.conn_pool.get().await?;
 
         let tx = conn.build_transaction().start().await?;
@@ -1347,6 +1350,16 @@ where
         dataset: DatasetId,
         tiles: Vec<AddDatasetTile>,
     ) -> Result<()> {
+        // shortcut: the multi-band source has no per-dataset tile size, store one per dataset when needed
+        let files = tiles
+            .iter()
+            .filter(|tile| tile.params.tile_size.is_some())
+            .map(|tile| tile.params.file_path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        if !files.is_empty() {
+            return Err(Error::DatasetTileSizeNotSupported { files });
+        }
+
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 

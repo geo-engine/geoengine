@@ -20,7 +20,7 @@ use crate::processing::{
     BandFilter, BandNeighborhoodAggregate, BandwiseExpression, ColumnRangeFilter, Downsampling,
     Expression, Interpolation, LineSimplification, NeighborhoodAggregate, PointInPolygonFilter,
     PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion,
-    RasterVectorJoin, Rasterization, Reflectance, Reprojection, Temperature,
+    RasterVectorJoin, Rasterization, ReTile, Reflectance, Reprojection, Temperature,
     TemporalRasterAggregation, TimeProjection, TimeShift, VectorExpression, VectorJoin,
     VisualPointClustering,
 };
@@ -114,6 +114,7 @@ typed_operator! {
         RasterScaling(RasterScaling),
         RasterStacker(RasterStacker),
         RasterTypeConversion(RasterTypeConversion),
+        ReTile(ReTile),
         Rasterization(Rasterization),
         Reflectance(Reflectance),
         Reprojection(Reprojection),

@@ -113,7 +113,11 @@ impl TileIdx {
         Self(GridIdx2D::new_y_x(y, x))
     }
 
-    /// Access the underlying pixel-space grid index.
+    pub fn new(idx: GridIdx2D) -> Self {
+        Self(idx)
+    }
+
+    /// The tile index as a grid index in tile space.
     pub fn grid_idx(&self) -> GridIdx2D {
         self.0
     }
@@ -130,7 +134,10 @@ impl From<[isize; 2]> for TileIdx {
 pub struct TileBounds(GridBoundingBox2D);
 
 impl TileBounds {
-    /// Access the underlying pixel-space grid bounding box.
+    pub fn new(bounds: GridBoundingBox2D) -> Self {
+        Self(bounds)
+    }
+    /// The tile bounds as a grid bounding box in tile space.
     pub fn grid_bounds(&self) -> GridBoundingBox2D {
         self.0
     }
@@ -176,7 +183,7 @@ impl Iterator for TileIdx2DIter {
     }
 }
 
-/// The static parameters required to create a `TilingStrategy`
+/// The configured default tile size, used by sources without their own tile size
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct TilingSpecification {
     pub tile_size: TileSize,
@@ -185,11 +192,6 @@ pub struct TilingSpecification {
 impl TilingSpecification {
     pub fn new(tile_size: TileSize) -> Self {
         Self { tile_size }
-    }
-
-    #[allow(clippy::unused_self)]
-    pub fn tiling_origin_reference(&self) -> Coordinate2D {
-        Coordinate2D::new(0., 0.)
     }
 }
 
@@ -213,9 +215,7 @@ impl From<TilingSpecification> for GridShape2D {
 
 impl TestDefault for TilingSpecification {
     fn test_default() -> Self {
-        Self {
-            tile_size: TileSize::default_512(),
-        }
+        Self::new(TileSize::default_512())
     }
 }
 
@@ -281,12 +281,6 @@ impl TilingStrategy {
         let pixel_idx = self.tile_idx_to_global_pixel_idx(tile_idx);
         self.geo_transform
             .grid_idx_to_pixel_upper_left_coordinate_2d(pixel_idx)
-    }
-
-    /// Convert a spatial coordinate to the tile index that contains it.
-    pub fn spatial_to_tile_idx(&self, coord: Coordinate2D) -> TileIdx {
-        let pixel_idx = self.geo_transform.coordinate_to_grid_idx_2d(coord);
-        self.pixel_idx_to_tile_idx(pixel_idx)
     }
 
     /// Returns the tile grid bounds for the given `raster_spatial_query`.
@@ -477,6 +471,81 @@ impl Iterator for TileInformationIter {
     }
 }
 
+/// A grid aligned to a tiling specification, used for tile addressing.
+///
+/// `TilingGrid` stores the aligned geo-transform, pixel bounds, and tile size.
+/// It can convert between pixel coordinates and tile indices.
+///
+/// Construct via `TilingGrid::from_spatial_grid(grid, tile_size)` or
+/// `TilingGrid::from_spatial_grid_with_origin(grid, origin, tile_size)`.
+///
+/// The grid's own origin is used by `from_spatial_grid`. The explicit-origin
+/// constructor keeps the same spatial extent and resolution while changing
+/// the pixel coordinate origin.
+///
+/// Unlike [`SpatialGridDefinition`] (which represents raw pixels), a `TilingGrid`
+/// knows its tile size.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TilingGrid {
+    /// Geo-transform mapping pixel indices to spatial coordinates.
+    pub geo_transform: GeoTransform,
+    /// Pixel bounds of the grid.
+    pub pixel_bounds: GridBoundingBox2D,
+    /// The size of each tile in pixels.
+    pub tile_size: TileSize,
+}
+
+impl TilingGrid {
+    /// Construct from a spatial grid and tile size, anchoring the tiles at the grid's origin.
+    pub fn from_spatial_grid(grid: SpatialGridDefinition, tile_size: TileSize) -> Self {
+        Self {
+            geo_transform: grid.geo_transform(),
+            pixel_bounds: grid.grid_bounds(),
+            tile_size,
+        }
+    }
+
+    /// Construct a tiling grid with an explicit pixel-aligned origin.
+    ///
+    /// The returned grid covers the same spatial extent and keeps the source
+    /// resolution. `None` means the origin is not aligned to the source grid.
+    pub fn from_spatial_grid_with_origin(
+        grid: SpatialGridDefinition,
+        origin: Coordinate2D,
+        tile_size: TileSize,
+    ) -> Option<Self> {
+        let source_geo_transform = grid.geo_transform();
+        let geo_transform = GeoTransform::new_typed(
+            origin,
+            source_geo_transform.x_pixel_size(),
+            source_geo_transform.y_pixel_size(),
+        );
+
+        if !source_geo_transform.is_compatible_grid(geo_transform) {
+            return None;
+        }
+
+        Some(Self {
+            pixel_bounds: geo_transform.spatial_to_grid_bounds(&grid.spatial_partition()),
+            geo_transform,
+            tile_size,
+        })
+    }
+
+    /// Create a [`TilingStrategy`] for tile index computation.
+    pub fn tiling_strategy(&self) -> TilingStrategy {
+        TilingStrategy {
+            geo_transform: self.geo_transform,
+            tile_size: self.tile_size,
+        }
+    }
+
+    /// Convert to a [`SpatialGridDefinition`] (pixel grid).
+    pub fn to_spatial_grid(self) -> SpatialGridDefinition {
+        SpatialGridDefinition::new(self.geo_transform, self.pixel_bounds)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -635,5 +704,65 @@ mod tests {
         assert_eq!(GridIdx2D::new_y_x(1000, 1000), pixels);
         let pixels = tiling_strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(-3, -3));
         assert_eq!(GridIdx2D::new_y_x(-300, -300), pixels);
+    }
+
+    #[test]
+    fn tiling_strategy_with_custom_origin() {
+        let origin = Coordinate2D::new(10., -10.);
+        let geo_transform = GeoTransform::new_unchecked(origin, 1.0, -1.0);
+        let tile_pixel_size = TileSize::new_unchecked(100, 100);
+        let strat = TilingStrategy::new(tile_pixel_size, geo_transform);
+
+        // The pixel at the tiling origin (10, -10) maps to pixel idx (0, 0)
+        let origin_pixel = geo_transform.coordinate_to_grid_idx_2d(origin);
+        assert_eq!(origin_pixel, GridIdx2D::new_y_x(0, 0));
+
+        // Tile (0,0) starts at global pixel (0,0)
+        let tile_start = strat.tile_idx_to_global_pixel_idx(TileIdx::new_y_x(0, 0));
+        assert_eq!(tile_start, GridIdx2D::new_y_x(0, 0));
+    }
+
+    #[test]
+    fn tiling_grid_with_explicit_origin_preserves_extent() {
+        let source = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked((100., -200.).into(), 30., -30.),
+            GridBoundingBox2D::new_min_max(0, 9, 0, 9).unwrap(),
+        );
+        let tiling_grid = TilingGrid::from_spatial_grid_with_origin(
+            source,
+            (70., -170.).into(),
+            TileSize::new_unchecked(4, 4),
+        )
+        .unwrap();
+
+        assert_eq!(
+            tiling_grid.to_spatial_grid().spatial_partition(),
+            source.spatial_partition()
+        );
+        assert_eq!(
+            tiling_grid.geo_transform.origin_coordinate,
+            (70., -170.).into()
+        );
+        assert_eq!(
+            tiling_grid.pixel_bounds,
+            GridBoundingBox2D::new_min_max(1, 10, 1, 10).unwrap()
+        );
+    }
+
+    #[test]
+    fn tiling_grid_rejects_unaligned_origin() {
+        let source = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked((100., -200.).into(), 30., -30.),
+            GridBoundingBox2D::new_min_max(0, 9, 0, 9).unwrap(),
+        );
+
+        assert!(
+            TilingGrid::from_spatial_grid_with_origin(
+                source,
+                (70.5, -170.).into(),
+                TileSize::new_unchecked(4, 4),
+            )
+            .is_none()
+        );
     }
 }

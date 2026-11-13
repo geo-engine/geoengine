@@ -851,8 +851,7 @@ mod tests {
     };
     use super::*;
     use float_cmp::assert_approx_eq;
-    use geoengine_datatypes::raster::TileIdx;
-    use geoengine_datatypes::raster::TileSize;
+    use geoengine_datatypes::raster::{TileIdx, TileSize};
     use geoengine_datatypes::{
         primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance, TimeInterval},
         raster::{
@@ -905,6 +904,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         }
     }
 
@@ -1061,6 +1061,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             read_id: None,
             request: GdalRequest::Read {
@@ -1133,6 +1134,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             read_id: None,
             request: GdalRequest::Read {
@@ -1209,6 +1211,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let mut gdc = GdalDatasetHolder::new();
@@ -1339,6 +1342,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let gdal_read_advice = GdalReadAdvise {
@@ -1383,6 +1387,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         // invalid channel => error
@@ -1439,6 +1444,7 @@ mod tests {
             ]),
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         // 404 => no data
@@ -1491,6 +1497,7 @@ mod tests {
             ]),
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         // 500 => error
@@ -1548,6 +1555,7 @@ mod tests {
             ]),
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         // The `/vsicurl/` prefix is added when the dataset is opened
@@ -1652,6 +1660,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let ge_global_dataset_grid = SpatialGridDefinition::new(
@@ -1766,6 +1775,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let gdal_read_advice = GdalReadAdvise {
@@ -1857,6 +1867,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let gdal_read_advice = GdalReadAdvise {
@@ -1923,6 +1934,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let gdal_read_advice = GdalReadAdvise {
@@ -2072,6 +2084,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         }
     }
 

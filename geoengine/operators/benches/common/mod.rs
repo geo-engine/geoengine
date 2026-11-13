@@ -214,6 +214,7 @@ pub fn stack(rasters: Vec<TypedRasterOperator>) -> TypedRasterOperator {
     RasterStacker {
         params: RasterStackerParams {
             rename_bands: RenameBands::Default,
+            output_origin: None,
         },
         sources: MultipleRasterSources { rasters },
     }
@@ -452,8 +453,8 @@ impl Env {
         let descriptor = initialized.result_descriptor();
         let grid = descriptor
             .spatial_grid_descriptor()
-            .tiling_grid_definition(self.exe_ctx.inner.tiling_specification);
-        let data = grid.tiling_grid_bounds();
+            .tiling_grid_definition();
+        let data = grid.pixel_bounds;
         let bounds = match area {
             Area::Extent => data,
             // grow by (n - 1) / 2 extents on each side, so the data stays in the center
@@ -468,7 +469,7 @@ impl Env {
                 )
                 .unwrap()
             }
-            Area::Part(part) => grid.tiling_geo_transform().spatial_to_grid_bounds(&part),
+            Area::Part(part) => grid.geo_transform.spatial_to_grid_bounds(&part),
         };
         let query = RasterQueryRectangle::new(
             bounds,

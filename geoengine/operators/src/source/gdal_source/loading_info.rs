@@ -9,6 +9,7 @@ use geoengine_datatypes::primitives::{
     CacheTtlSeconds, RasterQueryRectangle, TimeFilledItem, TimeInstance, TimeInterval, TimeStep,
     TimeStepIter,
 };
+use geoengine_datatypes::raster::TileSize;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -68,6 +69,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
         Ok(self.result_descriptor.clone())
+    }
+
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        Ok(self.params.tile_size)
     }
 
     fn box_clone(
@@ -155,6 +160,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         Ok(self.result_descriptor.clone())
     }
 
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        Ok(self.params.tile_size)
+    }
+
     fn box_clone(
         &self,
     ) -> Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> {
@@ -230,6 +239,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
         Ok(self.result_descriptor.clone())
+    }
+
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        Ok(self.params.tile_size)
     }
 
     fn box_clone(
@@ -316,6 +329,18 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 
     async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
         Ok(self.result_descriptor.clone())
+    }
+
+    fn tile_size(&self) -> Result<Option<TileSize>> {
+        let mut overrides = self
+            .params
+            .iter()
+            .filter_map(|part| part.params.as_ref().map(|params| params.tile_size));
+        let first = overrides.next().flatten();
+        if let Some(other) = overrides.find(|other| *other != first) {
+            return Err(Error::InconsistentTileSizeOverride { first, other });
+        }
+        Ok(first)
     }
 
     fn box_clone(
@@ -691,6 +716,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
+                    TileSize::new_unchecked(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -707,6 +733,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             time_placeholders: hashmap! {
                 "%TIME%".to_string() => GdalSourceTimePlaceholder {
@@ -771,7 +798,8 @@ mod tests {
                 ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
-                    GridShape2D::new_2d(180, 360).bounding_box()
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                    TileSize::new_unchecked(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             }
@@ -980,6 +1008,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn meta_data_list_rejects_inconsistent_tile_size_overrides() {
+        let regular = create_regular_metadata();
+        let part = |tile_size| GdalLoadingInfoTemporalSlice {
+            time: TimeInterval::default(),
+            params: Some(GdalDatasetParameters {
+                tile_size,
+                ..regular.params.clone()
+            }),
+            cache_ttl: None,
+        };
+        let list = |params| GdalMetaDataList {
+            result_descriptor: regular.result_descriptor.clone(),
+            params,
+        };
+        let size = Some(TileSize::new_unchecked(256, 256));
+
+        assert_eq!(
+            list(vec![part(size), part(size)]).tile_size().unwrap(),
+            size
+        );
+        assert!(list(vec![part(size), part(None)]).tile_size().is_err());
+    }
+
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_meta_data_list() {
@@ -993,6 +1045,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
+                    TileSize::new_unchecked(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -1012,6 +1065,7 @@ mod tests {
                         gdal_config_options: None,
                         allow_alphaband_as_mask: true,
                         retry: None,
+                        tile_size: None,
                     }),
                     cache_ttl: None,
                 },
@@ -1030,6 +1084,7 @@ mod tests {
                         gdal_config_options: None,
                         allow_alphaband_as_mask: true,
                         retry: None,
+                        tile_size: None,
                     }),
                     cache_ttl: None,
                 },
@@ -1048,6 +1103,7 @@ mod tests {
                         gdal_config_options: None,
                         allow_alphaband_as_mask: true,
                         retry: None,
+                        tile_size: None,
                     }),
                     cache_ttl: None,
                 },
@@ -1062,9 +1118,10 @@ mod tests {
                 time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 6))),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
-                    GridShape2D::new_2d(180, 360).bounding_box()
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                    TileSize::new_unchecked(256, 256),
                 ),
-                bands: RasterBandDescriptors::new_single_band()
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
 
@@ -1108,6 +1165,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((0., 0.).into(), 1., -1.),
                     GridShape2D::new_2d(128, 128).bounding_box(),
+                    TileSize::new_unchecked(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -1128,6 +1186,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             start: time_start,
             end: time_end,
@@ -1177,6 +1236,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
+                    TileSize::new_unchecked(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -1197,6 +1257,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             start: time_start,
             end: time_end,
@@ -1249,6 +1310,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((-180., -90.).into(), 1., -1.),
                     GridShape2D::new_2d(180, 360).bounding_box(),
+                    TileSize::new_unchecked(256, 256),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
@@ -1269,6 +1331,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             start: time_start,
             end: time_end,
@@ -1359,6 +1422,7 @@ mod tests {
                 gdal_config_options: None,
                 allow_alphaband_as_mask: true,
                 retry: None,
+                tile_size: None,
             },
             step: time_step,
             dataset_time_start: time_start,
@@ -1442,6 +1506,7 @@ mod tests {
                     gdal_config_options: None,
                     allow_alphaband_as_mask: true,
                     retry: None,
+                    tile_size: None,
                 },
                 step: time_step,
                 dataset_time_start: TimeInstance::from(DateTime::new_utc(2010, 1, 1, 0, 0, 0)),

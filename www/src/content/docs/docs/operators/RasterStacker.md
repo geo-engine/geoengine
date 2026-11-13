@@ -12,9 +12,10 @@ All inputs must have the same data type and spatial reference.
 
 ## Parameters
 
-| Name        | Type        | Description                                                                                                                                                                                                                              | Examples             |
-| ----------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| renameBands | RenameBands | Strategy for deriving output band names.<br><br>- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.<br>- `suffix`: appends one suffix per input.<br>- `rename`: explicitly provides names for all resulting bands. | `{"type":"default"}` |
+| Name         | Type                 | Description                                                                                                                                                                                                                              | Examples             |
+| ------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| renameBands  | RenameBands          | Strategy for deriving output band names.<br><br>- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.<br>- `suffix`: appends one suffix per input.<br>- `rename`: explicitly provides names for all resulting bands. | `{"type":"default"}` |
+| outputOrigin | Coordinate2D or null | Override the origin of the stacked output grid.<br>If `None`, the first input's origin is used.                                                                                                                                          |                      |
 
 ## Sources
 

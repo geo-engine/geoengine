@@ -84,6 +84,10 @@ export interface GdalDatasetParameters {
      * 
      */
     allowAlphabandAsMask?: boolean;
+    /**
+     * Optional tile size override. If absent, the configured default tile size is used.
+     */
+    tileSize?: Array<number> | null;
 }
 
 
@@ -122,6 +126,7 @@ export function GdalDatasetParametersFromJSONTyped(json: any, ignoreDiscriminato
         'gdalOpenOptions': json['gdalOpenOptions'] === undefined ? undefined : json['gdalOpenOptions'] === null ? null : json['gdalOpenOptions'],
         'gdalConfigOptions': json['gdalConfigOptions'] === undefined ? undefined : json['gdalConfigOptions'] === null ? null : json['gdalConfigOptions'],
         'allowAlphabandAsMask': json['allowAlphabandAsMask'] == null ? undefined : json['allowAlphabandAsMask'],
+        'tileSize': json['tileSize'] === undefined ? undefined : json['tileSize'] === null ? null : json['tileSize'],
     };
 }
 
@@ -147,6 +152,7 @@ export function GdalDatasetParametersToJSONTyped(value?: GdalDatasetParameters |
         'gdalOpenOptions': value['gdalOpenOptions'],
         'gdalConfigOptions': value['gdalConfigOptions'],
         'allowAlphabandAsMask': value['allowAlphabandAsMask'],
+        'tileSize': value['tileSize'],
     };
 }
 

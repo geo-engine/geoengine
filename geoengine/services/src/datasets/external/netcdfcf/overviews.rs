@@ -770,7 +770,7 @@ mod tests {
     use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::{
         primitives::{DateTime, TimeInterval},
-        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType, TileSize},
         spatial_reference::SpatialReference,
         test_data,
         util::gdal::hide_gdal_errors,
@@ -833,6 +833,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                        TileSize::default_512(),
                     )
                     .with_max_overview_level(Some(1)),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -857,6 +858,7 @@ mod tests {
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
                             retry: None,
+                            tile_size: None,
                         }),
                         cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
@@ -879,6 +881,7 @@ mod tests {
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
                             retry: None,
+                            tile_size: None,
                         }),
                         cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
@@ -1009,6 +1012,7 @@ mod tests {
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new_unchecked((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                        TileSize::default_512(),
                     )
                     .with_max_overview_level(Some(1)),
                     bands: RasterBandDescriptors::new_single_band(),
@@ -1034,6 +1038,7 @@ mod tests {
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
                             retry: None,
+                            tile_size: None,
                         }),
                         cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
@@ -1057,6 +1062,7 @@ mod tests {
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
                             retry: None,
+                            tile_size: None,
                         }),
                         cache_ttl: Some(CacheTtlSeconds::new(0)),
                     },
@@ -1080,6 +1086,7 @@ mod tests {
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
                             retry: None,
+                            tile_size: None,
                         }),
                         cache_ttl: Some(CacheTtlSeconds::new(0)),
                     }

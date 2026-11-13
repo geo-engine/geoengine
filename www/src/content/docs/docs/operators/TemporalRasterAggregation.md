@@ -19,8 +19,8 @@ an error is returned.
 | --------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
 | aggregation     | Aggregation            | Aggregation method for values within each time window.<br><br>Encountering NO DATA makes the aggregation result NO DATA unless<br>`ignoreNoData` is `true` for the selected aggregation variant. | `{"type":"mean","ignoreNoData":true}` |
 | window          | TimeStep               | Window size and granularity for the output time series.                                                                                                                                          | `{"granularity":"months","step":1}`   |
-| windowReference | TimeInstance or null   |                                                                                                                                                                                                  |                                       |
-| outputType      | RasterDataType or null |                                                                                                                                                                                                  |                                       |
+| windowReference | TimeInstance or null   | Optional reference timestamp used as the anchor for window boundaries.<br><br>If omitted, windows are anchored at `1970-01-01T00:00:00Z`.                                                        |                                       |
+| outputType      | RasterDataType or null | Optional output raster data type.                                                                                                                                                                |                                       |
 
 ## Sources
 

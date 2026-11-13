@@ -26,8 +26,8 @@ use geoengine_datatypes::{
         SpatialResolution, TimeInterval,
     },
     raster::{
-        GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
-        TilingSpatialGridDefinition, TilingSpecification,
+        GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition, TileSize,
+        TilingGrid,
     },
 };
 
@@ -124,12 +124,13 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
 
 fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
-    tiling_spatial_grid: TilingSpatialGridDefinition,
+    tiling_spatial_grid: TilingGrid,
     fetch_tiles: bool,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
     MultiBandGdalLoadingInfoQueryRectangle::new(
         tiling_spatial_grid
-            .tiling_geo_transform()
+            .tiling_strategy()
+            .geo_transform
             .grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
@@ -142,7 +143,7 @@ where
     T: Pixel,
 {
     pub produced_result_descriptor: RasterResultDescriptor,
-    pub tiling_specification: TilingSpecification,
+    pub tiling_grid: TilingGrid,
     pub meta_data: MultiBandGdalMetaData,
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
@@ -180,29 +181,12 @@ where
         // this is the result descriptor of the operator. It already incorporates the overview level AND shifts the origin to the tiling origin
         let result_descriptor = self.result_descriptor();
 
-        let grid_produced_by_source_desc = result_descriptor.spatial_grid;
-        let grid_produced_by_source = grid_produced_by_source_desc
+        let grid_produced_by_source = result_descriptor
+            .spatial_grid
             .source_spatial_grid_definition()
             .expect("the source grid definition should be present in a source...");
-        // A `GeoTransform` maps pixel space to world space.
-        // Usually a SRS has axis directions pointing "up" (y-axis) and "up" (y-axis).
-        // We are not aware of spatial reference systems where the x-axis points to the right.
-        // However, there are spatial reference systems where the y-axis points downwards.
-        // The standard "pixel-space" starts at the top-left corner of a `GeoTransform` and points down-right.
-        // Therefore, the pixel size on the x-axis is always increasing
-        let pixel_size_x = grid_produced_by_source.geo_transform().x_pixel_size().get();
-        debug_assert!(pixel_size_x.is_sign_positive());
-        // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
-        // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = grid_produced_by_source.geo_transform().y_pixel_size().get();
-        debug_assert!(pixel_size_y.is_sign_negative());
 
-        // The data origin is not neccessarily the origin of the tileing we want to use.
-        // TODO: maybe derive tilling origin reference from the data projection
-        let produced_tiling_grid =
-            grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
-
-        let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
+        let tiling_strategy = self.tiling_grid.tiling_strategy();
 
         let reader_mode = match self.original_resolution_spatial_grid {
             None => GdalReaderMode::OriginalResolution(ReaderState {
@@ -222,7 +206,7 @@ where
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
                 &query,
-                produced_tiling_grid,
+                self.tiling_grid,
                 true,
             ))
             .await?;
@@ -284,26 +268,16 @@ where
     async fn _time_query<'a>(
         &'a self,
         query: TimeInterval,
-        ctx: &'a dyn QueryContext,
+        _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
-        let result_descriptor = self.result_descriptor();
-
-        let grid_produced_by_source_desc = result_descriptor.spatial_grid;
-
-        let produced_tiling_grid =
-            grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
-
         let q_bounds = self
             .raster_result_descriptor()
-            .tiling_grid_definition(ctx.tiling_specification())
-            .tiling_grid_bounds();
+            .tiling_grid_definition()
+            .pixel_bounds;
         let query = RasterQueryRectangle::new(q_bounds, query, BandSelection::first());
 
-        let qrect = raster_query_rectangle_to_loading_info_query_rectangle(
-            &query,
-            produced_tiling_grid,
-            false,
-        );
+        let qrect =
+            raster_query_rectangle_to_loading_info_query_rectangle(&query, self.tiling_grid, false);
 
         let loading_info = self.meta_data.loading_info(qrect).await?;
 
@@ -349,6 +323,9 @@ impl RasterOperator for MultiBandGdalSource {
             )?;
         }
 
+        let tile_size = meta_data
+            .tile_size()?
+            .unwrap_or_else(|| context.tiling_specification().tile_size);
         let op_name = CanonicOperatorName::from(&self);
         let op = if self.params.overview_level.is_none() {
             InitializedGdalSourceOperator::initialize_original_resolution(
@@ -357,7 +334,7 @@ impl RasterOperator for MultiBandGdalSource {
                 self.params.data,
                 meta_data,
                 meta_data_result_descriptor,
-                context.tiling_specification(),
+                tile_size,
                 context.default_cache_ttl(),
             )
         } else {
@@ -368,7 +345,7 @@ impl RasterOperator for MultiBandGdalSource {
                 self.params.data,
                 meta_data,
                 meta_data_result_descriptor,
-                context.tiling_specification(),
+                tile_size,
                 self.params.overview_level.unwrap_or(0),
                 context.default_cache_ttl(),
             )
@@ -383,10 +360,10 @@ impl RasterOperator for MultiBandGdalSource {
 pub struct InitializedGdalSourceOperator {
     name: CanonicOperatorName,
     path: ProcessingGraphOperatorPath,
-    data_name: NamedData,
     pub meta_data: MultiBandGdalMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
-    pub tiling_specification: TilingSpecification,
+    pub tiling_grid: TilingGrid,
+    pub data_name: NamedData,
     // the overview level to use. 0/1 means the highest resolution
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
@@ -402,9 +379,16 @@ impl InitializedGdalSourceOperator {
         data_name: NamedData,
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
+        tile_size: TileSize,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
+        // The output tiling is driven by the (config-provided) tile size, not by the
+        // dataset's default tiling. Keep the dataset's geo-transform and bounds.
+        let result_descriptor = RasterResultDescriptor {
+            spatial_grid: result_descriptor.spatial_grid.with_tile_size(tile_size),
+            ..result_descriptor
+        };
+        let tiling_grid = result_descriptor.spatial_grid.tiling_grid_definition();
         InitializedGdalSourceOperator {
             name,
             path,
@@ -412,7 +396,7 @@ impl InitializedGdalSourceOperator {
             max_overview_level: result_descriptor.spatial_grid.max_overview_level(),
             produced_result_descriptor: result_descriptor,
             meta_data,
-            tiling_specification,
+            tiling_grid,
             overview_level: 0,
             original_resolution_spatial_grid: None,
             default_cache_ttl,
@@ -426,7 +410,7 @@ impl InitializedGdalSourceOperator {
         data_name: NamedData,
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
+        tile_size: TileSize,
         overview_level: u32,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
@@ -442,21 +426,29 @@ impl InitializedGdalSourceOperator {
                 overview_level,
             ) {
             let ovr_res = RasterResultDescriptor {
-                spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid),
+                spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid, tile_size),
                 ..result_descriptor
             };
             (ovr_res, Some(source_resolution_spatial_grid))
         } else {
-            (result_descriptor, None)
+            (
+                RasterResultDescriptor {
+                    spatial_grid: result_descriptor.spatial_grid.with_tile_size(tile_size),
+                    ..result_descriptor
+                },
+                None,
+            )
         };
+
+        let tiling_grid = result_descriptor.spatial_grid.tiling_grid_definition();
 
         InitializedGdalSourceOperator {
             name,
             path,
-            data_name,
             produced_result_descriptor: result_descriptor,
             meta_data,
-            tiling_specification,
+            tiling_grid,
+            data_name,
             overview_level,
             original_resolution_spatial_grid: original_grid,
             max_overview_level,
@@ -469,7 +461,7 @@ impl InitializedGdalSourceOperator {
     fn processor<P: Pixel>(&self) -> GdalSourceProcessor<P> {
         GdalSourceProcessor {
             produced_result_descriptor: self.produced_result_descriptor.clone(),
-            tiling_specification: self.tiling_specification,
+            tiling_grid: self.tiling_grid,
             meta_data: self.meta_data.clone(),
             overview_level: self.overview_level,
             original_resolution_spatial_grid: self.original_resolution_spatial_grid,
@@ -580,8 +572,7 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
-        TimeDescriptor,
+        MockExecutionContext, RasterBandDescriptor, StaticMetaData, TimeDescriptor,
     };
     use crate::source::gdal_read::assemble_tile;
     use crate::source::gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig};
@@ -813,6 +804,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let dataset_parameters_json = serde_json::to_value(&dataset_parameters).unwrap();
@@ -861,6 +853,7 @@ mod tests {
                 "gdalConfigOptions": null,
                 "allowAlphabandAsMask": true,
                 "retry": null,
+                "tileSize": null,
             })
         );
 
@@ -938,6 +931,7 @@ mod tests {
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new_unchecked((-180.0, 90.0).into(), 0.2, -0.2),
                     GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
+                    TileSize::new_unchecked(256, 256),
                 ),
                 bands: vec![
                     RasterBandDescriptor::new("band 0".to_string(), Measurement::Unitless),
@@ -1035,15 +1029,13 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let tiling_spec = execution_context.tiling_specification();
-
         let tiling_spatial_grid_definition = processor
             .result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+            .tiling_grid_definition();
 
         let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -1139,15 +1131,13 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let tiling_spec = execution_context.tiling_specification();
-
         let tiling_spatial_grid_definition = processor
             .result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+            .tiling_grid_definition();
 
         let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -1269,15 +1259,13 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let tiling_spec = execution_context.tiling_specification();
-
         let tiling_spatial_grid_definition = processor
             .result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+            .tiling_grid_definition();
 
         let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -1449,15 +1437,13 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let tiling_spec = execution_context.tiling_specification();
-
         let tiling_spatial_grid_definition = processor
             .result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+            .tiling_grid_definition();
 
         let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -1682,15 +1668,13 @@ mod tests {
 
         let processor = initialized.query_processor()?;
 
-        let tiling_spec = execution_context.tiling_specification();
-
         let tiling_spatial_grid_definition = processor
             .result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+            .tiling_grid_definition();
 
         let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -1787,15 +1771,13 @@ mod tests {
 
         let processor = initialized.query_processor()?.get_u16().unwrap();
 
-        let tiling_spec = execution_context.tiling_specification();
-
         let tiling_spatial_grid_definition = processor
             .result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec);
+            .tiling_grid_definition();
 
         let query_tiling_pixel_grid = tiling_spatial_grid_definition
-            .tiling_spatial_grid_definition()
+            .to_spatial_grid()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
@@ -1843,8 +1825,6 @@ mod tests {
         let expected_tiles = [
             "2025-01-01_global_b0_tile_0.tif",
             "2025-01-01_global_b0_tile_1.tif",
-            "2025-01-01_global_b0_tile_2.tif",
-            "2025-01-01_global_b0_tile_3.tif",
         ];
 
         let expected_time = TimeInterval::new_unchecked(
@@ -2036,6 +2016,7 @@ mod tests {
                             gdal_config_options: None,
                             allow_alphaband_as_mask: true,
                             retry: None,
+                            tile_size: None,
                         },
                     });
                 }
@@ -2185,6 +2166,7 @@ mod tests {
             gdal_config_options: None,
             allow_alphaband_as_mask: true,
             retry: None,
+            tile_size: None,
         };
 
         let mut params_b = dataset_params.clone();
@@ -2235,9 +2217,10 @@ mod tests {
             dataset_spatial_grid: data_grid,
         });
 
+        let tile_size = TileSize::new_unchecked(height, width);
         let tile_info = TileInformation::new(
             [0, 0].into(),
-            TileSize::new_unchecked(height, width),
+            tile_size,
             GeoTransform::new_unchecked((0.0, 4.0).into(), 1.0, -1.0),
         );
 
@@ -2261,8 +2244,7 @@ mod tests {
 
         let grid = tile.grid_array.as_masked_grid().expect("should be a grid");
 
-        let tiling_spec = TilingSpecification::new(TileSize::new_unchecked(height, width));
-        let tiling_grid = TilingSpatialGridDefinition::new(data_grid, tiling_spec);
+        let tiling_grid = TilingGrid::from_spatial_grid(data_grid, tile_size);
 
         let expected_tile = raster_tile_from_file::<u16>(
             test_data!("raster/grid_blit_valid_only/expected.tif"),

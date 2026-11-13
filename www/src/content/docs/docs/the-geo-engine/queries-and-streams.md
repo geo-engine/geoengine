@@ -74,8 +74,9 @@ An operator may also query several inputs at the same time, or the same input se
 ## Raster streams
 
 A raster result is a stream of _tiles_.
-All tiles have the same size, set by `[raster.tiling_specification]` in the server configuration (512 × 512 pixels by default).
-The tile size is fixed for the whole runtime of the server.
+All tiles of a stream have the same size.
+A source uses the tile size of its dataset or, if the dataset sets none, `[raster.tiling_specification]` from the server configuration (512 × 512 pixels by default).
+Operators keep the tile size of their input; [`ReTile`](/docs/operators/retile) changes it.
 
 Raster streams always have the same order and no gaps:
 

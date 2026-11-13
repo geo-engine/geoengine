@@ -1024,6 +1024,7 @@ fn clip(raster: TypedRasterOperator, mask: TypedRasterOperator) -> TypedRasterOp
             raster: RasterStacker {
                 params: RasterStackerParams {
                     rename_bands: RenameBands::Default,
+                    output_origin: None,
                 },
                 sources: MultipleRasterSources {
                     rasters: vec![raster, mask],
@@ -1209,7 +1210,8 @@ async fn it_clips_ndvi_with_germany() {
     let (bytes, _) = raster_stream_to_png_bytes(
         processor,
         RasterQueryRectangle::new(
-            germany_bounds(),
+            // the stacker uses the NDVI grid, whose origin (-180, 90) is 900 rows and 1800 columns from (0, 0)
+            GridBoundingBox2D::new([-551 + 900, 58 + 1800], [-473 + 900, 150 + 1800]).unwrap(),
             TimeInstance::from(DateTime::new_utc(2014, 4, 1, 0, 0, 0)).into(),
             BandSelection::first(),
         ),
