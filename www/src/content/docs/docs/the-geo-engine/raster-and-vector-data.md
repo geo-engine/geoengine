@@ -32,14 +32,17 @@ Operators propagate no data, e.g., an [`Expression`](/docs/operators/expression)
 
 ### Tiles
 
-Geo Engine splits rasters into tiles of a fixed size, 512 × 512 pixels by default.
+Geo Engine splits rasters into tiles of a fixed size.
+A GDAL dataset can set its own tile size with `tileSize`; otherwise it uses `[raster.tiling_specification]` from the server configuration, 512 × 512 pixels by default.
 Tiles are the unit in which rasters are loaded, processed, cached and streamed.
-The tile grid is aligned to the spatial grid of the raster, so tiles of rasters with the same grid line up with each other.
+The tile grid starts at the origin of the raster's spatial grid, so tiles of rasters with the same grid and tile size line up with each other.
+[`ReTile`](/docs/operators/retile) moves a raster onto another tile size or origin without resampling.
 See [Queries and Streams](/docs/the-geo-engine/queries-and-streams#raster-streams) for the order in which tiles arrive.
 
 ### Resolution
 
 Operators that combine several rasters require compatible grids.
+[`RasterStacker`](/docs/operators/rasterstacker) moves inputs with the same resolution onto a common grid if their pixels are aligned.
 To change the resolution of a raster, use [`Downsampling`](/docs/operators/downsampling) for a coarser and [`Interpolation`](/docs/operators/interpolation) for a finer resolution.
 The OGC services resample the final result to the requested resolution automatically.
 

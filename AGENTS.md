@@ -22,7 +22,9 @@ A server for processing and visualizing geospatial data, with native time-series
 - **Queries and streams**: a processing graph is evaluated lazily.
   Nothing is computed until a query arrives.
   Every operator, sources included, is queried with a query rectangle (spatial bounds, time interval, and the bands or columns to return) and answers with a stream: rasters as tiles, vectors as Arrow feature collections in chunks.
-  The tile size (`[raster.tiling_specification]`, 512×512 pixels by default) and the target chunk size (`[query_context] chunk_byte_size`) are fixed for the whole runtime of the server.
+  Raster tiles start at the origin of the raster's spatial grid.
+  Their size comes from the dataset (`GdalDatasetParameters.tileSize`) or defaults to `[raster.tiling_specification]` (512×512 pixels), and `ReTile` changes it.
+  The target chunk size (`[query_context] chunk_byte_size`) is fixed for the whole runtime of the server.
   A vector chunk can be smaller than the target, e.g. the last one of a stream.
 - **Assumptions and constraints**:
   - Every raster tile and feature has a time interval, stored in milliseconds and half-open `[start, end)`.
