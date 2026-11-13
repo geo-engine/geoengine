@@ -81,7 +81,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             trace!(
                 file = %params.file_path.display(),
                 "file does not intersect tile {:?}",
-                plan.tile.global_tile_position,
+                plan.tile.tile_position,
             );
             continue;
         };
@@ -146,7 +146,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
 
     Ok(RasterTile2D::new_with_properties(
         plan.time,
-        plan.tile.global_tile_position,
+        plan.tile.tile_position,
         plan.band,
         plan.tile.global_geo_transform,
         raster.unbounded(),
@@ -292,8 +292,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{
-        GeoTransform, GridShape2D, RasterPropertiesEntry, RasterPropertiesEntryType,
-        RasterPropertiesKey,
+        GeoTransform, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
+        TileSize,
     };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::NonZeroFiniteF64;
@@ -389,8 +389,8 @@ mod tests {
         // the file's own grid: a pixel size computed from bounds is off by rounding and does not
         // align with the file
         let tile_information = TileInformation {
-            tile_size_in_pixels: [8, 8].into(),
-            global_tile_position: [0, 0].into(),
+            tile_size: TileSize::new_unchecked(8, 8),
+            tile_position: [0, 0].into(),
             global_geo_transform: GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
         };
 
@@ -554,7 +554,7 @@ mod tests {
                 let plan = TilePlan {
                     tile: TileInformation::new(
                         position.into(),
-                        GridShape2D::new([32, 32]),
+                        TileSize::new_unchecked(32, 32),
                         GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
                     ),
                     time: TimeInterval::default(),
@@ -603,7 +603,7 @@ mod tests {
         let plan = TilePlan {
             tile: TileInformation::new(
                 [0, 0].into(),
-                GridShape2D::new([32, 32]),
+                TileSize::new_unchecked(32, 32),
                 GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
             ),
             time: TimeInterval::default(),
@@ -647,7 +647,7 @@ mod tests {
             let plan = TilePlan {
                 tile: TileInformation::new(
                     [0, 0].into(),
-                    GridShape2D::new([32, 32]),
+                    TileSize::new_unchecked(32, 32),
                     GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
                 ),
                 time: TimeInterval::default(),
@@ -689,7 +689,7 @@ mod tests {
         let plan = TilePlan {
             tile: TileInformation::new(
                 [0, 0].into(),
-                GridShape2D::new([8, 8]),
+                TileSize::new_unchecked(8, 8),
                 GeoTransform::new_unchecked((0., 64.).into(), 8., -8.),
             ),
             time: TimeInterval::default(),
@@ -755,7 +755,7 @@ mod tests {
                     let plan = TilePlan {
                         tile: TileInformation::new(
                             [tile_y as isize, tile_x as isize].into(),
-                            GridShape2D::new([tile_size, tile_size]),
+                            TileSize::new_unchecked(tile_size, tile_size),
                             GeoTransform::new_unchecked((0., 64.).into(), pixel_size, -pixel_size),
                         ),
                         time: TimeInterval::default(),

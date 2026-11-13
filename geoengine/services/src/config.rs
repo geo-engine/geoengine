@@ -178,17 +178,17 @@ impl ConfigElement for ProjectService {
 
 #[derive(Debug, Deserialize)]
 pub struct TilingSpecification {
-    pub tile_shape_pixels_x: usize,
-    pub tile_shape_pixels_y: usize,
+    pub tile_shape_pixels_x: NonZeroUsize,
+    pub tile_shape_pixels_y: NonZeroUsize,
 }
 
 impl From<TilingSpecification> for geoengine_datatypes::raster::TilingSpecification {
     fn from(ts: TilingSpecification) -> geoengine_datatypes::raster::TilingSpecification {
         geoengine_datatypes::raster::TilingSpecification {
-            tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::from([
+            tile_size: geoengine_datatypes::raster::TileSize::new_typed(
                 ts.tile_shape_pixels_y,
                 ts.tile_shape_pixels_x,
-            ]),
+            ),
         }
     }
 }

@@ -34,8 +34,8 @@ use crate::{
     primitives::{CacheHint, DateTime, TimeGranularity, TimeInstance, TimeInterval, TimeStep},
     raster::{
         EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridIdx, GridIdx2D, GridIndexAccess,
-        GridOrEmpty, GridShape2D, GridSize, MaskedGrid2D, Pixel, RasterTile2D, TileInformation,
-        TilingSpecification,
+        GridOrEmpty, GridShape2D, GridSize, MaskedGrid2D, Pixel, RasterTile2D, TileIdx,
+        TileInformation, TileSize, TilingSpecification,
     },
     util::test::TestDefault,
 };
@@ -156,7 +156,11 @@ impl<'a> AsciiRasterTiles<'a> {
                     let grid = raw_tile_row.grid::<T>(tile_column, tile_size);
                     tiles.push(RasterTile2D::new_with_tile_info(
                         block.time,
-                        TileInformation::new(tile_position, tile_size, self.geo_transform),
+                        TileInformation::new(
+                            TileIdx::from(tile_position.0),
+                            tile_size_of(tile_size),
+                            self.geo_transform,
+                        ),
                         block.band,
                         grid,
                         self.cache_hint,
@@ -192,7 +196,7 @@ impl<'a> AsciiRasterTiles<'a> {
     ///
     /// If the text is malformed.
     pub fn tiling_specification(&self) -> TilingSpecification {
-        TilingSpecification::new(parse(self.text).tile_size)
+        TilingSpecification::new(tile_size_of(parse(self.text).tile_size))
     }
 
     /// Returns the properties of the described raster, e.g., to build a result descriptor.
@@ -408,12 +412,16 @@ fn format_time_instance(millis: i64, time_format: AsciiTimeFormat) -> String {
     }
 }
 
+fn tile_size_of(shape: GridShape2D) -> TileSize {
+    TileSize::try_from(shape).expect("parsed tiles are non-empty")
+}
+
 fn tile_key<T>(tile: &RasterTile2D<T>) -> (TimeInterval, GridIdx2D, u32) {
-    (tile.time, tile.tile_position, tile.band)
+    (tile.time, tile.tile_position.grid_idx(), tile.band)
 }
 
 fn tile_order_key<T>(tile: &RasterTile2D<T>) -> (i64, i64, isize, isize, u32) {
-    let GridIdx([y, x]) = tile.tile_position;
+    let GridIdx([y, x]) = tile.tile_position.grid_idx();
     (
         tile.time.start().inner(),
         tile.time.end().inner(),
@@ -493,7 +501,10 @@ fn block_cells<T>(tiles: &[&RasterTile2D<T>]) -> Cells
 where
     T: Pixel + Display,
 {
-    let positions: Vec<[isize; 2]> = tiles.iter().map(|tile| tile.tile_position.0).collect();
+    let positions: Vec<[isize; 2]> = tiles
+        .iter()
+        .map(|tile| tile.tile_position.grid_idx().0)
+        .collect();
     let min_y = positions
         .iter()
         .map(|p| p[0])
@@ -520,7 +531,7 @@ where
 
     let by_position: BTreeMap<[isize; 2], &RasterTile2D<T>> = tiles
         .iter()
-        .map(|tile| (tile.tile_position.0, *tile))
+        .map(|tile| (tile.tile_position.grid_idx().0, *tile))
         .collect();
 
     (min_y..=max_y)
@@ -909,7 +920,7 @@ mod tests {
         assert_eq!(*tiles[0].grid_array.shape_ref(), [2, 3].into());
         assert_eq!(
             AsciiRasterTiles::new(TWO_BY_TWO_TILES).tiling_specification(),
-            TilingSpecification::new([2, 3].into())
+            TilingSpecification::new(TileSize::new_unchecked(2, 3))
         );
 
         let GridOrEmpty::Grid(upper_left) = &tiles[0].grid_array else {
@@ -956,7 +967,13 @@ mod tests {
 
         let keys: Vec<_> = tiles
             .iter()
-            .map(|t| (t.time.start().inner(), t.tile_position.0[1], t.band))
+            .map(|t| {
+                (
+                    t.time.start().inner(),
+                    t.tile_position.grid_idx().0[1],
+                    t.band,
+                )
+            })
             .collect();
         assert_eq!(
             keys,

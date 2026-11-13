@@ -1725,6 +1725,7 @@ mod tests {
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
+    use geoengine_datatypes::raster::TileSize;
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
@@ -1732,7 +1733,7 @@ mod tests {
             BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat,
             RasterQueryRectangle, SpatialPartition2D,
         },
-        raster::{GridShape2D, TilingSpecification},
+        raster::TilingSpecification,
         spatial_reference::SpatialReferenceOption,
         util::{Identifier, assert_image_equals, test::assert_eq_two_list_of_tiles},
     };
@@ -2049,7 +2050,7 @@ mod tests {
 
     fn ctx_tiling_spec_600x600() -> TilingSpecification {
         TilingSpecification {
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
+            tile_size: TileSize::new_unchecked(600, 600),
         }
     }
 
@@ -3398,7 +3399,7 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn create_dataset_tiling_specification() -> TilingSpecification {
         TilingSpecification {
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
+            tile_size: TileSize::new_unchecked(600, 600),
         }
     }
 

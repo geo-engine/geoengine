@@ -3,7 +3,7 @@
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor, ToPng};
 use geoengine_datatypes::primitives::{CacheHint, Coordinate2D, TimeInterval};
 use geoengine_datatypes::raster::{
-    GeoTransform, Grid2D, GridIdx2D, GridOrEmpty2D, GridShape2D, MaskedGrid2D, RasterTile2D,
+    GeoTransform, Grid2D, GridOrEmpty2D, GridShape2D, MaskedGrid2D, RasterTile2D, TileIdx,
 };
 use geoengine_datatypes::util::gdal::gdal_open_dataset;
 use std::time::{Duration, Instant};
@@ -420,7 +420,7 @@ fn create_raster_tile(
 
     Ok(RasterTile2D::new(
         time,
-        GridIdx2D::new([0, 0]),
+        TileIdx::new_y_x(0, 0),
         0,
         geo_transform,
         grid_or_empty,
