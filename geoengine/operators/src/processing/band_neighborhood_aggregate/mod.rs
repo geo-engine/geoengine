@@ -1029,4 +1029,27 @@ mod tests {
             .tile_origin([-1, 0]),
         );
     }
+
+    #[tokio::test]
+    async fn it_keeps_band_numbers_of_selected_bands() {
+        // the selection is a set, so `[2, 1]` is answered as `[1, 2]`, keeping the band numbers
+        let result = first_derivative(BandSelection::new(vec![2, 1]).unwrap()).await;
+
+        assert_raster_tiles_eq_ascii(
+            &result,
+            &AsciiRasterTiles::new(indoc! {"
+                [0, 5) band 1
+                +-----+-----+
+                | 2 2 | 4 4 |
+                | 2 2 | 4 4 |
+                +-----+-----+
+                [0, 5) band 2
+                +-----+-----+
+                | 2 2 | 4 4 |
+                | 2 2 | 4 4 |
+                +-----+-----+
+                "})
+            .tile_origin([-1, 0]),
+        );
+    }
 }

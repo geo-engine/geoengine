@@ -91,7 +91,7 @@ enum StreamState<T> {
 
 pub struct RasterStackerSource<Q> {
     pub queryable: Q,
-    pub band_idxs: Vec<u32>,
+    pub band_idxs: BandSelection,
 }
 
 impl<Q> From<(Q, Vec<u32>)> for RasterStackerSource<Q> {
@@ -99,7 +99,7 @@ impl<Q> From<(Q, Vec<u32>)> for RasterStackerSource<Q> {
         debug_assert!(!value.1.is_empty(), "At least one band required");
         Self {
             queryable: value.0,
-            band_idxs: value.1,
+            band_idxs: BandSelection::new_unchecked(value.1),
         }
     }
 }
@@ -165,7 +165,10 @@ where
         query_rect: PartialQueryRect,
         tiling_strategy: TilingStrategy,
     ) -> Self {
-        let number_of_bands: usize = queryables.iter().map(|s| s.band_idxs.len()).sum();
+        let number_of_bands: usize = queryables
+            .iter()
+            .map(|s| s.band_idxs.as_slice().len())
+            .sum();
 
         let tile_band_iter = TileIdxBandCrossProductIter::with_grid_bounds_and_selection(
             tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds),
@@ -207,9 +210,8 @@ where
                     let array_of_futures = sources
                         .iter()
                         .map(|source| {
-                            let query_rect = query_rect.raster_query_rectangle(
-                                BandSelection::new_unchecked(source.band_idxs.clone()),
-                            );
+                            let query_rect =
+                                query_rect.raster_query_rectangle(source.band_idxs.clone());
                             source.queryable.query(query_rect)
                         })
                         .collect::<Vec<_>>();
@@ -401,7 +403,7 @@ where
                                 *current_out_band = next_out_band;
                                 *current_stream_band_pos += 1;
                                 if *current_stream_band_pos
-                                    >= sources[*current_stream].band_idxs.len()
+                                    >= sources[*current_stream].band_idxs.as_slice().len()
                                 {
                                     *current_stream_band_pos = 0;
                                     *current_stream += 1;

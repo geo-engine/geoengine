@@ -29,13 +29,9 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     raster_colorizer: Option<RasterColorizer>,
     conn_closed: BoxFuture<'_, ()>,
 ) -> Result<(Vec<u8>, CacheHint)> {
+    // the tiles of a position arrive in ascending band order, because the band selection is always sorted
     debug_assert!(
-        query_rect.attributes().count() <= 3
-            || query_rect
-                .attributes()
-                .as_slice()
-                .windows(2)
-                .all(|w| w[0] < w[1]), // TODO: replace with `is_sorted` once it is stable
+        query_rect.attributes().count() <= 3 && query_rect.attributes().as_slice().is_sorted(),
         "bands must be sorted and at most three bands can be queried"
     );
 
