@@ -312,6 +312,15 @@ where
     {
         self.source.time_query(query, ctx).await
     }
+
+    async fn footprint_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<crate::engine::Footprint>>> {
+        self.source.footprint_query(query, precision, ctx).await
+    }
 }
 
 #[cfg(test)]
