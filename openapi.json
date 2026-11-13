@@ -2722,6 +2722,239 @@
         ]
       }
     },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles": {
+      "get": {
+        "tags": [
+          "OGC API"
+        ],
+        "summary": "OGC API Collection Coverage Tilesets List",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html)\nand [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).",
+        "operationId": "collection_coverage_tilesets",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileSets"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}": {
+      "get": {
+        "tags": [
+          "OGC API"
+        ],
+        "summary": "OGC API Collection Coverage Tileset Metadata",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html)\nand [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).",
+        "operationId": "collection_coverage_tileset",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "tileMatrixSetId",
+            "in": "path",
+            "description": "Tile matrix set identifier",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TileMatrixSetId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileSet"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Collection or tile matrix set not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}": {
+      "get": {
+        "tags": [
+          "OGC API"
+        ],
+        "summary": "OGC API Coverage Tile",
+        "description": "Returns the raw values of the tile as `GeoTIFF`, with one band per selected field.\nThe tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.\n\nCf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html)\nand [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).",
+        "operationId": "coverage_tile",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          },
+          {
+            "name": "tileMatrixSetId",
+            "in": "path",
+            "description": "Tile matrix set identifier",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TileMatrixSetId"
+            }
+          },
+          {
+            "name": "tileMatrix",
+            "in": "path",
+            "description": "Tile matrix level",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "tileRow",
+            "in": "path",
+            "description": "Tile row",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "tileCol",
+            "in": "path",
+            "description": "Tile column",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "datetime",
+            "in": "query",
+            "description": "Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2018-02-12T23:20:50Z"
+          },
+          {
+            "name": "properties",
+            "in": "query",
+            "description": "Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "red,green,blue"
+          },
+          {
+            "name": "exclude-properties",
+            "in": "query",
+            "description": "Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "alpha"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/GeoTiffResponse"
+          },
+          "400": {
+            "description": "Invalid tile coordinates, datetime or field selection"
+          },
+          "404": {
+            "description": "Collection or tile matrix set not found"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles": {
       "get": {
         "tags": [
@@ -2968,15 +3201,16 @@
                 "example": {
                   "conformsTo": [
                     "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
                     "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
                     "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/geodata-tilesets",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tiff",
                     "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
                     "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset"
                   ]
@@ -17843,6 +18077,17 @@
                   "message": "Unable to parse query string: invalid digit found in string"
                 }
               }
+            }
+          }
+        }
+      },
+      "GeoTiffResponse": {
+        "description": "GeoTIFF Image",
+        "content": {
+          "image/tiff; application=geotiff": {
+            "schema": {
+              "type": "string",
+              "format": "binary"
             }
           }
         }

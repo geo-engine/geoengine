@@ -5,10 +5,13 @@ All URIs are relative to *https://geoengine.io/api*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**collection**](OgcapiApi.md#collection) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata
+[**collection_coverage_tileset**](OgcapiApi.md#collection_coverage_tileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId} | OGC API Collection Coverage Tileset Metadata
+[**collection_coverage_tilesets**](OgcapiApi.md#collection_coverage_tilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles | OGC API Collection Coverage Tilesets List
 [**collection_tileset**](OgcapiApi.md#collection_tileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
 [**collection_tilesets**](OgcapiApi.md#collection_tilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List
 [**collections**](OgcapiApi.md#collections) | **GET** /ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List
 [**conformance**](OgcapiApi.md#conformance) | **GET** /ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes
+[**coverage_tile**](OgcapiApi.md#coverage_tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Coverage Tile
 [**landing_page**](OgcapiApi.md#landing_page) | **GET** /ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page
 [**tile**](OgcapiApi.md#tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
 [**tile_matrix_set**](OgcapiApi.md#tile_matrix_set) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
@@ -34,6 +37,69 @@ Name | Type | Description  | Required | Notes
 ### Return type
 
 [**models::Collection**](Collection.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## collection_coverage_tileset
+
+> models::TileSet collection_coverage_tileset(data_connector_id, layer_id, tile_matrix_set_id)
+OGC API Collection Coverage Tileset Metadata
+
+Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**data_connector_id** | **uuid::Uuid** | ID of the data connector | [required] |
+**layer_id** | **String** | ID of the layer, which is used as collection ID | [required] |
+**tile_matrix_set_id** | **String** | Tile matrix set identifier | [required] |
+
+### Return type
+
+[**models::TileSet**](TileSet.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## collection_coverage_tilesets
+
+> models::TileSets collection_coverage_tilesets(data_connector_id, layer_id)
+OGC API Collection Coverage Tilesets List
+
+Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**data_connector_id** | **uuid::Uuid** | ID of the data connector | [required] |
+**layer_id** | **String** | ID of the layer, which is used as collection ID | [required] |
+
+### Return type
+
+[**models::TileSets**](TileSets.md)
 
 ### Authorization
 
@@ -172,6 +238,44 @@ Name | Type | Description  | Required | Notes
 
 - **Content-Type**: Not defined
 - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## coverage_tile
+
+> std::path::PathBuf coverage_tile(data_connector_id, layer_id, tile_matrix_set_id, tile_matrix, tile_row, tile_col, datetime, properties, exclude_properties)
+OGC API Coverage Tile
+
+Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**data_connector_id** | **uuid::Uuid** | ID of the data connector | [required] |
+**layer_id** | **String** | ID of the layer, which is used as collection ID | [required] |
+**tile_matrix_set_id** | **String** | Tile matrix set identifier | [required] |
+**tile_matrix** | **i32** | Tile matrix level | [required] |
+**tile_row** | **i64** | Tile row | [required] |
+**tile_col** | **i64** | Tile column | [required] |
+**datetime** | Option<**String**> | Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`). |  |
+**properties** | Option<**String**> | Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`. |  |
+**exclude_properties** | Option<**String**> | Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`. |  |
+
+### Return type
+
+[**std::path::PathBuf**](std::path::PathBuf.md)
+
+### Authorization
+
+[session_token](../README.md#session_token)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: image/tiff; application=geotiff
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

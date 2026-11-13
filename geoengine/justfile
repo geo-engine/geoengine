@@ -212,12 +212,25 @@ validate-ogc-compliance requests-log-file="": common::_clear
     # 7. Run the OGC compliance validation action
     cd ../.ogc-validator
 
-    cp .env.template .env
-    sed -i "s|\$DATA_CONNECTOR_ID|$DATA_CONNECTOR_ID|g" .env
-    sed -i "s|\$LAYER_ID|$LAYER_ID|g" .env
+    rm -f step_summary.md
     touch step_summary.md
     npm install
-    npx @github/local-action ./node_modules/ogc-validator src/main.ts .env
+
+    # once for map tiles (PNG) and once for coverage tiles (GeoTIFF), since the suite only requests the tiles of one URL template
+    FAILED_TILE_TYPES=""
+    for TILE_TYPE in map coverage; do
+        echo "Validating $TILE_TYPE tiles..."
+        cp .env.template .env
+        sed -i "s|\$DATA_CONNECTOR_ID|$DATA_CONNECTOR_ID|g" .env
+        sed -i "s|\$LAYER_ID|$LAYER_ID|g" .env
+        sed -i "s|\$TILE_TYPE|$TILE_TYPE|g" .env
+        npx @github/local-action ./node_modules/ogc-validator src/main.ts .env || FAILED_TILE_TYPES="$FAILED_TILE_TYPES $TILE_TYPE"
+    done
+
+    if [ -n "$FAILED_TILE_TYPES" ]; then
+        echo "OGC compliance validation failed for:$FAILED_TILE_TYPES tiles"
+        exit 1
+    fi
 
 [group("update")]
 update-step1-rust: common::_clear && (lint-clippy "--fix")

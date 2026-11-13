@@ -1,11 +1,16 @@
 import Map from "ol/Map.js";
 import View from "ol/View.js";
+import TileState from "ol/TileState.js";
 import TileLayer from "ol/layer/Tile.js";
+import WebGLTileLayer from "ol/layer/WebGLTile.js";
 import VectorLayer from "ol/layer/Vector.js";
 import VectorSource from "ol/source/Vector.js";
+import DataTile from "ol/source/DataTile.js";
 import OGCMapTile from "ol/source/OGCMapTile.js";
-import OSM from "ol/source/OSM.js";
 import TileDebug from "ol/source/TileDebug.js";
+import { getTileSetInfo } from "ol/source/ogcTileUtil.js";
+import { toSize } from "ol/size.js";
+import { unByKey } from "ol/Observable.js";
 import Feature from "ol/Feature.js";
 import Point from "ol/geom/Point.js";
 import Style from "ol/style/Style.js";
@@ -13,9 +18,42 @@ import Circle from "ol/style/Circle.js";
 import Fill from "ol/style/Fill.js";
 import Text from "ol/style/Text.js";
 import Stroke from "ol/style/Stroke.js";
+import { fromArrayBuffer } from "geotiff";
 
 const SERVER_URL = `${window.location.protocol}//${window.location.hostname}:${window.location.port}`; // proxied by vite
 const ACTUAL_SERVER_URL = "http://localhost:3030";
+
+const DATA_CONNECTOR_ID = "cbb21ee3-d15d-45c5-a175-66964adf4e85";
+const DATETIME = "2014-04-01T00:00:00Z";
+
+/** Media type of coverage tiles */
+const GEOTIFF = "image/tiff; application=geotiff";
+
+/** `NewSubfileType` of the internal mask that GDAL writes into a GeoTIFF */
+const FILETYPE_MASK = 4;
+
+/**
+ * Colors for the raw NDVI values (bytes) of coverage tiles.
+ * Band 1 is the value, band 2 the validity mask.
+ */
+const COVERAGE_STYLE = {
+  color: [
+    "case",
+    ["==", ["band", 2], 0],
+    [0, 0, 0, 0],
+    [
+      "interpolate",
+      ["linear"],
+      ["band", 1],
+      0,
+      [140, 81, 10, 1],
+      128,
+      [246, 232, 195, 1],
+      255,
+      [1, 102, 94, 1],
+    ],
+  ],
+};
 
 async function getSessionToken() {
   try {
@@ -31,12 +69,30 @@ async function getSessionToken() {
   }
 }
 
-async function tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken) {
-  const tmsUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
+/**
+ * Fetches the tileset metadata with the session token and returns it as a blob URL,
+ * with all links pointing to the vite proxy.
+ *
+ * @param {"map" | "coverage"} tileType
+ */
+async function tileSetBlobUrl(
+  dataConnectorId,
+  layerId,
+  tileType,
+  tms,
+  sessionToken,
+) {
+  const tileSetUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/${tileType}/tiles/${tms}`;
 
-  return await urlToBlobUrl(tmsUrl, sessionToken, async (metadata) => {
+  return await urlToBlobUrl(tileSetUrl, sessionToken, async (metadata) => {
+    if (metadata.dataType === "coverage") {
+      // OpenLayers only parses tilesets of the data types `map` and `vector`.
+      // We use it for the tile grid and the URL template and decode the GeoTIFF tiles ourselves.
+      metadata.dataType = "map";
+    }
+
     for (const link of metadata.links) {
-      console.log("TMS link:", link.rel, link.href, link.type);
+      console.log("Tileset link:", link.rel, link.href, link.type);
 
       // replace urls
       if (link.href.startsWith(ACTUAL_SERVER_URL)) {
@@ -51,12 +107,6 @@ async function tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken) {
 }
 
 async function urlToBlobUrl(url, sessionToken, interceptor) {
-  // console.log("URL before: ", url);
-  // if (url.startsWith(ACTUAL_SERVER_URL)) {
-  //   url = url.replace(ACTUAL_SERVER_URL, SERVER_URL);
-  // }
-  // console.log("URL after: ", url);
-
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${sessionToken}`,
@@ -74,10 +124,10 @@ async function urlToBlobUrl(url, sessionToken, interceptor) {
   return URL.createObjectURL(blob);
 }
 
-async function addWgs84TileLayer(map, sessionToken, tms = "Custom") {
+async function findLayer(sessionToken, layerName) {
   const collections = await (
     await fetch(
-      `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
+      `${SERVER_URL}/api/layers/collections/${DATA_CONNECTOR_ID}/tags%3A%2A?offset=0&limit=20`,
       {
         headers: {
           Authorization: `Bearer ${sessionToken}`,
@@ -85,93 +135,139 @@ async function addWgs84TileLayer(map, sessionToken, tms = "Custom") {
       },
     )
   ).json();
-  const collection = collections.items.find((c) => c.name === "NDVI");
-  const dataConnectorId = collection.id.providerId;
-  const layerId = collection.id.layerId;
-
-  const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
-  console.log("Layer WGS84:", dataConnectorId, layerId, "\n" + tileUrl);
-
-  map.addLayer(
-    new TileLayer({
-      source: new OGCMapTile({
-        url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
-        context: {
-          datetime: "2014-04-01T00:00:00Z",
-        },
-        wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
-        tileLoadFunction: tileLoadFunction(sessionToken),
-        interpolate: false,
-      }),
-    }),
-  );
-  map.addLayer(
-    new TileLayer({
-      source: new TileDebug({
-        source: new OGCMapTile({
-          url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
-          context: {
-            datetime: "2014-04-01T00:00:00Z",
-          },
-          wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
-          tileLoadFunction: tileLoadFunction(sessionToken),
-          interpolate: false,
-        }),
-      }),
-    }),
-  );
+  const collection = collections.items.find((c) => c.name === layerName);
+  return {
+    dataConnectorId: collection.id.providerId,
+    layerId: collection.id.layerId,
+  };
 }
 
-async function addWebMercatorTileLayer(
-  map,
-  sessionToken,
-  tms = "WebMercatorQuad",
-) {
-  const collections = await (
-    await fetch(
-      `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
-      {
-        headers: {
-          Authorization: `Bearer ${sessionToken}`,
-        },
-      },
-    )
-  ).json();
-  const collection = collections.items.find((c) => c.name === "NDVI3857");
-  const dataConnectorId = collection.id.providerId;
-  const layerId = collection.id.layerId;
+/**
+ * Adds the tiles of the layer `layerName` and a tile debug layer to `map`.
+ *
+ * @param {"map" | "coverage"} tileType
+ * @returns the layer with the tiles
+ */
+async function addTileLayer(map, sessionToken, layerName, tms, tileType) {
+  const { dataConnectorId, layerId } = await findLayer(sessionToken, layerName);
 
-  const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
-  console.log("Layer WebMercator:", dataConnectorId, layerId, "\n" + tileUrl);
-
-  map.addLayer(
-    new TileLayer({
-      source: new OGCMapTile({
-        url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
-        context: {
-          datetime: "2014-04-01T00:00:00Z",
-        },
-        wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
-        tileLoadFunction: tileLoadFunction(sessionToken),
-        interpolate: false,
-      }),
-    }),
+  const tileSetUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/${tileType}/tiles/${tms}`;
+  console.log(
+    `Layer ${layerName}:`,
+    dataConnectorId,
+    layerId,
+    "\n" + tileSetUrl,
   );
+
+  const url = await tileSetBlobUrl(
+    dataConnectorId,
+    layerId,
+    tileType,
+    tms,
+    sessionToken,
+  );
+
+  const layer =
+    tileType === "coverage"
+      ? new WebGLTileLayer({
+          source: await coverageTileSource(url, sessionToken),
+          style: COVERAGE_STYLE,
+        })
+      : new TileLayer({ source: mapTileSource(url, sessionToken) });
+
+  map.addLayer(layer);
   map.addLayer(
     new TileLayer({
       source: new TileDebug({
-        source: new OGCMapTile({
-          url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
-          context: {
-            datetime: "2014-04-01T00:00:00Z",
-          },
-          wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
-          tileLoadFunction: tileLoadFunction(sessionToken),
-          interpolate: false,
-        }),
+        source: mapTileSource(url, sessionToken),
       }),
     }),
   );
+
+  return layer;
+}
+
+/** A source of map tiles (PNG) */
+function mapTileSource(url, sessionToken) {
+  return new OGCMapTile({
+    url,
+    context: {
+      datetime: DATETIME,
+    },
+    wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
+    tileLoadFunction: tileLoadFunction(sessionToken),
+    interpolate: false,
+  });
+}
+
+/**
+ * A source of coverage tiles (GeoTIFF) with two bands: the raw value and the validity mask (0 or 1)
+ */
+async function coverageTileSource(url, sessionToken) {
+  const tileSetInfo = await getTileSetInfo({
+    url,
+    mediaType: GEOTIFF,
+    context: {
+      datetime: DATETIME,
+    },
+  });
+
+  return new DataTile({
+    projection: tileSetInfo.projection,
+    tileGrid: tileSetInfo.grid,
+    bandCount: 2,
+    wrapX: false,
+    interpolate: false,
+    loader: async (z, x, y) => {
+      const [width, height] = toSize(tileSetInfo.grid.getTileSize(z));
+      const data = new Float32Array(width * height * 2); // everything invalid
+
+      const tileUrl = tileSetInfo.urlFunction([z, x, y]);
+      if (!tileUrl) {
+        return data;
+      }
+
+      const response = await fetch(tileUrl, {
+        headers: {
+          Authorization: `Bearer ${sessionToken}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`Tile fetch failed with status: ${response.status}`);
+      }
+
+      const { values, mask } = await readCoverageTile(
+        await response.arrayBuffer(),
+      );
+
+      for (let i = 0; i < width * height; ++i) {
+        data[2 * i] = values[i];
+        data[2 * i + 1] = mask ? mask[i] : 1;
+      }
+
+      return data;
+    },
+  });
+}
+
+/**
+ * Reads the first band of a coverage tile and its validity mask, if any.
+ */
+async function readCoverageTile(arrayBuffer) {
+  const tiff = await fromArrayBuffer(arrayBuffer);
+
+  const [values] = await (await tiff.getImage(0)).readRasters();
+
+  let mask;
+  for (let i = 1; i < (await tiff.getImageCount()); ++i) {
+    const image = await tiff.getImage(i);
+    if (image.fileDirectory.getValue("NewSubfileType") & FILETYPE_MASK) {
+      [mask] = await image.readRasters();
+      break;
+    }
+  }
+
+  return { values, mask };
 }
 
 function tileLoadFunction(sessionToken) {
@@ -301,49 +397,87 @@ function createView(tms, isWgs84) {
   }
 }
 
-const wgs84Map = new Map({
-  target: "wgs84Map",
-  layers: [],
-  view: createView("Custom", true),
-});
+/**
+ * Shows the raw value of the coverage tile below the pointer in `element`
+ *
+ * @returns the key of the listener
+ */
+function showValueOnHover(map, layer, element) {
+  element.textContent = "Value: move the pointer over the map";
 
-const webMercatorMap = new Map({
-  target: "webMercatorMap",
-  layers: [],
-  view: createView("Custom", false),
-});
+  return map.on("pointermove", (event) => {
+    if (event.dragging) {
+      return;
+    }
+
+    const data = layer.getData(event.pixel);
+    element.textContent =
+      data && data[1] > 0 ? `Value: ${data[0]}` : "Value: no data";
+  });
+}
+
+const maps = [
+  {
+    map: new Map({
+      target: "wgs84Map",
+      layers: [],
+      view: createView("Custom", true),
+    }),
+    layerName: "NDVI",
+    isWgs84: true,
+    valueElement: document.getElementById("wgs84Value"),
+  },
+  {
+    map: new Map({
+      target: "webMercatorMap",
+      layers: [],
+      view: createView("Custom", false),
+    }),
+    layerName: "NDVI3857",
+    isWgs84: false,
+    valueElement: document.getElementById("webMercatorValue"),
+  },
+];
 
 const sessionToken = await getSessionToken();
 
-// Get TMS selector
 const tmsSelector = document.getElementById("tms-selector");
-const initialTms = tmsSelector.value;
+const tileTypeSelector = document.getElementById("tile-type-selector");
 
-// Update views with correct projections for initial TMS
-wgs84Map.setView(createView(initialTms, true));
-webMercatorMap.setView(createView(initialTms, false));
+let hoverListenerKeys = [];
 
-await Promise.all([
-  addWgs84TileLayer(wgs84Map, sessionToken, initialTms),
-  addWebMercatorTileLayer(webMercatorMap, sessionToken, initialTms),
-]);
-await Promise.all([addCitiesLayer(wgs84Map), addCitiesLayer(webMercatorMap)]);
-
-// Add change listener to reload both maps when TMS selection changes
-tmsSelector.addEventListener("change", async () => {
+async function loadMaps() {
   const tms = tmsSelector.value;
+  const tileType = tileTypeSelector.value;
 
-  // Clear and reload layers
-  wgs84Map.getLayers().clear();
-  webMercatorMap.getLayers().clear();
+  unByKey(hoverListenerKeys);
+  hoverListenerKeys = [];
 
-  // Update views with new projections
-  wgs84Map.setView(createView(tms, true));
-  webMercatorMap.setView(createView(tms, false));
+  await Promise.all(
+    maps.map(async ({ map, layerName, isWgs84, valueElement }) => {
+      map.getLayers().clear();
+      map.setView(createView(tms, isWgs84));
 
-  await Promise.all([
-    addWgs84TileLayer(wgs84Map, sessionToken, tms),
-    addWebMercatorTileLayer(webMercatorMap, sessionToken, tms),
-  ]);
-  await Promise.all([addCitiesLayer(wgs84Map), addCitiesLayer(webMercatorMap)]);
-});
+      const layer = await addTileLayer(
+        map,
+        sessionToken,
+        layerName,
+        tms,
+        tileType,
+      );
+      await addCitiesLayer(map);
+
+      if (tileType === "coverage") {
+        hoverListenerKeys.push(showValueOnHover(map, layer, valueElement));
+      } else {
+        valueElement.textContent = "";
+      }
+    }),
+  );
+}
+
+await loadMaps();
+
+for (const selector of [tmsSelector, tileTypeSelector]) {
+  selector.addEventListener("change", loadMaps);
+}

@@ -12,7 +12,7 @@ use crate::api::handlers::{
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
     operations::reproject::suggest_pixel_size_like_gdal_helper,
-    primitives::{Coordinate2D, SpatialResolution},
+    primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
     raster::{
         GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
         TilingSpatialGridDefinition, TilingSpecification,
@@ -72,6 +72,51 @@ pub trait TileMatrixSetProvider: Send + Sync {
 
     /// Returns the tile size in pixels for a given tile matrix ID
     fn tile_size_in_pixels(&self, matrix_id: u8) -> GridShape2D;
+
+    /// Returns the cell size of a given tile matrix ID as published in its tile matrix definition.
+    ///
+    /// Unlike [`TileMatrixSetProvider::spatial_resolution`], this is never clamped to the resolution of the data.
+    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
+        self.spatial_resolution(matrix_id)
+    }
+
+    /// Computes the spatial extent of a tile from the tile matrix definition, i.e., the point of origin,
+    /// the cell size and the tile size in pixels of `tile_matrix`.
+    fn tile_spatial_bounds(
+        &self,
+        tile_matrix: u8,
+        tile_row: u32,
+        tile_col: u32,
+    ) -> OgcApiResult<SpatialPartition2D> {
+        let (matrix_shape, origin) = self.grid_shape_and_origin(tile_matrix);
+
+        if tile_row as usize >= matrix_shape.y() || tile_col as usize >= matrix_shape.x() {
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: tile_matrix.to_string(),
+                row: tile_row,
+                col: tile_col,
+            });
+        }
+
+        let cell_size = self.cell_size(tile_matrix);
+        let tile_size = self.tile_size_in_pixels(tile_matrix);
+        let tile_width = cell_size.x().get() * tile_size.x() as f64;
+        let tile_height = cell_size.y().get() * tile_size.y() as f64;
+
+        let upper_left = Coordinate2D::new(
+            origin.x + f64::from(tile_col) * tile_width,
+            origin.y - f64::from(tile_row) * tile_height,
+        );
+        let lower_right = Coordinate2D::new(upper_left.x + tile_width, upper_left.y - tile_height);
+
+        SpatialPartition2D::new(upper_left, lower_right).map_err(|_source| {
+            OgcApiError::TileGridBboxComputationFailed {
+                matrix: tile_matrix.to_string(),
+                row: tile_row,
+                col: tile_col,
+            }
+        })
+    }
 }
 
 /// A wrapper Tile Matrix Set Provider
@@ -289,6 +334,16 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
             }
         }
     }
+
+    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
+        match self {
+            TypedTileMatrixSetProvider::Custom(provider) => provider.cell_size(matrix_id),
+            TypedTileMatrixSetProvider::CustomWebMercator(provider) => {
+                provider.cell_size(matrix_id)
+            }
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.cell_size(matrix_id),
+        }
+    }
 }
 
 /// Custom tile matrix set implementation that computes TMS dynamically per layer
@@ -493,6 +548,10 @@ impl TileMatrixSetProvider for CustomWebMercatorTMS {
 
     fn tile_size_in_pixels(&self, matrix_id: u8) -> GridShape2D {
         self.0.tile_size_in_pixels(matrix_id)
+    }
+
+    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
+        self.0.cell_size(matrix_id)
     }
 }
 
@@ -747,6 +806,13 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
             Self::WIDTH_AND_HEIGHT.get() as usize,
             Self::WIDTH_AND_HEIGHT.get() as usize,
         )
+    }
+
+    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
+        let matrix_id = matrix_id.min(self.max_matrix_id() as u8); // Clamp to max zoom level
+        let (_, _, cell_size, _, _) = Self::DATA[matrix_id as usize]; // cellSize in meters
+
+        SpatialResolution::new_unchecked(cell_size, cell_size)
     }
 }
 

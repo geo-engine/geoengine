@@ -70,6 +70,20 @@ pub enum OgcApiError {
     #[snafu(display("Missing time in query"))]
     MissingTime,
 
+    #[snafu(display("Unknown field `{field}`, available fields are: {available}"))]
+    UnknownField { field: String, available: String },
+
+    #[snafu(display("Field `{field}` is selected more than once"))]
+    DuplicateField { field: String },
+
+    #[snafu(display(
+        "The `properties` and `exclude-properties` query parameters are mutually exclusive"
+    ))]
+    ConflictingFieldSelection,
+
+    #[snafu(display("The field selection does not select any field"))]
+    EmptyFieldSelection,
+
     #[snafu(display("Unsupported spatial reference authority: {from}"))]
     UnsupportedSpatialReferenceAuthority { from: SpatialReferenceAuthority },
 
@@ -95,7 +109,11 @@ impl OgcApiError {
             | Self::TileCoordinatesOutOfBounds { .. }
             | Self::MissingSpatialReference
             | Self::MissingTime
-            | Self::Unsupported3DBoundingBox { .. } => StatusCode::BAD_REQUEST,
+            | Self::Unsupported3DBoundingBox { .. }
+            | Self::UnknownField { .. }
+            | Self::DuplicateField { .. }
+            | Self::ConflictingFieldSelection
+            | Self::EmptyFieldSelection => StatusCode::BAD_REQUEST,
             Self::Internal { .. }
             | Self::InitializingProcessingGraph { .. }
             | Self::TileMatrixSetDefinitionNotAvailable { .. }
@@ -109,6 +127,9 @@ impl OgcApiError {
     pub fn title(&self) -> &str {
         match self {
             Self::CollectionNotFound { .. } => "Collection not found",
+            Self::ConflictingFieldSelection => "Invalid field selection parameters",
+            Self::DuplicateField { .. } => "Duplicate field",
+            Self::EmptyFieldSelection => "Empty field selection",
             Self::ExpectedRaster { .. } => "Invalid processing graph",
             Self::InitializingProcessingGraph { .. } => "Error while initializing processing graph",
             Self::Internal { .. } => "An internal error occurred",
@@ -126,6 +147,7 @@ impl OgcApiError {
                 "Tile matrix set definition not available"
             }
             Self::TileMatrixSetNotFound { .. } => "Tile matrix set not found",
+            Self::UnknownField { .. } => "Unknown field",
             Self::UnknownSpatialReferenceInfo { .. } => "Unknown spatial reference info",
             Self::Unsupported3DBoundingBox { .. } => "Unsupported 3D bounding box",
             Self::UnsupportedSpatialReferenceAuthority { .. } => {
