@@ -285,6 +285,8 @@ docs/RasterBandDescriptor.md
 docs/RasterColorizer.md
 docs/RasterDataType.md
 docs/RasterDatasetFromProcessingGraph.md
+docs/RasterFootprints.md
+docs/RasterFootprintsPrecision.md
 docs/RasterOperator.md
 docs/RasterPropertiesEntryType.md
 docs/RasterPropertiesKey.md
@@ -412,6 +414,8 @@ docs/TimeShiftParameters.md
 docs/TimeShiftParametersAbsolute.md
 docs/TimeShiftParametersRelative.md
 docs/TimeStep.md
+docs/TimeStepFootprint.md
+docs/TimeStepFootprintStatus.md
 docs/TypedDataProviderDefinition.md
 docs/TypedGeometry.md
 docs/TypedGeometryMultiLineString.md
@@ -765,6 +769,8 @@ src/models/raster_band_descriptor.rs
 src/models/raster_colorizer.rs
 src/models/raster_data_type.rs
 src/models/raster_dataset_from_processing_graph.rs
+src/models/raster_footprints.rs
+src/models/raster_footprints_precision.rs
 src/models/raster_operator.rs
 src/models/raster_properties_entry_type.rs
 src/models/raster_properties_key.rs
@@ -889,6 +895,8 @@ src/models/time_shift_parameters.rs
 src/models/time_shift_parameters_absolute.rs
 src/models/time_shift_parameters_relative.rs
 src/models/time_step.rs
+src/models/time_step_footprint.rs
+src/models/time_step_footprint_status.rs
 src/models/typed_data_provider_definition.rs
 src/models/typed_geometry.rs
 src/models/typed_geometry_multi_line_string.rs

@@ -87,6 +87,7 @@ Class | Method | HTTP request | Description
 *PlotsApi* | [**get_plot_handler**](docs/PlotsApi.md#get_plot_handler) | **GET** /plot/{id} | Generates a plot.
 *ProcessingGraphsApi* | [**dataset_from_processing_graph_handler**](docs/ProcessingGraphsApi.md#dataset_from_processing_graph_handler) | **POST** /datasetFromProcessingGraph/{id} | Create a task for creating a new dataset from the result of the processing graph given by its `id` and the dataset parameters in the request body. Returns the id of the created task
 *ProcessingGraphsApi* | [**get_processing_graph_all_metadata_zip_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_all_metadata_zip_handler) | **GET** /processingGraphs/{id}/allMetadata/zip | Gets a ZIP archive of the processing graph, its provenance and the output metadata.
+*ProcessingGraphsApi* | [**get_processing_graph_footprints_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_footprints_handler) | **GET** /processingGraphs/{id}/footprints | Gets when and where the data of a raster processing graph may exist.
 *ProcessingGraphsApi* | [**get_processing_graph_metadata_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_metadata_handler) | **GET** /processingGraphs/{id}/metadata | Gets the result metadata of a processing graph
 *ProcessingGraphsApi* | [**get_processing_graph_provenance_handler**](docs/ProcessingGraphsApi.md#get_processing_graph_provenance_handler) | **GET** /processingGraphs/{id}/provenance | Gets the provenance of all datasets used in a processing graph.
 *ProcessingGraphsApi* | [**load_processing_graph_handler**](docs/ProcessingGraphsApi.md#load_processing_graph_handler) | **GET** /processingGraphs/{id} | Retrieves an existing processing graph.
@@ -402,6 +403,8 @@ Class | Method | HTTP request | Description
  - [RasterColorizer](docs/RasterColorizer.md)
  - [RasterDataType](docs/RasterDataType.md)
  - [RasterDatasetFromProcessingGraph](docs/RasterDatasetFromProcessingGraph.md)
+ - [RasterFootprints](docs/RasterFootprints.md)
+ - [RasterFootprintsPrecision](docs/RasterFootprintsPrecision.md)
  - [RasterOperator](docs/RasterOperator.md)
  - [RasterPropertiesEntryType](docs/RasterPropertiesEntryType.md)
  - [RasterPropertiesKey](docs/RasterPropertiesKey.md)
@@ -526,6 +529,8 @@ Class | Method | HTTP request | Description
  - [TimeShiftParametersAbsolute](docs/TimeShiftParametersAbsolute.md)
  - [TimeShiftParametersRelative](docs/TimeShiftParametersRelative.md)
  - [TimeStep](docs/TimeStep.md)
+ - [TimeStepFootprint](docs/TimeStepFootprint.md)
+ - [TimeStepFootprintStatus](docs/TimeStepFootprintStatus.md)
  - [TypedDataProviderDefinition](docs/TypedDataProviderDefinition.md)
  - [TypedGeometry](docs/TypedGeometry.md)
  - [TypedGeometryMultiLineString](docs/TypedGeometryMultiLineString.md)
