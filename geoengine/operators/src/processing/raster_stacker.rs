@@ -72,6 +72,11 @@ impl RasterOperator for RasterStacker {
             .map(InitializedRasterOperator::result_descriptor)
             .collect::<Vec<_>>();
 
+        // stacking blits input cores onto one grid: halos would be lost
+        in_descriptors
+            .iter()
+            .try_for_each(|d| d.ensure_no_tile_overlap(RasterStacker::TYPE_NAME))?;
+
         ensure!(
             in_descriptors.iter().all(|d| d.spatial_reference
                 == in_descriptors[0].spatial_reference
@@ -445,7 +450,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::{CacheHint, Coordinate2D, TimeInstance, TimeInterval, TimeStep},
         raster::{
-            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, TileIdx, TileSize,
+            GeoTransform, Grid, GridBoundingBox2D, RasterDataType, TileIdx, TileOverlap, TileSize,
             TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
@@ -1132,6 +1137,7 @@ mod tests {
             grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
             properties: Default::default(),
             cache_hint: CacheHint::no_cache(),
+            overlap: TileOverlap::zero(),
         }];
 
         let data2: Vec<RasterTile2D<u8>> = vec![RasterTile2D {
@@ -1144,6 +1150,7 @@ mod tests {
                 .into(),
             properties: Default::default(),
             cache_hint: CacheHint::no_cache(),
+            overlap: TileOverlap::zero(),
         }];
 
         let descriptor1 = RasterResultDescriptor {

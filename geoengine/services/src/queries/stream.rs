@@ -17,6 +17,7 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::ProcessingGraphOperatorPath;
+use geoengine_operators::util::strip_tile_overlap;
 
 /// Initializes a raster processing graph and starts streaming the tiles within `spatial_bounds`
 pub async fn raster_stream<C: SessionContext>(
@@ -36,12 +37,21 @@ pub async fn raster_stream<C: SessionContext>(
 
     let execution_context = ctx.execution_context()?;
 
-    let initialized_operator = operator
+    let mut initialized_operator = operator
+        .clone()
         .initialize(
             ProcessingGraphOperatorPath::initialize_root(),
             &execution_context,
         )
         .await?;
+    if let Some(operator) = strip_tile_overlap(operator, initialized_operator.result_descriptor()) {
+        initialized_operator = operator
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
+            .await?;
+    }
 
     let query_bounds = initialized_operator
         .result_descriptor()

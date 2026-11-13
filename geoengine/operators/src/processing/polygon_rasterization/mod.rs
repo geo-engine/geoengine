@@ -854,7 +854,7 @@ fn burn_chunk<A: PixelAggregator<f64>>(
     column: Option<&str>,
     ignore_no_data: bool,
 ) -> Result<Option<Vec<A::State>>> {
-    let geo_transform = &tile_info.tile_geo_transform();
+    let geo_transform = &tile_info.core_geo_transform();
     let shape = tile_info.tile_size.grid_shape();
 
     let values: Option<Vec<Option<f64>>> = match column {

@@ -22,6 +22,8 @@ pub enum VectorOperator {
     MockPointSource(Box<models::MockPointSource>),
     #[serde(rename="OgrSource")]
     OgrSource(Box<models::OgrSource>),
+    #[serde(rename="OnnxObjectDetection")]
+    OnnxObjectDetection(Box<models::OnnxObjectDetection>),
     #[serde(rename="PointInPolygonFilter")]
     PointInPolygonFilter(Box<models::PointInPolygonFilter>),
     #[serde(rename="RasterVectorJoin")]

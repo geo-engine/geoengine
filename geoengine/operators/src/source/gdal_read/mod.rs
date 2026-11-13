@@ -65,7 +65,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     gdal_worker: &GdalPoolDispatcher,
     blocks: Option<&BlockIo>,
 ) -> Result<RasterTile2D<T>, GdalProcessPoolError> {
-    let tile_bounds = plan.tile.global_pixel_bounds();
+    let tile_bounds = plan.tile.core_pixel_bounds();
     let tile_spatial_grid = plan.tile.spatial_grid_definition();
     let mut raster: GridOrEmpty<GridBoundingBox2D, T> =
         GridOrEmpty::from(EmptyGrid::new(tile_bounds));
@@ -392,6 +392,7 @@ mod tests {
         let tile_information = TileInformation {
             tile_size: TileSize::new_unchecked(8, 8),
             tile_position: [0, 0].into(),
+            overlap: geoengine_datatypes::raster::TileOverlap::zero(),
             global_geo_transform: GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1),
         };
 

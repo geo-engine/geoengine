@@ -301,7 +301,7 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        let output_grid = GridOrEmpty::new_empty_shape(tile_info.global_pixel_bounds());
+        let output_grid = GridOrEmpty::new_empty_shape(tile_info.core_pixel_bounds());
         let shift = self.shift;
         let pool = pool.clone();
         Box::pin(async move {
@@ -328,7 +328,7 @@ where
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let out_bounds = tile_info.global_pixel_bounds();
+        let out_bounds = tile_info.core_pixel_bounds();
         let input_pixel_bounds = GridBoundingBox2D::new_unchecked(
             out_bounds.min_index() + self.shift,
             out_bounds.max_index() + self.shift,
@@ -435,10 +435,10 @@ mod tests {
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::raster::{
         GeoTransform, Grid, GridShape2D, RasterDataType, TileIdx, TileSize,
     };
+    use geoengine_datatypes::raster::{TileOverlap, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -466,6 +466,7 @@ mod tests {
             .into(),
             properties: Default::default(),
             cache_hint: CacheHint::no_cache(),
+            overlap: TileOverlap::zero(),
         }];
 
         let result_descriptor = RasterResultDescriptor {
@@ -537,6 +538,7 @@ mod tests {
 
         let accu = ReTileAccu::<u8> {
             output_tile_info: TileInformation {
+                overlap: TileOverlap::zero(),
                 global_geo_transform: GeoTransform::test_default(),
                 tile_position: TileIdx::new_y_x(0, 0),
                 tile_size: TileSize::new_unchecked(4, 4),
@@ -585,6 +587,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -601,6 +604,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -617,6 +621,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -633,6 +638,7 @@ mod tests {
                 .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::no_cache(),
+                overlap: TileOverlap::zero(),
             },
         ];
 
@@ -744,6 +750,7 @@ mod tests {
                 tile_position: TileIdx::new_y_x(ty, tx),
                 band: 0,
                 global_geo_transform: geo_transform,
+                overlap: TileOverlap::zero(),
                 grid_array: Grid::new(
                     in_tile_size.grid_shape(),
                     (0..4)

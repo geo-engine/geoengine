@@ -30,6 +30,7 @@ use geoengine_operators::util::raster_stream_to_geotiff::{
     GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, ToGeoTiffProgress,
     ToGeoTiffProgressConsumer, raster_stream_to_geotiff,
 };
+use geoengine_operators::util::strip_tile_overlap;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::path::PathBuf;
@@ -121,13 +122,22 @@ impl<C: SessionContext> RasterDatasetFromProcessingGraphTask<C> {
             .await?;
         let exe_ctx = self.ctx.execution_context()?;
 
-        let initialized_operator = processing_graph
+        let operator = processing_graph
             .clone()
             .operator
             .get_raster()
-            .expect("must be raster here")
+            .expect("must be raster here");
+        let mut initialized_operator = operator
+            .clone()
             .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
             .await?;
+        if let Some(operator) =
+            strip_tile_overlap(operator, initialized_operator.result_descriptor())
+        {
+            initialized_operator = operator
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+                .await?;
+        }
 
         let result_descriptor = initialized_operator.result_descriptor();
 

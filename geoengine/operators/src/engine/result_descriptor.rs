@@ -11,7 +11,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
-    SpatialGridDefinition, TileSize, TilingGrid, TilingStrategy,
+    SpatialGridDefinition, TileOverlap, TileSize, TilingGrid, TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::CoordinateProjection;
 use geoengine_datatypes::util::ByteSize;
@@ -106,6 +106,13 @@ pub struct SpatialGridDescriptor {
     max_overview_level: Option<u32>,
     #[serde(default = "TileSize::default_512")]
     pub tile_size: TileSize,
+    /// Overlap halo carried by every tile produced on this grid.
+    ///
+    /// Coverage and query intersection remain core-based. Like `tile_size`,
+    /// this is runtime-only information and defaults to no overlap when
+    /// deserialized from the database.
+    #[serde(default)]
+    pub overlap: TileOverlap,
 }
 
 impl SpatialGridDescriptor {
@@ -115,6 +122,7 @@ impl SpatialGridDescriptor {
             state: SpatialGridDescriptorState::Source,
             max_overview_level: None,
             tile_size,
+            overlap: TileOverlap::zero(),
         }
     }
 
@@ -158,16 +166,41 @@ impl SpatialGridDescriptor {
         }
     }
 
+    /// Set the tile overlap halo of this descriptor.
+    ///
+    /// Used by operators that produce overlapping tiles (e.g. `AddTileOverlap`).
     #[must_use]
+    pub fn with_tile_overlap(self, overlap: TileOverlap) -> Self {
+        Self { overlap, ..self }
+    }
+
+    /// The tile overlap halo of data produced on this grid.
+    pub fn tile_overlap(&self) -> TileOverlap {
+        self.overlap
+    }
+
+    /// Do tiles produced on this grid carry an overlap halo?
+    pub fn has_tile_overlap(&self) -> bool {
+        !self.overlap.is_zero()
+    }
+    #[must_use]
+    /// Apply `map_fn` to the spatial grid definition.
+    ///
+    /// The mapped grid may change geometry (resolution, origin, bounds), which
+    /// invalidates a previously declared tile overlap. The overlap is therefore
+    /// reset to zero; operators that keep producing padded tiles on the mapped
+    /// grid must set it explicitly afterwards.
     pub fn map<F: Fn(&SpatialGridDefinition) -> SpatialGridDefinition>(&self, map_fn: F) -> Self {
         Self {
             spatial_grid: map_fn(&self.spatial_grid),
             state: self.state,
             max_overview_level: None,
             tile_size: self.tile_size,
+            overlap: TileOverlap::zero(),
         }
     }
 
+    /// Same as [`SpatialGridDescriptor::map`], resetting the overlap as well.
     pub fn try_map<F: Fn(&SpatialGridDefinition) -> Result<SpatialGridDefinition>>(
         &self,
         map_fn: F,
@@ -177,6 +210,7 @@ impl SpatialGridDescriptor {
             state: self.state,
             max_overview_level: None,
             tile_size: self.tile_size,
+            overlap: TileOverlap::zero(),
         })
     }
 
@@ -188,10 +222,12 @@ impl SpatialGridDescriptor {
         self.is_compatible_grid_generic(&other.spatial_grid)
     }
 
-    /// Do both grids produce the same tiles (same origin, pixel size and tile size)?
+    /// Do both grids produce the same tiles (same origin, pixel size, tile size and overlap)?
     /// Grid bounds may differ.
     pub fn has_same_tiling(&self, other: &Self) -> bool {
-        self.geo_transform() == other.geo_transform() && self.tile_size == other.tile_size
+        self.geo_transform() == other.geo_transform()
+            && self.tile_size == other.tile_size
+            && self.overlap == other.overlap
     }
 
     /// Tiles are anchored at the grid's origin, so operations that move the origin
@@ -200,8 +236,9 @@ impl SpatialGridDescriptor {
         TilingGrid::from_spatial_grid(self.spatial_grid, self.tile_size)
     }
 
+    /// The tiling strategy producing tiles on this grid, including its overlap.
     pub fn tiling_strategy(&self) -> TilingStrategy {
-        self.tiling_grid_definition().tiling_strategy()
+        TilingStrategy::new_with_overlap(self.tile_size, self.geo_transform(), self.overlap)
     }
 
     pub fn is_source(&self) -> bool {
@@ -262,11 +299,13 @@ impl SpatialGridDescriptor {
     ) -> Result<Option<Self>> {
         let projected = self.spatial_grid.reproject_clipped(projector)?;
         match projected {
+            // reprojection changes the pixel grid: any overlap is invalid
             Some(p) => Ok(Some(Self {
                 spatial_grid: p,
                 state: SpatialGridDescriptorState::Merged,
                 max_overview_level: None,
                 tile_size: self.tile_size,
+                overlap: TileOverlap::zero(),
             })),
             None => Ok(None),
         }
@@ -295,11 +334,13 @@ impl SpatialGridDescriptor {
             });
         }
 
+        // intersecting happens on the same pixel grid: cores and halos stay valid
         Some(Self {
             spatial_grid: intersection,
             state: SpatialGridDescriptorState::Merged,
             max_overview_level: None,
             tile_size: self.tile_size,
+            overlap: self.overlap,
         })
     }
 
@@ -525,6 +566,7 @@ impl RasterResultDescriptor {
                 state: SpatialGridDescriptorState::Source,
                 max_overview_level: None,
                 tile_size: TileSize::default_512(),
+                overlap: TileOverlap::zero(),
             },
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
@@ -532,6 +574,46 @@ impl RasterResultDescriptor {
 
     pub fn replace_resolution(&mut self, resolution: SpatialResolution) {
         self.spatial_grid = self.spatial_grid.with_changed_resolution(resolution);
+    }
+
+    /// Reject overlapped input tiles for operators that cannot process them.
+    ///
+    /// Operators whose result depends on pixel multiplicity (counting,
+    /// aggregation), that manage their own neighborhood margins, or that assume
+    /// tiles match the tiling specification's core size must call this in
+    /// `_initialize`. Overlap-aware operators may accept padded tiles instead.
+    pub fn ensure_no_tile_overlap(&self, operator: &'static str) -> Result<()> {
+        if self.spatial_grid.has_tile_overlap() {
+            return Err(Error::OverlappingTilesNotSupported { operator });
+        }
+        Ok(())
+    }
+}
+
+/// Checks shared by operators with multiple raster inputs.
+pub mod multi_input {
+    use super::*;
+
+    /// Require all inputs to carry the same overlap halo.
+    ///
+    /// Pixel-local point-wise operators are safe for overlapping tiles as long
+    /// as all inputs are padded identically: corresponding tiles then cover the
+    /// same data window and combine element-wise without double counting.
+    pub fn ensure_equal_tile_overlap(descriptors: &[&RasterResultDescriptor]) -> Result<()> {
+        let Some((first, rest)) = descriptors.split_first() else {
+            return Ok(());
+        };
+        let first_overlap = first.spatial_grid.tile_overlap();
+        for descriptor in rest {
+            let other = descriptor.spatial_grid.tile_overlap();
+            if other != first_overlap {
+                return Err(Error::UnequalTileOverlap {
+                    a: first_overlap,
+                    b: other,
+                });
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1092,6 +1174,7 @@ mod db_types {
                     .max_overview_level
                     .and_then(|level| u32::try_from(level).ok()),
                 tile_size: TileSize::default_512(), // runtime-only; sources overwrite this
+                overlap: TileOverlap::zero(),       // runtime-only; operators overwrite this
             }
         }
     }

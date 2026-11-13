@@ -6,7 +6,8 @@ use crate::error::{self, Optimization};
 use crate::processing::{
     DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
     DownsamplingResolution, Interpolation, InterpolationMethod, InterpolationParams,
-    InterpolationResolution, Reprojection, ReprojectionParams,
+    InterpolationResolution, RemoveTileOverlap, RemoveTileOverlapParams, Reprojection,
+    ReprojectionParams,
 };
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
@@ -15,6 +16,26 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use snafu::ResultExt;
+
+/// Wraps `operator` in a `RemoveTileOverlap` if its tiles carry an overlap halo.
+///
+/// Sinks must never receive overlapping tiles: halo pixels would be written
+/// or rendered in addition to the cores.
+pub fn strip_tile_overlap(
+    operator: TypedRasterOperator,
+    result_descriptor: &RasterResultDescriptor,
+) -> Option<TypedRasterOperator> {
+    result_descriptor
+        .spatial_grid_descriptor()
+        .has_tile_overlap()
+        .then(|| {
+            RemoveTileOverlap {
+                params: RemoveTileOverlapParams { amount: None },
+                sources: crate::engine::SingleRasterSource { raster: operator },
+            }
+            .typed()
+        })
+}
 
 pub struct WrapWithProjectionAndResample {
     pub operator: TypedRasterOperator,
@@ -273,6 +294,24 @@ impl WrapWithProjectionAndResample {
         Ok(Self::new(iop, iip.boxed(), rd))
     }
 
+    /// Strips the tile overlap halo before any output processing.
+    /// Projection and resampling also expect non-overlapping inputs.
+    pub async fn wrap_with_overlap_removal(self, exe_ctx: &dyn ExecutionContext) -> Result<Self> {
+        let Some(remove_overlap) =
+            strip_tile_overlap(self.operator.clone(), &self.result_descriptor)
+        else {
+            return Ok(self);
+        };
+
+        let initialized = remove_overlap
+            .clone()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
+            .await?;
+
+        let rd = initialized.result_descriptor().clone();
+        Ok(Self::new(remove_overlap, initialized.boxed(), rd))
+    }
+
     pub async fn wrap_with_projection_and_resample(
         self,
         target_origin_reference: Option<Coordinate2D>,
@@ -280,7 +319,9 @@ impl WrapWithProjectionAndResample {
         target_sref: SpatialReference,
         exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
-        self.wrap_with_projection(target_sref, target_origin_reference, exe_ctx)
+        self.wrap_with_overlap_removal(exe_ctx)
+            .await?
+            .wrap_with_projection(target_sref, target_origin_reference, exe_ctx)
             .await?
             .wrap_with_resample(target_origin_reference, target_spatial_resolution, exe_ctx)
             .await
@@ -294,9 +335,49 @@ mod tests {
         MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::processing::{Expression, ExpressionParams};
     use geoengine_datatypes::primitives::TimeInterval;
+    use geoengine_datatypes::raster::TileOverlap;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType, TileSize};
     use geoengine_datatypes::util::test::TestDefault;
+
+    #[test]
+    fn it_strips_only_overlapping_tiles() {
+        let operator = Expression {
+            params: ExpressionParams {
+                expression: "A".to_string(),
+                output_type: RasterDataType::U8,
+                output_band: None,
+                map_no_data: false,
+            },
+            sources: crate::engine::SingleRasterSource {
+                raster: crate::source::GdalSource {
+                    params: crate::source::GdalSourceParameters::new(
+                        geoengine_datatypes::dataset::NamedData::with_system_name("test"),
+                    ),
+                }
+                .typed(),
+            },
+        }
+        .typed();
+        let mut descriptor = RasterResultDescriptor::with_datatype_and_num_bands(
+            RasterDataType::U8,
+            1,
+            geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+            geoengine_datatypes::util::test::TestDefault::test_default(),
+            crate::engine::TimeDescriptor::new_irregular(None),
+        );
+
+        assert!(strip_tile_overlap(operator.clone(), &descriptor).is_none());
+
+        descriptor.spatial_grid = descriptor
+            .spatial_grid
+            .with_tile_overlap(TileOverlap::new(1, 1));
+        assert!(matches!(
+            strip_tile_overlap(operator, &descriptor),
+            Some(TypedRasterOperator::RemoveTileOverlap(_))
+        ));
+    }
 
     async fn wrap_with_resample(target_resolution: SpatialResolution) -> TypedRasterOperator {
         let exe_ctx = MockExecutionContext::test_default();
