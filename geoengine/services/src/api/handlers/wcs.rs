@@ -380,15 +380,16 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
-    let spatial_reference_cache = app_ctx.spatial_reference_cache();
-    let bounds = request.spatial_partition(spatial_reference_cache)?;
+    // `spatial_ref` below ensures that the grid base CRS is the bbox CRS, so one axis order serves both
+    let axis_order = app_ctx
+        .spatial_reference_cache()
+        .axis_order(request.bbox_spatial_reference())?;
+    let bounds = request.spatial_partition(axis_order)?;
     let query = RasterGridQuery {
         processing_graph: identifier,
         crs: request.spatial_ref().map(Into::into)?,
         bounds,
-        resolution: request
-            .spatial_resolution(spatial_reference_cache)
-            .transpose()?,
+        resolution: request.spatial_resolution(axis_order).transpose()?,
         origin: Some(bounds.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
         time: request
             .time

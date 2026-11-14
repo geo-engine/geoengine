@@ -1,4 +1,4 @@
-use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceCache};
+use crate::api::handlers::spatial_references::AxisOrder;
 use crate::api::model::datatypes::SpatialReference;
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{
@@ -116,46 +116,32 @@ pub struct GetCoverage {
 }
 
 impl GetCoverage {
-    pub fn spatial_resolution(
-        &self,
-        spatial_reference_cache: &SpatialReferenceCache,
-    ) -> Option<Result<SpatialResolution>> {
+    /// The spatial resolution, with `axis_order` of the grid base CRS
+    pub fn spatial_resolution(&self, axis_order: AxisOrder) -> Option<Result<SpatialResolution>> {
         if let Some(grid_offsets) = self.gridoffsets {
-            return Some(
-                grid_offsets.spatial_resolution(self.gridbasecrs, spatial_reference_cache),
-            );
+            return Some(grid_offsets.spatial_resolution(axis_order));
         }
 
         match (self.resx, self.resy) {
             (Some(xres), Some(yres)) => {
-                match spatial_reference_cache
-                    .axis_order(self.gridbasecrs)
-                    .map(|axis_order| tuple_from_ogc_params(xres, yres, axis_order))
-                {
-                    Ok((x, y)) => {
-                        Some(SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into))
-                    }
-                    Err(e) => Some(Err(e)),
-                }
+                let (x, y) = tuple_from_ogc_params(xres, yres, axis_order);
+                Some(SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into))
             }
             (Some(_), None) | (None, Some(_)) => Some(Err(error::Error::WcsInvalidGridOffsets)),
             (None, None) => None,
         }
     }
 
-    pub fn spatial_partition(
-        &self,
-        spatial_reference_cache: &SpatialReferenceCache,
-    ) -> Result<SpatialPartition2D> {
-        let spatial_reference = self
-            .boundingbox
+    /// The CRS of the bounding box, which defaults to the grid base CRS
+    pub fn bbox_spatial_reference(&self) -> SpatialReference {
+        self.boundingbox
             .spatial_reference
-            .unwrap_or(self.gridbasecrs);
+            .unwrap_or(self.gridbasecrs)
+    }
 
-        rectangle_from_ogc_params(
-            self.boundingbox.bbox,
-            spatial_reference_cache.axis_order(spatial_reference)?,
-        )
+    /// The bounding box, with `axis_order` of [`Self::bbox_spatial_reference`]
+    pub fn spatial_partition(&self, axis_order: AxisOrder) -> Result<SpatialPartition2D> {
+        rectangle_from_ogc_params(self.boundingbox.bbox, axis_order)
     }
 
     pub fn spatial_ref(&self) -> Result<SpatialReference> {
@@ -183,16 +169,8 @@ pub struct GridOffsets {
 }
 
 impl GridOffsets {
-    fn spatial_resolution(
-        &self,
-        spatial_reference: SpatialReference,
-        spatial_reference_cache: &SpatialReferenceCache,
-    ) -> Result<SpatialResolution> {
-        let (x, y) = tuple_from_ogc_params(
-            self.x_step,
-            self.y_step,
-            spatial_reference_cache.axis_order(spatial_reference)?,
-        );
+    fn spatial_resolution(&self, axis_order: AxisOrder) -> Result<SpatialResolution> {
+        let (x, y) = tuple_from_ogc_params(self.x_step, self.y_step, axis_order);
         SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into)
     }
 }
@@ -262,6 +240,7 @@ mod tests {
     use crate::api::model::datatypes::SpatialReferenceAuthority;
 
     use super::*;
+    use crate::api::handlers::spatial_references::SpatialReferenceCache;
 
     fn to_deserializer(s: &str) -> StringDeserializer<serde::de::value::Error> {
         s.to_owned().into_deserializer()
@@ -318,18 +297,16 @@ mod tests {
             coverage
         );
 
+        let axis_order = SpatialReferenceCache::default()
+            .axis_order(coverage.bbox_spatial_reference())
+            .unwrap();
         assert_eq!(
-            coverage
-                .spatial_partition(&SpatialReferenceCache::default())
-                .unwrap(),
+            coverage.spatial_partition(axis_order).unwrap(),
             SpatialPartition2D::new_unchecked((-162., 81.).into(), (162., -81.).into())
         );
 
         assert_eq!(
-            coverage
-                .spatial_resolution(&SpatialReferenceCache::default())
-                .unwrap()
-                .unwrap(),
+            coverage.spatial_resolution(axis_order).unwrap().unwrap(),
             SpatialResolution::new_unchecked(36., 18.)
         );
     }
