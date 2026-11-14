@@ -532,6 +532,42 @@ mod tests {
     }
 
     #[test]
+    fn it_orders_ogc_params_by_the_axis_order_of_the_spatial_reference() {
+        let east_north = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
+        let bbox: BoundingBox2D = rectangle_from_ogc_params([1., 2., 3., 4.], east_north).unwrap();
+        assert_eq!(
+            bbox,
+            BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into())
+        );
+        assert_eq!(tuple_from_ogc_params(1., 2., east_north).unwrap(), (1., 2.));
+
+        // EPSG:4326 is (lat, lon), EPSG:31467 is (northing, easting)
+        for code in [4326, 31467] {
+            let north_east = SpatialReference::new(SpatialReferenceAuthority::Epsg, code);
+            let bbox: BoundingBox2D =
+                rectangle_from_ogc_params([1., 2., 3., 4.], north_east).unwrap();
+            assert_eq!(
+                bbox,
+                BoundingBox2D::new_unchecked((2., 1.).into(), (4., 3.).into())
+            );
+            assert_eq!(tuple_from_ogc_params(1., 2., north_east).unwrap(), (2., 1.));
+        }
+    }
+
+    #[test]
+    fn it_rejects_ogc_params_of_unknown_spatial_references() {
+        let unknown = SpatialReference::new(SpatialReferenceAuthority::Epsg, 99999);
+        assert!(matches!(
+            rectangle_from_ogc_params::<BoundingBox2D>([1., 2., 3., 4.], unknown),
+            Err(error::Error::UnknownSrsString { .. })
+        ));
+        assert!(matches!(
+            tuple_from_ogc_params(1., 2., unknown),
+            Err(error::Error::UnknownSrsString { .. })
+        ));
+    }
+
+    #[test]
     fn it_parses_coordinate() {
         let s = "1.1,2.2";
 

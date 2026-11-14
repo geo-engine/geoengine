@@ -301,6 +301,134 @@ mod tests {
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use tokio_postgres::NoTls;
 
+    /// What `spatial_reference_specification` returned before it was cached; the regression baseline
+    /// for the axis order lookups. Extents are compared to 0.001, like the static `crs-constants`.
+    #[test]
+    #[allow(clippy::too_many_lines, reason = "a table of expected values")]
+    fn it_keeps_the_specifications_of_common_spatial_references() {
+        let expected = [
+            (
+                "EPSG:4326",
+                "WGS 84",
+                "+proj=longlat +datum=WGS84 +no_defs +type=crs",
+                [-180., -90., 180., 90.],
+                Some(("Geodetic longitude", "Geodetic latitude")),
+                Some(AxisOrder::NorthEast),
+            ),
+            (
+                "EPSG:3857",
+                "WGS 84 / Pseudo-Mercator",
+                "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs",
+                [
+                    -20_037_508.343,
+                    -20_048_966.104,
+                    20_037_508.343,
+                    20_048_966.104,
+                ],
+                Some(("Easting", "Northing")),
+                Some(AxisOrder::EastNorth),
+            ),
+            (
+                "EPSG:25832",
+                "ETRS89 / UTM zone 32N",
+                "+proj=utm +zone=32 +ellps=GRS80 +units=m +no_defs +type=crs",
+                [239_323.445, 4_290_144.086, 761_545.651, 9_365_801.909],
+                Some(("Easting", "Northing")),
+                Some(AxisOrder::EastNorth),
+            ),
+            (
+                "EPSG:32632",
+                "WGS 84 / UTM zone 32N",
+                "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs +type=crs",
+                [166_021.443, 0., 833_978.557, 9_329_005.182],
+                Some(("Easting", "Northing")),
+                Some(AxisOrder::EastNorth),
+            ),
+            (
+                "EPSG:3035",
+                "ETRS89-extended / LAEA Europe",
+                "+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs +type=crs",
+                [-146_473.113, 196_462.701, 7_824_928.564, 6_971_477.485],
+                Some(("Easting", "Northing")),
+                Some(AxisOrder::NorthEast),
+            ),
+            (
+                "EPSG:4258",
+                "ETRS89",
+                "+proj=longlat +ellps=GRS80 +no_defs +type=crs",
+                [-16.1, 32.88, 40.18, 84.73],
+                Some(("Geodetic longitude", "Geodetic latitude")),
+                Some(AxisOrder::NorthEast),
+            ),
+            (
+                "EPSG:31467",
+                "DHDN / 3-degree Gauss-Kruger zone 3",
+                "+proj=tmerc +lat_0=0 +lon_0=9 +k=1 +x_0=3500000 +y_0=0 +ellps=bessel +units=m +no_defs +type=crs",
+                [3_386_568.198, 5_236_824.133, 3_614_339.428, 6_107_852.276],
+                Some(("Easting", "Northing")),
+                Some(AxisOrder::NorthEast),
+            ),
+            (
+                "ESRI:54009",
+                "World_Mollweide",
+                "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs",
+                [
+                    -18_040_095.696,
+                    -9_020_047.848,
+                    18_040_095.696,
+                    9_020_047.848,
+                ],
+                Some(("Easting", "Northing")),
+                Some(AxisOrder::EastNorth),
+            ),
+            (
+                "SR-ORG:81",
+                "GEOS - GEOstationary Satellite",
+                "+proj=geos +lon_0=0 +h=-0 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs",
+                [-5_568_748.276, -5_568_748.276, 5_568_748.276, 5_568_748.276],
+                None,
+                Some(AxisOrder::EastNorth),
+            ),
+        ];
+        for (srs, name, proj_string, [x1, y1, x2, y2], axis_labels, axis_order) in expected {
+            let spec =
+                spatial_reference_specification(SpatialReference::from_str(srs).unwrap().into())
+                    .unwrap();
+            assert_eq!(
+                spec.spatial_reference,
+                SpatialReference::from_str(srs).unwrap().into(),
+                "{srs}"
+            );
+            assert_eq!(spec.name, name, "{srs}");
+            assert_eq!(spec.proj_string, proj_string, "{srs}");
+            assert_approx_eq!(
+                BoundingBox2D,
+                spec.extent.into(),
+                BoundingBox2D::new_unchecked((x1, y1).into(), (x2, y2).into()),
+                epsilon = 0.001
+            );
+            assert_eq!(
+                spec.axis_labels,
+                axis_labels.map(|(a, b)| (a.to_owned(), b.to_owned()).into()),
+                "{srs}"
+            );
+            assert_eq!(spec.axis_order, axis_order, "{srs}");
+        }
+    }
+
+    /// Feet units, south-pointing axes and unknown codes are unknown to the `ProjJson` parser
+    #[test]
+    fn it_keeps_unknown_spatial_references_unknown() {
+        for srs in ["EPSG:2263", "EPSG:3413", "EPSG:2299", "EPSG:99999"] {
+            let result =
+                spatial_reference_specification(SpatialReference::from_str(srs).unwrap().into());
+            assert!(
+                matches!(&result, Err(Error::UnknownSrsString { srs_string }) if srs_string == srs),
+                "{srs}: {result:?}"
+            );
+        }
+    }
+
     #[ge_context::test]
     async fn get_spatial_reference(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();
