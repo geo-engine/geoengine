@@ -7,7 +7,7 @@ use crate::api::handlers::{
             to_non_zero_u64,
         },
     },
-    spatial_references::{AxisOrder, spatial_reference_specification},
+    spatial_references::{AxisOrder, SpatialReferenceCache},
 };
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
@@ -38,7 +38,10 @@ pub trait TileMatrixSetProvider: Send + Sync {
     fn id(&self) -> TileMatrixSetId;
 
     /// Returns the tile matrix set definition, including all tile matrices
-    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet>;
+    fn tile_matrix_set_definition(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<TileMatrixSet>;
 
     /// Returns the tile matrix definitions for all zoom levels
     fn tile_matrices(&self) -> OgcApiResult<Vec<TileMatrix>>;
@@ -47,7 +50,10 @@ pub trait TileMatrixSetProvider: Send + Sync {
     fn tiles_crs(&self) -> OgcApiResult<TilesCrs>;
 
     /// Returns the ordered axes labels (e.g., `["Lon", "Lat"]` or `["x", "y"]`)
-    fn ordered_axes(&self) -> OgcApiResult<Vec<String>>;
+    fn ordered_axes(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<Vec<String>>;
 
     /// Computes the pixel bounds of a tile in the global pixel grid of the tiling scheme.
     ///
@@ -224,14 +230,19 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
         }
     }
 
-    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet> {
+    fn tile_matrix_set_definition(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<TileMatrixSet> {
         match self {
-            TypedTileMatrixSetProvider::Custom(provider) => provider.tile_matrix_set_definition(),
+            TypedTileMatrixSetProvider::Custom(provider) => {
+                provider.tile_matrix_set_definition(spatial_reference_cache)
+            }
             TypedTileMatrixSetProvider::CustomWebMercator(provider) => {
-                provider.tile_matrix_set_definition()
+                provider.tile_matrix_set_definition(spatial_reference_cache)
             }
             TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
-                provider.tile_matrix_set_definition()
+                provider.tile_matrix_set_definition(spatial_reference_cache)
             }
         }
     }
@@ -252,11 +263,20 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
         }
     }
 
-    fn ordered_axes(&self) -> OgcApiResult<Vec<String>> {
+    fn ordered_axes(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<Vec<String>> {
         match self {
-            TypedTileMatrixSetProvider::Custom(provider) => provider.ordered_axes(),
-            TypedTileMatrixSetProvider::CustomWebMercator(provider) => provider.ordered_axes(),
-            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.ordered_axes(),
+            TypedTileMatrixSetProvider::Custom(provider) => {
+                provider.ordered_axes(spatial_reference_cache)
+            }
+            TypedTileMatrixSetProvider::CustomWebMercator(provider) => {
+                provider.ordered_axes(spatial_reference_cache)
+            }
+            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
+                provider.ordered_axes(spatial_reference_cache)
+            }
         }
     }
 
@@ -384,7 +404,10 @@ impl TileMatrixSetProvider for CustomNativeTMS {
         TileMatrixSetId::Custom(Self::TILE_MATRIX_SET_ID.to_string())
     }
 
-    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet> {
+    fn tile_matrix_set_definition(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<TileMatrixSet> {
         Ok(TileMatrixSet {
             id: self.id(),
             title: Self::TILE_MATRIX_SET_TITLE.to_string().into(),
@@ -392,7 +415,7 @@ impl TileMatrixSetProvider for CustomNativeTMS {
             keywords: Vec::new(),
             uri: None,
             crs: self.tiles_crs()?,
-            ordered_axes: self.ordered_axes()?,
+            ordered_axes: self.ordered_axes(spatial_reference_cache)?,
             well_known_scale_set: None,
             bounding_box: None,
             tile_matrices: self.tile_matrices()?,
@@ -412,8 +435,11 @@ impl TileMatrixSetProvider for CustomNativeTMS {
             .map(TilesCrs::Simple)
     }
 
-    fn ordered_axes(&self) -> OgcApiResult<Vec<String>> {
-        ordered_axes(self.spatial_reference)
+    fn ordered_axes(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<Vec<String>> {
+        ordered_axes(self.spatial_reference, spatial_reference_cache)
     }
 
     fn tile_grid_bbox(
@@ -503,8 +529,11 @@ impl TileMatrixSetProvider for CustomWebMercatorTMS {
         TileMatrixSetId::Custom(Self::TILE_MATRIX_SET_ID.into())
     }
 
-    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet> {
-        self.0.tile_matrix_set_definition()
+    fn tile_matrix_set_definition(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<TileMatrixSet> {
+        self.0.tile_matrix_set_definition(spatial_reference_cache)
     }
 
     fn tile_matrices(&self) -> OgcApiResult<Vec<TileMatrix>> {
@@ -515,8 +544,11 @@ impl TileMatrixSetProvider for CustomWebMercatorTMS {
         self.0.tiles_crs()
     }
 
-    fn ordered_axes(&self) -> OgcApiResult<Vec<String>> {
-        self.0.ordered_axes()
+    fn ordered_axes(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<Vec<String>> {
+        self.0.ordered_axes(spatial_reference_cache)
     }
 
     fn tile_grid_bbox(
@@ -634,7 +666,10 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
         TileMatrixSetId::WebMercatorQuad
     }
 
-    fn tile_matrix_set_definition(&self) -> OgcApiResult<TileMatrixSet> {
+    fn tile_matrix_set_definition(
+        &self,
+        _spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<TileMatrixSet> {
         Ok(TileMatrixSet {
             id: self.id(),
             title: Self::TILE_MATRIX_SET_TITLE.to_string().into(),
@@ -681,7 +716,10 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
         })
     }
 
-    fn ordered_axes(&self) -> OgcApiResult<Vec<String>> {
+    fn ordered_axes(
+        &self,
+        _spatial_reference_cache: &SpatialReferenceCache,
+    ) -> OgcApiResult<Vec<String>> {
         Ok(vec!["X".to_string(), "Y".to_string()])
     }
 
@@ -891,8 +929,11 @@ pub fn build_tile_matrices(
         .collect::<Vec<_>>())
 }
 
-fn ordered_axes(spatial_reference: SpatialReference) -> OgcApiResult<Vec<String>> {
-    let specification = spatial_reference_specification(spatial_reference.into())?;
+fn ordered_axes(
+    spatial_reference: SpatialReference,
+    spatial_reference_cache: &SpatialReferenceCache,
+) -> OgcApiResult<Vec<String>> {
+    let specification = spatial_reference_cache.specification(spatial_reference.into())?;
 
     Ok(match specification.axis_order {
         Some(AxisOrder::NorthEast) => vec!["Lon".into(), "Lat".into()],
@@ -1054,11 +1095,19 @@ mod tests {
     #[test]
     fn it_returns_an_axis_order() {
         assert_eq!(
-            ordered_axes(SpatialReference::epsg_4326()).unwrap(),
+            ordered_axes(
+                SpatialReference::epsg_4326(),
+                &SpatialReferenceCache::default()
+            )
+            .unwrap(),
             vec!["Lon".to_string(), "Lat".to_string()]
         );
         assert_eq!(
-            ordered_axes(SpatialReference::web_mercator()).unwrap(),
+            ordered_axes(
+                SpatialReference::web_mercator(),
+                &SpatialReferenceCache::default()
+            )
+            .unwrap(),
             vec!["X".to_string(), "Y".to_string()]
         );
     }

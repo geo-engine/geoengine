@@ -1,4 +1,5 @@
 use crate::{
+    api::handlers::spatial_references::SpatialReferenceCache,
     api::model::services::Volume,
     config::{Cache, QuotaTrackingMode, get_config_element},
     datasets::{
@@ -81,6 +82,9 @@ pub trait ApplicationContext: 'static + Send + Sync + Clone + UserAuth {
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
 
     fn oidc_manager(&self) -> &OidcManager;
+
+    /// The spatial reference specifications that PROJ resolved for this application
+    fn spatial_reference_cache(&self) -> &SpatialReferenceCache;
 
     /// Clear processing, provider metadata and GDAL caches. Requires an administrator.
     async fn clear_caches(&self, session: Self::Session) -> Result<()>;

@@ -4,9 +4,11 @@ use crate::api::model::datatypes::{
 use crate::contexts::ApplicationContext;
 use crate::{error::Error, error::Result};
 use actix_web::{FromRequest, Responder, web};
+use dashmap::DashMap;
 use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use std::sync::Arc;
 use utoipa::ToSchema;
 
 pub(crate) fn init_spatial_reference_routes<C>(cfg: &mut web::ServiceConfig)
@@ -130,7 +132,6 @@ fn proj_json(srs_string: &str) -> Option<ProjJson> {
 
         proj_sys::proj_destroy(c_proj);
         proj_sys::proj_context_destroy(ctx);
-        proj_sys::proj_cleanup();
 
         string.and_then(|s| serde_json::from_str(&s).ok())
     }
@@ -163,7 +164,6 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
 
         proj_sys::proj_destroy(c_proj);
         proj_sys::proj_context_destroy(ctx);
-        proj_sys::proj_cleanup();
 
         string
     }
@@ -212,9 +212,43 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
 pub(crate) async fn get_spatial_reference_specification_handler<C: ApplicationContext>(
     srs_string: web::Path<String>,
     _session: C::Session,
+    app_ctx: web::Data<C>,
 ) -> Result<impl Responder> {
     let spatial_ref = SpatialReference::from_str(&srs_string)?;
-    spatial_reference_specification(spatial_ref).map(web::Json)
+    app_ctx
+        .spatial_reference_cache()
+        .specification(spatial_ref)
+        .map(web::Json)
+}
+
+/// The spatial reference specifications that PROJ resolved, kept for the lifetime of the
+/// application context, so that requests do not ask PROJ again.
+///
+/// It keeps successes only, so that an unknown spatial reference gives the same error every time.
+/// It needs no eviction: it holds at most one entry per CRS in PROJ's database.
+#[derive(Clone, Debug, Default)]
+pub struct SpatialReferenceCache {
+    specifications: Arc<DashMap<SpatialReference, SpatialReferenceSpecification>>,
+}
+
+impl SpatialReferenceCache {
+    /// Returns the name, PROJ string, extent and axis order of a spatial reference.
+    pub fn specification(
+        &self,
+        spatial_reference: SpatialReference,
+    ) -> Result<SpatialReferenceSpecification> {
+        // clone before resolving, so that no shard lock is held while PROJ runs and during the insert
+        let cached = self
+            .specifications
+            .get(&spatial_reference)
+            .map(|spec| spec.clone());
+        if let Some(spec) = cached {
+            return Ok(spec);
+        }
+        let spec = spatial_reference_specification(spatial_reference)?;
+        self.specifications.insert(spatial_reference, spec.clone());
+        Ok(spec)
+    }
 }
 
 /// custom spatial references not known by proj or that shall be overriden
@@ -245,7 +279,8 @@ fn custom_spatial_reference_specification(
     }
 }
 
-pub fn spatial_reference_specification(
+/// Resolves the specification with PROJ; use [`SpatialReferenceCache::specification`] instead.
+fn spatial_reference_specification(
     spatial_reference: SpatialReference,
 ) -> Result<SpatialReferenceSpecification> {
     if let Some(sref) = custom_spatial_reference_specification(spatial_reference) {
@@ -427,6 +462,25 @@ mod tests {
                 "{srs}: {result:?}"
             );
         }
+    }
+
+    #[test]
+    fn it_caches_known_spatial_references_only() {
+        let cache = SpatialReferenceCache::default();
+        let known = SpatialReference::from_str("ESRI:54009").unwrap().into();
+        let first = cache.specification(known).unwrap();
+        assert_eq!(cache.specification(known).unwrap(), first);
+        assert_eq!(first, spatial_reference_specification(known).unwrap());
+        assert_eq!(cache.specifications.len(), 1);
+
+        let unknown = SpatialReference::from_str("EPSG:99999").unwrap().into();
+        for _ in 0..2 {
+            assert!(matches!(
+                cache.specification(unknown),
+                Err(Error::UnknownSrsString { .. })
+            ));
+        }
+        assert_eq!(cache.specifications.len(), 1);
     }
 
     #[ge_context::test]

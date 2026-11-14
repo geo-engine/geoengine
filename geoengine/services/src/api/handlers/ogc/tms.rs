@@ -165,7 +165,9 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
         tiling_specification,
     )?;
 
-    Ok(web::Json(provider.tile_matrix_set_definition()?))
+    Ok(web::Json(provider.tile_matrix_set_definition(
+        app_ctx.spatial_reference_cache(),
+    )?))
 }
 
 #[cfg(test)]

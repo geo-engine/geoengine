@@ -14,7 +14,7 @@ use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
 use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 use super::wcs::request::WcsBoundingbox;
-use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
+use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceCache};
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result, UnableToParseQueryString, UnableToSerializeQueryString};
 use crate::processing_graphs::processing_graph::ProcessingGraphId;
@@ -41,8 +41,12 @@ impl OgcBoundingBox {
         }
     }
 
-    pub fn bounds<A: AxisAlignedRectangle>(self, spatial_reference: SpatialReference) -> Result<A> {
-        rectangle_from_ogc_params(self.values, spatial_reference)
+    pub fn bounds<A: AxisAlignedRectangle>(
+        self,
+        spatial_reference: SpatialReference,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> Result<A> {
+        rectangle_from_ogc_params(self.values, spatial_reference, spatial_reference_cache)
     }
 
     pub fn bounds_naive<A: AxisAlignedRectangle>(self) -> Result<A> {
@@ -221,9 +225,11 @@ where
 pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
     values: [f64; 4],
     spatial_reference: SpatialReference,
+    spatial_reference_cache: &SpatialReferenceCache,
 ) -> Result<A> {
     let [a, b, c, d] = values;
-    let axis_order = spatial_reference_specification(spatial_reference)?
+    let axis_order = spatial_reference_cache
+        .specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
@@ -239,8 +245,10 @@ pub fn tuple_from_ogc_params(
     a: f64,
     b: f64,
     spatial_reference: SpatialReference,
+    spatial_reference_cache: &SpatialReferenceCache,
 ) -> Result<(f64, f64)> {
-    match spatial_reference_specification(spatial_reference)?
+    match spatial_reference_cache
+        .specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
@@ -533,36 +541,45 @@ mod tests {
 
     #[test]
     fn it_orders_ogc_params_by_the_axis_order_of_the_spatial_reference() {
+        let cache = SpatialReferenceCache::default();
         let east_north = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
-        let bbox: BoundingBox2D = rectangle_from_ogc_params([1., 2., 3., 4.], east_north).unwrap();
+        let bbox: BoundingBox2D =
+            rectangle_from_ogc_params([1., 2., 3., 4.], east_north, &cache).unwrap();
         assert_eq!(
             bbox,
             BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into())
         );
-        assert_eq!(tuple_from_ogc_params(1., 2., east_north).unwrap(), (1., 2.));
+        assert_eq!(
+            tuple_from_ogc_params(1., 2., east_north, &cache).unwrap(),
+            (1., 2.)
+        );
 
         // EPSG:4326 is (lat, lon), EPSG:31467 is (northing, easting)
         for code in [4326, 31467] {
             let north_east = SpatialReference::new(SpatialReferenceAuthority::Epsg, code);
             let bbox: BoundingBox2D =
-                rectangle_from_ogc_params([1., 2., 3., 4.], north_east).unwrap();
+                rectangle_from_ogc_params([1., 2., 3., 4.], north_east, &cache).unwrap();
             assert_eq!(
                 bbox,
                 BoundingBox2D::new_unchecked((2., 1.).into(), (4., 3.).into())
             );
-            assert_eq!(tuple_from_ogc_params(1., 2., north_east).unwrap(), (2., 1.));
+            assert_eq!(
+                tuple_from_ogc_params(1., 2., north_east, &cache).unwrap(),
+                (2., 1.)
+            );
         }
     }
 
     #[test]
     fn it_rejects_ogc_params_of_unknown_spatial_references() {
+        let cache = SpatialReferenceCache::default();
         let unknown = SpatialReference::new(SpatialReferenceAuthority::Epsg, 99999);
         assert!(matches!(
-            rectangle_from_ogc_params::<BoundingBox2D>([1., 2., 3., 4.], unknown),
+            rectangle_from_ogc_params::<BoundingBox2D>([1., 2., 3., 4.], unknown, &cache),
             Err(error::Error::UnknownSrsString { .. })
         ));
         assert!(matches!(
-            tuple_from_ogc_params(1., 2., unknown),
+            tuple_from_ogc_params(1., 2., unknown, &cache),
             Err(error::Error::UnknownSrsString { .. })
         ));
     }
