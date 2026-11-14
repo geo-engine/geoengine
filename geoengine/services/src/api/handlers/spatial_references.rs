@@ -138,10 +138,15 @@ fn proj_json(srs_string: &str) -> Option<ProjJson> {
         } else {
             let c_buf = proj_sys::proj_as_projjson(ctx, c_proj, std::ptr::null());
 
-            std::ffi::CStr::from_ptr(c_buf)
-                .to_str()
-                .map(ToOwned::to_owned)
-                .ok()
+            // null if PROJ cannot export the CRS
+            (!c_buf.is_null())
+                .then(|| {
+                    std::ffi::CStr::from_ptr(c_buf)
+                        .to_str()
+                        .map(ToOwned::to_owned)
+                        .ok()
+                })
+                .flatten()
         };
 
         proj_sys::proj_destroy(c_proj);
@@ -171,10 +176,15 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
                 std::ptr::null(),
             );
 
-            std::ffi::CStr::from_ptr(c_buf)
-                .to_str()
-                .map(ToOwned::to_owned)
-                .ok()
+            // null if the CRS has no PROJ string, e.g. EPSG:32600, the UTM grid system
+            (!c_buf.is_null())
+                .then(|| {
+                    std::ffi::CStr::from_ptr(c_buf)
+                        .to_str()
+                        .map(ToOwned::to_owned)
+                        .ok()
+                })
+                .flatten()
         };
 
         proj_sys::proj_destroy(c_proj);
@@ -630,6 +640,27 @@ mod tests {
             "{} of {checked} differ: {mismatches:?}",
             mismatches.len()
         );
+    }
+
+    /// PROJ knows these codes but cannot write them as a PROJ string; this crashed the server
+    #[test]
+    fn it_rejects_spatial_references_without_a_proj_string() {
+        let cache = SpatialReferenceCache::default();
+        for srs in ["EPSG:22700", "EPSG:32600", "EPSG:32700"] {
+            let spatial_reference = SpatialReference::from_str(srs).unwrap().into();
+            assert!(
+                matches!(
+                    cache.specification(spatial_reference),
+                    Err(Error::UnknownSrsString { .. })
+                ),
+                "{srs}"
+            );
+            assert_eq!(
+                cache.axis_order(spatial_reference).unwrap(),
+                AxisOrder::EastNorth,
+                "{srs}"
+            );
+        }
     }
 
     #[ge_context::test]
