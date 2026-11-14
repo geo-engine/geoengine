@@ -1208,6 +1208,7 @@ pub struct PlotQueryRectangle {
     pub spatial_resolution: SpatialResolution,
 }
 
+/// A set of bands. The order of the list does not matter: the tiles of a tile position are returned in ascending band order.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
 pub struct BandSelection(pub Vec<usize>);
 
