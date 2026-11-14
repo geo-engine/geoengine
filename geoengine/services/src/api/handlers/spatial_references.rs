@@ -5,6 +5,7 @@ use crate::contexts::ApplicationContext;
 use crate::{error::Error, error::Result};
 use actix_web::{FromRequest, Responder, web};
 use dashmap::DashMap;
+use geoengine_datatypes::spatial_reference::{StaticAxisOrder, StaticEpsgMetadataProvider};
 use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -267,26 +268,44 @@ impl SpatialReferenceCache {
 
     /// Returns the axis order of a spatial reference, the same as its specification has, but
     /// without building its name, PROJ string and extent.
+    ///
+    /// Custom references come first, then EPSG codes of the static registry, which needs no
+    /// PROJ, then PROJ, asked once per reference.
     pub fn axis_order(&self, spatial_reference: SpatialReference) -> Result<AxisOrder> {
         let axis_order =
             if let Some(spec) = custom_spatial_reference_specification(spatial_reference) {
                 spec.axis_order
+            } else if let Some(axis_order) =
+                StaticEpsgMetadataProvider::axis_order(spatial_reference.into())
+            {
+                Some(axis_order.into())
             } else {
-                let cached = self.axis_orders.get(&spatial_reference).map(|order| *order);
-                if let Some(axis_order) = cached {
-                    axis_order
-                } else {
-                    let srs_string = spatial_reference.srs_string();
-                    let axis_order = proj_json(&srs_string)
-                        .ok_or(Error::UnknownSrsString { srs_string })?
-                        .axis_order();
-                    self.axis_orders.insert(spatial_reference, axis_order);
-                    axis_order
-                }
+                self.proj_axis_order(spatial_reference)?
             };
         axis_order.ok_or_else(|| Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
         })
+    }
+
+    fn proj_axis_order(&self, spatial_reference: SpatialReference) -> Result<Option<AxisOrder>> {
+        if let Some(axis_order) = self.axis_orders.get(&spatial_reference).map(|order| *order) {
+            return Ok(axis_order);
+        }
+        let srs_string = spatial_reference.srs_string();
+        let axis_order = proj_json(&srs_string)
+            .ok_or(Error::UnknownSrsString { srs_string })?
+            .axis_order();
+        self.axis_orders.insert(spatial_reference, axis_order);
+        Ok(axis_order)
+    }
+}
+
+impl From<StaticAxisOrder> for AxisOrder {
+    fn from(axis_order: StaticAxisOrder) -> Self {
+        match axis_order {
+            StaticAxisOrder::EastNorth => AxisOrder::EastNorth,
+            StaticAxisOrder::NorthEast => AxisOrder::NorthEast,
+        }
     }
 }
 
@@ -558,17 +577,59 @@ mod tests {
     }
 
     #[test]
-    fn it_asks_proj_once_per_spatial_reference() {
+    fn it_asks_proj_only_for_spatial_references_outside_the_registry() {
         let cache = SpatialReferenceCache::default();
-        let before = PROJ_CONTEXTS.with(std::cell::Cell::get);
-        for srs in ["EPSG:3857", "ESRI:54009"] {
+        let count = || PROJ_CONTEXTS.with(std::cell::Cell::get);
+        let before = count();
+        for srs in ["EPSG:3857", "EPSG:4326", "EPSG:31467"] {
             let spatial_reference = SpatialReference::from_str(srs).unwrap().into();
             for _ in 0..10 {
-                cache.axis_order(spatial_reference).unwrap();
+                let _: BoundingBox2D = crate::api::ogc::util::OgcBoundingBox::new(1., 2., 3., 4.)
+                    .bounds(spatial_reference, &cache)
+                    .unwrap();
             }
         }
-        // one `proj_json` each, and no `proj_proj_string`
-        assert_eq!(PROJ_CONTEXTS.with(std::cell::Cell::get) - before, 2);
+        assert_eq!(
+            count() - before,
+            0,
+            "EPSG codes of the registry need no PROJ"
+        );
+
+        let esri = SpatialReference::from_str("ESRI:54009").unwrap().into();
+        for _ in 0..10 {
+            cache.axis_order(esri).unwrap();
+        }
+        // one `proj_json`, and no `proj_proj_string`
+        assert_eq!(count() - before, 1, "PROJ is asked once per reference");
+    }
+
+    /// The registry was generated with pyproj; the server must give the same axis order with the PROJ it links
+    #[test]
+    fn it_has_the_axis_order_of_proj_for_every_code_of_the_registry() {
+        let mut checked = 0;
+        let mut mismatches = Vec::new();
+        for code in 0..=u32::from(u16::MAX) {
+            let spatial_reference = SpatialReference::new(SpatialReferenceAuthority::Epsg, code);
+            let Some(static_order) = StaticEpsgMetadataProvider::axis_order(spatial_reference)
+            else {
+                continue;
+            };
+            let proj_order =
+                proj_json(&spatial_reference.srs_string()).and_then(|json| json.axis_order());
+            if proj_order != Some(static_order.into()) {
+                mismatches.push((code, static_order, proj_order));
+            }
+            checked += 1;
+        }
+        assert!(
+            checked > 4000,
+            "the registry should know most EPSG codes, got {checked}"
+        );
+        assert!(
+            mismatches.is_empty(),
+            "{} of {checked} differ: {mismatches:?}",
+            mismatches.len()
+        );
     }
 
     #[ge_context::test]
