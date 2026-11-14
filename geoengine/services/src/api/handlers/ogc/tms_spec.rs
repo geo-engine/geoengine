@@ -933,12 +933,17 @@ fn ordered_axes(
     spatial_reference: SpatialReference,
     spatial_reference_cache: &SpatialReferenceCache,
 ) -> OgcApiResult<Vec<String>> {
-    let specification = spatial_reference_cache.specification(spatial_reference.into())?;
-
-    Ok(match specification.axis_order {
-        Some(AxisOrder::NorthEast) => vec!["Lon".into(), "Lat".into()],
-        _ => vec!["X".into(), "Y".into()],
-    })
+    Ok(
+        match spatial_reference_cache.axis_order(spatial_reference.into()) {
+            Ok(AxisOrder::NorthEast) => vec!["Lon".into(), "Lat".into()],
+            // the specification of a reference without axis order gave X, Y, not an error
+            Ok(AxisOrder::EastNorth)
+            | Err(crate::error::Error::AxisOrderingNotKnownForSrs { .. }) => {
+                vec!["X".into(), "Y".into()]
+            }
+            Err(e) => return Err(e.into()),
+        },
+    )
 }
 
 /// Calculates the number of zoom levels for a tile matrix set based on the original resolution of the raster and the tile size.
