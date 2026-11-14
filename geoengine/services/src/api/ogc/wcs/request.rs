@@ -1,4 +1,4 @@
-use crate::api::handlers::spatial_references::SpatialReferenceCache;
+use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceCache};
 use crate::api::model::datatypes::SpatialReference;
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{
@@ -128,7 +128,10 @@ impl GetCoverage {
 
         match (self.resx, self.resy) {
             (Some(xres), Some(yres)) => {
-                match tuple_from_ogc_params(xres, yres, self.gridbasecrs, spatial_reference_cache) {
+                match spatial_reference_cache
+                    .axis_order(self.gridbasecrs)
+                    .map(|axis_order| tuple_from_ogc_params(xres, yres, axis_order))
+                {
                     Ok((x, y)) => {
                         Some(SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into))
                     }
@@ -151,8 +154,7 @@ impl GetCoverage {
 
         rectangle_from_ogc_params(
             self.boundingbox.bbox,
-            spatial_reference,
-            spatial_reference_cache,
+            spatial_reference_cache.axis_order(spatial_reference)?,
         )
     }
 
@@ -189,9 +191,8 @@ impl GridOffsets {
         let (x, y) = tuple_from_ogc_params(
             self.x_step,
             self.y_step,
-            spatial_reference,
-            spatial_reference_cache,
-        )?;
+            spatial_reference_cache.axis_order(spatial_reference)?,
+        );
         SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into)
     }
 }
@@ -203,13 +204,8 @@ pub struct GridOrigin {
 }
 
 impl GridOrigin {
-    pub fn coordinate(
-        &self,
-        spatial_reference: SpatialReference,
-        spatial_reference_cache: &SpatialReferenceCache,
-    ) -> Result<Coordinate2D> {
-        tuple_from_ogc_params(self.x, self.y, spatial_reference, spatial_reference_cache)
-            .map(Into::into)
+    pub fn coordinate(&self, axis_order: AxisOrder) -> Coordinate2D {
+        tuple_from_ogc_params(self.x, self.y, axis_order).into()
     }
 }
 

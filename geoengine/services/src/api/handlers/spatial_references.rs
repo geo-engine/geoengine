@@ -94,7 +94,7 @@ pub enum ProjJsonAxisDirection {
     North,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AxisOrder {
     NorthEast,
@@ -102,12 +102,24 @@ pub enum AxisOrder {
 }
 
 impl AxisOrder {
-    pub fn xy_to_native_order<T: Copy>(&self, input: [T; 2]) -> [T; 2] {
+    pub fn xy_to_native_order<T: Copy>(self, input: [T; 2]) -> [T; 2] {
         match &self {
             AxisOrder::EastNorth => input,
             AxisOrder::NorthEast => [input[1], input[0]],
         }
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// PROJ contexts created on this thread, for tests that check that requests do not ask PROJ
+    static PROJ_CONTEXTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn count_proj_context(srs_string: &str) {
+    tracing::debug!(srs_string, "resolving a spatial reference with PROJ");
+    #[cfg(test)]
+    PROJ_CONTEXTS.with(|n| n.set(n.get() + 1));
 }
 
 /// Get the proj json information for the given `srs_string` if it is known.
@@ -116,6 +128,7 @@ fn proj_json(srs_string: &str) -> Option<ProjJson> {
     unsafe {
         let c_definition = std::ffi::CString::new(srs_string).ok()?;
 
+        count_proj_context(srs_string);
         let ctx = proj_sys::proj_context_create();
         let c_proj = proj_sys::proj_create(ctx, c_definition.as_ptr());
 
@@ -143,6 +156,7 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
     unsafe {
         let c_definition = std::ffi::CString::new(srs_string).ok()?;
 
+        count_proj_context(srs_string);
         let ctx = proj_sys::proj_context_create();
         let c_proj = proj_sys::proj_create(ctx, c_definition.as_ptr());
 
@@ -229,6 +243,7 @@ pub(crate) async fn get_spatial_reference_specification_handler<C: ApplicationCo
 #[derive(Clone, Debug, Default)]
 pub struct SpatialReferenceCache {
     specifications: Arc<DashMap<SpatialReference, SpatialReferenceSpecification>>,
+    axis_orders: Arc<DashMap<SpatialReference, Option<AxisOrder>>>,
 }
 
 impl SpatialReferenceCache {
@@ -248,6 +263,30 @@ impl SpatialReferenceCache {
         let spec = spatial_reference_specification(spatial_reference)?;
         self.specifications.insert(spatial_reference, spec.clone());
         Ok(spec)
+    }
+
+    /// Returns the axis order of a spatial reference, the same as its specification has, but
+    /// without building its name, PROJ string and extent.
+    pub fn axis_order(&self, spatial_reference: SpatialReference) -> Result<AxisOrder> {
+        let axis_order =
+            if let Some(spec) = custom_spatial_reference_specification(spatial_reference) {
+                spec.axis_order
+            } else {
+                let cached = self.axis_orders.get(&spatial_reference).map(|order| *order);
+                if let Some(axis_order) = cached {
+                    axis_order
+                } else {
+                    let srs_string = spatial_reference.srs_string();
+                    let axis_order = proj_json(&srs_string)
+                        .ok_or(Error::UnknownSrsString { srs_string })?
+                        .axis_order();
+                    self.axis_orders.insert(spatial_reference, axis_order);
+                    axis_order
+                }
+            };
+        axis_order.ok_or_else(|| Error::AxisOrderingNotKnownForSrs {
+            srs_string: spatial_reference.srs_string(),
+        })
     }
 }
 
@@ -481,6 +520,55 @@ mod tests {
             ));
         }
         assert_eq!(cache.specifications.len(), 1);
+    }
+
+    /// The spatial references of the regression tests above, known and unknown
+    const BASELINE: [&str; 13] = [
+        "EPSG:4326",
+        "EPSG:3857",
+        "EPSG:25832",
+        "EPSG:32632",
+        "EPSG:3035",
+        "EPSG:4258",
+        "EPSG:31467",
+        "ESRI:54009",
+        "SR-ORG:81",
+        "EPSG:2263",
+        "EPSG:3413",
+        "EPSG:2299",
+        "EPSG:99999",
+    ];
+
+    #[test]
+    fn it_looks_up_the_axis_order_of_the_specification() {
+        let cache = SpatialReferenceCache::default();
+        for srs in BASELINE {
+            let spatial_reference = SpatialReference::from_str(srs).unwrap().into();
+            let expected = spatial_reference_specification(spatial_reference).and_then(|spec| {
+                spec.axis_order.ok_or(Error::AxisOrderingNotKnownForSrs {
+                    srs_string: srs.to_owned(),
+                })
+            });
+            assert_eq!(
+                format!("{:?}", cache.axis_order(spatial_reference)),
+                format!("{expected:?}"),
+                "{srs}"
+            );
+        }
+    }
+
+    #[test]
+    fn it_asks_proj_once_per_spatial_reference() {
+        let cache = SpatialReferenceCache::default();
+        let before = PROJ_CONTEXTS.with(std::cell::Cell::get);
+        for srs in ["EPSG:3857", "ESRI:54009"] {
+            let spatial_reference = SpatialReference::from_str(srs).unwrap().into();
+            for _ in 0..10 {
+                cache.axis_order(spatial_reference).unwrap();
+            }
+        }
+        // one `proj_json` each, and no `proj_proj_string`
+        assert_eq!(PROJ_CONTEXTS.with(std::cell::Cell::get) - before, 2);
     }
 
     #[ge_context::test]
