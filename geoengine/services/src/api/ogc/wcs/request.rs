@@ -1,3 +1,4 @@
+use crate::api::handlers::spatial_references::SpatialReferenceCache;
 use crate::api::model::datatypes::SpatialReference;
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{
@@ -115,28 +116,44 @@ pub struct GetCoverage {
 }
 
 impl GetCoverage {
-    pub fn spatial_resolution(&self) -> Option<Result<SpatialResolution>> {
+    pub fn spatial_resolution(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> Option<Result<SpatialResolution>> {
         if let Some(grid_offsets) = self.gridoffsets {
-            return Some(grid_offsets.spatial_resolution(self.gridbasecrs));
+            return Some(
+                grid_offsets.spatial_resolution(self.gridbasecrs, spatial_reference_cache),
+            );
         }
 
         match (self.resx, self.resy) {
-            (Some(xres), Some(yres)) => match tuple_from_ogc_params(xres, yres, self.gridbasecrs) {
-                Ok((x, y)) => Some(SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into)),
-                Err(e) => Some(Err(e)),
-            },
+            (Some(xres), Some(yres)) => {
+                match tuple_from_ogc_params(xres, yres, self.gridbasecrs, spatial_reference_cache) {
+                    Ok((x, y)) => {
+                        Some(SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into))
+                    }
+                    Err(e) => Some(Err(e)),
+                }
+            }
             (Some(_), None) | (None, Some(_)) => Some(Err(error::Error::WcsInvalidGridOffsets)),
             (None, None) => None,
         }
     }
 
-    pub fn spatial_partition(&self) -> Result<SpatialPartition2D> {
+    pub fn spatial_partition(
+        &self,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> Result<SpatialPartition2D> {
         let spatial_reference = self
             .boundingbox
             .spatial_reference
             .unwrap_or(self.gridbasecrs);
 
-        rectangle_from_ogc_params(self.boundingbox.bbox, spatial_reference)
+        rectangle_from_ogc_params(
+            self.boundingbox.bbox,
+            spatial_reference,
+            spatial_reference_cache,
+        )
     }
 
     pub fn spatial_ref(&self) -> Result<SpatialReference> {
@@ -164,8 +181,17 @@ pub struct GridOffsets {
 }
 
 impl GridOffsets {
-    fn spatial_resolution(&self, spatial_reference: SpatialReference) -> Result<SpatialResolution> {
-        let (x, y) = tuple_from_ogc_params(self.x_step, self.y_step, spatial_reference)?;
+    fn spatial_resolution(
+        &self,
+        spatial_reference: SpatialReference,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> Result<SpatialResolution> {
+        let (x, y) = tuple_from_ogc_params(
+            self.x_step,
+            self.y_step,
+            spatial_reference,
+            spatial_reference_cache,
+        )?;
         SpatialResolution::new(x.abs(), y.abs()).map_err(Into::into)
     }
 }
@@ -177,8 +203,13 @@ pub struct GridOrigin {
 }
 
 impl GridOrigin {
-    pub fn coordinate(&self, spatial_reference: SpatialReference) -> Result<Coordinate2D> {
-        tuple_from_ogc_params(self.x, self.y, spatial_reference).map(Into::into)
+    pub fn coordinate(
+        &self,
+        spatial_reference: SpatialReference,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> Result<Coordinate2D> {
+        tuple_from_ogc_params(self.x, self.y, spatial_reference, spatial_reference_cache)
+            .map(Into::into)
     }
 }
 
@@ -292,12 +323,17 @@ mod tests {
         );
 
         assert_eq!(
-            coverage.spatial_partition().unwrap(),
+            coverage
+                .spatial_partition(&SpatialReferenceCache::default())
+                .unwrap(),
             SpatialPartition2D::new_unchecked((-162., 81.).into(), (162., -81.).into())
         );
 
         assert_eq!(
-            coverage.spatial_resolution().unwrap().unwrap(),
+            coverage
+                .spatial_resolution(&SpatialReferenceCache::default())
+                .unwrap()
+                .unwrap(),
             SpatialResolution::new_unchecked(36., 18.)
         );
     }

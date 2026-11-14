@@ -1,11 +1,8 @@
 use crate::api::model::processing_graphs::ProcessingGraphId;
 use crate::{
-    api::{
-        handlers::spatial_references::spatial_reference_specification,
-        ogc::{
-            util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url},
-            wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion},
-        },
+    api::ogc::{
+        util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url},
+        wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion},
     },
     config::{self},
     contexts::{ApplicationContext, SessionContext},
@@ -261,7 +258,9 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
-    let spatial_reference_spec = spatial_reference_specification(spatial_reference.into())?;
+    let spatial_reference_spec = app_ctx
+        .spatial_reference_cache()
+        .specification(spatial_reference.into())?;
     let spatial_ref_axis_order =
         spatial_reference_spec
             .axis_order
@@ -381,12 +380,15 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
-    let bounds = request.spatial_partition()?;
+    let spatial_reference_cache = app_ctx.spatial_reference_cache();
+    let bounds = request.spatial_partition(spatial_reference_cache)?;
     let query = RasterGridQuery {
         processing_graph: identifier,
         crs: request.spatial_ref().map(Into::into)?,
         bounds,
-        resolution: request.spatial_resolution().transpose()?,
+        resolution: request
+            .spatial_resolution(spatial_reference_cache)
+            .transpose()?,
         origin: Some(bounds.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
         time: request
             .time
