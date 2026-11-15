@@ -98,6 +98,12 @@ impl FootprintBounds {
 
 /// Merges the two boxes whose hull adds the least area and drops the boxes that hull covers.
 ///
+/// This is one step of greedy agglomerative merging: it tries every pair (brute force, no index)
+/// and takes the pair with the least dead space, i.e. hull area minus the areas of both boxes.
+/// That is the waste measure of Guttman's quadratic R-tree split ("R-Trees: A Dynamic Index
+/// Structure for Spatial Searching", 1984), minimized here instead of maximized. `from_boxes`
+/// runs it each time an added box goes over the limit, so the boxes are merged as they arrive.
+///
 /// One hull of all boxes would claim the space between scattered scenes, which is wrong for a
 /// view from Italy to Denmark. Boxes that touch or overlap merge first, so a block of scenes
 /// stays a block. Among pairs that add the same area, such as the neighbors in a row, the pair
