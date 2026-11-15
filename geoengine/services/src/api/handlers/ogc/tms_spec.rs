@@ -844,8 +844,8 @@ mod tests {
     use crate::{
         api::handlers::ogc::{
             test_util::{
-                calculate_number_of_tiles, grid_bbox, session_and_3857_layer_id,
-                session_and_4326_layer_id, session_and_native_3857_layer_id,
+                calculate_number_of_tiles, session_and_3857_layer_id, session_and_4326_layer_id,
+                session_and_native_3857_layer_id,
             },
             util::{get_initialized_raster_operator, load_layer, raster_processing_graph_metadata},
         },

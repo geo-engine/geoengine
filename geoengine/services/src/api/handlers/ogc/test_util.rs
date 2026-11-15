@@ -23,7 +23,7 @@ use crate::{
 };
 use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_datatypes::{
-    raster::{GridBoundingBox2D, GridIdx2D, GridShape2D, GridSize, TilingSpatialGridDefinition},
+    raster::{GridShape2D, GridSize, TilingSpatialGridDefinition},
     test_data,
 };
 use tokio_postgres::NoTls;
@@ -113,11 +113,6 @@ pub async fn session_and_4326_rgb_layer_id(
             .await;
 
     (session_id, data_connector_id.into(), layer_id.into())
-}
-
-/// Shorthand for creating a `GridBoundingBox2D` from min and max coordinates.
-pub fn grid_bbox(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
-    GridBoundingBox2D::new(GridIdx2D::new(min), GridIdx2D::new(max)).unwrap()
 }
 
 /// Calculates the number of tiles in x and y direction for a given tiling spatial grid definition.
