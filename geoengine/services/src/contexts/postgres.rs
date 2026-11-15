@@ -592,6 +592,16 @@ where
         .with_footprint_skipping(self.context.query_ctx_footprint_skipping))
     }
 
+    fn footprints_query_context(
+        &self,
+        processing_graph: ProcessingGraphId,
+        computation: ComputationId,
+    ) -> Result<Self::QueryContext> {
+        Ok(self
+            .query_context(processing_graph, computation)?
+            .with_footprints_for_display())
+    }
+
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
         Ok(ExecutionContextImpl::<PostgresDb<Tls>>::new(
             self.db(),

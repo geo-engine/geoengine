@@ -79,6 +79,12 @@ pub trait QueryContext: Send + Sync + GdalProcessPoolAccess {
     fn footprint_boxes_per_step_limit(&self) -> usize;
     /// Whether operators ask their source where it has data and skip the tiles without.
     fn footprint_skipping(&self) -> bool;
+    /// Whether the footprints of this query are shown to a user, e.g. in a calendar, and not used to
+    /// answer a raster query. Remote catalogs may then refuse them as too large and serve them in
+    /// turns with raster queries.
+    fn footprints_for_display(&self) -> bool {
+        false
+    }
     fn tiling_specification(&self) -> TilingSpecification;
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn default_cache_ttl(&self) -> CacheTtlSeconds;

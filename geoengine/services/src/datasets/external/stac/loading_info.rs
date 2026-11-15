@@ -162,6 +162,7 @@ impl
         MultiBandGdalLoadingInfoQueryRectangle,
     > for StacMultiBandMetaData
 {
+    #[allow(clippy::too_many_lines)]
     async fn loading_info(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
@@ -239,8 +240,20 @@ impl
         }
 
         if query.search_in_chunks {
-            self.prepare_window_search(&items_url, time_interval, time_steps.len(), &cell_bboxes)
-                .await?;
+            // footprints that answer a raster query search like the raster query would
+            let lane = if query.for_display {
+                RequestLane::Footprints
+            } else {
+                RequestLane::Data
+            };
+            self.prepare_window_search(
+                &items_url,
+                time_interval,
+                time_steps.len(),
+                &cell_bboxes,
+                lane,
+            )
+            .await?;
         }
 
         // Searches are created lazily and are independent; the result is sorted and deduplicated below.
@@ -456,15 +469,16 @@ impl StacMultiBandMetaData {
         time_interval: TimeInterval,
         number_of_steps: usize,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        lane: RequestLane,
     ) -> geoengine_operators::util::Result<()> {
         if number_of_steps > 1 {
             return self
-                .search_missing_steps(items_url, time_interval, cell_bboxes)
+                .search_missing_steps(items_url, time_interval, cell_bboxes, lane)
                 .await;
         }
         // A single step is read by the per-step lookup of the data path, which has no limit for map
-        // tiles. A footprint query over too many cells is still too large.
-        self.reject_too_many_searches(cell_bboxes.len())
+        // tiles. A footprint query to show over too many cells is still too large.
+        self.reject_too_many_searches(cell_bboxes.len(), lane)
     }
 
     /// For each step whether any cell has an item in it, from one aggregation, if the server can
@@ -481,7 +495,13 @@ impl StacMultiBandMetaData {
             return None;
         };
         let with_items = self
-            .intervals_with_items(items_url, regular.step, &[time_interval], cell_bboxes)
+            .intervals_with_items(
+                items_url,
+                regular.step,
+                &[time_interval],
+                cell_bboxes,
+                RequestLane::Footprints,
+            )
             .await?;
         if cell_bboxes.len() <= self.query_cache.max_footprint_searches() {
             let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
@@ -505,6 +525,7 @@ impl StacMultiBandMetaData {
         step: TimeStep,
         chunks: &[TimeInterval],
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        lane: RequestLane,
     ) -> Option<Vec<TimeInterval>> {
         let range = TimeInterval::new(chunks.first()?.start(), chunks.last()?.end()).ok()?;
         let bbox = cell_bboxes
@@ -514,7 +535,7 @@ impl StacMultiBandMetaData {
         let aggregate_url = items_url.join("aggregate").ok()?;
 
         self.client
-            .intervals_with_items(aggregate_url, bbox, range, step)
+            .intervals_with_items(aggregate_url, bbox, range, step, lane)
             .await
     }
 
@@ -580,9 +601,14 @@ impl StacMultiBandMetaData {
         ))
     }
 
-    fn reject_too_many_searches(&self, searches: usize) -> geoengine_operators::util::Result<()> {
+    /// Footprints to show are bounded; those of a raster query search as much as the query would.
+    fn reject_too_many_searches(
+        &self,
+        searches: usize,
+        lane: RequestLane,
+    ) -> geoengine_operators::util::Result<()> {
         let limit = self.query_cache.max_footprint_searches();
-        if searches > limit {
+        if lane == RequestLane::Footprints && searches > limit {
             return Err(geoengine_operators::error::Error::FootprintQueryTooLarge {
                 searches,
                 limit,
@@ -602,6 +628,7 @@ impl StacMultiBandMetaData {
         items_url: &Url,
         time_interval: TimeInterval,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+        lane: RequestLane,
     ) -> geoengine_operators::util::Result<()> {
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return Ok(());
@@ -632,7 +659,7 @@ impl StacMultiBandMetaData {
 
         let chunk_intervals = chunks.iter().map(|(chunk, _)| *chunk).collect::<Vec<_>>();
         let with_items = self
-            .intervals_with_items(items_url, regular.step, &chunk_intervals, cell_bboxes)
+            .intervals_with_items(items_url, regular.step, &chunk_intervals, cell_bboxes, lane)
             .await;
 
         let mut searches = Vec::new();
@@ -653,8 +680,9 @@ impl StacMultiBandMetaData {
             }
         }
 
-        self.reject_too_many_searches(searches.len())?;
-        self.search_spans(items_url, dataset_id, searches).await
+        self.reject_too_many_searches(searches.len(), lane)?;
+        self.search_spans(items_url, dataset_id, searches, lane)
+            .await
     }
 
     /// Runs the searches of spans of missing steps, each for one cell, and stores their results.
@@ -663,6 +691,7 @@ impl StacMultiBandMetaData {
         items_url: &Url,
         dataset_id: u64,
         searches: Vec<(GridIdx2D, BoundingBox2D, TimeInterval, bool)>,
+        lane: RequestLane,
     ) -> geoengine_operators::util::Result<()> {
         futures::stream::iter(searches)
             .map(|(cell, bbox, span, single_step)| {
@@ -689,10 +718,8 @@ impl StacMultiBandMetaData {
                     // The entry for the span only makes concurrent callers share one search.
                     let result = cache
                         .get_or_fetch(metadata.dataset.clone(), cell, span, move || async move {
-                            // a window search takes turns with map tiles instead of holding them up
-                            let files = metadata
-                                .search_bbox(url, bbox, span, RequestLane::Footprints)
-                                .await?;
+                            // a window search to show takes turns with map tiles instead of holding them up
+                            let files = metadata.search_bbox(url, bbox, span, lane).await?;
                             for step in regular_time_steps(metadata.time_dimension, span)? {
                                 let step = step?;
                                 // An item on the span's closed end belongs to the next step and is dropped here.
@@ -3448,7 +3475,7 @@ mod grid_request_tests {
 
         for time in [window(3, 5), interval(3)] {
             let result = meta
-                .loading_info(query(world, time).searching_in_chunks())
+                .loading_info(query(world, time).searching_in_chunks().for_display())
                 .await;
 
             assert!(matches!(
@@ -3456,6 +3483,34 @@ mod grid_request_tests {
                 Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
             ));
         }
+    }
+
+    #[tokio::test]
+    async fn chunk_search_of_a_raster_query_is_not_limited() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                .times(1..)
+                .respond_with(responders::json_encoded(collection(&[], None))),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 256,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+        let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        // more cells than `max_footprint_searches` (50 in tests), which only bounds footprints to show
+        let loading_info = meta
+            .loading_info(query(world, window(3, 5)).searching_in_chunks())
+            .await
+            .unwrap();
+
+        assert_eq!(loading_info.time_steps().len(), 2);
     }
 
     #[tokio::test]

@@ -94,6 +94,10 @@ type MultiBandGdalMetaData = Box<
 /// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request tiles that are anchored in coordinates space.
 /// Additionaly you can also specify to fetch tiles (with gdal params).
 /// Set `fetch_tiles` to false if you only want to access the time steps.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent options of one query, no state machine"
+)]
 #[derive(Clone, Debug)]
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
@@ -104,6 +108,8 @@ pub struct MultiBandGdalLoadingInfoQueryRectangle {
     /// can tell without the files may answer with [`MultiBandGdalLoadingInfo::has_data`] and no
     /// files. Others answer with files as usual.
     pub availability_only: bool,
+    /// The answer is shown to a user, see [`crate::engine::QueryContext::footprints_for_display`].
+    pub for_display: bool,
 }
 
 impl MultiBandGdalLoadingInfoQueryRectangle {
@@ -118,6 +124,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
             fetch_tiles,
             search_in_chunks: false,
             availability_only: false,
+            for_display: false,
         }
     }
 
@@ -130,6 +137,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
             fetch_tiles,
             search_in_chunks: false,
             availability_only: false,
+            for_display: false,
         }
     }
 
@@ -142,6 +150,12 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
     #[must_use]
     pub fn availability_only(mut self) -> Self {
         self.availability_only = true;
+        self
+    }
+
+    #[must_use]
+    pub fn for_display(mut self) -> Self {
+        self.for_display = true;
         self
     }
 }
@@ -371,6 +385,9 @@ where
                     .searching_in_chunks();
                 if precision == FootprintPrecision::Availability {
                     loading_info_query = loading_info_query.availability_only();
+                }
+                if ctx.footprints_for_display() {
+                    loading_info_query = loading_info_query.for_display();
                 }
                 let loading_info = self.meta_data.loading_info(loading_info_query).await?;
 

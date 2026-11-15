@@ -115,6 +115,7 @@ impl StacClient {
         bbox: BoundingBox2D,
         range: TimeInterval,
         step: TimeStep,
+        lane: RequestLane,
     ) -> Option<Vec<TimeInterval>> {
         let channels = self
             .request_registry
@@ -148,7 +149,7 @@ impl StacClient {
                     .max_retries(1)
                     .initial_delay_ms(200)
                     .stop_on_status(&UNSUPPORTED_STATUSES),
-                RequestLane::Footprints,
+                lane,
             )
             .await;
         let response = match response {
