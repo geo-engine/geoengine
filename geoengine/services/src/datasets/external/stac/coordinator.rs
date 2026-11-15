@@ -51,15 +51,73 @@ const MAX_PENDING_ATTEMPTS: usize = 256;
 /// Bound retained quota identities per application or harvesting operation.
 const MAX_COORDINATORS: usize = 1024;
 
-/// How a request is scheduled against the other requests of the same STAC server.
+/// The queue a request of a STAC server waits in. While both lanes have requests waiting, they take
+/// turns by `footprints_share`, so a burst in one lane cannot hold up the other. A lane with nothing
+/// waiting leaves the whole limit of the server to the other.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum RequestPriority {
-    /// Requests a user waits for, such as map tiles. Admitted first.
+pub enum RequestLane {
+    /// Requests of raster queries, such as map tiles.
     #[default]
-    Interactive,
-    /// Window searches for the calendar. Admitted only while no interactive request waits,
-    /// and limited to a share of the server's limit, so tiles keep the rest.
-    Background,
+    Data,
+    /// Searches that tell where data exists, such as the calendar's.
+    Footprints,
+}
+
+/// Admissions of each lane while both lanes have requests waiting.
+#[derive(Debug, Default)]
+struct LaneTurns {
+    data: u32,
+    footprints: u32,
+    /// Whether both lanes waited when the last lane was chosen, so its admission counts.
+    both_waiting: bool,
+}
+
+impl LaneTurns {
+    /// The lane whose request is admitted next. While both wait, the footprint lane gets
+    /// `footprints_share` of the admissions.
+    fn next(
+        &mut self,
+        data_waiting: bool,
+        footprints_waiting: bool,
+        footprints_share: f64,
+    ) -> Option<RequestLane> {
+        self.both_waiting = data_waiting && footprints_waiting;
+        match (data_waiting, footprints_waiting) {
+            (true, true) => {
+                let admitted = f64::from(self.data) + f64::from(self.footprints);
+                let footprints_turn =
+                    f64::from(self.footprints) + 1. <= footprints_share * (admitted + 1.);
+                Some(if footprints_turn {
+                    RequestLane::Footprints
+                } else {
+                    RequestLane::Data
+                })
+            }
+            // the turns count only while both lanes wait
+            (true, false) => {
+                *self = Self::default();
+                Some(RequestLane::Data)
+            }
+            (false, true) => {
+                *self = Self::default();
+                Some(RequestLane::Footprints)
+            }
+            (false, false) => {
+                *self = Self::default();
+                None
+            }
+        }
+    }
+
+    fn admitted(&mut self, lane: RequestLane) {
+        if !self.both_waiting {
+            return;
+        }
+        match lane {
+            RequestLane::Data => self.data = self.data.saturating_add(1),
+            RequestLane::Footprints => self.footprints = self.footprints.saturating_add(1),
+        }
+    }
 }
 /// Keep recent starts and idle coordinators long enough to learn further policies
 /// and preserve quota accounting when providers are reconstructed.
@@ -196,15 +254,6 @@ struct State {
     cooldown_until: Option<Instant>,
     /// Last admission or release of an admitted attempt, used for idle retention.
     last_activity: Instant,
-    /// Admission timestamps of background attempts only, a subset of `starts`. A background attempt
-    /// is admitted only if the starts in here stay within `background_share` of each window's
-    /// limit, counted over the same rolling duration as the window. `starts` itself counts all
-    /// attempts, so the limit of the window still holds for both kinds together.
-    background_starts: VecDeque<Instant>,
-    /// Share of each window's limit that background attempts (the calendar) may use, between 0
-    /// and 1, rounded down but at least one attempt. The rest of the limit stays free for
-    /// interactive attempts (map tiles), which are not counted against this share.
-    background_share: f64,
 }
 
 impl State {
@@ -236,35 +285,8 @@ impl State {
             .unwrap_or(self.last_activity)
     }
 
-    /// [`Self::reserve_with_priority`] for an interactive attempt.
-    #[cfg(test)]
-    fn reserve(&mut self, now: Instant) -> Option<Instant> {
-        self.reserve_with_priority(now, RequestPriority::Interactive)
-    }
-
-    /// Background attempts additionally stay within their share of every window.
-    fn background_blocked_until(&self, now: Instant) -> Option<Instant> {
-        let fallback = [Window::new(10, DEFAULT_WINDOW_DURATION)];
-        let windows = if self.windows.is_empty() {
-            &fallback[..]
-        } else {
-            &self.windows[..]
-        };
-        windows
-            .iter()
-            .filter_map(|window| {
-                let limit = ((window.limit as f64 * self.background_share) as usize).max(1);
-                Window::new(limit, window.duration).blocked_until(&self.background_starts, now)
-            })
-            .max()
-    }
-
     /// Return a blocking deadline, or reserve capacity and return `None`.
-    fn reserve_with_priority(
-        &mut self,
-        now: Instant,
-        priority: RequestPriority,
-    ) -> Option<Instant> {
+    fn reserve(&mut self, now: Instant) -> Option<Instant> {
         self.prune(now);
         // Before learning policies, use the fallback immediately. There is no
         // special bootstrap request or wait for its headers.
@@ -276,9 +298,6 @@ impl State {
                 .filter_map(|window| window.blocked_until(&self.starts, now))
                 .max()
         };
-        let background = (priority == RequestPriority::Background)
-            .then(|| self.background_blocked_until(now))
-            .flatten();
         let deadline = local
             .into_iter()
             .chain(
@@ -287,16 +306,12 @@ impl State {
                     .and_then(RemoteQuota::blocked_until),
             )
             .chain(self.cooldown_until)
-            .chain(background)
             .max();
         if let Some(deadline) = deadline {
             return Some(deadline);
         }
         self.in_flight_requests += 1;
         self.starts.push_back(now);
-        if priority == RequestPriority::Background {
-            self.background_starts.push_back(now);
-        }
         self.last_activity = now;
         for quota in self
             .windows
@@ -318,13 +333,6 @@ impl State {
             .is_some_and(|at| now.duration_since(*at) >= history_duration)
         {
             self.starts.pop_front();
-        }
-        while self
-            .background_starts
-            .front()
-            .is_some_and(|at| now.duration_since(*at) >= history_duration)
-        {
-            self.background_starts.pop_front();
         }
         for quota in self
             .windows
@@ -396,7 +404,7 @@ struct AttemptJob {
     client: reqwest::Client,
     request: reqwest::Request,
     authentication: Option<StacAuthentication>,
-    priority: RequestPriority,
+    lane: RequestLane,
     reply: oneshot::Sender<Result<AttemptReply, StacClientError>>,
     permit: OwnedSemaphorePermit,
 }
@@ -480,13 +488,13 @@ impl Default for CoordinatorMap {
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
     /// The settings of `[stac_cache]`, which the contexts read. Without them (tests, harvester)
-    /// the registry uses [`DEFAULT_BACKGROUND_SHARE`] and providers get a standalone cache.
+    /// the registry uses [`DEFAULT_FOOTPRINTS_SHARE`] and providers get a standalone cache.
     config: Option<crate::config::StacCache>,
 }
 
-/// The background share of a registry that is not configured, e.g. in tests and the harvester,
-/// which send no background requests.
-const DEFAULT_BACKGROUND_SHARE: f64 = 0.5;
+/// The footprint lane's share of a registry that is not configured, e.g. in tests and the harvester,
+/// which send no footprint searches.
+const DEFAULT_FOOTPRINTS_SHARE: f64 = 0.5;
 
 impl StacRequestRegistry {
     /// Create an empty request registry.
@@ -567,7 +575,7 @@ impl StacRequestRegistry {
                 Arc::downgrade(&channels),
                 dispatch,
                 self.config
-                    .map_or(DEFAULT_BACKGROUND_SHARE, |config| config.background_share),
+                    .map_or(DEFAULT_FOOTPRINTS_SHARE, |config| config.footprints_share),
             ));
         }
         Ok(channels)
@@ -749,16 +757,16 @@ impl StacClient {
         request: reqwest::RequestBuilder,
         policy: &RetryPolicy,
     ) -> Result<T, StacClientError> {
-        self.execute_json_with_priority(request, policy, RequestPriority::Interactive)
+        self.execute_json_in_lane(request, policy, RequestLane::Data)
             .await
     }
 
-    /// Like [`Self::execute_json`], scheduled with the given priority.
-    pub(crate) async fn execute_json_with_priority<T: DeserializeOwned>(
+    /// Like [`Self::execute_json`], queued in the given lane.
+    pub(crate) async fn execute_json_in_lane<T: DeserializeOwned>(
         &self,
         request: reqwest::RequestBuilder,
         policy: &RetryPolicy,
-        priority: RequestPriority,
+        lane: RequestLane,
     ) -> Result<T, StacClientError> {
         let request = request.build()?;
         let channels = self
@@ -767,7 +775,7 @@ impl StacClient {
         let operation_name = format!("Fetch STAC items from {}", request.url());
         retry_http_with_action(
             || async {
-                let reply = match self.execute_attempt(&channels, &request, priority).await {
+                let reply = match self.execute_attempt(&channels, &request, lane).await {
                     Ok(reply) => reply,
                     Err(error) => return (Err(error), RetryAction::Abort),
                 };
@@ -791,7 +799,7 @@ impl StacClient {
         &self,
         channels: &ActorChannels,
         request: &reqwest::Request,
-        priority: RequestPriority,
+        lane: RequestLane,
     ) -> Result<AttemptReply, StacClientError> {
         let request_copy = request
             .try_clone()
@@ -815,7 +823,7 @@ impl StacClient {
                 .as_ref()
                 .filter(|_| self.origin.origin() == request.url().origin())
                 .cloned(),
-            priority,
+            lane,
             reply,
             permit,
         };
@@ -837,7 +845,7 @@ async fn run_attempt(job: AttemptJob, completed_before: usize) -> AttemptComplet
         client,
         request,
         authentication,
-        priority: _,
+        lane: _,
         mut reply,
         permit,
     } = job;
@@ -865,7 +873,7 @@ async fn run_actor<F>(
     cancellations: Arc<Notify>,
     coordinator: Weak<ActorChannels>,
     dispatch: F,
-    background_share: f64,
+    footprints_share: f64,
 ) where
     F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
 {
@@ -878,12 +886,10 @@ async fn run_actor<F>(
         unscoped_quota: None,
         cooldown_until: None,
         last_activity: now,
-        background_starts: VecDeque::new(),
-        background_share,
     };
-    // Interactive jobs are admitted before any waiting background job.
-    let mut interactive: VecDeque<AttemptJob> = VecDeque::new();
-    let mut background: VecDeque<AttemptJob> = VecDeque::new();
+    let mut data: VecDeque<AttemptJob> = VecDeque::new();
+    let mut footprints: VecDeque<AttemptJob> = VecDeque::new();
+    let mut turns = LaneTurns::default();
     let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
     let mut jobs_open = true;
 
@@ -893,22 +899,25 @@ async fn run_actor<F>(
         }
 
         let mut deadline = None;
-        if let Some(job) = interactive.pop_front().or_else(|| background.pop_front()) {
+        if let Some(lane) = turns.next(!data.is_empty(), !footprints.is_empty(), footprints_share) {
+            let queue = match lane {
+                RequestLane::Data => &mut data,
+                RequestLane::Footprints => &mut footprints,
+            };
+            let job = queue.pop_front().expect("the lane has a waiting job");
             if job.reply.is_closed() {
                 continue;
-            } else if let Some(until) = state.reserve_with_priority(Instant::now(), job.priority) {
+            } else if let Some(until) = state.reserve(Instant::now()) {
                 deadline = Some(until);
-                match job.priority {
-                    RequestPriority::Interactive => interactive.push_front(job),
-                    RequestPriority::Background => background.push_front(job),
-                }
+                queue.push_front(job);
             } else {
+                turns.admitted(lane);
                 running.push(dispatch(job, state.completed_requests));
                 continue;
             }
         }
 
-        let queued_empty = interactive.is_empty() && background.is_empty();
+        let queued_empty = data.is_empty() && footprints.is_empty();
         if !jobs_open && queued_empty && running.is_empty() {
             return;
         }
@@ -929,19 +938,19 @@ async fn run_actor<F>(
                 }
             },
             () = cancellations.notified() => {
-                interactive.retain(|job| !job.reply.is_closed());
-                background.retain(|job| !job.reply.is_closed());
+                data.retain(|job| !job.reply.is_closed());
+                footprints.retain(|job| !job.reply.is_closed());
             },
             job = receiver.recv(), if jobs_open => match job {
-                Some(job) => match job.priority {
-                    RequestPriority::Interactive => interactive.push_back(job),
-                    RequestPriority::Background => background.push_back(job),
+                Some(job) => match job.lane {
+                    RequestLane::Data => data.push_back(job),
+                    RequestLane::Footprints => footprints.push_back(job),
                 },
                 None => jobs_open = false,
             },
             () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } }, if deadline.is_some() => {},
             () = async { if let Some(deadline) = idle_deadline { tokio::time::sleep_until(deadline.into()).await } }, if idle_deadline.is_some() => {
-                if state.retain_until() <= Instant::now() && interactive.is_empty() && background.is_empty() && running.is_empty()
+                if state.retain_until() <= Instant::now() && data.is_empty() && footprints.is_empty() && running.is_empty()
                     && ActorChannels::try_retire(&coordinator) {
                     return;
                 }
@@ -1262,8 +1271,6 @@ mod tests {
             unscoped_quota: None,
             cooldown_until: None,
             last_activity: now,
-            background_starts: VecDeque::new(),
-            background_share: 0.5,
         };
         for _ in 0..10 {
             assert_eq!(state.reserve(Instant::now()), None);
@@ -1286,8 +1293,6 @@ mod tests {
             unscoped_quota: None,
             cooldown_until: None,
             last_activity: now,
-            background_starts: VecDeque::new(),
-            background_share: 0.5,
         };
         assert_eq!(state.reserve(now), None);
         let headers = quota_headers("2;w=60", "0", "60");

@@ -20,7 +20,7 @@ fn test_job(
             client,
             request,
             authentication: None,
-            priority: RequestPriority::Interactive,
+            lane: RequestLane::Data,
             reply,
             permit: coordinator.capacity.clone().try_acquire_owned().unwrap(),
         },
@@ -162,14 +162,14 @@ fn execute_job_with_policy(
     id: usize,
     policy: RetryPolicy,
 ) -> tokio::task::JoinHandle<Result<serde_json::Value, StacClientError>> {
-    execute_job_with_priority(coordinator, id, policy, RequestPriority::Interactive)
+    execute_job_in_lane(coordinator, id, policy, RequestLane::Data)
 }
 
-fn execute_job_with_priority(
+fn execute_job_in_lane(
     coordinator: Arc<ActorChannels>,
     id: usize,
     policy: RetryPolicy,
-    priority: RequestPriority,
+    lane: RequestLane,
 ) -> tokio::task::JoinHandle<Result<serde_json::Value, StacClientError>> {
     tokio::spawn(async move {
         // Use the fixture's registry and origin so lookup selects its dispatcher.
@@ -180,59 +180,53 @@ fn execute_job_with_priority(
         let origin = format!("https://{}/", coordinator.identity.host);
         let client = StacClient::new(reqwest::Client::new(), &origin, registry).unwrap();
         client
-            .execute_json_with_priority(
+            .execute_json_in_lane(
                 client.get(format!("https://actor.test/{id}")),
                 &policy,
-                priority,
+                lane,
             )
             .await
     })
 }
 
 #[tokio::test]
-async fn it_admits_interactive_attempts_before_waiting_background_ones() {
-    let (_registry, coordinator, mut starts) = controlled_coordinator("priority");
-    // Five background attempts use up the background share of the fallback limit.
-    let mut responses = Vec::new();
-    let mut background = Vec::new();
-    for id in 1..=5 {
-        background.push(execute_job_with_priority(
-            coordinator.clone(),
-            id,
-            RetryPolicy::new().max_retries(1),
-            RequestPriority::Background,
-        ));
-        responses.push(next_start(&mut starts).await);
+async fn it_lets_a_data_attempt_pass_a_burst_of_footprint_attempts() {
+    let (_registry, coordinator, mut starts) = controlled_coordinator("lanes");
+    let policy = || RetryPolicy::new().max_retries(1);
+    // ten footprint attempts use up the fallback limit of the window
+    let mut running = Vec::new();
+    for id in 1..=10 {
+        let job = execute_job_in_lane(coordinator.clone(), id, policy(), RequestLane::Footprints);
+        running.push((job, next_start(&mut starts).await));
     }
-    let waiting = execute_job_with_priority(
-        coordinator.clone(),
-        6,
-        RetryPolicy::new().max_retries(1),
-        RequestPriority::Background,
-    );
+    let waiting_footprints = [11, 12]
+        .map(|id| execute_job_in_lane(coordinator.clone(), id, policy(), RequestLane::Footprints));
+    // let both footprint attempts queue before the data attempt
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let data = execute_job(coordinator.clone(), 13);
     assert!(
         tokio::time::timeout(Duration::from_millis(20), starts.recv())
             .await
             .is_err(),
-        "the sixth background attempt must wait for the share"
+        "all attempts must wait for the window"
     );
 
-    let interactive = execute_job(coordinator.clone(), 7);
-    let (path, interactive_response) = next_start(&mut starts).await;
-    assert_eq!(
-        path, "/7",
-        "an interactive attempt passes the waiting background one"
-    );
-    interactive_response.send(response(7, None)).unwrap();
-    interactive.await.unwrap().unwrap();
+    // once the window has passed, the data attempt goes first, then the lanes take turns
+    let (path, data_response) = next_start(&mut starts).await;
+    assert_eq!(path, "/13");
+    let (path, footprints_response) = next_start(&mut starts).await;
+    assert_eq!(path, "/11");
+    data_response.send(response(13, None)).unwrap();
+    data.await.unwrap().unwrap();
+    footprints_response.send(response(11, None)).unwrap();
+    let [first, second] = waiting_footprints;
+    first.await.unwrap().unwrap();
+    let (path, last_response) = next_start(&mut starts).await;
+    assert_eq!(path, "/12");
+    last_response.send(response(12, None)).unwrap();
+    second.await.unwrap().unwrap();
 
-    // The waiting background attempt runs once its share window has passed.
-    let (path, waiting_response) = next_start(&mut starts).await;
-    assert_eq!(path, "/6");
-    waiting_response.send(response(6, None)).unwrap();
-    waiting.await.unwrap().unwrap();
-
-    for ((_, response_sender), job) in responses.into_iter().zip(background) {
+    for (job, (_, response_sender)) in running {
         response_sender.send(response(1, None)).unwrap();
         job.await.unwrap().unwrap();
     }

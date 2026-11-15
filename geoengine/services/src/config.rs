@@ -860,11 +860,9 @@ pub struct StacCache {
     pub search_chunk_steps: u32,
     /// Footprint queries needing more searches than this are rejected as too large.
     pub max_footprint_searches: usize,
-    /// Share of the requests per time window of a STAC server that background searches (the
-    /// calendar) may start, between 0 and 1. Map tiles (interactive) are served first and can use
-    /// the rest, so with a limit of 10 per second and a share of 0.5 the calendar gets at most 5
-    /// per second. At least one background request per window is always allowed.
-    pub background_share: f64,
+    /// Share of a STAC server's requests that footprint searches (the calendar) get while map tiles
+    /// also wait, between 0 and 1 (both excluded). While only one kind waits, it gets all requests.
+    pub footprints_share: f64,
     /// A calendar request for at most this many grid cells searches the files, which gives exact
     /// days and warms the cache of the map. For more cells, one aggregation counts the items of the
     /// cells, which is cheaper but also counts items next to the view. 0 always aggregates.
@@ -873,11 +871,12 @@ pub struct StacCache {
 
 impl StacCache {
     pub fn validate(&self) -> Result<()> {
-        if !(0.0..=1.0).contains(&self.background_share) {
+        // 0 or 1 would let one kind of request wait forever while the other keeps coming
+        if !(self.footprints_share > 0.0 && self.footprints_share < 1.0) {
             return Err(crate::error::Error::InvalidConfig {
                 reason: format!(
-                    "background_share must be between 0 and 1, got {}",
-                    self.background_share
+                    "footprints_share must be between 0 and 1 (both excluded), got {}",
+                    self.footprints_share
                 ),
             });
         }
@@ -892,7 +891,7 @@ impl TestDefault for StacCache {
             ttl_secs: 3_600,
             search_chunk_steps: 30,
             max_footprint_searches: 50,
-            background_share: 0.5,
+            footprints_share: 0.5,
             availability_search_cells: 4,
         }
     }

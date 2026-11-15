@@ -2,7 +2,7 @@ use super::common;
 use super::{
     StacClient, StacDataProvider, StacProviderDataset, StacProviderS3Config,
     cache::StacQueryCache,
-    coordinator::{RequestPriority, step_has_items},
+    coordinator::{RequestLane, step_has_items},
     grid::{ProjectedStacGrid, StacGrid, StacGridCells},
 };
 use crate::error::Result;
@@ -76,7 +76,7 @@ enum StacQueryState {
 async fn query_stac_item_collection(
     client: &StacClient,
     query_state: &StacQueryState,
-    priority: RequestPriority,
+    priority: RequestLane,
 ) -> geoengine_operators::util::Result<(stac::ItemCollection, StacQueryState)> {
     let request_policy = RetryPolicy::new().stop_on_status(&[400, 404]);
 
@@ -91,7 +91,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(query_url.clone()).query(query_params);
             let item_collection: stac::ItemCollection = client
-                .execute_json_with_priority(request, &request_policy, priority)
+                .execute_json_in_lane(request, &request_policy, priority)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -122,7 +122,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(next_url.clone());
             let item_collection: stac::ItemCollection = client
-                .execute_json_with_priority(request, &request_policy, priority)
+                .execute_json_in_lane(request, &request_policy, priority)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -255,7 +255,7 @@ impl
                     step,
                     move || async move {
                         metadata
-                            .search_bbox(url, bbox, step, RequestPriority::Interactive)
+                            .search_bbox(url, bbox, step, RequestLane::Data)
                             .await
                     },
                 )
@@ -462,7 +462,7 @@ impl StacMultiBandMetaData {
                 .search_missing_steps(items_url, time_interval, cell_bboxes)
                 .await;
         }
-        // A single step is read by the interactive per-step lookup, which has no limit for map
+        // A single step is read by the per-step lookup of the data path, which has no limit for map
         // tiles. A footprint query over too many cells is still too large.
         self.reject_too_many_searches(cell_bboxes.len())
     }
@@ -672,7 +672,7 @@ impl StacMultiBandMetaData {
                 async move {
                     if single_step {
                         // The span is the step itself, so the normal step entry is the shared search.
-                        // A map tile for the same step joins it, so it must not wait in the background lane.
+                        // A map tile for the same step joins it, so it waits in the data lane.
                         return cache
                             .get_or_fetch(
                                 metadata.dataset.clone(),
@@ -680,7 +680,7 @@ impl StacMultiBandMetaData {
                                 span,
                                 move || async move {
                                     metadata
-                                        .search_bbox(url, bbox, span, RequestPriority::Interactive)
+                                        .search_bbox(url, bbox, span, RequestLane::Data)
                                         .await
                                 },
                             )
@@ -689,9 +689,9 @@ impl StacMultiBandMetaData {
                     // The entry for the span only makes concurrent callers share one search.
                     let result = cache
                         .get_or_fetch(metadata.dataset.clone(), cell, span, move || async move {
-                            // a window search yields to map tiles and stays within the background share
+                            // a window search takes turns with map tiles instead of holding them up
                             let files = metadata
-                                .search_bbox(url, bbox, span, RequestPriority::Background)
+                                .search_bbox(url, bbox, span, RequestLane::Footprints)
                                 .await?;
                             for step in regular_time_steps(metadata.time_dimension, span)? {
                                 let step = step?;
@@ -735,7 +735,7 @@ impl StacMultiBandMetaData {
         items_url: Url,
         bbox: geoengine_datatypes::primitives::BoundingBox2D,
         time_interval: TimeInterval,
-        priority: RequestPriority,
+        priority: RequestLane,
     ) -> geoengine_operators::util::Result<Vec<TileFile>> {
         let mut files = Vec::new();
         let mut state = StacQueryState::FirstPage {
@@ -1856,7 +1856,7 @@ mod tests {
             query_url: Url::parse(&server.url_str("/initial-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&client, &initial_query, RequestPriority::Interactive)
+        query_stac_item_collection(&client, &initial_query, RequestLane::Data)
             .await
             .expect("initial authenticated STAC request should succeed");
 
@@ -1864,13 +1864,9 @@ mod tests {
             next_url: Url::parse(&server.url_str("/next-items")).unwrap(),
         };
         let cloned_client = client.clone();
-        query_stac_item_collection(
-            &cloned_client,
-            &next_page_query,
-            RequestPriority::Interactive,
-        )
-        .await
-        .expect("authenticated STAC pagination request should succeed");
+        query_stac_item_collection(&cloned_client, &next_page_query, RequestLane::Data)
+            .await
+            .expect("authenticated STAC pagination request should succeed");
 
         let authentication = client.authentication.as_ref().unwrap();
         tokio::time::timeout(Duration::from_secs(4), async {
@@ -1888,13 +1884,9 @@ mod tests {
             query_url: Url::parse(&server.url_str("/refreshed-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(
-            &cloned_client,
-            &refreshed_query,
-            RequestPriority::Interactive,
-        )
-        .await
-        .expect("refreshed authenticated STAC request should succeed");
+        query_stac_item_collection(&cloned_client, &refreshed_query, RequestLane::Data)
+            .await
+            .expect("refreshed authenticated STAC request should succeed");
     }
 
     /// Replicates the steps from `test_ndvi.http` without making real web requests:
@@ -3934,7 +3926,7 @@ mod grid_request_tests {
             super::query_stac_item_collection(
                 &client,
                 &state,
-                crate::datasets::external::stac::coordinator::RequestPriority::Interactive,
+                crate::datasets::external::stac::coordinator::RequestLane::Data,
             ),
         )
         .await

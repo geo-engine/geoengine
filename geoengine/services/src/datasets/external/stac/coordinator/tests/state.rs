@@ -10,8 +10,6 @@ fn state(now: Instant) -> State {
         unscoped_quota: None,
         cooldown_until: None,
         last_activity: now,
-        background_starts: VecDeque::new(),
-        background_share: 0.5,
     }
 }
 
@@ -355,56 +353,47 @@ fn it_retains_history_and_remote_deadlines_until_the_latest_expiry() {
 }
 
 #[test]
-fn it_limits_background_attempts_to_their_share_and_not_interactive_ones() {
-    let now = Instant::now();
-    let mut state = state(now);
-    // The fallback admits ten per second, so a share of a half admits five background attempts.
-    for _ in 0..5 {
-        assert_eq!(
-            state.reserve_with_priority(now, RequestPriority::Background),
-            None
-        );
+fn it_lets_the_lanes_take_turns_by_their_share_while_both_wait() {
+    let mut turns = LaneTurns::default();
+    let mut order = Vec::new();
+    for _ in 0..4 {
+        let lane = turns.next(true, true, 0.5).unwrap();
+        turns.admitted(lane);
+        order.push(lane);
     }
     assert_eq!(
-        state.reserve_with_priority(now, RequestPriority::Background),
-        Some(now + DEFAULT_WINDOW_DURATION)
+        order,
+        [
+            RequestLane::Data,
+            RequestLane::Footprints,
+            RequestLane::Data,
+            RequestLane::Footprints
+        ]
     );
-    // Interactive attempts use the remaining capacity of the whole limit.
-    for _ in 0..5 {
-        assert_eq!(state.reserve(now), None);
-    }
-    assert_eq!(state.reserve(now), Some(now + DEFAULT_WINDOW_DURATION));
-    let later = now + DEFAULT_WINDOW_DURATION;
-    assert_eq!(
-        state.reserve_with_priority(later, RequestPriority::Background),
-        None
-    );
+
+    let mut turns = LaneTurns::default();
+    let footprints = (0..10)
+        .filter(|_| {
+            let lane = turns.next(true, true, 0.2).unwrap();
+            turns.admitted(lane);
+            lane == RequestLane::Footprints
+        })
+        .count();
+    assert_eq!(footprints, 2);
 }
 
 #[test]
-fn it_scales_the_background_share_with_learned_windows_and_admits_at_least_one() {
-    let now = Instant::now();
-    let mut state = state(now);
-    state.background_share = 0.1;
-    state.windows.push(Window::new(5, Duration::from_secs(60)));
-    assert_eq!(
-        state.reserve_with_priority(now, RequestPriority::Background),
-        None
-    );
-    assert_eq!(
-        state.reserve_with_priority(now, RequestPriority::Background),
-        Some(now + Duration::from_secs(60))
-    );
-    assert_eq!(state.reserve(now), None);
-}
-
-#[test]
-fn it_blocks_background_attempts_during_a_cooldown() {
-    let now = Instant::now();
-    let mut state = state(now);
-    state.cooldown_until = Some(now + DEFAULT_RETRY_DELAY);
-    assert_eq!(
-        state.reserve_with_priority(now, RequestPriority::Background),
-        Some(now + DEFAULT_RETRY_DELAY)
-    );
+fn it_gives_a_lane_alone_every_turn_and_forgets_the_turns_then() {
+    let mut turns = LaneTurns::default();
+    for _ in 0..5 {
+        let lane = turns.next(false, true, 0.5).unwrap();
+        assert_eq!(lane, RequestLane::Footprints);
+        turns.admitted(lane);
+    }
+    // the footprints that ran alone do not make the data lane go first for five turns
+    let lane = turns.next(true, true, 0.5).unwrap();
+    assert_eq!(lane, RequestLane::Data);
+    turns.admitted(lane);
+    assert_eq!(turns.next(true, true, 0.5), Some(RequestLane::Footprints));
+    assert_eq!(turns.next(false, false, 0.5), None);
 }

@@ -2,7 +2,7 @@
 //!
 //! One `datetime_frequency` request tells which times have items at all. A step without any
 //! item can then be stored as empty for every cell, and its search is skipped.
-use super::{RequestPriority, StacClient};
+use super::{RequestLane, StacClient};
 use crate::util::{format_stac_wgs84_bbox, retry::RetryPolicy};
 use chrono::{DateTime, Months, Utc};
 use geoengine_datatypes::primitives::{
@@ -141,14 +141,14 @@ impl StacClient {
         ]);
 
         let response = self
-            .execute_json_with_priority::<Response>(
+            .execute_json_in_lane::<Response>(
                 request,
                 // planning is optional, so a failing server costs one short retry, not a long backoff
                 &RetryPolicy::new()
                     .max_retries(1)
                     .initial_delay_ms(200)
                     .stop_on_status(&UNSUPPORTED_STATUSES),
-                RequestPriority::Background,
+                RequestLane::Footprints,
             )
             .await;
         let response = match response {

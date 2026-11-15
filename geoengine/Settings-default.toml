@@ -341,12 +341,11 @@ search_chunk_steps = 30
 # footprint queries needing more STAC searches than this are answered with "too large"
 max_footprint_searches = 50
 # A STAC server allows a number of requests per time window (e.g. 10 per second). Map tiles and the
-# calendar's searches share it. Tiles are always served first. Calendar searches ("background")
-# additionally may only start this share of the window's requests, so with 10 per second and 0.5 the
-# calendar uses at most 5 per second and map tiles can always use the other 5, even if many calendar
-# searches are waiting. Between 0 and 1; at least one calendar request per window is allowed.
-# 1 lets the calendar use the whole limit whenever no map tile waits.
-background_share = 0.5
+# calendar's searches wait in two queues and share it. While both queues have requests, the calendar
+# gets this share of the requests and map tiles the rest, so with 10 per second and 0.5 each gets 5 per
+# second and a burst of calendar searches cannot hold up the map. While only one queue has requests, it
+# gets all of them. Between 0 and 1, both excluded.
+footprints_share = 0.5
 # a calendar request for at most this many grid cells searches the files (exact days, warms the map's cache);
 # for more cells one aggregation counts the items of the cells, which also counts items next to the view. 0 always aggregates
 availability_search_cells = 4
