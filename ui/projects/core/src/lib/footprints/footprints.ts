@@ -1,13 +1,8 @@
 import {MatCalendarView} from '@angular/material/datepicker';
-import {RasterFootprints, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-
-export interface TimeRange {
-    start: number;
-    end: number;
-}
+import {RasterFootprints, TimeInterval, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
 
 /** The calendar's dates are UTC dates in the local fields of a `Date` (see `setDate` in the layers component). */
-export function calendarCellRange(date: Date, view: MatCalendarView): TimeRange {
+export function calendarCellRange(date: Date, view: MatCalendarView): TimeInterval {
     const [year, month, day] = [date.getFullYear(), date.getMonth(), date.getDate()];
     switch (view) {
         case 'month':
@@ -67,7 +62,7 @@ export function monthStartUtc(date: Date): number {
 }
 
 /** The requests of a window: the month of its start first, so the visible month shows soonest, then the rest. */
-export function windowRequests(windowStartMs: number, windowEndMs: number): TimeRange[] {
+export function windowRequests(windowStartMs: number, windowEndMs: number): TimeInterval[] {
     const start = new Date(windowStartMs);
     const monthEnd = Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1);
     if (monthEnd >= windowEndMs) return [{start: windowStartMs, end: windowEndMs}];

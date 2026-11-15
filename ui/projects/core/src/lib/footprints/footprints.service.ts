@@ -8,7 +8,7 @@ import OlSourceVector from 'ol/source/Vector';
 import {Style} from 'ol/style';
 import {firstValueFrom} from 'rxjs';
 import {debounceTime} from 'rxjs/operators';
-import {RasterFootprints, RasterFootprintsPrecision, TimeStepFootprintStatus} from '@geoengine/api-client';
+import {RasterFootprints, RasterFootprintsPrecision, TimeInterval, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {
     LayersService,
     ProcessingGraphsService,
@@ -19,16 +19,7 @@ import {
     UUID,
 } from '@geoengine/common';
 import {boxFeatures, overlayStyle} from './footprint-overlay';
-import {
-    TimeRange,
-    calendarStartView,
-    cellClasses,
-    mergeFootprints,
-    monthStartOfTime,
-    monthStartUtc,
-    stepAt,
-    windowRequests,
-} from './footprints';
+import {calendarStartView, cellClasses, mergeFootprints, monthStartOfTime, monthStartUtc, stepAt, windowRequests} from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
@@ -111,7 +102,7 @@ export class FootprintsService {
             const start = new Time(new Date(windowStart));
             const end = start.add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
             // aborting makes the server stop starting catalog searches for a view the user already left
-            const get = (range: TimeRange): Promise<RasterFootprints> =>
+            const get = (range: TimeInterval): Promise<RasterFootprints> =>
                 this.processingGraphsService.getFootprints(
                     query.processingGraphId,
                     {
