@@ -731,16 +731,4 @@ mod tests {
         assert_eq_two_list_of_tiles_u8(&data[..1], &res[..1], false);
         assert!(res[1..].iter().all(RasterTile2D::is_empty));
     }
-
-    #[tokio::test]
-    async fn it_skips_nothing_when_the_footprints_have_other_time_steps() {
-        let footprints = vec![Footprint {
-            time: TimeInterval::new_unchecked(0, 10),
-            bounds: FootprintBounds::from_boxes([], 8),
-        }];
-
-        let (data, res) = two_steps_through_adapter(false, Some(footprints)).await;
-
-        assert_eq_two_list_of_tiles_u8(&data, &res, false);
-    }
 }

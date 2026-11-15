@@ -380,7 +380,7 @@ where
         let time_stream = self.time_query(query.time_interval(), ctx).await?;
 
         Ok(Box::pin(
-            RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+            RasterSubQueryAdapter::<'a, P, _, _>::new(
                 &self.source,
                 query,
                 tiling_strategy,
