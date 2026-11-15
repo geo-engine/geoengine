@@ -191,30 +191,44 @@ where
         }
     }
 
-    /// Asks the source where it has data in the area the tiles of this query read, and skips the tiles
-    /// without. Does nothing unless the query context turns footprint skipping on.
-    ///
-    /// The output then has the time steps of the source, so only operators whose time stream is the one
-    /// of their source may call this.
-    pub async fn skip_tiles_without_data(self) -> Result<Self> {
-        if !self.query_ctx.footprint_skipping() {
-            return Ok(self);
+    /// An adapter whose output has the time steps of its source. With footprint skipping on in the query
+    /// context, it asks the source where it has data in the area the tiles read and skips the tiles without.
+    pub async fn with_source_time_steps(
+        source_processor: &'a RasterProcessor,
+        query_rect_to_answer: RasterQueryRectangle,
+        tiling_strategy: TilingStrategy,
+        query_ctx: &'a dyn QueryContext,
+        sub_query: SubQuery,
+    ) -> Result<Self> {
+        let time = query_rect_to_answer.time_interval();
+        let mut adapter = Self::new(
+            source_processor,
+            query_rect_to_answer,
+            tiling_strategy,
+            query_ctx,
+            sub_query,
+            futures::stream::empty(),
+        );
+
+        if query_ctx.footprint_skipping()
+            && let Some(source_query) = adapter.source_query_rectangle()?
+        {
+            let footprints = source_processor
+                .footprint_query(source_query, FootprintPrecision::Coverage, query_ctx)
+                .await?;
+            return Ok(adapter.with_footprints(footprints));
         }
-        let Some(source_query) = self.source_query_rectangle()? else {
-            return Ok(self);
-        };
-        let footprints = self
-            .source_processor
-            .footprint_query(source_query, FootprintPrecision::Coverage, self.query_ctx)
-            .await?;
-        Ok(self.with_footprints(footprints))
+
+        adapter.footprints =
+            unknown_footprints(source_processor.time_query(time, query_ctx).await?);
+        Ok(adapter)
     }
 
     /// Produces the time steps of `footprints` instead of the time stream and skips the tiles where they
     /// have no data. They must be the footprints of the source in its pixel space, which have the time
     /// steps of the source.
     #[must_use]
-    pub fn with_footprints(mut self, footprints: BoxStream<'a, Result<Footprint>>) -> Self {
+    pub(crate) fn with_footprints(mut self, footprints: BoxStream<'a, Result<Footprint>>) -> Self {
         self.footprints = footprints;
         self
     }

@@ -680,23 +680,26 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let time_stream = qp
-            .time_query(query_rect.time_interval(), &query_ctx)
-            .await
-            .unwrap();
-
-        let adapter = RasterSubQueryAdapter::new(
-            &qp,
-            query_rect,
-            tiling_grid.generate_data_tiling_strategy(),
-            &query_ctx,
-            state_gen,
-            time_stream,
-        );
+        let tiling_strategy = tiling_grid.generate_data_tiling_strategy();
         let adapter = match footprints {
-            Some(footprints) => adapter
-                .with_footprints(futures::stream::iter(footprints.into_iter().map(Ok)).boxed()),
-            None => adapter.skip_tiles_without_data().await.unwrap(),
+            Some(footprints) => RasterSubQueryAdapter::new(
+                &qp,
+                query_rect,
+                tiling_strategy,
+                &query_ctx,
+                state_gen,
+                futures::stream::empty(),
+            )
+            .with_footprints(futures::stream::iter(footprints.into_iter().map(Ok)).boxed()),
+            None => RasterSubQueryAdapter::with_source_time_steps(
+                &qp,
+                query_rect,
+                tiling_strategy,
+                &query_ctx,
+                state_gen,
+            )
+            .await
+            .unwrap(),
         };
 
         (data, adapter.map(Result::unwrap).collect::<Vec<_>>().await)

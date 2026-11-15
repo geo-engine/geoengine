@@ -377,18 +377,14 @@ where
             _phantom_pixel_type: PhantomData,
         };
 
-        let time_stream = self.time_query(query.time_interval(), ctx).await?;
-
         Ok(Box::pin(
-            RasterSubQueryAdapter::<'a, P, _, _>::new(
+            RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
                 &self.source,
                 query,
                 tiling_strategy,
                 ctx,
                 sub_query,
-                time_stream,
             )
-            .skip_tiles_without_data()
             .await?,
         ))
     }
