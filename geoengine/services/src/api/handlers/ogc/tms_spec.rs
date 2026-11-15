@@ -1753,8 +1753,8 @@ mod tests {
             "CustomWebMercator should not require specific origin and resolution"
         );
 
-        reproject_if_necessary::<PostgresSessionContext<NoTls>>(
-            &mut layer,
+        reproject_if_necessary(
+            &mut layer.processing_graph,
             &mut initialized_operator,
             &execution_context,
             required_srs,

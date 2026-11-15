@@ -149,8 +149,8 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
             &tile_matrix_set_id,
             initialized_operator.result_descriptor(),
         )?;
-    reproject_if_necessary::<C::SessionContext>(
-        &mut layer,
+    reproject_if_necessary(
+        &mut layer.processing_graph,
         &mut initialized_operator,
         &execution_context,
         TypedTileMatrixSetProvider::required_srs(&tile_matrix_set_id),

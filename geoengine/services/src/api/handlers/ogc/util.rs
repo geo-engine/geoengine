@@ -24,7 +24,7 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
 };
 use geoengine_operators::engine::{
-    InitializedRasterOperator, ProcessingGraphOperatorPath, RasterOperator as _,
+    ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath, RasterOperator as _,
     RasterResultDescriptor, TypedResultDescriptor,
 };
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
@@ -180,7 +180,15 @@ pub async fn get_initialized_raster_operator<C: SessionContext>(
     layer: &Layer,
     execution_context: &C::ExecutionContext,
 ) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
-    let operator = match &layer.processing_graph.operator {
+    initialize_raster_graph(&layer.processing_graph, execution_context).await
+}
+
+/// Initializes the raster operator of `processing_graph`
+pub async fn initialize_raster_graph(
+    processing_graph: &ProcessingGraph,
+    execution_context: &dyn ExecutionContext,
+) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
+    let operator = match &processing_graph.operator {
         geoengine_operators::engine::TypedOperator::Raster(operator) => operator.clone(),
         geoengine_operators::engine::TypedOperator::Vector(_) => {
             return Err(OgcApiError::ExpectedRaster {
@@ -306,10 +314,10 @@ pub struct OriginAndResolution {
 /// to the required spatial reference.
 ///
 /// Then, reinitialize the raster operator to reflect the updated processing graph.
-pub async fn reproject_if_necessary<C: SessionContext>(
-    layer: &mut Layer,
+pub async fn reproject_if_necessary(
+    processing_graph: &mut ProcessingGraph,
     initialized_operator: &mut Box<dyn InitializedRasterOperator>,
-    execution_context: &C::ExecutionContext,
+    execution_context: &dyn ExecutionContext,
     required_srs: Option<SpatialReference>,
     required_origin_and_resolution: Option<OriginAndResolution>,
 ) -> OgcApiResult<()> {
@@ -329,18 +337,14 @@ pub async fn reproject_if_necessary<C: SessionContext>(
     }
 
     if let Some(target_srs) = required_srs {
-        processing_graph_with_reprojection(&mut layer.processing_graph, target_srs)?;
+        processing_graph_with_reprojection(processing_graph, target_srs)?;
     }
 
     if let Some(target) = required_origin_and_resolution {
-        processing_graph_with_resampling(
-            &mut layer.processing_graph,
-            target.origin,
-            target.resolution,
-        )?;
+        processing_graph_with_resampling(processing_graph, target.origin, target.resolution)?;
     }
 
-    *initialized_operator = get_initialized_raster_operator::<C>(layer, execution_context).await?;
+    *initialized_operator = initialize_raster_graph(processing_graph, execution_context).await?;
 
     Ok(())
 }
