@@ -27,7 +27,7 @@ dependencies = [
     "rasterio >=1.3,<2",
     "requests >= 2.26,<3",
     "rioxarray >=0.9.1, <0.24",
-    "StrEnum >=0.4.6,<0.5",          # TODO: use from stdlib when `python_requires = >=3.11`
+    "StrEnum >=0.4.6,<0.6",          # TODO: use from stdlib when `python_requires = >=3.11`
     "vega >= 3.5,<4.2",
     "websockets >= 14.2,<18",
     "xarray >=2024.4,<2026.10",
