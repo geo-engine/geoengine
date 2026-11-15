@@ -115,25 +115,6 @@ pub async fn session_and_4326_rgb_layer_id(
     (session_id, data_connector_id.into(), layer_id.into())
 }
 
-/// Merges multiple `GridBoundingBox2D` into one.
-///
-/// # Panics
-/// Panics if the iterator is empty.
-pub fn merge_bounds(bounds: impl IntoIterator<Item = GridBoundingBox2D>) -> GridBoundingBox2D {
-    let mut bounds = bounds.into_iter();
-    let mut merged_bounds = bounds.next().unwrap();
-    for bound in bounds {
-        merged_bounds = GridBoundingBox2D::new_min_max(
-            merged_bounds.y_min().min(bound.y_min()),
-            merged_bounds.y_max().max(bound.y_max()),
-            merged_bounds.x_min().min(bound.x_min()),
-            merged_bounds.x_max().max(bound.x_max()),
-        )
-        .unwrap();
-    }
-    merged_bounds
-}
-
 /// Shorthand for creating a `GridBoundingBox2D` from min and max coordinates.
 pub fn grid_bbox(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
     GridBoundingBox2D::new(GridIdx2D::new(min), GridIdx2D::new(max)).unwrap()

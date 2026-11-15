@@ -8,7 +8,6 @@ use crate::{
             },
             util::{
                 ensure_layer_exists, get_initialized_raster_operator, link_creator, load_layer,
-                reproject_if_necessary,
             },
         },
         model::datatypes::{DataProviderId, LayerId},
@@ -138,30 +137,21 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
     let ctx = app_ctx.session_context(session);
     let execution_context = ctx.execution_context()?;
 
-    let mut layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
-    let mut initialized_operator =
+    let layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
+    let initialized_operator =
         get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context).await?;
 
     let tiling_specification = execution_context.tiling_specification();
 
-    let required_origin_and_resolution =
-        TypedTileMatrixSetProvider::required_origin_and_resolution(
-            &tile_matrix_set_id,
-            initialized_operator.result_descriptor(),
-        )?;
-    reproject_if_necessary(
-        &mut layer.processing_graph,
-        &mut initialized_operator,
-        &execution_context,
-        TypedTileMatrixSetProvider::required_srs(&tile_matrix_set_id),
-        required_origin_and_resolution,
-    )
-    .await?;
+    let layer_descriptor = TypedTileMatrixSetProvider::layer_descriptor(
+        &tile_matrix_set_id,
+        initialized_operator.result_descriptor(),
+    )?;
 
     // Resolve the appropriate TMS provider
     let provider = TypedTileMatrixSetProvider::resolve(
         &tile_matrix_set_id,
-        initialized_operator.result_descriptor(),
+        &layer_descriptor,
         tiling_specification,
     )?;
 

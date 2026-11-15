@@ -5,7 +5,7 @@ use crate::{
         OgcApiResult, error,
         error::OgcApiError,
         tms_spec::{TileMatrixSetProvider, TypedTileMatrixSetProvider},
-        util::{initialize_raster_graph, load_layer, reproject_if_necessary},
+        util::{initialize_raster_graph, load_layer},
     },
     api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, SessionContext},
@@ -21,8 +21,6 @@ use geoengine_datatypes::{
     raster::{GridBoundingBox2D, GridShape2D},
     util::Identifier,
 };
-#[cfg(debug_assertions)]
-use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
@@ -133,110 +131,62 @@ pub struct TileOnGrid {
 /// # Errors
 /// If the graph is no raster or cannot be initialized, or the tile is outside the tile matrix.
 pub async fn tile_on_grid(
-    mut processing_graph: ProcessingGraph,
+    processing_graph: ProcessingGraph,
     execution_context: &dyn ExecutionContext,
     query: &TileQuery,
 ) -> OgcApiResult<TileOnGrid> {
-    let layer_operator = processing_graph
-        .operator
-        .clone()
-        .get_raster()
-        .map_err(crate::error::Error::from)?;
-    let layer_initialized = initialize_raster_graph(&processing_graph, execution_context)
-        .instrument(debug_span!("initialize_layer"))
-        .await?;
-
-    // The grid and the tile's pixels in it, from the operators the tile was computed with so
-    // far: a reprojection and resampling, optimized for the tile matrix's resolution. Only their
-    // result descriptor is used.
-    let mut initialized_operator = initialize_raster_graph(&processing_graph, execution_context)
+    let initialized_operator = initialize_raster_graph(&processing_graph, execution_context)
         .instrument(debug_span!("initialize_layer"))
         .await?;
     let tiling_specification = execution_context.tiling_specification();
 
-    let required_origin_and_resolution =
-        debug_span!("required_origin_and_resolution").in_scope(|| {
-            TypedTileMatrixSetProvider::required_origin_and_resolution(
-                &query.tile_matrix_set_id,
-                initialized_operator.result_descriptor(),
-            )
-        })?;
-    reproject_if_necessary(
-        &mut processing_graph,
-        &mut initialized_operator,
-        execution_context,
-        TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id),
-        required_origin_and_resolution,
-    )
-    .instrument(debug_span!("initialize_reprojection"))
-    .await?;
-
-    let tms_spec = TypedTileMatrixSetProvider::resolve(
+    let layer_descriptor = TypedTileMatrixSetProvider::layer_descriptor(
         &query.tile_matrix_set_id,
         initialized_operator.result_descriptor(),
+    )?;
+    let tms_spec = TypedTileMatrixSetProvider::resolve(
+        &query.tile_matrix_set_id,
+        &layer_descriptor,
         tiling_specification,
     )?;
 
-    let (expected_number_of_tiles_at_zoom_level, _) =
+    let (expected_number_of_tiles_at_zoom_level, origin) =
         tms_spec.grid_shape_and_origin(query.tile_matrix);
     query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
 
-    #[cfg(debug_assertions)]
-    let original_result_descriptor = initialized_operator.result_descriptor().clone();
-
-    let spatial_resolution = tms_spec.spatial_resolution(query.tile_matrix);
-    if spatial_resolution
-        != initialized_operator
-            .result_descriptor()
-            .spatial_grid
-            .spatial_resolution()
-    {
-        initialized_operator = initialized_operator
-            .optimize_and_reinitialize(spatial_resolution, execution_context)
-            .instrument(debug_span!("initialize_optimized"))
+    let operator = processing_graph
+        .operator
+        .get_raster()
+        .map_err(crate::error::Error::from)?;
+    let spatial_reference =
+        match TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id) {
+            Some(spatial_reference) => spatial_reference,
+            None => layer_descriptor
+                .spatial_reference
+                .as_option()
+                .ok_or(OgcApiError::MissingSpatialReference)?,
+        };
+    let wrapped =
+        WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized_operator)
+            .wrap_with_projection_and_resample(
+                Some(origin),
+                Some(tms_spec.spatial_resolution(query.tile_matrix)),
+                spatial_reference,
+                execution_context,
+            )
+            .instrument(debug_span!("initialize_warp"))
             .await
             .boxed_context(error::InitializingProcessingGraph)?;
-    }
-
-    #[cfg(debug_assertions)]
-    assert_multiple_of_original_resolution(
-        &original_result_descriptor,
-        initialized_operator.result_descriptor(),
-    );
-
-    let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
 
     let grid_bounds = tms_spec.tile_grid_bbox(
-        &initialized_operator
-            .result_descriptor()
+        &wrapped
+            .result_descriptor
             .tiling_grid_definition(tiling_specification),
         query.tile_matrix,
         query.tile_row,
         query.tile_col,
     )?;
-
-    // the layer on that grid in one step
-    let grid = *initialized_operator
-        .result_descriptor()
-        .spatial_grid_descriptor();
-    let spatial_reference = initialized_operator
-        .result_descriptor()
-        .spatial_reference
-        .as_option()
-        .ok_or(OgcApiError::MissingSpatialReference)?;
-    let wrapped = WrapWithProjectionAndResample::new_create_result_descriptor(
-        layer_operator,
-        layer_initialized,
-    )
-    .wrap_with_projection_and_resample(
-        Some(grid.geo_transform().origin_coordinate),
-        Some(grid.spatial_resolution()),
-        spatial_reference,
-        execution_context,
-    )
-    .instrument(debug_span!("initialize_warp"))
-    .await
-    .boxed_context(error::InitializingProcessingGraph)?;
+    let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
 
     Ok(TileOnGrid {
         processing_graph: ProcessingGraph {
@@ -247,44 +197,6 @@ pub async fn tile_on_grid(
         width: u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
         height: u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
     })
-}
-
-#[cfg(debug_assertions)]
-fn assert_multiple_of_original_resolution(
-    original_result_descriptor: &RasterResultDescriptor,
-    new_result_descriptor: &RasterResultDescriptor,
-) {
-    let original_pixel_resolution = original_result_descriptor
-        .spatial_grid_descriptor()
-        .grid_shape();
-    let new_pixel_resolution = new_result_descriptor.spatial_grid_descriptor().grid_shape();
-
-    // This should hold, but currently does not for all layers, so it only logs an error.
-    // Re-enable the asserts once it holds.
-    // debug_assert!(
-    //     original_pixel_resolution
-    //         .x()
-    //         .is_multiple_of(new_pixel_resolution.x()),
-    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
-    // );
-    // debug_assert!(
-    //     original_pixel_resolution
-    //         .y()
-    //         .is_multiple_of(new_pixel_resolution.y()),
-    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
-    // );
-
-    if !original_pixel_resolution
-        .x()
-        .is_multiple_of(new_pixel_resolution.x())
-        || !original_pixel_resolution
-            .y()
-            .is_multiple_of(new_pixel_resolution.y())
-    {
-        tracing::error!(
-            "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}"
-        );
-    }
 }
 
 fn band_selection(layer: &Layer) -> BandSelection {
@@ -318,3 +230,4 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
 
     Ok((query_processor, query_ctx, computation_id))
 }
+
