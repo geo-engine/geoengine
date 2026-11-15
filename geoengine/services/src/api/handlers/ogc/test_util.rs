@@ -72,6 +72,25 @@ pub async fn session_and_native_3857_layer_id(
     (session_id, data_connector_id.into(), layer_id.into())
 }
 
+/// Returns a session id, data connector id and layer id for the Modis NDVI of April 2014 in EPSG:32632 (UTM 32N)
+/// over Central Europe.
+pub async fn session_and_utm32n_layer_id(
+    app_ctx: &PostgresContext<NoTls>,
+) -> (SessionId, DataProviderId, LayerId) {
+    let session = admin_login(app_ctx).await;
+    let ctx = app_ctx.session_context(session.clone());
+
+    let session_id = ctx.session().id();
+    let (data_connector_id, layer_id) = add_file_definition_to_datasets_and_return_layer(
+        &ctx.db(),
+        test_data!("dataset_defs/ndvi_utm32n.json"),
+        Some(ndvi_255_symbology()),
+    )
+    .await;
+
+    (session_id, data_connector_id.into(), layer_id.into())
+}
+
 /// Returns a session id, data connector id and layer id for the Modis NDVI dataset in native EPSG:3857 projection.
 pub async fn session_and_4326_rgb_layer_id(
     app_ctx: &PostgresContext<NoTls>,
