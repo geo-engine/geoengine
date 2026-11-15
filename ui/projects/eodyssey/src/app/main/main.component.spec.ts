@@ -1,4 +1,4 @@
-import {NO_ERRORS_SCHEMA} from '@angular/core';
+import {NO_ERRORS_SCHEMA, signal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatIconRegistry} from '@angular/material/icon';
@@ -9,8 +9,16 @@ import {By, DomSanitizer} from '@angular/platform-browser';
 import {provideRouter} from '@angular/router';
 import {of} from 'rxjs';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {SpatialReference, Time, UserService} from '@geoengine/common';
-import {CoreModule, DEFAULT_CORE_CONFIG, MapContainerComponent, MapService, ProjectService, SpatialReferenceService} from '@geoengine/core';
+import {LayersService, SpatialReference, Time, UserService} from '@geoengine/common';
+import {
+    CoreModule,
+    DEFAULT_CORE_CONFIG,
+    FootprintsService,
+    MapContainerComponent,
+    MapService,
+    ProjectService,
+    SpatialReferenceService,
+} from '@geoengine/core';
 import {AppConfig} from '../app-config.service';
 import {MainComponent} from './main.component';
 import {EOdysseyLayerService} from '../layers/layers.service';
@@ -53,12 +61,25 @@ describe('EOdyssey debug reprojection', () => {
                     },
                 },
                 {provide: SpatialReferenceService, useValue: {reprojectExtent: vi.fn()}},
+                {provide: LayersService, useValue: {}},
+                {
+                    provide: FootprintsService,
+                    useValue: {
+                        layer: signal(undefined),
+                        overlayLight: signal(false),
+                        timeStepOverride: signal(undefined),
+                        overlayVisible: signal(false),
+                    },
+                },
                 {
                     provide: EOdysseyLayerService,
                     useValue: {
                         mapTileLayer: vi.fn().mockReturnValue({dataConnectorId: 'data', layerId: 'layer'}),
                         catalogueLoading: vi.fn().mockReturnValue(false),
                         appliedMinTileMatrixIndex: vi.fn().mockReturnValue(4),
+                        selectedPreset: vi.fn().mockReturnValue(undefined),
+                        selectedDataSource: vi.fn().mockReturnValue(undefined),
+                        dataSourceOfTime: vi.fn().mockReturnValue(undefined),
                     },
                 },
             ],
@@ -74,7 +95,9 @@ describe('EOdyssey debug reprojection', () => {
         );
         fixture = TestBed.createComponent(MainComponent);
         // The empty map element stands in for the queried map component during layout setup.
-        vi.spyOn(fixture.componentInstance, 'mapComponent').mockReturnValue({} as MapContainerComponent);
+        vi.spyOn(fixture.componentInstance, 'mapComponent').mockReturnValue({
+            dataOverlayLayer: signal(undefined),
+        } as unknown as MapContainerComponent);
     });
 
     afterEach(() => {
