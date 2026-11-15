@@ -231,3 +231,106 @@ async fn create_query_processor_and_query_context<C: SessionContext>(
     Ok((query_processor, query_ctx, computation_id))
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
+    use geoengine_operators::{
+        engine::{MockExecutionContext, RasterOperator},
+        source::{GdalSource, GdalSourceParameters},
+        util::gdal::add_ndvi_dataset,
+    };
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use tracing_subscriber::{Layer as _, layer::SubscriberExt};
+
+    /// Counts the debug events `Initialize GdalSource …`, one per initialization of the graph
+    struct CountInitializations(Arc<AtomicUsize>);
+
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CountInitializations {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _ctx: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            struct Message(String);
+            impl tracing::field::Visit for Message {
+                fn record_debug(
+                    &mut self,
+                    field: &tracing::field::Field,
+                    value: &dyn std::fmt::Debug,
+                ) {
+                    if field.name() == "message" {
+                        self.0 = format!("{value:?}");
+                    }
+                }
+            }
+            let mut message = Message(String::new());
+            event.record(&mut message);
+            if message.0.starts_with("Initialize GdalSource") {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// The layer graph is initialized once per tile, and once more only to read an overview level
+    #[tokio::test]
+    async fn it_initializes_the_graph_once_per_tile() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let processing_graph = ProcessingGraph {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+                }
+                .typed(),
+            ),
+        };
+
+        let count = Arc::new(AtomicUsize::new(0));
+        let subscriber = tracing_subscriber::registry().with(
+            CountInitializations(count.clone())
+                .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG),
+        );
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        // NDVI: 0.1° in EPSG:4326, about 11 km in EPSG:3857
+        for (tile_matrix_set_id, tile_matrix, tile_row, tile_col, initializations) in [
+            // finer than the data: the full resolution
+            (TileMatrixSetId::WebMercatorQuad, 5, 10, 16, 1),
+            // coarser: an overview level
+            (TileMatrixSetId::WebMercatorQuad, 2, 1, 2, 2),
+            (TileMatrixSetId::Custom("Custom".to_owned()), 2, 0, 4, 1),
+            (TileMatrixSetId::Custom("Custom".to_owned()), 1, 0, 2, 2),
+            // its finest tile matrix is the layer reprojected with `DataBounds`, about 28 km, more
+            // than twice the about 11 km the `Warp` estimates for the source: an overview level
+            (
+                TileMatrixSetId::Custom("CustomWebMercator".to_owned()),
+                2,
+                1,
+                2,
+                2,
+            ),
+        ] {
+            count.store(0, Ordering::Relaxed);
+            let name = format!("{tile_matrix_set_id}/{tile_matrix}/{tile_row}/{tile_col}");
+            let query = TileQuery {
+                data_connector_id: DataProviderId::from_u128(0),
+                layer_id: LayerId("ndvi".to_owned()),
+                time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 4, 1, 0, 0, 0))
+                    .unwrap(),
+                tile_matrix_set_id,
+                tile_matrix,
+                tile_row,
+                tile_col,
+            };
+
+            tile_on_grid(processing_graph.clone(), &exe_ctx, &query)
+                .await
+                .unwrap();
+
+            assert_eq!(count.load(Ordering::Relaxed), initializations, "{name}");
+        }
+    }
+}
