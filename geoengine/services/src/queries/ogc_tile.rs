@@ -12,25 +12,21 @@ use crate::{
     layers::layer::Layer,
     processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
     projects::Symbology,
-    queries::raster_grid::{RasterEncoding, RasterGridQuery, raster_grid_from_operator},
+    queries::raster_grid::{RasterEncoding, encode},
     quota::ComputationId,
 };
 use geoengine_datatypes::{
     error::BoxedResultExt,
     operations::image::RasterColorizer,
-    primitives::{
-        AxisAlignedRectangle, BandSelection, CacheHint, Coordinate2D, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution, TimeInterval,
-    },
-    raster::{GridBoundingBox2D, GridShape2D, TilingSpecification},
-    spatial_reference::SpatialReference,
+    primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
+    raster::{GridBoundingBox2D, GridShape2D},
     util::Identifier,
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors, RasterResultDescriptor,
-        TypedOperator, TypedRasterQueryProcessor,
+        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors, TypedOperator,
+        TypedRasterQueryProcessor,
     },
     util::{WrapWithProjectionAndResample, raster_stream_to_png::raster_stream_to_png_bytes},
 };
@@ -165,76 +161,6 @@ impl FieldSelection {
     }
 }
 
-/// The layer of a tile query and its tile matrix set
-struct TileSource {
-    layer: Layer,
-    initialized_operator: Box<dyn InitializedRasterOperator>,
-    tms_spec: TypedTileMatrixSetProvider,
-    /// the spatial reference of the tiles
-    spatial_reference: SpatialReference,
-}
-
-/// Loads the layer of `query`, resolves its tile matrix set and checks the tile coordinates
-async fn load_tile_source<C: ApplicationContext>(
-    ctx: &C::SessionContext,
-    execution_context: &<C::SessionContext as SessionContext>::ExecutionContext,
-    query: &TileQuery,
-) -> OgcApiResult<TileSource> {
-    let layer: Layer = load_layer::<C>(ctx, query.data_connector_id, query.layer_id.clone())
-        .instrument(debug_span!("load_processing_graph"))
-        .await?;
-    let initialized_operator = initialize_raster_graph(&layer.processing_graph, execution_context)
-        .instrument(debug_span!("initialize"))
-        .await?;
-
-    let (tms_spec, spatial_reference) = tile_matrix_set(
-        query,
-        initialized_operator.result_descriptor(),
-        execution_context.tiling_specification(),
-    )?;
-
-    Ok(TileSource {
-        layer,
-        initialized_operator,
-        tms_spec,
-        spatial_reference,
-    })
-}
-
-/// The tile matrix set of `query` for a layer with `result_descriptor`, and the spatial reference
-/// of its tiles
-///
-/// # Errors
-/// If the tile is outside the tile matrix, or the layer has no spatial reference.
-fn tile_matrix_set(
-    query: &TileQuery,
-    result_descriptor: &RasterResultDescriptor,
-    tiling_specification: TilingSpecification,
-) -> OgcApiResult<(TypedTileMatrixSetProvider, SpatialReference)> {
-    let layer_descriptor =
-        TypedTileMatrixSetProvider::layer_descriptor(&query.tile_matrix_set_id, result_descriptor)?;
-    let tms_spec = TypedTileMatrixSetProvider::resolve(
-        &query.tile_matrix_set_id,
-        &layer_descriptor,
-        tiling_specification,
-    )?;
-
-    let (expected_number_of_tiles_at_zoom_level, _) =
-        tms_spec.grid_shape_and_origin(query.tile_matrix);
-    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
-
-    let spatial_reference =
-        match TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id) {
-            Some(spatial_reference) => spatial_reference,
-            None => layer_descriptor
-                .spatial_reference
-                .as_option()
-                .ok_or(OgcApiError::MissingSpatialReference)?,
-        };
-
-    Ok((tms_spec, spatial_reference))
-}
-
 /// Renders the map tile of `query` as PNG
 pub async fn render_tile<C: ApplicationContext>(
     ctx: C::SessionContext,
@@ -311,17 +237,32 @@ pub async fn tile_on_grid(
         .await?;
     let tiling_specification = execution_context.tiling_specification();
 
-    let (tms_spec, spatial_reference) = tile_matrix_set(
-        query,
+    let layer_descriptor = TypedTileMatrixSetProvider::layer_descriptor(
+        &query.tile_matrix_set_id,
         initialized_operator.result_descriptor(),
+    )?;
+    let tms_spec = TypedTileMatrixSetProvider::resolve(
+        &query.tile_matrix_set_id,
+        &layer_descriptor,
         tiling_specification,
     )?;
-    let (_, origin) = tms_spec.grid_shape_and_origin(query.tile_matrix);
+
+    let (expected_number_of_tiles_at_zoom_level, origin) =
+        tms_spec.grid_shape_and_origin(query.tile_matrix);
+    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
 
     let operator = processing_graph
         .operator
         .get_raster()
         .map_err(crate::error::Error::from)?;
+    let spatial_reference =
+        match TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id) {
+            Some(spatial_reference) => spatial_reference,
+            None => layer_descriptor
+                .spatial_reference
+                .as_option()
+                .ok_or(OgcApiError::MissingSpatialReference)?,
+        };
     let wrapped =
         WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized_operator)
             .wrap_with_projection_and_resample(
@@ -360,6 +301,7 @@ pub async fn tile_on_grid(
 /// Unlike a map tile, a coverage tile covers the exact spatial extent of the tile
 /// and has exactly the tile size in pixels as its number of cells, cf.
 /// [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html), Requirement 62 F and G.
+/// Both are given by the tile's pixels on the grid of its tile matrix, the same as for a map tile.
 pub async fn render_coverage_tile<C: ApplicationContext>(
     ctx: C::SessionContext,
     query: TileQuery,
@@ -367,87 +309,47 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
 ) -> OgcApiResult<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
 
-    let TileSource {
-        layer,
-        initialized_operator,
-        tms_spec,
-        spatial_reference,
-    } = load_tile_source::<C>(&ctx, &execution_context, &query).await?;
+    let layer: Layer = load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone())
+        .instrument(debug_span!("load_processing_graph"))
+        .await?;
 
-    let band_order = field_selection.band_order(&initialized_operator.result_descriptor().bands)?;
+    let tile = tile_on_grid(layer.processing_graph, &execution_context, &query)
+        .instrument(debug_span!("initialize"))
+        .await?;
+
+    let result_descriptor = tile.initialized_operator.result_descriptor();
+    let band_order = field_selection.band_order(&result_descriptor.bands)?;
     let bands = BandSelection::new(band_order.clone()).map_err(|source| OgcApiError::Internal {
         source: source.into(),
     })?;
+    let spatial_reference = result_descriptor
+        .spatial_reference
+        .as_option()
+        .ok_or(OgcApiError::MissingSpatialReference)?;
 
-    let bounds = tms_spec.tile_spatial_bounds(query.tile_matrix, query.tile_row, query.tile_col)?;
-    // the cells of a coverage tile are the cells of its tile matrix
-    let resolution = tms_spec.spatial_resolution(query.tile_matrix);
+    let query_rect = RasterQueryRectangle::new(tile.grid_bounds, query.time_interval, bands);
 
-    let operator = layer
-        .processing_graph
-        .operator
-        .clone()
-        .get_raster()
-        .map_err(crate::error::Error::from)?;
+    let (processor, query_ctx, computation_id) = create_query_processor_and_query_context(
+        tile.processing_graph,
+        &tile.initialized_operator,
+        &ctx,
+    )
+    .await?;
 
-    let wrapped =
-        WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized_operator)
-            .wrap_with_projection_and_resample(
-                Some(bounds.upper_left()),
-                Some(resolution),
-                spatial_reference,
-                &execution_context,
-            )
-            .instrument(debug_span!("initialize"))
-            .await
-            .boxed_context(error::InitializingProcessingGraph)?;
-
-    let processing_graph_id = ctx
-        .db()
-        .register_processing_graph(layer.processing_graph)
-        .instrument(debug_span!("register_processing_graph"))
-        .await?;
-
-    let grid_query = RasterGridQuery {
-        processing_graph: processing_graph_id,
-        crs: spatial_reference,
-        bounds: pixel_center_bounds(bounds, resolution)?,
-        resolution: Some(resolution),
-        origin: Some(bounds.upper_left()),
-        time: query.time_interval,
-        bands,
-    };
-
-    Ok(raster_grid_from_operator(
-        ctx,
-        grid_query,
-        wrapped,
+    let (image_bytes, cache_hint) = encode(
+        processor,
+        query_rect,
+        query_ctx,
         RasterEncoding::GeoTiff {
             no_data_value: None,
             band_order: Some(band_order),
         },
+        spatial_reference,
+        execution_context.tiling_specification(),
     )
-    .await?)
-}
+    .await?;
 
-/// Shrinks `bounds` by half a pixel on each side, so that they span from the center of the
-/// upper-left pixel to the center of the lower-right pixel.
-///
-/// The grid of a raster query covers all pixels that the bounds touch. At fine resolutions,
-/// floating point errors in the tile bounds would otherwise add a row or column of pixels.
-fn pixel_center_bounds(
-    bounds: SpatialPartition2D,
-    resolution: SpatialResolution,
-) -> OgcApiResult<SpatialPartition2D> {
-    let half_pixel = Coordinate2D::new(resolution.x().get() / 2., -resolution.y().get() / 2.);
-
-    SpatialPartition2D::new(
-        bounds.upper_left() + half_pixel,
-        bounds.lower_right() - half_pixel,
-    )
-    .map_err(|source| OgcApiError::Internal {
-        source: source.into(),
-    })
+    Ok((image_bytes, cache_hint, computation_id))
 }
 
 fn band_selection(layer: &Layer) -> BandSelection {
