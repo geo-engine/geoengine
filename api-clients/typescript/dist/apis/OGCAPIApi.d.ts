@@ -29,6 +29,30 @@ export interface CollectionRequest {
      */
     layerId: string;
 }
+export interface CollectionCoverageTilesetRequest {
+    /**
+     * ID of the data connector
+     */
+    dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
+    layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
+    tileMatrixSetId: TileMatrixSetId;
+}
+export interface CollectionCoverageTilesetsRequest {
+    /**
+     * ID of the data connector
+     */
+    dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
+    layerId: string;
+}
 export interface CollectionTilesetRequest {
     /**
      * ID of the data connector
@@ -88,6 +112,44 @@ export interface ConformanceRequest {
      * ID of the layer, which is used as collection ID
      */
     layerId: string;
+}
+export interface CoverageTileRequest {
+    /**
+     * ID of the data connector
+     */
+    dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
+    layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
+    tileMatrixSetId: TileMatrixSetId;
+    /**
+     * Tile matrix level
+     */
+    tileMatrix: number;
+    /**
+     * Tile row
+     */
+    tileRow: number;
+    /**
+     * Tile column
+     */
+    tileCol: number;
+    /**
+     * Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+     */
+    datetime?: string;
+    /**
+     * Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.
+     */
+    properties?: string | null;
+    /**
+     * Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.
+     */
+    excludeProperties?: string | null;
 }
 export interface LandingPageRequest {
     /**
@@ -172,6 +234,34 @@ export declare class OGCAPIApi extends runtime.BaseAPI {
      */
     collection(requestParameters: CollectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Collection>;
     /**
+     * Creates request options for collectionCoverageTileset without sending the request
+     */
+    collectionCoverageTilesetRequestOpts(requestParameters: CollectionCoverageTilesetRequest): Promise<runtime.RequestOpts>;
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tileset Metadata
+     */
+    collectionCoverageTilesetRaw(requestParameters: CollectionCoverageTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSet>>;
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tileset Metadata
+     */
+    collectionCoverageTileset(requestParameters: CollectionCoverageTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSet>;
+    /**
+     * Creates request options for collectionCoverageTilesets without sending the request
+     */
+    collectionCoverageTilesetsRequestOpts(requestParameters: CollectionCoverageTilesetsRequest): Promise<runtime.RequestOpts>;
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tilesets List
+     */
+    collectionCoverageTilesetsRaw(requestParameters: CollectionCoverageTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSets>>;
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tilesets List
+     */
+    collectionCoverageTilesets(requestParameters: CollectionCoverageTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSets>;
+    /**
      * Creates request options for collectionTileset without sending the request
      */
     collectionTilesetRequestOpts(requestParameters: CollectionTilesetRequest): Promise<runtime.RequestOpts>;
@@ -227,6 +317,20 @@ export declare class OGCAPIApi extends runtime.BaseAPI {
      * OGC API Conformance Classes
      */
     conformance(requestParameters: ConformanceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Conformance>;
+    /**
+     * Creates request options for coverageTile without sending the request
+     */
+    coverageTileRequestOpts(requestParameters: CoverageTileRequest): Promise<runtime.RequestOpts>;
+    /**
+     * Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+     * OGC API Coverage Tile
+     */
+    coverageTileRaw(requestParameters: CoverageTileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>>;
+    /**
+     * Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+     * OGC API Coverage Tile
+     */
+    coverageTile(requestParameters: CoverageTileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile>;
     /**
      * Creates request options for landingPage without sending the request
      */
