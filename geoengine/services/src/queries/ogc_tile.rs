@@ -1,5 +1,6 @@
 //! OGC API map tiles of a layer as PNG.
 
+use crate::processing_graphs::processing_graph::ProcessingGraph;
 use crate::{
     api::handlers::ogc::{
         OgcApiResult, error,
@@ -17,7 +18,7 @@ use crate::{
 use geoengine_datatypes::{
     error::BoxedResultExt,
     operations::image::RasterColorizer,
-    primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
+    primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
     raster::GridShape2D,
     util::Identifier,
 };
@@ -25,8 +26,14 @@ use geoengine_datatypes::{
 use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{ExecutionContext, InitializedRasterOperator, TypedRasterQueryProcessor},
-    util::raster_stream_to_png::raster_stream_to_png_bytes,
+    engine::{
+        ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath, TypedOperator,
+        TypedRasterOperator, TypedRasterQueryProcessor,
+    },
+    util::{
+        WarpMethods, WrapWithProjectionAndResample,
+        raster_stream_to_png::{default_raster_colorizer, raster_stream_to_png_bytes},
+    },
 };
 use ogcapi_types::tiles::TileMatrixSetId;
 use tracing::{Instrument, debug_span};
@@ -74,6 +81,12 @@ pub async fn render_tile<C: ApplicationContext>(
     let mut layer: Layer = load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone())
         .instrument(debug_span!("load_processing_graph"))
         .await?;
+    let layer_operator = layer
+        .processing_graph
+        .operator
+        .clone()
+        .get_raster()
+        .map_err(crate::error::Error::from)?;
     let mut initialized_operator =
         get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context)
             .instrument(debug_span!("initialize"))
@@ -134,21 +147,30 @@ pub async fn render_tile<C: ApplicationContext>(
         u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
     );
 
-    let query_rect = RasterQueryRectangle::new(
-        tms_spec.tile_grid_bbox(
-            &initialized_operator
-                .result_descriptor()
-                .tiling_grid_definition(tiling_specification),
-            query.tile_matrix,
-            query.tile_row,
-            query.tile_col,
-        )?,
-        query.time_interval,
-        band_selection(&layer),
-    );
+    // The tile matrix's grid and the tile's pixels in it come from the reprojection and resampling
+    // above. The tile itself is computed in one `Warp` from the layer onto that grid, as for a WMS
+    // `GetMap`, with the resampling methods for the colorizer it is rendered with.
+    let tile_bounds = tms_spec.tile_grid_bbox(
+        &initialized_operator
+            .result_descriptor()
+            .tiling_grid_definition(tiling_specification),
+        query.tile_matrix,
+        query.tile_row,
+        query.tile_col,
+    )?;
+    let (initialized_operator, colorizer) = warp_onto_grid(
+        &mut layer,
+        layer_operator,
+        &*initialized_operator,
+        &execution_context,
+    )
+    .await?;
+
+    let query_rect =
+        RasterQueryRectangle::new(tile_bounds, query.time_interval, colorizer.band_selection());
 
     let (processor, query_ctx, computation_id) =
-        create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
+        create_query_processor_and_query_context(&layer, &*initialized_operator, &ctx).await?;
 
     // cancellation is handled by the task that runs this function
     let not_canceled = Box::pin(futures::future::pending());
@@ -162,7 +184,7 @@ pub async fn render_tile<C: ApplicationContext>(
             tile_width,
             tile_height,
             Some(query.time_interval),
-            layer.symbology.and_then(Symbology::into_raster_symbology).map(|symbology| symbology.raster_colorizer),
+            Some(colorizer),
             not_canceled,
         ).await
     )
@@ -209,16 +231,61 @@ fn assert_multiple_of_original_resolution(
     }
 }
 
-fn band_selection(layer: &Layer) -> BandSelection {
-    layer
+/// Puts `layer_operator` onto the grid of `grid_operator` in one `Warp` and makes it the processing
+/// graph of `layer`. Returns it with the colorizer to render it with: the one of the layer's
+/// symbology, or else [`default_raster_colorizer`]. The colorizer chooses the resampling methods
+/// (see [`WarpMethods::for_symbology`]).
+async fn warp_onto_grid(
+    layer: &mut Layer,
+    layer_operator: TypedRasterOperator,
+    grid_operator: &dyn InitializedRasterOperator,
+    execution_context: &dyn ExecutionContext,
+) -> OgcApiResult<(Box<dyn InitializedRasterOperator>, RasterColorizer)> {
+    let layer_initialized = layer_operator
+        .clone()
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            execution_context,
+        )
+        .instrument(debug_span!("initialize_layer"))
+        .await
+        .boxed_context(error::InitializingProcessingGraph)?;
+
+    let colorizer = layer
         .symbology
         .as_ref()
         .and_then(Symbology::as_raster_symbology)
-        .map(|symbology| &symbology.raster_colorizer)
         .map_or_else(
-            BandSelection::first, // matches to fallback linear gradient colorizer
-            RasterColorizer::band_selection,
-        )
+            || default_raster_colorizer(layer_initialized.result_descriptor()),
+            |symbology| symbology.raster_colorizer.clone(),
+        );
+    let methods = WarpMethods::for_symbology(&colorizer);
+    let grid = grid_operator.result_descriptor().spatial_grid_descriptor();
+    let spatial_reference = grid_operator
+        .result_descriptor()
+        .spatial_reference
+        .as_option()
+        .ok_or(OgcApiError::MissingSpatialReference)?;
+
+    let wrapped = WrapWithProjectionAndResample::new_create_result_descriptor(
+        layer_operator,
+        layer_initialized,
+    )
+    .wrap_with_projection_and_resample(
+        Some(grid.geo_transform().origin_coordinate),
+        Some(grid.spatial_resolution()),
+        spatial_reference,
+        methods,
+        execution_context,
+    )
+    .instrument(debug_span!("initialize_warp"))
+    .await
+    .boxed_context(error::InitializingProcessingGraph)?;
+
+    layer.processing_graph = ProcessingGraph {
+        operator: TypedOperator::Raster(wrapped.operator),
+    };
+    Ok((wrapped.initialized_operator, colorizer))
 }
 
 async fn create_query_processor_and_query_context<C: SessionContext>(

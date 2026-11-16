@@ -21,7 +21,7 @@ use crate::{
         registry::ProcessingGraphRegistry,
     },
     queries::{
-        raster_grid::{RasterEncoding, RasterGridQuery, raster_grid},
+        raster_grid::{RasterEncoding, RasterGridQuery, default_colorizer, raster_grid},
         run_query,
     },
     quota::ComputationId,
@@ -31,9 +31,7 @@ use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, CacheHint, SpatialPartition2D, SpatialResolution,
 };
-use geoengine_operators::{
-    engine::ProcessingGraphOperatorPath, util::raster_stream_to_png::default_colorizer_gradient,
-};
+use geoengine_operators::engine::ProcessingGraphOperatorPath;
 use reqwest::Url;
 use serde::Deserialize;
 use snafu::ensure;
@@ -363,13 +361,11 @@ async fn wms_get_map<C: ApplicationContext>(
             || Ok(BandSelection::new_single(0)),
             |colorizer| RasterColorizer::band_selection(colorizer).try_into(),
         )?;
-        let colorizer = colorizer.map_or_else(
-            || geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
-                band: 0,
-                band_colorizer: default_colorizer_gradient::<u8>(),
-            },
-            Into::into,
-        );
+        let ctx = app_ctx.session_context(session);
+        let colorizer = match colorizer {
+            Some(colorizer) => colorizer.into(),
+            None => default_colorizer(&ctx, &layer).await?,
+        };
 
         let query = RasterGridQuery {
             processing_graph: layer,
@@ -388,7 +384,6 @@ async fn wms_get_map<C: ApplicationContext>(
             colorizer,
         };
 
-        let ctx = app_ctx.session_context(session);
         run_query(&ctx, conn_closed, raster_grid(ctx.clone(), query, encoding)).await
     }
 
@@ -453,9 +448,11 @@ mod tests {
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
     use crate::ge_context;
+    use crate::processing_graphs::processing_graph::ProcessingGraph;
+    use crate::processing_graphs::registry::ProcessingGraphRegistry;
     use crate::users::UserAuth;
     use crate::util::tests::{
-        admin_login, check_allowed_http_methods, read_body_string,
+        add_land_cover_to_datasets, admin_login, check_allowed_http_methods, read_body_string,
         register_ndvi_processing_graph_helper,
         register_ndvi_processing_graph_helper_with_cache_ttl,
         register_ne2_multiband_processing_graph, send_test_request,
@@ -469,6 +466,7 @@ mod tests {
     use geoengine_datatypes::raster::{GridBoundingBox2D, GridShape2D, TilingSpecification};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::assert_image_equals;
+    use geoengine_operators::engine::RasterOperator;
     use geoengine_operators::engine::{ExecutionContext, RasterQueryProcessor};
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
@@ -905,6 +903,123 @@ mod tests {
         // );
 
         assert_image_equals(test_data!("wms/ne2_rgb_colorizer.png"), &image_bytes);
+    }
+
+    /// Registers the land cover test dataset as a processing graph and requests it as `GetMap` of
+    /// North America with pixels of 0.4°, four times the 0.1° of the data (the test dataset ends
+    /// at 20° W), with `styles`.
+    async fn get_map_land_cover(app_ctx: PostgresContext<NoTls>, styles: &str) -> Vec<u8> {
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session.clone());
+        let land_cover = add_land_cover_to_datasets(&admin_ctx.db()).await;
+        let id = admin_ctx
+            .db()
+            .register_processing_graph(ProcessingGraph {
+                operator: geoengine_operators::engine::TypedOperator::Raster(
+                    geoengine_operators::source::GdalSource {
+                        params: geoengine_operators::source::GdalSourceParameters::new(
+                            land_cover.into(),
+                        ),
+                    }
+                    .typed(),
+                ),
+            })
+            .await
+            .unwrap();
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            ("bbox", "25,-125,50.2,-85"),
+            ("width", "100"),
+            ("height", "63"),
+            ("crs", "EPSG:4326"),
+            ("styles", styles),
+            ("format", "image/png"),
+        ];
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((
+                header::AUTHORIZATION,
+                Bearer::new(admin_session.id().to_string()),
+            ));
+        let res = send_test_request(req, app_ctx).await;
+        assert_eq!(res.status(), 200);
+        actix_web::test::read_body(res).await.to_vec()
+    }
+
+    #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
+    async fn it_renders_classes_with_their_most_common_class(app_ctx: PostgresContext<NoTls>) {
+        // a palette, so the raster is resampled with the most common class (`mode`)
+        let palette = Colorizer::palette(
+            [
+                (0, [134, 201, 227]),
+                (1, [30, 129, 62]),
+                (2, [59, 194, 212]),
+                (3, [157, 194, 63]),
+                (4, [159, 225, 127]),
+                (5, [125, 194, 127]),
+                (6, [195, 127, 126]),
+                (7, [188, 221, 190]),
+                (8, [224, 223, 133]),
+                (9, [226, 221, 7]),
+                (10, [223, 192, 125]),
+                (11, [66, 128, 189]),
+                (12, [225, 222, 127]),
+                (13, [253, 2, 0]),
+                (14, [162, 159, 66]),
+                (15, [255, 255, 255]),
+                (16, [192, 192, 192]),
+            ]
+            .into_iter()
+            .map(|(class, [red, green, blue])| {
+                (
+                    f64::from(class).try_into().unwrap(),
+                    RgbaColor::new(red, green, blue, 255),
+                )
+            })
+            .collect(),
+            RgbaColor::transparent(),
+            RgbaColor::black(),
+        )
+        .unwrap();
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
+            band: 0,
+            band_colorizer: palette.into(),
+        });
+
+        let image_bytes = get_map_land_cover(
+            app_ctx,
+            &format!(
+                "custom:{}",
+                serde_json::to_string(&raster_colorizer).unwrap()
+            ),
+        )
+        .await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_land_cover_mode.png");
+
+        assert_image_equals(test_data!("wms/get_map_land_cover_mode.png"), &image_bytes);
+    }
+
+    #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
+    async fn it_renders_classes_without_a_style_with_a_palette(app_ctx: PostgresContext<NoTls>) {
+        // a palette of the classes of the classification, so also with the most common class
+        let image_bytes = get_map_land_cover(app_ctx, "").await;
+
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_land_cover_default.png");
+
+        assert_image_equals(
+            test_data!("wms/get_map_land_cover_default.png"),
+            &image_bytes,
+        );
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]

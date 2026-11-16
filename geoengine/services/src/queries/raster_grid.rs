@@ -24,12 +24,12 @@ use geoengine_operators::{
         TypedRasterQueryProcessor,
     },
     util::{
-        WrapWithProjectionAndResample,
+        WarpMethods, WrapWithProjectionAndResample,
         raster_stream_to_geotiff::{
             GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
             raster_stream_to_multiband_geotiff_bytes,
         },
-        raster_stream_to_png::raster_stream_to_png_bytes,
+        raster_stream_to_png::{default_raster_colorizer, raster_stream_to_png_bytes},
     },
 };
 use tracing::{Instrument, debug, debug_span};
@@ -48,15 +48,27 @@ pub struct RasterGridQuery {
 }
 
 pub enum RasterEncoding {
-    /// An image of `width` × `height` pixels; empty if the query misses the data
+    /// An image of `width` × `height` pixels; empty if the query misses the data. The colorizer
+    /// also chooses how to resample the raster (see [`WarpMethods::for_symbology`]).
     Png {
         width: u32,
         height: u32,
         colorizer: RasterColorizer,
     },
     /// The first band as `GeoTIFF`, at most `[wcs] tile_limit` tiles. Unlike a PNG it has no
-    /// requested size: its pixels are the query's grid, i.e. `bounds` at `resolution`.
+    /// requested size: its pixels are the query's grid, i.e. `bounds` at `resolution`. Resampled
+    /// with nearest neighbour, so that the values are values of the data.
     GeoTiff { no_data_value: Option<f64> },
+}
+
+impl RasterEncoding {
+    /// How to resample the raster onto the query's grid for this encoding
+    fn warp_methods(&self) -> WarpMethods {
+        match self {
+            Self::Png { colorizer, .. } => WarpMethods::for_symbology(colorizer),
+            Self::GeoTiff { .. } => WarpMethods::NEAREST,
+        }
+    }
 }
 
 /// Queries `query` and encodes the result as `encoding`
@@ -68,7 +80,7 @@ pub async fn raster_grid<C: SessionContext>(
     let execution_context = ctx.execution_context()?;
     let tiling_spec = execution_context.tiling_specification();
 
-    let wrapped = load_on_grid(&ctx, &query, &execution_context).await?;
+    let wrapped = load_on_grid(&ctx, &query, encoding.warp_methods(), &execution_context).await?;
 
     let grid_bounds = wrapped
         .result_descriptor
@@ -120,10 +132,37 @@ pub async fn raster_grid<C: SessionContext>(
     Ok((bytes, cache_hint, computation_id))
 }
 
-/// Loads and initializes the processing graph, projected and resampled onto the query's grid
+/// The colorizer for rendering `processing_graph` without a given one: a palette for a
+/// classification, otherwise a gray gradient (see [`default_raster_colorizer`]). It initializes
+/// the processing graph to know its bands and data type.
+pub async fn default_colorizer<C: SessionContext>(
+    ctx: &C,
+    processing_graph: &ProcessingGraphId,
+) -> Result<RasterColorizer> {
+    let execution_context = ctx.execution_context()?;
+    let operator = ctx
+        .db()
+        .load_processing_graph(processing_graph)
+        .instrument(debug_span!("load_processing_graph"))
+        .await?
+        .operator
+        .get_raster()?;
+    let initialized = operator
+        .initialize(
+            ProcessingGraphOperatorPath::initialize_root(),
+            &execution_context,
+        )
+        .instrument(debug_span!("initialize"))
+        .await?;
+    Ok(default_raster_colorizer(initialized.result_descriptor()))
+}
+
+/// Loads and initializes the processing graph, projected and resampled onto the query's grid with
+/// `methods`
 async fn load_on_grid<C: SessionContext>(
     ctx: &C,
     query: &RasterGridQuery,
+    methods: WarpMethods,
     execution_context: &C::ExecutionContext,
 ) -> Result<WrapWithProjectionAndResample> {
     let operator = ctx
@@ -143,13 +182,13 @@ async fn load_on_grid<C: SessionContext>(
             )
             .await?;
 
-        // TODO: add a resammple operator for downsampling AND resample push down!
         Ok(
             WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
                 .wrap_with_projection_and_resample(
                     query.origin,
                     query.resolution,
                     query.crs,
+                    methods,
                     execution_context,
                 )
                 .await?,
