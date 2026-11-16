@@ -805,6 +805,28 @@ mod tests {
     use std::str::FromStr;
 
     #[ge_context::test]
+    async fn it_marks_only_the_footprints_query_context_for_display(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        use geoengine_operators::engine::QueryContext as _;
+
+        let ctx = app_ctx.session_context(admin_login(&app_ctx).await);
+        let processing_graph = ProcessingGraphId::new();
+
+        // calendar searches are bounded and take turns with map tiles only if this is set
+        assert!(
+            ctx.footprints_query_context(processing_graph, ComputationId::new())?
+                .footprints_for_display()
+        );
+        assert!(
+            !ctx.query_context(processing_graph, ComputationId::new())?
+                .footprints_for_display()
+        );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
     async fn it_clears_operator_cache_even_if_gdal_clearance_fails(
         mut app_ctx: PostgresContext<NoTls>,
     ) {
