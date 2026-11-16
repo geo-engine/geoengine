@@ -14,8 +14,10 @@ use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOptions};
 use gdal::{Dataset, DriverManager, Metadata};
+use geoengine_datatypes::primitives::{
+    BandSelection, DateTimeParseFormat, RasterQueryRectangle, TimeInterval,
+};
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds};
-use geoengine_datatypes::primitives::{DateTimeParseFormat, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridBounds, GridIntersection,
     GridOrEmpty, GridSize, MapElements, MaskedGrid2D, NoDataValueGrid, Pixel, RasterTile2D,
@@ -32,13 +34,24 @@ use tracing::{debug, warn};
 
 use super::{abortable_query_execution, spawn_blocking};
 
-/// consume a raster stream and write it to a geotiff file, one band for each time step
+/// consume a raster stream and write it to a geotiff file, one band for each time step and selected band.
+///
+/// The `GeoTIFF` bands are grouped by time step: all selected bands of the first time step,
+/// then all selected bands of the next time step, and so on. Within a time step, the bands are
+/// ordered like `band_order`, or ascending like the stream if it is `None`. `band_order` must
+/// contain each band of the query's band selection exactly once. For multiple selected bands,
+/// each `GeoTIFF` band is described with the name of its raster band.
+///
+/// Without a no-data value, all bands share one internal mask, because `GeoTIFF` only supports
+/// internal masks per dataset.
+///
 /// Note: the entire process is done in memory, and will take 2x the size of the raster
 ///       time series
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'static>(
     processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
+    band_order: Option<Vec<u32>>,
     mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
@@ -53,6 +66,19 @@ where
     let tiling_grid_def = result_descriptor.tiling_grid_definition(tiling_specification);
     let tiling_strategy = tiling_grid_def.generate_data_tiling_strategy();
 
+    let band_order = band_order.unwrap_or_else(|| query_rect.attributes().as_vec());
+    let geotiff_band_positions = geotiff_band_positions(query_rect.attributes(), &band_order)?;
+    let band_names = band_order
+        .iter()
+        .map(|&band| {
+            result_descriptor
+                .bands
+                .bands()
+                .get(band as usize)
+                .map_or_else(|| band.to_string(), |band| band.name.clone())
+        })
+        .collect::<Vec<_>>();
+
     let query_abort_trigger = query_ctx.abort_trigger()?;
     let runtime = query_ctx.processing_runtime();
 
@@ -63,6 +89,8 @@ where
         write_multiband_geotiff_bytes(
             tiles,
             &query_rect,
+            band_names,
+            geotiff_band_positions,
             tiling_strategy,
             gdal_tiff_options,
             gdal_tiff_metadata,
@@ -78,9 +106,35 @@ where
     .await
 }
 
+/// For each band of `band_selection`, in ascending order, its position in `band_order`
+fn geotiff_band_positions(
+    band_selection: &BandSelection,
+    band_order: &[u32],
+) -> Result<Vec<usize>> {
+    let positions = band_selection
+        .as_slice()
+        .iter()
+        .map(|band| band_order.iter().position(|b| b == band))
+        .collect::<Option<Vec<_>>>();
+
+    match positions {
+        Some(positions) if band_order.len() == positions.len() => Ok(positions),
+        _ => Err(Error::GeoTiffBandOrderMustMatchBandSelection {
+            band_order: band_order.to_vec(),
+            band_selection: band_selection.as_vec(),
+        }),
+    }
+}
+
+/// Writes the tiles into a `GeoTIFF`.
+///
+/// `band_names` are the names of the `GeoTIFF` bands of one time step, and
+/// `geotiff_band_positions` maps the `i`-th selected band, in stream order, to its `GeoTIFF` band.
 async fn write_multiband_geotiff_bytes<T>(
     tiles: Vec<RasterTile2D<T>>,
     query_rect: &RasterQueryRectangle,
+    band_names: Vec<String>,
+    geotiff_band_positions: Vec<usize>,
     tiling_strategy: TilingStrategy,
     gdal_tiff_options: GdalGeoTiffOptions,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -96,35 +150,62 @@ where
         gdal_tiff_metadata,
     )?;
 
+    let selected_bands = query_rect.attributes().as_vec();
+
     let cache_hint = spawn_blocking(move || {
-        let mut band_idx = 1;
+        let num_bands = band_names.len().max(1);
+        let mut time_step_idx = 0;
+        let mut tile_idx_in_time_step = 0;
         let mut time = initial_tile_time;
 
         let mut cache_hint = CacheHint::max_duration();
 
+        for band_position in 0..num_bands {
+            describe_band(&dataset, band_position + 1, &band_names, band_position)?;
+        }
+
         for tile in tiles {
             if tile.time != time {
-                // new time step => next band
+                // new time step => next bands
                 time = tile.time;
-                band_idx += 1;
+                time_step_idx += 1;
+                tile_idx_in_time_step = 0;
 
-                let mut band = dataset.rasterband(band_idx)?;
+                for band_position in 0..num_bands {
+                    let band_idx = time_step_idx * num_bands + band_position + 1;
+                    describe_band(&dataset, band_idx, &band_names, band_position)?;
 
-                band.set_metadata_item(
-                    "start",
-                    &time.start().as_datetime_string_with_millis(),
-                    "time",
-                )?;
-                band.set_metadata_item(
-                    "end",
-                    &time.end().as_datetime_string_with_millis(),
-                    "time",
-                )?;
+                    let mut band = dataset.rasterband(band_idx)?;
+                    band.set_metadata_item(
+                        "start",
+                        &time.start().as_datetime_string_with_millis(),
+                        "time",
+                    )?;
+                    band.set_metadata_item(
+                        "end",
+                        &time.end().as_datetime_string_with_millis(),
+                        "time",
+                    )?;
+                }
             }
+
+            // The stream delivers the selected bands of each tile position in ascending order,
+            // so the position of the tile in its tile position is the index of its band in the selection.
+            let selection_idx = tile_idx_in_time_step % num_bands;
+            debug_assert_eq!(
+                Some(&tile.band),
+                selected_bands.get(selection_idx),
+                "raster stream should deliver the bands of a tile position in ascending order"
+            );
+            let band_position = geotiff_band_positions[selection_idx];
+            tile_idx_in_time_step += 1;
 
             cache_hint.merge_with(&tile.cache_hint);
 
-            writer.write_tile_into_band(tile, dataset.rasterband(band_idx)?)?;
+            writer.write_tile_into_band(
+                tile,
+                dataset.rasterband(time_step_idx * num_bands + band_position + 1)?,
+            )?;
         }
 
         Result::<CacheHint, Error>::Ok(cache_hint)
@@ -135,6 +216,24 @@ where
         spawn_blocking(move || gdal::vsi::get_vsi_mem_file_bytes_owned(file_path)).await??,
         cache_hint,
     ))
+}
+
+/// Sets the description of the `GeoTIFF` band `band_idx` (1-based) to the name of the raster band at `band_position`
+fn describe_band(
+    dataset: &Dataset,
+    band_idx: usize,
+    band_names: &[String],
+    band_position: usize,
+) -> Result<()> {
+    // a single raster band keeps the `GeoTIFF` band without description, as before multiple raster bands were supported
+    if band_names.len() < 2 {
+        return Ok(());
+    }
+
+    if let Some(band_name) = band_names.get(band_position) {
+        dataset.rasterband(band_idx)?.set_description(band_name)?;
+    }
+    Ok(())
 }
 
 fn create_multiband_dataset_and_writer<T>(
@@ -158,9 +257,11 @@ where
         tile_size_in_pixels: initial_tile_info.tile_size_in_pixels,
         geo_transform: initial_tile_info.global_geo_transform,
     };
+    let num_bands = query_rect.attributes().count() as usize;
     let num_tiles_per_timestep = strat
         .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds())
-        .number_of_elements();
+        .number_of_elements()
+        * num_bands;
     let num_timesteps = tiles.len() / num_tiles_per_timestep;
 
     let coordinate_of_ul_query_pixel = strat
@@ -209,7 +310,7 @@ where
         &file_path,
         query_rect.spatial_bounds().axis_size_x(),
         query_rect.spatial_bounds().axis_size_y(),
-        num_timesteps,
+        num_timesteps * num_bands,
         &options,
     )?;
     dataset.set_spatial_ref(&gdal_tiff_metadata.spatial_reference.try_into()?)?;
@@ -1900,6 +2001,7 @@ mod tests {
                 TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),
                 BandSelection::first(),
             ),
+            None,
             ctx,
             GdalGeoTiffDatasetMetadata {
                 no_data_value: None,
@@ -1928,5 +2030,137 @@ mod tests {
         // TODO: check that the time is encoded in the geotiff band metadata
 
         drop(ds);
+    }
+
+    #[tokio::test]
+    async fn it_writes_one_geotiff_band_per_time_step_and_raster_band() {
+        use crate::engine::{RasterBandDescriptor, RasterBandDescriptors};
+        use geoengine_datatypes::primitives::Measurement;
+
+        let time_steps = [
+            TimeInterval::new(0, 10).unwrap(),
+            TimeInterval::new(10, 20).unwrap(),
+        ];
+        let tile = |time: TimeInterval, band: u32, values: Vec<u8>| RasterTile2D {
+            time,
+            tile_position: [-1, 0].into(),
+            band,
+            global_geo_transform: TestDefault::test_default(),
+            grid_array: Grid::new([2, 2].into(), values).unwrap().into(),
+            properties: Default::default(),
+            cache_hint: CacheHint::no_cache(),
+        };
+        let data = vec![
+            tile(time_steps[0], 0, vec![1, 2, 3, 4]),
+            tile(time_steps[0], 1, vec![11, 12, 13, 14]),
+            tile(time_steps[1], 0, vec![21, 22, 23, 24]),
+            tile(time_steps[1], 1, vec![31, 32, 33, 34]),
+        ];
+
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let ctx = ecx.mock_query_context_test_default();
+
+        let mut result_descriptor = RasterResultDescriptor::with_datatype_and_num_bands(
+            RasterDataType::U8,
+            2,
+            GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
+            GeoTransform::test_default(),
+            TimeDescriptor::new_irregular(Some(TimeInterval::new(0, 20).unwrap())),
+        );
+        result_descriptor.bands = RasterBandDescriptors::new(vec![
+            RasterBandDescriptor::new("a".to_string(), Measurement::Unitless),
+            RasterBandDescriptor::new("b".to_string(), Measurement::Unitless),
+        ])
+        .unwrap();
+
+        let processor = MockRasterSourceProcessor {
+            result_descriptor,
+            data,
+            tiling_specification: ctx.tiling_specification(),
+        }
+        .boxed();
+
+        // the stream delivers the bands in ascending order, the `GeoTIFF` gets them in reverse order
+        let (mut bytes, _) = raster_stream_to_multiband_geotiff_bytes(
+            processor,
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-2, 0], [-1, 1]).unwrap(),
+                TimeInterval::new(0, 20).unwrap(),
+                BandSelection::first_n(2),
+            ),
+            Some(vec![1, 0]),
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: None,
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::NumThreads(1),
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            TilingSpecification::new([2, 2].into()),
+        )
+        .await
+        .unwrap();
+
+        let file_path = PathBuf::from(format!("/vsimem/{}/", uuid::Uuid::new_v4()));
+        let _mem_file =
+            gdal::vsi::create_mem_file_from_ref(&file_path, bytes.as_mut_slice()).unwrap();
+        let ds = gdal_open_dataset(&file_path).unwrap();
+
+        assert_eq!(ds.raster_count(), 4);
+
+        let bands = (1..=ds.raster_count())
+            .map(|band_idx| {
+                let band = ds.rasterband(band_idx).unwrap();
+                (
+                    band.description().unwrap(),
+                    band.read_as::<u8>((0, 0), (2, 2), (2, 2), None)
+                        .unwrap()
+                        .data()
+                        .to_vec(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            bands,
+            vec![
+                ("b".to_string(), vec![11, 12, 13, 14]),
+                ("a".to_string(), vec![1, 2, 3, 4]),
+                ("b".to_string(), vec![31, 32, 33, 34]),
+                ("a".to_string(), vec![21, 22, 23, 24]),
+            ]
+        );
+
+        drop(ds);
+    }
+
+    #[test]
+    fn it_maps_selected_bands_to_geotiff_band_positions() {
+        let selection = BandSelection::new(vec![0, 2, 5]).unwrap();
+
+        assert_eq!(
+            geotiff_band_positions(&selection, &[0, 2, 5]).unwrap(),
+            vec![0, 1, 2]
+        );
+        assert_eq!(
+            geotiff_band_positions(&selection, &[5, 0, 2]).unwrap(),
+            vec![1, 2, 0]
+        );
+
+        for invalid_order in [&[0, 2][..], &[0, 2, 3], &[0, 2, 5, 5], &[0, 2, 5, 1]] {
+            assert!(
+                matches!(
+                    geotiff_band_positions(&selection, invalid_order),
+                    Err(Error::GeoTiffBandOrderMustMatchBandSelection { .. })
+                ),
+                "{invalid_order:?} should be rejected"
+            );
+        }
     }
 }
