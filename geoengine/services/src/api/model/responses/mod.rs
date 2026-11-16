@@ -250,6 +250,10 @@ pub struct ZipResponse(pub Vec<u8>);
 // #[response(description = "PNG Image", content_type = "image/png", example = json!("image bytes"))]
 pub struct PngResponse(pub Vec<u8>);
 
+// #[derive(ToResponse)]
+// #[response(description = "GeoTIFF Image", content_type = "image/tiff; application=geotiff", example = json!("image bytes"))]
+pub struct GeoTiffResponse(pub Vec<u8>);
+
 // OpenAPI 3.1 allows empty schemas for known content types.
 // However, …
 //  …utoipa generates an array of i32 which is bad and
@@ -281,6 +285,22 @@ mod bytes_fix {
                 .into();
 
             ("PngResponse", response)
+        }
+    }
+
+    impl<'r> ToResponse<'r> for GeoTiffResponse {
+        fn response() -> (&'r str, RefOr<Response>) {
+            let response = ResponseBuilder::new()
+                .description("GeoTIFF Image")
+                .content(
+                    "image/tiff; application=geotiff",
+                    ContentBuilder::new()
+                        .schema(Some(BinaryFile::schema()))
+                        .build(),
+                )
+                .into();
+
+            ("GeoTiffResponse", response)
         }
     }
 

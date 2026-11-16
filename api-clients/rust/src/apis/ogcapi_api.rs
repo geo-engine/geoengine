@@ -21,6 +21,22 @@ pub enum CollectionError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`collection_coverage_tileset`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CollectionCoverageTilesetError {
+    Status404(),
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`collection_coverage_tilesets`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CollectionCoverageTilesetsError {
+    Status404(),
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`collection_tileset`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -48,6 +64,15 @@ pub enum CollectionsError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ConformanceError {
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`coverage_tile`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CoverageTileError {
+    Status400(),
+    Status404(),
     UnknownValue(serde_json::Value),
 }
 
@@ -120,6 +145,89 @@ pub async fn collection(configuration: &configuration::Configuration, data_conne
     } else {
         let content = resp.text().await?;
         let entity: Option<CollectionError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+pub async fn collection_coverage_tileset(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str, tile_matrix_set_id: &str) -> Result<models::TileSet, Error<CollectionCoverageTilesetError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
+    let p_path_tile_matrix_set_id = tile_matrix_set_id;
+
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string());
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.bearer_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::TileSet`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::TileSet`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<CollectionCoverageTilesetError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+pub async fn collection_coverage_tilesets(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str) -> Result<models::TileSets, Error<CollectionCoverageTilesetsError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
+
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.bearer_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::TileSets`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::TileSets`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<CollectionCoverageTilesetsError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }
@@ -301,6 +409,52 @@ pub async fn conformance(configuration: &configuration::Configuration, data_conn
     } else {
         let content = resp.text().await?;
         let entity: Option<ConformanceError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent { status, content, entity }))
+    }
+}
+
+/// Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+pub async fn coverage_tile(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str, tile_matrix_set_id: &str, tile_matrix: i32, tile_row: i64, tile_col: i64, datetime: Option<&str>, properties: Option<&str>, exclude_properties: Option<&str>) -> Result<reqwest::Response, Error<CoverageTileError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
+    let p_path_tile_matrix_set_id = tile_matrix_set_id;
+    let p_path_tile_matrix = tile_matrix;
+    let p_path_tile_row = tile_row;
+    let p_path_tile_col = tile_col;
+    let p_query_datetime = datetime;
+    let p_query_properties = properties;
+    let p_query_exclude_properties = exclude_properties;
+
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string(), tileMatrix=p_path_tile_matrix, tileRow=p_path_tile_row, tileCol=p_path_tile_col);
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref param_value) = p_query_datetime {
+        req_builder = req_builder.query(&[("datetime", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_properties {
+        req_builder = req_builder.query(&[("properties", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = p_query_exclude_properties {
+        req_builder = req_builder.query(&[("exclude-properties", &param_value.to_string())]);
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.bearer_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(resp)
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<CoverageTileError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent { status, content, entity }))
     }
 }

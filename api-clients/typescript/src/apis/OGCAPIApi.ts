@@ -74,6 +74,32 @@ export interface CollectionRequest {
     layerId: string;
 }
 
+export interface CollectionCoverageTilesetRequest {
+    /**
+     * ID of the data connector
+     */
+    dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
+    layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
+    tileMatrixSetId: TileMatrixSetId;
+}
+
+export interface CollectionCoverageTilesetsRequest {
+    /**
+     * ID of the data connector
+     */
+    dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
+    layerId: string;
+}
+
 export interface CollectionTilesetRequest {
     /**
      * ID of the data connector
@@ -136,6 +162,45 @@ export interface ConformanceRequest {
      * ID of the layer, which is used as collection ID
      */
     layerId: string;
+}
+
+export interface CoverageTileRequest {
+    /**
+     * ID of the data connector
+     */
+    dataConnectorId: string;
+    /**
+     * ID of the layer, which is used as collection ID
+     */
+    layerId: string;
+    /**
+     * Tile matrix set identifier
+     */
+    tileMatrixSetId: TileMatrixSetId;
+    /**
+     * Tile matrix level
+     */
+    tileMatrix: number;
+    /**
+     * Tile row
+     */
+    tileRow: number;
+    /**
+     * Tile column
+     */
+    tileCol: number;
+    /**
+     * Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+     */
+    datetime?: string;
+    /**
+     * Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.
+     */
+    properties?: string | null;
+    /**
+     * Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.
+     */
+    excludeProperties?: string | null;
 }
 
 export interface LandingPageRequest {
@@ -271,6 +336,140 @@ export class OGCAPIApi extends runtime.BaseAPI {
      */
     async collection(requestParameters: CollectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Collection> {
         const response = await this.collectionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for collectionCoverageTileset without sending the request
+     */
+    async collectionCoverageTilesetRequestOpts(requestParameters: CollectionCoverageTilesetRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['dataConnectorId'] == null) {
+            throw new runtime.RequiredError(
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling collectionCoverageTileset().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling collectionCoverageTileset().'
+            );
+        }
+
+        if (requestParameters['tileMatrixSetId'] == null) {
+            throw new runtime.RequiredError(
+                'tileMatrixSetId',
+                'Required parameter "tileMatrixSetId" was null or undefined when calling collectionCoverageTileset().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}`;
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tileset Metadata
+     */
+    async collectionCoverageTilesetRaw(requestParameters: CollectionCoverageTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSet>> {
+        const requestOptions = await this.collectionCoverageTilesetRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TileSetFromJSON(jsonValue));
+    }
+
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tileset Metadata
+     */
+    async collectionCoverageTileset(requestParameters: CollectionCoverageTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSet> {
+        const response = await this.collectionCoverageTilesetRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for collectionCoverageTilesets without sending the request
+     */
+    async collectionCoverageTilesetsRequestOpts(requestParameters: CollectionCoverageTilesetsRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['dataConnectorId'] == null) {
+            throw new runtime.RequiredError(
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling collectionCoverageTilesets().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling collectionCoverageTilesets().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles`;
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tilesets List
+     */
+    async collectionCoverageTilesetsRaw(requestParameters: CollectionCoverageTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSets>> {
+        const requestOptions = await this.collectionCoverageTilesetsRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TileSetsFromJSON(jsonValue));
+    }
+
+    /**
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+     * OGC API Collection Coverage Tilesets List
+     */
+    async collectionCoverageTilesets(requestParameters: CollectionCoverageTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSets> {
+        const response = await this.collectionCoverageTilesetsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -547,6 +746,113 @@ export class OGCAPIApi extends runtime.BaseAPI {
      */
     async conformance(requestParameters: ConformanceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Conformance> {
         const response = await this.conformanceRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coverageTile without sending the request
+     */
+    async coverageTileRequestOpts(requestParameters: CoverageTileRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['dataConnectorId'] == null) {
+            throw new runtime.RequiredError(
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling coverageTile().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling coverageTile().'
+            );
+        }
+
+        if (requestParameters['tileMatrixSetId'] == null) {
+            throw new runtime.RequiredError(
+                'tileMatrixSetId',
+                'Required parameter "tileMatrixSetId" was null or undefined when calling coverageTile().'
+            );
+        }
+
+        if (requestParameters['tileMatrix'] == null) {
+            throw new runtime.RequiredError(
+                'tileMatrix',
+                'Required parameter "tileMatrix" was null or undefined when calling coverageTile().'
+            );
+        }
+
+        if (requestParameters['tileRow'] == null) {
+            throw new runtime.RequiredError(
+                'tileRow',
+                'Required parameter "tileRow" was null or undefined when calling coverageTile().'
+            );
+        }
+
+        if (requestParameters['tileCol'] == null) {
+            throw new runtime.RequiredError(
+                'tileCol',
+                'Required parameter "tileCol" was null or undefined when calling coverageTile().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['datetime'] != null) {
+            queryParameters['datetime'] = requestParameters['datetime'];
+        }
+
+        if (requestParameters['properties'] != null) {
+            queryParameters['properties'] = requestParameters['properties'];
+        }
+
+        if (requestParameters['excludeProperties'] != null) {
+            queryParameters['exclude-properties'] = requestParameters['excludeProperties'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (this.configuration && this.configuration.accessToken) {
+            const token = this.configuration.accessToken;
+            const tokenString = await token("session_token", []);
+
+            if (tokenString) {
+                headerParameters["Authorization"] = `Bearer ${tokenString}`;
+            }
+        }
+
+        let urlPath = `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`;
+        urlPath = urlPath.replace('{dataConnectorId}', encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace('{layerId}', encodeURIComponent(String(requestParameters['layerId'])));
+        urlPath = urlPath.replace('{tileMatrixSetId}', encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
+        urlPath = urlPath.replace('{tileMatrix}', encodeURIComponent(String(requestParameters['tileMatrix'])));
+        urlPath = urlPath.replace('{tileRow}', encodeURIComponent(String(requestParameters['tileRow'])));
+        urlPath = urlPath.replace('{tileCol}', encodeURIComponent(String(requestParameters['tileCol'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+     * OGC API Coverage Tile
+     */
+    async coverageTileRaw(requestParameters: CoverageTileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<runtime.HttpFile>> {
+        const requestOptions = await this.coverageTileRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.BlobApiResponse(response);
+    }
+
+    /**
+     * Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+     * OGC API Coverage Tile
+     */
+    async coverageTile(requestParameters: CoverageTileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.HttpFile> {
+        const response = await this.coverageTileRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
