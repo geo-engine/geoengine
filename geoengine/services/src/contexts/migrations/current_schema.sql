@@ -892,9 +892,15 @@ CREATE TYPE "StacAssetBand" AS (
     band_name text
 );
 
+CREATE TYPE "StacCoarserAsset" AS (
+    resolution "SpatialResolution",
+    asset_band "StacAssetBand"
+);
+
 CREATE TYPE "StacProviderDatasetBand" AS (
     asset_band "StacAssetBand",
-    band_descriptor "RasterBandDescriptor"
+    band_descriptor "RasterBandDescriptor",
+    coarser_assets "StacCoarserAsset" []
 );
 
 CREATE TYPE "StacProviderDataset" AS (

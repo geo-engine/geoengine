@@ -994,6 +994,43 @@ pub struct StacProviderDatasetBand {
     pub asset_band: StacAssetBand,
     /// The band descriptor of the resulting geo engine dataset layer.
     pub band_descriptor: crate::api::model::operators::RasterBandDescriptor,
+    /// Coarser assets with the same band, finest first.
+    ///
+    /// When the source reads an overview level, it reads the coarsest of these
+    /// assets that is not coarser than the overview level, so it transfers less
+    /// data. Their resolution must be an integer multiple of the dataset's
+    /// resolution.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coarser_assets: Vec<StacCoarserAsset>,
+}
+
+/// A coarser asset that holds the same band as a dataset band, e.g. the 60 m
+/// file of a band whose dataset has a resolution of 10 m.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacCoarserAsset {
+    /// The pixel size of the asset files.
+    pub resolution: SpatialResolution,
+    /// The band inside the coarser asset.
+    pub asset_band: StacAssetBand,
+}
+
+impl From<StacCoarserAsset> for crate::datasets::external::stac::StacCoarserAsset {
+    fn from(value: StacCoarserAsset) -> Self {
+        Self {
+            resolution: value.resolution.into(),
+            asset_band: value.asset_band.into(),
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacCoarserAsset> for StacCoarserAsset {
+    fn from(value: crate::datasets::external::stac::StacCoarserAsset) -> Self {
+        Self {
+            resolution: value.resolution.into(),
+            asset_band: value.asset_band.into(),
+        }
+    }
 }
 
 impl From<StacAssetBand> for crate::datasets::external::stac::StacAssetBand {
@@ -1019,6 +1056,7 @@ impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProv
         Self {
             asset_band: value.asset_band.into(),
             band_descriptor: value.band_descriptor.into(),
+            coarser_assets: value.coarser_assets.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -1028,6 +1066,7 @@ impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProv
         Self {
             asset_band: value.asset_band.into(),
             band_descriptor: value.band_descriptor.into(),
+            coarser_assets: value.coarser_assets.into_iter().map(Into::into).collect(),
         }
     }
 }

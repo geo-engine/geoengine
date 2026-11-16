@@ -202,8 +202,20 @@ pub struct StacAssetBand {
     pub band_name: Option<String>,
 }
 
+/// A coarser asset that holds the same band as a dataset band, e.g. the 60 m
+/// file of a band whose dataset has a resolution of 10 m.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
-#[postgres(name = "StacProviderDatasetBand")]
+#[postgres(name = "StacCoarserAsset")]
+pub struct StacCoarserAsset {
+    /// The pixel size of the asset files. It must be an integer multiple of the
+    /// dataset's resolution.
+    pub resolution: SpatialResolution,
+    /// The band inside the coarser asset, addressed like
+    /// [`StacProviderDatasetBand::asset_band`].
+    pub asset_band: StacAssetBand,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct StacProviderDatasetBand {
     /// The band inside the STAC asset that this dataset band reads from.
     ///
@@ -218,7 +230,46 @@ pub struct StacProviderDatasetBand {
     /// naming fallback (`asset_band.band_name`, then
     /// `asset_band.asset_title`) and a unitless measurement.
     pub band_descriptor: RasterBandDescriptor,
+    /// Coarser assets with the same band, finest first.
+    ///
+    /// When the source reads an overview level, it reads the coarsest of these
+    /// assets that is not coarser than the overview level instead of the
+    /// asset at the dataset's resolution, so it transfers less data.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coarser_assets: Vec<StacCoarserAsset>,
 }
+
+/// The database representation of [`StacProviderDatasetBand`]. Bands stored
+/// before coarser assets existed have `NULL` there.
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "StacProviderDatasetBand")]
+struct StacProviderDatasetBandDbType {
+    asset_band: StacAssetBand,
+    band_descriptor: RasterBandDescriptor,
+    coarser_assets: Option<Vec<StacCoarserAsset>>,
+}
+
+impl From<&StacProviderDatasetBand> for StacProviderDatasetBandDbType {
+    fn from(value: &StacProviderDatasetBand) -> Self {
+        Self {
+            asset_band: value.asset_band.clone(),
+            band_descriptor: value.band_descriptor.clone(),
+            coarser_assets: Some(value.coarser_assets.clone()),
+        }
+    }
+}
+
+impl From<StacProviderDatasetBandDbType> for StacProviderDatasetBand {
+    fn from(value: StacProviderDatasetBandDbType) -> Self {
+        Self {
+            asset_band: value.asset_band,
+            band_descriptor: value.band_descriptor,
+            coarser_assets: value.coarser_assets.unwrap_or_default(),
+        }
+    }
+}
+
+geoengine_datatypes::delegate_from_to_sql!(StacProviderDatasetBand, StacProviderDatasetBandDbType);
 
 impl StacProviderDatasetBand {
     /// Create a dataset band whose resulting result-descriptor band is
@@ -234,6 +285,7 @@ impl StacProviderDatasetBand {
         Self {
             asset_band,
             band_descriptor,
+            coarser_assets: Vec::new(),
         }
     }
 }
@@ -787,6 +839,57 @@ mod tests {
             .await;
 
         assert!(result.is_err());
+    }
+
+    #[crate::ge_context::test]
+    async fn it_round_trips_coarser_assets_through_database_and_api(
+        app_ctx: crate::contexts::PostgresContext<tokio_postgres::NoTls>,
+    ) {
+        use crate::contexts::{ApplicationContext, SessionContext};
+        use crate::layers::storage::LayerProviderDb;
+        use crate::users::UserSession;
+        let db = app_ctx.session_context(UserSession::admin_session()).db();
+        let mut api: crate::api::model::services::StacDataProviderDefinition =
+            serde_json::from_str(include_str!(
+                "../../../../../test_data/provider_defs_api/stac_sentinel2.json"
+            ))
+            .unwrap();
+        api.s3_config = None;
+        api.authentication = None;
+        let mut definition = StacDataProviderDefinition::from(api);
+        let band = &mut definition.datasets[0].bands[0];
+        band.coarser_assets = vec![StacCoarserAsset {
+            resolution: SpatialResolution::new_unchecked(60., 60.),
+            asset_band: StacAssetBand {
+                asset_title: band.asset_band.asset_title.replace("10m", "60m"),
+                band_name: band.asset_band.band_name.clone(),
+            },
+        }];
+
+        let id = db
+            .add_layer_provider(definition.clone().into())
+            .await
+            .unwrap();
+        assert_eq!(
+            db.get_layer_provider_definition(id).await.unwrap(),
+            definition.clone().into()
+        );
+
+        let api = crate::api::model::services::StacDataProviderDefinition::from(definition.clone());
+        let json = serde_json::to_value(&api).unwrap();
+        assert_eq!(
+            json["datasets"][0]["bands"][0]["coarserAssets"][0]["resolution"],
+            serde_json::json!({"x": 60.0, "y": 60.0})
+        );
+        // bands without coarser assets leave the field out
+        assert!(
+            json["datasets"][0]["bands"][1]
+                .get("coarserAssets")
+                .is_none()
+        );
+        let api: crate::api::model::services::StacDataProviderDefinition =
+            serde_json::from_value(json).unwrap();
+        assert_eq!(StacDataProviderDefinition::from(api), definition);
     }
 
     #[crate::ge_context::test]
