@@ -972,6 +972,9 @@ where
     Ok(time_steps)
 }
 
+/// Time steps of one part of a footprint query, see `searching_in_chunks`.
+const STEPS_PER_PART: usize = 32;
+
 #[async_trait]
 impl<Tls>
     MetaData<
@@ -997,6 +1000,27 @@ where
             }
         })?;
 
+        let mut time_steps = create_gap_free_time_steps(
+            self.dataset_id,
+            query.query_rectangle.time_interval(),
+            &conn,
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+        // A footprint query of a long time range gets the files of the first steps only, so it does
+        // not hold the files of all steps at once. The source asks for `next` when it gets there.
+        let mut files_time = query.query_rectangle.time_interval();
+        let mut next = None;
+        if query.search_in_chunks && time_steps.len() > STEPS_PER_PART {
+            let part_end = time_steps[STEPS_PER_PART - 1].end();
+            time_steps.truncate(STEPS_PER_PART);
+            next = TimeInterval::new(part_end, files_time.end()).ok();
+            files_time = TimeInterval::new(files_time.start(), part_end)?;
+        }
+
         let files = if query.fetch_tiles {
             // query the files
             let rows = conn
@@ -1016,7 +1040,7 @@ where
                     &[
                         &self.dataset_id,
                         &query.query_rectangle.spatial_bounds(),
-                        &query.query_rectangle.time_interval(),
+                        &files_time,
                         &query.query_rectangle.attributes().as_slice(),
                     ],
                 )
@@ -1055,21 +1079,12 @@ where
             vec![]
         };
 
-        let time_steps = create_gap_free_time_steps(
-            self.dataset_id,
-            query.query_rectangle.time_interval(),
-            &conn,
-        )
-        .await
-        .map_err(|e| geoengine_operators::error::Error::MetaData {
-            source: Box::new(e),
-        })?;
-
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
             files,
             self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
-        ))
+        )
+        .with_next(next))
     }
 
     async fn result_descriptor(

@@ -5675,6 +5675,72 @@ mod tests {
     }
 
     #[ge_context::test]
+    async fn it_answers_a_long_footprint_query_in_parts(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, true).await?;
+        let db = ctx.db();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await?
+            .expect("the dataset exists");
+        let meta_data: Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: dataset_id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+        let query = |time| {
+            MultiBandGdalLoadingInfoQueryRectangle::new(
+                SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
+                time,
+                BandSelection::first(),
+                true,
+            )
+            .searching_in_chunks()
+        };
+
+        // 40 monthly steps, the tiles are in the last four months
+        let first = meta_data
+            .loading_info(query(TimeInterval::new(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2022-01-01T00:00:00Z")
+                    .unwrap(),
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-01T00:00:00Z")
+                    .unwrap(),
+            )?))
+            .await?;
+        assert_eq!(first.time_steps().len(), 32);
+        assert_eq!(
+            first.file_partitions(first.time_steps()[0], &[0]).count(),
+            0
+        );
+        let next = first.next().expect("the rest of the time comes next");
+        assert_eq!(
+            next.start(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2024-09-01T00:00:00Z")
+                .unwrap()
+        );
+
+        let rest = meta_data.loading_info(query(next)).await?;
+        assert_eq!(rest.time_steps().len(), 8);
+        assert_eq!(rest.next(), None);
+        let last = *rest.time_steps().last().unwrap();
+        assert!(rest.file_partitions(last, &[0]).count() > 0);
+
+        Ok(())
+    }
+
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_answers_multiband_time_queries(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
