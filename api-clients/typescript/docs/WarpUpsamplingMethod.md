@@ -1,6 +1,7 @@
 
-# WarpMethod
+# WarpUpsamplingMethod
 
+How `Warp` computes an output pixel that is finer than the input in both axes, as `gdalwarp -r` with the same name.
 
 ## Properties
 
@@ -10,11 +11,11 @@ Name | Type
 ## Example
 
 ```typescript
-import type { WarpMethod } from '@geoengine/api-client'
+import type { WarpUpsamplingMethod } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-} satisfies WarpMethod
+} satisfies WarpUpsamplingMethod
 
 console.log(example)
 
@@ -23,7 +24,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as WarpMethod
+const exampleParsed = JSON.parse(exampleJSON) as WarpUpsamplingMethod
 console.log(exampleParsed)
 ```
 

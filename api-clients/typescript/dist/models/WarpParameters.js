@@ -19,7 +19,9 @@ exports.WarpParametersToJSON = WarpParametersToJSON;
 exports.WarpParametersToJSONTyped = WarpParametersToJSONTyped;
 const SpatialResolution_1 = require("./SpatialResolution");
 const Coordinate2D_1 = require("./Coordinate2D");
-const WarpMethod_1 = require("./WarpMethod");
+const WarpDownsamplingMethod_1 = require("./WarpDownsamplingMethod");
+const WarpUpsamplingMethod_1 = require("./WarpUpsamplingMethod");
+const RasterDataType_1 = require("./RasterDataType");
 /**
  * Check if a given object implements the WarpParameters interface.
  */
@@ -37,7 +39,9 @@ function WarpParametersFromJSONTyped(json, ignoreDiscriminator) {
         'targetSpatialReference': json['targetSpatialReference'] === undefined ? undefined : json['targetSpatialReference'] === null ? null : json['targetSpatialReference'],
         'outputResolution': json['outputResolution'] === undefined ? undefined : json['outputResolution'] === null ? null : (0, SpatialResolution_1.SpatialResolutionFromJSON)(json['outputResolution']),
         'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : (0, Coordinate2D_1.Coordinate2DFromJSON)(json['outputOriginReference']),
-        'method': json['method'] == null ? undefined : (0, WarpMethod_1.WarpMethodFromJSON)(json['method']),
+        'downsampling': json['downsampling'] == null ? undefined : (0, WarpDownsamplingMethod_1.WarpDownsamplingMethodFromJSON)(json['downsampling']),
+        'upsampling': json['upsampling'] == null ? undefined : (0, WarpUpsamplingMethod_1.WarpUpsamplingMethodFromJSON)(json['upsampling']),
+        'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : (0, RasterDataType_1.RasterDataTypeFromJSON)(json['outputDataType']),
     };
 }
 function WarpParametersToJSON(json) {
@@ -51,6 +55,8 @@ function WarpParametersToJSONTyped(value, ignoreDiscriminator = false) {
         'targetSpatialReference': value['targetSpatialReference'],
         'outputResolution': (0, SpatialResolution_1.SpatialResolutionToJSON)(value['outputResolution']),
         'outputOriginReference': (0, Coordinate2D_1.Coordinate2DToJSON)(value['outputOriginReference']),
-        'method': (0, WarpMethod_1.WarpMethodToJSON)(value['method']),
+        'downsampling': (0, WarpDownsamplingMethod_1.WarpDownsamplingMethodToJSON)(value['downsampling']),
+        'upsampling': (0, WarpUpsamplingMethod_1.WarpUpsamplingMethodToJSON)(value['upsampling']),
+        'outputDataType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['outputDataType']),
     };
 }
