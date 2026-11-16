@@ -572,7 +572,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_keeps_input_order_and_labels_partial_selections() {
-        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let tile_size = TileSize::new_unchecked(2, 2);
         let time_interval = TimeInterval::default();
 
         let result_descriptor = RasterResultDescriptor {
@@ -581,7 +581,8 @@ mod tests {
             time: TimeDescriptor::new_irregular(Some(time_interval)),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
-                tile_size_in_pixels.bounding_box(),
+                tile_size.grid_shape().bounding_box(),
+                tile_size,
             ),
             bands: RasterBandDescriptors::new(vec![
                 RasterBandDescriptor::new_unitless("band0".into()),
@@ -599,7 +600,7 @@ mod tests {
 
         let data = (0..3_u8)
             .map(|band| {
-                let grid: MaskedGrid2D<u8> = Grid2D::new(tile_size_in_pixels, vec![band * 4; 4])
+                let grid: MaskedGrid2D<u8> = Grid2D::new(tile_size.grid_shape(), vec![band * 4; 4])
                     .unwrap()
                     .into();
                 RasterTile2D::new_with_tile_info(

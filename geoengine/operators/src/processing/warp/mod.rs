@@ -26,7 +26,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
     Coordinate2D, SpatialResolution, find_next_best_overview_level_resolution,
 };
-use geoengine_datatypes::raster::{NearestNeighbor, TilingSpecification};
+use geoengine_datatypes::raster::NearestNeighbor;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 
@@ -86,14 +86,8 @@ impl RasterOperator for Warp {
             .sources
             .initialize_sources(path.clone(), context)
             .await?;
-        InitializedWarp::new(
-            name,
-            path,
-            initialized_source.raster,
-            self.params,
-            context.tiling_specification(),
-        )
-        .map(InitializedRasterOperator::boxed)
+        InitializedWarp::new(name, path, initialized_source.raster, self.params)
+            .map(InitializedRasterOperator::boxed)
     }
 
     span_fn!(Warp);
@@ -205,7 +199,6 @@ pub struct InitializedWarp<O: InitializedRasterOperator> {
     state: TileReprojectionSubqueryGridInfo,
     source_srs: SpatialReference,
     target_srs: SpatialReference,
-    tiling_specification: TilingSpecification,
 }
 
 impl<O: InitializedRasterOperator> InitializedWarp<O> {
@@ -219,7 +212,6 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
         path: ProcessingGraphOperatorPath,
         source: O,
         params: WarpParams,
-        tiling_specification: TilingSpecification,
     ) -> Result<Self> {
         let in_descriptor = source.result_descriptor();
         let source_srs = source_srs(in_descriptor)?;
@@ -229,11 +221,9 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
         let state = TileReprojectionSubqueryGridInfo {
             in_spatial_grid: in_descriptor
                 .spatial_grid_descriptor()
-                .tiling_grid_definition(tiling_specification)
-                .tiling_spatial_grid_definition(),
-            out_spatial_grid: out_grid
-                .tiling_grid_definition(tiling_specification)
-                .tiling_spatial_grid_definition(),
+                .tiling_grid_definition()
+                .to_spatial_grid(),
+            out_spatial_grid: out_grid.tiling_grid_definition().to_spatial_grid(),
         };
 
         let result_descriptor = RasterResultDescriptor {
@@ -253,7 +243,6 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             state,
             source_srs,
             target_srs,
-            tiling_specification,
         })
     }
 }
@@ -290,13 +279,11 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
                     InterploationProcessor::<_, _, NearestNeighbor>::new(
                         p,
                         self.result_descriptor.clone(),
-                        self.tiling_specification,
                     ).boxed().into()
                 }
                 WarpMethod::NearestNeighbor if !reproject => DownsampleProcessor::new(
                     p,
                     self.result_descriptor.clone(),
-                    self.tiling_specification,
                 ).boxed().into(),
                 WarpMethod::NearestNeighbor => RasterReprojectionProcessor::new(
                     p,
@@ -382,7 +369,9 @@ mod tests {
     use crate::util::test::AsciiRasterTilesExt;
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
-    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterTile2D, TileSize};
+    use geoengine_datatypes::raster::{
+        GeoTransform, GridBoundingBox2D, RasterTile2D, TileSize, TilingSpecification,
+    };
     use geoengine_datatypes::util::test::{
         AsciiRasterTiles, TestDefault, assert_eq_two_list_of_tiles, assert_raster_tiles_eq_ascii,
     };

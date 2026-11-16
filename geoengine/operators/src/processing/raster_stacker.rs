@@ -950,6 +950,7 @@ mod tests {
         let stacker = RasterStacker {
             params: RasterStackerParams {
                 rename_bands: RenameBands::Default,
+                output_origin: None,
             },
             sources: MultipleRasterSources {
                 rasters: vec![mock_source(&raster1, time), mock_source(&raster2, time)],

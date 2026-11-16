@@ -681,6 +681,7 @@ mod tests {
         let stacked_operator = RasterStacker {
             params: RasterStackerParams {
                 rename_bands: RenameBands::Rename(vec!["band_0".to_string(), "band_1".to_string()]),
+                output_origin: None,
             },
             sources: MultipleRasterSources {
                 rasters: vec![
