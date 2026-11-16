@@ -392,7 +392,7 @@ jobs:
         run: just api-clients test-rust
 
   api-client-idempotency:
-    name: "api-client / rust"
+    name: "api-client / idempotency"
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
@@ -541,3 +541,28 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fail-on-error: false # do not fail the workflow if the upload fails
+
+  all-checks:
+    name: "ci / all checks"
+    # run even if a dependency failed, otherwise this job is skipped and counts as passed
+    if: always()
+    needs:
+      - geoengine-test
+      - geoengine-lint
+      - geoengine-build
+      - python
+      - www
+      - api-client-python
+      - api-client-typescript
+      - api-client-rust
+      - api-client-idempotency
+      - ui-build
+      - ui-test
+      - ui-lint
+      - repository-lint
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - name: Fail if any required job did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
