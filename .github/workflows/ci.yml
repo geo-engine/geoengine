@@ -195,7 +195,7 @@ jobs:
         if: ${{ matrix.build == '' }}
         env:
           PROXY_PORT: 8123
-      - name: Validate service
+      - name: Validate service (map tiles)
         if: ${{ matrix.build == '' }}
         uses: geo-engine/ogc-validator@v3
         with:
@@ -206,6 +206,25 @@ jobs:
           service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
           ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
           ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
+          ogc-api-tiles-tilematrix: "1"
+          ogc-api-tiles-mintilerow: "0"
+          ogc-api-tiles-maxtilerow: "1"
+          ogc-api-tiles-mintilecol: "0"
+          ogc-api-tiles-maxtilecol: "1"
+          ogc-api-tiles-ignore: ""
+        env:
+          PROXY_URL: "http://127.0.0.1:8123"
+      - name: Validate service (coverage tiles)
+        if: ${{ matrix.build == '' }}
+        uses: geo-engine/ogc-validator@v3
+        with:
+          teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
+          ogc-api-processes: false
+          ogc-api-features: false
+          ogc-api-tiles: true
+          service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
+          ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
+          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/coverage/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
           ogc-api-tiles-tilematrix: "1"
           ogc-api-tiles-mintilerow: "0"
           ogc-api-tiles-maxtilerow: "1"
@@ -392,7 +411,7 @@ jobs:
         run: just api-clients test-rust
 
   api-client-idempotency:
-    name: "api-client / rust"
+    name: "api-client / idempotency"
 
     runs-on: ubuntu-26.04
     container: quay.io/geoengine/devcontainer:latest
@@ -541,3 +560,28 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fail-on-error: false # do not fail the workflow if the upload fails
+
+  all-checks:
+    name: "ci / all checks"
+    # run even if a dependency failed, otherwise this job is skipped and counts as passed
+    if: always()
+    needs:
+      - geoengine-test
+      - geoengine-lint
+      - geoengine-build
+      - python
+      - www
+      - api-client-python
+      - api-client-typescript
+      - api-client-rust
+      - api-client-idempotency
+      - ui-build
+      - ui-test
+      - ui-lint
+      - repository-lint
+    runs-on: ubuntu-26.04
+    permissions: {}
+    steps:
+      - name: Fail if any required job did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
