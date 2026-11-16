@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { StacCoarserAsset } from './StacCoarserAsset';
+import {
+    StacCoarserAssetFromJSON,
+    StacCoarserAssetFromJSONTyped,
+    StacCoarserAssetToJSON,
+    StacCoarserAssetToJSONTyped,
+} from './StacCoarserAsset';
 import type { StacAssetBand } from './StacAssetBand';
 import {
     StacAssetBandFromJSON,
@@ -42,6 +49,15 @@ export interface StacProviderDatasetBand {
      * The band descriptor of the resulting geo engine dataset layer.
      */
     bandDescriptor: RasterBandDescriptor;
+    /**
+     * Coarser assets with the same band, finest first.
+     * 
+     * When the source reads an overview level, it reads the coarsest of these
+     * assets that is not coarser than the overview level, so it transfers less
+     * data. Their resolution must be an integer multiple of the dataset's
+     * resolution.
+     */
+    coarserAssets?: Array<StacCoarserAsset>;
 }
 
 /**
@@ -65,6 +81,7 @@ export function StacProviderDatasetBandFromJSONTyped(json: any, ignoreDiscrimina
         
         'assetBand': StacAssetBandFromJSON(json['assetBand']),
         'bandDescriptor': RasterBandDescriptorFromJSON(json['bandDescriptor']),
+        'coarserAssets': json['coarserAssets'] == null ? undefined : ((json['coarserAssets'] as Array<any>).map(StacCoarserAssetFromJSON)),
     };
 }
 
@@ -81,6 +98,7 @@ export function StacProviderDatasetBandToJSONTyped(value?: StacProviderDatasetBa
         
         'assetBand': StacAssetBandToJSON(value['assetBand']),
         'bandDescriptor': RasterBandDescriptorToJSON(value['bandDescriptor']),
+        'coarserAssets': value['coarserAssets'] == null ? undefined : ((value['coarserAssets'] as Array<any>).map(StacCoarserAssetToJSON)),
     };
 }
 

@@ -379,6 +379,7 @@ __all__ = [
     "SpatialResolution",
     "StacApiRetries",
     "StacAssetBand",
+    "StacCoarserAsset",
     "StacDataProviderDefinition",
     "StacGrid",
     "StacProviderAuthentication",
@@ -865,6 +866,7 @@ from geoengine_api_client.models.spatial_reference_specification import SpatialR
 from geoengine_api_client.models.spatial_resolution import SpatialResolution as SpatialResolution
 from geoengine_api_client.models.stac_api_retries import StacApiRetries as StacApiRetries
 from geoengine_api_client.models.stac_asset_band import StacAssetBand as StacAssetBand
+from geoengine_api_client.models.stac_coarser_asset import StacCoarserAsset as StacCoarserAsset
 from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition as StacDataProviderDefinition
 from geoengine_api_client.models.stac_grid import StacGrid as StacGrid
 from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication as StacProviderAuthentication

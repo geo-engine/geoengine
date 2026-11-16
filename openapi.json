@@ -14828,6 +14828,24 @@
           }
         }
       },
+      "StacCoarserAsset": {
+        "type": "object",
+        "description": "A coarser asset that holds the same band as a dataset band, e.g. the 60 m\nfile of a band whose dataset has a resolution of 10 m.",
+        "required": [
+          "resolution",
+          "assetBand"
+        ],
+        "properties": {
+          "resolution": {
+            "$ref": "#/components/schemas/SpatialResolution",
+            "description": "The pixel size of the asset files."
+          },
+          "assetBand": {
+            "$ref": "#/components/schemas/StacAssetBand",
+            "description": "The band inside the coarser asset."
+          }
+        }
+      },
       "StacDataProviderDefinition": {
         "type": "object",
         "required": [
@@ -15030,6 +15048,13 @@
           "bandDescriptor": {
             "$ref": "#/components/schemas/RasterBandDescriptor",
             "description": "The band descriptor of the resulting geo engine dataset layer."
+          },
+          "coarserAssets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StacCoarserAsset"
+            },
+            "description": "Coarser assets with the same band, finest first.\n\nWhen the source reads an overview level, it reads the coarsest of these\nassets that is not coarser than the overview level, so it transfers less\ndata. Their resolution must be an integer multiple of the dataset's\nresolution."
           }
         }
       },

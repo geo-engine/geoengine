@@ -666,6 +666,8 @@ pub mod stac_api_retries;
 pub use self::stac_api_retries::StacApiRetries;
 pub mod stac_asset_band;
 pub use self::stac_asset_band::StacAssetBand;
+pub mod stac_coarser_asset;
+pub use self::stac_coarser_asset::StacCoarserAsset;
 pub mod stac_data_provider_definition;
 pub use self::stac_data_provider_definition::StacDataProviderDefinition;
 pub mod stac_grid;

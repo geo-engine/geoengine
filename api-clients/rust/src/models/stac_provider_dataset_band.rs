@@ -18,6 +18,9 @@ pub struct StacProviderDatasetBand {
     /// The band descriptor of the resulting geo engine dataset layer.
     #[serde(rename = "bandDescriptor")]
     pub band_descriptor: Box<models::RasterBandDescriptor>,
+    /// Coarser assets with the same band, finest first.  When the source reads an overview level, it reads the coarsest of these assets that is not coarser than the overview level, so it transfers less data. Their resolution must be an integer multiple of the dataset's resolution.
+    #[serde(rename = "coarserAssets", skip_serializing_if = "Option::is_none")]
+    pub coarser_assets: Option<Vec<models::StacCoarserAsset>>,
 }
 
 impl StacProviderDatasetBand {
@@ -25,6 +28,7 @@ impl StacProviderDatasetBand {
         StacProviderDatasetBand {
             asset_band: Box::new(asset_band),
             band_descriptor: Box::new(band_descriptor),
+            coarser_assets: None,
         }
     }
 }

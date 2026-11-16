@@ -8,6 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { StacCoarserAsset } from './StacCoarserAsset';
 import type { StacAssetBand } from './StacAssetBand';
 import type { RasterBandDescriptor } from './RasterBandDescriptor';
 /**
@@ -25,6 +26,15 @@ export interface StacProviderDatasetBand {
      * The band descriptor of the resulting geo engine dataset layer.
      */
     bandDescriptor: RasterBandDescriptor;
+    /**
+     * Coarser assets with the same band, finest first.
+     *
+     * When the source reads an overview level, it reads the coarsest of these
+     * assets that is not coarser than the overview level, so it transfers less
+     * data. Their resolution must be an integer multiple of the dataset's
+     * resolution.
+     */
+    coarserAssets?: Array<StacCoarserAsset>;
 }
 /**
  * Check if a given object implements the StacProviderDatasetBand interface.
