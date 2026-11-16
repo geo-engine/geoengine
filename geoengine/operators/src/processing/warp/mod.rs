@@ -591,24 +591,24 @@ mod tests {
             Coordinate2D::new(0.5, 0.5)
         );
         // each output pixel center lies on a corner of four input pixels and takes the one below and
-        // to the right of it, so the values move up by one row
+        // to the right of it, so the values move up by one row; the tiles start at the new origin
         assert_raster_tiles_eq_ascii(
             &tiles,
             &AsciiRasterTiles::new(indoc! {"
                 [0, 10)
                 +----------+----------+----------+
+                |  _  _  0 |  1  2  3 |  4  5  _ |
                 |  _  _ 10 | 11 12 13 | 14 15  _ |
                 |  _  _ 20 | 21 22 23 | 24 25  _ |
-                |  _  _ 30 | 31 32 33 | 34 35  _ |
                 +----------+----------+----------+
+                |  _  _ 30 | 31 32 33 | 34 35  _ |
                 |  _  _ 40 | 41 42 43 | 44 45  _ |
                 |  _  _ 50 | 51 52 53 | 54 55  _ |
-                |  _  _  _ |  _  _  _ |  _  _  _ |
                 +----------+----------+----------+
             "})
             .tile_origin([-2, -1])
             .geo_transform(GeoTransform::new_unchecked(
-                Coordinate2D::new(0.5, -0.5),
+                Coordinate2D::new(0.5, 0.5),
                 1.,
                 -1.,
             )),
