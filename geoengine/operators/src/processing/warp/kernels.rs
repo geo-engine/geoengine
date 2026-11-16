@@ -1,5 +1,5 @@
-//! The resampling methods of [`Warp`](super::Warp) besides nearest neighbour, within the same spatial
-//! reference, with the semantics of GDAL's warp kernel (`gdalwarp -r <method>`):
+//! The resampling methods of [`Warp`](super::Warp) besides nearest neighbour, with the semantics of
+//! GDAL's warp kernel (`gdalwarp -r <method>`):
 //!
 //! - `average`, `mode`, `min` and `max` aggregate the input pixels under the footprint of an output
 //!   pixel. An input pixel at the edge of the footprint counts with the fraction it covers in each axis.
@@ -13,7 +13,12 @@
 //!
 //! Input pixels without data are left out; an output pixel without any input pixel has no data.
 //! Integer outputs round half up (see [`pixel_from_f64_rounded`]).
+//!
+//! With another spatial reference, the footprint of an output pixel is the bounding box of its
+//! upper left and lower right corner in the input, as in GDAL, and `bilinear` interpolates around
+//! its projected center. Output pixels whose corners or center cannot be projected have no data.
 
+use crate::adapters::TileReprojectionSubqueryGridInfo;
 use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
@@ -23,12 +28,18 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+use geoengine_datatypes::operations::reproject::Reproject;
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, RasterQueryRectangle, TimeInterval,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, CacheHint, Coordinate2D,
+    RasterQueryRectangle, SpatialPartition2D, TimeInterval,
 };
 use geoengine_datatypes::raster::{
-    GeoTransform, Grid, GridBoundingBox2D, GridBounds, GridIdx2D, GridIndexAccess, GridOrEmpty,
-    MapElementsParallel, MaskedGrid, Pixel, RasterTile2D, TileInformation, pixel_from_f64_rounded,
+    GeoTransform, Grid, GridBoundingBox2D, GridBounds, GridIdx2D, GridIndexAccess,
+    GridIntersection, GridOrEmpty, GridSize, MapElementsParallel, MaskedGrid, Pixel, RasterTile2D,
+    TileInformation, pixel_from_f64_rounded,
+};
+use geoengine_datatypes::spatial_reference::{
+    CoordinateProjection, DefaultCoordinateProjector, SpatialReference,
 };
 use rayon::ThreadPool;
 use rayon::prelude::*;
@@ -143,15 +154,21 @@ fn spans(
         .collect()
 }
 
-/// The spans of the pixels of an output tile in both axes
+/// The spans of the pixels of an output tile
 #[derive(Debug, Clone)]
-struct TileSpans {
-    y: Vec<Span>,
-    x: Vec<Span>,
+enum TileSpans {
+    /// within the same spatial reference: one span per row and one per column
+    Separable { y: Vec<Span>, x: Vec<Span> },
+    /// with another spatial reference: the spans (y, x) of each pixel, row-major, `None` for pixels
+    /// that cannot be projected
+    PerPixel {
+        width: usize,
+        pixels: Vec<Option<(Span, Span)>>,
+    },
 }
 
 impl TileSpans {
-    fn new(
+    fn separable(
         kernel: WarpKernel,
         out_bounds: &GridBoundingBox2D,
         out_geo_transform: &GeoTransform,
@@ -161,7 +178,7 @@ impl TileSpans {
         let [max_y, max_x] = out_bounds.max_index().0;
         let out_origin = out_geo_transform.origin_coordinate();
         let in_origin = in_geo_transform.origin_coordinate();
-        Self {
+        Self::Separable {
             y: spans(
                 kernel,
                 (min_y, max_y),
@@ -177,8 +194,100 @@ impl TileSpans {
         }
     }
 
-    /// The input pixels the output tile needs
-    fn input_bounds(&self) -> GridBoundingBox2D {
+    /// The spans of the pixels of the output tile `tile_info` in `projection.out_srs`, projected
+    /// into the input grid in `projection.in_srs`: the corners of each pixel for the footprint
+    /// methods, its center for `bilinear`.
+    fn projected(
+        kernel: WarpKernel,
+        tile_info: &TileInformation,
+        projection: &KernelProjection,
+        pool: &ThreadPool,
+    ) -> Result<Self> {
+        let [min_y, min_x] = tile_info.global_pixel_bounds().min_index().0;
+        let [height, width] = [
+            tile_info.tile_size_in_pixels.axis_size_y(),
+            tile_info.tile_size_in_pixels.axis_size_x(),
+        ];
+        let out_geo_transform = projection.grids.out_spatial_grid.geo_transform();
+        let in_geo_transform = projection.grids.in_spatial_grid.geo_transform();
+        let in_origin = in_geo_transform.origin_coordinate();
+        let in_pixel_size = (
+            in_geo_transform.x_pixel_size().get(),
+            in_geo_transform.y_pixel_size().get(),
+        );
+        let to_input_pixels = |coordinate: Option<Coordinate2D>| {
+            coordinate.map(|c| {
+                (
+                    (c.y - in_origin.y) / in_pixel_size.1,
+                    (c.x - in_origin.x) / in_pixel_size.0,
+                )
+            })
+        };
+        let coordinate = |y: f64, x: f64| {
+            let origin = out_geo_transform.origin_coordinate();
+            Coordinate2D::new(
+                origin.x + (min_x as f64 + x) * out_geo_transform.x_pixel_size().get(),
+                origin.y + (min_y as f64 + y) * out_geo_transform.y_pixel_size().get(),
+            )
+        };
+
+        let pixels = pool.install(|| {
+            if kernel == WarpKernel::Bilinear {
+                let centers: Vec<Coordinate2D> = (0..height * width)
+                    .into_par_iter()
+                    .map(|i| coordinate((i / width) as f64 + 0.5, (i % width) as f64 + 0.5))
+                    .collect();
+                let centers = projection.project(&centers, pool)?;
+                Ok::<_, crate::error::Error>(
+                    centers
+                        .into_par_iter()
+                        .map(|center| {
+                            to_input_pixels(center)
+                                .map(|(y, x)| (Span::bilinear(y), Span::bilinear(x)))
+                        })
+                        .collect(),
+                )
+            } else {
+                let corners: Vec<Coordinate2D> = (0..=height)
+                    .into_par_iter()
+                    .flat_map_iter(|y| (0..=width).map(move |x| coordinate(y as f64, x as f64)))
+                    .collect();
+                let corners = projection.project(&corners, pool)?;
+                let corner = |y: usize, x: usize| to_input_pixels(corners[y * (width + 1) + x]);
+                Ok((0..height * width)
+                    .into_par_iter()
+                    .map(|i| {
+                        let (y, x) = (i / width, i % width);
+                        // GDAL's footprint: the upper left and the lower right corner
+                        let (upper_left, lower_right) = (corner(y, x)?, corner(y + 1, x + 1)?);
+                        Some((
+                            Span::footprint(upper_left.0, lower_right.0),
+                            Span::footprint(upper_left.1, lower_right.1),
+                        ))
+                    })
+                    .collect())
+            }
+        })?;
+
+        Ok(Self::PerPixel { width, pixels })
+    }
+
+    fn width(&self) -> usize {
+        match self {
+            Self::Separable { x, .. } => x.len(),
+            Self::PerPixel { width, .. } => *width,
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Separable { y, x } => y.len() * x.len(),
+            Self::PerPixel { pixels, .. } => pixels.len(),
+        }
+    }
+
+    /// The input pixels the output tile needs, within the same spatial reference
+    fn separable_input_bounds(y: &[Span], x: &[Span]) -> GridBoundingBox2D {
         let range = |spans: &[Span]| {
             spans
                 .iter()
@@ -186,9 +295,107 @@ impl TileSpans {
                     (min.min(span.start), max.max(span.end - 1))
                 })
         };
-        let (min_y, max_y) = range(&self.y);
-        let (min_x, max_x) = range(&self.x);
+        let (min_y, max_y) = range(y);
+        let (min_x, max_x) = range(x);
         GridBoundingBox2D::new_unchecked([min_y, min_x], [max_y, max_x])
+    }
+}
+
+/// How the output pixels of a [`WarpKernelProcessor`] with another spatial reference relate to
+/// the input pixels
+#[derive(Debug, Clone, Copy)]
+pub struct KernelProjection {
+    pub in_srs: SpatialReference,
+    pub out_srs: SpatialReference,
+    /// the tiling grids of input and output
+    pub grids: TileReprojectionSubqueryGridInfo,
+}
+
+impl KernelProjection {
+    /// Projects `coordinates` from the output into the input spatial reference, `None` for
+    /// coordinates outside of the output grid (as in the nearest-neighbour reprojection) or that
+    /// cannot be projected.
+    fn project(
+        &self,
+        coordinates: &[Coordinate2D],
+        pool: &ThreadPool,
+    ) -> Result<Vec<Option<Coordinate2D>>> {
+        const CHUNK_SIZE: usize = 64 * 512;
+        let valid_area = self.grids.out_spatial_grid.spatial_partition().as_bbox();
+        let mut projected = vec![None; coordinates.len()];
+        pool.install(|| {
+            projected
+                .par_chunks_mut(CHUNK_SIZE)
+                .zip(coordinates.par_chunks(CHUNK_SIZE))
+                .try_for_each(|(projected, coordinates)| {
+                    let Some(bounds) = BoundingBox2D::from_coord_ref_iter(coordinates.iter())
+                    else {
+                        return Ok(());
+                    };
+                    let projector =
+                        DefaultCoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
+                    // the whole chunk at once if it lies in the valid area, else coordinate by coordinate
+                    if valid_area.contains_bbox(&bounds)
+                        && let Ok(coordinates) = projector.project_coordinates(coordinates)
+                    {
+                        for (projected, coordinate) in projected.iter_mut().zip(coordinates) {
+                            *projected = Some(coordinate);
+                        }
+                        return Ok(());
+                    }
+                    for (projected, coordinate) in projected.iter_mut().zip(coordinates) {
+                        *projected = valid_area
+                            .contains_coordinate(coordinate)
+                            .then(|| projector.project_coordinate(*coordinate).ok())
+                            .flatten();
+                    }
+                    Result::<(), crate::error::Error>::Ok(())
+                })
+        })?;
+        Ok(projected)
+    }
+
+    /// The input pixels the output tile `tile_info` needs within `query_bounds`: the projected
+    /// bounds of the tile, with a margin of one pixel for the footprints and the bilinear
+    /// neighbours at its edges. `None` if the tile cannot be projected.
+    fn input_bounds(
+        &self,
+        tile_info: &TileInformation,
+        query_bounds: &GridBoundingBox2D,
+    ) -> Result<Option<GridBoundingBox2D>> {
+        let Some(out_bounds) = self
+            .grids
+            .out_spatial_grid
+            .grid_bounds()
+            .intersection(&tile_info.global_pixel_bounds())
+            .and_then(|bounds| bounds.intersection(query_bounds))
+        else {
+            return Ok(None);
+        };
+        let out_partition: SpatialPartition2D = self
+            .grids
+            .out_spatial_grid
+            .geo_transform()
+            .grid_to_spatial_bounds(&out_bounds);
+        let projector = DefaultCoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
+        match out_partition.reproject(&projector) {
+            Ok(in_partition) => {
+                let bounds = self
+                    .grids
+                    .in_spatial_grid
+                    .geo_transform()
+                    .spatial_to_grid_bounds(&in_partition);
+                let [min_y, min_x] = bounds.min_index().0;
+                let [max_y, max_x] = bounds.max_index().0;
+                Ok(Some(GridBoundingBox2D::new_unchecked(
+                    [min_y - 1, min_x - 1],
+                    [max_y + 1, max_x + 1],
+                )))
+            }
+            // the projection can return an empty box, which contains no pixels
+            Err(geoengine_datatypes::error::Error::OutputBboxEmpty { .. }) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
     }
 }
 
@@ -313,13 +520,15 @@ impl<P: Pixel> PixelState<P> {
     }
 }
 
-/// Resamples a raster onto another grid in the same spatial reference with a [`WarpKernel`].
+/// Resamples a raster onto another grid with a [`WarpKernel`], in the same spatial reference or,
+/// with a [`KernelProjection`], in another one.
 pub struct WarpKernelProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P>,
 {
     source: Q,
     kernel: WarpKernel,
+    projection: Option<KernelProjection>,
     out_result_descriptor: RasterResultDescriptor,
 }
 
@@ -328,10 +537,12 @@ where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
-    /// `out_result_descriptor` must have the spatial reference and the data type of `source`.
+    /// `out_result_descriptor` must have the data type of `source`, and the spatial reference of
+    /// `source` if `projection` is `None`.
     pub fn new(
         source: Q,
         kernel: WarpKernel,
+        projection: Option<KernelProjection>,
         out_result_descriptor: RasterResultDescriptor,
     ) -> Self {
         debug_assert_eq!(
@@ -341,6 +552,7 @@ where
         Self {
             source,
             kernel,
+            projection,
             out_result_descriptor,
         }
     }
@@ -387,6 +599,7 @@ where
 
         let sub_query = WarpKernelSubQuery::<P> {
             kernel: self.kernel,
+            projection: self.projection,
             input_geo_transform: in_spatial_grid
                 .tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
@@ -414,20 +627,10 @@ where
 #[derive(Debug, Clone)]
 struct WarpKernelSubQuery<P> {
     kernel: WarpKernel,
+    projection: Option<KernelProjection>,
     input_geo_transform: GeoTransform,
     output_geo_transform: GeoTransform,
     _phantom_pixel_type: PhantomData<P>,
-}
-
-impl<P> WarpKernelSubQuery<P> {
-    fn tile_spans(&self, tile_info: &TileInformation) -> TileSpans {
-        TileSpans::new(
-            self.kernel,
-            &tile_info.global_pixel_bounds(),
-            &self.output_geo_transform,
-            &self.input_geo_transform,
-        )
-    }
 }
 
 type FoldFn<P> =
@@ -442,29 +645,58 @@ impl<'a, P: Pixel> SubQueryTileAggregator<'a, P> for WarpKernelSubQuery<P> {
     fn new_fold_accu(
         &self,
         tile_info: TileInformation,
-        _query_rect: RasterQueryRectangle,
+        query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         let kernel = self.kernel;
-        let spans = self.tile_spans(&tile_info);
+        let projection = self.projection;
+        let (output_geo_transform, input_geo_transform) =
+            (self.output_geo_transform, self.input_geo_transform);
+        let time = query_rect.time_interval();
         let pool = pool.clone();
-        crate::util::spawn_blocking(move || WarpKernelAccu::new(kernel, tile_info, spans, pool))
-            .map_err(From::from)
-            .boxed()
+        crate::util::spawn_blocking(move || {
+            let spans = match projection {
+                Some(projection) => TileSpans::projected(kernel, &tile_info, &projection, &pool)?,
+                None => TileSpans::separable(
+                    kernel,
+                    &tile_info.global_pixel_bounds(),
+                    &output_geo_transform,
+                    &input_geo_transform,
+                ),
+            };
+            Ok(WarpKernelAccu::new(kernel, tile_info, spans, time, pool))
+        })
+        .map_err(From::from)
+        .and_then(|result| async { result })
+        .boxed()
     }
 
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        _query_rect: RasterQueryRectangle,
+        query_rect: RasterQueryRectangle,
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        Ok(Some(RasterQueryRectangle::new(
-            self.tile_spans(&tile_info).input_bounds(),
-            time,
-            BandSelection::new_single(band_idx),
-        )))
+        let bounds = match &self.projection {
+            Some(projection) => {
+                projection.input_bounds(&tile_info, &query_rect.spatial_bounds())?
+            }
+            None => {
+                let TileSpans::Separable { y, x } = TileSpans::separable(
+                    self.kernel,
+                    &tile_info.global_pixel_bounds(),
+                    &self.output_geo_transform,
+                    &self.input_geo_transform,
+                ) else {
+                    unreachable!("the spans within the same spatial reference are separable")
+                };
+                Some(TileSpans::separable_input_bounds(&y, &x))
+            }
+        };
+        Ok(bounds.map(|bounds| {
+            RasterQueryRectangle::new(bounds, time, BandSelection::new_single(band_idx))
+        }))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -485,7 +717,7 @@ pub struct WarpKernelAccu<P: Pixel> {
     spans: Arc<TileSpans>,
     /// row-major, one per pixel of the output tile
     pixels: Vec<PixelState<P>>,
-    time: Option<TimeInterval>,
+    time: TimeInterval,
     cache_hint: CacheHint,
     pool: Arc<ThreadPool>,
 }
@@ -495,15 +727,15 @@ impl<P: Pixel> WarpKernelAccu<P> {
         kernel: WarpKernel,
         output_tile_info: TileInformation,
         spans: TileSpans,
+        time: TimeInterval,
         pool: Arc<ThreadPool>,
     ) -> Self {
-        let size = spans.x.len() * spans.y.len();
         Self {
             kernel,
             output_tile_info,
+            pixels: vec![PixelState::new(kernel); spans.len()],
             spans: Arc::new(spans),
-            pixels: vec![PixelState::new(kernel); size],
-            time: None,
+            time,
             cache_hint: CacheHint::max_duration(),
             pool,
         }
@@ -513,7 +745,7 @@ impl<P: Pixel> WarpKernelAccu<P> {
     fn fold(mut self, tile: &RasterTile2D<P>) -> Self {
         let _span = tracing::debug_span!("warp_kernel_fold").entered();
 
-        self.time = Some(tile.time);
+        self.time = tile.time;
         self.cache_hint.merge_with(&tile.cache_hint);
 
         let GridOrEmpty::Grid(grid) = &tile.grid_array else {
@@ -522,54 +754,66 @@ impl<P: Pixel> WarpKernelAccu<P> {
         let in_bounds = tile.tile_information().global_pixel_bounds();
         let [in_min_y, in_min_x] = in_bounds.min_index().0;
         let [in_max_y, in_max_x] = in_bounds.max_index().0;
-        let [tile_offset_y, tile_offset_x] = in_bounds.min_index().0;
 
         let kernel = self.kernel;
         let spans = self.spans.clone();
-        let width = spans.x.len();
-        // the output columns whose spans intersect the tile
-        let columns: Vec<(usize, std::ops::Range<isize>)> = spans
-            .x
-            .iter()
-            .enumerate()
-            .map(|(column, span)| (column, span.clamped(in_min_x, in_max_x)))
-            .filter(|(_, range)| !range.is_empty())
-            .collect();
-        if columns.is_empty() {
-            return self;
-        }
-
-        let add_row = |(row, pixels): (usize, &mut [PixelState<P>])| {
-            let y_span = spans.y[row];
+        let width = spans.width();
+        // adds the input pixels of `tile` in the spans of one output pixel to its state
+        let add = |state: &mut PixelState<P>, y_span: Span, x_span: Span| {
+            let x_range = x_span.clamped(in_min_x, in_max_x);
+            if x_range.is_empty() {
+                return;
+            }
             for in_y in y_span.clamped(in_min_y, in_max_y) {
                 let weight_y = y_span.weight(in_y);
-                for (column, x_range) in &columns {
-                    let x_span = spans.x[*column];
-                    let state = &mut pixels[*column];
-                    for in_x in x_range.clone() {
-                        let local: GridIdx2D = [in_y - tile_offset_y, in_x - tile_offset_x].into();
-                        if let Some(value) = grid.get_at_grid_index_unchecked(local) {
-                            let center = in_y == y_span.center && in_x == x_span.center;
-                            state.add(
-                                kernel,
-                                value,
-                                weight_y * x_span.weight(in_x),
-                                (in_y, in_x),
-                                center,
-                            );
-                        }
+                for in_x in x_range.clone() {
+                    let local: GridIdx2D = [in_y - in_min_y, in_x - in_min_x].into();
+                    if let Some(value) = grid.get_at_grid_index_unchecked(local) {
+                        let center = in_y == y_span.center && in_x == x_span.center;
+                        state.add(
+                            kernel,
+                            value,
+                            weight_y * x_span.weight(in_x),
+                            (in_y, in_x),
+                            center,
+                        );
                     }
                 }
             }
         };
 
         let pixels = &mut self.pixels;
-        self.pool.install(|| {
-            pixels
-                .par_chunks_mut(width)
-                .enumerate()
-                .filter(|(row, _)| !spans.y[*row].clamped(in_min_y, in_max_y).is_empty())
-                .for_each(add_row);
+        self.pool.install(|| match spans.as_ref() {
+            TileSpans::Separable { y, x } => {
+                // the output columns whose spans intersect the tile
+                let columns: Vec<usize> = (0..x.len())
+                    .filter(|column| !x[*column].clamped(in_min_x, in_max_x).is_empty())
+                    .collect();
+                pixels
+                    .par_chunks_mut(width)
+                    .enumerate()
+                    .filter(|(row, _)| !y[*row].clamped(in_min_y, in_max_y).is_empty())
+                    .for_each(|(row, pixels)| {
+                        for column in &columns {
+                            add(&mut pixels[*column], y[row], x[*column]);
+                        }
+                    });
+            }
+            TileSpans::PerPixel {
+                pixels: pixel_spans,
+                ..
+            } => {
+                pixels
+                    .par_chunks_mut(width)
+                    .zip(pixel_spans.par_chunks(width))
+                    .for_each(|(pixels, spans)| {
+                        for (state, spans) in pixels.iter_mut().zip(spans) {
+                            if let Some((y_span, x_span)) = spans {
+                                add(state, *y_span, *x_span);
+                            }
+                        }
+                    });
+            }
         });
 
         self
@@ -606,7 +850,7 @@ impl<P: Pixel> FoldTileAccu for WarpKernelAccu<P> {
         .await??;
 
         Ok(RasterTile2D::new_with_tile_info(
-            self.time.expect("there is at least one input"),
+            self.time,
             self.output_tile_info,
             0,
             grid,
@@ -621,7 +865,7 @@ impl<P: Pixel> FoldTileAccu for WarpKernelAccu<P> {
 
 impl<P: Pixel> FoldTileAccuMut for WarpKernelAccu<P> {
     fn set_time(&mut self, time: TimeInterval) {
-        self.time = Some(time);
+        self.time = time;
     }
 
     fn set_cache_hint(&mut self, cache_hint: CacheHint) {
