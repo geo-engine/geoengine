@@ -599,7 +599,11 @@ mod tests {
         for _ in 0..10 {
             cache.axis_order(esri).unwrap();
         }
-        assert_eq!(cache.axis_orders.len(), 1, "PROJ is asked once per reference");
+        assert_eq!(
+            cache.axis_orders.len(),
+            1,
+            "PROJ is asked once per reference"
+        );
     }
 
     /// The registry was generated with pyproj; the server must give the same axis order with the PROJ it links
