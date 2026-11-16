@@ -7,8 +7,6 @@ publish.workspace = true
 license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
-build = "build.rs"
-default-run = "geoengine-server"
 
 [lib]
 bench = false
@@ -28,20 +26,6 @@ harness = false
 [[bench]]
 name = "wms_load"
 harness = false
-
-[[bin]]
-name = "geoengine-server"
-path = "src/bin/geoengine-server.rs"
-bench = false
-
-[[bin]]
-name = "geoengine-cli"
-path = "src/bin/geoengine-cli.rs"
-bench = false
-
-[features]
-# logs Tokio runtime metrics every second, see `README.md`
-runtime-metrics = ["dep:tokio-metrics"]
 
 [dependencies]
 actix-files = { workspace = true }
@@ -82,9 +66,7 @@ num-traits = { workspace = true }
 oauth2 = { workspace = true }
 ogcapi-types = { workspace = true }
 openidconnect = { workspace = true }
-opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
-opentelemetry_sdk = { workspace = true }
 ort = { workspace = true }
 paste = { workspace = true }
 pbkdf2 = { workspace = true }
@@ -108,13 +90,11 @@ stac-extensions = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }
-tokio-metrics = { workspace = true, optional = true }
 tokio-postgres = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
 tracing-appender = { workspace = true }
-tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 typed_floats = { workspace = true }
 url = { workspace = true }
@@ -130,7 +110,6 @@ zip = { workspace = true }
 nix = { version = "0.31", features = ["socket"] }
 
 [dev-dependencies]
-assert_cmd = { workspace = true }
 criterion = { workspace = true }
 csv = { workspace = true }
 httptest = { workspace = true }
@@ -138,11 +117,6 @@ pretty_assertions = { workspace = true }
 serial_test = { workspace = true }
 tempfile = { workspace = true }
 xml = { workspace = true }
-
-[build-dependencies]
-anyhow = { workspace = true }
-vergen = { workspace = true, features = ["build", "cargo", "emit_and_set"] }
-vergen-gitcl = { workspace = true, features = ["build"] }
 
 [lints]
 workspace = true

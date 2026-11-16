@@ -4,7 +4,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**getSpatialReferenceSpecificationHandler**](SpatialReferencesApi.md#getspatialreferencespecificationhandler) | **GET** /spatialReferenceSpecification/{srsString} |  |
+| [**getSpatialReferenceSpecificationHandler**](SpatialReferencesApi.md#getspatialreferencespecificationhandler) | **GET** /spatialReferenceSpecification/{srsString} | Returns the name, PROJ string, extent and axis order of a spatial reference. |
 
 
 
@@ -12,7 +12,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 > SpatialReferenceSpecification getSpatialReferenceSpecificationHandler(srsString)
 
-
+Returns the name, PROJ string, extent and axis order of a spatial reference.
 
 ### Example
 

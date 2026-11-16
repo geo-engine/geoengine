@@ -169,6 +169,7 @@ fn proj_proj_string(srs_string: &str) -> Option<String> {
     }
 }
 
+/// Returns the name, PROJ string, extent and axis order of a spatial reference.
 #[allow(
     clippy::unused_async, // the function signature of request handlers requires it
     clippy::no_effect_underscore_binding // need `_session` to quire authentication

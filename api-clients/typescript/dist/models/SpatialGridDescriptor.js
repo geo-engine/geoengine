@@ -39,6 +39,7 @@ function SpatialGridDescriptorFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'spatialGrid': (0, SpatialGridDefinition_1.SpatialGridDefinitionFromJSON)(json['spatialGrid']),
         'descriptor': (0, SpatialGridDescriptorState_1.SpatialGridDescriptorStateFromJSON)(json['descriptor']),
+        'maxOverviewLevel': json['maxOverviewLevel'] === undefined ? undefined : json['maxOverviewLevel'] === null ? null : json['maxOverviewLevel'],
     };
 }
 function SpatialGridDescriptorToJSON(json) {
@@ -51,5 +52,6 @@ function SpatialGridDescriptorToJSONTyped(value, ignoreDiscriminator = false) {
     return {
         'spatialGrid': (0, SpatialGridDefinition_1.SpatialGridDefinitionToJSON)(value['spatialGrid']),
         'descriptor': (0, SpatialGridDescriptorState_1.SpatialGridDescriptorStateToJSON)(value['descriptor']),
+        'maxOverviewLevel': value['maxOverviewLevel'],
     };
 }

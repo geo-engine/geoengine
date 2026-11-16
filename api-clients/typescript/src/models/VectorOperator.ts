@@ -185,6 +185,16 @@ export function VectorOperatorToJSONTyped(value?: VectorOperator | null, ignoreD
 * Check if a given object implements the VectorOperator interface.
 */
 export function instanceOfVectorOperator(value: object): value is VectorOperator {
-    return instanceOfMockPointSource(value)
-        || instanceOfRasterVectorJoin(value);
+    return instanceOfColumnRangeFilter(value)
+        || instanceOfLineSimplification(value)
+        || instanceOfMockPointSource(value)
+        || instanceOfOgrSource(value)
+        || instanceOfPointInPolygonFilter(value)
+        || instanceOfRasterVectorJoin(value)
+        || instanceOfReprojection(value)
+        || instanceOfTimeProjection(value)
+        || instanceOfTimeShift(value)
+        || instanceOfVectorExpression(value)
+        || instanceOfVectorJoin(value)
+        || instanceOfVisualPointClustering(value);
 }

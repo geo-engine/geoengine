@@ -2,9 +2,10 @@ use super::{
     GdalDatasetParameters, GdalMetadataMapping,
     process_common::{
         GdalDataGridVariant, GdalIpcPayload, GdalReadAdvise, GdalReadWindow, IpcProcessError,
-        RasterInfo,
+        RasterInfo, level_of_factor,
     },
 };
+use crate::util::gdal::band_levels;
 use crate::{
     source::gdal_worker_process::process_common::IpcProcessGdalErrorKind,
     util::{GdalConfigOptions, gdal::gdal_open_ex_gdal_error, retry::retry_sync},
@@ -28,6 +29,7 @@ use geoengine_datatypes::{
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::{
     env,
     ffi::CString,
@@ -446,13 +448,16 @@ impl GdalHandling {
     ///
     /// A method to load single tiles from a GDAL dataset.
     ///
+    /// Reads `read_advise` from the full-resolution band, resampled to `read_window_bounds`
+    /// (`level_factor` = `None`), or from the level `factor` times coarser at native size.
     pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
         cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
+        level_factor: Option<NonZeroUsize>,
     ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
         Self::open_with_retry(cache, dataset_params, |ds, params| {
-            Self::load_tile_data(ds, params, read_advise)
+            Self::load_tile_data(ds, params, read_advise, level_factor)
         })
     }
 
@@ -467,7 +472,8 @@ impl GdalHandling {
         dataset_params: &GdalDatasetParameters,
     ) -> Result<RasterInfo, IpcProcessError> {
         Self::open_with_retry(cache, dataset_params, |ds, params| {
-            let band_type = ds.rasterband(params.rasterband_channel)?.band_type();
+            let band = ds.rasterband(params.rasterband_channel)?;
+            let band_type = band.band_type();
             let data_type = RasterDataType::from_gdal_data_type(band_type).map_err(|_| {
                 IpcProcessError::IpcOther {
                     msg: format!("unsupported raster data type {band_type:?}"),
@@ -484,6 +490,7 @@ impl GdalHandling {
             Ok(RasterInfo {
                 data_type,
                 spatial_reference,
+                levels: band_levels(&band)?,
             })
         })
     }
@@ -720,6 +727,7 @@ impl GdalHandling {
         dataset: &mut GdalDataset,
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
+        level_factor: Option<NonZeroUsize>,
     ) -> Result<GdalIpcPayload<T>, IpcProcessError> {
         let _span = tracing::debug_span!(
             "gdal_load_tile_data",
@@ -780,12 +788,42 @@ impl GdalHandling {
 
         let rasterband = dataset.rasterband(dataset_params.rasterband_channel)?;
 
-        let result_gdal_raster = Self::read_grid_from_raster(
-            &rasterband,
-            &read_advise.gdal_read_widow,
-            &read_advise.read_window_bounds,
-            dataset_params,
-        )?;
+        // properties, scale and offset always come from the full-resolution band
+        let result_gdal_raster = match level_factor.filter(|factor| factor.get() > 1) {
+            None => Self::read_grid_from_raster(
+                &rasterband,
+                &read_advise.gdal_read_widow,
+                &read_advise.read_window_bounds,
+                dataset_params,
+            )?,
+            Some(factor) => {
+                let (size_x, size_y) = read_advise.gdal_read_widow.gdal_window_size();
+                if (
+                    read_advise.read_window_bounds.axis_size_x(),
+                    read_advise.read_window_bounds.axis_size_y(),
+                ) != (size_x, size_y)
+                {
+                    return Err(IpcProcessError::IpcOther {
+                        msg: "a level read must not resample".to_string(),
+                    });
+                }
+                let overview = level_of_factor(&band_levels(&rasterband)?, factor)
+                    .map(|level| rasterband.overview(level - 1))
+                    .transpose()?;
+                let Some(overview) = overview else {
+                    return Err(IpcProcessError::MissingOverviewLevel {
+                        file: dataset_params.file_path.display().to_string(),
+                        factor,
+                    });
+                };
+                Self::read_grid_from_raster(
+                    &overview,
+                    &read_advise.gdal_read_widow,
+                    &read_advise.read_window_bounds,
+                    dataset_params,
+                )?
+            }
+        };
 
         let properties = Self::read_raster_properties(dataset, dataset_params, &rasterband);
 
@@ -1026,6 +1064,7 @@ mod tests {
             request: GdalRequest::Read {
                 read_advise,
                 data_type: RasterDataType::U8,
+                level_factor: None,
             },
         };
 
@@ -1097,6 +1136,7 @@ mod tests {
             request: GdalRequest::Read {
                 read_advise,
                 data_type: RasterDataType::U8,
+                level_factor: None,
             },
         };
 
@@ -1173,7 +1213,7 @@ mod tests {
         let dataset = gdc.get_or_open(&dataset_params).unwrap();
 
         let reader_payload =
-            GdalHandling::load_tile_data::<u8>(dataset, &dataset_params, gdal_read_advice)?;
+            GdalHandling::load_tile_data::<u8>(dataset, &dataset_params, gdal_read_advice, None)?;
 
         let grid_and_props: GridAndProperties<u8, GridBoundingBox2D> = reader_payload.into();
         Ok(grid_and_props.into())
@@ -1308,8 +1348,12 @@ mod tests {
 
         let mut gdc = GdalDatasetHolder::new();
 
-        let result =
-            GdalHandling::load_tile_data_with_dataset_retry::<u8>(&mut gdc, &ds, gdal_read_advice);
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut gdc,
+            &ds,
+            gdal_read_advice,
+            None,
+        );
 
         // file not found => specific error
         match result {
@@ -1340,8 +1384,12 @@ mod tests {
         };
 
         // invalid channel => error
-        let result =
-            GdalHandling::load_tile_data_with_dataset_retry::<u8>(&mut gdc, &ds, gdal_read_advice);
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut gdc,
+            &ds,
+            gdal_read_advice,
+            None,
+        );
         match result {
             Err(IpcProcessError::GdalError { .. }) => {}
             _ => panic!("expected GdalError error"),
@@ -1401,8 +1449,12 @@ mod tests {
 
         let mut gdc = GdalDatasetHolder::new();
 
-        let result =
-            GdalHandling::load_tile_data_with_dataset_retry::<u8>(&mut gdc, &ds, gdal_read_advice);
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut gdc,
+            &ds,
+            gdal_read_advice,
+            None,
+        );
 
         // file not found => specific error
         match result {
@@ -1440,8 +1492,12 @@ mod tests {
         };
 
         // 500 => error
-        let result =
-            GdalHandling::load_tile_data_with_dataset_retry::<u8>(&mut gdc, &ds, gdal_read_advice);
+        let result = GdalHandling::load_tile_data_with_dataset_retry::<u8>(
+            &mut gdc,
+            &ds,
+            gdal_read_advice,
+            None,
+        );
         match result {
             Err(IpcProcessError::GdalError { .. }) => {}
             _ => panic!("expected GdalError error"),
@@ -1655,9 +1711,13 @@ mod tests {
         let mut gdc = GdalDatasetHolder::new();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
-        let reader_payload =
-            GdalHandling::load_tile_data::<u8>(dataset, &up_side_down_params, gdal_read_advice)
-                .unwrap();
+        let reader_payload = GdalHandling::load_tile_data::<u8>(
+            dataset,
+            &up_side_down_params,
+            gdal_read_advice,
+            None,
+        )
+        .unwrap();
 
         let GridAndProperties { grid, properties } = reader_payload.into();
         assert!(!grid.is_empty());
@@ -1716,10 +1776,14 @@ mod tests {
         let mut gdc = GdalDatasetHolder::new();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
-        let GridAndProperties { grid, properties } =
-            GdalHandling::load_tile_data::<u8>(dataset, &up_side_down_params, gdal_read_advice)
-                .unwrap()
-                .into();
+        let GridAndProperties { grid, properties } = GdalHandling::load_tile_data::<u8>(
+            dataset,
+            &up_side_down_params,
+            gdal_read_advice,
+            None,
+        )
+        .unwrap()
+        .into();
 
         assert!(!grid.is_empty());
 
@@ -1804,7 +1868,7 @@ mod tests {
         let dataset = gdc.get_or_open(&params).unwrap();
 
         let reader_payload =
-            GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice).unwrap();
+            GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice, None).unwrap();
 
         // Verify that the override no_data_value is being used
         // Without the fix, this would return AllValid and the test would fail
@@ -1869,7 +1933,7 @@ mod tests {
         let mut gdc = GdalDatasetHolder::new();
         let dataset = gdc.get_or_open(&params).unwrap();
 
-        GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice)
+        GdalHandling::load_tile_data::<u8>(dataset, &params, gdal_read_advice, None)
             .unwrap()
             .data_variant
     }
@@ -1955,10 +2019,113 @@ mod tests {
             .expect("the NDVI fixture opens");
         assert_eq!(info.data_type, RasterDataType::U8);
         assert_eq!(info.spatial_reference, SpatialReference::epsg_4326().into());
+        assert_eq!(info.levels.len(), 1, "the NDVI fixture has no overviews");
 
         // a missing file is an error, whatever `file_not_found_handling` says
         let mut missing = get_params();
         missing.file_path = test_data!("raster/does_not_exist.tif").into();
         assert!(GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &missing).is_err());
+    }
+
+    /// A 64x64 u16 `GeoTIFF` in 16x16 blocks. Its overviews (2, 4) hold 7, its full resolution 9.
+    fn tiled_tiff_with_overviews(dir: &Path) -> GdalDatasetParameters {
+        use gdal::cpl::CslStringList;
+
+        let file_path = dir.join("tiled_with_overviews.tif");
+        let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+        let options: CslStringList = ["TILED=YES", "BLOCKXSIZE=16", "BLOCKYSIZE=16"]
+            .into_iter()
+            .collect();
+        let mut dataset = driver
+            .create_with_band_type_with_options::<u16, _>(&file_path, 64, 64, 1, &options)
+            .unwrap();
+        dataset
+            .set_geo_transform(&[0., 1., 0., 64., 0., -1.])
+            .unwrap();
+        let write = |dataset: &GdalDataset, value: u16| {
+            let mut band = dataset.rasterband(1).unwrap();
+            let mut buffer = gdal::raster::Buffer::new((64, 64), vec![value; 64 * 64]);
+            band.write((0, 0), (64, 64), &mut buffer).unwrap();
+        };
+        write(&dataset, 7);
+        // GDAL does not update the overviews when the full resolution changes afterwards
+        dataset.build_overviews("NEAREST", &[2, 4], &[]).unwrap();
+        write(&dataset, 9);
+        dataset.close().unwrap();
+
+        GdalDatasetParameters {
+            file_path,
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (0., 64.).into(),
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
+            },
+            width: 64,
+            height: 64,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: true,
+            retry: None,
+        }
+    }
+
+    #[test]
+    fn it_reads_the_levels_and_one_level_at_native_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff_with_overviews(dir.path());
+        let mut holder = GdalDatasetHolder::new();
+
+        let layout =
+            GdalHandling::load_raster_info_with_dataset_retry(&mut holder, &params).unwrap();
+        let sizes: Vec<_> = layout.levels.iter().map(|l| (l.size_x, l.size_y)).collect();
+        assert_eq!(sizes, vec![(64, 64), (32, 32), (16, 16)]);
+        assert_eq!(
+            (layout.levels[0].block_size_x, layout.levels[0].block_size_y),
+            (16, 16)
+        );
+
+        assert_eq!(layout.missing_overview_level(4), None);
+        assert_eq!(layout.missing_overview_level(8), Some(8));
+
+        let window = GridBoundingBox2D::new([0, 0], [7, 7]).unwrap();
+        let read_advise = GdalReadAdvise {
+            gdal_read_widow: GdalReadWindow::new([0, 0].into(), [8, 8].into()),
+            read_window_bounds: window,
+            bounds_of_target: window,
+            flip_y: false,
+        };
+        for (factor, expected) in [(1, 9), (2, 7), (4, 7)] {
+            let payload = GdalHandling::load_tile_data_with_dataset_retry::<u16>(
+                &mut holder,
+                &params,
+                read_advise,
+                NonZeroUsize::new(factor),
+            )
+            .unwrap();
+            assert_eq!(payload.dimensions, window);
+            match payload.data_variant {
+                GdalDataGridVariant::AllValid { data } => {
+                    assert_eq!(data, vec![expected; 64], "factor {factor}");
+                }
+                other => panic!("expected all-valid data, got {other:?}"),
+            }
+        }
+
+        assert!(
+            matches!(
+                GdalHandling::load_tile_data_with_dataset_retry::<u16>(
+                    &mut holder,
+                    &params,
+                    read_advise,
+                    NonZeroUsize::new(8),
+                ),
+                Err(IpcProcessError::MissingOverviewLevel { factor, .. }) if factor.get() == 8
+            ),
+            "a missing level is an error, not a resampled read"
+        );
     }
 }

@@ -38,6 +38,7 @@ const Reprojection_1 = require("./Reprojection");
 const Temperature_1 = require("./Temperature");
 const TemporalRasterAggregation_1 = require("./TemporalRasterAggregation");
 const TimeShift_1 = require("./TimeShift");
+const Warp_1 = require("./Warp");
 function RasterOperatorFromJSON(json) {
     return RasterOperatorFromJSONTyped(json, false);
 }
@@ -88,6 +89,8 @@ function RasterOperatorFromJSONTyped(json, ignoreDiscriminator) {
             return Object.assign({}, (0, TemporalRasterAggregation_1.TemporalRasterAggregationFromJSONTyped)(json, true), { type: 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, (0, TimeShift_1.TimeShiftFromJSONTyped)(json, true), { type: 'TimeShift' });
+        case 'Warp':
+            return Object.assign({}, (0, Warp_1.WarpFromJSONTyped)(json, true), { type: 'Warp' });
         default:
             return json;
     }
@@ -142,6 +145,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
             return Object.assign({}, (0, TemporalRasterAggregation_1.TemporalRasterAggregationToJSON)(value), { 'type': 'TemporalRasterAggregation' });
         case 'TimeShift':
             return Object.assign({}, (0, TimeShift_1.TimeShiftToJSON)(value), { 'type': 'TimeShift' });
+        case 'Warp':
+            return Object.assign({}, (0, Warp_1.WarpToJSON)(value), { 'type': 'Warp' });
         default:
             return value;
     }
@@ -150,6 +155,26 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
 * Check if a given object implements the RasterOperator interface.
 */
 function instanceOfRasterOperator(value) {
-    return (0, Expression_1.instanceOfExpression)(value)
-        || (0, GdalSource_1.instanceOfGdalSource)(value);
+    return (0, BandFilter_1.instanceOfBandFilter)(value)
+        || (0, BandNeighborhoodAggregate_1.instanceOfBandNeighborhoodAggregate)(value)
+        || (0, BandwiseExpression_1.instanceOfBandwiseExpression)(value)
+        || (0, Downsampling_1.instanceOfDownsampling)(value)
+        || (0, Expression_1.instanceOfExpression)(value)
+        || (0, GdalSource_1.instanceOfGdalSource)(value)
+        || (0, Interpolation_1.instanceOfInterpolation)(value)
+        || (0, MultiBandGdalSource_1.instanceOfMultiBandGdalSource)(value)
+        || (0, NeighborhoodAggregate_1.instanceOfNeighborhoodAggregate)(value)
+        || (0, Onnx_1.instanceOfOnnx)(value)
+        || (0, PolygonRasterization_1.instanceOfPolygonRasterization)(value)
+        || (0, Radiance_1.instanceOfRadiance)(value)
+        || (0, RasterScaling_1.instanceOfRasterScaling)(value)
+        || (0, RasterStacker_1.instanceOfRasterStacker)(value)
+        || (0, RasterTypeConversion_1.instanceOfRasterTypeConversion)(value)
+        || (0, Rasterization_1.instanceOfRasterization)(value)
+        || (0, Reflectance_1.instanceOfReflectance)(value)
+        || (0, Reprojection_1.instanceOfReprojection)(value)
+        || (0, Temperature_1.instanceOfTemperature)(value)
+        || (0, TemporalRasterAggregation_1.instanceOfTemporalRasterAggregation)(value)
+        || (0, TimeShift_1.instanceOfTimeShift)(value)
+        || (0, Warp_1.instanceOfWarp)(value);
 }

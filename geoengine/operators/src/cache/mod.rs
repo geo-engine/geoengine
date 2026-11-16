@@ -5,4 +5,5 @@ pub mod cache_tiles;
 pub mod error;
 pub mod new_raster_cache;
 pub mod shared_cache;
+pub mod single_read;
 pub mod util;

@@ -798,6 +798,7 @@ class LayersApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Returns the capabilities of the given provider, e.g., whether it supports listing and search.
      */
     providerCapabilitiesHandlerRaw(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -807,6 +808,7 @@ class LayersApi extends runtime.BaseAPI {
         });
     }
     /**
+     * Returns the capabilities of the given provider, e.g., whether it supports listing and search.
      */
     providerCapabilitiesHandler(requestParameters, initOverrides) {
         return __awaiter(this, void 0, void 0, function* () {

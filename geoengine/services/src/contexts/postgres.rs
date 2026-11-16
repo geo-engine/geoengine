@@ -138,8 +138,14 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
         );
+
+        // tests run the new raster cache and block reads when the settings enable them
+        let cache_config = get_config_element::<Cache>()?;
+        cache_config.validate()?;
+        let new_raster_cache = cache_config.new_raster_cache();
 
         Ok(PostgresContext {
             task_manager: Arc::new(TypedTaskManagerBackend::new(
@@ -153,7 +159,7 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
-            new_raster_cache: None,
+            new_raster_cache,
             default_cache_ttl: CacheTtlSeconds::new(0),
             provider_registry,
             stac_request_registry,
@@ -203,16 +209,11 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
         );
 
-        let new_raster_cache = if cache_config.enabled && cache_config.enable_new_raster_cache {
-            Some(Arc::new(NewRasterCacheEnum::new_lru(
-                cache_config.new_raster_cache_size_in_bytes(),
-            )))
-        } else {
-            None
-        };
+        let new_raster_cache = cache_config.new_raster_cache();
 
         Ok(PostgresContext {
             task_manager: Arc::new(TypedTaskManagerBackend::new(
@@ -291,16 +292,11 @@ where
             gdal_process_pool_config.number_of_processes as usize,
             gdal_process_pool_config.max_active_processes as usize,
             gdal_process_pool_config.max_dataset_processes as usize,
+            gdal_process_pool_config.header_cache_entries,
             gdal_process_pool_config.worker.into(),
         );
 
-        let new_raster_cache = if cache_config.enabled && cache_config.enable_new_raster_cache {
-            Some(Arc::new(NewRasterCacheEnum::new_lru(
-                cache_config.new_raster_cache_size_in_bytes(),
-            )))
-        } else {
-            None
-        };
+        let new_raster_cache = cache_config.new_raster_cache();
 
         let app_ctx = PostgresContext {
             task_manager: Arc::new(TypedTaskManagerBackend::new(
@@ -834,6 +830,7 @@ mod tests {
                 0,
                 0,
                 0,
+                geoengine_operators::source::gdal_worker_process::DEFAULT_HEADER_CACHE_ENTRIES,
                 WorkerConfig::default(),
             )
         })

@@ -1,12 +1,14 @@
+use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, ProcessingGraphOperatorPath,
     QueryContext, QueryProcessor, SpatialGridDescriptor, TypedRasterOperator,
 };
-use crate::error::Error;
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::GdalDatasetParameters;
+use crate::source::gdal_read::{
+    BlockIo, ensure_overview_level_exists, overview_source, tile_stream,
+};
 use crate::source::gdal_worker_process::{GdalReaderMode, OverviewReaderState, ReaderState};
-use crate::source::multi_band_gdal_source::reader::GdalPoolReader;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -16,13 +18,12 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use futures::TryFutureExt;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
         BandSelection, CacheTtlSeconds, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
-        SpatialResolution, TimeInterval, find_next_best_overview_level,
+        SpatialResolution, TimeInterval,
     },
     raster::{
         GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D, SpatialGridDefinition,
@@ -40,7 +41,6 @@ use tracing::{debug, trace};
 
 mod error;
 mod loading_info;
-mod reader;
 
 /// Parameters for the GDAL Source Operator
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -146,6 +146,9 @@ where
     pub meta_data: MultiBandGdalMetaData,
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    /// The dataset declares its overview levels (`max_overview_level`), so every file has
+    /// `overview_level`: it is read from that level as is, never resampled.
+    pub files_have_level: bool,
     pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
@@ -155,7 +158,7 @@ impl<T> GdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
 #[async_trait]
 impl<P> QueryProcessor for GdalSourceProcessor<P>
 where
-    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+    P: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = GridBoundingBox2D;
@@ -209,6 +212,7 @@ where
                 GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: original_resolution_spatial_grid,
                     overview_level: self.overview_level,
+                    files_have_level: self.files_have_level,
                 })
             }
         };
@@ -229,6 +233,7 @@ where
 
         let gdal_worker = ctx.get_gdal_worker();
         let read_ahead = ctx.gdal_read_ahead().multi_band_gdal_source;
+        let blocks = BlockIo::from_query_context(ctx);
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
         let spatial_tiles = tiling_strategy
@@ -249,23 +254,19 @@ where
             bands.into_iter(),
         );
 
-        let stream = stream::iter(time_tile_band_iter)
-            .map(move |(time_interval, tile_info, band_idx)| {
-                GdalPoolReader::load_tile_from_files_async::<P>(
-                    loading_info.clone(),
-                    reader_mode,
-                    tile_info,
-                    time_interval,
-                    band_idx,
-                    gdal_worker.clone(),
-                    self.default_cache_ttl,
-                )
-                .map_err(Error::from)
-            })
-            .buffered(read_ahead)
-            .boxed();
+        let default_cache_ttl = self.default_cache_ttl;
+        let plans = stream::iter(time_tile_band_iter).map(move |(time, tile, band)| {
+            Ok(loading_info.tile_plan(time, tile, band, default_cache_ttl))
+        });
 
-        return Ok(stream);
+        Ok(tile_stream(
+            plans,
+            reader_mode,
+            gdal_worker,
+            blocks,
+            read_ahead,
+            |source| GdalSourceError::from(source).into(),
+        ))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -276,7 +277,7 @@ where
 #[async_trait]
 impl<P> RasterQueryProcessor for GdalSourceProcessor<P>
 where
-    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+    P: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type RasterType = P;
 
@@ -338,6 +339,16 @@ impl RasterOperator for MultiBandGdalSource {
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
+        if let Some(overview_level) = self.params.overview_level {
+            ensure_overview_level_exists(
+                &self.params.data,
+                overview_level,
+                meta_data_result_descriptor
+                    .spatial_grid
+                    .max_overview_level(),
+            )?;
+        }
+
         let op_name = CanonicOperatorName::from(&self);
         let op = if self.params.overview_level.is_none() {
             InitializedGdalSourceOperator::initialize_original_resolution(
@@ -379,6 +390,8 @@ pub struct InitializedGdalSourceOperator {
     // the overview level to use. 0/1 means the highest resolution
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
+    /// the overview levels the dataset declares, see [`SpatialGridDescriptor::max_overview_level`]
+    pub max_overview_level: Option<u32>,
     pub default_cache_ttl: CacheTtlSeconds,
 }
 
@@ -396,6 +409,7 @@ impl InitializedGdalSourceOperator {
             name,
             path,
             data_name,
+            max_overview_level: result_descriptor.spatial_grid.max_overview_level(),
             produced_result_descriptor: result_descriptor,
             meta_data,
             tiling_specification,
@@ -416,6 +430,7 @@ impl InitializedGdalSourceOperator {
         overview_level: u32,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
+        let max_overview_level = result_descriptor.spatial_grid.max_overview_level();
         let source_resolution_spatial_grid = result_descriptor
             .spatial_grid_descriptor()
             .source_spatial_grid_definition()
@@ -444,7 +459,23 @@ impl InitializedGdalSourceOperator {
             tiling_specification,
             overview_level,
             original_resolution_spatial_grid: original_grid,
+            max_overview_level,
             default_cache_ttl,
+        }
+    }
+}
+
+impl InitializedGdalSourceOperator {
+    fn processor<P: Pixel>(&self) -> GdalSourceProcessor<P> {
+        GdalSourceProcessor {
+            produced_result_descriptor: self.produced_result_descriptor.clone(),
+            tiling_specification: self.tiling_specification,
+            meta_data: self.meta_data.clone(),
+            overview_level: self.overview_level,
+            original_resolution_spatial_grid: self.original_resolution_spatial_grid,
+            files_have_level: self.max_overview_level.is_some(),
+            default_cache_ttl: self.default_cache_ttl,
+            _phantom_data: PhantomData,
         }
     }
 }
@@ -457,42 +488,9 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         Ok(match self.result_descriptor().data_type {
-            RasterDataType::U8 => TypedRasterQueryProcessor::U8(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::U16 => TypedRasterQueryProcessor::U16(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::U32 => TypedRasterQueryProcessor::U32(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
+            RasterDataType::U8 => TypedRasterQueryProcessor::U8(self.processor::<u8>().boxed()),
+            RasterDataType::U16 => TypedRasterQueryProcessor::U16(self.processor::<u16>().boxed()),
+            RasterDataType::U32 => TypedRasterQueryProcessor::U32(self.processor::<u32>().boxed()),
             RasterDataType::U64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::U64,
@@ -503,59 +501,15 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     raster_type: RasterDataType::I8,
                 })?;
             }
-            RasterDataType::I16 => TypedRasterQueryProcessor::I16(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::I32 => TypedRasterQueryProcessor::I32(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
+            RasterDataType::I16 => TypedRasterQueryProcessor::I16(self.processor::<i16>().boxed()),
+            RasterDataType::I32 => TypedRasterQueryProcessor::I32(self.processor::<i32>().boxed()),
             RasterDataType::I64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::I64,
                 })?;
             }
-            RasterDataType::F32 => TypedRasterQueryProcessor::F32(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
-            RasterDataType::F64 => TypedRasterQueryProcessor::F64(
-                GdalSourceProcessor {
-                    produced_result_descriptor: self.produced_result_descriptor.clone(),
-                    tiling_specification: self.tiling_specification,
-                    meta_data: self.meta_data.clone(),
-                    overview_level: self.overview_level,
-                    original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-                    default_cache_ttl: self.default_cache_ttl,
-                    _phantom_data: PhantomData,
-                }
-                .boxed(),
-            ),
+            RasterDataType::F32 => TypedRasterQueryProcessor::F32(self.processor::<f32>().boxed()),
+            RasterDataType::F64 => TypedRasterQueryProcessor::F64(self.processor::<f64>().boxed()),
         })
     }
 
@@ -565,6 +519,11 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
     fn name(&self) -> &'static str {
         MultiBandGdalSource::TYPE_NAME
+    }
+
+    fn reads_cached_blocks(&self) -> bool {
+        // see `GdalReaderMode::level_factor`: else GDAL picks an overview, which has no blocks
+        self.original_resolution_spatial_grid.is_none() || self.max_overview_level.is_some()
     }
 
     fn path(&self) -> ProcessingGraphOperatorPath {
@@ -597,19 +556,20 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             .spatial_grid
             .spatial_resolution();
 
-        // TODO: get available overviews levels from the dataset metadata (not available yet) and only load these.
-        //       Then, we might have to prepend a Resampling operator to match the target resolution.
-        //       For now, we just load the overview level regardless and let gdal handle the resamṕling.
-        let next_best_overview_level =
-            find_next_best_overview_level(native_resolution, target_resolution);
-
-        Ok(MultiBandGdalSource {
-            params: GdalSourceParameters {
-                data: self.data_name.clone(),
-                overview_level: Some(next_best_overview_level),
+        Ok(overview_source(
+            native_resolution,
+            target_resolution,
+            self.max_overview_level,
+            |overview_level| {
+                MultiBandGdalSource {
+                    params: GdalSourceParameters {
+                        data: self.data_name.clone(),
+                        overview_level: Some(overview_level),
+                    },
+                }
+                .typed()
             },
-        }
-        .typed())
+        ))
     }
 }
 
@@ -623,7 +583,8 @@ mod tests {
         ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
         TimeDescriptor,
     };
-    use crate::source::gdal_worker_process::WorkerConfig;
+    use crate::source::gdal_read::assemble_tile;
+    use crate::source::gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig};
     use crate::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalMetadataMapping, GdalProcessPool,
         GdalProcessPoolAccess,
@@ -1983,7 +1944,13 @@ mod tests {
             TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
         );
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
 
         let mut failures = Vec::new();
 
@@ -2100,6 +2067,7 @@ mod tests {
                 let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: mosaic_grid,
                     overview_level: overview_level as u32,
+                    files_have_level: false,
                 });
 
                 // overview pixels that lie completely inside the mosaic, the tiling origin is at (0, 0)
@@ -2123,21 +2091,13 @@ mod tests {
                             ),
                         );
 
-                        let tile = std::panic::AssertUnwindSafe(
-                            GdalPoolReader::load_tile_from_files_async::<u16>(
-                                MultiBandGdalLoadingInfo::new(
-                                    vec![time_interval],
-                                    files.clone(),
-                                    None,
-                                ),
-                                reader_mode,
-                                tile_info,
-                                time_interval,
-                                0,
-                                gpp.get_gdal_worker(),
-                                CacheTtlSeconds::new(0),
-                            ),
-                        )
+                        let tile = std::panic::AssertUnwindSafe(assemble_tile::<u16>(
+                            MultiBandGdalLoadingInfo::new(vec![time_interval], files.clone(), None)
+                                .tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
+                            reader_mode,
+                            &gpp.get_gdal_worker(),
+                            None,
+                        ))
                         .catch_unwind()
                         .await;
 
@@ -2298,17 +2258,20 @@ mod tests {
             GeoTransform::new_unchecked((0.0, 4.0).into(), 1.0, -1.0),
         );
 
-        let gpp = GdalProcessPool::new(2, 2, 2, WorkerConfig::default());
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let gw = gpp.get_gdal_worker();
 
-        let tile = GdalPoolReader::load_tile_from_files_async::<u16>(
-            loading_info,
+        let tile = assemble_tile::<u16>(
+            loading_info.tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
             reader_mode,
-            tile_info,
-            time_interval,
-            0, // band
-            gw,
-            CacheTtlSeconds::new(0),
+            &gw,
+            None,
         )
         .await
         .unwrap();

@@ -19,6 +19,12 @@ export interface DataSourceVariant {
     /** The region collection containing this variant's preset layers. */
     collectionId: string;
 }
+export interface DataSourceCategory {
+    /** Layer collection id; categories do not carry data-source metadata. */
+    key: string;
+    name: string;
+    sources: DataSourceDefinition[];
+}
 export interface DataSourceDefinition {
     key: string;
     name: string;

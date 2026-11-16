@@ -357,7 +357,7 @@ async fn list_collection_handler<C: ApplicationContext>(
     Ok(web::Json(collection))
 }
 
-// Returns the capabilities of the given provider
+/// Returns the capabilities of the given provider, e.g., whether it supports listing and search.
 #[utoipa::path(
     tag = "Layers",
     get,

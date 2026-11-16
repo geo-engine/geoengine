@@ -3113,7 +3113,7 @@ class DatasetsApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> None:
-        """update_dataset_provenance_handler
+        """Updates the dataset's provenance.
 
 
         :param dataset: Dataset Name (required)
@@ -3185,7 +3185,7 @@ class DatasetsApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> ApiResponse[None]:
-        """update_dataset_provenance_handler
+        """Updates the dataset's provenance.
 
 
         :param dataset: Dataset Name (required)
@@ -3257,7 +3257,7 @@ class DatasetsApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> RESTResponseType:
-        """update_dataset_provenance_handler
+        """Updates the dataset's provenance.
 
 
         :param dataset: Dataset Name (required)

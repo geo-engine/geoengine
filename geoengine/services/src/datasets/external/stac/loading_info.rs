@@ -612,6 +612,9 @@ impl StacMultiBandMetaData {
 
         let gdal_config_options =
             common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref(), None);
+        // one JP2 tile becomes one GDAL block, so cached block reads decode each tile once
+        let gdal_open_options = common::is_jp2_media_type(asset.r#type.as_deref())
+            .then(|| vec!["USE_TILE_AS_BLOCK=YES".to_string()]);
 
         for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
             if dataset_band.asset_band.asset_title != asset_title {
@@ -643,7 +646,7 @@ impl StacMultiBandMetaData {
                     file_not_found_handling: FileNotFoundHandling::Error,
                     no_data_value: common::no_data_value_for_rasterband(asset, rasterband_channel),
                     properties_mapping: None,
-                    gdal_open_options: None,
+                    gdal_open_options: gdal_open_options.clone(),
                     gdal_config_options: gdal_config_options.clone(),
                     allow_alphaband_as_mask: false,
                     retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?

@@ -13,7 +13,9 @@ use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::processing::ExpressionEnvironment;
-use crate::source::gdal_worker_process::{GdalProcessPool, GdalProcessPoolAccess, WorkerConfig};
+use crate::source::gdal_worker_process::{
+    DEFAULT_HEADER_CACHE_ENTRIES, GdalProcessPool, GdalProcessPoolAccess, WorkerConfig,
+};
 use crate::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
@@ -135,7 +137,13 @@ impl TestDefault for MockExecutionContext {
             ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
             default_cache_ttl: CacheTtlSeconds::new(0),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(
+                2,
+                2,
+                2,
+                DEFAULT_HEADER_CACHE_ENTRIES,
+                WorkerConfig::default(),
+            ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
         }
@@ -159,6 +167,7 @@ impl MockExecutionContext {
                 2,
                 2,
                 2,
+                DEFAULT_HEADER_CACHE_ENTRIES,
                 WorkerConfig::default(),
             ),
             ort_environment: test_ort_environment(),
@@ -174,7 +183,13 @@ impl MockExecutionContext {
             ml_models: HashMap::default(),
             tiling_specification,
             default_cache_ttl: CacheTtlSeconds::new(0),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(
+                2,
+                2,
+                2,
+                DEFAULT_HEADER_CACHE_ENTRIES,
+                WorkerConfig::default(),
+            ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
         }
@@ -191,7 +206,13 @@ impl MockExecutionContext {
             ml_models: HashMap::default(),
             tiling_specification,
             default_cache_ttl: CacheTtlSeconds::new(0),
-            gdal_process_pool: GdalProcessPool::new(2, 2, 2, WorkerConfig::default()),
+            gdal_process_pool: GdalProcessPool::new(
+                2,
+                2,
+                2,
+                DEFAULT_HEADER_CACHE_ENTRIES,
+                WorkerConfig::default(),
+            ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
         }

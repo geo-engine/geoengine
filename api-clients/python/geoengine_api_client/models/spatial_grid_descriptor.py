@@ -18,7 +18,8 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
+from typing_extensions import Annotated
 from geoengine_api_client.models.spatial_grid_definition import SpatialGridDefinition
 from geoengine_api_client.models.spatial_grid_descriptor_state import SpatialGridDescriptorState
 from typing import Optional, Set
@@ -31,7 +32,8 @@ class SpatialGridDescriptor(BaseModel):
     """ # noqa: E501
     spatial_grid: SpatialGridDefinition = Field(alias="spatialGrid")
     descriptor: SpatialGridDescriptorState
-    __properties: ClassVar[List[str]] = ["spatialGrid", "descriptor"]
+    max_overview_level: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset. Sources read only these and downsample further themselves. Unset: the levels are unknown and GDAL chooses, which may resample.", alias="maxOverviewLevel")
+    __properties: ClassVar[List[str]] = ["spatialGrid", "descriptor", "maxOverviewLevel"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -75,6 +77,11 @@ class SpatialGridDescriptor(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of spatial_grid
         if self.spatial_grid:
             _dict['spatialGrid'] = self.spatial_grid.to_dict()
+        # set to None if max_overview_level (nullable) is None
+        # and model_fields_set contains the field
+        if self.max_overview_level is None and "max_overview_level" in self.model_fields_set:
+            _dict['maxOverviewLevel'] = None
+
         return _dict
 
     @classmethod
@@ -88,7 +95,8 @@ class SpatialGridDescriptor(BaseModel):
 
         _obj = cls.model_validate({
             "spatialGrid": SpatialGridDefinition.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None,
-            "descriptor": obj.get("descriptor")
+            "descriptor": obj.get("descriptor"),
+            "maxOverviewLevel": obj.get("maxOverviewLevel")
         })
         return _obj
 

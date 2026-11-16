@@ -1,4 +1,5 @@
 mod csv;
+pub mod gdal_read;
 pub mod gdal_source;
 pub mod gdal_worker_process;
 mod multi_band_gdal_source;

@@ -12,7 +12,7 @@ Method | HTTP request | Description
 [**register_user_handler**](SessionApi.md#register_user_handler) | **POST** /user | Registers a user.
 [**session_handler**](SessionApi.md#session_handler) | **GET** /session | Retrieves details about the current session.
 [**session_project_handler**](SessionApi.md#session_project_handler) | **POST** /session/project/{project} | Sets the active project of the session.
-[**session_view_handler**](SessionApi.md#session_view_handler) | **POST** /session/view | 
+[**session_view_handler**](SessionApi.md#session_view_handler) | **POST** /session/view | Sets the view (spatial and temporal extent) of the current session.
 
 
 
@@ -239,7 +239,7 @@ Name | Type | Description  | Required | Notes
 ## session_view_handler
 
 > session_view_handler(st_rectangle)
-
+Sets the view (spatial and temporal extent) of the current session.
 
 ### Parameters
 

@@ -10,11 +10,13 @@ import * as prettier from 'prettier';
  * @param input The path to the OpenAPI specification file (JSON).
  * @param operatorsOutputDir The directory where the generated markdown files for operators will be saved.
  * @param plotsOutputDir The directory where the generated markdown files for plot operators will be saved.
+ * @param endpointsOutputFile The markdown file where the generated list of REST endpoints will be saved.
  */
 interface OpenApiOperatorsOptions {
     input: string;
     operatorsOutputDir: string;
     plotsOutputDir: string;
+    endpointsOutputFile: string;
 }
 
 /**
@@ -32,7 +34,7 @@ export default function openApiOperatorsPlugin(options: OpenApiOperatorsOptions)
                 // Prevent double-running during simple dev reloads
                 if (isRestart) return;
 
-                const {input, operatorsOutputDir, plotsOutputDir} = options;
+                const {input, operatorsOutputDir, plotsOutputDir, endpointsOutputFile} = options;
 
                 logger.info(`Generating operator and plot docs from ${input}...`);
 
@@ -93,6 +95,8 @@ export default function openApiOperatorsPlugin(options: OpenApiOperatorsOptions)
                     for (const plotOperatorMd of plotOperatorMds) {
                         await writeMarkdownFile(plotsOutputDir, plotOperatorMd, logger);
                     }
+
+                    await writeEndpointsFile(endpointsOutputFile, openapiSchema?.paths ?? {}, openapiSchema?.security, logger);
 
                     logger.info('✅ Documentation generated successfully.');
                 } catch (error) {
@@ -187,6 +191,110 @@ ${operatorMd.content}`;
     const config = await prettier.resolveConfig(filePath);
     const formatted = await prettier.format(fileContent, {...config, parser: 'markdown', filepath: filePath});
 
+    fs.writeFileSync(filePath, formatted);
+    logger.info(`Written file: ${filePath}`);
+}
+
+const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] as const;
+
+/**
+ * Represents a single REST endpoint for the generated endpoint list.
+ */
+interface EndpointEntry {
+    method: string;
+    path: string;
+    summary: string;
+    session: SessionRequirement;
+}
+
+/**
+ * Whether an endpoint needs a session: `yes` if it requires one, `optional` if it works with and without, `no` if it needs none.
+ */
+type SessionRequirement = 'yes' | 'optional' | 'no';
+
+/**
+ * Derives the session requirement of an operation from its own `security`, falling back to the global `security` of the spec.
+ * An empty security requirement object (`{}`) means that the operation also works without authentication.
+ * @param operation The OpenAPI operation.
+ * @param globalSecurity The top-level `security` of the OpenAPI spec.
+ * @returns The session requirement of the operation.
+ */
+function sessionRequirement(
+    operation: OpenAPI.OperationObject,
+    globalSecurity: OpenAPI.SecurityRequirementObject[] | undefined,
+): SessionRequirement {
+    const security = operation.security ?? globalSecurity ?? [];
+    if (security.length === 0) return 'no';
+    if (security.some((requirement) => Object.keys(requirement).length === 0)) return 'optional';
+    return 'yes';
+}
+
+/**
+ * Writes a markdown page that lists all REST endpoints of the OpenAPI spec, grouped by their tag.
+ * @param filePath The markdown file to write.
+ * @param paths The `paths` object of the OpenAPI spec.
+ * @param globalSecurity The top-level `security` of the OpenAPI spec.
+ * @param logger The logger instance for logging messages.
+ */
+async function writeEndpointsFile(
+    filePath: string,
+    paths: OpenAPI.PathsObject,
+    globalSecurity: OpenAPI.SecurityRequirementObject[] | undefined,
+    logger: AstroIntegrationLogger,
+): Promise<void> {
+    const groups = new Map<string, EndpointEntry[]>();
+
+    for (const [endpointPath, pathItem] of Object.entries(paths)) {
+        for (const method of HTTP_METHODS) {
+            const operation = pathItem?.[method] as OpenAPI.OperationObject | undefined;
+            if (!operation) continue;
+
+            const tag = operation.tags?.[0] ?? 'Other';
+            const entries = groups.get(tag) ?? [];
+            entries.push({
+                method: method.toUpperCase(),
+                path: endpointPath,
+                summary: operation.summary || operation.description || (operation.operationId ? `\`${operation.operationId}\`` : ''),
+                session: sessionRequirement(operation, globalSecurity),
+            });
+            groups.set(tag, entries);
+        }
+    }
+
+    const sections = [...groups.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([tag, entries]) => {
+            const rows = entries
+                .map(
+                    ({method, path: endpointPath, summary, session}) =>
+                        `| \`${method}\` | \`${endpointPath}\` | ${session} | ${escapeMarkdownTableCell(summary)} |`,
+                )
+                .join('\n');
+            return `## ${tag}\n\n| Method | Path | Session | Description |\n| --- | --- | --- | --- |\n${rows}`;
+        })
+        .join('\n\n');
+
+    const fileContent = `\
+---
+title: Endpoints
+sidebar:
+    order: 3
+---
+
+<!-- Generated by plugins/astro-openapi.ts from openapi.json. Do not edit. -->
+
+This page lists all endpoints of the [REST API](/docs/api/rest-api), grouped by topic.
+Paths are relative to the API base URL, e.g., \`http://localhost:3030/api\`.
+The column _Session_ says whether an endpoint needs a session (_yes_), works with and without one (_optional_), or needs none (_no_); see [Authentication](/docs/api/rest-api#authentication).
+The request and response bodies are described in the OpenAPI specification and the Swagger UI of the server.
+
+${sections}
+`;
+
+    const config = await prettier.resolveConfig(filePath);
+    const formatted = await prettier.format(fileContent, {...config, parser: 'markdown', filepath: filePath});
+
+    fs.mkdirSync(path.dirname(filePath), {recursive: true});
     fs.writeFileSync(filePath, formatted);
     logger.info(`Written file: ${filePath}`);
 }

@@ -53,7 +53,7 @@ class SpatialReferencesApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> SpatialReferenceSpecification:
-        """get_spatial_reference_specification_handler
+        """Returns the name, PROJ string, extent and axis order of a spatial reference.
 
 
         :param srs_string: (required)
@@ -119,7 +119,7 @@ class SpatialReferencesApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> ApiResponse[SpatialReferenceSpecification]:
-        """get_spatial_reference_specification_handler
+        """Returns the name, PROJ string, extent and axis order of a spatial reference.
 
 
         :param srs_string: (required)
@@ -185,7 +185,7 @@ class SpatialReferencesApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> RESTResponseType:
-        """get_spatial_reference_specification_handler
+        """Returns the name, PROJ string, extent and axis order of a spatial reference.
 
 
         :param srs_string: (required)

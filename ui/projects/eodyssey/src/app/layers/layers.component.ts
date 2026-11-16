@@ -9,6 +9,7 @@ import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {CoreModule, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
+import {DataSourceNavigationComponent} from './data-source-navigation.component';
 import type {DataSourceDefinition} from './data-sources';
 import {EOdysseyLayerService} from './layers.service';
 
@@ -21,7 +22,7 @@ import {EOdysseyLayerService} from './layers.service';
                 <p class="catalogue-message catalogue-error">{{ error }}</p>
                 <button mat-stroked-button type="button" (click)="eodysseyLayerService.retryCatalogue()">Retry</button>
             </div>
-        } @else if (!eodysseyLayerService.catalogueLoading() && eodysseyLayerService.dataSources().length === 0) {
+        } @else if (!eodysseyLayerService.catalogueLoading() && eodysseyLayerService.categories().length === 0) {
             <div class="catalogue-notice" role="status">
                 <p class="catalogue-message">No data sources are available for this configuration.</p>
                 <button mat-stroked-button type="button" (click)="eodysseyLayerService.retryCatalogue()">Retry</button>
@@ -36,22 +37,7 @@ import {EOdysseyLayerService} from './layers.service';
                     <span>Loading data sources…</span>
                 </div>
             }
-            <mat-selection-list
-                [multiple]="false"
-                class="data-sources"
-                [attr.aria-busy]="eodysseyLayerService.catalogueLoading()"
-                (selectionChange)="onDataSourceSelectionChange($event.options)"
-            >
-                @for (dataSource of eodysseyLayerService.dataSources(); track dataSource.key) {
-                    <mat-list-option
-                        [value]="dataSource.key"
-                        [selected]="eodysseyLayerService.selectedDataSource()?.key === dataSource.key"
-                        [matTooltip]="dataSource.name"
-                    >
-                        <span matListItemTitle>{{ dataSource.name }}</span>
-                    </mat-list-option>
-                }
-            </mat-selection-list>
+            <geoengine-data-source-navigation></geoengine-data-source-navigation>
         </section>
         <mat-divider></mat-divider>
 
@@ -264,36 +250,6 @@ import {EOdysseyLayerService} from './layers.service';
                 color: var(--geoengine-foreground-secondary-text-color);
             }
 
-            .data-sources {
-                padding: 0;
-                margin: 0;
-
-                mat-list-option {
-                    border-radius: 0.5rem;
-                    padding: 0 0.5rem;
-
-                    --mat-list-list-item-label-text-size: #{$text2};
-
-                    span {
-                        display: -webkit-box !important;
-                        -webkit-line-clamp: 2;
-                        -webkit-box-orient: vertical;
-                        overflow: hidden;
-                        white-space: normal !important;
-                    }
-
-                    ::ng-deep {
-                        .mdc-list-item__end {
-                            margin: 0;
-                            padding: 0;
-                        }
-                        .mdc-radio {
-                            padding-right: 0;
-                        }
-                    }
-                }
-            }
-
             .region-select {
                 display: block;
                 width: 100%;
@@ -479,6 +435,7 @@ import {EOdysseyLayerService} from './layers.service';
         MatSelectModule,
         MatProgressSpinnerModule,
         RasterLegendViewComponent,
+        DataSourceNavigationComponent,
     ],
 })
 export class LayersComponent {
@@ -542,11 +499,6 @@ export class LayersComponent {
             !!this.eodysseyLayerService.mapTileLayer() &&
             (this.legendLayer.isLoading() || this.legendLayer.status() === 'error' || !!this.legend()),
     );
-
-    onDataSourceSelectionChange(options: readonly {value: string}[]): void {
-        const selected = options[0]?.value;
-        if (selected) this.eodysseyLayerService.setSelectedDataSource(selected);
-    }
 
     private async applyDataSourceTime(dataSource: DataSourceDefinition): Promise<void> {
         if (this.autoSelectTime() && dataSource.defaultTime) await this.projectService.setTime(new Time(new Date(dataSource.defaultTime)));

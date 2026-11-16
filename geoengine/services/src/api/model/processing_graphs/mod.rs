@@ -46,7 +46,7 @@ pub use crate::api::model::processing_graphs::{
         TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeProjection,
         TimeProjectionParameters, TimeShift, TimeShiftParameters, VectorExpression,
         VectorExpressionParameters, VectorJoin, VectorJoinParameters, VectorJoinSources,
-        VisualPointClustering, VisualPointClusteringParameters,
+        VisualPointClustering, VisualPointClusteringParameters, Warp, WarpMethod, WarpParameters,
     },
     source::{
         AttributeFilter, GdalSource, GdalSourceParameters, MockPointSource,
@@ -163,6 +163,7 @@ pub enum RasterOperator {
     TemporalRasterAggregation(TemporalRasterAggregation),
     Temperature(Temperature),
     TimeShift(TimeShift),
+    Warp(Warp),
 }
 
 /// An operator that produces vector data.
@@ -255,6 +256,7 @@ operator_conversions!(RasterOperator <=> OperatorsTypedRasterOperator {
     TemporalRasterAggregation,
     Temperature,
     TimeShift,
+    Warp,
 });
 
 operator_conversions!(VectorOperator <=> OperatorsTypedVectorOperator {
@@ -382,6 +384,9 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     VectorJoinSources,
     VisualPointClustering,
     VisualPointClusteringParameters,
+    Warp,
+    WarpMethod,
+    WarpParameters,
     // Plots
     BoxPlot,
     BoxPlotParameters,

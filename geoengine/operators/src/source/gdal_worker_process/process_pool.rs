@@ -1,11 +1,17 @@
+use crate::util::safe_lock_mutex;
+use dashmap::{DashMap, mapref::entry::Entry};
+use lru::LruCache;
 use snafu::Snafu;
 use std::collections::VecDeque;
 use std::hash::{BuildHasherDefault, Hasher};
+use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
 
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
@@ -13,8 +19,8 @@ use rustc_hash::FxHasher;
 use super::{
     GdalProcessPoolAccess,
     process_common::{
-        GdalIpcPayload, IpcChannelMessage, IpcChannelResult, IpcProcessError,
-        IpcProcessRasterResult, WorkerRequest, WorkerResponse,
+        GdalIpcPayload, GdalRequest, IpcChannelMessage, IpcChannelResult, IpcProcessError,
+        IpcProcessRasterResult, RasterInfo, WorkerRequest, WorkerResponse,
     },
     process_impl::{ChildProcessGuard, WorkerConfig, spawn_ipc_server_process},
 };
@@ -295,6 +301,12 @@ enum BrokerCommand {
     },
 }
 
+/// A read in flight and its request, which followers compare in full: the hash alone may collide.
+struct InFlightRead {
+    request: IpcChannelMessage,
+    tx: InFlightTile,
+}
+
 type SharedResult = Option<
     Arc<(
         Result<IpcChannelResult, GdalProcessPoolError>,
@@ -302,8 +314,8 @@ type SharedResult = Option<
     )>,
 >;
 
-/// Sender of an in-flight read. Followers `subscribe()` to it while holding the `in_flight_tiles`
-/// lock, so its receiver count only changes under that lock. The map holds the sender, not a
+/// Sender of an in-flight read. Followers `subscribe()` to it while holding the shard lock of its
+/// key in `in_flight_tiles`, so its receiver count only changes under that lock. The map holds the sender, not a
 /// receiver: a stored receiver would keep the count at one or more, so the leader could not
 /// notice that all callers gave up.
 type InFlightTile = Arc<tokio::sync::watch::Sender<SharedResult>>;
@@ -311,17 +323,104 @@ type InFlightTile = Arc<tokio::sync::watch::Sender<SharedResult>>;
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
     /// Reads in progress by tile, to deduplicate them. Used by the callers' tasks on any runtime
-    /// thread and by the leader tasks, not by the single-threaded broker, hence the lock. It is
-    /// held only briefly and never across an `.await`.
-    in_flight_tiles: Mutex<FastHashMap<u64, InFlightTile>>,
+    /// thread and by the leader tasks, not by the single-threaded broker, hence the locks. Every
+    /// operation touches one key, so reads of different tiles only share a shard lock. A shard
+    /// lock is held only briefly and never across an `.await`.
+    in_flight_tiles: DashMap<u64, InFlightRead, BuildHasherDefault<FxHasher>>,
+    raster_infos: RasterInfos,
+    counters: PoolCounters,
+}
+
+/// The default of `[gdal_process_pool] header_cache_entries`, for mock contexts and tests.
+pub const DEFAULT_HEADER_CACHE_ENTRIES: NonZeroUsize = NonZeroUsize::new(4096).expect("not zero");
+
+/// Recently read headers by file, so that a tile does not queue behind the workers that decode for
+/// one on every read.
+struct RasterInfos(Mutex<LruCache<Arc<str>, (CacheHint, RasterInfo)>>);
+
+impl Default for RasterInfos {
+    fn default() -> Self {
+        Self::new(DEFAULT_HEADER_CACHE_ENTRIES)
+    }
+}
+
+impl RasterInfos {
+    fn new(entries: NonZeroUsize) -> Self {
+        Self(Mutex::new(LruCache::new(entries)))
+    }
+
+    fn get(&self, file: &str) -> Option<RasterInfo> {
+        let mut infos = safe_lock_mutex(&self.0);
+        let (cache_hint, info) = infos.get(file)?;
+        cache_hint.may_cache().then(|| info.clone())
+    }
+
+    /// Returns whether no valid header of the file was known. Tiles that wait for the same header
+    /// all put it, this is true for the first one.
+    fn put(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) -> bool {
+        let mut infos = safe_lock_mutex(&self.0);
+        let is_new = !infos
+            .peek(&*file)
+            .is_some_and(|(cache_hint, _)| cache_hint.may_cache());
+        infos.put(file, (cache_hint, info));
+        is_new
+    }
+
+    fn clear(&self) {
+        safe_lock_mutex(&self.0).clear();
+    }
+}
+
+#[derive(Default)]
+struct PoolCounters {
+    reads: AtomicU64,
+    reads_joined: AtomicU64,
+    headers: AtomicU64,
+    headers_joined: AtomicU64,
+}
+
+impl PoolCounters {
+    fn count(&self, request: &IpcChannelMessage, joined: bool) {
+        let is_header = matches!(request.0.request, GdalRequest::Header);
+        match (is_header, joined) {
+            (true, true) => &self.headers_joined,
+            (true, false) => &self.headers,
+            (false, true) => &self.reads_joined,
+            (false, false) => &self.reads,
+        }
+        .fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// What the pool was asked since it was created.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PoolRequestStats {
+    /// reads sent to a worker
+    pub reads: u64,
+    /// reads that joined an identical read in flight
+    pub reads_joined: u64,
+    /// header requests sent to a worker
+    pub headers: u64,
+    /// header requests that joined an identical one in flight
+    pub headers_joined: u64,
 }
 
 impl GdalProcessPool {
+    pub fn request_stats(&self) -> PoolRequestStats {
+        PoolRequestStats {
+            reads: self.counters.reads.load(Ordering::Relaxed),
+            reads_joined: self.counters.reads_joined.load(Ordering::Relaxed),
+            headers: self.counters.headers.load(Ordering::Relaxed),
+            headers_joined: self.counters.headers_joined.load(Ordering::Relaxed),
+        }
+    }
+
     /// Ask every worker to close its dataset and clear remote file caches.
     /// Waits for every worker acknowledgement, even if another worker fails.
     /// `CLEAR_CACHES_TIMEOUT` bounds the entire operation, including broker submission and response.
     /// Queued clears may still run after a timeout, and concurrent queries may refill caches.
     pub async fn clear_caches(&self) -> Result<(), GdalProcessPoolError> {
+        self.raster_infos.clear();
         tokio::time::timeout(CLEAR_CACHES_TIMEOUT, async {
             let (tx, rx) = oneshot::channel();
             self.broker_tx
@@ -358,6 +457,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        header_cache_entries: NonZeroUsize,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
@@ -402,7 +502,9 @@ impl GdalProcessPool {
 
         Arc::new(Self {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
+            raster_infos: RasterInfos::new(header_cache_entries),
+            counters: PoolCounters::default(),
         })
     }
 
@@ -416,6 +518,7 @@ impl GdalProcessPool {
     /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
     /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
     /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `header_cache_entries`: The number of file headers kept for reads through cached blocks.
     ///
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
@@ -425,6 +528,7 @@ impl GdalProcessPool {
         number_of_processes: usize,
         max_active_processes: usize,
         max_dataset_processes: usize,
+        header_cache_entries: NonZeroUsize,
         worker_config: WorkerConfig,
     ) -> Arc<Self> {
         Self::new_with_tokio_handle(
@@ -432,6 +536,7 @@ impl GdalProcessPool {
             number_of_processes,
             max_active_processes,
             max_dataset_processes,
+            header_cache_entries,
             worker_config,
         )
     }
@@ -1099,16 +1204,12 @@ impl Drop for LeaderCleanupGuard {
     fn drop(&mut self) {
         // This is guaranteed to run whether the function succeeds, errors,
         // panics, or is abruptly cancelled by Tokio.
-        if let Ok(mut lock) = self.pool.in_flight_tiles.lock() {
-            remove_in_flight(&mut lock, self.tile_key, &self.tx);
-        }
-    }
-}
-
-/// Removes the entry only if it still belongs to `tx`, never a newer leader's entry for the same key.
-fn remove_in_flight(map: &mut FastHashMap<u64, InFlightTile>, tile_key: u64, tx: &InFlightTile) {
-    if map.get(&tile_key).is_some_and(|t| Arc::ptr_eq(t, tx)) {
-        map.remove(&tile_key);
+        // only its own entry, never a newer leader's entry for the same key
+        self.pool
+            .in_flight_tiles
+            .remove_if(&self.tile_key, |_, in_flight| {
+                Arc::ptr_eq(&in_flight.tx, &self.tx)
+            });
     }
 }
 
@@ -1135,15 +1236,19 @@ async fn await_read_or_abandon(
         tokio::select! {
             res = &mut oneshot_rx => break res,
             () = tx.closed() => {
-                let Ok(mut lock) = pool.in_flight_tiles.lock() else {
-                    break (&mut oneshot_rx).await;
-                };
-                // A follower may have subscribed between `closed()` and taking the lock. Followers
-                // only subscribe under this lock, so the count is stable here: if it is 0, removing
-                // the entry guarantees that later callers start a new leader instead of joining
-                // this abandoned one. Otherwise, keep waiting for the result.
-                if tx.receiver_count() == 0 {
-                    remove_in_flight(&mut lock, tile_key, tx);
+                // A follower may have subscribed between `closed()` and here. Followers only
+                // subscribe under the shard lock of the key, which `remove_if` holds while it
+                // checks, so the count is stable: if it is 0, removing the entry guarantees that
+                // later callers start a new leader instead of joining this abandoned one.
+                // Otherwise, keep waiting for the result.
+                let mut abandoned = None;
+                pool.in_flight_tiles.remove_if(&tile_key, |_, in_flight| {
+                    let no_callers = tx.receiver_count() == 0;
+                    abandoned = Some(no_callers);
+                    no_callers && Arc::ptr_eq(&in_flight.tx, tx)
+                });
+                // without an entry for the key, no follower can subscribe
+                if abandoned.unwrap_or_else(|| tx.receiver_count() == 0) {
                     tracing::trace!("All callers gave up on fetch: {tile_key}");
                     return None;
                 }
@@ -1211,6 +1316,21 @@ impl GdalPoolDispatcher {
         Ok(payload)
     }
 
+    /// The header of `file` if it was read recently, see [`RasterInfos`].
+    pub fn remembered_raster_info(&self, file: &str) -> Option<RasterInfo> {
+        self.pool.raster_infos.get(file)
+    }
+
+    /// Returns whether no valid header of `file` was known, see [`RasterInfos`].
+    pub fn remember_raster_info(
+        &self,
+        file: Arc<str>,
+        info: RasterInfo,
+        cache_hint: CacheHint,
+    ) -> bool {
+        self.pool.raster_infos.put(file, info, cache_hint)
+    }
+
     /// Read a header (`GdalRequest::Header`) without pixel
     /// data. Uses the same leader/follower deduplication as [`Self::read_data`].
     ///
@@ -1219,9 +1339,16 @@ impl GdalPoolDispatcher {
     pub async fn read_header(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<IpcChannelResult, GdalProcessPoolError> {
+    ) -> Result<RasterInfo, GdalProcessPoolError> {
         let shared_res = self.dispatch_dedup(request).await?;
-        shared_res.0.clone()
+        match shared_res.0.clone()? {
+            IpcChannelResult::RasterInfo(info) => Ok(info),
+            IpcChannelResult::Raster(_) => Err(GdalProcessPoolError::IpcProcessError {
+                source: IpcProcessError::IpcOther {
+                    msg: "the worker answered a header read with a raster".to_string(),
+                },
+            }),
+        }
     }
 
     /// Shared leader/follower dispatch: hashes the request, coalesces identical
@@ -1241,21 +1368,31 @@ impl GdalPoolDispatcher {
         let tile_key = s.finish();
 
         let mut rx = {
-            let mut lock = self
-                .pool
-                .in_flight_tiles
-                .lock()
-                .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+            // holds the shard lock of the key until the entry is dropped
+            let entry = self.pool.in_flight_tiles.entry(tile_key);
 
             // test if data is already read
-            if let Some(tx) = lock.get(&tile_key) {
+            let in_flight = match &entry {
+                Entry::Occupied(occupied) => Some(occupied.get()),
+                Entry::Vacant(_) => None,
+            };
+            if let Some(in_flight) = in_flight.filter(|r| same_read(&r.request, &request)) {
                 tracing::trace!("Follower attached to existing fetch: {tile_key}");
-                tx.subscribe()
+                self.pool.counters.count(&request, true);
+                in_flight.tx.subscribe()
             } else {
+                self.pool.counters.count(&request, false);
                 tracing::trace!("Spawning background fetch task for: {tile_key}");
                 let (tx, rx) = tokio::sync::watch::channel(None);
                 let tx = Arc::new(tx);
-                lock.insert(tile_key, tx.clone());
+                // a different request with the same hash reads on its own, unregistered; either
+                // way the shard lock is released here, before the leader is spawned
+                if let Entry::Vacant(vacant) = entry {
+                    vacant.insert(InFlightRead {
+                        request: request.clone(),
+                        tx: tx.clone(),
+                    });
+                }
 
                 let pool_clone = self.pool.clone();
                 let request_clone = request.clone();
@@ -1333,6 +1470,11 @@ impl GdalPoolDispatcher {
     }
 }
 
+/// Whether two requests read the same data. The tracing id differs per request.
+fn same_read(a: &IpcChannelMessage, b: &IpcChannelMessage) -> bool {
+    a.0.dataset_params == b.0.dataset_params && a.0.request == b.0.request
+}
+
 impl GdalProcessPoolAccess for Arc<GdalProcessPool> {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool> {
         self
@@ -1348,6 +1490,24 @@ mod tests {
     /// Creates a window from min/max `[row, col]` indices.
     fn window(min: [isize; 2], max: [isize; 2]) -> GridBoundingBox2D {
         GridBoundingBox2D::new(GridIdx2D::new(min), GridIdx2D::new(max)).unwrap()
+    }
+
+    #[test]
+    fn it_reports_only_the_first_valid_header_of_a_file_as_new() {
+        let infos = RasterInfos::default();
+        let info = RasterInfo {
+            data_type: geoengine_datatypes::raster::RasterDataType::U8,
+            spatial_reference:
+                geoengine_datatypes::spatial_reference::SpatialReferenceOption::Unreferenced,
+            levels: vec![],
+        };
+
+        assert!(infos.put("a".into(), info.clone(), CacheHint::seconds(60)));
+        assert!(!infos.put("a".into(), info.clone(), CacheHint::seconds(60)));
+        assert!(infos.put("b".into(), info.clone(), CacheHint::seconds(60)));
+
+        assert!(infos.put("expired".into(), info.clone(), CacheHint::no_cache()));
+        assert!(infos.put("expired".into(), info, CacheHint::seconds(60)));
     }
 
     // --- calculate_grid_distance ---
@@ -1377,6 +1537,25 @@ mod tests {
         let a = window([0, 0], [7, 7]);
         let b = window([50, 0], [57, 7]);
         assert_eq!(calculate_grid_distance(&a, &b), 50);
+    }
+
+    #[test]
+    fn same_read_ignores_the_tracing_id_but_not_what_the_hash_leaves_out() {
+        let w = window([0, 0], [255, 255]);
+        let a = make_request(42, 1, w).0.request;
+        let mut b = make_request(42, 1, w).0.request;
+        b.0.read_id = Some("another-read".to_string());
+        assert!(same_read(&a, &b));
+
+        // not part of `full_hash`, but changes the returned properties
+        b.0.dataset_params.properties_mapping = Some(vec![]);
+        let hash_of = |msg: &IpcChannelMessage| {
+            let mut hasher = rustc_hash::FxHasher::default();
+            msg.full_hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(hash_of(&a), hash_of(&b));
+        assert!(!same_read(&a, &b));
     }
 
     // --- WorkerAffinity::rank ---
@@ -1501,7 +1680,7 @@ mod tests {
     };
     use crate::source::gdal_worker_process::process_common::{
         GdalDataGridByteVariant, GdalIpcBytePayload, GdalIpcRasterProperties, GdalReadAdvise,
-        GdalReadWindow, GdalRequest, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
+        GdalReadWindow, IpcChannelMessage, IpcChannelMessagePayload, IpcChannelResult,
     };
     use geoengine_datatypes::primitives::Coordinate2D;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType};
@@ -1537,7 +1716,9 @@ mod tests {
         (
             GdalProcessPool {
                 broker_tx,
-                in_flight_tiles: Mutex::new(FastHashMap::default()),
+                in_flight_tiles: DashMap::default(),
+                raster_infos: RasterInfos::default(),
+                counters: PoolCounters::default(),
             },
             broker_rx,
         )
@@ -1759,7 +1940,13 @@ mod tests {
             dataset.flush_cache().unwrap();
         };
         write(&path, 1.0);
-        let pool = GdalProcessPool::new(1, 1, 1, WorkerConfig::default());
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         let (mut request, _) = make_request(0, 1, window([0, 0], [255, 255]));
         request.request.0.dataset_params.file_path = path.clone();
         for (iteration, expected) in [1, 1, 2, 2].into_iter().enumerate() {
@@ -1983,7 +2170,13 @@ mod tests {
                 .times(2)
                 .respond_with(status_code(200).body(bytes)),
         );
-        let pool = GdalProcessPool::new(1, 1, 1, WorkerConfig::default());
+        let pool = GdalProcessPool::new(
+            1,
+            1,
+            1,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
         for iteration in 0..3 {
             if iteration == 2 {
                 pool.clear_caches().await.unwrap();
@@ -2036,6 +2229,7 @@ mod tests {
                     flip_y: false,
                 },
                 data_type: RasterDataType::U8,
+                level_factor: None,
             },
         });
         let req = Box::new(QueuedRequest {
@@ -2314,7 +2508,9 @@ mod tests {
         });
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
+            raster_infos: RasterInfos::default(),
+            counters: PoolCounters::default(),
         });
         (pool, held_rx)
     }
@@ -2333,7 +2529,7 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(1), queued.respond_to.closed())
             .await
             .expect("the leader should abandon the read once its only caller is gone");
-        assert!(pool.in_flight_tiles.lock().unwrap().is_empty());
+        assert!(pool.in_flight_tiles.is_empty());
     }
 
     #[tokio::test]
@@ -2418,7 +2614,9 @@ mod tests {
 
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
+            raster_infos: RasterInfos::default(),
+            counters: PoolCounters::default(),
         });
 
         // Mock broker: respond to every Read with a fixed success result.
@@ -2431,7 +2629,7 @@ mod tests {
             }
         });
 
-        let dispatcher = GdalPoolDispatcher::new(pool);
+        let dispatcher = GdalPoolDispatcher::new(pool.clone());
 
         let w = window([0, 0], [255, 255]);
         let (msg_a, _) = make_request(42, 1, w);
@@ -2451,6 +2649,14 @@ mod tests {
             1,
             "only one BrokerCommand::Read should have been sent (dedup)"
         );
+        assert_eq!(
+            pool.request_stats(),
+            PoolRequestStats {
+                reads: 1,
+                reads_joined: 1,
+                ..Default::default()
+            }
+        );
     }
 
     #[tokio::test]
@@ -2461,7 +2667,9 @@ mod tests {
 
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
-            in_flight_tiles: Mutex::new(FastHashMap::default()),
+            in_flight_tiles: DashMap::default(),
+            raster_infos: RasterInfos::default(),
+            counters: PoolCounters::default(),
         });
 
         // Mock broker: respond with a FileNotFound error.

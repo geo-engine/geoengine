@@ -16,6 +16,9 @@ pub struct SpatialGridDescriptor {
     pub spatial_grid: Box<models::SpatialGridDefinition>,
     #[serde(rename = "descriptor")]
     pub descriptor: models::SpatialGridDescriptorState,
+    /// The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset. Sources read only these and downsample further themselves. Unset: the levels are unknown and GDAL chooses, which may resample.
+    #[serde(rename = "maxOverviewLevel", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub max_overview_level: Option<Option<i32>>,
 }
 
 impl SpatialGridDescriptor {
@@ -23,6 +26,7 @@ impl SpatialGridDescriptor {
         SpatialGridDescriptor {
             spatial_grid: Box::new(spatial_grid),
             descriptor,
+            max_overview_level: None,
         }
     }
 }

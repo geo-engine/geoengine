@@ -914,6 +914,7 @@ export class DatasetsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Updates the dataset\'s provenance.
      */
     async updateDatasetProvenanceHandlerRaw(requestParameters: UpdateDatasetProvenanceHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
         const requestOptions = await this.updateDatasetProvenanceHandlerRequestOpts(requestParameters);
@@ -923,6 +924,7 @@ export class DatasetsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Updates the dataset\'s provenance.
      */
     async updateDatasetProvenanceHandler(requestParameters: UpdateDatasetProvenanceHandlerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
         await this.updateDatasetProvenanceHandlerRaw(requestParameters, initOverrides);

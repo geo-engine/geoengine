@@ -41,6 +41,12 @@ export interface SpatialGridDescriptor {
      * 
      */
     descriptor: SpatialGridDescriptorState;
+    /**
+     * The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset.
+     * Sources read only these and downsample further themselves. Unset: the levels are unknown
+     * and GDAL chooses, which may resample.
+     */
+    maxOverviewLevel?: number | null;
 }
 
 
@@ -66,6 +72,7 @@ export function SpatialGridDescriptorFromJSONTyped(json: any, ignoreDiscriminato
         
         'spatialGrid': SpatialGridDefinitionFromJSON(json['spatialGrid']),
         'descriptor': SpatialGridDescriptorStateFromJSON(json['descriptor']),
+        'maxOverviewLevel': json['maxOverviewLevel'] === undefined ? undefined : json['maxOverviewLevel'] === null ? null : json['maxOverviewLevel'],
     };
 }
 
@@ -82,6 +89,7 @@ export function SpatialGridDescriptorToJSONTyped(value?: SpatialGridDescriptor |
         
         'spatialGrid': SpatialGridDefinitionToJSON(value['spatialGrid']),
         'descriptor': SpatialGridDescriptorStateToJSON(value['descriptor']),
+        'maxOverviewLevel': value['maxOverviewLevel'],
     };
 }
 

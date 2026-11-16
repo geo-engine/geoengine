@@ -110,6 +110,10 @@ impl SpatialGridDescriptorState {
 pub struct SpatialGridDescriptor {
     spatial_grid: SpatialGridDefinition,
     state: SpatialGridDescriptorState,
+    /// A source dataset declares that every file has the power-of-two overview levels
+    /// `2..=max_overview_level`. `None`: unknown, GDAL chooses and may resample.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_overview_level: Option<u32>,
 }
 
 impl SpatialGridDescriptor {
@@ -117,7 +121,22 @@ impl SpatialGridDescriptor {
         Self {
             spatial_grid: spatial_grid_def,
             state: SpatialGridDescriptorState::Source,
+            max_overview_level: None,
         }
+    }
+
+    /// Declares the overview levels `2..=max_overview_level` of a source dataset.
+    #[must_use]
+    pub fn with_max_overview_level(self, max_overview_level: Option<u32>) -> Self {
+        Self {
+            max_overview_level,
+            ..self
+        }
+    }
+
+    /// The largest declared overview level, see [`Self::with_max_overview_level`].
+    pub fn max_overview_level(&self) -> Option<u32> {
+        self.max_overview_level
     }
 
     pub fn source_from_parts(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
@@ -128,6 +147,7 @@ impl SpatialGridDescriptor {
     pub fn as_derived(self) -> Self {
         Self {
             state: SpatialGridDescriptorState::Merged,
+            max_overview_level: None,
             ..self
         }
     }
@@ -146,6 +166,9 @@ impl SpatialGridDescriptor {
         Some(Self {
             spatial_grid: merged_grid,
             state,
+            max_overview_level: (self.max_overview_level == other.max_overview_level)
+                .then_some(self.max_overview_level)
+                .flatten(),
         })
     }
 
@@ -153,7 +176,8 @@ impl SpatialGridDescriptor {
     pub fn map<F: Fn(&SpatialGridDefinition) -> SpatialGridDefinition>(&self, map_fn: F) -> Self {
         Self {
             spatial_grid: map_fn(&self.spatial_grid),
-            ..*self
+            state: self.state,
+            max_overview_level: None,
         }
     }
 
@@ -163,7 +187,8 @@ impl SpatialGridDescriptor {
     ) -> Result<Self> {
         Ok(Self {
             spatial_grid: map_fn(&self.spatial_grid)?,
-            ..*self
+            state: self.state,
+            max_overview_level: None,
         })
     }
 
@@ -244,6 +269,7 @@ impl SpatialGridDescriptor {
             Some(p) => Ok(Some(Self {
                 spatial_grid: p,
                 state: SpatialGridDescriptorState::Merged,
+                max_overview_level: None,
             })),
             None => Ok(None),
         }
@@ -268,15 +294,17 @@ impl SpatialGridDescriptor {
         let tiling_spatial_grid = tiling_grid.tiling_spatial_grid_definition();
         let intersection = self.spatial_grid.intersection(&tiling_spatial_grid)?;
 
-        let descriptor = if self.spatial_grid.grid_bounds == intersection.grid_bounds {
-            self.state
-        } else {
-            SpatialGridDescriptorState::Merged
-        };
+        if self.spatial_grid.grid_bounds == intersection.grid_bounds {
+            return Some(Self {
+                spatial_grid: intersection,
+                ..*self
+            });
+        }
 
         Some(Self {
             spatial_grid: intersection,
-            state: descriptor,
+            state: SpatialGridDescriptorState::Merged,
+            max_overview_level: None,
         })
     }
 
@@ -284,6 +312,7 @@ impl SpatialGridDescriptor {
         let SpatialGridDescriptor {
             spatial_grid,
             state,
+            ..
         } = *self;
         (state, spatial_grid)
     }
@@ -1041,6 +1070,7 @@ mod db_types {
     pub struct SpatialGridDescriptorDbType {
         state: SpatialGridDescriptorStateDbType,
         spatial_grid: SpatialGridDefinition,
+        max_overview_level: Option<i32>,
     }
 
     impl From<&SpatialGridDescriptor> for SpatialGridDescriptorDbType {
@@ -1048,6 +1078,9 @@ mod db_types {
             Self {
                 spatial_grid: value.spatial_grid,
                 state: SpatialGridDescriptorStateDbType::from(&value.state),
+                max_overview_level: value
+                    .max_overview_level
+                    .map(|level| i32::try_from(level).unwrap_or(i32::MAX)),
             }
         }
     }
@@ -1057,6 +1090,9 @@ mod db_types {
             Self {
                 spatial_grid: value.spatial_grid,
                 state: SpatialGridDescriptorState::from(value.state),
+                max_overview_level: value
+                    .max_overview_level
+                    .and_then(|level| u32::try_from(level).ok()),
             }
         }
     }

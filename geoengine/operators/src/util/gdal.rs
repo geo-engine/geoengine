@@ -1,3 +1,6 @@
+use crate::source::gdal_worker_process::process_common::{
+    RasterLevelLayout, largest_overview_level,
+};
 use crate::{
     engine::{
         MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
@@ -13,6 +16,7 @@ use crate::{
     test_data,
     util::Result,
 };
+use gdal::raster::RasterBand;
 use gdal::{Dataset, DatasetOptions, DriverManager, errors::GdalError};
 use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_datatypes::{
@@ -436,7 +440,8 @@ pub fn raster_descriptor_from_dataset(
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             data_geo_transfrom,
             data_shape.bounding_box(),
-        ),
+        )
+        .with_max_overview_level(Some(max_overview_level(rasterband)?)),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO: derive better name?
             measurement_from_rasterband(dataset, band)?,
@@ -465,12 +470,39 @@ pub fn raster_descriptor_from_dataset_and_sref(
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             data_geo_transfrom,
             data_shape.bounding_box(),
-        ),
+        )
+        .with_max_overview_level(Some(max_overview_level(rasterband)?)),
         bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
             "band".into(), // TODO derive better name?
             measurement_from_rasterband(dataset, band)?,
         )])?,
     })
+}
+
+/// The size and block size of the full resolution and then of each overview of a band.
+pub fn band_levels(band: &RasterBand) -> std::result::Result<Vec<RasterLevelLayout>, GdalError> {
+    let layout = |band: &RasterBand| {
+        let (size_x, size_y) = band.size();
+        let (block_size_x, block_size_y) = band.block_size();
+        RasterLevelLayout {
+            size_x,
+            size_y,
+            block_size_x,
+            block_size_y,
+        }
+    };
+    let overview_count = usize::try_from(band.overview_count()?).unwrap_or(0);
+    let mut levels = Vec::with_capacity(overview_count + 1);
+    levels.push(layout(band));
+    for overview in 0..overview_count {
+        levels.push(layout(&band.overview(overview)?));
+    }
+    Ok(levels)
+}
+
+/// See [`largest_overview_level`].
+pub fn max_overview_level(band: &RasterBand) -> Result<u32> {
+    Ok(largest_overview_level(&band_levels(band)?))
 }
 
 pub fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {

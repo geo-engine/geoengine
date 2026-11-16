@@ -165,6 +165,125 @@ describe('LayersComponent', () => {
         fixture = TestBed.createComponent(LayersComponent);
     });
 
+    function mockCategorizedCatalogue(): void {
+        const category = (key: string, name: string): CollectionItem => ({
+            type: 'collection',
+            name,
+            description: '',
+            id: {providerId: 'provider', collectionId: key},
+        });
+        const source = listings.edv.items[0] as Extract<CollectionItem, {type: 'collection'}>;
+        const pages: Record<string, unknown[]> = {
+            [LAYER_DB_ROOT_COLLECTION_ID]: listings[LAYER_DB_ROOT_COLLECTION_ID].items,
+            // Deliberately unsorted. Categories have no edv:dataset or edv:crs metadata.
+            edv: [category('radar', 'Radar Imagery'), category('optical', 'Optical Imagery')],
+            optical: [
+                {
+                    ...source,
+                    properties: [...(source.properties ?? []), ['edv:citation', 'Source citation'], ['edv:minTileMatrixIndex', '5']],
+                },
+            ],
+            radar: [
+                {
+                    ...source,
+                    name: 'Radar',
+                    id: {providerId: 'provider', collectionId: 'radarSource'},
+                    properties: [['edv:dataset', 'radar']],
+                },
+            ],
+            dataset: listings.dataset.items,
+            region: listings.region.items,
+            radarSource: [{...(listings.dataset.items[0] as CollectionItem), id: {providerId: 'provider', collectionId: 'radarRegion'}}],
+            radarRegion: [{...(listings.region.items[0] as CollectionItem), id: {providerId: 'provider', layerId: 'radar-layer'}}],
+        };
+        getLayerCollectionItems.mockImplementation((_provider, collection, offset = 0, limit = 20) =>
+            Promise.resolve({items: (pages[collection] ?? []).slice(offset, offset + limit)}),
+        );
+    }
+
+    it('expands the first category and preselects its first source, variant and preset with their metadata', async () => {
+        mockCategorizedCatalogue();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const element = fixture.nativeElement as HTMLElement;
+        const panels = element.querySelectorAll('mat-expansion-panel');
+        expect(panels).toHaveLength(2);
+        expect(panels[0].classList.contains('mat-expanded')).toBe(true);
+        expect(panels[1].classList.contains('mat-expanded')).toBe(false);
+        expect(eodysseyLayerService.selectedCategory()?.name).toBe('Optical Imagery');
+        expect(eodysseyLayerService.selectedDataSource()).toMatchObject({
+            key: 'sentinel',
+            citation: 'Source citation',
+            minTileMatrixIndex: 5,
+            defaultTime: 1775001600000,
+        });
+        expect(eodysseyLayerService.selectedVariant()?.key).toBe('EPSG:4326');
+        expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');
+        expect(eodysseyLayerService.canApplyPreset()).toBe(true);
+        expect(getLayerCollectionItems.mock.calls.map((call) => call[1])).not.toContain('radarRegion');
+        fixture.componentInstance.applySelectedPreset();
+        expect(eodysseyLayerService.appliedMinTileMatrixIndex()).toBe(5);
+        expect(setTime).toHaveBeenCalled();
+        await fixture.whenStable();
+        expect(setTimeStepDuration).toHaveBeenCalledWith({durationAmount: 1, durationUnit: 'day'});
+    });
+
+    it('switches categories through the accordion while keeping the applied visualization until Apply', async () => {
+        mockCategorizedCatalogue();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.componentInstance.applySelectedPreset();
+        const applied = eodysseyLayerService.mapTileLayer();
+        const element = fixture.nativeElement as HTMLElement;
+        (element.querySelectorAll('mat-expansion-panel-header')[1] as HTMLElement).click();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedCategory()?.key).toBe('radar');
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('radar');
+        expect(eodysseyLayerService.selectedPreset()?.layerId).toBe('radar-layer');
+        expect(eodysseyLayerService.mapTileLayer()).toEqual(applied);
+        const panels = element.querySelectorAll('mat-expansion-panel');
+        expect(panels[0].classList.contains('mat-expanded')).toBe(false);
+        expect(panels[1].classList.contains('mat-expanded')).toBe(true);
+        fixture.componentInstance.applySelectedPreset();
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe('radar-layer');
+        (element.querySelectorAll('mat-expansion-panel-header')[0] as HTMLElement).click();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('sentinel');
+        expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default');
+    });
+
+    it('paginates category and data-source collections and permits an empty category', async () => {
+        const collection = (key: string): CollectionItem => ({
+            type: 'collection',
+            name: key,
+            description: '',
+            id: {providerId: 'provider', collectionId: key},
+        });
+        const pages: Record<string, unknown[]> = {
+            ...Object.fromEntries(Object.entries(listings).map(([key, page]) => [key, page.items])),
+            edv: [...Array.from({length: 20}, (_, index) => collection(`Category ${index}`)), collection('Imagery')],
+            Imagery: [...Array.from({length: 20}, (_, index) => ({type: 'layer', name: String(index)})), ...listings.edv.items],
+        };
+        getLayerCollectionItems.mockImplementation((_provider, key, offset = 0, limit = 20) =>
+            Promise.resolve({items: (pages[key] ?? []).slice(offset, offset + limit)}),
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.categories()).toHaveLength(21);
+        expect(eodysseyLayerService.selectedDataSource()).toBeUndefined();
+        expect(eodysseyLayerService.canApplyPreset()).toBe(false);
+        expect(getLayerCollectionItems.mock.calls.some((call) => call[1] === 'edv' && call[2] === 20)).toBe(true);
+        expect(getLayerCollectionItems.mock.calls.some((call) => call[1] === 'Imagery' && call[2] === 20)).toBe(true);
+        eodysseyLayerService.setSelectedCategory('Imagery');
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(eodysseyLayerService.selectedCategory()?.key).toBe('Imagery');
+        expect(eodysseyLayerService.selectedDataSource()?.key).toBe('sentinel');
+        await vi.waitFor(() => expect(eodysseyLayerService.selectedPreset()?.key).toBe('Default'));
+    });
+
     it('preselects the matching coverage on source switches and preserves the initial choice while panning', async () => {
         mockCoverageCatalogue();
         mapView.setCenter([9, 50]);
@@ -376,7 +495,7 @@ describe('LayersComponent', () => {
         await Promise.resolve();
         fixture.detectChanges();
         expect(element.querySelectorAll('mat-spinner').length).toBe(2);
-        expect(element.querySelector('.data-sources')?.getAttribute('aria-busy')).toBe('true');
+        expect(element.querySelector('geoengine-data-source-navigation mat-accordion')?.getAttribute('aria-busy')).toBe('true');
         expect(element.querySelector('.visualization-presets')?.getAttribute('aria-busy')).toBe('true');
         resolveRoot(listings[LAYER_DB_ROOT_COLLECTION_ID]);
         await fixture.whenStable();
@@ -507,7 +626,7 @@ describe('LayersComponent', () => {
         emptyCatalogue = false;
         retry!.click();
         fixture.detectChanges();
-        expect(element.querySelector('.data-sources')?.getAttribute('aria-busy')).toBe('true');
+        expect(element.querySelector('geoengine-data-source-navigation mat-accordion')?.getAttribute('aria-busy')).toBe('true');
         await fixture.whenStable();
         fixture.detectChanges();
         expect(element.textContent).not.toContain('No data sources are available');
@@ -747,10 +866,11 @@ describe('LayersComponent', () => {
         ]);
     });
 
-    it('reports a missing source key without traversing another folder level', async () => {
+    it('reports a missing source key within a category without traversing another folder level', async () => {
+        const category = {type: 'collection', name: 'Imagery', id: {providerId: 'provider', collectionId: 'category'}, description: ''};
         getLayerCollectionItems.mockImplementation((_provider, collection) =>
             Promise.resolve(
-                collection === 'edv'
+                collection === 'category'
                     ? {
                           items: [
                               {
@@ -761,7 +881,9 @@ describe('LayersComponent', () => {
                               },
                           ],
                       }
-                    : (listings[collection] ?? {items: []}),
+                    : collection === 'edv'
+                      ? {items: [category]}
+                      : (listings[collection] ?? {items: []}),
             ),
         );
         fixture.detectChanges();

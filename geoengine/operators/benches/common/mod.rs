@@ -1,5 +1,5 @@
 //! Setup shared by the topic benches (`gdal_source`, `reprojection`, `expression`,
-//! `bands_and_time`, `raster_cache`) and `core_scaling`: one raster dataset, one GDAL pool like
+//! `bands_and_time`, `raster_cache`), `core_scaling` and `block_reads`: one raster dataset, one GDAL pool like
 //! the server, the operator workloads and queries over the whole result or a part of it, run as
 //! one task per query where they are concurrent, like the server does.
 //!
@@ -34,6 +34,7 @@
 )]
 
 pub mod metrics;
+pub mod range_server;
 
 use config::{Config, ConfigError, Environment, File};
 use criterion::{BenchmarkGroup, Criterion, SamplingMode, measurement::WallTime};
@@ -41,8 +42,8 @@ use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::{
     dataset::{DataId, DatasetId, NamedData},
     primitives::{
-        BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
-        TimeInterval, TimeStep,
+        BandSelection, CacheTtlSeconds, RasterQueryRectangle, SpatialPartition2D,
+        SpatialResolution, TimeInstance, TimeInterval, TimeStep,
     },
     raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
     spatial_reference::SpatialReference,
@@ -68,9 +69,12 @@ use geoengine_operators::{
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
-        gdal_worker_process::WorkerConfig,
+        gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig},
     },
-    util::{create_rayon_thread_pool, gdal::create_ndvi_meta_data_with_cache_ttl},
+    util::{
+        WrapWithProjectionAndResample, create_rayon_thread_pool,
+        gdal::create_ndvi_meta_data_with_cache_ttl,
+    },
 };
 use rayon::ThreadPool;
 use serde::de::DeserializeOwned;
@@ -291,6 +295,11 @@ impl Env {
             setting(&settings, "gdal_process_pool.number_of_processes", 32),
             setting(&settings, "gdal_process_pool.max_active_processes", 16),
             setting(&settings, "gdal_process_pool.max_dataset_processes", 8),
+            setting(
+                &settings,
+                "gdal_process_pool.header_cache_entries",
+                DEFAULT_HEADER_CACHE_ENTRIES,
+            ),
             WorkerConfig {
                 // without the server's options GDAL caches 5% of the RAM per worker
                 gdal_config_options: Some(
@@ -399,6 +408,31 @@ impl Env {
     /// The mean over windows of six time steps of the raster, ignoring no data.
     pub fn six_step_mean(&self, raster: TypedRasterOperator) -> TypedRasterOperator {
         mean(raster, self.step * 6)
+    }
+
+    /// The operator as the server wraps it for a query in `srs` with `resolution`, e.g. for a WMS
+    /// `GetMap` request (`WrapWithProjectionAndResample`, as in `services::queries::raster_grid`).
+    pub fn resample(
+        &self,
+        operator: TypedRasterOperator,
+        srs: SpatialReference,
+        resolution: SpatialResolution,
+    ) -> TypedRasterOperator {
+        self.runtime.block_on(async {
+            let initialized = operator
+                .clone()
+                .initialize(
+                    ProcessingGraphOperatorPath::initialize_root(),
+                    &self.exe_ctx,
+                )
+                .await
+                .unwrap();
+            WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
+                .wrap_with_projection_and_resample(None, Some(resolution), srs, &self.exe_ctx)
+                .await
+                .unwrap()
+                .operator
+        })
     }
 
     /// Initializes the operator and queries all of its bands in `area` and `time`.

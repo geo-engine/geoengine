@@ -85,14 +85,30 @@ impl GdalDatasetParameters {
         }
     }
 
-    /// Returns whether the file path refers to a remote resource that is accessed via
-    /// a GDAL virtual file system handler (HTTP(S) or S3). Used to decide whether the
-    /// VSI cache needs to be cleared on retry.
+    /// Returns whether the file path refers to a remote resource: an HTTP(S) or S3 URL, or a
+    /// path through a remote GDAL virtual file system anywhere in it, as in
+    /// `SENTINEL2_L2A:/vsis3/...` or `/vsizip//vsicurl/...`. Used to decide whether the VSI cache
+    /// needs to be cleared on retry and which files `BlockReadMode::Auto` reads through blocks.
     pub fn is_remote(&self) -> bool {
+        // the `_streaming` variants start with these names, too
+        const REMOTE_FILE_SYSTEMS: [&str; 9] = [
+            "/vsicurl",
+            "/vsis3",
+            "/vsigs",
+            "/vsiaz",
+            "/vsiadls",
+            "/vsioss",
+            "/vsiswift",
+            "/vsiwebhdfs",
+            "/vsihdfs",
+        ];
         let file_path_str = self.file_path.to_string_lossy();
         file_path_str.starts_with("http://")
             || file_path_str.starts_with("https://")
             || file_path_str.starts_with("s3://")
+            || REMOTE_FILE_SYSTEMS
+                .iter()
+                .any(|file_system| file_path_str.contains(file_system))
     }
 
     /// Returns the request-level GDAL config options supplied by the user.
