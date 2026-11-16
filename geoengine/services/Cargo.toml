@@ -27,6 +27,10 @@ harness = false
 name = "wms_load"
 harness = false
 
+[[bench]]
+name = "ogc_tiles_load"
+harness = false
+
 [dependencies]
 actix-files = { workspace = true }
 actix-http = { workspace = true }
