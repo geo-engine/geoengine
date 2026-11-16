@@ -589,8 +589,8 @@ mod tests {
 
         let tile_info = TileInformation {
             global_geo_transform: TestDefault::test_default(),
-            global_tile_position: [0, 0].into(),
-            tile_size_in_pixels,
+            tile_position: TileIdx::new_y_x(0, 0),
+            tile_size: TileSize::new_unchecked(2, 2),
         };
 
         let data = (0..3_u8)
@@ -628,7 +628,7 @@ mod tests {
         .typed();
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(
-            geoengine_datatypes::raster::TilingSpecification::new(tile_size_in_pixels),
+            geoengine_datatypes::raster::TilingSpecification::new(TileSize::new_unchecked(2, 2)),
         );
         let query_context = execution_context.mock_query_context_test_default();
 

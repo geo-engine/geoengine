@@ -382,7 +382,7 @@ mod tests {
     use crate::util::test::AsciiRasterTilesExt;
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
-    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridShape2D, RasterTile2D};
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterTile2D, TileSize};
     use geoengine_datatypes::util::test::{
         AsciiRasterTiles, TestDefault, assert_eq_two_list_of_tiles, assert_raster_tiles_eq_ascii,
     };
@@ -655,7 +655,7 @@ mod tests {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
         }
         .typed();
-        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+        exe_ctx.tiling_specification = TilingSpecification::new(TileSize::default_512());
 
         let reprojection = Reprojection {
             params: ReprojectionParams {
@@ -698,7 +698,7 @@ mod tests {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
         }
         .typed();
-        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+        exe_ctx.tiling_specification = TilingSpecification::new(TileSize::default_512());
         let resolution = SpatialResolution::new_unchecked(40_000., 20_000.);
 
         let (descriptor, tiles) = query(
