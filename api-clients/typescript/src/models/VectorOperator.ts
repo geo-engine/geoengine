@@ -200,6 +200,7 @@ export function instanceOfVectorOperator(value: object): value is VectorOperator
         || instanceOfLineSimplification(value)
         || instanceOfMockPointSource(value)
         || instanceOfOgrSource(value)
+        || instanceOfOnnxObjectDetection(value)
         || instanceOfPointInPolygonFilter(value)
         || instanceOfRasterVectorJoin(value)
         || instanceOfReprojection(value)

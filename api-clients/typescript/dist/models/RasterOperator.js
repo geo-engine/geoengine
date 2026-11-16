@@ -170,7 +170,8 @@ function RasterOperatorToJSONTyped(value, ignoreDiscriminator = false) {
 * Check if a given object implements the RasterOperator interface.
 */
 function instanceOfRasterOperator(value) {
-    return (0, BandFilter_1.instanceOfBandFilter)(value)
+    return (0, AddTileOverlap_1.instanceOfAddTileOverlap)(value)
+        || (0, BandFilter_1.instanceOfBandFilter)(value)
         || (0, BandNeighborhoodAggregate_1.instanceOfBandNeighborhoodAggregate)(value)
         || (0, BandwiseExpression_1.instanceOfBandwiseExpression)(value)
         || (0, Downsampling_1.instanceOfDownsampling)(value)
@@ -188,6 +189,7 @@ function instanceOfRasterOperator(value) {
         || (0, Rasterization_1.instanceOfRasterization)(value)
         || (0, ReTile_1.instanceOfReTile)(value)
         || (0, Reflectance_1.instanceOfReflectance)(value)
+        || (0, RemoveTileOverlap_1.instanceOfRemoveTileOverlap)(value)
         || (0, Reprojection_1.instanceOfReprojection)(value)
         || (0, Temperature_1.instanceOfTemperature)(value)
         || (0, TemporalRasterAggregation_1.instanceOfTemporalRasterAggregation)(value)

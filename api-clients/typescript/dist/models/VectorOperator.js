@@ -114,6 +114,7 @@ function instanceOfVectorOperator(value) {
         || (0, LineSimplification_1.instanceOfLineSimplification)(value)
         || (0, MockPointSource_1.instanceOfMockPointSource)(value)
         || (0, OgrSource_1.instanceOfOgrSource)(value)
+        || (0, OnnxObjectDetection_1.instanceOfOnnxObjectDetection)(value)
         || (0, PointInPolygonFilter_1.instanceOfPointInPolygonFilter)(value)
         || (0, RasterVectorJoin_1.instanceOfRasterVectorJoin)(value)
         || (0, Reprojection_1.instanceOfReprojection)(value)
