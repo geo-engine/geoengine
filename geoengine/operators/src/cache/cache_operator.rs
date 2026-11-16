@@ -671,6 +671,88 @@ mod tests {
         assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
     }
 
+    #[tokio::test]
+    async fn it_serves_bands_in_ascending_order_from_cache() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let stacked_operator = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Rename(vec!["band_0".to_string(), "band_1".to_string()]),
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![
+                    GdalSource {
+                        params: GdalSourceParameters::new(ndvi_id.clone()),
+                    }
+                    .typed(),
+                    GdalSource {
+                        params: GdalSourceParameters::new(ndvi_id.clone()),
+                    }
+                    .typed(),
+                ],
+            },
+        };
+
+        let operator = stacked_operator
+            .typed()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let cached_op = InitializedCacheOperator::new(operator);
+
+        let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
+
+        let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
+            ChunkByteSize::test_default(),
+            Some(Arc::new(SharedCache::test_default())),
+            None,
+            None,
+        );
+
+        let query = |bands: Vec<u32>| {
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                TimeInterval::default(),
+                BandSelection::new(bands).unwrap(),
+            )
+        };
+
+        // fill the cache with an unsorted selection
+        let bands_filled = processor
+            .query(query(vec![1, 0]), &query_ctx)
+            .await
+            .unwrap()
+            .map_ok(|tile| tile.band)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        // wait for the cache to be filled, which happens asynchronously
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // delete the dataset to make sure the result is served from the cache
+        exe_ctx.delete_meta_data(&ndvi_id);
+
+        let bands_from_cache = processor
+            .query(query(vec![0, 1]), &query_ctx)
+            .await
+            .unwrap()
+            .map_ok(|tile| tile.band)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        assert_ne!(bands_filled, [] as [u32; 0]);
+        assert!(
+            bands_filled.chunks(2).all(|bands| bands == [0, 1]),
+            "bands must be ascending per tile position"
+        );
+        assert_eq!(bands_from_cache, bands_filled);
+    }
+
     #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn it_reuses_multi_band_subset() {

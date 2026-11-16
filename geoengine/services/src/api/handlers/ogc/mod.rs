@@ -47,6 +47,10 @@ where
         GET "/collections/{collectionId}/map/tiles/" -> tiles::collection_tilesets::<C>,
         GET "/collections/{collectionId}/map/tiles/{tileMatrixSetId}" -> tiles::collection_tileset::<C>,
         GET "/collections/{collectionId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}" -> tiles::tile::<C>,
+        GET "/collections/{collectionId}/coverage/tiles" -> tiles::collection_coverage_tilesets::<C>,
+        GET "/collections/{collectionId}/coverage/tiles/" -> tiles::collection_coverage_tilesets::<C>,
+        GET "/collections/{collectionId}/coverage/tiles/{tileMatrixSetId}" -> tiles::collection_coverage_tileset::<C>,
+        GET "/collections/{collectionId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}" -> tiles::coverage_tile::<C>,
         GET "/tileMatrixSets" -> tms::tile_matrix_sets::<C>,
         GET "/tileMatrixSets/" -> tms::tile_matrix_sets::<C>,
         GET "/tileMatrixSets/{tileMatrixSetId}" -> tms::tile_matrix_set::<C>,
@@ -72,6 +76,9 @@ where
         tiles::collection_tilesets,
         tiles::collection_tileset,
         tiles::tile,
+        tiles::collection_coverage_tilesets,
+        tiles::collection_coverage_tileset,
+        tiles::coverage_tile,
 
     ),
     components(
