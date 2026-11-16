@@ -74,34 +74,59 @@ jobs:
       - name: Prefetch build downloads
         uses: ./.github/actions/prefetch-build-downloads
 
-      # Pull request: measure the base and the pull request one after the other on the same runner,
-      # so that the comparison does not depend on the runner. Both build in the same directory, so the
-      # second build only recompiles the crates whose files the pull request changes.
-
-      - name: Check out the base
-        if: github.event_name == 'pull_request'
-        run: |
-          echo "PR_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "BASE_SHA=$(git rev-parse --short HEAD^1)" >> "$GITHUB_ENV"
-          git checkout --detach HEAD^1
-
-      - name: Run benchmarks of the base
-        if: github.event_name == 'pull_request'
-        run: just bench-ci -- --save-baseline base
-
-      - name: Check out the pull request
-        if: github.event_name == 'pull_request'
-        run: git checkout --detach "$PR_SHA"
-
-      - name: Run benchmarks of the pull request
-        if: github.event_name == 'pull_request'
-        # lenient: benchmarks that are new in the pull request have no baseline
-        run: just bench-ci -- --baseline-lenient base
+      # Pull request: measure the base and the pull request on the same runner, so that the comparison
+      # does not depend on the runner. Both build in the same directory, so the second build only
+      # recompiles the crates whose files the pull request changes. The bench executables are copied
+      # aside, so that the rounds can alternate without rebuilding.
 
       - uses: actions/setup-python@v7
         if: github.event_name == 'pull_request'
         with:
           python-version: "3.x"
+
+      - name: Build benchmarks of the base and the pull request
+        if: github.event_name == 'pull_request'
+        # `bash` runs with `pipefail`, so a failing build fails the step despite the pipe
+        shell: bash
+        run: |
+          # the scripts of the pull request, as the base may not have them
+          cp -r "$GITHUB_WORKSPACE/.github/scripts" "$RUNNER_TEMP/scripts"
+          pr_sha=$(git rev-parse HEAD)
+          echo "BASE_SHA=$(git rev-parse --short HEAD^1)" >> "$GITHUB_ENV"
+          git checkout --detach HEAD^1
+          just bench-ci --no-run --message-format=json-render-diagnostics \
+            | python3 -I "$RUNNER_TEMP/scripts/collect_bench_executables.py" "$RUNNER_TEMP/bench-bin/base"
+          git checkout --detach "$pr_sha"
+          just bench-ci --no-run --message-format=json-render-diagnostics \
+            | python3 -I "$RUNNER_TEMP/scripts/collect_bench_executables.py" "$RUNNER_TEMP/bench-bin/pr"
+
+      - name: Run benchmarks in the order base, PR, PR, base
+        if: github.event_name == 'pull_request'
+        shell: bash
+        # the executables read the test data of the checkout, i.e., of the pull request
+        working-directory: geoengine/operators
+        env:
+          GEOENGINE_BENCH_CI: 1
+        run: |
+          export CRITERION_HOME="$GITHUB_WORKSPACE/geoengine/target/criterion"
+          run() { # run all bench executables of $1 with the Criterion arguments $2…
+            local side="$1"; shift
+            for bench in "$RUNNER_TEMP/bench-bin/$side/bench"/*; do
+              # half the measurement time of a single run: two rounds instead of one long one
+              GDALSOURCE_PROCESS_PATH="$RUNNER_TEMP/bench-bin/$side/gdalsource-process" \
+                "$bench" --bench --measurement-time 1 "$@"
+            done
+          }
+          keep_change() { # move Criterion's `change` directories aside as `change-$1`
+            find "$CRITERION_HOME" -type d -name change -prune -exec mv {} {}-"$1" \;
+          }
+          # lenient: a benchmark that only one side has has no baseline
+          run base --save-baseline r1
+          run pr --baseline-lenient r1
+          keep_change r1
+          run pr --save-baseline r2
+          run base --baseline-lenient r2
+          keep_change r2
 
       - name: Compare benchmark results
         if: github.event_name == 'pull_request'
