@@ -214,6 +214,7 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
         params: WarpParams,
     ) -> Result<Self> {
         let in_descriptor = source.result_descriptor();
+        in_descriptor.ensure_no_tile_overlap(Warp::TYPE_NAME)?;
         let source_srs = source_srs(in_descriptor)?;
         let target_srs = params.target_spatial_reference.unwrap_or(source_srs);
         let out_grid = warped_spatial_grid(in_descriptor, &params)?;

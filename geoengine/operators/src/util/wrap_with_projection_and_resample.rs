@@ -95,7 +95,10 @@ impl WrapWithProjectionAndResample {
             .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
             .await?;
 
-        Ok(Self::new_create_result_descriptor(remove_overlap, initialized))
+        Ok(Self::new_create_result_descriptor(
+            remove_overlap,
+            initialized,
+        ))
     }
 
     async fn wrap_with_warp(

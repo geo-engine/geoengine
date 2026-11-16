@@ -595,11 +595,11 @@ mod tests {
             .unwrap(),
         };
 
-        let tile_info = TileInformation {
-            global_geo_transform: TestDefault::test_default(),
-            tile_position: TileIdx::new_y_x(0, 0),
-            tile_size: TileSize::new_unchecked(2, 2),
-        };
+        let tile_info = TileInformation::new(
+            TileIdx::new_y_x(0, 0),
+            TileSize::new_unchecked(2, 2),
+            TestDefault::test_default(),
+        );
 
         let data = (0..3_u8)
             .map(|band| {
