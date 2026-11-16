@@ -5,7 +5,9 @@ use geoengine_datatypes::raster::{
 use std::num::NonZeroUsize;
 use tracing::trace;
 
-use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
+use crate::source::gdal_worker_process::process_common::{
+    GdalReadAdvise, GdalReadWindow, SubpixelWindow,
+};
 
 #[derive(Copy, Clone, Debug)]
 pub struct ReaderState {
@@ -277,6 +279,7 @@ impl OverviewReaderState {
                 start_y: window_start_y,
                 size_x: axis_x.window_size,
                 size_y: axis_y.window_size,
+                subpixel: None,
             },
             coarseness,
         );
@@ -401,11 +404,27 @@ fn coarsen_read_window(window: GdalReadWindow, factor: NonZeroUsize) -> GdalRead
         (window.start_x + window.size_x as isize + factor_isize - 1).div_euclid(factor_isize);
     let end_y =
         (window.start_y + window.size_y as isize + factor_isize - 1).div_euclid(factor_isize);
+    // the exact window, unless it already lies on whole file pixels
+    let aligned = [
+        window.start_x,
+        window.start_y,
+        window.start_x + window.size_x as isize,
+        window.start_y + window.size_y as isize,
+    ]
+    .iter()
+    .all(|edge| edge.rem_euclid(factor_isize) == 0);
     GdalReadWindow {
         start_x,
         start_y,
         size_x: (end_x - start_x) as usize,
         size_y: (end_y - start_y) as usize,
+        subpixel: (!aligned).then_some(SubpixelWindow {
+            start_x: window.start_x,
+            start_y: window.start_y,
+            size_x: window.size_x,
+            size_y: window.size_y,
+            divisor: factor,
+        }),
     }
 }
 
@@ -524,6 +543,7 @@ mod tests {
                 start_y: 0,
                 size_x: 512,
                 size_y: 512,
+                subpixel: None,
             },
         );
 
@@ -570,6 +590,7 @@ mod tests {
                 start_y: 90,
                 size_x: 180,
                 size_y: 90,
+                subpixel: None,
             },
         );
 
@@ -617,6 +638,7 @@ mod tests {
                 start_y: 100,
                 size_x: 170,
                 size_y: 80,
+                subpixel: None,
             },
         );
 
@@ -668,6 +690,7 @@ mod tests {
                 start_y: 0,
                 size_x: 180,
                 size_y: 90,
+                subpixel: None,
             },
         );
 
@@ -715,6 +738,7 @@ mod tests {
                 start_y: 0,
                 size_x: 1024,
                 size_y: 1024,
+                subpixel: None,
             },
         );
 
@@ -762,6 +786,7 @@ mod tests {
                 start_y: 0,
                 size_x: 2048,
                 size_y: 2048,
+                subpixel: None,
             },
         );
 
@@ -814,7 +839,8 @@ mod tests {
         let first = reader_state
             .tiling_to_dataset_read_advise(&coarser_file, &tile(0))
             .unwrap();
-        // 512 tile pixels are 4096 dataset pixels, i.e. 682 2/3 file pixels, rounded up
+        // 512 tile pixels are 4096 dataset pixels, i.e. 682 2/3 file pixels: the envelope is
+        // rounded up, the exact window keeps the fraction
         assert_eq!(
             first.gdal_read_widow,
             GdalReadWindow {
@@ -822,6 +848,13 @@ mod tests {
                 start_y: 0,
                 size_x: 683,
                 size_y: 683,
+                subpixel: Some(SubpixelWindow {
+                    start_x: 0,
+                    start_y: 0,
+                    size_x: 4096,
+                    size_y: 4096,
+                    divisor: NonZeroUsize::new(6).unwrap(),
+                }),
             },
         );
         assert_eq!(
@@ -840,6 +873,13 @@ mod tests {
                 start_y: 0,
                 size_x: 684,
                 size_y: 683,
+                subpixel: Some(SubpixelWindow {
+                    start_x: 4096,
+                    start_y: 0,
+                    size_x: 4096,
+                    size_y: 4096,
+                    divisor: NonZeroUsize::new(6).unwrap(),
+                }),
             },
         );
         assert_eq!(
@@ -914,6 +954,7 @@ mod tests {
                 start_y: 2048,
                 size_x: 2048,
                 size_y: 2048,
+                subpixel: None,
             },
         );
 
@@ -964,6 +1005,7 @@ mod tests {
                 start_y: 2048,
                 size_x: 2048 - 16,
                 size_y: 2048 - 16,
+                subpixel: None,
             },
         );
 
@@ -1016,6 +1058,7 @@ mod tests {
                 start_y: 0,
                 size_x: 2048 - 16,
                 size_y: 2048 - 16,
+                subpixel: None,
             },
         );
 
@@ -1063,6 +1106,7 @@ mod tests {
                 start_y: 0,
                 size_x: 2048 - 16,
                 size_y: 2048 - 16,
+                subpixel: None,
             },
         );
 

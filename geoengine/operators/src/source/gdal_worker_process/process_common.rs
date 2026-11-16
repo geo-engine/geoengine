@@ -45,6 +45,34 @@ pub struct GdalReadWindow {
     pub(crate) start_y: isize,
     pub(crate) size_x: usize, // pixelspace size
     pub(crate) size_y: usize,
+    /// The exact window if it does not lie on whole pixels of the file, e.g. for a file that is
+    /// coarser than its dataset. The integer window above is its envelope.
+    #[serde(default)]
+    pub(crate) subpixel: Option<SubpixelWindow>,
+}
+
+/// A read window in pixels `divisor` times finer than the file's pixels, i.e. the window
+/// `start / divisor` with the size `size / divisor` in file pixels.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct SubpixelWindow {
+    pub(crate) start_x: isize,
+    pub(crate) start_y: isize,
+    pub(crate) size_x: usize,
+    pub(crate) size_y: usize,
+    pub(crate) divisor: NonZeroUsize,
+}
+
+impl SubpixelWindow {
+    /// The window in file pixels: start x, start y, size x, size y.
+    pub fn in_file_pixels(&self) -> [f64; 4] {
+        let divisor = self.divisor.get() as f64;
+        [
+            self.start_x as f64 / divisor,
+            self.start_y as f64 / divisor,
+            self.size_x as f64 / divisor,
+            self.size_y as f64 / divisor,
+        ]
+    }
 }
 
 impl GdalReadWindow {
@@ -54,6 +82,7 @@ impl GdalReadWindow {
             start_y: start.y(),
             size_x: size.axis_size_x(),
             size_y: size.axis_size_y(),
+            subpixel: None,
         }
     }
 
