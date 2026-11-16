@@ -323,6 +323,579 @@ class OGCAPIApi:
 
 
     @validate_call
+    def collection_coverage_tileset(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> TileSet:
+        """OGC API Collection Coverage Tileset Metadata
+
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param tile_matrix_set_id: Tile matrix set identifier (required)
+        :type tile_matrix_set_id: TileMatrixSetId
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._collection_coverage_tileset_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            tile_matrix_set_id=tile_matrix_set_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TileSet",
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def collection_coverage_tileset_with_http_info(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[TileSet]:
+        """OGC API Collection Coverage Tileset Metadata
+
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param tile_matrix_set_id: Tile matrix set identifier (required)
+        :type tile_matrix_set_id: TileMatrixSetId
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._collection_coverage_tileset_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            tile_matrix_set_id=tile_matrix_set_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TileSet",
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def collection_coverage_tileset_without_preload_content(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """OGC API Collection Coverage Tileset Metadata
+
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param tile_matrix_set_id: Tile matrix set identifier (required)
+        :type tile_matrix_set_id: TileMatrixSetId
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._collection_coverage_tileset_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            tile_matrix_set_id=tile_matrix_set_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TileSet",
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _collection_coverage_tileset_serialize(
+        self,
+        data_connector_id,
+        layer_id,
+        tile_matrix_set_id,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
+        if tile_matrix_set_id is not None:
+            _path_params['tileMatrixSetId'] = tile_matrix_set_id
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'session_token'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def collection_coverage_tilesets(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> TileSets:
+        """OGC API Collection Coverage Tilesets List
+
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._collection_coverage_tilesets_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TileSets",
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def collection_coverage_tilesets_with_http_info(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[TileSets]:
+        """OGC API Collection Coverage Tilesets List
+
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._collection_coverage_tilesets_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TileSets",
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def collection_coverage_tilesets_without_preload_content(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """OGC API Collection Coverage Tilesets List
+
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._collection_coverage_tilesets_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "TileSets",
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _collection_coverage_tilesets_serialize(
+        self,
+        data_connector_id,
+        layer_id,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
+        # process the query parameters
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'application/json'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'session_token'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
     def collection_tileset(
         self,
         data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
@@ -1500,6 +2073,399 @@ class OGCAPIApi:
         return self.api_client.param_serialize(
             method='GET',
             resource_path='/ogc/{dataConnectorId}/{layerId}/conformance',
+            path_params=_path_params,
+            query_params=_query_params,
+            header_params=_header_params,
+            body=_body_params,
+            post_params=_form_params,
+            files=_files,
+            auth_settings=_auth_settings,
+            collection_formats=_collection_formats,
+            _host=_host,
+            _request_auth=_request_auth
+        )
+
+
+
+
+    @validate_call
+    def coverage_tile(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
+        tile_matrix: Annotated[int, Field(strict=True, ge=0, description="Tile matrix level")],
+        tile_row: Annotated[int, Field(strict=True, ge=0, description="Tile row")],
+        tile_col: Annotated[int, Field(strict=True, ge=0, description="Tile column")],
+        datetime: Annotated[Optional[StrictStr], Field(description="Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).")] = None,
+        properties: Annotated[Optional[StrictStr], Field(description="Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.")] = None,
+        exclude_properties: Annotated[Optional[StrictStr], Field(description="Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> bytes:
+        """OGC API Coverage Tile
+
+        Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param tile_matrix_set_id: Tile matrix set identifier (required)
+        :type tile_matrix_set_id: TileMatrixSetId
+        :param tile_matrix: Tile matrix level (required)
+        :type tile_matrix: int
+        :param tile_row: Tile row (required)
+        :type tile_row: int
+        :param tile_col: Tile column (required)
+        :type tile_col: int
+        :param datetime: Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+        :type datetime: str
+        :param properties: Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.
+        :type properties: str
+        :param exclude_properties: Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.
+        :type exclude_properties: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._coverage_tile_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            tile_matrix_set_id=tile_matrix_set_id,
+            tile_matrix=tile_matrix,
+            tile_row=tile_row,
+            tile_col=tile_col,
+            datetime=datetime,
+            properties=properties,
+            exclude_properties=exclude_properties,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "bytes",
+            '400': None,
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        ).data
+
+
+    @validate_call
+    def coverage_tile_with_http_info(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
+        tile_matrix: Annotated[int, Field(strict=True, ge=0, description="Tile matrix level")],
+        tile_row: Annotated[int, Field(strict=True, ge=0, description="Tile row")],
+        tile_col: Annotated[int, Field(strict=True, ge=0, description="Tile column")],
+        datetime: Annotated[Optional[StrictStr], Field(description="Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).")] = None,
+        properties: Annotated[Optional[StrictStr], Field(description="Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.")] = None,
+        exclude_properties: Annotated[Optional[StrictStr], Field(description="Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> ApiResponse[bytes]:
+        """OGC API Coverage Tile
+
+        Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param tile_matrix_set_id: Tile matrix set identifier (required)
+        :type tile_matrix_set_id: TileMatrixSetId
+        :param tile_matrix: Tile matrix level (required)
+        :type tile_matrix: int
+        :param tile_row: Tile row (required)
+        :type tile_row: int
+        :param tile_col: Tile column (required)
+        :type tile_col: int
+        :param datetime: Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+        :type datetime: str
+        :param properties: Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.
+        :type properties: str
+        :param exclude_properties: Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.
+        :type exclude_properties: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._coverage_tile_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            tile_matrix_set_id=tile_matrix_set_id,
+            tile_matrix=tile_matrix,
+            tile_row=tile_row,
+            tile_col=tile_col,
+            datetime=datetime,
+            properties=properties,
+            exclude_properties=exclude_properties,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "bytes",
+            '400': None,
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        response_data.read()
+        return self.api_client.response_deserialize(
+            response_data=response_data,
+            response_types_map=_response_types_map,
+        )
+
+
+    @validate_call
+    def coverage_tile_without_preload_content(
+        self,
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
+        tile_matrix: Annotated[int, Field(strict=True, ge=0, description="Tile matrix level")],
+        tile_row: Annotated[int, Field(strict=True, ge=0, description="Tile row")],
+        tile_col: Annotated[int, Field(strict=True, ge=0, description="Tile column")],
+        datetime: Annotated[Optional[StrictStr], Field(description="Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).")] = None,
+        properties: Annotated[Optional[StrictStr], Field(description="Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.")] = None,
+        exclude_properties: Annotated[Optional[StrictStr], Field(description="Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.")] = None,
+        _request_timeout: Union[
+            None,
+            Annotated[StrictFloat, Field(gt=0)],
+            Tuple[
+                Annotated[StrictFloat, Field(gt=0)],
+                Annotated[StrictFloat, Field(gt=0)]
+            ]
+        ] = None,
+        _request_auth: Optional[Dict[StrictStr, Any]] = None,
+        _content_type: Optional[StrictStr] = None,
+        _headers: Optional[Dict[StrictStr, Any]] = None,
+        _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
+    ) -> RESTResponseType:
+        """OGC API Coverage Tile
+
+        Returns the raw values of the tile as `GeoTIFF`, with one band per selected field. The tile covers the exact spatial extent of the tile and has the tile size in pixels as its number of cells.  Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/20-057/20-057.html) and [OGC API - Coverages - Part 1: Core](https://docs.ogc.org/DRAFTS/19-087.html) (field selection and tiled coverage data).
+
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
+        :param tile_matrix_set_id: Tile matrix set identifier (required)
+        :type tile_matrix_set_id: TileMatrixSetId
+        :param tile_matrix: Tile matrix level (required)
+        :type tile_matrix: int
+        :param tile_row: Tile row (required)
+        :type tile_row: int
+        :param tile_col: Tile column (required)
+        :type tile_col: int
+        :param datetime: Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+        :type datetime: str
+        :param properties: Comma-separated list of the fields (bands) to return, in this order. If omitted, all fields are returned. Must not be combined with `exclude-properties`.
+        :type properties: str
+        :param exclude_properties: Comma-separated list of the fields (bands) not to return. An empty value returns all fields. Must not be combined with `properties`.
+        :type exclude_properties: str
+        :param _request_timeout: timeout setting for this request. If one
+                                 number provided, it will be total request
+                                 timeout. It can also be a pair (tuple) of
+                                 (connection, read) timeouts.
+        :type _request_timeout: int, tuple(int, int), optional
+        :param _request_auth: set to override the auth_settings for an a single
+                              request; this effectively ignores the
+                              authentication in the spec for a single request.
+        :type _request_auth: dict, optional
+        :param _content_type: force content-type for the request.
+        :type _content_type: str, Optional
+        :param _headers: set to override the headers for a single
+                         request; this effectively ignores the headers
+                         in the spec for a single request.
+        :type _headers: dict, optional
+        :param _host_index: set to override the host_index for a single
+                            request; this effectively ignores the host_index
+                            in the spec for a single request.
+        :type _host_index: int, optional
+        :return: Returns the result object.
+        """ # noqa: E501
+
+        _param = self._coverage_tile_serialize(
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
+            tile_matrix_set_id=tile_matrix_set_id,
+            tile_matrix=tile_matrix,
+            tile_row=tile_row,
+            tile_col=tile_col,
+            datetime=datetime,
+            properties=properties,
+            exclude_properties=exclude_properties,
+            _request_auth=_request_auth,
+            _content_type=_content_type,
+            _headers=_headers,
+            _host_index=_host_index
+        )
+
+        _response_types_map: Dict[str, Optional[str]] = {
+            '200': "bytes",
+            '400': None,
+            '404': None,
+        }
+        response_data = self.api_client.call_api(
+            *_param,
+            _request_timeout=_request_timeout
+        )
+        return response_data.response
+
+
+    def _coverage_tile_serialize(
+        self,
+        data_connector_id,
+        layer_id,
+        tile_matrix_set_id,
+        tile_matrix,
+        tile_row,
+        tile_col,
+        datetime,
+        properties,
+        exclude_properties,
+        _request_auth,
+        _content_type,
+        _headers,
+        _host_index,
+    ) -> RequestSerialized:
+
+        _host = None
+
+        _collection_formats: Dict[str, str] = {
+        }
+
+        _path_params: Dict[str, str] = {}
+        _query_params: List[Tuple[str, str]] = []
+        _header_params: Dict[str, Optional[str]] = _headers or {}
+        _form_params: List[Tuple[str, str]] = []
+        _files: Dict[
+            str, Union[str, bytes, List[str], List[bytes], List[Tuple[str, bytes]]]
+        ] = {}
+        _body_params: Optional[bytes] = None
+
+        # process the path parameters
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
+        if tile_matrix_set_id is not None:
+            _path_params['tileMatrixSetId'] = tile_matrix_set_id
+        if tile_matrix is not None:
+            _path_params['tileMatrix'] = tile_matrix
+        if tile_row is not None:
+            _path_params['tileRow'] = tile_row
+        if tile_col is not None:
+            _path_params['tileCol'] = tile_col
+        # process the query parameters
+        if datetime is not None:
+            
+            _query_params.append(('datetime', datetime))
+            
+        if properties is not None:
+            
+            _query_params.append(('properties', properties))
+            
+        if exclude_properties is not None:
+            
+            _query_params.append(('exclude-properties', exclude_properties))
+            
+        # process the header parameters
+        # process the form parameters
+        # process the body parameter
+
+
+        # set the HTTP header `Accept`
+        if 'Accept' not in _header_params:
+            _header_params['Accept'] = self.api_client.select_header_accept(
+                [
+                    'image/tiff; application=geotiff'
+                ]
+            )
+
+
+        # authentication setting
+        _auth_settings: List[str] = [
+            'session_token'
+        ]
+
+        return self.api_client.param_serialize(
+            method='GET',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

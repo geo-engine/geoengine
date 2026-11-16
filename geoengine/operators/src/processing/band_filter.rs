@@ -228,12 +228,13 @@ where
 
         let query = query.select_attributes(BandSelection::new(input_bands.clone())?);
 
-        // Create a mapping from input band index to output band index
-        let mut input_to_output_band: std::collections::HashMap<u32, u32> =
-            std::collections::HashMap::new();
-        for (output_idx, input_idx) in input_bands.iter().enumerate() {
-            input_to_output_band.insert(*input_idx, output_idx as u32);
-        }
+        // Create a mapping from input band index to output band index.
+        // Both are ascending, because the filter keeps the input order of the bands.
+        let input_to_output_band: std::collections::HashMap<u32, u32> = input_bands
+            .iter()
+            .copied()
+            .zip(output_attributes.as_slice().iter().copied())
+            .collect();
 
         let stream = self.source.query(query, ctx).await?;
 
@@ -563,6 +564,126 @@ mod tests {
             .try_into()
             .unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn it_keeps_input_order_and_labels_partial_selections() {
+        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let time_interval = TimeInterval::default();
+
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(Some(time_interval)),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new_unitless("band0".into()),
+                RasterBandDescriptor::new_unitless("band1".into()),
+                RasterBandDescriptor::new_unitless("band2".into()),
+            ])
+            .unwrap(),
+        };
+
+        let tile_info = TileInformation {
+            global_geo_transform: TestDefault::test_default(),
+            global_tile_position: [0, 0].into(),
+            tile_size_in_pixels,
+        };
+
+        let data = (0..3_u8)
+            .map(|band| {
+                let grid: MaskedGrid2D<u8> = Grid2D::new(tile_size_in_pixels, vec![band * 4; 4])
+                    .unwrap()
+                    .into();
+                RasterTile2D::new_with_tile_info(
+                    time_interval,
+                    tile_info,
+                    u32::from(band),
+                    grid.into(),
+                    CacheHint::no_cache(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let mock_source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data.clone(),
+                result_descriptor,
+            },
+        }
+        .typed();
+
+        // the bands are a set: `[2, 0]` selects the same bands as `[0, 2]`, in input order
+        let band_filter: TypedRasterOperator = BandFilter {
+            params: BandFilterParams {
+                bands: BandsByNameOrIndex::Index(vec![2, 0]),
+            },
+            sources: SingleRasterSource {
+                raster: mock_source,
+            },
+        }
+        .typed();
+
+        let execution_context = MockExecutionContext::new_with_tiling_spec(
+            geoengine_datatypes::raster::TilingSpecification::new(tile_size_in_pixels),
+        );
+        let query_context = execution_context.mock_query_context_test_default();
+
+        let initialized = band_filter
+            .initialize(
+                ProcessingGraphOperatorPath::initialize_root(),
+                &execution_context,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            initialized.result_descriptor().bands,
+            vec![
+                RasterBandDescriptor::new_unitless("band0".into()),
+                RasterBandDescriptor::new_unitless("band2".into()),
+            ]
+            .try_into()
+            .unwrap()
+        );
+
+        let qp = initialized.query_processor().unwrap().get_u8().unwrap();
+
+        let query = |bands: BandSelection| {
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+                time_interval,
+                bands,
+            )
+        };
+
+        // only the second output band: it must keep its band number
+        let result = qp
+            .raster_query(query(BandSelection::new_single(1)), &query_context)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let mut expected_band_1 = data[2].clone();
+        expected_band_1.band = 1;
+        assert!(vec![expected_band_1.clone()].tiles_equal_ignoring_cache_hint(&result));
+
+        // an unsorted query is answered in ascending band order
+        let result = qp
+            .raster_query(query([1, 0].try_into().unwrap()), &query_context)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let expected_band_0 = data[0].clone();
+        assert!(vec![expected_band_0, expected_band_1].tiles_equal_ignoring_cache_hint(&result));
     }
 
     #[test]
