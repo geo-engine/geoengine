@@ -111,16 +111,8 @@ impl AxisOrder {
     }
 }
 
-#[cfg(test)]
-thread_local! {
-    /// PROJ contexts created on this thread, for tests that check that requests do not ask PROJ
-    static PROJ_CONTEXTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
 fn count_proj_context(srs_string: &str) {
     tracing::debug!(srs_string, "resolving a spatial reference with PROJ");
-    #[cfg(test)]
-    PROJ_CONTEXTS.with(|n| n.set(n.get() + 1));
 }
 
 /// Get the proj json information for the given `srs_string` if it is known.
@@ -588,9 +580,8 @@ mod tests {
 
     #[test]
     fn it_asks_proj_only_for_spatial_references_outside_the_registry() {
+        // every axis order that PROJ resolves ends up in `axis_orders`
         let cache = SpatialReferenceCache::default();
-        let count = || PROJ_CONTEXTS.with(std::cell::Cell::get);
-        let before = count();
         for srs in ["EPSG:3857", "EPSG:4326", "EPSG:31467"] {
             let spatial_reference = SpatialReference::from_str(srs).unwrap().into();
             for _ in 0..10 {
@@ -599,9 +590,8 @@ mod tests {
                     .unwrap();
             }
         }
-        assert_eq!(
-            count() - before,
-            0,
+        assert!(
+            cache.axis_orders.is_empty(),
             "EPSG codes of the registry need no PROJ"
         );
 
@@ -609,8 +599,7 @@ mod tests {
         for _ in 0..10 {
             cache.axis_order(esri).unwrap();
         }
-        // one `proj_json`, and no `proj_proj_string`
-        assert_eq!(count() - before, 1, "PROJ is asked once per reference");
+        assert_eq!(cache.axis_orders.len(), 1, "PROJ is asked once per reference");
     }
 
     /// The registry was generated with pyproj; the server must give the same axis order with the PROJ it links
