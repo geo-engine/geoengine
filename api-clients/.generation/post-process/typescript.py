@@ -34,44 +34,44 @@ def raster_operator_ts(
     file_contents: list[str],
 ) -> Generator[str, None, None]:
     """Modify the RasterOperator.ts file."""
-    for line in file_contents:
-        yield line
-
-    new_lines = dedent("""\
-                       
-        /**
-        * Check if a given object implements the RasterOperator interface.
-        */
-        export function instanceOfRasterOperator(value: object): value is RasterOperator {
-            return instanceOfExpression(value)
-                || instanceOfGdalSource(value);
-        }
-    """).splitlines(keepends=True)
-
-    for line in new_lines:
-        yield line
+    yield from one_of_instance_of_ts(file_contents, "RasterOperator")
 
 
 def vector_operator_ts(
     file_contents: list[str],
 ) -> Generator[str, None, None]:
     """Modify the VectorOperator.ts file."""
+    yield from one_of_instance_of_ts(file_contents, "VectorOperator")
+
+
+def one_of_instance_of_ts(file_contents: list[str], type_name: str) -> Generator[str, None, None]:
+    """
+    Add the missing `instanceOf` check for a `oneOf` with a discriminator.
+
+    It accepts every variant whose `instanceOf` function the generated file imports.
+    A hand-picked subset makes untagged unions like `SingleRasterOrVectorOperator` serialize
+    every other operator as `{}`.
+    """
+    variant_checks: list[str] = []
     for line in file_contents:
+        stripped = line.strip()
+        if stripped.startswith("instanceOf") and stripped.endswith(","):
+            variant_checks.append(f"{stripped.removesuffix(',')}(value)")
         yield line
 
-    new_lines = dedent("""\
-                       
+    if not variant_checks:
+        raise ValueError(f"no variants found for {type_name}")
+
+    checks = f"\n{INDENT}{INDENT}|| ".join(variant_checks)
+    yield dedent(f"""\
+
         /**
-        * Check if a given object implements the VectorOperator interface.
+        * Check if a given object implements the {type_name} interface.
         */
-        export function instanceOfVectorOperator(value: object): value is VectorOperator {
-            return instanceOfMockPointSource(value)
-                || instanceOfRasterVectorJoin(value);
-        }
-    """).splitlines(keepends=True)
-
-    for line in new_lines:
-        yield line
+        export function instanceOf{type_name}(value: object): value is {type_name} {{
+        """)
+    yield f"{INDENT}return {checks};\n"
+    yield "}\n"
 
 
 def typed_operator_ts(file_contents: list[str]) -> Generator[str, None, None]:

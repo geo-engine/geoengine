@@ -32,7 +32,7 @@ on:
 
 env:
   python-version: "3.10" # use lowest supported Python version
-  node-version: "20.19.x" # use lowest supported Node version
+  node-version: "22.12.x" # use lowest supported Node version
   rust-version: "1.85.1" # use lowest supported Rust version
 
 jobs:

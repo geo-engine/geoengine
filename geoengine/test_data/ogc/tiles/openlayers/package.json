@@ -1,10 +1,12 @@
 {
   "name": "ogc-map-tiles",
+  "type": "module",
   "dependencies": {
-    "ol": "10.9.0"
+    "geotiff": "3.1.0-beta.0",
+    "ol": "10.11.0"
   },
   "devDependencies": {
-    "vite": "^3.2.3"
+    "vite": "^8.3.8"
   },
   "scripts": {
     "start": "vite",

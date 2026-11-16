@@ -22,7 +22,7 @@ use crate::processing::{
     PolygonRasterization, Radiance, RasterScaling, RasterStacker, RasterTypeConversion,
     RasterVectorJoin, Rasterization, Reflectance, Reprojection, Temperature,
     TemporalRasterAggregation, TimeProjection, TimeShift, VectorExpression, VectorJoin,
-    VisualPointClustering,
+    VisualPointClustering, Warp,
 };
 use crate::source::{CsvSource, GdalSource, MultiBandGdalSource, OgrSource};
 use crate::util::Result;
@@ -120,6 +120,7 @@ typed_operator! {
         Temperature(Temperature),
         TemporalRasterAggregation(TemporalRasterAggregation),
         TimeShift(TimeShift),
+        Warp(Warp),
         MockRasterSourceu8(MockRasterSource<u8>),
         MockRasterSourceu16(MockRasterSource<u16>),
         MockRasterSourceu32(MockRasterSource<u32>),

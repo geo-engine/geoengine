@@ -129,23 +129,39 @@ impl RasterQueryRectangle {
 
 pub trait QueryAttributeSelection: Clone + Send + Sync {}
 
+/// A set of band indices, always sorted in ascending order.
+///
+/// A raster stream delivers the tiles of one tile position in ascending band order,
+/// regardless of the order in which the bands were requested.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BandSelection(Vec<u32>);
 
 impl BandSelection {
-    pub fn new(bands: Vec<u32>) -> Result<Self> {
-        fn has_no_duplicates<T: std::hash::Hash + std::cmp::Eq>(vec: &[T]) -> bool {
-            let set: std::collections::HashSet<_> = vec.iter().collect();
-            set.len() == vec.len()
-        }
-
-        ensure!(has_no_duplicates(&bands), DuplicateBandInQueryBandSelection);
+    /// Creates a band selection from a list of bands.
+    /// The bands are sorted, so the order of the list does not matter.
+    pub fn new(mut bands: Vec<u32>) -> Result<Self> {
         ensure!(!bands.is_empty(), QueryBandSelectionMustNotBeEmpty);
+
+        bands.sort_unstable();
+
+        ensure!(
+            bands.windows(2).all(|w| w[0] < w[1]),
+            DuplicateBandInQueryBandSelection
+        );
 
         Ok(Self(bands))
     }
 
-    pub fn new_unchecked(bands: Vec<u32>) -> Self {
+    /// Creates a band selection without checking for duplicates or an empty list.
+    /// The bands are sorted, so the order of the list does not matter.
+    pub fn new_unchecked(mut bands: Vec<u32>) -> Self {
+        bands.sort_unstable();
+
+        debug_assert!(
+            bands.windows(2).all(|w| w[0] < w[1]),
+            "Band selection must not contain duplicates"
+        );
+
         Self(bands)
     }
 
@@ -178,7 +194,7 @@ impl BandSelection {
     }
 
     pub fn contains(&self, band: u32) -> bool {
-        self.0.contains(&band)
+        self.0.binary_search(&band).is_ok()
     }
 
     pub fn contains_all(&self, bands: &[u32]) -> bool {
@@ -278,3 +294,27 @@ impl PlotSeriesSelection {
 }
 
 impl QueryAttributeSelection for PlotSeriesSelection {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn band_selection_is_sorted() {
+        assert_eq!(
+            BandSelection::new(vec![2, 0, 1]).unwrap().as_slice(),
+            &[0, 1, 2]
+        );
+        assert_eq!(BandSelection::new_unchecked(vec![1, 0]).as_slice(), &[0, 1]);
+        assert_eq!(
+            BandSelection::try_from([3, 1]).unwrap(),
+            BandSelection::try_from([1, 3]).unwrap()
+        );
+    }
+
+    #[test]
+    fn band_selection_rejects_duplicates_and_empty() {
+        assert!(BandSelection::new(vec![1, 0, 1]).is_err());
+        assert!(BandSelection::new(vec![]).is_err());
+    }
+}

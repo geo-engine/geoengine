@@ -56,6 +56,8 @@ pub enum RasterOperator {
     Temperature(Box<models::Temperature>),
     #[serde(rename="TimeShift")]
     TimeShift(Box<models::TimeShift>),
+    #[serde(rename="Warp")]
+    Warp(Box<models::Warp>),
 }
 
 impl Default for RasterOperator {

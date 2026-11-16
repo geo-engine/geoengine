@@ -10,7 +10,8 @@ use crate::api::model::processing_graphs::{
     RasterStacker, RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
     Rasterization, RasterizationParameters, Reflectance, ReflectanceParameters, RenameBands,
     Temperature, TemperatureParameters, TemporalRasterAggregation,
-    TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters,
+    TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters, Warp, WarpMethod,
+    WarpParameters,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
         AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum,
@@ -49,6 +50,7 @@ use geoengine_operators::{
         Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeShift as OperatorsTimeShift, TimeShiftParams as OperatorsTimeShiftParams,
+        Warp as OperatorsWarp, WarpMethod as OperatorsWarpMethod,
     },
     source::{
         GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
@@ -251,6 +253,28 @@ impl TryFrom<&OperatorsInterpolation> for Interpolation {
                     }
                 },
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
+            },
+            sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
+                raster: raster_operator_from_runtime(&value.sources.raster)?,
+            }
+            .into(),
+        })
+    }
+}
+
+impl TryFrom<&OperatorsWarp> for Warp {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &OperatorsWarp) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            params: WarpParameters {
+                target_spatial_reference: value.params.target_spatial_reference.map(Into::into),
+                output_resolution: value.params.output_resolution.map(Into::into),
+                output_origin_reference: value.params.output_origin_reference.map(Into::into),
+                method: match value.params.method {
+                    OperatorsWarpMethod::NearestNeighbor => WarpMethod::NearestNeighbor,
+                },
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
                 raster: raster_operator_from_runtime(&value.sources.raster)?,
@@ -835,6 +859,27 @@ mod tests {
                     },
                 }),
                 |graph| matches!(graph, RasterOperator::Downsampling(_)),
+            ),
+            (
+                TypedRasterOperator::from(geoengine_operators::processing::Warp {
+                    params: geoengine_operators::processing::WarpParams {
+                        target_spatial_reference: Some(
+                            geoengine_datatypes::spatial_reference::SpatialReference::web_mercator(
+                            ),
+                        ),
+                        output_resolution: Some(
+                            geoengine_datatypes::primitives::SpatialResolution::new_unchecked(
+                                20_000., 10_000.,
+                            ),
+                        ),
+                        output_origin_reference: Some(Coordinate2D::new(0.0, 0.0)),
+                        method: geoengine_operators::processing::WarpMethod::NearestNeighbor,
+                    },
+                    sources: SingleRasterSource {
+                        raster: raster_source(),
+                    },
+                }),
+                |graph| matches!(graph, RasterOperator::Warp(_)),
             ),
             (
                 TypedRasterOperator::from(OperatorsBandFilter {

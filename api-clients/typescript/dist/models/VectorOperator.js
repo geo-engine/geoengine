@@ -105,6 +105,16 @@ function VectorOperatorToJSONTyped(value, ignoreDiscriminator = false) {
 * Check if a given object implements the VectorOperator interface.
 */
 function instanceOfVectorOperator(value) {
-    return (0, MockPointSource_1.instanceOfMockPointSource)(value)
-        || (0, RasterVectorJoin_1.instanceOfRasterVectorJoin)(value);
+    return (0, ColumnRangeFilter_1.instanceOfColumnRangeFilter)(value)
+        || (0, LineSimplification_1.instanceOfLineSimplification)(value)
+        || (0, MockPointSource_1.instanceOfMockPointSource)(value)
+        || (0, OgrSource_1.instanceOfOgrSource)(value)
+        || (0, PointInPolygonFilter_1.instanceOfPointInPolygonFilter)(value)
+        || (0, RasterVectorJoin_1.instanceOfRasterVectorJoin)(value)
+        || (0, Reprojection_1.instanceOfReprojection)(value)
+        || (0, TimeProjection_1.instanceOfTimeProjection)(value)
+        || (0, TimeShift_1.instanceOfTimeShift)(value)
+        || (0, VectorExpression_1.instanceOfVectorExpression)(value)
+        || (0, VectorJoin_1.instanceOfVectorJoin)(value)
+        || (0, VisualPointClustering_1.instanceOfVisualPointClustering)(value);
 }

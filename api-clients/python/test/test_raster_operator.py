@@ -36,16 +36,24 @@ class TestRasterOperator(unittest.TestCase):
         if include_optional:
             return RasterOperator(
                 type = 'BandFilter',
-                params = None,
-                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
-                    source = null, )
+                params = geoengine_api_client.models.warp_parameters.WarpParameters(
+                    target_spatial_reference = '', 
+                    output_resolution = null, 
+                    output_origin_reference = null, 
+                    method = null, ),
+                sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
+                    raster = null, )
             )
         else:
             return RasterOperator(
                 type = 'BandFilter',
-                params = None,
-                sources = geoengine_api_client.models.single_raster_or_vector_source.SingleRasterOrVectorSource(
-                    source = null, ),
+                params = geoengine_api_client.models.warp_parameters.WarpParameters(
+                    target_spatial_reference = '', 
+                    output_resolution = null, 
+                    output_origin_reference = null, 
+                    method = null, ),
+                sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
+                    raster = null, ),
         )
         """
 
