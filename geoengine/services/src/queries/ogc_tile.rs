@@ -1,5 +1,6 @@
 //! OGC API map tiles of a layer as PNG.
 
+use crate::config::{self, get_config_element};
 use crate::processing_graphs::processing_graph::ProcessingGraph;
 use crate::{
     api::handlers::ogc::{
@@ -31,7 +32,7 @@ use geoengine_operators::{
         TypedRasterOperator, TypedRasterQueryProcessor,
     },
     util::{
-        WarpMethods, WrapWithProjectionAndResample,
+        WrapWithProjectionAndResample,
         raster_stream_to_png::{default_raster_colorizer, raster_stream_to_png_bytes},
     },
 };
@@ -234,7 +235,8 @@ fn assert_multiple_of_original_resolution(
 /// Puts `layer_operator` onto the grid of `grid_operator` in one `Warp` and makes it the processing
 /// graph of `layer`. Returns it with the colorizer to render it with: the one of the layer's
 /// symbology, or else [`default_raster_colorizer`]. The colorizer chooses the resampling methods
-/// (see [`WarpMethods::for_symbology`]).
+/// (see [`geoengine_operators::util::WarpMethods::for_symbology`]), unless `[ogc] map_resampling`
+/// is `"nearest"`.
 async fn warp_onto_grid(
     layer: &mut Layer,
     layer_operator: TypedRasterOperator,
@@ -259,7 +261,9 @@ async fn warp_onto_grid(
             || default_raster_colorizer(layer_initialized.result_descriptor()),
             |symbology| symbology.raster_colorizer.clone(),
         );
-    let methods = WarpMethods::for_symbology(&colorizer);
+    let methods = get_config_element::<config::Ogc>()?
+        .map_resampling
+        .methods(&colorizer);
     let grid = grid_operator.result_descriptor().spatial_grid_descriptor();
     let spatial_reference = grid_operator
         .result_descriptor()

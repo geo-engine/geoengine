@@ -101,6 +101,12 @@ filename_prefix = "geo_engine"
 # improve debugging.
 raw_error_messages = false
 
+[ogc]
+# How WMS GetMap and OGC API tiles resample rasters onto the requested grid: "symbology" uses the
+# methods for the colorizer ("mode" for palettes, "average"/"bilinear" for gradients and RGB),
+# "nearest" always uses nearest neighbor, which is faster. WCS always uses nearest neighbor.
+map_resampling = "symbology"
+
 [ogc.default_time]
 # type "Value" with start/end as ISO strings or "Now" for using the current time, use wcs.default_time etc. for override
 type = "Value"

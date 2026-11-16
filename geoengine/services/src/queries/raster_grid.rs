@@ -62,12 +62,15 @@ pub enum RasterEncoding {
 }
 
 impl RasterEncoding {
-    /// How to resample the raster onto the query's grid for this encoding
-    fn warp_methods(&self) -> WarpMethods {
-        match self {
-            Self::Png { colorizer, .. } => WarpMethods::for_symbology(colorizer),
+    /// How to resample the raster onto the query's grid for this encoding: for a PNG as
+    /// `[ogc] map_resampling` says (see [`config::MapResampling`])
+    fn warp_methods(&self) -> Result<WarpMethods> {
+        Ok(match self {
+            Self::Png { colorizer, .. } => get_config_element::<config::Ogc>()?
+                .map_resampling
+                .methods(colorizer),
             Self::GeoTiff { .. } => WarpMethods::NEAREST,
-        }
+        })
     }
 }
 
@@ -80,7 +83,7 @@ pub async fn raster_grid<C: SessionContext>(
     let execution_context = ctx.execution_context()?;
     let tiling_spec = execution_context.tiling_specification();
 
-    let wrapped = load_on_grid(&ctx, &query, encoding.warp_methods(), &execution_context).await?;
+    let wrapped = load_on_grid(&ctx, &query, encoding.warp_methods()?, &execution_context).await?;
 
     let grid_bounds = wrapped
         .result_descriptor

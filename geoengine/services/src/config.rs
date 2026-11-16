@@ -2,12 +2,14 @@ use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
+use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::new_raster_cache::{
     BlockReadMode, DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
 };
 use geoengine_operators::processing::ExpressionCacheConfig;
+use geoengine_operators::util::WarpMethods;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -379,6 +381,32 @@ pub struct Ogc {
     pub default_time: Option<OgcDefaultTime>,
     pub tiles: Option<OgcApiTilesConfig>,
     pub cors: Option<CorsConfig>,
+    /// How WMS `GetMap` and OGC API tiles resample rasters onto the requested grid
+    #[serde(default)]
+    pub map_resampling: MapResampling,
+}
+
+/// How rendered maps (WMS `GetMap`, OGC API tiles) resample rasters onto the requested grid.
+/// WCS always uses nearest neighbor, as it returns data values.
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum MapResampling {
+    /// The methods for the colorizer: the most common class for a palette, the average and
+    /// bilinear interpolation for gradients and RGB composites
+    #[default]
+    Symbology,
+    /// Nearest neighbor, which is faster
+    Nearest,
+}
+
+impl MapResampling {
+    /// The methods for rendering with `colorizer`
+    pub fn methods(self, colorizer: &RasterColorizer) -> WarpMethods {
+        match self {
+            Self::Symbology => WarpMethods::for_symbology(colorizer),
+            Self::Nearest => WarpMethods::NEAREST,
+        }
+    }
 }
 
 impl ConfigElement for Ogc {
@@ -922,6 +950,41 @@ mod tests {
 
         assert_eq!(config.max_cache_size_in_bytes, 1024 * 1024 * 1024);
         assert_eq!(config.workspace_path, PathBuf::from("expression_workspace"));
+    }
+
+    #[test]
+    fn it_resamples_maps_by_symbology_unless_configured_otherwise() {
+        use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+
+        let config: Ogc = default_settings().get(Ogc::KEY).unwrap();
+        assert_eq!(config.map_resampling, MapResampling::Symbology);
+
+        let config = Config::builder()
+            .add_source(default_settings())
+            .set_override("ogc.map_resampling", "nearest")
+            .unwrap()
+            .build()
+            .unwrap();
+        let config: Ogc = config.get(Ogc::KEY).unwrap();
+        assert_eq!(config.map_resampling, MapResampling::Nearest);
+
+        let palette = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: Colorizer::palette(
+                [(1.0.try_into().unwrap(), RgbaColor::white())].into(),
+                RgbaColor::transparent(),
+                RgbaColor::black(),
+            )
+            .unwrap(),
+        };
+        assert_eq!(
+            MapResampling::Symbology.methods(&palette),
+            WarpMethods::CLASSES
+        );
+        assert_eq!(
+            MapResampling::Nearest.methods(&palette),
+            WarpMethods::NEAREST
+        );
     }
 
     #[test]
