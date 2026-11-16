@@ -1756,4 +1756,38 @@ mod tests {
             .await;
         }
     }
+
+    /// `Warp` approximates the coordinate transformation as GDAL's default `--et 0.125`, with its
+    /// own subdivision of the rows, so it is close to GDAL's approximate results as well
+    #[tokio::test]
+    async fn it_approximates_the_reprojection_like_gdal() {
+        let reprojected = WarpParams {
+            target_spatial_reference: Some(SpatialReference::web_mercator()),
+            ..WarpParams::default()
+        };
+        assert_like_gdal(
+            "ndvi",
+            "ndvi_average_3857_30km_Float32_et0125",
+            WarpParams {
+                downsampling: WarpDownsampling::Average,
+                ..reprojected
+            },
+            1e-3,
+            None,
+            TypedRasterQueryProcessor::get_f32,
+        )
+        .await;
+        assert_like_gdal(
+            "ndvi",
+            "ndvi_bilinear_3857_2km_coast_Float32_et0125",
+            WarpParams {
+                upsampling: WarpUpsampling::Bilinear,
+                ..reprojected
+            },
+            1e-3,
+            None,
+            TypedRasterQueryProcessor::get_f32,
+        )
+        .await;
+    }
 }

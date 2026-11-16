@@ -30,7 +30,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use rayon::slice::{ParallelSlice, ParallelSliceMut};
 use tokio::sync::OnceCell;
 
-use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
+use super::{ApproxProjection, FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 
 #[derive(Debug, Clone, Copy)]
 pub struct TileReprojectionSubqueryGridInfo {
@@ -275,6 +275,10 @@ impl InputPixelIndicesCache {
     }
 }
 
+/// The input pixel indices of the pixel centers of `spec.tile_info`. Chunks within the valid
+/// output area are projected approximately, row by row, with an error of at most
+/// [`APPROX_ERROR_THRESHOLD_PX`](super::APPROX_ERROR_THRESHOLD_PX) input pixels (see
+/// [`ApproxProjection`]).
 fn input_pixel_indices_parallel(
     pool: &ThreadPool,
     spec: InputPixelIndicesSpec,
@@ -300,6 +304,10 @@ fn input_pixel_indices_parallel(
     let valid_out_area = spec.valid_out_area.as_bbox();
 
     let to_index = |c: Coordinate2D| input_pixel_index(&spec.in_geo_transform, c);
+    let in_pixel_size = (
+        spec.in_geo_transform.x_pixel_size().get(),
+        spec.in_geo_transform.y_pixel_size().get(),
+    );
 
     let mut indices = vec![NO_PIXEL; tile_info.tile_size_in_pixels.number_of_elements()];
 
@@ -326,18 +334,17 @@ fn input_pixel_indices_parallel(
                 with_projector(spec.out_srs, spec.in_srs, |proj| {
                     if valid_out_area.contains_bbox(&chunk_bounds) {
                         tracing::trace!("reproject whole tile chunk");
-                        match proj.project_coordinates(&out_coords) {
-                            Ok(in_coords) => {
-                                for (index, in_coord) in index_slice.iter_mut().zip(in_coords) {
-                                    *index = to_index(in_coord);
-                                }
-                            }
-                            // one failing coordinate must not fail the whole chunk
-                            Err(_) => {
-                                for (index, out_coord) in index_slice.iter_mut().zip(&out_coords) {
-                                    if let Ok(in_coord) = proj.project_coordinate(*out_coord) {
-                                        *index = to_index(in_coord);
-                                    }
+                        // row by row, approximately; points that fail to project get no pixel
+                        let approx = ApproxProjection::new(proj, in_pixel_size);
+                        let mut in_coords = vec![None; width];
+                        for (index_row, out_row) in
+                            index_slice.chunks_mut(width).zip(out_coords.chunks(width))
+                        {
+                            let in_coords = &mut in_coords[..out_row.len()];
+                            approx.project_row(out_row, in_coords);
+                            for (index, in_coord) in index_row.iter_mut().zip(in_coords.iter()) {
+                                if let Some(in_coord) = in_coord {
+                                    *index = to_index(*in_coord);
                                 }
                             }
                         }

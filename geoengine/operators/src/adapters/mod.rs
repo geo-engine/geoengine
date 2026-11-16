@@ -13,8 +13,9 @@ pub use raster_stacker::{
     PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource,
 };
 pub use raster_subquery::{
-    FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
-    TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
+    APPROX_ERROR_THRESHOLD_PX, ApproxProjection, FoldTileAccu, FoldTileAccuMut,
+    RasterSubQueryAdapter, SubQueryTileAggregator, TileReprojectionSubQuery,
+    TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
 };
 pub use simple_raster_stacker::{
     SimpleRasterStackerAdapter, SimpleRasterStackerError, SimpleRasterStackerSource,

@@ -13,6 +13,7 @@ Both inputs are 60 × 60 pixels of 0.1° in EPSG:4326, from 0° to 6° E and 50�
 
 `expected/<input>_<method>_<case>_<data type>.tif` is the result of `gdal raster update -r <method> --et 0` (GDAL 3.12) on an empty target grid.
 The target grid is fixed beforehand, as `Warp`'s output grid, and `--et 0` transforms every pixel exactly.
+`<...>_et0125.tif` uses GDAL's default `--et 0.125` instead, the approximate transformation that `Warp` also uses (with its own subdivision of the rows, so the results are close, not equal).
 Each `Byte` result with `average` or `bilinear` has a `Float32` counterpart: where the exact result lies halfway between two integers, GDAL's rounding depends on the rounding errors of its coordinates, so the tests accept both neighbours there.
 
 The cases:
@@ -40,6 +41,11 @@ warp() { # input method case size bbox data_type nodata [crs]
     gdal raster create --size "$4" --bbox "$5" --crs "${8:-EPSG:4326}" --ot "$6" --nodata "$7" --burn "$7" --overwrite "$target"
     gdal raster update -r "$2" --et 0 "$1.tif" "$target"
 }
+warp_approx() { # as `warp`, with GDAL's default approximate transformation (--et 0.125)
+    target="expected/$1_$2_$3_$6_et0125.tif"
+    gdal raster create --size "$4" --bbox "$5" --crs "${8:-EPSG:4326}" --ot "$6" --nodata "$7" --burn "$7" --overwrite "$target"
+    gdal raster update -r "$2" "$1.tif" "$target"
+}
 warp ndvi average 3x 20,20 0,50,6,56 Byte 255
 warp ndvi average 3x 20,20 0,50,6,56 Float32 -9999
 warp ndvi average 2_5x 24,24 0,50,6,56 Float32 -9999
@@ -64,5 +70,7 @@ warp ndvi bilinear 3857_2km 90,80 460000,6640000,640000,6800000 Byte 255 EPSG:38
 warp ndvi bilinear 3857_2km 90,80 460000,6640000,640000,6800000 Float32 -9999 EPSG:3857
 warp ndvi bilinear 3857_2km_coast 90,80 360000,6700000,540000,6860000 Byte 255 EPSG:3857
 warp ndvi bilinear 3857_2km_coast 90,80 360000,6700000,540000,6860000 Float32 -9999 EPSG:3857
+warp_approx ndvi average 3857_30km 18,32 60000,6510000,600000,7470000 Float32 -9999 EPSG:3857
+warp_approx ndvi bilinear 3857_2km_coast 90,80 360000,6700000,540000,6860000 Float32 -9999 EPSG:3857
 rm -f ./*.aux.xml expected/*.aux.xml
 ```
