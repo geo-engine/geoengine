@@ -276,11 +276,6 @@ pub enum Error {
 
     NotYetImplemented,
 
-    #[snafu(display(
-        "Warp supports resampling methods other than nearest neighbour only within the same spatial reference yet"
-    ))]
-    WarpResamplingMethodRequiresSameSpatialReference,
-
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
     TemporalRasterAggregationMeanRequiresNoData,

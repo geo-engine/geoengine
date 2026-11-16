@@ -21,6 +21,7 @@ The cases:
 - `2_5x`: 0.25°, partly covered input pixels
 - `2x_shifted`: 0.2° with the origin moved by half an input pixel
 - `mixed`: 0.3° wide and 0.05° high
+- `3857_30km`, `3857_2km`, `3857_2km_coast`: reprojected to EPSG:3857 with 30 km (coarser) and 2 km (finer) pixels, the latter on land and on the coast
 - `2x_finer`, `2_5x_finer_shifted`: 0.05° and 0.04°, on a part of the input; the latter is shifted so that no output pixel center lies on an input pixel edge, where the pixel GDAL takes as the one under the center depends on rounding errors
 
 ## Commands
@@ -34,9 +35,9 @@ gdal raster clip --bbox 0,50,6,56 ../landcover/landcover.tif landcover.tif --ove
 gdal raster edit --nodata 0 --crs EPSG:4326 landcover.tif
 
 mkdir -p expected
-warp() { # input method case size bbox data_type nodata
+warp() { # input method case size bbox data_type nodata [crs]
     target="expected/$1_$2_$3_$6.tif"
-    gdal raster create --size "$4" --bbox "$5" --crs EPSG:4326 --ot "$6" --nodata "$7" --burn "$7" --overwrite "$target"
+    gdal raster create --size "$4" --bbox "$5" --crs "${8:-EPSG:4326}" --ot "$6" --nodata "$7" --burn "$7" --overwrite "$target"
     gdal raster update -r "$2" --et 0 "$1.tif" "$target"
 }
 warp ndvi average 3x 20,20 0,50,6,56 Byte 255
@@ -55,5 +56,13 @@ warp landcover mode 3x 20,20 0,50,6,56 Byte 0
 warp landcover mode 2_5x 24,24 0,50,6,56 Byte 0
 warp landcover mode 2x_shifted 29,29 0.05,50.05,5.85,55.85 Byte 0
 warp landcover mode mixed 20,120 0,50,6,56 Byte 0
+warp ndvi average 3857_30km 18,32 60000,6510000,600000,7470000 Byte 255 EPSG:3857
+warp ndvi average 3857_30km 18,32 60000,6510000,600000,7470000 Float32 -9999 EPSG:3857
+warp ndvi max 3857_30km 18,32 60000,6510000,600000,7470000 Byte 255 EPSG:3857
+warp landcover mode 3857_30km 18,32 60000,6510000,600000,7470000 Byte 0 EPSG:3857
+warp ndvi bilinear 3857_2km 90,80 460000,6640000,640000,6800000 Byte 255 EPSG:3857
+warp ndvi bilinear 3857_2km 90,80 460000,6640000,640000,6800000 Float32 -9999 EPSG:3857
+warp ndvi bilinear 3857_2km_coast 90,80 360000,6700000,540000,6860000 Byte 255 EPSG:3857
+warp ndvi bilinear 3857_2km_coast 90,80 360000,6700000,540000,6860000 Float32 -9999 EPSG:3857
 rm -f ./*.aux.xml expected/*.aux.xml
 ```

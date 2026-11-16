@@ -156,6 +156,62 @@ fn method_cases(
         .collect()
 }
 
+/// The `wms_tile` of `reprojection` with pixels that are coarser in x and finer in y than the
+/// ~11 km of the reprojected raster, and with pixels that are finer in both axes: reprojection and
+/// resampling in one wrapper, with nearest neighbour and with the other methods.
+fn wms_3857_cases(env: &Env) -> Vec<(String, Case)> {
+    let tile = || {
+        Area::Part(SpatialPartition2D::new_unchecked(
+            Coordinate2D::new(0., 7_514_065.6),
+            Coordinate2D::new(2_504_688.5, 5_009_377.1),
+        ))
+    };
+    let cases = [
+        (
+            "mixed_wms_3857",
+            (19_568., 4_892.),
+            WarpDownsampling::Nearest,
+            WarpUpsampling::Nearest,
+        ),
+        (
+            "mixed_wms_3857_average",
+            (19_568., 4_892.),
+            WarpDownsampling::Average,
+            WarpUpsampling::Nearest,
+        ),
+        (
+            "finer_wms_3857",
+            (4_892., 4_892.),
+            WarpDownsampling::Nearest,
+            WarpUpsampling::Nearest,
+        ),
+        (
+            "finer_wms_3857_bilinear",
+            (4_892., 4_892.),
+            WarpDownsampling::Nearest,
+            WarpUpsampling::Bilinear,
+        ),
+    ];
+    cases
+        .into_iter()
+        .map(|(name, (x, y), downsampling, upsampling)| {
+            (
+                name.to_string(),
+                env.case(
+                    env.resample_with_methods(
+                        env.raster(),
+                        SpatialReference::web_mercator(),
+                        SpatialResolution::new_unchecked(x, y),
+                        (downsampling, upsampling),
+                    ),
+                    tile(),
+                    env.one_step(),
+                ),
+            )
+        })
+        .collect()
+}
+
 fn resampling(c: &mut Criterion) {
     let env = Env::new();
     let wgs84 = SpatialReference::epsg_4326();
@@ -176,23 +232,7 @@ fn resampling(c: &mut Criterion) {
         ));
     }
     cases.extend(method_cases(&env, &resolutions, tile_at_10e_50n, "tile"));
-    // the `wms_tile` of `reprojection` with pixels that are coarser in x and finer in y than the
-    // ~11 km of the reprojected raster: reprojection and resampling in one wrapper
-    cases.push((
-        "mixed_wms_3857".to_string(),
-        env.case(
-            env.resample(
-                env.raster(),
-                SpatialReference::web_mercator(),
-                SpatialResolution::new_unchecked(19_568., 4_892.),
-            ),
-            Area::Part(SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(0., 7_514_065.6),
-                Coordinate2D::new(2_504_688.5, 5_009_377.1),
-            )),
-            env.one_step(),
-        ),
-    ));
+    cases.extend(wms_3857_cases(&env));
     // local only, see `reprojection`
     if !common::ci() {
         for (name, resolution) in resolutions {
