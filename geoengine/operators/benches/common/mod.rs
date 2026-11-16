@@ -66,6 +66,7 @@ use geoengine_operators::{
         NeighborhoodAggregateParams, NeighborhoodParams, RasterScaling, RasterScalingParams,
         RasterStacker, RasterStackerParams, Reprojection, ReprojectionParams, ScalingMode,
         SlopeOffsetSelection, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        WarpDownsampling, WarpUpsampling,
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
@@ -436,6 +437,22 @@ impl Env {
                 .unwrap()
                 .operator
         })
+    }
+
+    /// `resample`, with `downsampling` and `upsampling` in the `Warp` it wraps the operator with.
+    pub fn resample_with_methods(
+        &self,
+        operator: TypedRasterOperator,
+        srs: SpatialReference,
+        resolution: SpatialResolution,
+        (downsampling, upsampling): (WarpDownsampling, WarpUpsampling),
+    ) -> TypedRasterOperator {
+        let TypedRasterOperator::Warp(mut warp) = self.resample(operator, srs, resolution) else {
+            panic!("the resampled operator should be a warp");
+        };
+        warp.params.downsampling = downsampling;
+        warp.params.upsampling = upsampling;
+        TypedRasterOperator::Warp(warp)
     }
 
     /// Initializes the operator and queries all of its bands in `area` and `time`.

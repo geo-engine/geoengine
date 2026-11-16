@@ -483,8 +483,9 @@ __all__ = [
     "Volume",
     "VolumeFileLayersResponse",
     "Warp",
-    "WarpMethod",
+    "WarpDownsamplingMethod",
     "WarpParameters",
+    "WarpUpsamplingMethod",
     "WcsRequest",
     "WcsService",
     "WcsVersion",
@@ -969,8 +970,9 @@ from geoengine_api_client.models.visual_point_clustering_parameters import Visua
 from geoengine_api_client.models.volume import Volume as Volume
 from geoengine_api_client.models.volume_file_layers_response import VolumeFileLayersResponse as VolumeFileLayersResponse
 from geoengine_api_client.models.warp import Warp as Warp
-from geoengine_api_client.models.warp_method import WarpMethod as WarpMethod
+from geoengine_api_client.models.warp_downsampling_method import WarpDownsamplingMethod as WarpDownsamplingMethod
 from geoengine_api_client.models.warp_parameters import WarpParameters as WarpParameters
+from geoengine_api_client.models.warp_upsampling_method import WarpUpsamplingMethod as WarpUpsamplingMethod
 from geoengine_api_client.models.wcs_request import WcsRequest as WcsRequest
 from geoengine_api_client.models.wcs_service import WcsService as WcsService
 from geoengine_api_client.models.wcs_version import WcsVersion as WcsVersion

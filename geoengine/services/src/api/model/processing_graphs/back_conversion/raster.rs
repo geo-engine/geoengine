@@ -10,8 +10,8 @@ use crate::api::model::processing_graphs::{
     RasterStacker, RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
     Rasterization, RasterizationParameters, Reflectance, ReflectanceParameters, RenameBands,
     Temperature, TemperatureParameters, TemporalRasterAggregation,
-    TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters, Warp, WarpMethod,
-    WarpParameters,
+    TemporalRasterAggregationParameters, TimeShift, TimeShiftParameters, Warp,
+    WarpDownsamplingMethod, WarpParameters, WarpUpsamplingMethod,
     processing::{
         Aggregation, AggregationCount, AggregationFirst, AggregationLast, AggregationMax,
         AggregationMean, AggregationMin, AggregationPercentileEstimate, AggregationSum,
@@ -50,7 +50,8 @@ use geoengine_operators::{
         Temperature as OperatorsTemperature,
         TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
         TimeShift as OperatorsTimeShift, TimeShiftParams as OperatorsTimeShiftParams,
-        Warp as OperatorsWarp, WarpMethod as OperatorsWarpMethod,
+        Warp as OperatorsWarp, WarpDownsampling as OperatorsWarpDownsampling,
+        WarpUpsampling as OperatorsWarpUpsampling,
     },
     source::{
         GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
@@ -272,9 +273,18 @@ impl TryFrom<&OperatorsWarp> for Warp {
                 target_spatial_reference: value.params.target_spatial_reference.map(Into::into),
                 output_resolution: value.params.output_resolution.map(Into::into),
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
-                method: match value.params.method {
-                    OperatorsWarpMethod::NearestNeighbor => WarpMethod::NearestNeighbor,
+                downsampling: match value.params.downsampling {
+                    OperatorsWarpDownsampling::Nearest => WarpDownsamplingMethod::Nearest,
+                    OperatorsWarpDownsampling::Average => WarpDownsamplingMethod::Average,
+                    OperatorsWarpDownsampling::Mode => WarpDownsamplingMethod::Mode,
+                    OperatorsWarpDownsampling::Min => WarpDownsamplingMethod::Min,
+                    OperatorsWarpDownsampling::Max => WarpDownsamplingMethod::Max,
                 },
+                upsampling: match value.params.upsampling {
+                    OperatorsWarpUpsampling::Nearest => WarpUpsamplingMethod::Nearest,
+                    OperatorsWarpUpsampling::Bilinear => WarpUpsamplingMethod::Bilinear,
+                },
+                output_data_type: value.params.output_data_type.map(Into::into),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
                 raster: raster_operator_from_runtime(&value.sources.raster)?,
@@ -873,7 +883,9 @@ mod tests {
                             ),
                         ),
                         output_origin_reference: Some(Coordinate2D::new(0.0, 0.0)),
-                        method: geoengine_operators::processing::WarpMethod::NearestNeighbor,
+                        downsampling: geoengine_operators::processing::WarpDownsampling::Average,
+                        upsampling: geoengine_operators::processing::WarpUpsampling::Bilinear,
+                        output_data_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
                     },
                     sources: SingleRasterSource {
                         raster: raster_source(),

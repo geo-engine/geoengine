@@ -18,19 +18,20 @@ from enum import Enum
 from typing_extensions import Self
 
 
-class WarpMethod(str, Enum):
+class WarpUpsamplingMethod(str, Enum):
     """
-    WarpMethod
+    How `Warp` computes an output pixel that is finer than the input in both axes, as `gdalwarp -r` with the same name.
     """
 
     """
     allowed enum values
     """
-    NEARESTNEIGHBOR = 'nearestNeighbor'
+    NEAREST = 'nearest'
+    BILINEAR = 'bilinear'
 
     @classmethod
     def from_json(cls, json_str: str) -> Self:
-        """Create an instance of WarpMethod from a JSON string"""
+        """Create an instance of WarpUpsamplingMethod from a JSON string"""
         return cls(json.loads(json_str))
 
 

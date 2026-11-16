@@ -26,13 +26,27 @@ import {
     Coordinate2DToJSON,
     Coordinate2DToJSONTyped,
 } from './Coordinate2D';
-import type { WarpMethod } from './WarpMethod';
+import type { WarpDownsamplingMethod } from './WarpDownsamplingMethod';
 import {
-    WarpMethodFromJSON,
-    WarpMethodFromJSONTyped,
-    WarpMethodToJSON,
-    WarpMethodToJSONTyped,
-} from './WarpMethod';
+    WarpDownsamplingMethodFromJSON,
+    WarpDownsamplingMethodFromJSONTyped,
+    WarpDownsamplingMethodToJSON,
+    WarpDownsamplingMethodToJSONTyped,
+} from './WarpDownsamplingMethod';
+import type { WarpUpsamplingMethod } from './WarpUpsamplingMethod';
+import {
+    WarpUpsamplingMethodFromJSON,
+    WarpUpsamplingMethodFromJSONTyped,
+    WarpUpsamplingMethodToJSON,
+    WarpUpsamplingMethodToJSONTyped,
+} from './WarpUpsamplingMethod';
+import type { RasterDataType } from './RasterDataType';
+import {
+    RasterDataTypeFromJSON,
+    RasterDataTypeFromJSONTyped,
+    RasterDataTypeToJSON,
+    RasterDataTypeToJSONTyped,
+} from './RasterDataType';
 
 /**
  * Parameters for the `Warp` operator.
@@ -54,9 +68,20 @@ export interface WarpParameters {
      */
     outputOriginReference?: Coordinate2D | null;
     /**
-     * Resampling method.
+     * How to compute an output pixel that is coarser than the input in at least one axis.
+     * Defaults to `nearest`.
      */
-    method?: WarpMethod;
+    downsampling?: WarpDownsamplingMethod;
+    /**
+     * How to compute an output pixel that is finer than the input in both axes.
+     * Defaults to `nearest`.
+     */
+    upsampling?: WarpUpsamplingMethod;
+    /**
+     * The data type of the output. Defaults to the data type of the input.
+     * Integer types round half up and clip values to their range.
+     */
+    outputDataType?: RasterDataType | null;
 }
 
 
@@ -81,7 +106,9 @@ export function WarpParametersFromJSONTyped(json: any, ignoreDiscriminator: bool
         'targetSpatialReference': json['targetSpatialReference'] === undefined ? undefined : json['targetSpatialReference'] === null ? null : json['targetSpatialReference'],
         'outputResolution': json['outputResolution'] === undefined ? undefined : json['outputResolution'] === null ? null : SpatialResolutionFromJSON(json['outputResolution']),
         'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
-        'method': json['method'] == null ? undefined : WarpMethodFromJSON(json['method']),
+        'downsampling': json['downsampling'] == null ? undefined : WarpDownsamplingMethodFromJSON(json['downsampling']),
+        'upsampling': json['upsampling'] == null ? undefined : WarpUpsamplingMethodFromJSON(json['upsampling']),
+        'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : RasterDataTypeFromJSON(json['outputDataType']),
     };
 }
 
@@ -99,7 +126,9 @@ export function WarpParametersToJSONTyped(value?: WarpParameters | null, ignoreD
         'targetSpatialReference': value['targetSpatialReference'],
         'outputResolution': SpatialResolutionToJSON(value['outputResolution']),
         'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
-        'method': WarpMethodToJSON(value['method']),
+        'downsampling': WarpDownsamplingMethodToJSON(value['downsampling']),
+        'upsampling': WarpUpsamplingMethodToJSON(value['upsampling']),
+        'outputDataType': RasterDataTypeToJSON(value['outputDataType']),
     };
 }
 

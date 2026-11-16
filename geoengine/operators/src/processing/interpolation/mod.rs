@@ -15,7 +15,7 @@ use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
     Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution, Fraction,
 };
-use crate::processing::{InitializedWarp, WarpMethod, WarpOrigin, WarpParams};
+use crate::processing::{InitializedWarp, WarpOrigin, WarpParams};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -99,7 +99,7 @@ impl RasterOperator for Interpolation {
                     target_spatial_reference: None,
                     output_resolution: Some(out_grid.spatial_resolution()),
                     output_origin_reference: self.params.output_origin_reference,
-                    method: WarpMethod::NearestNeighbor,
+                    ..WarpParams::default()
                 };
                 InitializedWarp::with_output_grid(
                     WarpOrigin {

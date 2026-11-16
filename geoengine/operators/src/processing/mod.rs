@@ -87,6 +87,6 @@ pub use time_projection::{TimeProjection, TimeProjectionError, TimeProjectionPar
 pub use time_shift::{TimeShift, TimeShiftError, TimeShiftParams};
 pub use vector_join::{VectorJoin, VectorJoinParams, VectorJoinSources, VectorJoinType};
 pub use warp::{
-    InitializedWarp, Warp, WarpMethod, WarpOrigin, WarpParams, source_at_overview_level,
-    warped_spatial_grid,
+    InitializedWarp, Warp, WarpDownsampling, WarpOrigin, WarpParams, WarpUpsampling,
+    source_at_overview_level, warped_spatial_grid,
 };
