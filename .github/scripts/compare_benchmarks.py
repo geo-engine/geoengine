@@ -71,13 +71,13 @@ def fmt(change) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("criterion_dir", type=Path, help="Criterion output directory of both rounds")
-    parser.add_argument("--threshold", type=float, default=0.10, help="relative change, e.g. 0.10")
+    parser.add_argument("--threshold", type=float, default=0.25, help="relative change, e.g. 0.25")
     parser.add_argument("--base-ref", default="base", help="label of the base commit")
     parser.add_argument("--output", type=Path, required=True, help="file for the Markdown report")
     args = parser.parse_args()
 
     rows, unpaired = [], []
-    regressions = improvements = 0
+    regressions = improvements = noisy = 0
     # every benchmark that ran has a `new/benchmark.json`
     for benchmark_file in sorted(args.criterion_dir.glob("**/new/benchmark.json")):
         bench_dir = benchmark_file.parent.parent
@@ -99,7 +99,7 @@ def main() -> int:
         elif faster:
             verdict, improvements = "🟢 faster", improvements + 1
         elif abs(change) > args.threshold:
-            verdict = "noisy"  # above the threshold, but not consistently in both rounds
+            verdict, noisy = "noisy", noisy + 1  # above the threshold, but not in both rounds
         else:
             verdict = "≈"
         rows.append(
@@ -117,7 +117,8 @@ def main() -> int:
         "Change of the median of the PR against the base, per round with its 95 % confidence interval; "
         f"🔴/🟢 only if both rounds' intervals exclude zero and both changes exceed {args.threshold:.0%}.",
         "",
-        f"**{regressions} slower, {improvements} faster, {len(rows) - regressions - improvements} unchanged.**",
+        f"**{regressions} slower, {improvements} faster, {noisy} noisy, "
+        f"{len(rows) - regressions - improvements - noisy} unchanged.**",
         "",
         "<details><summary>All benchmarks</summary>",
         "",

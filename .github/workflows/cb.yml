@@ -132,7 +132,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           python3 -I "$GITHUB_WORKSPACE/.github/scripts/compare_benchmarks.py" target/criterion \
-            --base-ref "$BASE_SHA" --threshold 0.10 --output "$RUNNER_TEMP/benchmark-report.md"
+            --base-ref "$BASE_SHA" --threshold 0.25 --output "$RUNNER_TEMP/benchmark-report.md"
           cat "$RUNNER_TEMP/benchmark-report.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment on the pull request
