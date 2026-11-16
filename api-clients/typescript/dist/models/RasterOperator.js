@@ -176,6 +176,7 @@ function instanceOfRasterOperator(value) {
         || (0, RasterStacker_1.instanceOfRasterStacker)(value)
         || (0, RasterTypeConversion_1.instanceOfRasterTypeConversion)(value)
         || (0, Rasterization_1.instanceOfRasterization)(value)
+        || (0, ReTile_1.instanceOfReTile)(value)
         || (0, Reflectance_1.instanceOfReflectance)(value)
         || (0, Reprojection_1.instanceOfReprojection)(value)
         || (0, Temperature_1.instanceOfTemperature)(value)

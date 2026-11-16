@@ -19,12 +19,12 @@ cannot be reprojected to the target spatial reference.
 
 ## Parameters
 
-| Name                   | Type                      | Description                                                                      | Examples                |
-| ---------------------- | ------------------------- | -------------------------------------------------------------------------------- | ----------------------- |
-| targetSpatialReference | string,null               | Target spatial reference system. Defaults to the spatial reference of the input. | `"EPSG:3857"`           |
-| outputResolution       | SpatialResolution or null |                                                                                  | `{"x":20000,"y":10000}` |
-| outputOriginReference  | Coordinate2D or null      |                                                                                  |                         |
-| method                 | WarpMethod                | Resampling method.                                                               |                         |
+| Name                   | Type                      | Description                                                                                                                      | Examples                |
+| ---------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| targetSpatialReference | string,null               | Target spatial reference system. Defaults to the spatial reference of the input.                                                 | `"EPSG:3857"`           |
+| outputResolution       | SpatialResolution or null | Output resolution (`x`, `y`) in units of the target spatial reference.<br>Defaults to the resolution of the (reprojected) input. | `{"x":20000,"y":10000}` |
+| outputOriginReference  | Coordinate2D or null      | Optional reference point used to align the output grid origin.                                                                   |                         |
+| method                 | WarpMethod                | Resampling method.                                                                                                               |                         |
 
 ## Sources
 
