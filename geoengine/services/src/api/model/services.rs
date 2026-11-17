@@ -997,9 +997,8 @@ pub struct StacProviderDatasetBand {
     /// Coarser assets with the same band, finest first.
     ///
     /// When the source reads an overview level, it reads the coarsest of these
-    /// assets that is not coarser than the overview level, so it transfers less
-    /// data. Their resolution must be an integer multiple of the dataset's
-    /// resolution.
+    /// assets whose factor is not larger than the overview level, so it
+    /// transfers less data.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub coarser_assets: Vec<StacCoarserAsset>,
 }
@@ -1009,8 +1008,11 @@ pub struct StacProviderDatasetBand {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StacCoarserAsset {
-    /// The pixel size of the asset files.
-    pub resolution: SpatialResolution,
+    /// How many times coarser than the dataset's resolution the asset's pixels
+    /// are, in both axes, e.g. 6 for 60 m files of a 10 m dataset. At least 2,
+    /// and increasing within a band.
+    #[schema(value_type = u32, minimum = 2)]
+    pub factor: std::num::NonZeroU32,
     /// The band inside the coarser asset.
     pub asset_band: StacAssetBand,
 }
@@ -1018,7 +1020,7 @@ pub struct StacCoarserAsset {
 impl From<StacCoarserAsset> for crate::datasets::external::stac::StacCoarserAsset {
     fn from(value: StacCoarserAsset) -> Self {
         Self {
-            resolution: value.resolution.into(),
+            factor: value.factor,
             asset_band: value.asset_band.into(),
         }
     }
@@ -1027,7 +1029,7 @@ impl From<StacCoarserAsset> for crate::datasets::external::stac::StacCoarserAsse
 impl From<crate::datasets::external::stac::StacCoarserAsset> for StacCoarserAsset {
     fn from(value: crate::datasets::external::stac::StacCoarserAsset) -> Self {
         Self {
-            resolution: value.resolution.into(),
+            factor: value.factor,
             asset_band: value.asset_band.into(),
         }
     }

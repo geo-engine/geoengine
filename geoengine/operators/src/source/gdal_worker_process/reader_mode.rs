@@ -358,23 +358,11 @@ fn coarser_file_factor(
     native: &SpatialGridDefinition,
     file: &SpatialGridDefinition,
 ) -> Option<NonZeroUsize> {
-    let factor = |native_size: f64, file_size: f64| {
-        let ratio = (file_size / native_size).abs();
-        let rounded = ratio.round();
-        (rounded >= 1. && float_cmp::approx_eq!(f64, ratio, rounded, epsilon = 1e-6))
-            .then_some(rounded as usize)
-    };
-    let native_geo_transform = native.geo_transform();
-    let file_geo_transform = file.geo_transform();
-    let x = factor(
-        native_geo_transform.x_pixel_size().get(),
-        file_geo_transform.x_pixel_size().get(),
-    )?;
-    let y = factor(
-        native_geo_transform.y_pixel_size().get(),
-        file_geo_transform.y_pixel_size().get(),
-    )?;
-    (x == y).then_some(x).and_then(NonZeroUsize::new)
+    let factor = file
+        .geo_transform()
+        .spatial_resolution()
+        .integer_multiple_of(native.geo_transform().spatial_resolution())?;
+    NonZeroUsize::new(factor.get() as usize)
 }
 
 /// The grid that covers the same area as `grid` with `factor` times finer pixels.

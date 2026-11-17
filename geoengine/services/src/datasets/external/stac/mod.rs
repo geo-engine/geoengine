@@ -10,7 +10,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::{fmt, sync::Arc};
+use std::{fmt, num::NonZeroU32, sync::Arc};
 
 mod auth;
 mod cache;
@@ -64,6 +64,28 @@ fn validate_s3_config(s3_config: Option<&StacProviderS3Config>) -> crate::error:
             reason: "STAC S3 credentials must not use the secret replacement placeholder"
                 .to_owned(),
         });
+    }
+    Ok(())
+}
+
+/// Coarser assets need a factor of at least 2, and each band lists them finest first, so that
+/// every factor names one file.
+fn validate_coarser_assets(datasets: &[StacProviderDataset]) -> crate::error::Result<()> {
+    for dataset in datasets {
+        for band in &dataset.bands {
+            let mut previous = 1;
+            for coarser in &band.coarser_assets {
+                if coarser.factor.get() <= previous {
+                    return Err(crate::error::Error::InvalidConfig {
+                        reason: format!(
+                            "STAC coarser assets of band `{}` in dataset `{}` need factors of at least 2, finest first",
+                            band.band_descriptor.name, dataset.name
+                        ),
+                    });
+                }
+                previous = coarser.factor.get();
+            }
+        }
     }
     Ok(())
 }
@@ -204,16 +226,52 @@ pub struct StacAssetBand {
 
 /// A coarser asset that holds the same band as a dataset band, e.g. the 60 m
 /// file of a band whose dataset has a resolution of 10 m.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
-#[postgres(name = "StacCoarserAsset")]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct StacCoarserAsset {
-    /// The pixel size of the asset files. It must be an integer multiple of the
-    /// dataset's resolution.
-    pub resolution: SpatialResolution,
+    /// How many times coarser than the dataset's resolution the asset's pixels
+    /// are, in both axes, e.g. 6 for 60 m files of a 10 m dataset. At least 2.
+    pub factor: NonZeroU32,
     /// The band inside the coarser asset, addressed like
     /// [`StacProviderDatasetBand::asset_band`].
     pub asset_band: StacAssetBand,
 }
+
+/// The database representation of [`StacCoarserAsset`]. Postgres has no
+/// unsigned integers, so the factor is a `bigint` that holds every `u32`.
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "StacCoarserAsset")]
+struct StacCoarserAssetDbType {
+    factor: i64,
+    asset_band: StacAssetBand,
+}
+
+impl From<&StacCoarserAsset> for StacCoarserAssetDbType {
+    fn from(value: &StacCoarserAsset) -> Self {
+        Self {
+            factor: i64::from(value.factor.get()),
+            asset_band: value.asset_band.clone(),
+        }
+    }
+}
+
+impl TryFrom<StacCoarserAssetDbType> for StacCoarserAsset {
+    type Error = crate::error::Error;
+
+    fn try_from(value: StacCoarserAssetDbType) -> Result<Self, Self::Error> {
+        let factor = u32::try_from(value.factor)
+            .ok()
+            .and_then(NonZeroU32::new)
+            .ok_or_else(|| crate::error::Error::InvalidConfig {
+                reason: format!("invalid STAC coarser asset factor {}", value.factor),
+            })?;
+        Ok(Self {
+            factor,
+            asset_band: value.asset_band,
+        })
+    }
+}
+
+geoengine_datatypes::delegate_from_to_sql!(StacCoarserAsset, StacCoarserAssetDbType);
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct StacProviderDatasetBand {
@@ -233,8 +291,8 @@ pub struct StacProviderDatasetBand {
     /// Coarser assets with the same band, finest first.
     ///
     /// When the source reads an overview level, it reads the coarsest of these
-    /// assets that is not coarser than the overview level instead of the
-    /// asset at the dataset's resolution, so it transfers less data.
+    /// assets whose factor is not larger than the overview level instead of
+    /// the asset at the dataset's resolution, so it transfers less data.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub coarser_assets: Vec<StacCoarserAsset>,
 }
@@ -358,6 +416,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                 new.stac_grid.unwrap_or_default().validate()?;
                 validate_max_concurrent_cell_searches(new.max_concurrent_cell_searches)?;
                 validate_time_dimension(new.time_dimension)?;
+                validate_coarser_assets(&new.datasets)?;
 
                 TypedDataProviderDefinition::StacDataProviderDefinition(new)
             }
@@ -406,6 +465,7 @@ impl StacDataProvider {
     ) -> crate::error::Result<Self> {
         validate_s3_config(definition.s3_config.as_ref())?;
         validate_time_dimension(definition.time_dimension)?;
+        validate_coarser_assets(&definition.datasets)?;
         let grid = definition.stac_grid.unwrap_or_default().validate()?;
         let max_concurrent_cell_searches =
             validate_max_concurrent_cell_searches(definition.max_concurrent_cell_searches)?;
@@ -859,7 +919,7 @@ mod tests {
         let mut definition = StacDataProviderDefinition::from(api);
         let band = &mut definition.datasets[0].bands[0];
         band.coarser_assets = vec![StacCoarserAsset {
-            resolution: SpatialResolution::new_unchecked(60., 60.),
+            factor: NonZeroU32::new(6).unwrap(),
             asset_band: StacAssetBand {
                 asset_title: band.asset_band.asset_title.replace("10m", "60m"),
                 band_name: band.asset_band.band_name.clone(),
@@ -878,8 +938,8 @@ mod tests {
         let api = crate::api::model::services::StacDataProviderDefinition::from(definition.clone());
         let json = serde_json::to_value(&api).unwrap();
         assert_eq!(
-            json["datasets"][0]["bands"][0]["coarserAssets"][0]["resolution"],
-            serde_json::json!({"x": 60.0, "y": 60.0})
+            json["datasets"][0]["bands"][0]["coarserAssets"][0]["factor"],
+            serde_json::json!(6)
         );
         // bands without coarser assets leave the field out
         assert!(
@@ -887,9 +947,38 @@ mod tests {
                 .get("coarserAssets")
                 .is_none()
         );
+        let mut zero = json.clone();
+        zero["datasets"][0]["bands"][0]["coarserAssets"][0]["factor"] = serde_json::json!(0);
+        assert!(
+            serde_json::from_value::<crate::api::model::services::StacDataProviderDefinition>(zero)
+                .is_err(),
+            "a factor of 0 is no valid factor"
+        );
         let api: crate::api::model::services::StacDataProviderDefinition =
             serde_json::from_value(json).unwrap();
         assert_eq!(StacDataProviderDefinition::from(api), definition);
+
+        // a factor of 1 is the native asset, and factors are finest first
+        for factors in [vec![1], vec![6, 2], vec![2, 2]] {
+            let mut invalid = definition.clone();
+            let band = &mut invalid.datasets[0].bands[0];
+            band.coarser_assets = factors
+                .into_iter()
+                .map(|factor| StacCoarserAsset {
+                    factor: NonZeroU32::new(factor).unwrap(),
+                    asset_band: band.coarser_assets[0].asset_band.clone(),
+                })
+                .collect();
+            assert!(
+                db.update_layer_provider_definition(id, invalid.into())
+                    .await
+                    .is_err()
+            );
+        }
+        assert_eq!(
+            db.get_layer_provider_definition(id).await.unwrap(),
+            definition.into()
+        );
     }
 
     #[crate::ge_context::test]

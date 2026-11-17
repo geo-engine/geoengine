@@ -893,7 +893,7 @@ CREATE TYPE "StacAssetBand" AS (
 );
 
 CREATE TYPE "StacCoarserAsset" AS (
-    resolution "SpatialResolution",
+    factor bigint,
     asset_band "StacAssetBand"
 );
 
