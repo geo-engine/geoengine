@@ -455,13 +455,19 @@ mod tests {
 
     /// A 64x64 u16 `GeoTIFF` in 16x16 blocks with overviews 2 and 4, every pixel distinct.
     fn tiled_tiff_with_overviews(dir: &std::path::Path) -> GdalDatasetParameters {
-        let file_path = dir.join("blocks.tif");
+        tiled_tiff(dir, 64, &[2, 4])
+    }
+
+    /// A `size`² `u16` file in 16 px blocks whose pixel values are `y * size + x`, with origin
+    /// (0, 64) and the given overviews.
+    fn tiled_tiff(dir: &std::path::Path, size: usize, overviews: &[i32]) -> GdalDatasetParameters {
+        let file_path = dir.join(format!("blocks_{size}.tif"));
         let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
         let options: gdal::cpl::CslStringList = ["TILED=YES", "BLOCKXSIZE=16", "BLOCKYSIZE=16"]
             .into_iter()
             .collect();
         let mut dataset = driver
-            .create_with_band_type_with_options::<u16, _>(&file_path, 64, 64, 1, &options)
+            .create_with_band_type_with_options::<u16, _>(&file_path, size, size, 1, &options)
             .unwrap();
         dataset
             .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap())
@@ -470,13 +476,13 @@ mod tests {
             .set_geo_transform(&[0., 1., 0., 64., 0., -1.])
             .unwrap();
         let mut buffer =
-            gdal::raster::Buffer::new((64, 64), (0..64 * 64).map(|v| v as u16).collect());
+            gdal::raster::Buffer::new((size, size), (0..size * size).map(|v| v as u16).collect());
         dataset
             .rasterband(1)
             .unwrap()
-            .write((0, 0), (64, 64), &mut buffer)
+            .write((0, 0), (size, size), &mut buffer)
             .unwrap();
-        dataset.build_overviews("NEAREST", &[2, 4], &[]).unwrap();
+        dataset.build_overviews("NEAREST", overviews, &[]).unwrap();
         dataset.close().unwrap();
 
         GdalDatasetParameters {
@@ -487,8 +493,8 @@ mod tests {
                 x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
                 y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
             },
-            width: 64,
-            height: 64,
+            width: size,
+            height: size,
             file_not_found_handling: FileNotFoundHandling::Error,
             no_data_value: None,
             properties_mapping: None,
@@ -737,10 +743,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn levels_a_file_lacks_are_subsampled_from_its_coarsest_level_through_blocks() {
+    async fn whole_number_levels_are_resampled_alike_in_every_tile() {
         let dir = tempfile::tempdir().unwrap();
-        // the file has the overviews 2 and 4
-        let params = tiled_tiff_with_overviews(dir.path());
+        // only the level 3, whose 22 px are 2.9 times smaller than the file's 64 px
+        let params = tiled_tiff(dir.path(), 64, &[3]);
         let file_grid = params.spatial_grid_definition();
         let gpp = GdalProcessPool::new(
             2,
@@ -750,70 +756,168 @@ mod tests {
             WorkerConfig::default(),
         );
         let gdal_worker = gpp.get_gdal_worker();
-        let block_pool = GdalProcessPool::new(
-            2,
-            2,
-            2,
-            DEFAULT_HEADER_CACHE_ENTRIES,
-            WorkerConfig::default(),
-        );
-        let block_worker = block_pool.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
-        let blocks = BlockIo::new(
-            cache.clone(),
-            block_worker.clone(),
-            CacheTtlSeconds::new(60),
-        );
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+        let plan = |level: u32, tile_size: usize, position: [isize; 2]| TilePlan {
+            tile: TileInformation::new(
+                position.into(),
+                GridShape2D::new([tile_size, tile_size]),
+                GeoTransform::new_unchecked((0., 64.).into(), f64::from(level), -f64::from(level)),
+            ),
+            time: TimeInterval::default(),
+            band: 0,
+            files: vec![params.clone()],
+            cache_hint: CacheHint::max_duration(),
+        };
 
-        for (overview_level, tile_size) in [(8_u32, 8_usize), (8, 4), (8, 3), (16, 4), (16, 3)] {
-            let pixel_size = f64::from(overview_level);
-            let tiles_per_axis = (64 / overview_level as usize).div_ceil(tile_size);
-            for files_have_level in [false, true] {
-                let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
-                    original_dataset_grid: file_grid,
-                    overview_level,
-                    files_have_level,
-                });
-                for tile_y in 0..tiles_per_axis {
-                    for tile_x in 0..tiles_per_axis {
-                        let plan = TilePlan {
-                            tile: TileInformation::new(
-                                [tile_y as isize, tile_x as isize].into(),
-                                GridShape2D::new([tile_size, tile_size]),
-                                GeoTransform::new_unchecked(
-                                    (0., 64.).into(),
-                                    pixel_size,
-                                    -pixel_size,
-                                ),
-                            ),
-                            time: TimeInterval::default(),
-                            band: 0,
-                            files: vec![params.clone()],
-                            cache_hint: CacheHint::max_duration(),
-                        };
-                        let from_gdal =
-                            assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
-                                .await
-                                .unwrap();
-                        let from_blocks =
-                            assemble_tile::<u16>(plan, reader_mode, &block_worker, Some(&blocks))
-                                .await
-                                .unwrap();
-                        assert_eq!(
-                            from_blocks, from_gdal,
-                            "level {overview_level}, tile size {tile_size}, declared {files_have_level}, tile [{tile_y}, {tile_x}]"
-                        );
+        for level in [4_u32, 8] {
+            let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: file_grid,
+                overview_level: level,
+                files_have_level: false,
+            });
+            let size = 64 / level as usize;
+            // one tile of the whole file: GDAL's window then maps onto the level exactly
+            let whole = assemble_tile::<u16>(
+                plan(level, size, [0, 0]),
+                reader_mode,
+                &gdal_worker,
+                Some(&blocks),
+            )
+            .await
+            .unwrap();
+            let from_gdal =
+                assemble_tile::<u16>(plan(level, size, [0, 0]), reader_mode, &gdal_worker, None)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                whole.grid_array, from_gdal.grid_array,
+                "level {level}, whole file"
+            );
+            let whole = whole.grid_array.into_materialized_masked_grid();
+
+            // smaller tiles take the same pixels; GDAL rounds each tile's window into the level
+            // to whole pixels, so its pixels depend on the tile
+            for tile_size in [3_usize, 4, 5] {
+                for tile_y in 0..size.div_ceil(tile_size) {
+                    for tile_x in 0..size.div_ceil(tile_size) {
+                        let tile = assemble_tile::<u16>(
+                            plan(level, tile_size, [tile_y as isize, tile_x as isize]),
+                            reader_mode,
+                            &gdal_worker,
+                            Some(&blocks),
+                        )
+                        .await
+                        .unwrap()
+                        .grid_array
+                        .into_materialized_masked_grid();
+                        for y in 0..tile_size.min(size - tile_y * tile_size) {
+                            for x in 0..tile_size.min(size - tile_x * tile_size) {
+                                let (global_y, global_x) =
+                                    (tile_y * tile_size + y, tile_x * tile_size + x);
+                                assert_eq!(
+                                    tile.inner_grid.data[y * tile_size + x],
+                                    whole.inner_grid.data[global_y * size + global_x],
+                                    "level {level}, tile size {tile_size}, pixel [{global_y}, {global_x}]"
+                                );
+                            }
+                        }
                     }
                 }
             }
         }
-        // every read of the block pass stored a unit of level 4: no tile fell back to GDAL
-        let stats = block_pool.request_stats();
         assert!(
             cache.stats().stored > 0,
             "the reads went through the blocks"
         );
-        assert_eq!(stats.reads + stats.reads_joined, cache.stats().stored);
+    }
+
+    #[tokio::test]
+    async fn levels_a_file_lacks_are_subsampled_from_its_coarsest_level_through_blocks() {
+        for (overviews, levels) in [(vec![2, 4], vec![8_u32, 16])] {
+            let dir = tempfile::tempdir().unwrap();
+            let params = tiled_tiff(dir.path(), 64, &overviews);
+            let file_grid = params.spatial_grid_definition();
+            let gpp = GdalProcessPool::new(
+                2,
+                2,
+                2,
+                DEFAULT_HEADER_CACHE_ENTRIES,
+                WorkerConfig::default(),
+            );
+            let gdal_worker = gpp.get_gdal_worker();
+            let block_pool = GdalProcessPool::new(
+                2,
+                2,
+                2,
+                DEFAULT_HEADER_CACHE_ENTRIES,
+                WorkerConfig::default(),
+            );
+            let block_worker = block_pool.get_gdal_worker();
+            let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+            let blocks = BlockIo::new(
+                cache.clone(),
+                block_worker.clone(),
+                CacheTtlSeconds::new(60),
+            );
+
+            for (overview_level, tile_size) in levels
+                .iter()
+                .flat_map(|&level| [8_usize, 4, 3].map(|tile_size| (level, tile_size)))
+            {
+                let pixel_size = f64::from(overview_level);
+                let tiles_per_axis = (64 / overview_level as usize).div_ceil(tile_size);
+                for files_have_level in [false, true] {
+                    let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                        original_dataset_grid: file_grid,
+                        overview_level,
+                        files_have_level,
+                    });
+                    for tile_y in 0..tiles_per_axis {
+                        for tile_x in 0..tiles_per_axis {
+                            let plan = TilePlan {
+                                tile: TileInformation::new(
+                                    [tile_y as isize, tile_x as isize].into(),
+                                    GridShape2D::new([tile_size, tile_size]),
+                                    GeoTransform::new_unchecked(
+                                        (0., 64.).into(),
+                                        pixel_size,
+                                        -pixel_size,
+                                    ),
+                                ),
+                                time: TimeInterval::default(),
+                                band: 0,
+                                files: vec![params.clone()],
+                                cache_hint: CacheHint::max_duration(),
+                            };
+                            let from_gdal =
+                                assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
+                                    .await
+                                    .unwrap();
+                            let from_blocks = assemble_tile::<u16>(
+                                plan,
+                                reader_mode,
+                                &block_worker,
+                                Some(&blocks),
+                            )
+                            .await
+                            .unwrap();
+                            assert_eq!(
+                                from_blocks, from_gdal,
+                                "level {overview_level}, tile size {tile_size}, declared {files_have_level}, tile [{tile_y}, {tile_x}]"
+                            );
+                        }
+                    }
+                }
+            }
+            // every read of the block pass stored a unit: no tile fell back to GDAL
+            let stats = block_pool.request_stats();
+            assert!(
+                cache.stats().stored > 0,
+                "the reads went through the blocks"
+            );
+            assert_eq!(stats.reads + stats.reads_joined, cache.stats().stored);
+        }
     }
 
     #[tokio::test]

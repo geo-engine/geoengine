@@ -40,7 +40,8 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridBounds,
-    GridIdx2D, GridOrEmpty, GridShapeAccess, GridSize, MaskedGrid, Pixel, RasterTile2D,
+    GridIdx2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel,
+    RasterTile2D,
 };
 use num::FromPrimitive;
 use std::num::NonZeroUsize;
@@ -147,6 +148,41 @@ impl BlockIo {
         block_cache_hint(cache_hint, self.min_ttl).may_cache()
     }
 
+    /// The header of the file, remembered or read and then remembered, and whether this call
+    /// remembered it. `None` if the file is missing and counts as no data.
+    async fn header(
+        &self,
+        params: &GdalDatasetParameters,
+        file: &Arc<str>,
+        cache_hint: CacheHint,
+    ) -> Result<(Option<RasterInfo>, bool), GdalProcessPoolError> {
+        if let Some(info) = self.reader.remembered_raster_info(file) {
+            return Ok((Some(info), false));
+        }
+        let Some(info) = self
+            .reader
+            .read_raster_info_or_no_data(params.clone())
+            .await?
+        else {
+            return Ok((None, false));
+        };
+        let is_new = self.reader.remember_raster_info(
+            file.clone(),
+            info.clone(),
+            block_cache_hint(cache_hint, self.min_ttl),
+        );
+        let ttl = cache_hint.total_ttl_seconds();
+        if is_new && ttl < self.min_ttl {
+            tracing::debug!(
+                "{} has a cache TTL of {} s, its blocks live for the minimum of {} s",
+                params.file_path.display(),
+                ttl.seconds(),
+                self.min_ttl.seconds(),
+            );
+        }
+        Ok((Some(info), is_new))
+    }
+
     /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
     /// than the full resolution. A file without that level reads its coarsest finer overview and
     /// keeps the pixel under the center of each output pixel, as GDAL's nearest resampling does.
@@ -168,36 +204,11 @@ impl BlockIo {
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
         let file = file_id(params);
-        let info = match self.reader.remembered_raster_info(&file) {
-            Some(info) => Some(info),
-            None => {
-                let info = self
-                    .reader
-                    .read_raster_info_or_no_data(params.clone())
-                    .await?;
-                if let Some(info) = &info {
-                    let is_new = self.reader.remember_raster_info(
-                        file.clone(),
-                        info.clone(),
-                        block_cache_hint(cache_hint, self.min_ttl),
-                    );
-                    let ttl = cache_hint.total_ttl_seconds();
-                    if is_new && ttl < self.min_ttl {
-                        tracing::debug!(
-                            "{} has a cache TTL of {} s, its blocks live for the minimum of {} s",
-                            params.file_path.display(),
-                            ttl.seconds(),
-                            self.min_ttl.seconds(),
-                        );
-                    }
-                }
-                info
-            }
-        };
+        let (info, new_header) = self.header(params, &file, cache_hint).await?;
         let Some(info) = info else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
-        // a file without the level reads its coarsest finer one and keeps one pixel per output pixel
+        // a file without the level reads the coarsest finer one and resamples it, as GDAL does
         let Some((level, read_factor)) = info
             .level_of_factor(factor)
             .map(|level| (level, factor))
@@ -209,18 +220,29 @@ impl BlockIo {
             }
             .into());
         };
-        let step = factor.get() / read_factor.get();
-        let Some(level_window) = finer_read_advise(&info, level, read_factor, step, read_advise)
-            .and_then(|advise| level_window(&info, level, read_factor, advise))
-        else {
-            return Err(IpcProcessError::IpcOther {
+        let not_inside = || -> GdalProcessPoolError {
+            IpcProcessError::IpcOther {
                 msg: format!(
                     "read {:?} of {} is not inside its level {factor}",
                     read_advise.gdal_read_widow,
                     params.file_path.display()
                 ),
             }
-            .into());
+            .into()
+        };
+        if read_factor != factor && new_header {
+            tracing::info!(
+                "{} has no overview level {factor}, its level {read_factor} is read and resampled",
+                params.file_path.display()
+            );
+        }
+        let Some((level_advise, resampled)) =
+            level_read(&info, level, read_factor, factor, read_advise)
+        else {
+            return Err(not_inside());
+        };
+        let Some(level_window) = level_window(&info, level, read_factor, level_advise) else {
+            return Err(not_inside());
         };
 
         let blocks = try_join_all(
@@ -244,11 +266,11 @@ impl BlockIo {
         // off the task that polls all tiles of the query, so that tiles compose in parallel
         let window = level_window.window;
         let (grid, properties) = crate::util::spawn_blocking(move || {
-            let grid = subsample(
-                compose(window, &blocks),
-                step,
-                read_advise.read_window_bounds.axis_size(),
-            );
+            let grid = compose(window, &blocks);
+            let grid = match &resampled {
+                None => grid,
+                Some([rows, columns]) => pick(grid, rows, columns),
+            };
             let properties = blocks.first().map(|block| block.properties.clone());
             let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
                 .set_grid_bounds(read_advise.read_window_bounds)
@@ -430,71 +452,97 @@ fn compose<T: Pixel>(
     grid
 }
 
-/// The coarsest power-of-two level of the file finer than `factor` that `factor` is a multiple
-/// of, as (index, factor), e.g. 8 for 16 if the file stops at 8. `None` if it has none from 2 up.
+/// The coarsest level of the file with a whole-number factor below `factor`, as (index, factor):
+/// the overview GDAL resamples from. `None` if it has none from 2 up.
 fn finer_level(info: &RasterInfo, factor: NonZeroUsize) -> Option<(usize, NonZeroUsize)> {
-    (1..=factor.get().trailing_zeros())
+    (2..factor.get())
         .rev()
-        .filter_map(|exponent| NonZeroUsize::new(1 << exponent))
-        .filter(|finer| *finer < factor)
+        .filter_map(NonZeroUsize::new)
         .find_map(|finer| info.level_of_factor(finer).map(|level| (level, finer)))
 }
 
-/// `read_advise` with `step` pixels of `level` per output pixel in each axis, cut at the end of
-/// the level. The output pixels whose centers lie beyond it take its last pixels, see
-/// [`subsample`]. `None` if the read starts beyond the level.
-fn finer_read_advise(
+/// The read of `level`, whose factor is `read_factor`, for `read_advise` of the level `factor`,
+/// and, if `level` is a finer one, the pixels of it that the output takes, y then x. `None` if the
+/// read is not inside the level.
+fn level_read(
     info: &RasterInfo,
     level: usize,
-    level_factor: NonZeroUsize,
-    step: usize,
+    read_factor: NonZeroUsize,
+    factor: NonZeroUsize,
     read_advise: GdalReadAdvise,
-) -> Option<GdalReadAdvise> {
-    if step == 1 {
-        return Some(read_advise);
+) -> Option<(GdalReadAdvise, Option<[Vec<usize>; 2]>)> {
+    if read_factor == factor {
+        return Some((read_advise, None));
     }
     let layout = info.levels.get(level)?;
+    let full = info.levels.first()?;
     let (start_x, start_y) = read_advise.gdal_read_widow.gdal_window_start();
+    let (size_x, size_y) = read_advise.gdal_read_widow.gdal_window_size();
     let [out_y, out_x] = read_advise.read_window_bounds.axis_size();
-    let size = |out: usize, start: isize, level_size: usize| {
-        let start = usize::try_from(start).ok()? / level_factor.get();
-        let size = (out * step).min(level_size.checked_sub(start)?);
-        (size > 0).then_some(size)
-    };
-    let size_y = size(out_y, start_y, layout.size_y)?;
-    let size_x = size(out_x, start_x, layout.size_x)?;
-    Some(GdalReadAdvise {
+    let rows = source_pixels(start_y, out_y, factor.get(), layout.size_y, full.size_y)?;
+    let columns = source_pixels(start_x, out_x, factor.get(), layout.size_x, full.size_x)?;
+    // the pixels the output takes, as a read of the finer level starting at its first one
+    let level_advise = GdalReadAdvise {
+        gdal_read_widow: GdalReadWindow::new(
+            GridIdx2D::new([
+                (rows[0] * read_factor.get()) as isize,
+                (columns[0] * read_factor.get()) as isize,
+            ]),
+            GridShape2D::new([size_y, size_x]),
+        ),
         read_window_bounds: GridBoundingBox2D::new_min_max(
             0,
-            size_y as isize - 1,
+            (rows[rows.len() - 1] - rows[0]) as isize,
             0,
-            size_x as isize - 1,
+            (columns[columns.len() - 1] - columns[0]) as isize,
         )
         .ok()?,
         ..read_advise
-    })
+    };
+    Some((level_advise, Some([rows, columns])))
 }
 
-/// One pixel of `grid` per output pixel of `out_shape` (y, x): the one under the output pixel's
-/// center, as GDAL's nearest resampling picks it. Output pixels whose center lies beyond `grid`
-/// take its last row or column.
-fn subsample<T: Pixel>(
+/// Per axis, the pixels of a level of `level_size` that `out` output pixels of the level `factor`
+/// take: the one under each output pixel's center, and the level's last pixel for centers beyond
+/// it. As GDAL, this scales by the sizes of the level and the full resolution (`full_size`), not
+/// by the level's nominal factor: GDAL sizes a level 3 of 64 px 22 px, 2.9 times smaller.
+/// `start` is the read's first pixel at full resolution.
+fn source_pixels(
+    start: isize,
+    out: usize,
+    factor: usize,
+    level_size: usize,
+    full_size: usize,
+) -> Option<Vec<usize>> {
+    let first = usize::try_from(start).ok()? / factor;
+    let last_pixel = level_size.checked_sub(1)?;
+    Some(
+        (first..first + out)
+            .map(|pixel| ((2 * pixel + 1) * factor * level_size / (2 * full_size)).min(last_pixel))
+            .collect(),
+    )
+}
+
+/// The pixels `rows` × `columns` of `grid`, whose first pixel is (`rows[0]`, `columns[0]`).
+fn pick<T: Pixel>(
     grid: GridOrEmpty<GridBoundingBox2D, T>,
-    step: usize,
-    [out_y, out_x]: [usize; 2],
+    rows: &[usize],
+    columns: &[usize],
 ) -> GridOrEmpty<GridBoundingBox2D, T> {
-    if step == 1 {
-        return grid;
-    }
-    let bounds = GridBoundingBox2D::new_min_max(0, out_y as isize - 1, 0, out_x as isize - 1)
-        .expect("a read has pixels");
+    let bounds =
+        GridBoundingBox2D::new_min_max(0, rows.len() as isize - 1, 0, columns.len() as isize - 1)
+            .expect("a read has pixels");
     let GridOrEmpty::Grid(grid) = grid else {
         return EmptyGrid::new(bounds).into();
     };
-    let [in_y, in_x] = grid.inner_grid.shape.axis_size();
-    let source = |out: usize, size: usize| (out * step + step / 2).min(size - 1);
-    let indices = (0..out_y)
-        .flat_map(|y| (0..out_x).map(move |x| source(y, in_y) * in_x + source(x, in_x)))
+    let [_, width] = grid.inner_grid.shape.axis_size();
+    let indices = rows
+        .iter()
+        .flat_map(|row| {
+            columns
+                .iter()
+                .map(move |column| (row - rows[0]) * width + column - columns[0])
+        })
         .collect::<Vec<_>>();
     MaskedGrid::new(
         Grid::new(
@@ -601,38 +649,6 @@ mod tests {
         NonZeroUsize::new(factor).expect("not zero")
     }
 
-    #[test]
-    fn it_subsamples_the_pixel_under_each_center_and_clamps_at_the_far_edges() {
-        let bounds = GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap();
-        let grid = GridOrEmpty::from(MaskedGrid::new_with_data(
-            Grid::new(bounds, (0..25_u16).collect()).unwrap(),
-        ));
-        // 5 px of the finer level for 3 output pixels of twice the size: the centers lie at 1, 3
-        // and 5, the last one beyond the level, so it takes the last pixel 4
-        let out = subsample(grid, 2, [3, 3]);
-        let GridOrEmpty::Grid(out) = out else {
-            panic!("the read has valid pixels")
-        };
-        assert_eq!(out.inner_grid.data, vec![6, 8, 9, 16, 18, 19, 21, 23, 24]);
-    }
-
-    #[test]
-    fn it_finds_the_coarsest_finer_level_a_factor_is_a_multiple_of() {
-        let level = |size: usize| RasterLevelLayout {
-            size_x: size,
-            size_y: size,
-            block_size_x: 16,
-            block_size_y: 16,
-        };
-        let info = raster_info(vec![level(64), level(32), level(16)]);
-        assert_eq!(finer_level(&info, factor(16)), Some((2, factor(4))));
-        assert_eq!(finer_level(&info, factor(8)), Some((2, factor(4))));
-        // 6 is not a multiple of 4, and 3 is not a level
-        assert_eq!(finer_level(&info, factor(6)), Some((1, factor(2))));
-        let info = raster_info(vec![level(64)]);
-        assert_eq!(finer_level(&info, factor(8)), None, "no overviews");
-    }
-
     fn advise(start: [isize; 2], size: [usize; 2], out: [usize; 2]) -> GdalReadAdvise {
         let bounds =
             GridBoundingBox2D::new_min_max(0, out[0] as isize - 1, 0, out[1] as isize - 1).unwrap();
@@ -660,6 +676,49 @@ mod tests {
             block_size_x: block,
             block_size_y: block,
         }
+    }
+
+    #[test]
+    fn it_takes_the_pixel_under_each_center_of_any_whole_number_level() {
+        // level 4 of 64 px from its level 3 of 22 px, as GDAL with the ratio 4 * 22 / 64
+        assert_eq!(source_pixels(0, 5, 4, 22, 64), Some(vec![0, 2, 3, 4, 6]));
+        // a read starting at the output pixel 8, i.e. at 32 px: centers at 34 and 38 px
+        assert_eq!(source_pixels(32, 2, 4, 22, 64), Some(vec![11, 13]));
+        // level 8 of 60 px from its level 4 of 15 px: every second pixel, the last center beyond
+        assert_eq!(
+            source_pixels(0, 8, 8, 15, 60),
+            Some(vec![1, 3, 5, 7, 9, 11, 13, 14])
+        );
+    }
+
+    #[test]
+    fn it_picks_pixels_of_a_grid() {
+        let bounds = GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap();
+        let grid = GridOrEmpty::from(MaskedGrid::new_with_data(
+            Grid::new(bounds, (0..25_u16).collect()).unwrap(),
+        ));
+        // the grid's first pixel is the level pixel (2, 2)
+        let GridOrEmpty::Grid(out) = pick(grid, &[2, 4, 5], &[2, 4, 6]) else {
+            panic!("the read has valid pixels")
+        };
+        assert_eq!(out.inner_grid.data, vec![0, 2, 4, 10, 12, 14, 15, 17, 19]);
+    }
+
+    #[test]
+    fn it_finds_the_coarsest_finer_level_of_a_whole_number_factor() {
+        let level = |size: usize| RasterLevelLayout {
+            size_x: size,
+            size_y: size,
+            block_size_x: 16,
+            block_size_y: 16,
+        };
+        // levels 2, 3 and 6
+        let info = raster_info(vec![level(64), level(32), level(22), level(11)]);
+        assert_eq!(finer_level(&info, factor(16)), Some((3, factor(6))));
+        assert_eq!(finer_level(&info, factor(4)), Some((2, factor(3))));
+        assert_eq!(finer_level(&info, factor(3)), Some((1, factor(2))));
+        let info = raster_info(vec![level(64)]);
+        assert_eq!(finer_level(&info, factor(8)), None, "no overviews");
     }
 
     #[test]
