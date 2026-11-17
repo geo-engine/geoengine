@@ -2,22 +2,18 @@ use crate::api::handlers::{
     ogc::{
         OgcApiResult,
         error::{self, OgcApiError},
-        util::{
-            OriginAndResolution, crs_from_spatial_reference_option, to_non_zero_u16,
-            to_non_zero_u64,
-        },
+        util::{crs_from_spatial_reference_option, to_non_zero_u16, to_non_zero_u64},
     },
     spatial_references::{AxisOrder, SpatialReferenceCache},
 };
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
-    operations::reproject::suggest_pixel_size_like_gdal_helper,
-    primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
+    primitives::{Coordinate2D, SpatialResolution},
     raster::{
         GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
         TilingSpatialGridDefinition, TilingSpecification,
     },
-    spatial_reference::{DefaultCoordinateProjector, SpatialReference},
+    spatial_reference::{CoordinateProjection, DefaultCoordinateProjector, SpatialReference},
     util::PositiveFiniteF64,
 };
 use geoengine_operators::engine::{RasterResultDescriptor, ResultDescriptor};
@@ -55,17 +51,47 @@ pub trait TileMatrixSetProvider: Send + Sync {
         spatial_reference_cache: &SpatialReferenceCache,
     ) -> OgcApiResult<Vec<String>>;
 
-    /// Computes the pixel bounds of a tile in the global pixel grid of the tiling scheme.
-    ///
-    /// The resolution is determined by `tile_matrix`, which corresponds to the zoom level in a TMS.
-    /// The origin and orientation of the tile grid is determined by the `tiling_spatial_grid_definition`.
+    /// The pixels of a tile in `tiling_spatial_grid_definition`, a grid at the resolution of
+    /// `tile_matrix` (see [`Self::spatial_resolution`]) that is aligned to its origin.
     fn tile_grid_bbox(
         &self,
         tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
         tile_matrix: u8,
         tile_row: u32,
         tile_col: u32,
-    ) -> OgcApiResult<GridBoundingBox2D>;
+    ) -> OgcApiResult<GridBoundingBox2D> {
+        let (tiles, origin) = self.grid_shape_and_origin(tile_matrix);
+        if tile_row as usize >= tiles.y() || tile_col as usize >= tiles.x() {
+            return Err(OgcApiError::TileCoordinatesOutOfBounds {
+                matrix: tile_matrix.to_string(),
+                row: tile_row,
+                col: tile_col,
+            });
+        }
+        let tile_size = self.tile_size_in_pixels(tile_matrix);
+        let geo_transform = tiling_spatial_grid_definition.tiling_geo_transform();
+        // the pixel under the center of the tile matrix's first pixel, so that rounding of the origin does not matter
+        let first_pixel = geo_transform.coordinate_to_grid_idx_2d(
+            origin
+                + Coordinate2D::new(
+                    geo_transform.x_pixel_size().get() / 2.,
+                    geo_transform.y_pixel_size().get() / 2.,
+                ),
+        );
+        let (tile_height, tile_width) = (tile_size.y() as isize, tile_size.x() as isize);
+        let min = first_pixel
+            + GridIdx2D::new([
+                tile_row as isize * tile_height,
+                tile_col as isize * tile_width,
+            ]);
+
+        GridBoundingBox2D::new(min, min + GridIdx2D::new([tile_height - 1, tile_width - 1]))
+            .map_err(|_source| OgcApiError::InvalidTileCoordinates {
+                matrix: tile_matrix.to_string(),
+                row: tile_row,
+                col: tile_col,
+            })
+    }
 
     /// Returns the maximum matrix ID for this tile matrix set
     fn max_matrix_id(&self) -> u32;
@@ -78,51 +104,6 @@ pub trait TileMatrixSetProvider: Send + Sync {
 
     /// Returns the tile size in pixels for a given tile matrix ID
     fn tile_size_in_pixels(&self, matrix_id: u8) -> GridShape2D;
-
-    /// Returns the cell size of a given tile matrix ID as published in its tile matrix definition.
-    ///
-    /// Unlike [`TileMatrixSetProvider::spatial_resolution`], this is never clamped to the resolution of the data.
-    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
-        self.spatial_resolution(matrix_id)
-    }
-
-    /// Computes the spatial extent of a tile from the tile matrix definition, i.e., the point of origin,
-    /// the cell size and the tile size in pixels of `tile_matrix`.
-    fn tile_spatial_bounds(
-        &self,
-        tile_matrix: u8,
-        tile_row: u32,
-        tile_col: u32,
-    ) -> OgcApiResult<SpatialPartition2D> {
-        let (matrix_shape, origin) = self.grid_shape_and_origin(tile_matrix);
-
-        if tile_row as usize >= matrix_shape.y() || tile_col as usize >= matrix_shape.x() {
-            return Err(OgcApiError::TileCoordinatesOutOfBounds {
-                matrix: tile_matrix.to_string(),
-                row: tile_row,
-                col: tile_col,
-            });
-        }
-
-        let cell_size = self.cell_size(tile_matrix);
-        let tile_size = self.tile_size_in_pixels(tile_matrix);
-        let tile_width = cell_size.x().get() * tile_size.x() as f64;
-        let tile_height = cell_size.y().get() * tile_size.y() as f64;
-
-        let upper_left = Coordinate2D::new(
-            origin.x + f64::from(tile_col) * tile_width,
-            origin.y - f64::from(tile_row) * tile_height,
-        );
-        let lower_right = Coordinate2D::new(upper_left.x + tile_width, upper_left.y - tile_height);
-
-        SpatialPartition2D::new(upper_left, lower_right).map_err(|_source| {
-            OgcApiError::TileGridBboxComputationFailed {
-                matrix: tile_matrix.to_string(),
-                row: tile_row,
-                col: tile_col,
-            }
-        })
-    }
 }
 
 /// A wrapper Tile Matrix Set Provider
@@ -150,7 +131,7 @@ impl TypedTileMatrixSetProvider {
                 Ok(TypedTileMatrixSetProvider::CustomWebMercator(tms))
             }
             TileMatrixSetId::WebMercatorQuad => Ok(TypedTileMatrixSetProvider::WebMercatorQuad(
-                WebMercatorQuadTMS::new(result_descriptor.clone()),
+                WebMercatorQuadTMS,
             )),
             TileMatrixSetId::Custom(_) => Err(OgcApiError::TileMatrixSetNotFound {
                 tile_matrix_set_id: tile_matrix_set_id.to_string(),
@@ -181,42 +162,37 @@ impl TypedTileMatrixSetProvider {
         }
     }
 
-    /// Returns the required origin for a given tile matrix set ID, if applicable.
-    pub fn required_origin_and_resolution(
+    /// The layer's result descriptor as `tile_matrix_set_id` sees it, computed without operators:
+    /// for `CustomWebMercator` and a layer in another spatial reference, on the grid that a
+    /// `Reprojection` to EPSG:3857 with `DataBounds` derives; otherwise the layer's.
+    pub fn layer_descriptor(
         tile_matrix_set_id: &TileMatrixSetId,
         result_descriptor: &RasterResultDescriptor,
-    ) -> OgcApiResult<Option<OriginAndResolution>> {
-        match tile_matrix_set_id {
-            TileMatrixSetId::WebMercatorQuad => {
-                let spatial_reference = result_descriptor
-                    .spatial_reference()
-                    .as_option()
-                    .context(error::MissingSpatialReference)?;
-                let source_resolution = result_descriptor.spatial_grid.spatial_resolution();
-                let web_mercator = SpatialReference::web_mercator();
-
-                let resolution = if spatial_reference == web_mercator {
-                    source_resolution
-                } else {
-                    suggest_pixel_size_like_gdal_helper::<_, DefaultCoordinateProjector>(
-                        result_descriptor.spatial_bounds(),
-                        source_resolution,
-                        spatial_reference,
-                        web_mercator,
-                    )
+    ) -> OgcApiResult<RasterResultDescriptor> {
+        let spatial_reference = result_descriptor
+            .spatial_reference()
+            .as_option()
+            .context(error::MissingSpatialReference)?;
+        // `WebMercatorQuad` has fixed tile matrices, only the custom ones derive them from the layer
+        let custom = matches!(tile_matrix_set_id, TileMatrixSetId::Custom(_));
+        match Self::required_srs(tile_matrix_set_id) {
+            Some(web_mercator) if custom && spatial_reference != web_mercator => {
+                let projector =
+                    DefaultCoordinateProjector::from_known_srs(spatial_reference, web_mercator)
+                        .map_err(crate::error::Error::from)?;
+                let spatial_grid = result_descriptor
+                    .spatial_grid_descriptor()
+                    .reproject_clipped(&projector)
                     .map_err(crate::error::Error::from)?
-                };
-
-                Ok(Some(OriginAndResolution {
-                    origin: Coordinate2D::new(
-                        WebMercatorQuadTMS::ORIGIN[0],
-                        WebMercatorQuadTMS::ORIGIN[1],
-                    ),
-                    resolution: WebMercatorQuadTMS::find_next_best_resolution(resolution),
-                }))
+                    .ok_or(geoengine_operators::error::Error::ReprojectionFailed)
+                    .map_err(crate::error::Error::from)?;
+                Ok(RasterResultDescriptor {
+                    spatial_reference: web_mercator.into(),
+                    spatial_grid,
+                    ..result_descriptor.clone()
+                })
             }
-            // For custom tile matrix sets, we use the layer's native resolution and origin, so we don't need to require a specific one here.
-            TileMatrixSetId::Custom(_) => Ok(None),
+            _ => Ok(result_descriptor.clone()),
         }
     }
 }
@@ -280,35 +256,6 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
         }
     }
 
-    fn tile_grid_bbox(
-        &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-        tile_matrix: u8,
-        tile_row: u32,
-        tile_col: u32,
-    ) -> OgcApiResult<GridBoundingBox2D> {
-        match self {
-            TypedTileMatrixSetProvider::Custom(provider) => provider.tile_grid_bbox(
-                tiling_spatial_grid_definition,
-                tile_matrix,
-                tile_row,
-                tile_col,
-            ),
-            TypedTileMatrixSetProvider::CustomWebMercator(provider) => provider.tile_grid_bbox(
-                tiling_spatial_grid_definition,
-                tile_matrix,
-                tile_row,
-                tile_col,
-            ),
-            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.tile_grid_bbox(
-                tiling_spatial_grid_definition,
-                tile_matrix,
-                tile_row,
-                tile_col,
-            ),
-        }
-    }
-
     fn max_matrix_id(&self) -> u32 {
         match self {
             TypedTileMatrixSetProvider::Custom(provider) => provider.max_matrix_id(),
@@ -352,16 +299,6 @@ impl TileMatrixSetProvider for TypedTileMatrixSetProvider {
             TypedTileMatrixSetProvider::WebMercatorQuad(provider) => {
                 provider.tile_size_in_pixels(matrix_id)
             }
-        }
-    }
-
-    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
-        match self {
-            TypedTileMatrixSetProvider::Custom(provider) => provider.cell_size(matrix_id),
-            TypedTileMatrixSetProvider::CustomWebMercator(provider) => {
-                provider.cell_size(matrix_id)
-            }
-            TypedTileMatrixSetProvider::WebMercatorQuad(provider) => provider.cell_size(matrix_id),
         }
     }
 }
@@ -442,37 +379,6 @@ impl TileMatrixSetProvider for CustomNativeTMS {
         ordered_axes(self.spatial_reference, spatial_reference_cache)
     }
 
-    fn tile_grid_bbox(
-        &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-        tile_matrix: u8,
-        tile_row: u32,
-        tile_col: u32,
-    ) -> OgcApiResult<GridBoundingBox2D> {
-        let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
-        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
-
-        let tile_grid_bounds = tiling_strategy.raster_spatial_query_to_tiling_grid_box(grid_bounds);
-        let tile_index =
-            tile_grid_bounds.min_index() + GridIdx2D::new([tile_row as isize, tile_col as isize]);
-
-        let min_pixel_index = tiling_strategy.tile_idx_to_global_pixel_idx(tile_index);
-        let max_pixel_index = min_pixel_index
-            + GridIdx2D::new([
-                tiling_strategy.tile_size_in_pixels.x() as isize,
-                tiling_strategy.tile_size_in_pixels.y() as isize,
-            ])
-            - GridIdx2D::new([1, 1]); // inclusive bounds, e.g. we expect max-min to be 511 and not 512 for a 512 pixel tile
-
-        GridBoundingBox2D::new(min_pixel_index, max_pixel_index).map_err(|_source| {
-            OgcApiError::InvalidTileCoordinates {
-                matrix: tile_matrix.to_string(),
-                row: tile_row,
-                col: tile_col,
-            }
-        })
-    }
-
     fn max_matrix_id(&self) -> u32 {
         let number_of_zoom_levels =
             calculate_number_of_zoom_levels(&self.result_descriptor, &self.tiling_specification);
@@ -551,21 +457,6 @@ impl TileMatrixSetProvider for CustomWebMercatorTMS {
         self.0.ordered_axes(spatial_reference_cache)
     }
 
-    fn tile_grid_bbox(
-        &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-        tile_matrix: u8,
-        tile_row: u32,
-        tile_col: u32,
-    ) -> OgcApiResult<GridBoundingBox2D> {
-        self.0.tile_grid_bbox(
-            tiling_spatial_grid_definition,
-            tile_matrix,
-            tile_row,
-            tile_col,
-        )
-    }
-
     fn max_matrix_id(&self) -> u32 {
         self.0.max_matrix_id()
     }
@@ -581,16 +472,10 @@ impl TileMatrixSetProvider for CustomWebMercatorTMS {
     fn tile_size_in_pixels(&self, matrix_id: u8) -> GridShape2D {
         self.0.tile_size_in_pixels(matrix_id)
     }
-
-    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
-        self.0.cell_size(matrix_id)
-    }
 }
 
 /// Web Mercator Quad tile matrix set (OGC standard, fixed to EPSG:3857)
-pub struct WebMercatorQuadTMS {
-    result_descriptor: RasterResultDescriptor,
-}
+pub struct WebMercatorQuadTMS;
 
 impl WebMercatorQuadTMS {
     pub const TILE_MATRIX_SET_ID: &str = "WebMercatorQuad";
@@ -638,27 +523,6 @@ impl WebMercatorQuadTMS {
     ///
     /// The tile width and height for the Web Mercator Quad tile matrix set is fixed at 256 pixels.
     const WIDTH_AND_HEIGHT: NonZeroU16 = NonZeroU16::new(256).expect("256 is a valid non-zero u16");
-
-    fn new(result_descriptor: RasterResultDescriptor) -> Self {
-        WebMercatorQuadTMS { result_descriptor }
-    }
-
-    /// Finds the first resolution in [`DATA`] that is equal to or smaller than the given `native_resolution`.
-    fn find_next_best_resolution(native_resolution: SpatialResolution) -> SpatialResolution {
-        for &(_, _, cell_size, _, _) in Self::DATA {
-            let resolution = cell_size; // cell size equals resolution in meters per pixel for Web Mercator Quad
-            if native_resolution.x() <= resolution && native_resolution.y() <= resolution {
-                return SpatialResolution::new_unchecked(resolution, resolution);
-            }
-        }
-        // The resolution is coarser than the coarsest WebMercatorQuad cell: clamp to the
-        // coarsest cell. Data finer than the finest cell never reaches this fallback, it
-        // matches the coarsest cell in the loop above. Clamping to the finest cell would
-        // feed an invalid interpolation fraction (< 1) into the resampling graph and
-        // abort tile rendering with an HTTP 500 (`FractionMustBeOneOrLarger`).
-        let &(_, _, cell_size, _, _) = Self::DATA.first().expect("DATA should not be empty");
-        SpatialResolution::new_unchecked(cell_size, cell_size)
-    }
 }
 
 impl TileMatrixSetProvider for WebMercatorQuadTMS {
@@ -723,110 +587,15 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
         Ok(vec!["X".to_string(), "Y".to_string()])
     }
 
-    fn tile_grid_bbox(
-        &self,
-        tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
-        tile_matrix: u8,
-        tile_row: u32,
-        tile_col: u32,
-    ) -> OgcApiResult<GridBoundingBox2D> {
-        // Clamp to max zoom level
-        let matrix_id = tile_matrix.min(self.max_matrix_id() as u8);
-
-        // Get total pixel bounds from tiling_spatial_grid_definition (at this zoom level)
-        let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
-        let [total_pixels_y, total_pixels_x] = grid_bounds.axis_size();
-        let [min_y, min_x] = grid_bounds.min_index().0;
-
-        // Get number of tiles in y and x direction from DATA
-        let (_, _, _, matrix_width, matrix_height) = Self::DATA[matrix_id as usize];
-
-        // Validate tile coordinates are within bounds
-        if u64::from(tile_col) >= matrix_width || u64::from(tile_row) >= matrix_height {
-            return Err(OgcApiError::TileCoordinatesOutOfBounds {
-                matrix: matrix_id.to_string(),
-                row: tile_row,
-                col: tile_col,
-            });
-        }
-
-        // Calculate tile size in pixels from total pixels and tile grid dimensions
-        let tile_size_x = (total_pixels_x as isize) / (matrix_width as isize);
-        let tile_size_y = (total_pixels_y as isize) / (matrix_height as isize);
-
-        // Calculate pixel bounds for this specific tile, relative to grid bounds min
-        let min_pixel_x = min_x + (tile_col as isize) * tile_size_x;
-        let min_pixel_y = min_y + (tile_row as isize) * tile_size_y;
-
-        // For the last tile in each dimension, extend to the actual grid bounds
-        // to account for rounding from integer division
-        let max_pixel_x = if u64::from(tile_col + 1) >= matrix_width {
-            grid_bounds.x_max()
-        } else {
-            min_pixel_x + tile_size_x - 1
-        };
-        let max_pixel_y = if u64::from(tile_row + 1) >= matrix_height {
-            grid_bounds.y_max()
-        } else {
-            min_pixel_y + tile_size_y - 1
-        };
-
-        let min_index = GridIdx2D::new([min_pixel_y, min_pixel_x]);
-        let max_index = GridIdx2D::new([max_pixel_y, max_pixel_x]);
-
-        GridBoundingBox2D::new(min_index, max_index).map_err(|_source| {
-            OgcApiError::TileGridBboxComputationFailed {
-                matrix: matrix_id.to_string(),
-                row: tile_row,
-                col: tile_col,
-            }
-        })
-    }
-
     fn max_matrix_id(&self) -> u32 {
         24 // OGC Web Mercator Quad has exactly 25 levels (0-24)
     }
 
-    /// Returns the spatial resolution for a given tile matrix ID (zoom level) in meters per pixel.
-    ///
-    /// The resolution is calculated based on the cell size defined in the OGC Web Mercator Quad specification.
-    ///
-    /// In detail, the resolution is computed as follows:
-    /// 1. Clamp the provided `matrix_id` to the maximum zoom level (24).
-    /// 2. Retrieve the cell size for the given `matrix_id` from the predefined `DATA` array.
-    /// 3. Create a `SpatialResolution` object using the cell size (which is already in meters).
-    /// 4. Calculate the multiples of the base resolution of the layer to find the closest matching resolution.
-    /// 5. Round down the resolution multiple to the nearest power of 2.
-    /// 6. Return the final spatial resolution, ensuring it does not go below the base resolution of the layer.
-    ///
-    fn spatial_resolution(&self, mut matrix_id: u8) -> SpatialResolution {
-        matrix_id = matrix_id.min(self.max_matrix_id() as u8); // Clamp to max zoom level
-
-        let (_, _, cell_size, _, _) = Self::DATA[matrix_id as usize]; // cellSize in meters
-
-        // cellSize is already in meters and > 0, so we can create a SpatialResolution directly
-        let target_spatial_resolution = SpatialResolution::new_unchecked(cell_size, cell_size);
-
-        // Find the closest zoom level (matching or slightly finer) to a multiple of result descriptor's resolution
-        let base_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
-        // fails if the target is finer than the base resolution, i.e., the multiple is 0
-        let Ok(multiples_of_resolution) = target_spatial_resolution.div_floor(base_resolution)
-        else {
-            return base_resolution; // Don't go below the base resolution of the layer
-        };
-
-        if multiples_of_resolution.x() <= 1.0 || multiples_of_resolution.y() <= 1.0 {
-            return base_resolution; // Don't go below the base resolution of the layer
-        }
-
-        let mut resolution_multiple = f64::min(
-            multiples_of_resolution.x().get(),
-            multiples_of_resolution.y().get(),
-        );
-        resolution_multiple = 2_f64.powf(resolution_multiple.log2().floor()); // Round down to nearest power of 2
-
-        // a power of 2 that is at least 2, and the product is bounded by the target resolution
-        base_resolution * PositiveFiniteF64::new_unchecked(resolution_multiple)
+    /// The cell size of the tile matrix (zoom level) in meters per pixel
+    fn spatial_resolution(&self, matrix_id: u8) -> SpatialResolution {
+        let matrix_id = matrix_id.min(self.max_matrix_id() as u8); // Clamp to max zoom level
+        let (_, _, cell_size, _, _) = Self::DATA[matrix_id as usize];
+        SpatialResolution::new_unchecked(cell_size, cell_size)
     }
 
     fn grid_shape_and_origin(&self, matrix_id: u8) -> (GridShape2D, Coordinate2D) {
@@ -844,13 +613,6 @@ impl TileMatrixSetProvider for WebMercatorQuadTMS {
             Self::WIDTH_AND_HEIGHT.get() as usize,
             Self::WIDTH_AND_HEIGHT.get() as usize,
         )
-    }
-
-    fn cell_size(&self, matrix_id: u8) -> SpatialResolution {
-        let matrix_id = matrix_id.min(self.max_matrix_id() as u8); // Clamp to max zoom level
-        let (_, _, cell_size, _, _) = Self::DATA[matrix_id as usize]; // cellSize in meters
-
-        SpatialResolution::new_unchecked(cell_size, cell_size)
     }
 }
 
@@ -1082,19 +844,16 @@ mod tests {
     use crate::{
         api::handlers::ogc::{
             test_util::{
-                calculate_number_of_tiles, grid_bbox, merge_bounds, session_and_3857_layer_id,
-                session_and_4326_layer_id, session_and_native_3857_layer_id,
+                calculate_number_of_tiles, session_and_3857_layer_id, session_and_4326_layer_id,
+                session_and_native_3857_layer_id,
             },
-            util::{
-                get_initialized_raster_operator, load_layer, raster_processing_graph_metadata,
-                reproject_if_necessary,
-            },
+            util::{get_initialized_raster_operator, load_layer, raster_processing_graph_metadata},
         },
         contexts::{ApplicationContext, PostgresContext, PostgresSessionContext, SessionContext},
         ge_context,
         layers::{layer::Layer, listing::LayerCollectionProvider},
     };
-    use geoengine_operators::engine::ExecutionContext;
+    use geoengine_operators::engine::{ExecutionContext, RasterOperator};
     use tokio_postgres::NoTls;
 
     #[test]
@@ -1114,40 +873,6 @@ mod tests {
             )
             .unwrap(),
             vec!["X".to_string(), "Y".to_string()]
-        );
-    }
-
-    /// `WebMercatorQuad` covers a fixed range of resolutions: from the coarsest (zoom 0)
-    /// cell to the finest (zoom 24) cell. A suggested pixel size coarser than the
-    /// coarsest cell (e.g. a global 4326 layer at 2.5 degrees resolution, suggestive of
-    /// ~351,600 m/px) must clamp to the coarsest cell, not the finest. Clamping to the
-    /// finest cell produced an invalid interpolation fraction (< 1) and aborted tile
-    /// rendering with an internal server error.
-    #[test]
-    fn it_clamps_coarser_than_coarsest_resolution_to_the_coarsest_cell() {
-        let resolution = WebMercatorQuadTMS::find_next_best_resolution(
-            SpatialResolution::new_unchecked(351_600.0, 351_600.0),
-        );
-
-        assert!(
-            approx_eq!(
-                f64,
-                resolution.x().get(),
-                156_543.033_928_041,
-                epsilon = 1e-9
-            ),
-            "x resolution should be the coarsest cell, got {}",
-            resolution.x()
-        );
-        assert!(
-            approx_eq!(
-                f64,
-                resolution.y().get(),
-                156_543.033_928_041,
-                epsilon = 1e-9
-            ),
-            "y resolution should be the coarsest cell, got {}",
-            resolution.y()
         );
     }
 
@@ -1375,12 +1100,14 @@ mod tests {
 
         let (matrix_width, matrix_height) = (8, 4);
 
+        // the grid of the layer is the finest tile matrix
+        let finest = provider.max_matrix_id() as u8;
         let (mut tile_row, mut tile_col) = (0, 0);
         let mut num_tiles = 0;
         for tile_info in tiling_iterator {
             assert_eq!(
                 provider
-                    .tile_grid_bbox(&tiling_spatial_grid_definition, 0, tile_row, tile_col)
+                    .tile_grid_bbox(&tiling_spatial_grid_definition, finest, tile_row, tile_col)
                     .unwrap(),
                 tile_info.global_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}: Expected {}",
@@ -1435,12 +1162,14 @@ mod tests {
 
         let (matrix_width, matrix_height) = (6, 6);
 
+        // the grid of the layer is the finest tile matrix
+        let finest = provider.max_matrix_id() as u8;
         let (mut tile_row, mut tile_col) = (0, 0);
         let mut num_tiles = 0;
         for tile_info in tiling_iterator {
             assert_eq!(
                 provider
-                    .tile_grid_bbox(&tiling_spatial_grid_definition, 0, tile_row, tile_col)
+                    .tile_grid_bbox(&tiling_spatial_grid_definition, finest, tile_row, tile_col)
                     .unwrap(),
                 tile_info.global_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}: Expected {}",
@@ -1540,113 +1269,78 @@ mod tests {
         assert_eq!(num_tiles, actual_width * actual_height);
     }
 
+    /// A tile is 256 × 256 pixels of the grid that `render_tile` warps the layer onto, and starts
+    /// at the tile's corner in the `WebMercatorQuad` tile matrix
     #[ge_context::test]
     async fn it_calculates_webmercator_tile_bounds(app_ctx: PostgresContext<NoTls>) {
         let (session_id, data_connector_id, layer_id) =
             session_and_native_3857_layer_id(&app_ctx).await;
 
         let ctx = app_ctx.session_context(app_ctx.session_by_id(session_id).await.unwrap());
-
         let layer = load_layer::<PostgresContext<NoTls>>(&ctx, data_connector_id, layer_id.clone())
             .await
             .unwrap();
         let execution_context = ctx.execution_context().unwrap();
-        let initialized_operator =
-            get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(
-                &layer,
-                &execution_context,
-            )
-            .await
-            .unwrap();
+        let tiling_specification = execution_context.tiling_specification();
+        let result_descriptor = get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(
+            &layer,
+            &execution_context,
+        )
+        .await
+        .unwrap()
+        .result_descriptor()
+        .clone();
 
         let tms_spec = TypedTileMatrixSetProvider::resolve(
             &TileMatrixSetId::WebMercatorQuad,
-            initialized_operator.result_descriptor(),
-            execution_context.tiling_specification(),
+            &result_descriptor,
+            tiling_specification,
         )
         .unwrap();
 
-        // Test case: 0/0/0 - full world at zoom 0
-        let tile_matrix = 0;
-        let tiling_grid_definition = initialized_operator
-            .optimize_and_reinitialize(
-                tms_spec.spatial_resolution(tile_matrix), // level 0/0
-                &execution_context,
+        for (tile_matrix, tile_row, tile_col) in [(0, 0, 0), (1, 0, 1), (1, 1, 0), (5, 10, 16)] {
+            let (_, origin) = tms_spec.grid_shape_and_origin(tile_matrix);
+            let resolution = tms_spec.spatial_resolution(tile_matrix);
+            let grid = geoengine_operators::processing::warped_spatial_grid(
+                &result_descriptor,
+                &geoengine_operators::processing::WarpParams {
+                    target_spatial_reference: None,
+                    output_resolution: Some(resolution),
+                    output_origin_reference: Some(origin),
+                    method: geoengine_operators::processing::WarpMethod::NearestNeighbor,
+                },
             )
-            .await
             .unwrap()
-            .result_descriptor()
-            .tiling_grid_definition(execution_context.tiling_specification());
-        let bounds_0_0_0 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 0, 0)
-            .unwrap();
-        assert_eq!(
-            bounds_0_0_0,
-            grid_bbox([-178, -178], [178, 177]),
-            "Bounds mismatch for tile 0/0/0"
-        );
-        assert_eq!(
-            bounds_0_0_0,
-            tiling_grid_definition.tiling_grid_bounds(),
-            "Total pixel bounds mismatch for tile 0/0/0"
-        );
+            .tiling_grid_definition(tiling_specification);
 
-        // Test case: zoom level 1 - all four tiles (2x2 matrix)
-        let tile_matrix = 1;
-        let tiling_grid_definition = initialized_operator
-            .optimize_and_reinitialize(
-                tms_spec.spatial_resolution(tile_matrix), // level 0/0
-                &execution_context,
-            )
-            .await
-            .unwrap()
-            .result_descriptor()
-            .tiling_grid_definition(execution_context.tiling_specification());
+            let bounds = tms_spec
+                .tile_grid_bbox(&grid, tile_matrix, tile_row, tile_col)
+                .unwrap();
 
-        // Check each tile individually - ensure all four tiles exist and have valid bounds
-        let bounds_1_0_0 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 0, 0)
-            .unwrap();
-        assert_eq!(
-            bounds_1_0_0,
-            grid_bbox([-355, -356], [0, -2]),
-            "Bounds mismatch for tile 1/0/0"
-        );
-
-        let bounds_1_1_0 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 0, 1)
-            .unwrap();
-        assert_eq!(
-            bounds_1_1_0,
-            grid_bbox([-355, -1], [0, 354]),
-            "Bounds mismatch for tile 1/1/0"
-        );
-
-        let bounds_1_0_1 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 1, 0)
-            .unwrap();
-        assert_eq!(
-            bounds_1_0_1,
-            grid_bbox([1, -356], [357, -2]),
-            "Bounds mismatch for tile 1/0/1"
-        );
-
-        let bounds_1_1_1 = tms_spec
-            .tile_grid_bbox(&tiling_grid_definition, tile_matrix, 1, 1)
-            .unwrap();
-        assert_eq!(
-            bounds_1_1_1,
-            grid_bbox([1, -1], [357, 354]),
-            "Bounds mismatch for tile 1/1/1"
-        );
-
-        // Verify that the four tiles together should cover the total bounds
-        // by checking that at least one tile touches each edge of the total bounds
-        assert_eq!(
-            merge_bounds([bounds_1_0_0, bounds_1_0_1, bounds_1_1_0, bounds_1_1_1]),
-            tiling_grid_definition.tiling_grid_bounds(),
-            "The merged bounds of all four tiles at zoom level 1 should equal the total bounds"
-        );
+            assert_eq!(
+                bounds.axis_size(),
+                [256, 256],
+                "tile {tile_matrix}/{tile_row}/{tile_col}"
+            );
+            let upper_left = grid
+                .tiling_geo_transform()
+                .grid_idx_to_pixel_upper_left_coordinate_2d(bounds.min_index());
+            let tile_size = 256. * resolution.x().get();
+            assert!(
+                approx_eq!(
+                    f64,
+                    upper_left.x,
+                    origin.x + f64::from(tile_col) * tile_size,
+                    epsilon = 1e-6
+                ) && approx_eq!(
+                    f64,
+                    upper_left.y,
+                    origin.y - f64::from(tile_row) * tile_size,
+                    epsilon = 1e-6
+                ),
+                "tile {tile_matrix}/{tile_row}/{tile_col} starts at {upper_left:?}"
+            );
+        }
     }
 
     /// Test helper: computes tiles at each zoom level for a given layer.
@@ -1779,11 +1473,12 @@ mod tests {
 
     /// Test `GeoEngineCustomWebMercatorTMS` variant properties via `TypedTileMatrixSetProvider`
     #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_validates_custom_web_mercator_tms_properties(app_ctx: PostgresContext<NoTls>) {
         let (session_id, _data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
         let session = app_ctx.session_by_id(session_id).await.unwrap();
         let ctx = app_ctx.session_context(session);
-        let mut layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
         let execution_context = ctx.execution_context().unwrap();
 
         let tiling_spec = execution_context.tiling_specification();
@@ -1802,39 +1497,55 @@ mod tests {
             "Required SRS should be Web Mercator (EPSG:3857)"
         );
 
-        let mut initialized_operator = get_initialized_raster_operator::<
-            PostgresSessionContext<NoTls>,
-        >(&layer, &execution_context)
-        .await
-        .expect("Failed to initialize operator");
-
-        let required_origin_and_resolution =
-            TypedTileMatrixSetProvider::required_origin_and_resolution(
-                &tms_id,
-                initialized_operator.result_descriptor(),
+        let initialized_operator =
+            get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(
+                &layer,
+                &execution_context,
             )
-            .unwrap();
-        assert!(
-            required_origin_and_resolution.is_none(),
-            "CustomWebMercator should not require specific origin and resolution"
-        );
+            .await
+            .expect("Failed to initialize operator");
 
-        reproject_if_necessary(
-            &mut layer.processing_graph,
-            &mut initialized_operator,
+        let layer_descriptor = TypedTileMatrixSetProvider::layer_descriptor(
+            &tms_id,
+            initialized_operator.result_descriptor(),
+        )
+        .unwrap();
+
+        // the grid of a `Reprojection` with `DataBounds`, as the tile path reprojected the layer before
+        let reprojection = RasterOperator::typed(geoengine_operators::processing::Reprojection {
+            params: geoengine_operators::processing::ReprojectionParams {
+                target_spatial_reference: SpatialReference::web_mercator(),
+                derive_out_spec:
+                    geoengine_operators::processing::DeriveOutRasterSpecsSource::DataBounds,
+            },
+            sources: geoengine_operators::engine::SingleRasterOrVectorSource {
+                source: geoengine_operators::util::input::RasterOrVectorOperator::Raster(
+                    layer
+                        .processing_graph
+                        .operator
+                        .clone()
+                        .get_raster()
+                        .unwrap(),
+                ),
+            },
+        })
+        .initialize(
+            geoengine_operators::engine::ProcessingGraphOperatorPath::initialize_root(),
             &execution_context,
-            required_srs,
-            required_origin_and_resolution,
         )
         .await
         .unwrap();
+        assert_eq!(
+            layer_descriptor.spatial_grid,
+            reprojection.result_descriptor().spatial_grid
+        );
+        assert_eq!(
+            layer_descriptor.spatial_reference,
+            SpatialReference::web_mercator().into()
+        );
 
-        let tms_spec = TypedTileMatrixSetProvider::resolve(
-            &tms_id,
-            initialized_operator.result_descriptor(),
-            tiling_spec,
-        )
-        .expect("Should resolve CustomWebMercator TMS");
+        let tms_spec = TypedTileMatrixSetProvider::resolve(&tms_id, &layer_descriptor, tiling_spec)
+            .expect("Should resolve CustomWebMercator TMS");
 
         // Verify TMS level 0
         let tile_matrices = tms_spec.tile_matrices().unwrap();
@@ -1859,30 +1570,31 @@ mod tests {
             "Level 0 properties should match expected values"
         );
 
-        let initialized_operator =
-            get_initialized_raster_operator::<PostgresSessionContext<NoTls>>(
-                &layer,
-                &execution_context,
-            )
-            .await
-            .expect("Failed to initialize operator");
-        let tiling_grid_definition = initialized_operator
-            .optimize_and_reinitialize(
-                tms_spec.spatial_resolution(0), // level 0/0
-                &execution_context,
-            )
-            .await
-            .unwrap()
-            .result_descriptor()
-            .tiling_grid_definition(tiling_spec);
+        // the grid that `render_tile` warps the layer onto
+        let (_, origin) = tms_spec.grid_shape_and_origin(0);
+        let tiling_grid_definition = geoengine_operators::processing::warped_spatial_grid(
+            initialized_operator.result_descriptor(),
+            &geoengine_operators::processing::WarpParams {
+                target_spatial_reference: Some(SpatialReference::web_mercator()),
+                output_resolution: Some(tms_spec.spatial_resolution(0)),
+                output_origin_reference: Some(origin),
+                method: geoengine_operators::processing::WarpMethod::NearestNeighbor,
+            },
+        )
+        .unwrap()
+        .tiling_grid_definition(tiling_spec);
         let bbox_0_0_0 = tms_spec
             .tile_grid_bbox(&tiling_grid_definition, 0, 0, 0)
             .unwrap();
 
-        assert_eq!(
-            bbox_0_0_0,
-            grid_bbox([-512, -512], [-1, -1]),
-            "Tile 0/0/0 bounds should match expected values"
+        assert_eq!(bbox_0_0_0.axis_size(), [512, 512]);
+        let upper_left = tiling_grid_definition
+            .tiling_geo_transform()
+            .grid_idx_to_pixel_upper_left_coordinate_2d(bbox_0_0_0.min_index());
+        assert!(
+            approx_eq!(f64, upper_left.x, origin.x, epsilon = 1e-6)
+                && approx_eq!(f64, upper_left.y, origin.y, epsilon = 1e-6),
+            "Tile 0/0/0 should start at the origin of tile matrix 0, starts at {upper_left:?}"
         );
     }
 }
