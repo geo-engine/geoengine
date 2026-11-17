@@ -749,8 +749,21 @@ mod tests {
             WorkerConfig::default(),
         );
         let gdal_worker = gpp.get_gdal_worker();
+        // the block reads get their own pool, so that its counters show every read they caused
+        let block_pool = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let block_worker = block_pool.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
-        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+        let blocks = BlockIo::new(
+            cache.clone(),
+            block_worker.clone(),
+            CacheTtlSeconds::new(60),
+        );
         // as MGRS tiles: the file starts 3 px right of and below a pixel edge of the level-4 tile grid
         let reader_mode = |files_have_level| {
             GdalReaderMode::OverviewLevel(OverviewReaderState {
@@ -790,14 +803,21 @@ mod tests {
                         .await
                         .unwrap();
                 let from_blocks =
-                    assemble_tile::<u16>(plan, reader_mode(false), &gdal_worker, Some(&blocks))
+                    assemble_tile::<u16>(plan, reader_mode(false), &block_worker, Some(&blocks))
                         .await
                         .unwrap();
                 assert_eq!(from_level, from_gdal, "tile [{tile_y}, {tile_x}]");
                 assert_eq!(from_blocks, from_gdal, "tile [{tile_y}, {tile_x}]");
             }
         }
-        assert!(cache.byte_size() > 0, "the reads went through the blocks");
+        // every read of the block pass stored a unit: no tile fell back to a window read
+        let stats = block_pool.request_stats();
+        assert!(
+            cache.stats().stored > 0,
+            "the reads went through the blocks"
+        );
+        assert_eq!(stats.reads + stats.reads_joined, cache.stats().stored);
+        assert_eq!(stats.headers, 1, "one header for the file");
     }
 
     #[tokio::test]
