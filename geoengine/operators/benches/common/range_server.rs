@@ -5,6 +5,7 @@
 #![allow(clippy::print_stdout, reason = "the coverage is printed by a bench")]
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -94,7 +95,10 @@ impl RangeServer {
             // GEOENGINE_BENCH_RANGE_LOG: a directory to write every served range to
             if let Some(dir) = std::env::var_os("GEOENGINE_BENCH_RANGE_LOG") {
                 let name = format!("{}__{path}.txt", id.replace('/', "_"));
-                let lines: String = ranges.iter().map(|(a, b)| format!("{a} {b}\n")).collect();
+                let lines = ranges.iter().fold(String::new(), |mut lines, (a, b)| {
+                    let _ = writeln!(lines, "{a} {b}");
+                    lines
+                });
                 let _ = std::fs::write(std::path::Path::new(&dir).join(name), lines);
             }
             let mut lengths: Vec<u64> = ranges.iter().map(|(a, b)| b - a + 1).collect();
