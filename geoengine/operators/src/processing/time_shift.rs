@@ -1353,3 +1353,28 @@ mod tests {
         assert_eq!(reverse_shifted, time);
     }
 }
+
+#[cfg(test)]
+mod footprint_tests {
+    use super::*;
+    use crate::engine::footprint_test_util::*;
+
+    #[tokio::test]
+    async fn time_shift_answers_with_the_output_times() {
+        let shifted = RasterOperator::typed(TimeShift {
+            params: TimeShiftParams::Relative {
+                granularity: TimeGranularity::Millis,
+                value: 5,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: stack_inputs().remove(0).into(),
+            },
+        });
+
+        // shifted by one step, the query of [0, 5) reads the empty input step [5, 10)
+        let footprints = checked_footprints(shifted, &[0]).await;
+
+        assert_eq!(footprints[0].time, TimeInterval::new_unchecked(0, 5));
+        assert!(footprints[0].bounds.is_empty());
+    }
+}

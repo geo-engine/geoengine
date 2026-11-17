@@ -1222,3 +1222,70 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod footprint_tests {
+    use crate::engine::footprint_test_util::*;
+    use crate::engine::{FootprintBounds, TimeDescriptor};
+    use geoengine_datatypes::primitives::TimeInterval;
+
+    #[tokio::test]
+    async fn raster_stacker_unions_the_sources_of_the_selected_bands() {
+        let both = checked_footprints(stack(stack_inputs()), &[0, 1]).await;
+        assert_eq!(
+            step_boxes(&both),
+            [[tile_box(0), tile_box(1)].as_slice(), [].as_slice()]
+        );
+
+        let second = checked_footprints(stack(stack_inputs()), &[1]).await;
+        assert_eq!(
+            step_boxes(&second),
+            [[tile_box(1)].as_slice(), [].as_slice()]
+        );
+    }
+
+    #[tokio::test]
+    async fn raster_stacker_zips_sources_with_other_time_steps() {
+        // the first source has one step of ten, the second two of five: the stack splits at 5
+        let slow = source(
+            vec![tile(0, 0, 0, true), tile(0, 1, 0, false)],
+            1,
+            TimeDescriptor::new_irregular(None),
+        );
+        let fast = source(
+            vec![
+                tile(0, 0, 0, false),
+                tile(0, 1, 0, true),
+                tile(5, 0, 0, false),
+                tile(5, 1, 0, true),
+            ],
+            1,
+            TimeDescriptor::new_irregular(None),
+        );
+
+        let footprints = checked_footprints(stack(vec![slow.clone(), fast.clone()]), &[0, 1]).await;
+
+        // every step has data in one of the sources, and none is unknown
+        assert!(footprints.len() >= 2);
+        assert!(
+            footprints
+                .iter()
+                .all(|step| step.bounds != FootprintBounds::Unknown)
+        );
+
+        // The stack has the time steps of all sources, also if only the bands of one are
+        // selected: the second source still splits the gap after the first one's step at 10.
+        let only_slow = checked_footprints(stack(vec![slow, fast]), &[0]).await;
+        assert_eq!(
+            only_slow.iter().map(|step| step.time).collect::<Vec<_>>(),
+            [
+                TimeInterval::new_unchecked(0, 5),
+                TimeInterval::new_unchecked(5, 10)
+            ]
+        );
+        assert_eq!(
+            step_boxes(&only_slow),
+            [[tile_box(0)].as_slice(), [].as_slice()]
+        );
+    }
+}

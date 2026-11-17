@@ -739,3 +739,29 @@ mod tests {
         assert_eq!(params, deserialized);
     }
 }
+
+#[cfg(test)]
+mod footprint_tests {
+    use super::*;
+    use crate::engine::footprint_test_util::*;
+
+    #[tokio::test]
+    async fn band_filter_answers_for_the_selected_input_band() {
+        let band_filter = BandFilter {
+            params: BandFilterParams {
+                bands: BandsByNameOrIndex::Name(vec!["band1".to_string()]),
+            },
+            sources: SingleRasterSource {
+                raster: two_band_source(),
+            },
+        }
+        .typed();
+
+        let footprints = checked_footprints(band_filter, &[0]).await;
+
+        assert_eq!(
+            step_boxes(&footprints),
+            [[tile_box(1)].as_slice(), [tile_box(1)].as_slice()]
+        );
+    }
+}

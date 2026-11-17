@@ -874,3 +874,27 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod footprint_tests {
+    use crate::engine::footprint_test_util::*;
+
+    #[tokio::test]
+    async fn it_has_boxes_only_for_the_tiles_with_data_of_the_selected_bands() {
+        // band 0 has data in tile 0 at the first step, band 1 in tile 1 at both steps
+        let first = checked_footprints(two_band_source(), &[0]).await;
+        assert_eq!(
+            step_boxes(&first),
+            [[tile_box(0)].as_slice(), [].as_slice()]
+        );
+
+        let both = checked_footprints(two_band_source(), &[0, 1]).await;
+        assert_eq!(
+            step_boxes(&both),
+            [
+                [tile_box(0), tile_box(1)].as_slice(),
+                [tile_box(1)].as_slice()
+            ]
+        );
+    }
+}
