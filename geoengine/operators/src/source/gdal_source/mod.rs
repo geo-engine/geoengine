@@ -485,11 +485,11 @@ impl InitializedGdalSourceOperator {
     }
 
     /// Initializes the operator with a result descriptor that incorporates the overview level. The original resolution spatial grid is stored in the operator for later use in the query processor when reading the data.
-    /// If the overview level is 0, this method behaves the same as `initialize_original_resolution`.
+    /// If the overview level is 0 or 1, this method behaves the same as `initialize_original_resolution`.
     ///
     /// # Panics
-    /// Panics if the result descriptor does not contain a source spatial grid definition or if the overview level is greater than 0 but the overview level spatial grid could not be created.
-    /// The latter can only happen if the overview level is greater than 0 but the source spatial grid is smaller than the overview level, which should not happen in practice.
+    /// Panics if the result descriptor does not contain a source spatial grid definition or if the overview level is greater than 1 but the overview level spatial grid could not be created.
+    /// The latter can only happen if the overview level is greater than 1 but the source spatial grid is smaller than the overview level, which should not happen in practice.
     #[allow(clippy::too_many_arguments)]
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
