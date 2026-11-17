@@ -20,6 +20,8 @@ Name | Type | Description | Notes
 **cache_ttl_secs** | Option<**i32**> | Optional output cache lifetime; omitted values use the global cache default. | [optional]
 **stac_grid** | Option<[**models::StacGrid**](StacGrid.md)> | Target number of square search cells per dataset CRS projected area of use; omitted values use 512. | [optional]
 **max_concurrent_cell_searches** | Option<**i32**> | STAC searches one loading info request runs in parallel; omitted values use 8. | [optional]
+**item_time** | Option<[**models::StacItemTime**](StacItemTime.md)> | Which item time decides the layer time steps an item belongs to; omitted values use `datetime`. | [optional]
+**max_concurrent_asset_probes** | Option<**i32**> | Asset file headers one STAC search reads in parallel to complete grid metadata the STAC items lack, as for `NetCDF` assets; omitted values use 8. | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

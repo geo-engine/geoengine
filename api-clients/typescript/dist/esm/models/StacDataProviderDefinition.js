@@ -15,6 +15,7 @@ import { StacProviderDatasetFromJSON, StacProviderDatasetToJSON, } from './StacP
 import { StacGridFromJSON, StacGridToJSON, } from './StacGrid';
 import { StacProviderAuthenticationFromJSON, StacProviderAuthenticationToJSON, } from './StacProviderAuthentication';
 import { TimeDimensionFromJSON, TimeDimensionToJSON, } from './TimeDimension';
+import { StacItemTimeFromJSON, StacItemTimeToJSON, } from './StacItemTime';
 /**
  * @export
  */
@@ -69,6 +70,8 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
+        'itemTime': json['itemTime'] === undefined ? undefined : json['itemTime'] === null ? null : StacItemTimeFromJSON(json['itemTime']),
+        'maxConcurrentAssetProbes': json['maxConcurrentAssetProbes'] === undefined ? undefined : json['maxConcurrentAssetProbes'] === null ? null : json['maxConcurrentAssetProbes'],
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -95,5 +98,7 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         'cacheTtlSecs': value['cacheTtlSecs'],
         'stacGrid': StacGridToJSON(value['stacGrid']),
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
+        'itemTime': StacItemTimeToJSON(value['itemTime']),
+        'maxConcurrentAssetProbes': value['maxConcurrentAssetProbes'],
     };
 }
