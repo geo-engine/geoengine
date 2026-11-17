@@ -3,11 +3,11 @@ use crate::adapters::{
     SimpleRasterStackerAdapter, SimpleRasterStackerError,
 };
 use crate::engine::{
-    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, Footprint, FootprintCombine,
-    InitializedRasterOperator, InitializedSources, MultipleRasterSources, Operator, OperatorName,
-    ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterBandDescriptor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterOperator,
-    TypedRasterQueryProcessor, zip_footprints,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, Footprint, FootprintBounds,
+    FootprintCombine, InitializedRasterOperator, InitializedSources, MultipleRasterSources,
+    Operator, OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor,
+    RasterBandDescriptor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    TypedRasterOperator, TypedRasterQueryProcessor, zip_footprints,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
@@ -446,7 +446,18 @@ where
                 .collect::<Vec<_>>();
             first_band += band_count;
 
+            // A source without selected bands has no data in the output, but its time steps
+            // still split the steps of the others, as in `_time_query`.
             if bands.is_empty() {
+                let time_steps = source.time_query(query.time_interval(), ctx).await?;
+                streams.push(
+                    time_steps
+                        .map_ok(|time| Footprint {
+                            time,
+                            bounds: FootprintBounds::empty(),
+                        })
+                        .boxed(),
+                );
                 continue;
             }
 

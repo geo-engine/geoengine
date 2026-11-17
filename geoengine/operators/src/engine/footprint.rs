@@ -919,7 +919,7 @@ mod tests {
             TimeDescriptor::new_irregular(None),
         );
 
-        let footprints = checked_footprints(stack(vec![slow, fast]), &[0, 1]).await;
+        let footprints = checked_footprints(stack(vec![slow.clone(), fast.clone()]), &[0, 1]).await;
 
         // every step has data in one of the sources, and none is unknown
         assert!(footprints.len() >= 2);
@@ -927,6 +927,21 @@ mod tests {
             footprints
                 .iter()
                 .all(|step| step.bounds != FootprintBounds::Unknown)
+        );
+
+        // The stack has the time steps of all sources, also if only the bands of one are
+        // selected: the second source still splits the gap after the first one's step at 10.
+        let only_slow = checked_footprints(stack(vec![slow, fast]), &[0]).await;
+        assert_eq!(
+            only_slow.iter().map(|step| step.time).collect::<Vec<_>>(),
+            [
+                TimeInterval::new_unchecked(0, 5),
+                TimeInterval::new_unchecked(5, 10)
+            ]
+        );
+        assert_eq!(
+            step_boxes(&only_slow),
+            [[tile_box(0)].as_slice(), [].as_slice()]
         );
     }
 
