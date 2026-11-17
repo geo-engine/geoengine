@@ -88,9 +88,12 @@ impl CrsMetadataProvider for StaticEpsgMetadataProvider {
     }
 
     fn uses_meters(&self) -> super::Result<bool> {
-        #[allow(clippy::float_cmp)]
-        // stored value is exact (1.0 or a conversion factor from proj.db)
-        Ok(self.meters_per_unit == 1.0)
+        Ok(float_cmp::approx_eq!(
+            f64,
+            self.meters_per_unit,
+            1.0,
+            ulps = 2
+        ))
     }
 
     fn meters_per_unit(&self) -> super::Result<f64> {
