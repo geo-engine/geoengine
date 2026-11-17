@@ -35,7 +35,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    GdalDatasetParameters, GdalLoadingInfo, LoadingInfoDetail, MultiBandGdalLoadingInfo,
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
@@ -997,7 +997,10 @@ where
             }
         })?;
 
-        let files = if query.fetch_tiles {
+        let files = if matches!(
+            query.detail,
+            LoadingInfoDetail::Availability | LoadingInfoDetail::Files
+        ) {
             // query the files
             let rows = conn
                 .query(

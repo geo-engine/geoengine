@@ -322,7 +322,7 @@ where
         self.processor.time_query(query, ctx).await // TODO: investigate if we can use caching here?
     }
 
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::RasterQueryRectangle,
         precision: crate::engine::FootprintPrecision,

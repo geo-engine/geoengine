@@ -313,7 +313,7 @@ where
         self.source.time_query(query, ctx).await
     }
 
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::RasterQueryRectangle,
         precision: crate::engine::FootprintPrecision,
@@ -569,5 +569,31 @@ mod tests {
             }
             GridOrEmpty2D::Empty(_) => panic!("expected GridOrEmpty2D::Grid"),
         }
+    }
+}
+
+#[cfg(test)]
+mod footprint_tests {
+    use super::*;
+    use crate::engine::{RasterOperator, footprint_test_util::*};
+
+    #[tokio::test]
+    async fn it_passes_the_footprints_of_its_source_through() {
+        let scaled = RasterOperator::typed(RasterScaling {
+            params: RasterScalingParams {
+                slope: SlopeOffsetSelection::Constant { value: 1. },
+                offset: SlopeOffsetSelection::Constant { value: 0. },
+                output_measurement: None,
+                scaling_mode: ScalingMode::MulSlopeAddOffset,
+            },
+            sources: SingleRasterSource {
+                raster: two_band_source(),
+            },
+        });
+
+        assert_eq!(
+            checked_footprints(scaled, &[1]).await,
+            checked_footprints(two_band_source(), &[1]).await
+        );
     }
 }
