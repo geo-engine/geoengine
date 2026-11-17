@@ -44,6 +44,10 @@
 //!   server then counts no GETs and bytes for them.
 //! - `GEOENGINE_BENCH_ROUNDS`: run each mode this many times, cold and then warm, plus one cold run for
 //!   the hash, instead of letting criterion pick. For remote files, to bound the traffic.
+//! - `GEOENGINE_BENCH_VIEW_LEVELS`: comma separated overview levels to view, in place of the two
+//!   beyond the coarsest overview. Needs `GEOENGINE_BENCH_UNDECLARED_LEVELS`.
+//! - `GEOENGINE_BENCH_RANGE_LOG`: a directory to write the byte ranges of each cold run to, one
+//!   file per case and served file.
 //! - `GEOENGINE_BENCH_UNDECLARED_LEVELS`: register the single-file datasets without their overview
 //!   levels, as STAC datasets are, so that only the files' own headers name them. Adds the views
 //!   `view_overview_32` and `view_overview_64` of the single-band cases, 2 and 4 times coarser than
@@ -778,10 +782,14 @@ fn beyond_overview_cases(
     if std::env::var_os("GEOENGINE_BENCH_UNDECLARED_LEVELS").is_none() {
         return Vec::new();
     }
-    [2, 4]
+    // GEOENGINE_BENCH_VIEW_LEVELS: comma separated overview levels to view instead
+    let levels: Vec<u32> = match std::env::var("GEOENGINE_BENCH_VIEW_LEVELS") {
+        Ok(levels) => levels.split(',').filter_map(|l| l.parse().ok()).collect(),
+        Err(_) => vec![max_overview_level * 2, max_overview_level * 4],
+    };
+    levels
         .into_iter()
-        .map(|times| {
-            let level = max_overview_level * times;
+        .map(|level| {
             Case::new(
                 format!("{prefix}/view_overview_{level}"),
                 source(data, Some(level)),
@@ -995,7 +1003,9 @@ fn block_reads(c: &mut Criterion) {
                         };
                         if cold {
                             clear().await;
+                            server.reset();
                             let hash = run_once(true).await;
+                            server.print_coverage(&id);
                             *view_times.lock().unwrap() = ViewTimes::default();
                             println!("{id}: hash {hash:016x}");
                             let mut hashes = hashes.lock().unwrap();

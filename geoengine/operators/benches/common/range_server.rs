@@ -91,6 +91,12 @@ impl RangeServer {
                     covered_to = *end + 1;
                 }
             }
+            // GEOENGINE_BENCH_RANGE_LOG: a directory to write every served range to
+            if let Some(dir) = std::env::var_os("GEOENGINE_BENCH_RANGE_LOG") {
+                let name = format!("{}__{path}.txt", id.replace('/', "_"));
+                let lines: String = ranges.iter().map(|(a, b)| format!("{a} {b}\n")).collect();
+                let _ = std::fs::write(std::path::Path::new(&dir).join(name), lines);
+            }
             let mut lengths: Vec<u64> = ranges.iter().map(|(a, b)| b - a + 1).collect();
             lengths.sort_unstable();
             println!(
