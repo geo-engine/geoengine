@@ -308,6 +308,7 @@ impl From<geoengine_datatypes::dataset::LayerId> for LayerId {
     PartialEq,
     Ord,
     PartialOrd,
+    Hash,
     Serialize,
     Deserialize,
     ToSchema,
@@ -384,7 +385,7 @@ impl std::fmt::Display for SpatialReferenceAuthority {
 }
 
 /// A spatial reference consists of an authority and a code
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, FromSql, ToSql)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, FromSql, ToSql)]
 pub struct SpatialReference {
     authority: SpatialReferenceAuthority,
     code: u32,

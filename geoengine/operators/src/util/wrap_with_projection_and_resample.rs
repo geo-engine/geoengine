@@ -1,9 +1,11 @@
 use crate::engine::{
-    ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath, RasterOperator,
-    RasterResultDescriptor, ResultDescriptor, TypedRasterOperator,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath,
+    RasterOperator, RasterResultDescriptor, ResultDescriptor, TypedRasterOperator,
 };
 use crate::error;
-use crate::processing::{Warp, WarpParams, source_at_overview_level, warped_spatial_grid};
+use crate::processing::{
+    InitializedWarp, Warp, WarpParams, source_at_overview_level, warped_spatial_grid,
+};
 use crate::util::Result;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -96,22 +98,30 @@ impl WrapWithProjectionAndResample {
                 {
                     return Ok(optimized);
                 }
-                optimized.operator
+                optimized
             }
-            None => self.operator,
+            None => self,
         };
 
+        // the source is initialized already, so the `Warp` is built around it instead of initializing the graph again
         let warp = Warp {
             params,
-            sources: source.into(),
-        }
-        .typed();
-        let initialized = warp
-            .clone()
-            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
-            .await?;
+            sources: source.operator.into(),
+        };
+        let span = warp.span();
+        let initialized = exe_ctx.wrap_initialized_raster_operator(
+            InitializedWarp::new(
+                CanonicOperatorName::from(&warp),
+                ProcessingGraphOperatorPath::initialize_root(),
+                source.initialized_operator,
+                params,
+                exe_ctx.tiling_specification(),
+            )?
+            .boxed(),
+            span,
+        );
         let result_descriptor = initialized.result_descriptor().clone();
-        Ok(Self::new(warp, initialized, result_descriptor))
+        Ok(Self::new(warp.typed(), initialized, result_descriptor))
     }
 }
 

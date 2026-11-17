@@ -1,0 +1,16 @@
+name: "Prefetch OpenAPI Generator"
+description: >
+  Restore the OpenAPI Generator jar from the cache, or download it with retries,
+  since the generator CLI tries only once.
+runs:
+  using: "composite"
+  steps:
+    - name: Cache OpenAPI Generator jar
+      uses: actions/cache@v6
+      with:
+        # `storageDir` in `api-clients/openapitools.json`
+        path: ~/.cache/openapi-generator
+        key: openapi-generator-${{ hashFiles('api-clients/openapitools.json') }}
+    - name: Prefetch OpenAPI Generator
+      shell: bash
+      run: just api-clients prefetch-generator

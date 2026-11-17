@@ -1,4 +1,5 @@
 use crate::{
+    api::handlers::spatial_references::SpatialReferenceCache,
     api::model::services::Volume,
     config::{Cache, Oidc, Quota, get_config_element},
     contexts::{
@@ -79,6 +80,7 @@ where
     warp_mode_max_memory_per_tile: usize,
     /// runs query tasks, so they leave the single-threaded HTTP workers
     processing_runtime: tokio::runtime::Handle,
+    spatial_reference_cache: SpatialReferenceCache,
 }
 
 /// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
@@ -172,6 +174,7 @@ where
             warp_mode_max_memory_per_tile: get_config_element::<crate::config::QueryContext>()?
                 .warp_mode_max_memory_per_tile(),
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         })
     }
 
@@ -248,6 +251,7 @@ where
             warp_mode_max_memory_per_tile: get_config_element::<crate::config::QueryContext>()?
                 .warp_mode_max_memory_per_tile(),
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         })
     }
 
@@ -334,6 +338,7 @@ where
                 .warp_mode_max_memory_per_tile(),
             // the server builds its context on the main runtime, which then runs all queries
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         };
 
         info!(
@@ -486,6 +491,10 @@ where
 
     fn oidc_manager(&self) -> &OidcManager {
         &self.oidc_manager
+    }
+
+    fn spatial_reference_cache(&self) -> &SpatialReferenceCache {
+        &self.spatial_reference_cache
     }
 
     async fn clear_caches(&self, session: Self::Session) -> Result<()> {
