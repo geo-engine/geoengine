@@ -351,7 +351,9 @@ async fn wms_get_map<C: ApplicationContext>(
         let conn_closed = connection_closed(&req, request_timeout_seconds.map(Duration::from_secs));
 
         let crs = request.crs.ok_or(error::Error::MissingSpatialReference)?;
-        let bounds: SpatialPartition2D = request.bbox.bounds(crs)?;
+        let bounds: SpatialPartition2D = request
+            .bbox
+            .bounds(crs, app_ctx.spatial_reference_cache())?;
         let resolution = SpatialResolution::new(
             (bounds.size_x() / f64::from(request.width)).abs(),
             (bounds.size_y() / f64::from(request.height)).abs(),
