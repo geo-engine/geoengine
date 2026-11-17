@@ -108,7 +108,13 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
         ) {
             (Some(factor), Some(blocks)) => {
                 blocks
-                    .read::<T>(&params, read_advise, factor, plan.cache_hint)
+                    .read::<T>(
+                        &params,
+                        read_advise,
+                        factor,
+                        level_factor.is_none(),
+                        plan.cache_hint,
+                    )
                     .await
             }
             (Some(factor), None) if level_factor.is_some() && factor.get() > 1 => {
@@ -740,6 +746,110 @@ mod tests {
             .unwrap();
             assert_eq!(tile, from_gdal, "declared: {files_have_level}");
         }
+    }
+
+    /// GDAL scales a window by the sizes of the level and of the file, not by the level's factor.
+    /// Level 4 of 61 px has 16 px, 3.8 times fewer, so a window read that starts at its pixel 11
+    /// or later starts one pixel later in the level. Blocks resample such a level from itself:
+    /// each tile pixel takes the level pixel under its center, in every tile alike.
+    #[tokio::test]
+    async fn undeclared_levels_that_gdal_reads_shifted_are_resampled_from_themselves() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff(dir.path(), 61, &[4]);
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+        let reader_mode = |files_have_level| {
+            GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: file_grid,
+                overview_level: 4,
+                files_have_level,
+            })
+        };
+        let plan = |tile_size: usize, position: [isize; 2]| TilePlan {
+            tile: TileInformation::new(
+                position.into(),
+                GridShape2D::new([tile_size, tile_size]),
+                GeoTransform::new_unchecked((0., 64.).into(), 4., -4.),
+            ),
+            time: TimeInterval::default(),
+            band: 0,
+            files: vec![params.clone()],
+            cache_hint: CacheHint::max_duration(),
+        };
+
+        // the level as it is in the file
+        let level = assemble_tile::<u16>(plan(16, [0, 0]), reader_mode(true), &gdal_worker, None)
+            .await
+            .unwrap()
+            .grid_array
+            .into_materialized_masked_grid();
+        let whole = assemble_tile::<u16>(
+            plan(16, [0, 0]),
+            reader_mode(false),
+            &gdal_worker,
+            Some(&blocks),
+        )
+        .await
+        .unwrap()
+        .grid_array
+        .into_materialized_masked_grid();
+        // the center of tile pixel `p` lies at 4 p + 2 of the file's 61 px, which its 16 level
+        // pixels share
+        let under_center = |pixel: usize| ((2 * pixel + 1) * 4 * 16 / (2 * 61)).min(15);
+        assert_eq!(under_center(9), 9);
+        assert_eq!(under_center(10), 11);
+        for y in 0..16 {
+            for x in 0..16 {
+                assert_eq!(
+                    whole.inner_grid.data[y * 16 + x],
+                    level.inner_grid.data[under_center(y) * 16 + under_center(x)],
+                    "pixel [{y}, {x}]"
+                );
+            }
+        }
+
+        for tile_size in [3_usize, 4, 5] {
+            for tile_y in 0..16_usize.div_ceil(tile_size) {
+                for tile_x in 0..16_usize.div_ceil(tile_size) {
+                    let tile = assemble_tile::<u16>(
+                        plan(tile_size, [tile_y as isize, tile_x as isize]),
+                        reader_mode(false),
+                        &gdal_worker,
+                        Some(&blocks),
+                    )
+                    .await
+                    .unwrap()
+                    .grid_array
+                    .into_materialized_masked_grid();
+                    for y in 0..tile_size.min(16 - tile_y * tile_size) {
+                        for x in 0..tile_size.min(16 - tile_x * tile_size) {
+                            let (global_y, global_x) =
+                                (tile_y * tile_size + y, tile_x * tile_size + x);
+                            assert_eq!(
+                                tile.inner_grid.data[y * tile_size + x],
+                                whole.inner_grid.data[global_y * 16 + global_x],
+                                "tile size {tile_size}, pixel [{global_y}, {global_x}]"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        let stats = gpp.request_stats();
+        assert!(
+            cache.stats().stored > 0,
+            "the reads went through the blocks"
+        );
+        assert_eq!(stats.headers, 1, "one header for the file");
     }
 
     #[tokio::test]

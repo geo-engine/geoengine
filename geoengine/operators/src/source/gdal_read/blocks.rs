@@ -186,6 +186,9 @@ impl BlockIo {
     /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
     /// than the full resolution. A file without that level reads its coarsest finer overview and
     /// keeps the pixel under the center of each output pixel, as GDAL's nearest resampling does.
+    /// If the dataset does not declare the level (`undeclared`), the read stands in for GDAL's
+    /// window read, which scales by the sizes of the level and of the file: a level whose pixels
+    /// that read does not take one to one is resampled alike, from itself.
     ///
     /// # Errors
     /// Returns an error if a header or block read fails, if the file has neither the level nor a
@@ -198,6 +201,7 @@ impl BlockIo {
         params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
         factor: NonZeroUsize,
+        undeclared: bool,
         cache_hint: CacheHint,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
@@ -236,8 +240,10 @@ impl BlockIo {
                 params.file_path.display()
             );
         }
+        let one_to_one = read_factor == factor
+            && (!undeclared || info.window_reads_take_level_pixels(level, factor));
         let Some((level_advise, resampled)) =
-            level_read(&info, level, read_factor, factor, read_advise)
+            level_read(&info, level, read_factor, one_to_one, factor, read_advise)
         else {
             return Err(not_inside());
         };
@@ -462,16 +468,17 @@ fn finer_level(info: &RasterInfo, factor: NonZeroUsize) -> Option<(usize, NonZer
 }
 
 /// The read of `level`, whose factor is `read_factor`, for `read_advise` of the level `factor`,
-/// and, if `level` is a finer one, the pixels of it that the output takes, y then x. `None` if the
-/// read is not inside the level.
+/// and, unless the output takes the pixels of `level` `one_to_one`, the pixels of it that the
+/// output takes, y then x. `None` if the read is not inside the level.
 fn level_read(
     info: &RasterInfo,
     level: usize,
     read_factor: NonZeroUsize,
+    one_to_one: bool,
     factor: NonZeroUsize,
     read_advise: GdalReadAdvise,
 ) -> Option<(GdalReadAdvise, Option<[Vec<usize>; 2]>)> {
-    if read_factor == factor {
+    if one_to_one {
         return Some((read_advise, None));
     }
     let layout = info.levels.get(level)?;
@@ -771,6 +778,34 @@ mod tests {
             "ceil(10 980 / 8) = 1 373"
         );
         assert_eq!(layout.level_of_factor(factor(16)), None);
+    }
+
+    #[test]
+    fn it_knows_the_levels_whose_pixels_a_window_read_takes_one_to_one() {
+        let sentinel_2 = raster_info(vec![
+            level(10_980, 1024),
+            level(5490, 512),
+            level(2745, 512),
+            level(1373, 512),
+            level(687, 512),
+        ]);
+        for (index, level_factor) in [(1, 2), (2, 4), (3, 8)] {
+            assert!(
+                sentinel_2.window_reads_take_level_pixels(index, factor(level_factor)),
+                "level {level_factor}"
+            );
+        }
+        // 687 px are 15.98 times fewer: pixel 685 of a window read is the level's pixel 686
+        assert!(!sentinel_2.window_reads_take_level_pixels(4, factor(16)));
+
+        let small = raster_info(vec![level(61, 16), level(16, 16)]);
+        assert!(!small.window_reads_take_level_pixels(1, factor(4)));
+        let even = raster_info(vec![level(64, 16), level(16, 16)]);
+        assert!(even.window_reads_take_level_pixels(1, factor(4)));
+        assert!(
+            !even.window_reads_take_level_pixels(2, factor(8)),
+            "no such level"
+        );
     }
 
     #[test]
