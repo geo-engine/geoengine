@@ -51,9 +51,12 @@ rayon_threads = 0
 gdal_source_read_ahead = 8
 # GDAL tile reads a MultiBandGdalSource query keeps in flight
 multi_band_gdal_source_read_ahead = 16
-# The most boxes a footprint (where a raster may have data, see `/processingGraphs/{id}/footprints`) keeps
-# for one time step. If a step has more, the boxes that add the least empty area are merged. Combining
-# footprints, e.g. in an expression, takes time in the product of the numbers of boxes.
+# A footprint tells for one time step of a raster (one interval of its time dimension) where it may
+# have data, as rectangles ("boxes") in its pixel space; outside of them there is none. The term is
+# the one of remote sensing for the outline of a scene. See `/processingGraphs/{id}/footprints`.
+# This is the most boxes a footprint keeps for one time step. If a step has more, the boxes whose
+# merge adds the least empty area are merged. Combining footprints, e.g. in an expression, takes
+# time in the product of the numbers of boxes.
 footprint_boxes_per_step_limit = 64
 
 [expression]

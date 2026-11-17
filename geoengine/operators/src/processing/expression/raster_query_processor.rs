@@ -141,10 +141,14 @@ where
         precision: crate::engine::FootprintPrecision,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Footprint>>> {
-        // With `map_no_data`, a pixel without data in any input can get a value from the expression.
-        // Still, if no data in all inputs gives no data, there is no data where no input has data.
-        // Without it, a pixel is no-data if any input is, so there is data only where all inputs
-        // have data.
+        // A footprint is a superset, so an expression that turns data into no-data, like
+        // `fn(A) -> NODATA`, needs no care. Only turning no-data into data matters:
+        // - Without `map_no_data`, a pixel is no-data if any input is, without evaluating the
+        //   expression. So there is data only where all inputs have data.
+        // - With it, the expression gets the no-data inputs. Evaluated once with all inputs no-data,
+        //   it tells whether a pixel without data in any input stays without data. If it does, as
+        //   `A + B` or `fn(A) -> NODATA`, there is data only where an input has data. If not, as
+        //   `fn(A) -> 1`, any pixel can have data.
         let combine = if !self.map_no_data {
             FootprintCombine::Intersection
         } else if Tuple::maps_no_data_to_no_data(&self.program)? {

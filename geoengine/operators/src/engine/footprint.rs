@@ -410,7 +410,9 @@ pub fn zip_footprints(
     .boxed()
 }
 
-/// How exact the boxes of a footprint stream have to be. A source may answer more exactly than asked.
+/// How exact the boxes of a footprint stream have to be: `Availability` answers *when* there is
+/// data, `Coverage` also *where*. Both are one query, because every operator combines them by the
+/// same rule. A source may answer more exactly than asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FootprintPrecision {
     /// Only whether a step has data. A step with data may carry the whole query bounds as its
