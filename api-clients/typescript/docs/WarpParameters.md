@@ -13,6 +13,7 @@ Name | Type
 `downsampling` | [WarpDownsamplingMethod](WarpDownsamplingMethod.md)
 `upsampling` | [WarpUpsamplingMethod](WarpUpsamplingMethod.md)
 `outputDataType` | [RasterDataType](RasterDataType.md)
+`deriveOutSpec` | [DeriveOutRasterSpecsSource](DeriveOutRasterSpecsSource.md)
 
 ## Example
 
@@ -27,6 +28,7 @@ const example = {
   "downsampling": null,
   "upsampling": null,
   "outputDataType": null,
+  "deriveOutSpec": null,
 } satisfies WarpParameters
 
 console.log(example)

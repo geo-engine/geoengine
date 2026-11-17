@@ -27,14 +27,15 @@ is used with another spatial reference.
 
 ## Parameters
 
-| Name                   | Type                      | Description                                                                                                   | Examples            |
-| ---------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------- |
-| targetSpatialReference | string,null               | Target spatial reference system. Defaults to the spatial reference of the input.                              | `"EPSG:3857"`       |
-| outputResolution       | SpatialResolution or null |                                                                                                               | `{"x":0.5,"y":0.5}` |
-| outputOriginReference  | Coordinate2D or null      |                                                                                                               |                     |
-| downsampling           | WarpDownsamplingMethod    | How to compute an output pixel that is coarser than the input in at least one axis.<br>Defaults to `nearest`. | `"average"`         |
-| upsampling             | WarpUpsamplingMethod      | How to compute an output pixel that is finer than the input in both axes.<br>Defaults to `nearest`.           | `"bilinear"`        |
-| outputDataType         | RasterDataType or null    |                                                                                                               | `"F32"`             |
+| Name                   | Type                       | Description                                                                                                                                                                                                     | Examples            |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| targetSpatialReference | string,null                | Target spatial reference system. Defaults to the spatial reference of the input.                                                                                                                                | `"EPSG:3857"`       |
+| outputResolution       | SpatialResolution or null  |                                                                                                                                                                                                                 | `{"x":0.5,"y":0.5}` |
+| outputOriginReference  | Coordinate2D or null       |                                                                                                                                                                                                                 |                     |
+| downsampling           | WarpDownsamplingMethod     | How to compute an output pixel that is coarser than the input in at least one axis.<br>Defaults to `nearest`.                                                                                                   | `"average"`         |
+| upsampling             | WarpUpsamplingMethod       | How to compute an output pixel that is finer than the input in both axes.<br>Defaults to `nearest`.                                                                                                             | `"bilinear"`        |
+| outputDataType         | RasterDataType or null     |                                                                                                                                                                                                                 | `"F32"`             |
+| deriveOutSpec          | DeriveOutRasterSpecsSource | How the output grid is derived when reprojecting, as in `Reprojection`:<br>`projectionBounds` (default) derives it from the area of use of the input's spatial<br>reference, `dataBounds` from the data bounds. |                     |
 
 ## Sources
 

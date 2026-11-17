@@ -71,6 +71,10 @@ pub struct WarpParams {
     /// values to their range.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_data_type: Option<RasterDataType>,
+    /// How the output grid is derived when reprojecting: from the area of use of the source's
+    /// spatial reference (default) or from the data bounds, as in `Reprojection`
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
 /// How [`Warp`] computes an output pixel that is coarser than the input in at least one axis, with
@@ -160,7 +164,7 @@ pub fn warped_spatial_grid(
             in_srs,
             ReprojectionParams {
                 target_spatial_reference: target_srs,
-                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+                derive_out_spec: params.derive_out_spec,
             },
         )?,
         _ => in_grid,

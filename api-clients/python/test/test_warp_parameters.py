@@ -44,7 +44,8 @@ class TestWarpParameters(unittest.TestCase):
                     y = 1.337, ),
                 downsampling = 'nearest',
                 upsampling = 'nearest',
-                output_data_type = 'U8'
+                output_data_type = 'U8',
+                derive_out_spec = 'dataBounds'
             )
         else:
             return WarpParameters(

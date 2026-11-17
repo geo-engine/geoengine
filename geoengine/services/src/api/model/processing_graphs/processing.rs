@@ -322,6 +322,15 @@ impl From<DeriveOutRasterSpecsSource> for OperatorsDeriveOutRasterSpecsSource {
     }
 }
 
+impl From<OperatorsDeriveOutRasterSpecsSource> for DeriveOutRasterSpecsSource {
+    fn from(value: OperatorsDeriveOutRasterSpecsSource) -> Self {
+        match value {
+            OperatorsDeriveOutRasterSpecsSource::DataBounds => Self::DataBounds,
+            OperatorsDeriveOutRasterSpecsSource::ProjectionBounds => Self::ProjectionBounds,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
@@ -1083,6 +1092,12 @@ pub struct WarpParameters {
     #[schema(examples("F32"))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_data_type: Option<RasterDataType>,
+    /// How the output grid is derived when reprojecting, as in `Reprojection`:
+    /// `projectionBounds` (default) derives it from the area of use of the input's spatial
+    /// reference, `dataBounds` from the data bounds.
+    #[schema(examples("projectionBounds"))]
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
@@ -1156,6 +1171,7 @@ impl TryFrom<Warp> for OperatorsWarp {
                 downsampling: value.params.downsampling.into(),
                 upsampling: value.params.upsampling.into(),
                 output_data_type: value.params.output_data_type.map(Into::into),
+                derive_out_spec: value.params.derive_out_spec.into(),
             },
             sources: (*value.sources).try_into()?,
         })
@@ -3881,6 +3897,7 @@ mod tests {
                 downsampling: OperatorsWarpDownsampling::Mode,
                 upsampling: OperatorsWarpUpsampling::Bilinear,
                 output_data_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
+                derive_out_spec: OperatorsDeriveOutRasterSpecsSource::ProjectionBounds,
             }
         );
     }
