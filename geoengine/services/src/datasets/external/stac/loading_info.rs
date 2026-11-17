@@ -790,21 +790,15 @@ impl<'a> From<&'a StacTileFile> for StacFileGroup<'a> {
     }
 }
 
-/// Keeps, of each item's band, the coarsest file whose factor is not larger than `level`, or the
-/// finest file if all are coarser. The order of the files is kept.
+/// Keeps, of each item's band, the coarsest file whose factor is not larger than `level`. The
+/// files of a band are never coarser than requested: a band whose files are all coarser has no
+/// file. The order of the files is kept.
 fn select_file_resolution(files: Vec<StacTileFile>, level: NonZeroU32) -> Vec<TileFile> {
     let mut chosen: HashMap<StacFileGroup, NonZeroU32> = HashMap::new();
-    for file in &files {
+    for file in files.iter().filter(|file| file.factor <= level) {
         chosen
             .entry(StacFileGroup::from(file))
-            .and_modify(|best| {
-                *best = match (file.factor <= level, *best <= level) {
-                    (true, true) => (*best).max(file.factor),
-                    (true, false) => file.factor,
-                    (false, true) => *best,
-                    (false, false) => (*best).min(file.factor),
-                };
-            })
+            .and_modify(|best| *best = (*best).max(file.factor))
             .or_insert(file.factor);
     }
     let keep: Vec<bool> = files
@@ -1324,6 +1318,8 @@ mod tests {
             file("a", 0, 6, "a_60m"),
             file("a", 1, 1, "a_band_1"),
             file("b", 0, 1, "b_10m"),
+            // never read coarser than requested, even if there is no finer file
+            file("c", 0, 6, "c_60m"),
         ];
         let paths = |level: u32| {
             select_file_resolution(files.clone(), NonZeroU32::new(level).unwrap())
@@ -1333,7 +1329,8 @@ mod tests {
         };
 
         assert_eq!(paths(1), ["a_10m", "a_band_1", "b_10m"]);
-        assert_eq!(paths(8), ["a_60m", "a_band_1", "b_10m"]);
+        assert_eq!(paths(4), ["a_10m", "a_band_1", "b_10m"]);
+        assert_eq!(paths(8), ["a_60m", "a_band_1", "b_10m", "c_60m"]);
     }
 
     #[test]
