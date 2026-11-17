@@ -9,7 +9,12 @@ use geoengine_datatypes::{
 use num::FromPrimitive;
 use tracing::{debug, trace};
 
-use crate::source::gdal_worker_process::{GdalPoolDispatcher, GdalReaderMode};
+use crate::cache::new_raster_cache::SupportedRasterDataType;
+use crate::source::gdal_read::{BlockIo, MdSlice};
+use crate::source::gdal_worker_process::reader::GdalPoolReader;
+use crate::source::gdal_worker_process::{
+    GdalPoolDispatcher, GdalProcessReadResult, GdalReaderMode,
+};
 use crate::source::md_gdal_source::{
     MdDatasetFile, MdGdalSourceError, MdLoadingInfo, MdPresentation,
 };
@@ -28,17 +33,24 @@ pub struct MdTileRequest {
 /// blitted into the same tile, the way the spatial pieces of one time step are mosaicked.
 /// A tile no file intersects comes back empty, never dropped: the stream must stay gap-free.
 /// Returns `None` only for empty `requests`, which `MdLoadingInfo::z_slices` never produces.
+/// Reads go through `blocks` if given and the cache hint allows it, like the reads of a
+/// `MultiBandGdalSource`.
 ///
 /// # Errors
 /// Returns a `MdGdalSourceError` if a read window cannot be computed or a pool read fails.
-pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
+pub async fn load_md_tile_from_files_async<
+    T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
+>(
     loading_info: &MdLoadingInfo,
     requests: &[MdTileRequest],
     reader_mode: GdalReaderMode,
     tile_information: TileInformation,
     gdal_worker: &GdalPoolDispatcher,
+    blocks: Option<&BlockIo>,
     default_cache_ttl: CacheTtlSeconds,
 ) -> Result<Option<RasterTile2D<T>>, MdGdalSourceError> {
+    let cache_hint = loading_info.cache_hint(default_cache_ttl);
+    let blocks = blocks.filter(|blocks| blocks.caches(cache_hint));
     let Some(first) = requests.first() else {
         return Ok(None);
     };
@@ -53,6 +65,8 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
             reader_mode,
             tile_information,
             gdal_worker,
+            blocks,
+            cache_hint,
             &mut frame,
             &mut properties,
         )
@@ -71,7 +85,7 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
         global_z,
         frame,
         properties,
-        loading_info.cache_hint(default_cache_ttl),
+        cache_hint,
         loading_info.time_steps(),
     )))
 }
@@ -79,12 +93,14 @@ pub async fn load_md_tile_from_files_async<T: Pixel + GdalType + FromPrimitive>(
 /// Blits one file's read windows for one z slice into `frame`. Leaves `frame` untouched if
 /// the file does not intersect the tile.
 #[allow(clippy::too_many_arguments)]
-async fn blit_md_file<T: Pixel + GdalType + FromPrimitive>(
+async fn blit_md_file<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType>(
     loading_info: &MdLoadingInfo,
     request: &MdTileRequest,
     reader_mode: GdalReaderMode,
     tile_information: TileInformation,
     gdal_worker: &GdalPoolDispatcher,
+    blocks: Option<&BlockIo>,
+    cache_hint: CacheHint,
     frame: &mut GridOrEmpty<GridBoundingBox2D, T>,
     properties: &mut RasterProperties,
 ) -> Result<(), MdGdalSourceError> {
@@ -110,28 +126,46 @@ async fn blit_md_file<T: Pixel + GdalType + FromPrimitive>(
         return Ok(());
     }
 
-    let reader =
-        crate::source::gdal_worker_process::reader::GdalPoolReader::from(gdal_worker.clone());
+    let reader = GdalPoolReader::from(gdal_worker.clone());
+    let blocks = blocks.filter(|blocks| blocks.reads(&dataset_params));
+    let slice = MdSlice {
+        group: file.group.clone(),
+        array_name,
+        z_index,
+        axis_mapping: axis_mapping.to_vec(),
+    };
 
     for advise in advises {
-        match reader
-            .read_md_slice_data::<T>(
-                dataset_params.clone(),
-                advise,
-                file.group.as_deref(),
-                &array_name,
-                z_index,
-                axis_mapping,
-            )
-            .await?
-        {
-            crate::source::gdal_worker_process::reader::GdalProcessMdReadResult::Grid(grid_and_properties) => {
+        let from_blocks = match blocks {
+            Some(blocks) => {
+                blocks
+                    .read_md::<T>(&dataset_params, &slice, advise, cache_hint)
+                    .await?
+            }
+            None => None,
+        };
+        let read = match from_blocks {
+            Some(read) => read,
+            None => {
+                reader
+                    .read_md_slice_data::<T>(
+                        dataset_params.clone(),
+                        advise,
+                        slice.group.as_deref(),
+                        &slice.array_name,
+                        slice.z_index,
+                        &slice.axis_mapping,
+                    )
+                    .await?
+            }
+        };
+        match read {
+            GdalProcessReadResult::Grid(grid_and_properties) => {
                 frame.grid_blit_valid_only(&grid_and_properties.grid);
                 *properties = grid_and_properties.properties;
             }
-            crate::source::gdal_worker_process::reader::GdalProcessMdReadResult::FileNotFoundAsNoData => {
-                // leave the frame empty to signal no data
-            }
+            // leave the frame empty to signal no data
+            GdalProcessReadResult::FileNotFoundAsNoData => {}
         }
     }
 
