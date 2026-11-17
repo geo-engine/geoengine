@@ -737,6 +737,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn files_shifted_against_the_tile_grid_read_their_levels_through_blocks() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff_with_overviews(dir.path());
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+        // as MGRS tiles: the file starts 3 px right of and below a pixel edge of the level-4 tile grid
+        let reader_mode = |files_have_level| {
+            GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: file_grid,
+                overview_level: 4,
+                files_have_level,
+            })
+        };
+
+        for tile_y in 0..3 {
+            for tile_x in 0..3 {
+                let plan = TilePlan {
+                    tile: TileInformation::new(
+                        [tile_y, tile_x].into(),
+                        GridShape2D::new([8, 8]),
+                        GeoTransform::new_unchecked((-3., 67.).into(), 4., -4.),
+                    ),
+                    time: TimeInterval::default(),
+                    band: 0,
+                    files: vec![params.clone()],
+                    cache_hint: CacheHint::max_duration(),
+                };
+                if let Some(read_advise) = reader_mode(false)
+                    .tiling_to_dataset_read_advise(&file_grid, &plan.tile.spatial_grid_definition())
+                {
+                    assert!(
+                        level_read_advise(read_advise, NonZeroUsize::new(4).unwrap()).is_some(),
+                        "the read of tile [{tile_y}, {tile_x}] starts on a pixel of level 4"
+                    );
+                }
+                let from_gdal =
+                    assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker, None)
+                        .await
+                        .unwrap();
+                let from_level =
+                    assemble_tile::<u16>(plan.clone(), reader_mode(true), &gdal_worker, None)
+                        .await
+                        .unwrap();
+                let from_blocks =
+                    assemble_tile::<u16>(plan, reader_mode(false), &gdal_worker, Some(&blocks))
+                        .await
+                        .unwrap();
+                assert_eq!(from_level, from_gdal, "tile [{tile_y}, {tile_x}]");
+                assert_eq!(from_blocks, from_gdal, "tile [{tile_y}, {tile_x}]");
+            }
+        }
+        assert!(cache.byte_size() > 0, "the reads went through the blocks");
+    }
+
+    #[tokio::test]
     async fn block_reads_equal_window_reads() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
