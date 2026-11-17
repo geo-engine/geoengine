@@ -48,8 +48,10 @@ import {
  * 
  * ## Errors
  * 
- * The operator returns an error if the input has no spatial reference or if the input data
- * cannot be reprojected to the target spatial reference.
+ * The operator returns an error if the input has no spatial reference, if the input data
+ * cannot be reprojected to the target spatial reference, or if `mode` is used with a float
+ * input or could need more memory than the limit
+ * `[query_context] warp_mode_max_memory_per_tile_mb`.
  * @export
  * @interface Warp
  */

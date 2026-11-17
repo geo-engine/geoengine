@@ -109,3 +109,8 @@ PR titles follow conventional commits, `type(scope): description`, with scopes `
 Changelog is generated with git-cliff.
 Keep unrelated changes in separate PRs.
 The PR description says how to test the change, the expected behavior, and any configuration changes.
+
+### Addressing review comments
+
+After the first review, merge `main` instead of rebasing or force-pushing, so commit links in replies stay valid (PRs are squashed anyway).
+Make one commit per comment that needs a code change (closely related ones may share one), and reply with the commit and a short note.

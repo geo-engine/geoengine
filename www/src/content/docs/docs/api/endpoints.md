@@ -81,17 +81,20 @@ The request and response bodies are described in the OpenAPI specification and t
 
 ## OGC API
 
-| Method | Path                                                                                                                  | Session | Description                         |
-| ------ | --------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------- |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/`                                                                                   | yes     | OGC API Landing Page                |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections`                                                                        | yes     | OGC API Collections List            |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}`                                                              | yes     | OGC API Collection Metadata         |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles`                                                    | yes     | OGC API Collection Tilesets List    |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}`                                  | yes     | OGC API Collection Tileset Metadata |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}` | yes     | OGC API Tile                        |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/conformance`                                                                        | yes     | OGC API Conformance Classes         |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets`                                                                     | yes     | OGC API Tile Matrix Set List        |
-| `GET`  | `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}`                                                   | yes     | OGC API Tile Matrix Set Definition  |
+| Method | Path                                                                                                                       | Session | Description                                  |
+| ------ | -------------------------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------- |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/`                                                                                        | yes     | OGC API Landing Page                         |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections`                                                                             | yes     | OGC API Collections List                     |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}`                                                                   | yes     | OGC API Collection Metadata                  |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles`                                                    | yes     | OGC API Collection Coverage Tilesets List    |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}`                                  | yes     | OGC API Collection Coverage Tileset Metadata |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/coverage/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}` | yes     | OGC API Coverage Tile                        |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles`                                                         | yes     | OGC API Collection Tilesets List             |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}`                                       | yes     | OGC API Collection Tileset Metadata          |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`      | yes     | OGC API Tile                                 |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/conformance`                                                                             | yes     | OGC API Conformance Classes                  |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets`                                                                          | yes     | OGC API Tile Matrix Set List                 |
+| `GET`  | `/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}`                                                        | yes     | OGC API Tile Matrix Set Definition           |
 
 ## OGC WCS
 

@@ -31,6 +31,9 @@ pub struct WarpParameters {
     /// The data type of the output. Defaults to the data type of the input. Integer types round half up and clip values to their range.
     #[serde(rename = "outputDataType", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub output_data_type: Option<Option<models::RasterDataType>>,
+    /// How the output grid is derived when reprojecting, as in `Reprojection`: `projectionBounds` (default) derives it from the area of use of the input's spatial reference, `dataBounds` from the data bounds.
+    #[serde(rename = "deriveOutSpec", skip_serializing_if = "Option::is_none")]
+    pub derive_out_spec: Option<models::DeriveOutRasterSpecsSource>,
 }
 
 impl WarpParameters {
@@ -43,6 +46,7 @@ impl WarpParameters {
             downsampling: None,
             upsampling: None,
             output_data_type: None,
+            derive_out_spec: None,
         }
     }
 }

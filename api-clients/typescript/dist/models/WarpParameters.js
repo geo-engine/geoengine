@@ -21,6 +21,7 @@ const SpatialResolution_1 = require("./SpatialResolution");
 const Coordinate2D_1 = require("./Coordinate2D");
 const WarpDownsamplingMethod_1 = require("./WarpDownsamplingMethod");
 const WarpUpsamplingMethod_1 = require("./WarpUpsamplingMethod");
+const DeriveOutRasterSpecsSource_1 = require("./DeriveOutRasterSpecsSource");
 const RasterDataType_1 = require("./RasterDataType");
 /**
  * Check if a given object implements the WarpParameters interface.
@@ -42,6 +43,7 @@ function WarpParametersFromJSONTyped(json, ignoreDiscriminator) {
         'downsampling': json['downsampling'] == null ? undefined : (0, WarpDownsamplingMethod_1.WarpDownsamplingMethodFromJSON)(json['downsampling']),
         'upsampling': json['upsampling'] == null ? undefined : (0, WarpUpsamplingMethod_1.WarpUpsamplingMethodFromJSON)(json['upsampling']),
         'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : (0, RasterDataType_1.RasterDataTypeFromJSON)(json['outputDataType']),
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceFromJSON)(json['deriveOutSpec']),
     };
 }
 function WarpParametersToJSON(json) {
@@ -58,5 +60,6 @@ function WarpParametersToJSONTyped(value, ignoreDiscriminator = false) {
         'downsampling': (0, WarpDownsamplingMethod_1.WarpDownsamplingMethodToJSON)(value['downsampling']),
         'upsampling': (0, WarpUpsamplingMethod_1.WarpUpsamplingMethodToJSON)(value['upsampling']),
         'outputDataType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['outputDataType']),
+        'deriveOutSpec': (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceToJSON)(value['deriveOutSpec']),
     };
 }

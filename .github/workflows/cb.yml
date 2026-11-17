@@ -15,6 +15,14 @@ env:
   BENCH_UPLOAD_NAME: benchmark-results
   BENCH_FILE_PATH: ./benchmark-data.json
   CARGO_BENCH_FILE_PATH: output.txt
+  # retry transient network failures when downloading dependencies
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  PIP_RETRIES: 10
+  UV_HTTP_RETRIES: 10
+  npm_config_fetch_retries: 5
+  npm_config_fetch_retry_mintimeout: 20000
+  npm_config_fetch_retry_maxtimeout: 120000
 
 jobs:
   benchmarks:
@@ -37,15 +45,15 @@ jobs:
 
       - name: Install GitHub CLI # cf. <https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian>
         run: |
-          (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
+          (type -p wget >/dev/null || (sudo apt-get -o Acquire::Retries=5 update && sudo apt-get -o Acquire::Retries=5 install wget -y)) \
           && sudo mkdir -p -m 755 /etc/apt/keyrings \
           && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
           && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
           && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
           && sudo mkdir -p -m 755 /etc/apt/sources.list.d \
           && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-          && sudo apt update \
-          && sudo apt install gh -y
+          && sudo apt-get -o Acquire::Retries=5 update \
+          && sudo apt-get -o Acquire::Retries=5 install gh -y
 
       - name: Download previous benchmark data
         # same directory as the benchmark actions, which ignore `defaults.run`
@@ -76,6 +84,9 @@ jobs:
             exit 1
           fi
           echo "Comparing against benchmark data at ${{ env.BENCH_FILE_PATH }}."
+
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
 
       - name: Run benchmark
         # `bash` runs with `pipefail`, so a failing bench fails the step despite the `tee`
