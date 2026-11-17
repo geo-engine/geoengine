@@ -30,8 +30,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalRetryOptions, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile,
+    GdalRetryOptions, LoadingInfoResolution, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
@@ -263,10 +263,14 @@ impl
             .iter()
             .any(|band| !band.coarser_assets.is_empty())
         {
-            tile_files = select_file_resolution(
-                tile_files,
-                query.resolution.unwrap_or(self.dataset.resolution),
-            );
+            let resolution = match query.resolution {
+                LoadingInfoResolution::Native => self.dataset.resolution,
+                LoadingInfoResolution::OverviewLevel(level) => SpatialResolution::new_unchecked(
+                    self.dataset.resolution.x().get() * f64::from(level.get()),
+                    self.dataset.resolution.y().get() * f64::from(level.get()),
+                ),
+            };
+            tile_files = select_file_resolution(tile_files, resolution);
         }
 
         Ok(MultiBandGdalLoadingInfo::new(
@@ -1018,6 +1022,7 @@ mod tests {
         matchers::{contains, request, url_decoded},
         responders,
     };
+    use std::num::NonZeroU32;
     use std::time::Duration;
     use tokio_postgres::NoTls;
 
@@ -1512,15 +1517,13 @@ mod tests {
         )
         .unwrap();
 
-        // `None` is the native resolution; the second 10 m query is finer than every asset
-        for (resolution, expected) in [
+        // `None` is the native resolution, otherwise the overview level
+        for (level, expected) in [
             (None, 10.),
-            (Some(10.), 10.),
-            (Some(5.), 10.),
-            (Some(20.), 20.),
-            (Some(40.), 20.),
-            (Some(80.), 60.),
-            (Some(640.), 60.),
+            (Some(2), 20.),
+            (Some(4), 20.),
+            (Some(8), 60.),
+            (Some(64), 60.),
         ] {
             let mut query = MultiBandGdalLoadingInfoQueryRectangle::new(
                 bounds,
@@ -1528,9 +1531,10 @@ mod tests {
                 BandSelection::first(),
                 true,
             );
-            if let Some(resolution) = resolution {
-                query =
-                    query.with_resolution(SpatialResolution::new_unchecked(resolution, resolution));
+            if let Some(level) = level {
+                query = query.with_resolution(LoadingInfoResolution::OverviewLevel(
+                    NonZeroU32::new(level).unwrap(),
+                ));
             }
             let info = meta.loading_info(query).await.unwrap();
             let tile = TileInformation::new(
@@ -1539,16 +1543,16 @@ mod tests {
                 GeoTransform::new_unchecked(bounds.upper_left(), 60., -60.),
             );
             let files = info.tile_files(time, tile, 0);
-            assert_eq!(files.len(), 1, "resolution {resolution:?}");
+            assert_eq!(files.len(), 1, "level {level:?}");
             assert_eq!(
                 files[0].geo_transform.x_pixel_size.get(),
                 expected,
-                "resolution {resolution:?}"
+                "level {level:?}"
             );
             assert_eq!(
                 files[0].file_path,
                 std::path::PathBuf::from(format!("s3://example/B04_{expected}m.jp2")),
-                "resolution {resolution:?}"
+                "level {level:?}"
             );
         }
     }

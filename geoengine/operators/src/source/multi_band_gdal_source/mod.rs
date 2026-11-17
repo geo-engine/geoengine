@@ -36,6 +36,7 @@ use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 use std::time::Instant;
 use tracing::{debug, trace};
 
@@ -96,13 +97,22 @@ type MultiBandGdalMetaData = Box<
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
     pub fetch_tiles: bool,
-    /// The pixel size of the grid the source produces its tiles in. It is coarser than the
-    /// native resolution if the source reads an overview level. `None` means the native
-    /// resolution.
+    /// The resolution the source produces its tiles in: the native resolution or an
+    /// overview level.
     ///
-    /// Metadata may return files that are coarser than the native resolution, but not coarser
-    /// than this resolution, to read less data for overview levels.
-    pub resolution: Option<SpatialResolution>,
+    /// For an overview level, metadata may return files that are coarser than the native
+    /// resolution, but not coarser than the level, to read less data.
+    pub resolution: LoadingInfoResolution,
+}
+
+/// The resolution a source produces its tiles in, relative to the native resolution of the data.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LoadingInfoResolution {
+    /// The native resolution of the data.
+    #[default]
+    Native,
+    /// An overview level: its pixels are this many times larger than the native pixels.
+    OverviewLevel(NonZeroU32),
 }
 
 impl MultiBandGdalLoadingInfoQueryRectangle {
@@ -115,7 +125,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle: QueryRectangle::new(spatial_bounds, time_interval, attributes),
             fetch_tiles,
-            resolution: None,
+            resolution: LoadingInfoResolution::Native,
         }
     }
 
@@ -126,14 +136,14 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle,
             fetch_tiles,
-            resolution: None,
+            resolution: LoadingInfoResolution::Native,
         }
     }
 
-    /// Sets the pixel size of the grid the source produces its tiles in.
+    /// Sets the resolution the source produces its tiles in.
     #[must_use]
-    pub fn with_resolution(mut self, resolution: SpatialResolution) -> Self {
-        self.resolution = Some(resolution);
+    pub fn with_resolution(mut self, resolution: LoadingInfoResolution) -> Self {
+        self.resolution = resolution;
         self
     }
 }
@@ -141,6 +151,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
 fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
+    resolution: LoadingInfoResolution,
     fetch_tiles: bool,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
     let tiling_geo_transform = tiling_spatial_grid.tiling_geo_transform();
@@ -150,7 +161,7 @@ fn raster_query_rectangle_to_loading_info_query_rectangle(
         raster_query_rectangle.attributes().clone(),
         fetch_tiles,
     )
-    .with_resolution(tiling_geo_transform.spatial_resolution())
+    .with_resolution(resolution)
 }
 
 pub struct GdalSourceProcessor<T>
@@ -169,7 +180,21 @@ where
     pub _phantom_data: PhantomData<T>,
 }
 
-impl<T> GdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
+impl<T> GdalSourceProcessor<T>
+where
+    T: gdal::raster::GdalType + Pixel,
+{
+    /// The resolution this processor produces its tiles in, for the metadata.
+    fn loading_info_resolution(&self) -> LoadingInfoResolution {
+        self.original_resolution_spatial_grid
+            .and_then(|_| NonZeroU32::new(self.overview_level))
+            .filter(|level| level.get() > 1)
+            .map_or(
+                LoadingInfoResolution::Native,
+                LoadingInfoResolution::OverviewLevel,
+            )
+    }
+}
 
 #[async_trait]
 impl<P> QueryProcessor for GdalSourceProcessor<P>
@@ -239,6 +264,7 @@ where
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
                 &query,
                 produced_tiling_grid,
+                self.loading_info_resolution(),
                 true,
             ))
             .await?;
@@ -318,6 +344,7 @@ where
         let qrect = raster_query_rectangle_to_loading_info_query_rectangle(
             &query,
             produced_tiling_grid,
+            LoadingInfoResolution::Native,
             false,
         );
 
