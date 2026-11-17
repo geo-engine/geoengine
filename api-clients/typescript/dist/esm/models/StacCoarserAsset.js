@@ -10,13 +10,12 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { SpatialResolutionFromJSON, SpatialResolutionToJSON, } from './SpatialResolution';
 import { StacAssetBandFromJSON, StacAssetBandToJSON, } from './StacAssetBand';
 /**
  * Check if a given object implements the StacCoarserAsset interface.
  */
 export function instanceOfStacCoarserAsset(value) {
-    if (!('resolution' in value) || value['resolution'] === undefined)
+    if (!('factor' in value) || value['factor'] === undefined)
         return false;
     if (!('assetBand' in value) || value['assetBand'] === undefined)
         return false;
@@ -30,7 +29,7 @@ export function StacCoarserAssetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'resolution': SpatialResolutionFromJSON(json['resolution']),
+        'factor': json['factor'],
         'assetBand': StacAssetBandFromJSON(json['assetBand']),
     };
 }
@@ -42,7 +41,7 @@ export function StacCoarserAssetToJSONTyped(value, ignoreDiscriminator = false) 
         return value;
     }
     return {
-        'resolution': SpatialResolutionToJSON(value['resolution']),
+        'factor': value['factor'],
         'assetBand': StacAssetBandToJSON(value['assetBand']),
     };
 }

@@ -8,7 +8,6 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { SpatialResolution } from './SpatialResolution';
 import type { StacAssetBand } from './StacAssetBand';
 /**
  * A coarser asset that holds the same band as a dataset band, e.g. the 60 m
@@ -18,9 +17,11 @@ import type { StacAssetBand } from './StacAssetBand';
  */
 export interface StacCoarserAsset {
     /**
-     * The pixel size of the asset files.
+     * How many times coarser than the dataset's resolution the asset's pixels
+     * are, in both axes, e.g. 6 for 60 m files of a 10 m dataset. At least 2,
+     * and increasing within a band.
      */
-    resolution: SpatialResolution;
+    factor: number;
     /**
      * The band inside the coarser asset.
      */

@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 /// StacCoarserAsset : A coarser asset that holds the same band as a dataset band, e.g. the 60 m file of a band whose dataset has a resolution of 10 m.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StacCoarserAsset {
-    /// The pixel size of the asset files.
-    #[serde(rename = "resolution")]
-    pub resolution: Box<models::SpatialResolution>,
+    /// How many times coarser than the dataset's resolution the asset's pixels are, in both axes, e.g. 6 for 60 m files of a 10 m dataset. At least 2, and increasing within a band.
+    #[serde(rename = "factor")]
+    pub factor: i32,
     /// The band inside the coarser asset.
     #[serde(rename = "assetBand")]
     pub asset_band: Box<models::StacAssetBand>,
@@ -23,9 +23,9 @@ pub struct StacCoarserAsset {
 
 impl StacCoarserAsset {
     /// A coarser asset that holds the same band as a dataset band, e.g. the 60 m file of a band whose dataset has a resolution of 10 m.
-    pub fn new(resolution: models::SpatialResolution, asset_band: models::StacAssetBand) -> StacCoarserAsset {
+    pub fn new(factor: i32, asset_band: models::StacAssetBand) -> StacCoarserAsset {
         StacCoarserAsset {
-            resolution: Box::new(resolution),
+            factor,
             asset_band: Box::new(asset_band),
         }
     }

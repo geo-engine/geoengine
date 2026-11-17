@@ -32,7 +32,7 @@ class StacProviderDatasetBand(BaseModel):
     """ # noqa: E501
     asset_band: StacAssetBand = Field(description="The band inside the STAC asset that this dataset band reads from (addressing: which asset file + which raster channel within it).", alias="assetBand")
     band_descriptor: RasterBandDescriptor = Field(description="The band descriptor of the resulting geo engine dataset layer.", alias="bandDescriptor")
-    coarser_assets: Optional[List[StacCoarserAsset]] = Field(default=None, description="Coarser assets with the same band, finest first.  When the source reads an overview level, it reads the coarsest of these assets that is not coarser than the overview level, so it transfers less data. Their resolution must be an integer multiple of the dataset's resolution.", alias="coarserAssets")
+    coarser_assets: Optional[List[StacCoarserAsset]] = Field(default=None, description="Coarser assets with the same band, finest first.  When the source reads an overview level, it reads the coarsest of these assets whose factor is not larger than the overview level, so it transfers less data.", alias="coarserAssets")
     __properties: ClassVar[List[str]] = ["assetBand", "bandDescriptor", "coarserAssets"]
 
     model_config = ConfigDict(

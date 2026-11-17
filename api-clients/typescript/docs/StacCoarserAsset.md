@@ -7,7 +7,7 @@ A coarser asset that holds the same band as a dataset band, e.g. the 60 m file o
 
 Name | Type
 ------------ | -------------
-`resolution` | [SpatialResolution](SpatialResolution.md)
+`factor` | number
 `assetBand` | [StacAssetBand](StacAssetBand.md)
 
 ## Example
@@ -17,7 +17,7 @@ import type { StacCoarserAsset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "resolution": null,
+  "factor": null,
   "assetBand": null,
 } satisfies StacCoarserAsset
 

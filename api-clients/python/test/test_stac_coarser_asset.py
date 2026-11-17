@@ -35,18 +35,14 @@ class TestStacCoarserAsset(unittest.TestCase):
         model = StacCoarserAsset()
         if include_optional:
             return StacCoarserAsset(
-                resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
-                    x = 1.337, 
-                    y = 1.337, ),
+                factor = 2,
                 asset_band = geoengine_api_client.models.stac_asset_band.StacAssetBand(
                     asset_title = '', 
                     band_name = '', )
             )
         else:
             return StacCoarserAsset(
-                resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
-                    x = 1.337, 
-                    y = 1.337, ),
+                factor = 2,
                 asset_band = geoengine_api_client.models.stac_asset_band.StacAssetBand(
                     asset_title = '', 
                     band_name = '', ),

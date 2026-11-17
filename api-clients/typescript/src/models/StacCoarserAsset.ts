@@ -12,13 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { SpatialResolution } from './SpatialResolution';
-import {
-    SpatialResolutionFromJSON,
-    SpatialResolutionFromJSONTyped,
-    SpatialResolutionToJSON,
-    SpatialResolutionToJSONTyped,
-} from './SpatialResolution';
 import type { StacAssetBand } from './StacAssetBand';
 import {
     StacAssetBandFromJSON,
@@ -35,9 +28,11 @@ import {
  */
 export interface StacCoarserAsset {
     /**
-     * The pixel size of the asset files.
+     * How many times coarser than the dataset's resolution the asset's pixels
+     * are, in both axes, e.g. 6 for 60 m files of a 10 m dataset. At least 2,
+     * and increasing within a band.
      */
-    resolution: SpatialResolution;
+    factor: number;
     /**
      * The band inside the coarser asset.
      */
@@ -48,7 +43,7 @@ export interface StacCoarserAsset {
  * Check if a given object implements the StacCoarserAsset interface.
  */
 export function instanceOfStacCoarserAsset(value: object): value is StacCoarserAsset {
-    if (!('resolution' in value) || value['resolution'] === undefined) return false;
+    if (!('factor' in value) || value['factor'] === undefined) return false;
     if (!('assetBand' in value) || value['assetBand'] === undefined) return false;
     return true;
 }
@@ -63,7 +58,7 @@ export function StacCoarserAssetFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'resolution': SpatialResolutionFromJSON(json['resolution']),
+        'factor': json['factor'],
         'assetBand': StacAssetBandFromJSON(json['assetBand']),
     };
 }
@@ -79,7 +74,7 @@ export function StacCoarserAssetToJSONTyped(value?: StacCoarserAsset | null, ign
 
     return {
         
-        'resolution': SpatialResolutionToJSON(value['resolution']),
+        'factor': value['factor'],
         'assetBand': StacAssetBandToJSON(value['assetBand']),
     };
 }

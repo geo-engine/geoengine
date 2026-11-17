@@ -19,7 +19,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, ClassVar, Dict, List
-from geoengine_api_client.models.spatial_resolution import SpatialResolution
+from typing_extensions import Annotated
 from geoengine_api_client.models.stac_asset_band import StacAssetBand
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,9 +29,9 @@ class StacCoarserAsset(BaseModel):
     """
     A coarser asset that holds the same band as a dataset band, e.g. the 60 m file of a band whose dataset has a resolution of 10 m.
     """ # noqa: E501
-    resolution: SpatialResolution = Field(description="The pixel size of the asset files.")
+    factor: Annotated[int, Field(strict=True, ge=2)] = Field(description="How many times coarser than the dataset's resolution the asset's pixels are, in both axes, e.g. 6 for 60 m files of a 10 m dataset. At least 2, and increasing within a band.")
     asset_band: StacAssetBand = Field(description="The band inside the coarser asset.", alias="assetBand")
-    __properties: ClassVar[List[str]] = ["resolution", "assetBand"]
+    __properties: ClassVar[List[str]] = ["factor", "assetBand"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -72,9 +72,6 @@ class StacCoarserAsset(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of resolution
-        if self.resolution:
-            _dict['resolution'] = self.resolution.to_dict()
         # override the default output from pydantic by calling `to_dict()` of asset_band
         if self.asset_band:
             _dict['assetBand'] = self.asset_band.to_dict()
@@ -90,7 +87,7 @@ class StacCoarserAsset(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "resolution": SpatialResolution.from_dict(obj["resolution"]) if obj.get("resolution") is not None else None,
+            "factor": obj.get("factor"),
             "assetBand": StacAssetBand.from_dict(obj["assetBand"]) if obj.get("assetBand") is not None else None
         })
         return _obj

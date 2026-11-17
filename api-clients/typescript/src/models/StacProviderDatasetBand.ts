@@ -53,9 +53,8 @@ export interface StacProviderDatasetBand {
      * Coarser assets with the same band, finest first.
      * 
      * When the source reads an overview level, it reads the coarsest of these
-     * assets that is not coarser than the overview level, so it transfers less
-     * data. Their resolution must be an integer multiple of the dataset's
-     * resolution.
+     * assets whose factor is not larger than the overview level, so it
+     * transfers less data.
      */
     coarserAssets?: Array<StacCoarserAsset>;
 }

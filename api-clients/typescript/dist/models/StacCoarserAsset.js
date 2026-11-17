@@ -17,13 +17,12 @@ exports.StacCoarserAssetFromJSON = StacCoarserAssetFromJSON;
 exports.StacCoarserAssetFromJSONTyped = StacCoarserAssetFromJSONTyped;
 exports.StacCoarserAssetToJSON = StacCoarserAssetToJSON;
 exports.StacCoarserAssetToJSONTyped = StacCoarserAssetToJSONTyped;
-const SpatialResolution_1 = require("./SpatialResolution");
 const StacAssetBand_1 = require("./StacAssetBand");
 /**
  * Check if a given object implements the StacCoarserAsset interface.
  */
 function instanceOfStacCoarserAsset(value) {
-    if (!('resolution' in value) || value['resolution'] === undefined)
+    if (!('factor' in value) || value['factor'] === undefined)
         return false;
     if (!('assetBand' in value) || value['assetBand'] === undefined)
         return false;
@@ -37,7 +36,7 @@ function StacCoarserAssetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'resolution': (0, SpatialResolution_1.SpatialResolutionFromJSON)(json['resolution']),
+        'factor': json['factor'],
         'assetBand': (0, StacAssetBand_1.StacAssetBandFromJSON)(json['assetBand']),
     };
 }
@@ -49,7 +48,7 @@ function StacCoarserAssetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'resolution': (0, SpatialResolution_1.SpatialResolutionToJSON)(value['resolution']),
+        'factor': value['factor'],
         'assetBand': (0, StacAssetBand_1.StacAssetBandToJSON)(value['assetBand']),
     };
 }
