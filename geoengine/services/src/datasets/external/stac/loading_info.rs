@@ -1,6 +1,7 @@
 use super::common;
 use super::{
-    StacClient, StacDataProvider, StacProviderDataset, StacProviderS3Config,
+    StacClient, StacDataProvider, StacItemTime, StacProviderDataset, StacProviderS3Config,
+    asset_probe,
     cache::StacQueryCache,
     grid::{ProjectedStacGrid, StacGrid, StacGridCells},
 };
@@ -59,6 +60,9 @@ pub struct StacMultiBandMetaData {
     query_cache: Arc<StacQueryCache>,
     /// Upper bound of STAC cell searches one loading info request runs in parallel.
     max_concurrent_cell_searches: usize,
+    /// Upper bound of asset file headers one STAC search reads in parallel.
+    max_concurrent_asset_probes: usize,
+    item_time: StacItemTime,
     grid: StacGrid,
 }
 
@@ -381,6 +385,8 @@ impl StacMultiBandMetaData {
             cache_ttl_secs: provider.cache_ttl_secs,
             query_cache: provider.query_cache.clone(),
             max_concurrent_cell_searches: provider.max_concurrent_cell_searches,
+            max_concurrent_asset_probes: provider.max_concurrent_asset_probes,
+            item_time: provider.item_time,
             grid: provider.grid,
         }
     }
@@ -432,6 +438,7 @@ impl StacMultiBandMetaData {
         time_interval: TimeInterval,
     ) -> geoengine_operators::util::Result<Vec<StacTileFile>> {
         let mut files = Vec::new();
+        let mut unprobed_assets = Vec::new();
         let mut state = StacQueryState::FirstPage {
             query_url: items_url,
             query_params: self.create_stac_query_params(bbox, time_interval)?,
@@ -440,7 +447,13 @@ impl StacMultiBandMetaData {
         while !matches!(state, StacQueryState::Finished) {
             let (collection, next_state) = query_stac_item_collection(&self.client, &state).await?;
             for item in collection.items {
-                self.process_stac_item(&item, &mut files).map_err(|error| {
+                self.collect_stac_item(
+                    &item,
+                    Some(time_interval),
+                    &mut files,
+                    &mut unprobed_assets,
+                )
+                .map_err(|error| {
                     geoengine_operators::error::Error::LoadingInfo {
                         source: Box::new(error),
                     }
@@ -448,6 +461,17 @@ impl StacMultiBandMetaData {
             }
             state = next_state;
         }
+
+        let probed_assets = unprobed_assets.len();
+        self.add_probed_assets(unprobed_assets, &mut files).await?;
+        debug!(
+            dataset = %self.dataset.name,
+            %bbox,
+            ?time_interval,
+            probed_assets,
+            tile_files = files.len(),
+            "STAC search finished"
+        );
 
         Ok(files)
     }
@@ -494,20 +518,40 @@ impl StacMultiBandMetaData {
     }
 
     /// Append matching assets from a STAC item to the dataset's tile file list.
+    ///
+    /// Assets whose grid metadata must be read from their file header, such as `NetCDF` assets
+    /// without `proj:transform`, are skipped; [`Self::search_bbox`] probes them.
     pub fn process_stac_item(&self, item: &Item, files: &mut Vec<StacTileFile>) -> Result<()> {
-        let Some((time, z_index)) = self.item_time_and_z_index(item)? else {
+        self.collect_stac_item(item, None, files, &mut Vec::new())
+    }
+
+    /// Append the tiles of an item for the layer time step `step`, which the item time range
+    /// is compared with for [`StacItemTime::Range`]. Assets that need a header probe are
+    /// collected in `unprobed_assets`.
+    fn collect_stac_item(
+        &self,
+        item: &Item,
+        step: Option<TimeInterval>,
+        files: &mut Vec<StacTileFile>,
+        unprobed_assets: &mut Vec<UnprobedAsset>,
+    ) -> Result<()> {
+        let Some((time, z_index)) = self.item_time_and_z_index(item, step)? else {
             return Ok(());
         };
 
-        let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
-
+        let item_context = StacItemContext {
+            item,
+            id: item.id.as_str().into(),
+            epsg: common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2),
+            time,
+            z_index,
+        };
         let mut item_files = Vec::new();
         for asset in item.assets.values() {
-            self.process_stac_asset(item, asset, item_epsg, time, z_index, &mut item_files)?;
+            self.process_stac_asset(&item_context, asset, &mut item_files, unprobed_assets)?;
         }
-        let item_id: Arc<str> = item.id.as_str().into();
         files.extend(item_files.into_iter().map(|(factor, file)| StacTileFile {
-            item_id: item_id.clone(),
+            item_id: item_context.id.clone(),
             factor,
             file,
         }));
@@ -515,7 +559,11 @@ impl StacMultiBandMetaData {
         Ok(())
     }
 
-    fn item_time_and_z_index(&self, item: &Item) -> Result<Option<(TimeInterval, i64)>> {
+    fn item_time_and_z_index(
+        &self,
+        item: &Item,
+        step: Option<TimeInterval>,
+    ) -> Result<Option<(TimeInterval, i64)>> {
         if item.version != stac::Version::v1_1_0 {
             tracing::warn!(
                 "Skipping STAC item with unsupported version: {:?}",
@@ -524,7 +572,21 @@ impl StacMultiBandMetaData {
             return Ok(None);
         }
 
-        let Some(item_datetime) = item.properties.datetime else {
+        let item_range = match (
+            self.item_time,
+            step,
+            item.properties.start_datetime,
+            item.properties.end_datetime,
+        ) {
+            (StacItemTime::Range, Some(step), Some(start), Some(end)) => Some((step, start, end)),
+            _ => None,
+        };
+
+        let Some(item_datetime) = item
+            .properties
+            .datetime
+            .or(item_range.map(|(_, start, _)| start))
+        else {
             tracing::warn!("Skipping STAC item without datetime: {}", item.id);
             return Ok(None);
         };
@@ -538,6 +600,20 @@ impl StacMultiBandMetaData {
                 || item_datetime.timestamp_millis(),
                 |updated| updated.timestamp_millis(),
             );
+
+        if let Some((step, start, end)) = item_range {
+            // `end_datetime` is inclusive, the item belongs to every step its range overlaps
+            let range = TimeInterval::new(
+                TimeInstance::from_millis_unchecked(start.timestamp_millis()),
+                TimeInstance::from_millis_unchecked(end.timestamp_millis().saturating_add(1)),
+            )
+            .map_err(|e| {
+                geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!("STAC item {} has an invalid time range: {e}", item.id),
+                }
+            })?;
+            return Ok(range.intersects(&step).then_some((step, z_index)));
+        }
 
         let item_time =
             TimeInstance::from_millis(item_datetime.timestamp_millis()).map_err(|e| {
@@ -589,32 +665,57 @@ impl StacMultiBandMetaData {
 
     fn process_stac_asset(
         &self,
-        item: &Item,
+        item: &StacItemContext<'_>,
         asset: &stac::Asset,
-        item_epsg: Option<u32>,
-        time: TimeInterval,
-        z_index: i64,
         files: &mut Vec<(NonZeroU32, TileFile)>,
+        unprobed_assets: &mut Vec<UnprobedAsset>,
     ) -> Result<()> {
-        if common::data_type_from_asset_v1_1_0_fallback(asset) != Some(self.dataset.data_type) {
+        let data_type = common::data_type_from_asset_v1_1_0_fallback(asset);
+        let asset_epsg = common::epsg_code_from_asset_or_item(
+            asset,
+            item.epsg,
+            common::StacExtensionMajorVersion::V2,
+        );
+        let geo_transform = common::geo_transform_from_asset_or_item(asset, item.item);
+        let shape = common::proj_shape_from_asset_or_item(asset, item.item);
+
+        if common::is_netcdf_media_type(asset.r#type.as_deref())
+            && (data_type.is_none()
+                || asset_epsg.is_none()
+                || geo_transform.is_none()
+                || shape.is_none())
+        {
+            // complete the missing metadata from the file header, unless the known metadata
+            // already excludes the asset from this dataset
+            if data_type.is_none_or(|data_type| data_type == self.dataset.data_type)
+                && asset_epsg.is_none_or(|epsg| self.is_dataset_projection(epsg))
+                && self.is_dataset_asset(asset)
+            {
+                unprobed_assets.push(UnprobedAsset {
+                    file_path: asset_file_path(&asset.href)?,
+                    item_id: item.id.clone(),
+                    asset: asset.clone(),
+                    asset_epsg,
+                    time: item.time,
+                    z_index: item.z_index,
+                });
+            }
             return Ok(());
         }
 
-        let Some(asset_epsg) = common::epsg_code_from_asset_or_item(
-            asset,
-            item_epsg,
-            common::StacExtensionMajorVersion::V2,
-        ) else {
+        if data_type != Some(self.dataset.data_type) {
+            return Ok(());
+        }
+
+        let Some(asset_epsg) = asset_epsg else {
             return Ok(());
         };
 
-        if SpatialReference::new(SpatialReferenceAuthority::Epsg, asset_epsg)
-            != self.dataset.projection
-        {
+        if !self.is_dataset_projection(asset_epsg) {
             return Ok(());
         }
 
-        let Some(geo_transform) = common::geo_transform_from_asset_or_item(asset, item) else {
+        let Some(geo_transform) = geo_transform else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing geo transform",
                 asset.href
@@ -622,13 +723,144 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let Some((height, width)) = common::proj_shape_from_asset_or_item(asset, item) else {
+        let Some((height, width)) = shape else {
             tracing::warn!(
                 "Skipping asset with href {} due to missing projection shape",
                 asset.href
             );
             return Ok(());
         };
+
+        self.push_asset_tiles(
+            asset,
+            AssetGrid {
+                geo_transform,
+                width,
+                height,
+                no_data_value: None,
+            },
+            item.time,
+            item.z_index,
+            files,
+        )
+    }
+
+    fn is_dataset_projection(&self, epsg: u32) -> bool {
+        SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg) == self.dataset.projection
+    }
+
+    /// Whether a band of the dataset reads the asset, natively or as a coarser asset, so assets
+    /// that no band uses are not probed.
+    fn is_dataset_asset(&self, asset: &stac::Asset) -> bool {
+        asset.title.as_deref().is_some_and(|title| {
+            self.dataset.bands.iter().any(|band| {
+                band.asset_band.asset_title == title
+                    || band
+                        .coarser_assets
+                        .iter()
+                        .any(|coarser| coarser.asset_band.asset_title == title)
+            })
+        })
+    }
+
+    /// Read the headers of the assets that lack grid metadata and append their tiles.
+    ///
+    /// Each file is read once, however many items, steps or bands refer to it. A file that
+    /// cannot be read fails the search, so an incomplete result never enters the query cache.
+    async fn add_probed_assets(
+        &self,
+        unprobed_assets: Vec<UnprobedAsset>,
+        files: &mut Vec<StacTileFile>,
+    ) -> geoengine_operators::util::Result<()> {
+        if unprobed_assets.is_empty() {
+            return Ok(());
+        }
+
+        let file_paths = unprobed_assets
+            .iter()
+            .map(|asset| asset.file_path.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let probes = futures::stream::iter(file_paths)
+            .map(|file_path| {
+                let s3_config = self.s3_config.clone();
+                async move {
+                    let probe = asset_probe::probe_asset(file_path.clone(), s3_config).await;
+                    (file_path, probe)
+                }
+            })
+            .buffer_unordered(self.max_concurrent_asset_probes)
+            .collect::<std::collections::HashMap<_, _>>()
+            .await;
+
+        for unprobed in unprobed_assets {
+            let probe = match probes.get(&unprobed.file_path) {
+                Some(Ok(probe)) => probe,
+                Some(Err(error)) => {
+                    return Err(geoengine_operators::error::Error::LoadingInfo {
+                        source: error.to_string().into(),
+                    });
+                }
+                None => continue,
+            };
+
+            if probe.data_type != self.dataset.data_type {
+                continue;
+            }
+
+            let Some(epsg) = unprobed.asset_epsg.or(probe.epsg) else {
+                tracing::warn!(
+                    "Skipping asset with href {} because its file declares no identifiable CRS",
+                    unprobed.asset.href
+                );
+                continue;
+            };
+            if !self.is_dataset_projection(epsg) {
+                continue;
+            }
+
+            let mut asset_files = Vec::new();
+            self.push_asset_tiles(
+                &unprobed.asset,
+                AssetGrid {
+                    geo_transform: probe.geo_transform,
+                    width: probe.width,
+                    height: probe.height,
+                    no_data_value: probe.no_data_value,
+                },
+                unprobed.time,
+                unprobed.z_index,
+                &mut asset_files,
+            )
+            .map_err(|error| geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(error),
+            })?;
+            files.extend(asset_files.into_iter().map(|(factor, file)| StacTileFile {
+                item_id: unprobed.item_id.clone(),
+                factor,
+                file,
+            }));
+        }
+
+        Ok(())
+    }
+
+    /// Append one tile per dataset band that reads `asset`, located by `grid`, with the factor
+    /// of its resolution.
+    fn push_asset_tiles(
+        &self,
+        asset: &stac::Asset,
+        grid: AssetGrid,
+        time: TimeInterval,
+        z_index: i64,
+        files: &mut Vec<(NonZeroU32, TileFile)>,
+    ) -> Result<()> {
+        let AssetGrid {
+            geo_transform,
+            width,
+            height,
+            no_data_value,
+        } = grid;
 
         let Some(factor) = self.asset_factor(geo_transform.spatial_resolution()) else {
             return Ok(());
@@ -691,7 +923,8 @@ impl StacMultiBandMetaData {
                         no_data_value: common::no_data_value_for_rasterband(
                             asset,
                             rasterband_channel,
-                        ),
+                        )
+                        .or(no_data_value),
                         properties_mapping: None,
                         gdal_open_options: gdal_open_options.clone(),
                         gdal_config_options: gdal_config_options.clone(),
@@ -704,6 +937,39 @@ impl StacMultiBandMetaData {
 
         Ok(())
     }
+}
+
+/// The grid of an asset file and its no-data value, from STAC metadata or the file header.
+#[derive(Clone, Copy)]
+struct AssetGrid {
+    geo_transform: GeoTransform,
+    width: usize,
+    height: usize,
+    /// The file's no-data value, used when the STAC metadata declares none.
+    no_data_value: Option<f64>,
+}
+
+/// The values of a STAC item that all of its assets share.
+struct StacItemContext<'a> {
+    item: &'a Item,
+    id: Arc<str>,
+    /// The CRS the item declares, which its assets inherit unless they declare their own.
+    epsg: Option<u32>,
+    /// The time of the item's tiles.
+    time: TimeInterval,
+    z_index: i64,
+}
+
+/// An asset of a search result whose grid metadata must be read from its file header.
+struct UnprobedAsset {
+    file_path: PathBuf,
+    /// The item the asset belongs to.
+    item_id: Arc<str>,
+    asset: stac::Asset,
+    /// The CRS the STAC metadata declares, which takes precedence over the file's.
+    asset_epsg: Option<u32>,
+    time: TimeInterval,
+    z_index: i64,
 }
 
 /// Ordered borrowed key containing every field used to identify a returned tile.
@@ -1128,6 +1394,8 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            item_time: None,
+            max_concurrent_asset_probes: None,
         }
     }
 
@@ -1502,6 +1770,8 @@ mod tests {
                 .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 max_concurrent_cell_searches: 8,
+                max_concurrent_asset_probes: 8,
+                item_time: StacItemTime::Datetime,
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
             };
@@ -1617,6 +1887,8 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            max_concurrent_asset_probes: 8,
+            item_time: StacItemTime::Datetime,
             cache_ttl_secs: None,
             grid: StacGrid::default(),
         };
@@ -1689,6 +1961,8 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            max_concurrent_asset_probes: 8,
+            item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -1777,6 +2051,8 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            max_concurrent_asset_probes: 8,
+            item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -1874,6 +2150,8 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            max_concurrent_asset_probes: 8,
+            item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -1930,6 +2208,195 @@ mod tests {
             file.spatial_partition,
             SpatialPartition2D::new((500_000., 5_800_000.).into(), (500_120., 5_799_880.).into())
                 .unwrap()
+        );
+    }
+
+    /// A U8 EPSG:4326 dataset with an `NDVI` band on the 1/112 degree Sentinel-3 SYN grid, with
+    /// the origin of the EUROPE region file that discovery samples.
+    fn netcdf_meta(server: &Server, item_time: StacItemTime) -> StacMultiBandMetaData {
+        let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
+        let mut dataset = definition.datasets[0].clone();
+        dataset.data_type = geoengine_datatypes::raster::RasterDataType::U8;
+        dataset.resolution =
+            SpatialResolution::new_unchecked(0.008_928_571_428_571, 0.008_928_571_428_571);
+        dataset.projection = SpatialReference::epsg_4326();
+        dataset.spatial_grid = SpatialGridDescriptor::source_from_parts(
+            GeoTransform::new_unchecked(
+                (-10.995_535_714_293_83, 75.004_464_285_714_29).into(),
+                0.008_928_571_428_571,
+                -0.008_928_571_428_571,
+            ),
+            GridBoundingBox2D::new(
+                GridIdx2D::new([-1680, -18929]),
+                GridIdx2D::new([18480, 21391]),
+            )
+            .unwrap(),
+        );
+        dataset.bands = vec![crate::datasets::external::stac::StacProviderDatasetBand {
+            asset_band: crate::datasets::external::stac::StacAssetBand {
+                asset_title: "Normalised difference vegetation index".to_owned(),
+                band_name: None,
+            },
+            band_descriptor: RasterBandDescriptor::new_unitless("NDVI".to_owned()),
+            coarser_assets: vec![],
+        }];
+        StacMultiBandMetaData {
+            api_url: definition.api_url,
+            collection_name: definition.collection_name,
+            s3_config: None,
+            time_dimension: definition.time_dimension,
+            dataset,
+            page_limit: definition.page_limit,
+            client: StacClient::new(
+                reqwest::Client::new(),
+                &server.url_str("/"),
+                crate::datasets::external::stac::StacRequestRegistry::new(),
+            )
+            .unwrap(),
+            query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
+            max_concurrent_cell_searches: 8,
+            max_concurrent_asset_probes: 8,
+            item_time,
+            grid: StacGrid::default(),
+            cache_ttl_secs: definition.cache_ttl_secs,
+        }
+    }
+
+    /// A Sentinel-3 SYN V10 item: a 10-day composite whose `NetCDF` assets have no projection or
+    /// raster metadata.
+    fn s3_syn_v10_item(ndvi_href: &str, saa_href: &str) -> serde_json::Value {
+        serde_json::json!({
+            "type": "Feature",
+            "stac_version": "1.1.0",
+            "id": "S3B_SY_2_V10____20261101T000000_20261110T235959_EUROPE",
+            "geometry": null,
+            "properties": {
+                "datetime": "2026-11-01T00:00:00Z",
+                "start_datetime": "2026-11-01T00:00:00Z",
+                "end_datetime": "2026-11-10T23:59:59Z",
+                "proj:code": null
+            },
+            "links": [],
+            "assets": {
+                "NDVI": {
+                    "href": ndvi_href,
+                    "title": "Normalised difference vegetation index",
+                    "type": "application/netcdf"
+                },
+                // no dataset band reads the sun azimuth angle, so it must not be probed
+                "saa": {
+                    "href": saa_href,
+                    "title": "Sun azimuth angle",
+                    "type": "application/netcdf"
+                }
+            }
+        })
+    }
+
+    fn day(day: u8) -> TimeInterval {
+        TimeInterval::new(
+            DateTime::new_utc(2026, 11, day, 0, 0, 0),
+            DateTime::new_utc(2026, 11, day + 1, 0, 0, 0),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn it_reads_the_grid_of_netcdf_assets_from_their_header() {
+        let server = Server::run();
+        let netcdf =
+            std::fs::read(crate::test_data!("raster/netcdf_stac/s3_syn_v10_ndvi.nc")).unwrap();
+        let ndvi_href = server.url_str("/data/NDVI.nc");
+        let saa_href = server.url_str("/data/saa.nc");
+        server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/collections/sentinel-2-l2a/items",
+            ))
+            .respond_with(responders::json_encoded(serde_json::json!({
+                "type": "FeatureCollection",
+                "features": [s3_syn_v10_item(&ndvi_href, &saa_href)],
+                "links": []
+            }))),
+        );
+        server.expect(
+            Expectation::matching(request::path("/data/NDVI.nc"))
+                .times(1..)
+                .respond_with(
+                    responders::status_code(200)
+                        .append_header("Accept-Ranges", "none")
+                        .body(netcdf),
+                ),
+        );
+        // no expectation for `/data/saa.nc`: the server fails the test on any request to it
+
+        let meta = netcdf_meta(&server, StacItemTime::Datetime);
+        let items_url = Url::parse(&server.url_str("/collections/sentinel-2-l2a/items")).unwrap();
+        let bbox = BoundingBox2D::new((-11.0, 74.9).into(), (-10.8, 75.0).into()).unwrap();
+        let files = meta.search_bbox(items_url, bbox, day(1)).await.unwrap();
+
+        assert_eq!(files.len(), 1, "only the NDVI asset yields a file");
+        assert_eq!(files[0].factor.get(), 1);
+        let file = &files[0].file;
+        assert_eq!(file.params.file_path, PathBuf::from(&ndvi_href));
+        assert_eq!((file.params.width, file.params.height), (16, 8));
+        assert_eq!(file.params.no_data_value, Some(255.));
+        let origin = file.params.geo_transform.origin_coordinate;
+        assert!((origin.x + 10.995_535_714_285_715).abs() < 1e-12);
+        assert!((origin.y - 75.004_464_285_714_29).abs() < 1e-12);
+        assert!(
+            (file.params.geo_transform.x_pixel_size.get() - 0.008_928_571_428_571).abs() < 1e-15
+        );
+        assert!(
+            file.params
+                .gdal_config_options
+                .as_ref()
+                .unwrap()
+                .contains(&(
+                    "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+                    ".tif,.tiff,.jp2,.nc".to_owned()
+                ))
+        );
+    }
+
+    #[test]
+    fn it_assigns_range_items_to_every_step_they_overlap() {
+        let server = Server::run();
+        let item: Item = serde_json::from_value(s3_syn_v10_item(
+            "https://example.com/NDVI.nc",
+            "https://example.com/saa.nc",
+        ))
+        .unwrap();
+
+        let range_meta = netcdf_meta(&server, StacItemTime::Range);
+        assert_eq!(
+            range_meta
+                .item_time_and_z_index(&item, Some(day(5)))
+                .unwrap(),
+            Some((day(5), 1_793_491_200_000)),
+            "the composite of November 1 to 10 covers November 5"
+        );
+        assert_eq!(
+            range_meta
+                .item_time_and_z_index(&item, Some(day(10)))
+                .unwrap(),
+            Some((day(10), 1_793_491_200_000)),
+            "the end of the range is inclusive"
+        );
+        assert_eq!(
+            range_meta
+                .item_time_and_z_index(&item, Some(day(11)))
+                .unwrap(),
+            None
+        );
+
+        let datetime_meta = netcdf_meta(&server, StacItemTime::Datetime);
+        assert_eq!(
+            datetime_meta
+                .item_time_and_z_index(&item, Some(day(5)))
+                .unwrap(),
+            Some((day(1), 1_793_491_200_000)),
+            "the item datetime snaps to its own step, which the caller filters out"
         );
     }
 
@@ -2360,6 +2827,8 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            item_time: None,
+            max_concurrent_asset_probes: None,
         };
 
         admin_ctx
@@ -2606,6 +3075,8 @@ mod grid_request_tests {
                 cache_ttl_secs: None,
                 stac_grid: Some(grid),
                 max_concurrent_cell_searches: None,
+                item_time: None,
+                max_concurrent_asset_probes: None,
             },
             request_registry,
         )

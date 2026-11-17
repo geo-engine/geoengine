@@ -12,6 +12,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::{fmt, num::NonZeroU32, sync::Arc};
 
+pub(crate) mod asset_probe;
 mod auth;
 mod cache;
 pub(crate) mod common;
@@ -29,6 +30,7 @@ pub use loading_info::{StacMultiBandMetaData, StacTileFile};
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
 const DEFAULT_MAX_CONCURRENT_CELL_SEARCHES: usize = 8;
+const DEFAULT_MAX_CONCURRENT_ASSET_PROBES: usize = 8;
 
 /// The positive number of parallel cell searches, since a limit of zero would never make progress
 fn validate_max_concurrent_cell_searches(limit: Option<i32>) -> crate::error::Result<usize> {
@@ -40,6 +42,19 @@ fn validate_max_concurrent_cell_searches(limit: Option<i32>) -> crate::error::Re
         .filter(|limit| *limit > 0)
         .ok_or_else(|| crate::error::Error::InvalidConfig {
             reason: "STAC max concurrent cell searches must be positive".to_owned(),
+        })
+}
+
+/// The positive number of parallel asset header probes, since a limit of zero would never make progress
+fn validate_max_concurrent_asset_probes(limit: Option<i32>) -> crate::error::Result<usize> {
+    let Some(limit) = limit else {
+        return Ok(DEFAULT_MAX_CONCURRENT_ASSET_PROBES);
+    };
+    usize::try_from(limit)
+        .ok()
+        .filter(|limit| *limit > 0)
+        .ok_or_else(|| crate::error::Error::InvalidConfig {
+            reason: "STAC max concurrent asset probes must be positive".to_owned(),
         })
 }
 
@@ -129,6 +144,27 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(default)]
     pub max_concurrent_cell_searches: Option<i32>,
+    /// Which item time decides the layer time steps an item belongs to; omitted values use
+    /// [`StacItemTime::Datetime`].
+    #[serde(default)]
+    pub item_time: Option<StacItemTime>,
+    /// Asset file headers one STAC search reads in parallel to complete missing grid
+    /// metadata; omitted values use 8.
+    #[serde(default)]
+    pub max_concurrent_asset_probes: Option<i32>,
+}
+
+/// Which time of a STAC item decides the layer time steps it belongs to.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, ToSql, FromSql)]
+#[postgres(name = "StacItemTime")]
+#[serde(rename_all = "camelCase")]
+pub enum StacItemTime {
+    /// The item `datetime`, snapped to the time step that contains it.
+    #[default]
+    Datetime,
+    /// The item's `start_datetime`/`end_datetime` range: the item belongs to every time step it
+    /// overlaps, as composites over several days do. Items without a range use their `datetime`.
+    Range,
 }
 
 fn default_query_timeout() -> i64 {
@@ -415,6 +451,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
                 validate_s3_config(new.s3_config.as_ref())?;
                 new.stac_grid.unwrap_or_default().validate()?;
                 validate_max_concurrent_cell_searches(new.max_concurrent_cell_searches)?;
+                validate_max_concurrent_asset_probes(new.max_concurrent_asset_probes)?;
                 validate_time_dimension(new.time_dimension)?;
                 validate_coarser_assets(&new.datasets)?;
 
@@ -444,6 +481,9 @@ pub struct StacDataProvider {
     query_cache: Arc<StacQueryCache>,
     /// STAC searches one loading info request runs in parallel
     max_concurrent_cell_searches: usize,
+    /// Asset file headers one STAC search reads in parallel
+    max_concurrent_asset_probes: usize,
+    item_time: StacItemTime,
     grid: StacGrid,
 }
 
@@ -469,6 +509,8 @@ impl StacDataProvider {
         let grid = definition.stac_grid.unwrap_or_default().validate()?;
         let max_concurrent_cell_searches =
             validate_max_concurrent_cell_searches(definition.max_concurrent_cell_searches)?;
+        let max_concurrent_asset_probes =
+            validate_max_concurrent_asset_probes(definition.max_concurrent_asset_probes)?;
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(
@@ -491,6 +533,8 @@ impl StacDataProvider {
             cache_ttl_secs: definition.cache_ttl_secs,
             query_cache: Arc::new(StacQueryCache::default()),
             max_concurrent_cell_searches,
+            max_concurrent_asset_probes,
+            item_time: definition.item_time.unwrap_or_default(),
             grid,
         })
     }
@@ -1000,6 +1044,8 @@ mod tests {
             serde_json::from_value(serde_json::json!({"targetNumberOfCells":259_200})).unwrap(),
         );
         api.max_concurrent_cell_searches = Some(4);
+        api.item_time = Some(crate::api::model::services::StacItemTime::Range);
+        api.max_concurrent_asset_probes = std::num::NonZeroU16::new(2);
         let mut definition = StacDataProviderDefinition::from(api);
         let id = db
             .add_layer_provider(definition.clone().into())
@@ -1051,6 +1097,14 @@ mod tests {
         assert_eq!(validate_max_concurrent_cell_searches(Some(4)).unwrap(), 4);
         assert!(validate_max_concurrent_cell_searches(Some(0)).is_err());
         assert!(validate_max_concurrent_cell_searches(Some(-1)).is_err());
+    }
+
+    #[test]
+    fn it_validates_max_concurrent_asset_probes() {
+        assert_eq!(validate_max_concurrent_asset_probes(None).unwrap(), 8);
+        assert_eq!(validate_max_concurrent_asset_probes(Some(2)).unwrap(), 2);
+        assert!(validate_max_concurrent_asset_probes(Some(0)).is_err());
+        assert!(validate_max_concurrent_asset_probes(Some(-1)).is_err());
     }
 
     #[tokio::test]

@@ -1715,6 +1715,7 @@ mod tests {
     /// code on the item properties (`proj:epsg`), so this exercises the version-aware
     /// parsing in `try_create_tile_for_band`. The item fixture is a recorded response
     /// from the element84 STAC API and contains no external dependencies.
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn test_process_harvest_item_recovers_v1_0_0_item() {
         use geoengine_datatypes::{dataset::DataProviderId, util::Identifier};
@@ -1756,6 +1757,8 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            item_time: None,
+            max_concurrent_asset_probes: None,
         };
 
         let items: stac::ItemCollection = serde_json::from_str(include_str!(
