@@ -19,12 +19,13 @@ cannot be reprojected to the target spatial reference.
 
 ## Parameters
 
-| Name                   | Type                      | Description                                                                      | Examples                |
-| ---------------------- | ------------------------- | -------------------------------------------------------------------------------- | ----------------------- |
-| targetSpatialReference | string,null               | Target spatial reference system. Defaults to the spatial reference of the input. | `"EPSG:3857"`           |
-| outputResolution       | SpatialResolution or null |                                                                                  | `{"x":20000,"y":10000}` |
-| outputOriginReference  | Coordinate2D or null      |                                                                                  |                         |
-| method                 | WarpMethod                | Resampling method.                                                               |                         |
+| Name                   | Type                       | Description                                                                                                                                                                                                     | Examples                |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| targetSpatialReference | string,null                | Target spatial reference system. Defaults to the spatial reference of the input.                                                                                                                                | `"EPSG:3857"`           |
+| outputResolution       | SpatialResolution or null  |                                                                                                                                                                                                                 | `{"x":20000,"y":10000}` |
+| outputOriginReference  | Coordinate2D or null       |                                                                                                                                                                                                                 |                         |
+| method                 | WarpMethod                 | Resampling method.                                                                                                                                                                                              |                         |
+| deriveOutSpec          | DeriveOutRasterSpecsSource | How the output grid is derived when reprojecting, as in `Reprojection`:<br>`projectionBounds` (default) derives it from the area of use of the input's spatial<br>reference, `dataBounds` from the data bounds. |                         |
 
 ## Sources
 

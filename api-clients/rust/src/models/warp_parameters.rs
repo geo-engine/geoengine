@@ -25,6 +25,9 @@ pub struct WarpParameters {
     /// Resampling method.
     #[serde(rename = "method", skip_serializing_if = "Option::is_none")]
     pub method: Option<models::WarpMethod>,
+    /// How the output grid is derived when reprojecting, as in `Reprojection`: `projectionBounds` (default) derives it from the area of use of the input's spatial reference, `dataBounds` from the data bounds.
+    #[serde(rename = "deriveOutSpec", skip_serializing_if = "Option::is_none")]
+    pub derive_out_spec: Option<models::DeriveOutRasterSpecsSource>,
 }
 
 impl WarpParameters {
@@ -35,6 +38,7 @@ impl WarpParameters {
             output_resolution: None,
             output_origin_reference: None,
             method: None,
+            derive_out_spec: None,
         }
     }
 }

@@ -51,6 +51,13 @@ pub struct WarpParams {
     /// How to compute the output pixels, nearest neighbour by default
     #[serde(default, skip_serializing_if = "WarpMethod::is_default")]
     pub method: WarpMethod,
+    /// How the output grid is derived when reprojecting: from the area of use of the source's
+    /// spatial reference (default) or from the data bounds, as in `Reprojection`
+    #[serde(
+        default,
+        skip_serializing_if = "DeriveOutRasterSpecsSource::is_default"
+    )]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
 /// How [`Warp`] computes the value of an output pixel from the input.
@@ -122,7 +129,7 @@ pub fn warped_spatial_grid(
             in_srs,
             ReprojectionParams {
                 target_spatial_reference: target_srs,
-                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+                derive_out_spec: params.derive_out_spec,
             },
         )?,
         _ => in_grid,
@@ -512,6 +519,7 @@ mod tests {
             output_resolution: Some(resolution),
             output_origin_reference: None,
             method: WarpMethod::NearestNeighbor,
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
         }
     }
 
@@ -831,6 +839,7 @@ mod tests {
                     output_resolution: None,
                     output_origin_reference: None,
                     method: WarpMethod::NearestNeighbor,
+                    derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
                 },
             ),
             &exe_ctx,
@@ -862,6 +871,7 @@ mod tests {
                     output_resolution: Some(resolution),
                     output_origin_reference: None,
                     method: WarpMethod::NearestNeighbor,
+                    derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
                 },
             ),
             &exe_ctx,
@@ -955,6 +965,7 @@ mod tests {
                 output_resolution: None,
                 output_origin_reference: None,
                 method: WarpMethod::NearestNeighbor,
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
             }
         );
     }

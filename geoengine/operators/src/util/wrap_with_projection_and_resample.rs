@@ -4,7 +4,8 @@ use crate::engine::{
 };
 use crate::error;
 use crate::processing::{
-    Warp, WarpMethod, WarpParams, source_at_overview_level, warped_spatial_grid,
+    DeriveOutRasterSpecsSource, Warp, WarpMethod, WarpParams, source_at_overview_level,
+    warped_spatial_grid,
 };
 use crate::util::Result;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
@@ -59,6 +60,7 @@ impl WrapWithProjectionAndResample {
             output_resolution: target_spatial_resolution,
             output_origin_reference: target_origin_reference,
             method: WarpMethod::NearestNeighbor,
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
         };
 
         let target_spatial_grid = warped_spatial_grid(&self.result_descriptor, &params)?;

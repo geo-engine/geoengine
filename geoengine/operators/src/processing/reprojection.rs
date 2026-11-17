@@ -34,13 +34,20 @@ use geoengine_datatypes::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
-#[derive(Default)]
 pub enum DeriveOutRasterSpecsSource {
     DataBounds,
     #[default]
     ProjectionBounds,
+}
+
+impl DeriveOutRasterSpecsSource {
+    /// Whether this is the default, which serialized operators leave out
+    #[allow(clippy::trivially_copy_pass_by_ref)] // must adhere to serde's signature
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -395,6 +402,7 @@ impl RasterOperator for Reprojection {
             output_resolution: None,
             output_origin_reference: None,
             method: WarpMethod::NearestNeighbor,
+            derive_out_spec: self.params.derive_out_spec,
         };
 
         InitializedWarp::with_output_grid(
@@ -1620,6 +1628,80 @@ mod tests {
         assert_eq!(
             out_spatial_grid.grid_bounds,
             GridBoundingBox2D::new_min_max(-1405, 1405, -1410, 1409).unwrap()
+        );
+    }
+
+    /// A `Reprojection` with `dataBounds` optimizes to a `Warp` that derives its grid from the
+    /// data bounds as well, so the optimized operator keeps the extent of the original one.
+    #[tokio::test]
+    async fn optimized_raster_reprojection_keeps_data_bounds() {
+        let exe_ctx = MockExecutionContext::test_default();
+        // 200 km × 200 km in UTM zone 32N, a small part of the zone's area of use
+        let source = || {
+            MockRasterSource {
+                params: MockRasterSourceParams::<u8> {
+                    data: vec![],
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReference::new(
+                            SpatialReferenceAuthority::Epsg,
+                            32632,
+                        )
+                        .into(),
+                        time: crate::engine::TimeDescriptor::new_irregular(None),
+                        spatial_grid: SpatialGridDescriptor::source_from_parts(
+                            GeoTransform::new_unchecked(
+                                Coordinate2D::new(300_000., 5_900_000.),
+                                1_000.,
+                                -1_000.,
+                            ),
+                            GridBoundingBox2D::new_min_max(0, 199, 0, 199).unwrap(),
+                        ),
+                        bands: RasterBandDescriptors::new_single_band(),
+                    },
+                },
+            }
+            .typed()
+        };
+        let initialize = |operator: crate::engine::TypedRasterOperator| {
+            operator.initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        };
+        let reprojection = |derive_out_spec| {
+            RasterOperator::typed(Reprojection {
+                params: ReprojectionParams {
+                    target_spatial_reference: SpatialReference::epsg_4326(),
+                    derive_out_spec,
+                },
+                sources: SingleRasterOrVectorSource {
+                    source: source().into(),
+                },
+            })
+        };
+
+        let data_bounds = initialize(reprojection(DeriveOutRasterSpecsSource::DataBounds))
+            .await
+            .unwrap();
+        let projection_bounds =
+            initialize(reprojection(DeriveOutRasterSpecsSource::ProjectionBounds))
+                .await
+                .unwrap();
+        let grid = data_bounds.result_descriptor().spatial_grid;
+        // otherwise, the test would not tell the two apart
+        assert_ne!(
+            grid.as_parts().1,
+            projection_bounds
+                .result_descriptor()
+                .spatial_grid
+                .as_parts()
+                .1
+        );
+
+        let optimized = data_bounds.optimize(grid.spatial_resolution()).unwrap();
+        let optimized = initialize(optimized).await.unwrap();
+
+        assert_eq!(
+            optimized.result_descriptor().spatial_grid.as_parts().1,
+            grid.as_parts().1
         );
     }
 }

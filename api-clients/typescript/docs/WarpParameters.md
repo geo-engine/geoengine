@@ -11,6 +11,7 @@ Name | Type
 `outputResolution` | [SpatialResolution](SpatialResolution.md)
 `outputOriginReference` | [Coordinate2D](Coordinate2D.md)
 `method` | [WarpMethod](WarpMethod.md)
+`deriveOutSpec` | [DeriveOutRasterSpecsSource](DeriveOutRasterSpecsSource.md)
 
 ## Example
 
@@ -23,6 +24,7 @@ const example = {
   "outputResolution": null,
   "outputOriginReference": null,
   "method": null,
+  "deriveOutSpec": null,
 } satisfies WarpParameters
 
 console.log(example)
