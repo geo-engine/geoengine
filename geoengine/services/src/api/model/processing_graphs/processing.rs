@@ -1020,8 +1020,9 @@ impl TryFrom<Downsampling> for OperatorsDownsampling {
 /// ## Errors
 ///
 /// The operator returns an error if the input has no spatial reference, if the input data
-/// cannot be reprojected to the target spatial reference, or if a method other than `nearest`
-/// is used with another spatial reference.
+/// cannot be reprojected to the target spatial reference, if a method other than `nearest`
+/// is used with another spatial reference, or if `mode` is used with a float input or could
+/// need more memory than the limit `[query_context] warp_mode_max_memory_per_tile_mb`.
 #[api_operator(
     title = "Warp",
     examples(
@@ -1105,7 +1106,7 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
 }
 
 /// How `Warp` computes an output pixel that is coarser than the input in at least one axis, as
-/// `gdalwarp -r` with the same name. Input pixels without data are left out.
+/// `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum WarpDownsamplingMethod {
@@ -1116,7 +1117,10 @@ pub enum WarpDownsamplingMethod {
     /// that the output pixel covers.
     Average,
     /// The most common value of the input pixels under the output pixel, weighted by the area of
-    /// each that the output pixel covers.
+    /// each that the output pixel covers. Only for integer inputs. The operator returns an error if
+    /// it could need more memory per output tile than the limit
+    /// `[query_context] warp_mode_max_memory_per_tile_mb`, e.g. for a large factor on 16-bit data
+    /// without overviews.
     Mode,
     /// The minimum of the input pixels under the output pixel.
     Min,

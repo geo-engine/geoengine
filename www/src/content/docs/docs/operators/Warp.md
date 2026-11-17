@@ -22,8 +22,9 @@ resolution that differs from the processing graph's.
 ## Errors
 
 The operator returns an error if the input has no spatial reference, if the input data
-cannot be reprojected to the target spatial reference, or if a method other than `nearest`
-is used with another spatial reference.
+cannot be reprojected to the target spatial reference, if a method other than `nearest`
+is used with another spatial reference, or if `mode` is used with a float input or could
+need more memory than the limit `[query_context] warp_mode_max_memory_per_tile_mb`.
 
 ## Parameters
 

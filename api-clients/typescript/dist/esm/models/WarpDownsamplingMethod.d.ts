@@ -10,7 +10,7 @@
  */
 /**
  * How `Warp` computes an output pixel that is coarser than the input in at least one axis, as
- * `gdalwarp -r` with the same name. Input pixels without data are left out.
+ * `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
  * @export
  */
 export declare const WarpDownsamplingMethod: {
