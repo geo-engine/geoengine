@@ -29,7 +29,7 @@ use geoengine_operators::{
             GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
             raster_stream_to_multiband_geotiff_bytes,
         },
-        raster_stream_to_png::{default_raster_colorizer, raster_stream_to_png_bytes},
+        raster_stream_to_png::raster_stream_to_png_bytes,
     },
 };
 use tracing::{Instrument, debug, debug_span};
@@ -78,16 +78,18 @@ impl RasterEncoding {
     }
 }
 
-/// Queries `query` and encodes the result as `encoding`
+/// Queries `query` and encodes the result as the encoding that `encoding` returns for the result
+/// descriptor of the processing graph, e.g. with a default colorizer for its data (see
+/// [`geoengine_operators::util::raster_stream_to_png::default_raster_colorizer`]). The processing graph is initialized once.
 pub async fn raster_grid<C: SessionContext>(
     ctx: C,
     query: RasterGridQuery,
-    encoding: RasterEncoding,
+    encoding: impl FnOnce(&RasterResultDescriptor) -> RasterEncoding,
 ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
     let tiling_spec = execution_context.tiling_specification();
 
-    let wrapped = load_on_grid(&ctx, &query, encoding.warp_methods()?, &execution_context).await?;
+    let (wrapped, encoding) = load_on_grid(&ctx, &query, encoding, &execution_context).await?;
 
     let grid_bounds = wrapped
         .result_descriptor
@@ -139,39 +141,15 @@ pub async fn raster_grid<C: SessionContext>(
     Ok((bytes, cache_hint, computation_id))
 }
 
-/// The colorizer for rendering `processing_graph` without a given one: a palette for a
-/// classification, otherwise a gray gradient (see [`default_raster_colorizer`]). It initializes
-/// the processing graph to know its bands and data type.
-pub async fn default_colorizer<C: SessionContext>(
-    ctx: &C,
-    processing_graph: &ProcessingGraphId,
-) -> Result<RasterColorizer> {
-    let execution_context = ctx.execution_context()?;
-    let operator = ctx
-        .db()
-        .load_processing_graph(processing_graph)
-        .instrument(debug_span!("load_processing_graph"))
-        .await?
-        .operator
-        .get_raster()?;
-    let initialized = operator
-        .initialize(
-            ProcessingGraphOperatorPath::initialize_root(),
-            &execution_context,
-        )
-        .instrument(debug_span!("initialize"))
-        .await?;
-    Ok(default_raster_colorizer(initialized.result_descriptor()))
-}
-
-/// Loads and initializes the processing graph, projected and resampled onto the query's grid with
-/// `methods`
+/// Loads and initializes the processing graph once, chooses the encoding for its result
+/// descriptor with `encoding`, and projects and resamples it onto the query's grid with the methods
+/// of that encoding (see [`RasterEncoding::warp_methods`])
 async fn load_on_grid<C: SessionContext>(
     ctx: &C,
     query: &RasterGridQuery,
-    methods: WarpMethods,
+    encoding: impl FnOnce(&RasterResultDescriptor) -> RasterEncoding,
     execution_context: &C::ExecutionContext,
-) -> Result<WrapWithProjectionAndResample> {
+) -> Result<(WrapWithProjectionAndResample, RasterEncoding)> {
     let operator = ctx
         .db()
         .load_processing_graph(&query.processing_graph)
@@ -188,18 +166,19 @@ async fn load_on_grid<C: SessionContext>(
                 execution_context,
             )
             .await?;
+        let encoding = encoding(initialized.result_descriptor());
 
-        Ok(
+        let wrapped =
             WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
                 .wrap_with_projection_and_resample(
                     query.origin,
                     query.resolution,
                     query.crs,
-                    methods,
+                    encoding.warp_methods()?,
                     execution_context,
                 )
-                .await?,
-        )
+                .await?;
+        Ok((wrapped, encoding))
     }
     .instrument(debug_span!("initialize"))
     .await
