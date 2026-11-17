@@ -509,9 +509,12 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
         };
 
         // compute in the output data type if it holds the input values, e.g. the average of `U8`
-        // values in `F32`, otherwise in the input type and convert the results
+        // values in `F32`; for a float output that does not, e.g. `I32` → `F32`, in `F64`, so that
+        // the fractions are kept until the end; otherwise in the input type, rounding once at the end
         let working_data_type = if out_data_type.represents_losslessly(in_descriptor.data_type) {
             out_data_type
+        } else if matches!(out_data_type, RasterDataType::F32 | RasterDataType::F64) {
+            RasterDataType::F64
         } else {
             in_descriptor.data_type
         };
@@ -1387,6 +1390,42 @@ mod tests {
                 "pixel {y}, {x}: {value} != {expected}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn it_keeps_the_fractions_of_an_integer_average_in_a_float_output() {
+        let exe_ctx = mock_exe_ctx();
+        // `F32` cannot hold every `I32`, so the kernel must not compute in `I32` and round there
+        let source = input().mock_raster_source::<i32>().typed();
+
+        let (descriptor, tiles) = query_typed(
+            warp(
+                source,
+                WarpParams {
+                    output_data_type: Some(RasterDataType::F32),
+                    ..downsampling_params(2., WarpDownsampling::Average)
+                },
+            ),
+            &exe_ctx,
+            TimeInterval::new_unchecked(0, 10),
+            None,
+            TypedRasterQueryProcessor::get_f32,
+        )
+        .await;
+
+        assert_eq!(descriptor.data_type, RasterDataType::F32);
+        // the mean of 10 × row + column over 2 × 2 pixels, e.g. (0 + 1 + 10 + 11) / 4 = 5.5
+        assert_raster_tiles_eq_ascii(
+            &tiles,
+            &two_degrees(indoc! {"
+                [0, 10)
+                +----------------+
+                |  5.5  7.5  9.5 |
+                | 25.5 27.5 29.5 |
+                | 45.5 47.5 49.5 |
+                +----------------+
+            "}),
+        );
     }
 
     #[tokio::test]
