@@ -25,7 +25,7 @@ pub use process_pool::{
     DEFAULT_HEADER_CACHE_ENTRIES, GdalPoolDispatcher, GdalProcessPool, GdalProcessPoolError,
     PoolRequestStats,
 };
-pub use reader::{GdalPoolReader, GdalProcessMdReadResult, GdalProcessReadResult};
+pub use reader::{GdalPoolReader, GdalProcessReadResult};
 pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 
 /// How many tile reads an `MdGdalSource` keeps in flight against the worker pool.

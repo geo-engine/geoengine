@@ -24,14 +24,6 @@ pub enum GdalProcessReadResult<T: Pixel> {
     FileNotFoundAsNoData,
 }
 
-/// Result of reading a z-slice of a multidimensional array through the GDAL worker process.
-pub enum GdalProcessMdReadResult<T: Pixel> {
-    /// The grid of the requested z-slice.
-    Grid(Box<GridAndProperties<T, GridBoundingBox2D>>),
-    /// The file was not found and the dataset is configured to treat that as no-data.
-    FileNotFoundAsNoData,
-}
-
 /// Reverses the rows of a grid (and its validity mask) if `flip_y` is set: MD and upside-down
 /// datasets return data in stored row order, the caller flips it back to the tile (north-up)
 /// order.
@@ -400,7 +392,7 @@ impl GdalPoolReader {
         array_name: &str,
         z_index: usize,
         axis_mapping: &[MdAxisMapping],
-    ) -> Result<GdalProcessMdReadResult<T>, GdalProcessPoolError> {
+    ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
 
@@ -442,13 +434,13 @@ impl GdalPoolReader {
             .await;
 
         let Some(payload) = read_result_or_no_data(res, file_not_found_as_no_data)? else {
-            return Ok(GdalProcessMdReadResult::FileNotFoundAsNoData);
+            return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
 
         let slice = split_md_slice(payload, axis_mapping, read_advise)?;
         let GridAndProperties { grid, properties } = slice.into();
         let grid = flip_grid_y_if_needed(grid, read_advise.flip_y);
-        Ok(GdalProcessMdReadResult::Grid(Box::new(GridAndProperties {
+        Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
             grid,
             properties,
         })))

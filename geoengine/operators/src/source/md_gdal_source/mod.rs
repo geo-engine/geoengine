@@ -1,3 +1,4 @@
+use crate::cache::new_raster_cache::SupportedRasterDataType;
 use crate::engine::SingleRasterSource;
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, MetaData, OperatorData, OperatorName,
@@ -10,6 +11,7 @@ use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
     Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
 };
+use crate::source::gdal_read::BlockIo;
 use crate::source::gdal_worker_process::{GdalReaderMode, ReaderState, TILE_READ_CONCURRENCY};
 use crate::source::md_gdal_source::reader::{MdTileRequest, load_md_tile_from_files_async};
 use crate::util::Result;
@@ -84,7 +86,7 @@ where
 #[async_trait]
 impl<P> QueryProcessor for MdGdalSourceProcessor<P>
 where
-    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+    P: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type Output = RasterTile2D<P>;
     type SpatialBounds = geoengine_datatypes::raster::GridBoundingBox2D;
@@ -142,6 +144,7 @@ where
             })
             .await?;
         let gdal_worker = ctx.get_gdal_worker();
+        let blocks = BlockIo::from_query_context(ctx);
         let default_cache_ttl = self.default_cache_ttl;
 
         let global_z = loading_info.z_indices_in_time(query.time_interval());
@@ -206,6 +209,7 @@ where
             })
             .map(move |(request, tile_info)| {
                 let gdal_worker = gdal_worker.clone();
+                let blocks = blocks.clone();
                 let loading_info = Arc::clone(&loading_info);
                 async move {
                     match request {
@@ -215,6 +219,7 @@ where
                             reader_mode,
                             tile_info,
                             &gdal_worker,
+                            blocks.as_ref(),
                             default_cache_ttl,
                         )
                         .await
@@ -306,7 +311,7 @@ fn output_band_groups(band_count: u32, attributes: &BandSelection) -> Result<Vec
 #[async_trait]
 impl<P> RasterQueryProcessor for MdGdalSourceProcessor<P>
 where
-    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+    P: Pixel + gdal::raster::GdalType + FromPrimitive + SupportedRasterDataType,
 {
     type RasterType = P;
 
@@ -938,6 +943,61 @@ mod tests {
     async fn test_query_wrap_across_multiple_tile_columns() {
         for origin_x in [0.0, -0.125] {
             query_wrap_across_multiple_tile_columns(origin_x).await;
+        }
+    }
+
+    /// Reads through file blocks give the same tiles as direct reads, also for a south-up array,
+    /// which is flipped after its blocks are composed, and for a wrapped one, whose tiles read
+    /// two windows of the file.
+    #[tokio::test]
+    async fn test_query_through_blocks_equals_direct_reads() {
+        use crate::cache::new_raster_cache::{BlockReadMode, NewRasterCacheEnum};
+
+        let cases = [
+            (
+                "md_cf_minutes",
+                MdDataset::ascending_lat_minutes(),
+                ts_grid_bounds(),
+                TimeInterval::new_unchecked(-2_208_988_800_000, -2_208_988_800_000 + 60_000),
+            ),
+            (
+                "md_wrap_multitile",
+                MdDataset::wrapped(
+                    "md/wrap_0_360_multitile.nc",
+                    1440,
+                    4,
+                    (-0.125, 1.0, 0.25, -0.25),
+                    2,
+                ),
+                GridBoundingBox2D::new_unchecked([-4, -720], [-1, 719]),
+                TimeInterval::new_unchecked(EPOCH_2000, EPOCH_2000 + DAY),
+            ),
+        ];
+
+        for (name, dataset, spatial, time) in cases {
+            let mut exe_ctx = MockExecutionContext::test_default();
+            let name = add_md_dataset(&mut exe_ctx, name, dataset);
+            let mut tiles = Vec::new();
+            for mode in [BlockReadMode::Off, BlockReadMode::On] {
+                let mut query_ctx = exe_ctx.mock_query_context_test_default();
+                query_ctx.new_raster_cache = Some(Arc::new(
+                    NewRasterCacheEnum::new_lru(100_000_000).with_block_read_mode(mode),
+                ));
+                tiles.push(
+                    query_md_source(
+                        &exe_ctx,
+                        &query_ctx,
+                        name.clone(),
+                        spatial,
+                        time,
+                        BandSelection::first(),
+                    )
+                    .await,
+                );
+            }
+
+            assert!(!tiles[0].is_empty(), "{name}");
+            assert_eq!(tiles[0], tiles[1], "{name}");
         }
     }
 
