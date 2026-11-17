@@ -150,6 +150,17 @@ impl GdalReaderMode {
             GdalReaderMode::OverviewLevel(_) => None,
         }
     }
+
+    /// The overview level of a dataset that does not declare its levels, so only some of its
+    /// files may have it. `None` for the full resolution and for declared levels.
+    pub fn undeclared_level_factor(&self) -> Option<NonZeroUsize> {
+        match self {
+            GdalReaderMode::OverviewLevel(rs) if !rs.files_have_level => {
+                NonZeroUsize::new(rs.overview_level as usize).filter(|factor| factor.get() > 1)
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]

@@ -49,8 +49,9 @@ pub struct TilePlan {
 }
 
 /// Reads the files of `plan` and composes its tile. Reads of a level the dataset declares go
-/// through `blocks` if given, else they read the level directly; neither resamples. Only
-/// overviews of datasets without declared levels are left to GDAL, which may resample.
+/// through `blocks` if given, else they read the level directly; neither resamples. Datasets
+/// without declared levels read the level through `blocks` from each file that has it; other
+/// files, and all of them without `blocks`, are left to GDAL, which may resample.
 ///
 /// The highest z-index wins at each valid pixel. A file is read only where the files above it
 /// left pixels invalid, so files are read one after another. The properties come from the first
@@ -97,13 +98,20 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             continue;
         }
 
-        let read = match (level_factor, blocks.filter(|blocks| blocks.reads(&params))) {
+        // without declared levels, blocks read the level from the files that have it
+        let undeclared_factor = reader_mode
+            .undeclared_level_factor()
+            .filter(|&factor| level_read_advise(read_advise, factor).is_some());
+        let read = match (
+            level_factor.or(undeclared_factor),
+            blocks.filter(|blocks| blocks.reads(&params)),
+        ) {
             (Some(factor), Some(blocks)) => {
                 blocks
                     .read::<T>(&params, read_advise, factor, plan.cache_hint)
                     .await
             }
-            (Some(factor), None) if factor.get() > 1 => {
+            (Some(factor), None) if level_factor.is_some() && factor.get() > 1 => {
                 let Some(level_advise) = level_read_advise(read_advise, factor) else {
                     return Err(misaligned_read(&params, factor));
                 };
@@ -121,8 +129,12 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             Err(GdalProcessPoolError::IpcProcessError {
                 source: IpcProcessError::MissingOverviewLevel { file, factor },
             }) => {
-                // the dataset declares the level, but one of its files lacks it: GDAL picks another
-                tracing::warn!("{file} lacks the overview level {factor}, GDAL may resample it");
+                // GDAL picks another level; only a dataset that declares the level promised it
+                if level_factor.is_some() {
+                    tracing::warn!(
+                        "{file} lacks the overview level {factor}, GDAL may resample it"
+                    );
+                }
                 reader.read_tile_data::<T>(params, read_advise).await?
             }
             read => read?,
@@ -709,11 +721,18 @@ mod tests {
         let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker, None)
             .await
             .unwrap();
-        for blocks in [None, Some(&blocks)] {
-            let tile = assemble_tile::<u16>(plan.clone(), reader_mode(true), &gdal_worker, blocks)
-                .await
-                .unwrap();
-            assert_eq!(tile, from_gdal);
+        for (files_have_level, blocks) in
+            [(true, None), (true, Some(&blocks)), (false, Some(&blocks))]
+        {
+            let tile = assemble_tile::<u16>(
+                plan.clone(),
+                reader_mode(files_have_level),
+                &gdal_worker,
+                blocks,
+            )
+            .await
+            .unwrap();
+            assert_eq!(tile, from_gdal, "declared: {files_have_level}");
         }
     }
 
@@ -732,6 +751,13 @@ mod tests {
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+        // a dataset that does not declare its levels, in its own cache to see that it is used
+        let undeclared_cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let undeclared_blocks = BlockIo::new(
+            undeclared_cache.clone(),
+            gdal_worker.clone(),
+            CacheTtlSeconds::new(60),
+        );
 
         for (overview_level, tile_size) in [(0_u32, 8_usize), (0, 12), (2, 8), (2, 12), (4, 12)] {
             let reader_mode = |files_have_level| {
@@ -773,20 +799,38 @@ mod tests {
                         assemble_tile::<u16>(plan.clone(), reader_mode(true), &gdal_worker, None)
                             .await
                             .unwrap();
-                    let from_blocks =
-                        assemble_tile::<u16>(plan, reader_mode(true), &gdal_worker, Some(&blocks))
-                            .await
-                            .unwrap();
+                    let from_blocks = assemble_tile::<u16>(
+                        plan.clone(),
+                        reader_mode(true),
+                        &gdal_worker,
+                        Some(&blocks),
+                    )
+                    .await
+                    .unwrap();
+                    let from_undeclared_blocks = assemble_tile::<u16>(
+                        plan,
+                        reader_mode(false),
+                        &gdal_worker,
+                        Some(&undeclared_blocks),
+                    )
+                    .await
+                    .unwrap();
 
                     let case = format!(
                         "overview {overview_level}, tile size {tile_size}, tile [{tile_y}, {tile_x}]"
                     );
                     assert_eq!(from_level, from_gdal, "{case}");
                     assert_eq!(from_blocks, from_gdal, "{case}");
+                    assert_eq!(from_undeclared_blocks, from_gdal, "{case}");
                 }
             }
         }
 
         assert!(cache.byte_size() > 0, "the reads went through the blocks");
+        assert_eq!(
+            undeclared_cache.byte_size(),
+            cache.byte_size(),
+            "the overview reads of the undeclared dataset went through the same blocks"
+        );
     }
 }
