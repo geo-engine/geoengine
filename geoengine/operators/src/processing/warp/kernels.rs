@@ -47,8 +47,19 @@ pub enum WarpKernel {
     Bilinear,
 }
 
-/// GDAL's tolerance for footprint edges that lie on a pixel edge
+/// GDAL's tolerance for footprint edges that lie on a pixel edge, relative to the magnitude of the
+/// pixel coordinate (see [`tolerance`])
 const EPSILON: f64 = 1e-10;
+
+/// The tolerance for a footprint edge at the input pixel coordinate `value`.
+///
+/// GDAL compares coordinates relative to its dataset, which are small. Here, they are global pixel
+/// indices, which can be large on fine grids, e.g. ≈ 10⁷ at 0.0001°. Their rounding error grows with
+/// their magnitude and exceeds a fixed `1e-10`, so that a pixel that only touches the edge would count.
+#[inline]
+fn tolerance(value: f64) -> f64 {
+    EPSILON * value.abs().max(1.)
+}
 
 /// GDAL's minimum sum of the weights of a bilinear interpolation
 const MIN_BILINEAR_WEIGHT: f64 = 0.00001;
@@ -69,8 +80,8 @@ impl Span {
     /// The pixels `[min, max)` covers, with GDAL's weights (`GWKAverageOrModeComputeSourceCoords`).
     fn footprint(min: f64, max: f64) -> Self {
         let (min, max) = if min <= max { (min, max) } else { (max, min) };
-        let start = (min + EPSILON).floor() as isize;
-        let mut end = (max - EPSILON).ceil() as isize;
+        let start = (min + tolerance(min)).floor() as isize;
+        let mut end = (max - tolerance(max)).ceil() as isize;
         if end <= start {
             end = start + 1;
         }
@@ -86,8 +97,9 @@ impl Span {
         Self {
             start,
             end,
-            first_weight: 1. - (min - start as f64),
-            last_weight: 1. - (end as f64 - max),
+            // at most 1, for an edge that lies within the tolerance outside of the span
+            first_weight: (1. - (min - start as f64)).min(1.),
+            last_weight: (1. - (end as f64 - max)).min(1.),
             center: start,
         }
     }
@@ -744,6 +756,31 @@ mod tests {
             (1..5).map(|idx| span.weight(idx)).collect::<Vec<_>>(),
             vec![0.5, 1., 1., 0.25]
         );
+    }
+
+    #[test]
+    fn it_ignores_rounding_errors_of_large_pixel_indices() {
+        // 0.0003° over 0.0001°: the output pixel 10⁷ covers the input pixels 3 × 10⁷ .. 3 × 10⁷ + 3,
+        // but `1e7 * 0.0003 / 0.0001` is 29_999_999.999_999_993, below the edge by more than 1e-10
+        let spans = spans(
+            WarpKernel::Average,
+            (10_000_000, 10_000_002),
+            (0., 0.0003),
+            (0., 0.0001),
+        );
+
+        for (k, span) in spans.into_iter().enumerate() {
+            let start = 30_000_000 + 3 * k as isize;
+            assert_eq!(
+                (span.start, span.end),
+                (start, start + 3),
+                "output pixel {k}"
+            );
+            assert!(
+                (span.first_weight - 1.).abs() < 1e-6 && (span.last_weight - 1.).abs() < 1e-6,
+                "output pixel {k}: {span:?}"
+            );
+        }
     }
 
     #[test]
