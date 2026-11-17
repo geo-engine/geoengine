@@ -82,7 +82,7 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
+        _query_rect: RasterQueryRectangle,
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
@@ -92,12 +92,13 @@ where
             self.state.out_spatial_grid.geo_transform()
         );
 
+        // the whole tile, also where it reaches beyond the query rectangle, as a tile is always
+        // filled completely, independently of the query
         let valid_pixel_bounds = self
             .state
             .out_spatial_grid
             .grid_bounds()
-            .intersection(&tile_info.global_pixel_bounds())
-            .and_then(|b| b.intersection(&query_rect.spatial_bounds()));
+            .intersection(&tile_info.global_pixel_bounds());
 
         let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {
             self.state

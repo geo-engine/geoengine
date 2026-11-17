@@ -1137,7 +1137,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_fills_whole_tiles_when_reprojecting_with_a_method() {
+    async fn it_fills_whole_tiles_when_reprojecting() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let ndvi = GdalSource {
             params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
@@ -1146,8 +1146,15 @@ mod tests {
         exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(16, 16));
         let tile_size = 16;
 
-        // coarser with `average`, finer with `bilinear`
-        for resolution in [30_000., 5_000.] {
+        // coarser with `average`, finer with `bilinear`, and both with nearest neighbour
+        let methods = [
+            (WarpDownsampling::Average, WarpUpsampling::Bilinear),
+            (WarpDownsampling::Nearest, WarpUpsampling::Nearest),
+        ];
+        for ((downsampling, upsampling), resolution) in methods
+            .into_iter()
+            .flat_map(|methods| [30_000., 5_000.].map(|resolution| (methods, resolution)))
+        {
             let operator = warp(
                 ndvi.clone(),
                 WarpParams {
@@ -1155,8 +1162,8 @@ mod tests {
                     output_resolution: Some(SpatialResolution::new_unchecked(
                         resolution, resolution,
                     )),
-                    downsampling: WarpDownsampling::Average,
-                    upsampling: WarpUpsampling::Bilinear,
+                    downsampling,
+                    upsampling,
                     ..WarpParams::default()
                 },
             );
@@ -1196,7 +1203,8 @@ mod tests {
             });
             assert!(
                 outside_of_the_quarter,
-                "{resolution} m: the tile should have data outside of the quarter"
+                "{downsampling:?}, {upsampling:?} at {resolution} m: the tile should have data \
+                 outside of the quarter"
             );
             assert_eq_two_list_of_tiles(&part, &whole, false);
         }
