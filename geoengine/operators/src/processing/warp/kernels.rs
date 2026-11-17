@@ -168,6 +168,24 @@ fn spans(
         .collect()
 }
 
+/// The position (y, x) of a projected `coordinate` in the input pixels of `in_geo_transform`, `None`
+/// if it could not be projected. A projection can also return non-finite coordinates instead of an
+/// error, e.g. outside of its area of use, which count as not projected, too.
+fn to_input_pixels(
+    coordinate: Option<Coordinate2D>,
+    in_geo_transform: &GeoTransform,
+) -> Option<(f64, f64)> {
+    let origin = in_geo_transform.origin_coordinate();
+    coordinate
+        .filter(|c| c.x.is_finite() && c.y.is_finite())
+        .map(|c| {
+            (
+                (c.y - origin.y) / in_geo_transform.y_pixel_size().get(),
+                (c.x - origin.x) / in_geo_transform.x_pixel_size().get(),
+            )
+        })
+}
+
 /// The spans of the pixels of an output tile
 #[derive(Debug, Clone)]
 enum TileSpans {
@@ -224,19 +242,8 @@ impl TileSpans {
         ];
         let out_geo_transform = projection.grids.out_spatial_grid.geo_transform();
         let in_geo_transform = projection.grids.in_spatial_grid.geo_transform();
-        let in_origin = in_geo_transform.origin_coordinate();
-        let in_pixel_size = (
-            in_geo_transform.x_pixel_size().get(),
-            in_geo_transform.y_pixel_size().get(),
-        );
-        let to_input_pixels = |coordinate: Option<Coordinate2D>| {
-            coordinate.map(|c| {
-                (
-                    (c.y - in_origin.y) / in_pixel_size.1,
-                    (c.x - in_origin.x) / in_pixel_size.0,
-                )
-            })
-        };
+        let to_input_pixels =
+            |coordinate: Option<Coordinate2D>| to_input_pixels(coordinate, &in_geo_transform);
         let coordinate = |y: f64, x: f64| {
             let origin = out_geo_transform.origin_coordinate();
             Coordinate2D::new(
@@ -1497,6 +1504,29 @@ mod tests {
                 Some(9)
             ]
         );
+    }
+
+    #[test]
+    fn it_treats_non_finite_coordinates_as_not_projected() {
+        let geo_transform = GeoTransform::new_unchecked((10., 20.).into(), 2., -4.);
+
+        assert_eq!(
+            to_input_pixels(Some((14., 12.).into()), &geo_transform),
+            Some((2., 2.))
+        );
+        assert_eq!(to_input_pixels(None, &geo_transform), None);
+        for coordinate in [
+            (f64::NAN, 12.),
+            (14., f64::NAN),
+            (f64::INFINITY, 12.),
+            (14., f64::NEG_INFINITY),
+        ] {
+            assert_eq!(
+                to_input_pixels(Some(coordinate.into()), &geo_transform),
+                None,
+                "{coordinate:?}"
+            );
+        }
     }
 
     #[test]
