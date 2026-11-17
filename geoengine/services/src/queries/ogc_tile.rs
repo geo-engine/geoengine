@@ -33,7 +33,7 @@ use geoengine_operators::engine::RasterResultDescriptor;
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors,
+        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors, TypedOperator,
         TypedRasterQueryProcessor,
     },
     util::{WrapWithProjectionAndResample, raster_stream_to_png::raster_stream_to_png_bytes},
@@ -273,7 +273,7 @@ pub async fn render_tile<C: ApplicationContext>(
 
 /// A layer's processing graph on the grid of a tile matrix, and the pixels of one tile in that grid
 pub struct TileOnGrid {
-    /// the processing graph the tile is computed with, e.g. the layer's graph reprojected
+    /// the processing graph the tile is computed with: the layer's graph on the tile matrix's grid
     pub processing_graph: ProcessingGraph,
     pub initialized_operator: Box<dyn InitializedRasterOperator>,
     /// the tile's pixels in the grid of `initialized_operator`
@@ -283,7 +283,8 @@ pub struct TileOnGrid {
     pub height: u32,
 }
 
-/// Puts `processing_graph` onto the grid of the tile matrix of `query` and finds the tile's pixels
+/// Puts `processing_graph` onto the grid of the tile matrix of `query` with one `Warp`, the same as
+/// for a WMS `GetMap`, and finds the tile's pixels in it
 ///
 /// # Errors
 /// If the graph is no raster or cannot be initialized, or the tile is outside the tile matrix.
@@ -292,6 +293,18 @@ pub async fn tile_on_grid(
     execution_context: &dyn ExecutionContext,
     query: &TileQuery,
 ) -> OgcApiResult<TileOnGrid> {
+    let layer_operator = processing_graph
+        .operator
+        .clone()
+        .get_raster()
+        .map_err(crate::error::Error::from)?;
+    let layer_initialized = initialize_raster_graph(&processing_graph, execution_context)
+        .instrument(debug_span!("initialize_layer"))
+        .await?;
+
+    // The grid and the tile's pixels in it, from the operators the tile was computed with so
+    // far: a reprojection and resampling, optimized for the tile matrix's resolution. Only their
+    // result descriptor is used.
     let mut initialized_operator = initialize_raster_graph(&processing_graph, execution_context)
         .instrument(debug_span!("initialize_layer"))
         .await?;
@@ -358,9 +371,34 @@ pub async fn tile_on_grid(
         query.tile_col,
     )?;
 
+    // the layer on that grid in one step
+    let grid = *initialized_operator
+        .result_descriptor()
+        .spatial_grid_descriptor();
+    let spatial_reference = initialized_operator
+        .result_descriptor()
+        .spatial_reference
+        .as_option()
+        .ok_or(OgcApiError::MissingSpatialReference)?;
+    let wrapped = WrapWithProjectionAndResample::new_create_result_descriptor(
+        layer_operator,
+        layer_initialized,
+    )
+    .wrap_with_projection_and_resample(
+        Some(grid.geo_transform().origin_coordinate),
+        Some(grid.spatial_resolution()),
+        spatial_reference,
+        execution_context,
+    )
+    .instrument(debug_span!("initialize_warp"))
+    .await
+    .boxed_context(error::InitializingProcessingGraph)?;
+
     Ok(TileOnGrid {
-        processing_graph,
-        initialized_operator,
+        processing_graph: ProcessingGraph {
+            operator: TypedOperator::Raster(wrapped.operator),
+        },
+        initialized_operator: wrapped.initialized_operator,
         grid_bounds,
         width: u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
         height: u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
