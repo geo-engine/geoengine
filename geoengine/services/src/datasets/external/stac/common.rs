@@ -20,11 +20,14 @@ use super::StacProviderS3Config;
 /// STAC `fields` query parameter used to keep item responses small while including all
 /// metadata needed by the provider (loading info) and the harvester (discovery/mapping).
 ///
+/// Includes the item's time range (`start_datetime`/`end_datetime`) and the asset media type
+/// (`assets.*.type`), which select `NetCDF` assets and JPEG 2000 open options.
+///
 /// Includes both the STAC 1.1.0 metadata (`assets.*.data_type`, `assets.*.bands`,
 /// `assets.*.proj:code`) and the STAC 1.0.0 metadata (`assets.*.raster:bands`,
 /// item-level projection fields, and `assets.*.proj:epsg`) so that items of either version
 /// survive the field filter.
-pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,properties.proj:shape,properties.proj:transform,assets.*.title,assets.*.href,assets.*.data_type,assets.*.nodata,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
+pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.start_datetime,properties.end_datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,properties.proj:shape,properties.proj:transform,assets.*.title,assets.*.href,assets.*.type,assets.*.data_type,assets.*.nodata,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
 
 // ---------------------------------------------------------------------------
 // STAC extension version types
@@ -633,6 +636,17 @@ pub fn is_jp2_media_type(media_type: Option<&str>) -> bool {
     media_type == Some("image/jp2")
 }
 
+/// Check if a media type is `NetCDF` (`application/netcdf` or the older `application/x-netcdf`).
+///
+/// STAC catalogs usually omit the projection and raster metadata of `NetCDF` assets, so their
+/// grid, data type and CRS are read from the file header instead.
+pub fn is_netcdf_media_type(media_type: Option<&str>) -> bool {
+    matches!(
+        media_type,
+        Some("application/netcdf" | "application/x-netcdf")
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Time helpers
 // ---------------------------------------------------------------------------
@@ -710,7 +724,7 @@ pub fn gdal_config_options_for_file_path(
         ),
         (
             "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-            ".tif,.tiff,.jp2".to_owned(),
+            ".tif,.tiff,.jp2,.nc".to_owned(),
         ),
     ];
 

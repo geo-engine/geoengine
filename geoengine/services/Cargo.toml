@@ -60,6 +60,7 @@ float-cmp = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 gdal = { workspace = true }
+gdal-sys = { workspace = true }
 geo = { workspace = true }
 geoengine-api-client = { path = "../../api-clients/rust" }
 geoengine-datatypes = { path = "../datatypes" }

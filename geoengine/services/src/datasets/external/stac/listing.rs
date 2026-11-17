@@ -539,6 +539,8 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            item_time: None,
+            max_concurrent_asset_probes: None,
         })
         .unwrap()
     }
@@ -614,6 +616,8 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            item_time: None,
+            max_concurrent_asset_probes: None,
         })
         .unwrap()
     }
