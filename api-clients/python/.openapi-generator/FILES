@@ -355,6 +355,7 @@ docs/StacAssetBand.md
 docs/StacCoarserAsset.md
 docs/StacDataProviderDefinition.md
 docs/StacGrid.md
+docs/StacItemTime.md
 docs/StacProviderAuthentication.md
 docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
@@ -837,6 +838,7 @@ geoengine_api_client/models/stac_asset_band.py
 geoengine_api_client/models/stac_coarser_asset.py
 geoengine_api_client/models/stac_data_provider_definition.py
 geoengine_api_client/models/stac_grid.py
+geoengine_api_client/models/stac_item_time.py
 geoengine_api_client/models/stac_provider_authentication.py
 geoengine_api_client/models/stac_provider_dataset.py
 geoengine_api_client/models/stac_provider_dataset_band.py
@@ -1315,6 +1317,7 @@ test/test_stac_asset_band.py
 test/test_stac_coarser_asset.py
 test/test_stac_data_provider_definition.py
 test/test_stac_grid.py
+test/test_stac_item_time.py
 test/test_stac_provider_authentication.py
 test/test_stac_provider_dataset.py
 test/test_stac_provider_dataset_band.py

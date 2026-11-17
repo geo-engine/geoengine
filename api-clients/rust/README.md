@@ -472,6 +472,7 @@ Class | Method | HTTP request | Description
  - [StacCoarserAsset](docs/StacCoarserAsset.md)
  - [StacDataProviderDefinition](docs/StacDataProviderDefinition.md)
  - [StacGrid](docs/StacGrid.md)
+ - [StacItemTime](docs/StacItemTime.md)
  - [StacProviderAuthentication](docs/StacProviderAuthentication.md)
  - [StacProviderDataset](docs/StacProviderDataset.md)
  - [StacProviderDatasetBand](docs/StacProviderDatasetBand.md)
