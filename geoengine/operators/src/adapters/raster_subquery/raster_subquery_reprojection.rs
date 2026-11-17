@@ -45,6 +45,9 @@ pub struct TileReprojectionSubQuery<T, F> {
     pub fold_fn: F,
     pub state: TileReprojectionSubqueryGridInfo,
     pub index_cache: InputPixelIndicesCache,
+    /// the largest error in input pixels of the approximate projection, 0 to project exactly (see
+    /// [`ApproxProjection`])
+    pub approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -87,6 +90,7 @@ where
                 in_srs: self.in_srs,
                 valid_out_area: self.state.out_spatial_grid.spatial_partition(),
                 in_geo_transform: self.state.in_spatial_grid.geo_transform(),
+                approximation_error: self.approximation_error,
             },
             delivered_bounds: None,
             pool: pool.clone(),
@@ -244,6 +248,7 @@ pub struct InputPixelIndicesSpec {
     in_srs: SpatialReference,
     valid_out_area: SpatialPartition2D,
     in_geo_transform: GeoTransform,
+    approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 /// The [`InputPixelIndices`] of the last few tiles of one query, so that further bands and time
@@ -277,8 +282,7 @@ impl InputPixelIndicesCache {
 
 /// The input pixel indices of the pixel centers of `spec.tile_info`. Chunks within the valid
 /// output area are projected approximately, row by row, with an error of at most
-/// [`APPROX_ERROR_THRESHOLD_PX`](super::APPROX_ERROR_THRESHOLD_PX) input pixels (see
-/// [`ApproxProjection`]).
+/// `spec.approximation_error` input pixels (see [`ApproxProjection`]).
 fn input_pixel_indices_parallel(
     pool: &ThreadPool,
     spec: InputPixelIndicesSpec,
@@ -304,10 +308,6 @@ fn input_pixel_indices_parallel(
     let valid_out_area = spec.valid_out_area.as_bbox();
 
     let to_index = |c: Coordinate2D| input_pixel_index(&spec.in_geo_transform, c);
-    let in_pixel_size = (
-        spec.in_geo_transform.x_pixel_size().get(),
-        spec.in_geo_transform.y_pixel_size().get(),
-    );
 
     let mut indices = vec![NO_PIXEL; tile_info.tile_size_in_pixels.number_of_elements()];
 
@@ -335,7 +335,11 @@ fn input_pixel_indices_parallel(
                     if valid_out_area.contains_bbox(&chunk_bounds) {
                         tracing::trace!("reproject whole tile chunk");
                         // row by row, approximately; points that fail to project get no pixel
-                        let approx = ApproxProjection::new(proj, in_pixel_size);
+                        let approx = ApproxProjection::new(
+                            proj,
+                            &spec.in_geo_transform,
+                            spec.approximation_error,
+                        );
                         let mut in_coords = vec![None; width];
                         for (index_row, out_row) in
                             index_slice.chunks_mut(width).zip(out_coords.chunks(width))
@@ -653,6 +657,9 @@ mod tests {
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
             index_cache: Default::default(),
+            approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64::new_unchecked(
+                0.125,
+            ),
             state: TileReprojectionSubqueryGridInfo {
                 in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
                 out_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
@@ -749,6 +756,9 @@ mod tests {
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
             index_cache: Default::default(),
+            approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64::new_unchecked(
+                0.125,
+            ),
             state: TileReprojectionSubqueryGridInfo {
                 in_spatial_grid,
                 out_spatial_grid,
@@ -858,6 +868,9 @@ mod tests {
             out_srs: SpatialReference::epsg_4326(),
             fold_fn: fold_by_coordinate_lookup_future,
             index_cache: Default::default(),
+            approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64::new_unchecked(
+                0.125,
+            ),
             state: TileReprojectionSubqueryGridInfo {
                 in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
                 out_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
@@ -972,6 +985,9 @@ mod tests {
             out_srs: SpatialReference::epsg_4326(),
             fold_fn: fold_by_coordinate_lookup_future,
             index_cache: Default::default(),
+            approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64::new_unchecked(
+                0.125,
+            ),
             state: TileReprojectionSubqueryGridInfo {
                 in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
                 out_spatial_grid,

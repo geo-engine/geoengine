@@ -341,15 +341,17 @@ pub struct KernelProjection {
     pub out_srs: SpatialReference,
     /// the tiling grids of input and output
     pub grids: TileReprojectionSubqueryGridInfo,
+    /// the largest error in input pixels of the approximate projection, 0 to project exactly (see
+    /// [`ApproxProjection`])
+    pub approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl KernelProjection {
     /// Projects `coordinates`, rows of `row_len` coordinates, from the output into the input
     /// spatial reference, `None` for coordinates outside of the output grid (as in the
     /// nearest-neighbour reprojection) or that cannot be projected. Rows within the output grid are
-    /// projected approximately, with an error of at most
-    /// [`APPROX_ERROR_THRESHOLD_PX`](crate::adapters::APPROX_ERROR_THRESHOLD_PX) input pixels
-    /// (see [`ApproxProjection`]).
+    /// projected approximately, with an error of at most `approximation_error` input pixels (see
+    /// [`ApproxProjection`]).
     fn project(
         &self,
         coordinates: &[Coordinate2D],
@@ -359,10 +361,6 @@ impl KernelProjection {
         let chunk_size = row_len * (64 * 512_usize).div_ceil(row_len);
         let valid_area = self.grids.out_spatial_grid.spatial_partition().as_bbox();
         let in_geo_transform = self.grids.in_spatial_grid.geo_transform();
-        let in_pixel_size = (
-            in_geo_transform.x_pixel_size().get(),
-            in_geo_transform.y_pixel_size().get(),
-        );
         let mut projected = vec![None; coordinates.len()];
         pool.install(|| {
             projected
@@ -377,7 +375,11 @@ impl KernelProjection {
                         DefaultCoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
                     // row by row if the chunk lies in the valid area, else coordinate by coordinate
                     if valid_area.contains_bbox(&bounds) {
-                        let approx = ApproxProjection::new(&projector, in_pixel_size);
+                        let approx = ApproxProjection::new(
+                            &projector,
+                            &in_geo_transform,
+                            self.approximation_error,
+                        );
                         for (projected, row) in projected
                             .chunks_mut(row_len)
                             .zip(coordinates.chunks(row_len))

@@ -45,7 +45,8 @@ class TestWarpParameters(unittest.TestCase):
                 downsampling = 'nearest',
                 upsampling = 'nearest',
                 output_data_type = 'U8',
-                derive_out_spec = 'dataBounds'
+                derive_out_spec = 'dataBounds',
+                approximation_error_threshold = 1.337
             )
         else:
             return WarpParameters(

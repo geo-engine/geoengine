@@ -43,7 +43,8 @@ class TestRasterOperator(unittest.TestCase):
                     downsampling = null, 
                     upsampling = null, 
                     output_data_type = null, 
-                    derive_out_spec = null, ),
+                    derive_out_spec = null, 
+                    approximation_error_threshold = 1.337, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, )
             )
@@ -57,7 +58,8 @@ class TestRasterOperator(unittest.TestCase):
                     downsampling = null, 
                     upsampling = null, 
                     output_data_type = null, 
-                    derive_out_spec = null, ),
+                    derive_out_spec = null, 
+                    approximation_error_threshold = 1.337, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
         )

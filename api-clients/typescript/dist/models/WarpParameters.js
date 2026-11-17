@@ -44,6 +44,7 @@ function WarpParametersFromJSONTyped(json, ignoreDiscriminator) {
         'upsampling': json['upsampling'] == null ? undefined : (0, WarpUpsamplingMethod_1.WarpUpsamplingMethodFromJSON)(json['upsampling']),
         'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : (0, RasterDataType_1.RasterDataTypeFromJSON)(json['outputDataType']),
         'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceFromJSON)(json['deriveOutSpec']),
+        'approximationErrorThreshold': json['approximationErrorThreshold'] === undefined ? undefined : json['approximationErrorThreshold'] === null ? null : json['approximationErrorThreshold'],
     };
 }
 function WarpParametersToJSON(json) {
@@ -61,5 +62,6 @@ function WarpParametersToJSONTyped(value, ignoreDiscriminator = false) {
         'upsampling': (0, WarpUpsamplingMethod_1.WarpUpsamplingMethodToJSON)(value['upsampling']),
         'outputDataType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['outputDataType']),
         'deriveOutSpec': (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceToJSON)(value['deriveOutSpec']),
+        'approximationErrorThreshold': value['approximationErrorThreshold'],
     };
 }

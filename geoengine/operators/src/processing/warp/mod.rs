@@ -76,6 +76,11 @@ pub struct WarpParams {
     /// spatial reference (default) or from the data bounds, as in `Reprojection`
     #[serde(default, skip_serializing_if = "is_default")]
     pub derive_out_spec: DeriveOutRasterSpecsSource,
+    /// The largest error in input pixels of the approximate coordinate transformation when
+    /// reprojecting, as `gdalwarp -et`; 0 projects every pixel exactly. The server's
+    /// `[query_context] reprojection_approximation_error_px` (0.125 by default) if `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approximation_error_threshold: Option<geoengine_datatypes::util::NonNegativeFiniteF64>,
 }
 
 /// How [`Warp`] computes an output pixel that is coarser than the input in at least one axis, with
@@ -133,17 +138,8 @@ impl RasterOperator for Warp {
             .sources
             .initialize_sources(path.clone(), context)
             .await?;
-        let warp = InitializedWarp::new(
-            name,
-            path,
-            initialized_source.raster,
-            self.params,
-            context.tiling_specification(),
-        )?;
-        let warp = warp.with_mode_memory_budget(
-            context.warp_mode_max_memory_per_tile(),
-            context.thread_pool().current_num_threads(),
-        )?;
+        let warp =
+            InitializedWarp::new(name, path, initialized_source.raster, self.params, context)?;
         Ok(warp.boxed())
     }
 
@@ -286,6 +282,8 @@ pub struct InitializedWarp<O: InitializedRasterOperator> {
     kernel_in_resolution: SpatialResolution,
     /// the limit for the memory of `mode` per output tile
     mode_memory_budget: usize,
+    /// the largest error in input pixels of the approximate projection, 0 to project exactly
+    approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
     tiling_specification: TilingSpecification,
 }
 
@@ -294,13 +292,13 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
     ///
     /// # Errors
     /// If the source has no spatial reference, or does not intersect the area of use of the
-    /// target spatial reference.
+    /// target spatial reference, or as [`Self::with_output_grid`].
     pub fn new(
         name: CanonicOperatorName,
         path: ProcessingGraphOperatorPath,
         source: O,
         params: WarpParams,
-        tiling_specification: TilingSpecification,
+        context: &dyn ExecutionContext,
     ) -> Result<Self> {
         let out_grid = warped_spatial_grid(source.result_descriptor(), &params)?;
         Self::with_output_grid(
@@ -313,23 +311,29 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             source,
             params,
             out_grid,
-            tiling_specification,
+            context,
         )
     }
 
     /// A `Warp` of `source` onto `out_grid`, which the caller computed from `params`, e.g. with the
     /// rules of the operator in `origin` that is mapped to a `Warp`. The target spatial reference is
-    /// the one of `params`, or the source's.
+    /// the one of `params`, or the source's. `context` gives the tiling, the limit for the memory
+    /// of `mode` and the default of `params.approximation_error_threshold`.
     ///
     /// # Errors
-    /// If the source has no spatial reference.
+    /// If the source has no spatial reference, or `mode` is used with a float input or exceeds its
+    /// memory limit.
     pub fn with_output_grid(
         origin: WarpOrigin,
         source: O,
         params: WarpParams,
         out_grid: SpatialGridDescriptor,
-        tiling_specification: TilingSpecification,
+        context: &dyn ExecutionContext,
     ) -> Result<Self> {
+        let tiling_specification = context.tiling_specification();
+        let approximation_error = params
+            .approximation_error_threshold
+            .unwrap_or_else(|| context.reprojection_approximation_error());
         let WarpOrigin {
             name,
             path,
@@ -389,7 +393,7 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             bands: in_descriptor.bands.clone(),
         };
 
-        Ok(Self {
+        let warp = Self {
             name,
             path,
             operator_name,
@@ -402,22 +406,25 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             reproject,
             kernel,
             kernel_in_resolution: in_resolution,
-            mode_memory_budget: crate::engine::DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
+            mode_memory_budget: context.warp_mode_max_memory_per_tile(),
+            approximation_error,
             tiling_specification,
-        })
+        };
+        warp.ensure_mode_fits_memory_budget(context.thread_pool().current_num_threads())?;
+        Ok(warp)
     }
 
-    /// Sets the limit for the memory of `mode` per output tile to `budget` bytes and checks that
-    /// `mode` keeps at most that (see [`kernels::mode_memory_per_tile`]), with `threads` threads
-    /// that compute output rows at the same time. With reprojection, the footprints also depend on
-    /// the output tile, so the processor checks them again for each tile.
+    /// Checks that `mode` keeps at most `self.mode_memory_budget` bytes per output tile (see
+    /// [`kernels::mode_memory_per_tile`]), with `threads` threads that compute output rows at the
+    /// same time. With reprojection, the footprints also depend on the output tile, so the
+    /// processor checks them again for each tile.
     ///
     /// # Errors
-    /// If the estimate exceeds `budget`.
-    pub fn with_mode_memory_budget(mut self, budget: usize, threads: usize) -> Result<Self> {
-        self.mode_memory_budget = budget;
+    /// If the estimate exceeds the budget.
+    fn ensure_mode_fits_memory_budget(&self, threads: usize) -> Result<()> {
+        let budget = self.mode_memory_budget;
         if self.kernel != Some(WarpKernel::Mode) {
-            return Ok(self);
+            return Ok(());
         }
         let data_type = self.source.result_descriptor().data_type;
         let in_resolution = self.kernel_in_resolution;
@@ -431,8 +438,7 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             self.tiling_specification.tile_size_in_pixels,
             threads,
         );
-        kernels::ensure_mode_fits_memory_budget(&estimate, budget, data_type)?;
-        Ok(self)
+        kernels::ensure_mode_fits_memory_budget(&estimate, budget, data_type)
     }
 }
 
@@ -512,6 +518,7 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
                     self.source_srs,
                     self.target_srs,
                     self.state,
+                    self.approximation_error,
                 ).boxed().into()
             } else if finer {
                 // the same spatial reference: look up the input pixel by its index, without
@@ -592,6 +599,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
             in_srs: self.source_srs,
             out_srs: self.target_srs,
             grids: self.state,
+            approximation_error: self.approximation_error,
         });
         let warped = call_on_generic_raster_processor!(source, p => WarpKernelProcessor::new(
             p,
@@ -1269,6 +1277,74 @@ mod tests {
                 .iter()
                 .filter_map(|result| result.as_ref().err())
                 .collect::<Vec<_>>()
+        );
+    }
+
+    /// `approximationErrorThreshold` overrides the default of the execution context, and 0
+    /// projects exactly
+    #[tokio::test]
+    async fn it_approximates_the_reprojection_with_the_threshold_of_the_parameter_or_context() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = GdalSource {
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+        }
+        .typed();
+        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+        let threshold = |px: f64| geoengine_datatypes::util::NonNegativeFiniteF64::new(px).unwrap();
+        // in the polar stereographic projection, a row of output pixels is a curve in the input,
+        // so a large error lets the interpolation move the pixels, unlike in EPSG:3857
+        let operator = |approximation_error_threshold| {
+            warp(
+                ndvi.clone(),
+                WarpParams {
+                    target_spatial_reference: Some(SpatialReference::new(
+                        geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+                        3413,
+                    )),
+                    output_resolution: Some(SpatialResolution::new_unchecked(5_000., 5_000.)),
+                    approximation_error_threshold,
+                    ..WarpParams::default()
+                },
+            )
+        };
+
+        // a tile in the middle of the grid, whose rows lie within the area of use, as only those
+        // are approximated
+        let grid = operator(None)
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .result_descriptor()
+            .spatial_grid
+            .tiling_grid_definition(exe_ctx.tiling_specification)
+            .tiling_grid_bounds();
+        let [center_y, center_x] = [0, 1].map(|axis| {
+            (grid.min_index().0[axis] + grid.max_index().0[axis]).div_euclid(2 * 512) * 512
+        });
+        let tile = Some(GridBoundingBox2D::new_unchecked(
+            [center_y, center_x],
+            [center_y + 511, center_x + 511],
+        ));
+
+        exe_ctx.reprojection_approximation_error = threshold(0.);
+        let (_, exact) = query(operator(None), &exe_ctx, ndvi_time(), tile).await;
+        exe_ctx.reprojection_approximation_error = threshold(50.);
+        let (_, coarse) = query(operator(None), &exe_ctx, ndvi_time(), tile).await;
+        let (_, exact_by_parameter) =
+            query(operator(Some(threshold(0.))), &exe_ctx, ndvi_time(), tile).await;
+
+        assert!(exact.iter().any(|tile| !tile.is_empty()));
+        assert_eq_two_list_of_tiles(&exact_by_parameter, &exact, false);
+        assert_ne!(
+            coarse
+                .iter()
+                .map(|tile| &tile.grid_array)
+                .collect::<Vec<_>>(),
+            exact
+                .iter()
+                .map(|tile| &tile.grid_array)
+                .collect::<Vec<_>>(),
+            "an error of 50 input pixels must change the result"
         );
     }
 

@@ -37,6 +37,7 @@ export function WarpParametersFromJSONTyped(json, ignoreDiscriminator) {
         'upsampling': json['upsampling'] == null ? undefined : WarpUpsamplingMethodFromJSON(json['upsampling']),
         'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : RasterDataTypeFromJSON(json['outputDataType']),
         'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
+        'approximationErrorThreshold': json['approximationErrorThreshold'] === undefined ? undefined : json['approximationErrorThreshold'] === null ? null : json['approximationErrorThreshold'],
     };
 }
 export function WarpParametersToJSON(json) {
@@ -54,5 +55,6 @@ export function WarpParametersToJSONTyped(value, ignoreDiscriminator = false) {
         'upsampling': WarpUpsamplingMethodToJSON(value['upsampling']),
         'outputDataType': RasterDataTypeToJSON(value['outputDataType']),
         'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
+        'approximationErrorThreshold': value['approximationErrorThreshold'],
     };
 }

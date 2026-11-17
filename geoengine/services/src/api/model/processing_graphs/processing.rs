@@ -1100,6 +1100,12 @@ pub struct WarpParameters {
     #[schema(examples("projectionBounds"))]
     #[serde(default, skip_serializing_if = "is_default")]
     pub derive_out_spec: DeriveOutRasterSpecsSource,
+    /// The largest error in input pixels of the approximate coordinate transformation when
+    /// reprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's
+    /// `[query_context] reprojection_approximation_error_px` (`0.125` by default).
+    #[schema(value_type = Option<f64>, examples(0.125, 0.0))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approximation_error_threshold: Option<NonNegativeFiniteF64>,
 }
 
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
@@ -1177,6 +1183,7 @@ impl TryFrom<Warp> for OperatorsWarp {
                 upsampling: value.params.upsampling.into(),
                 output_data_type: value.params.output_data_type.map(Into::into),
                 derive_out_spec: value.params.derive_out_spec.into(),
+                approximation_error_threshold: value.params.approximation_error_threshold,
             },
             sources: (*value.sources).try_into()?,
         })
@@ -3874,7 +3881,8 @@ mod tests {
                 "outputResolution": { "x": 20000.0, "y": 10000.0 },
                 "downsampling": "mode",
                 "upsampling": "bilinear",
-                "outputDataType": "F32"
+                "outputDataType": "F32",
+                "approximationErrorThreshold": 0.0
             },
             "sources": {
                 "raster": {
@@ -3903,8 +3911,19 @@ mod tests {
                 upsampling: OperatorsWarpUpsampling::Bilinear,
                 output_data_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
                 derive_out_spec: OperatorsDeriveOutRasterSpecsSource::ProjectionBounds,
+                approximation_error_threshold: Some(NonNegativeFiniteF64::new_unchecked(0.)),
             }
         );
+    }
+
+    #[test]
+    fn it_rejects_a_negative_approximation_error_threshold() {
+        for threshold in [json!(-0.5), json!("NaN")] {
+            let result = serde_json::from_value::<WarpParameters>(json!({
+                "approximationErrorThreshold": threshold
+            }));
+            assert!(result.is_err(), "{threshold} must be rejected");
+        }
     }
 
     #[test]

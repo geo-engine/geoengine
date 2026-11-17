@@ -415,7 +415,7 @@ impl RasterOperator for Reprojection {
             raster_source,
             warp_params,
             out_grid,
-            context.tiling_specification(),
+            context,
         )
         .map(InitializedRasterOperator::boxed)
     }
@@ -432,6 +432,8 @@ where
     from: SpatialReference,
     to: SpatialReference,
     state: TileReprojectionSubqueryGridInfo,
+    /// see [`TileReprojectionSubQuery::approximation_error`]
+    approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
     _phantom_data: PhantomData<P>,
 }
 
@@ -446,6 +448,7 @@ where
         from: SpatialReference,
         to: SpatialReference,
         state: TileReprojectionSubqueryGridInfo,
+        approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
     ) -> Self {
         Self {
             source,
@@ -453,6 +456,7 @@ where
             from,
             to,
             state,
+            approximation_error,
             _phantom_data: PhantomData,
         }
     }
@@ -483,6 +487,7 @@ where
             fold_fn: fold_by_coordinate_lookup_future,
             state,
             index_cache: Default::default(),
+            approximation_error: self.approximation_error,
             _phantom_data: PhantomData,
         };
 

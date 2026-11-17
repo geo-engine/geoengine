@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
-from typing import Any, ClassVar, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from geoengine_api_client.models.coordinate2_d import Coordinate2D
 from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource
 from geoengine_api_client.models.raster_data_type import RasterDataType
@@ -40,7 +40,8 @@ class WarpParameters(BaseModel):
     upsampling: Optional[WarpUpsamplingMethod] = Field(default=None, description="How to compute an output pixel that is finer than the input in both axes. Defaults to `nearest`.")
     output_data_type: Optional[RasterDataType] = Field(default=None, description="The data type of the output. Defaults to the data type of the input. Integer types round half up and clip values to their range.", alias="outputDataType")
     derive_out_spec: Optional[DeriveOutRasterSpecsSource] = Field(default=None, description="How the output grid is derived when reprojecting, as in `Reprojection`: `projectionBounds` (default) derives it from the area of use of the input's spatial reference, `dataBounds` from the data bounds.", alias="deriveOutSpec")
-    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "downsampling", "upsampling", "outputDataType", "deriveOutSpec"]
+    approximation_error_threshold: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="The largest error in input pixels of the approximate coordinate transformation when reprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's `[query_context] reprojection_approximation_error_px` (`0.125` by default).", alias="approximationErrorThreshold")
+    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "downsampling", "upsampling", "outputDataType", "deriveOutSpec", "approximationErrorThreshold"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -107,6 +108,11 @@ class WarpParameters(BaseModel):
         if self.output_data_type is None and "output_data_type" in self.model_fields_set:
             _dict['outputDataType'] = None
 
+        # set to None if approximation_error_threshold (nullable) is None
+        # and model_fields_set contains the field
+        if self.approximation_error_threshold is None and "approximation_error_threshold" in self.model_fields_set:
+            _dict['approximationErrorThreshold'] = None
+
         return _dict
 
     @classmethod
@@ -125,7 +131,8 @@ class WarpParameters(BaseModel):
             "downsampling": obj.get("downsampling"),
             "upsampling": obj.get("upsampling"),
             "outputDataType": obj.get("outputDataType"),
-            "deriveOutSpec": obj.get("deriveOutSpec")
+            "deriveOutSpec": obj.get("deriveOutSpec"),
+            "approximationErrorThreshold": obj.get("approximationErrorThreshold")
         })
         return _obj
 

@@ -111,7 +111,7 @@ impl RasterOperator for Downsampling {
             raster_source,
             warp_params,
             out_grid,
-            context.tiling_specification(),
+            context,
         )
         .map(InitializedRasterOperator::boxed)
     }

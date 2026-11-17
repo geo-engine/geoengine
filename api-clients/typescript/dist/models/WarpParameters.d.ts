@@ -54,6 +54,12 @@ export interface WarpParameters {
      * reference, `dataBounds` from the data bounds.
      */
     deriveOutSpec?: DeriveOutRasterSpecsSource;
+    /**
+     * The largest error in input pixels of the approximate coordinate transformation when
+     * reprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's
+     * `[query_context] reprojection_approximation_error_px` (`0.125` by default).
+     */
+    approximationErrorThreshold?: number | null;
 }
 /**
  * Check if a given object implements the WarpParameters interface.

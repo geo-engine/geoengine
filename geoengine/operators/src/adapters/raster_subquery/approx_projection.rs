@@ -1,35 +1,41 @@
 //! An approximate coordinate projection for rows of output pixels, as GDAL's approximate
 //! transformer (`GDALApproxTransform`, `gdalwarp -et`): it projects the start, the middle and the
-//! end of a row exactly and interpolates linearly in between if the middle lies within
-//! [`APPROX_ERROR_THRESHOLD_PX`] input pixels of the interpolation. Otherwise it splits the row
-//! into halves and repeats. Rows of at most five coordinates are projected exactly.
+//! end of a row exactly and interpolates linearly in between if the middle lies within a threshold
+//! of input pixels of the interpolation. Otherwise it splits the row into halves and repeats. Rows of at most five coordinates, and all
+//! rows with a threshold of 0, are projected exactly.
 
 use geoengine_datatypes::primitives::Coordinate2D;
+use geoengine_datatypes::raster::GeoTransform;
 use geoengine_datatypes::spatial_reference::CoordinateProjection;
-
-/// The largest error of the approximate projection, in input pixels. GDAL's default for
-/// `gdalwarp -et`, which makes the result differ from the exact projection only for output pixels
-/// whose center lies within an eighth of an input pixel of an input pixel edge.
-pub const APPROX_ERROR_THRESHOLD_PX: f64 = 0.125;
+use geoengine_datatypes::util::{NonNegativeFiniteF64, PositiveFiniteF64};
 
 /// Rows of at most this many coordinates are projected exactly, as in GDAL
 const MAX_EXACT_ROW_LEN: usize = 5;
 
-/// Projects rows of coordinates approximately with `projector` into an input grid with
-/// `in_pixel_size`.
+/// Projects rows of coordinates approximately with `projector` into an input grid.
 pub struct ApproxProjection<'p, P> {
     projector: &'p P,
     /// the absolute pixel size of the input grid in x and y
-    in_pixel_size: (f64, f64),
-    max_error_px: f64,
+    in_pixel_size: (PositiveFiniteF64, PositiveFiniteF64),
+    /// the largest error in input pixels, 0 to project exactly
+    max_error_px: NonNegativeFiniteF64,
 }
 
 impl<'p, P: CoordinateProjection> ApproxProjection<'p, P> {
-    pub fn new(projector: &'p P, in_pixel_size: (f64, f64)) -> Self {
+    /// Into the input grid of `in_geo_transform`, with an error of at most `max_error_px` input
+    /// pixels, as `gdalwarp -et`; 0 projects every coordinate exactly
+    pub fn new(
+        projector: &'p P,
+        in_geo_transform: &GeoTransform,
+        max_error_px: NonNegativeFiniteF64,
+    ) -> Self {
         Self {
             projector,
-            in_pixel_size: (in_pixel_size.0.abs(), in_pixel_size.1.abs()),
-            max_error_px: APPROX_ERROR_THRESHOLD_PX,
+            in_pixel_size: (
+                in_geo_transform.x_pixel_size().abs().into(),
+                in_geo_transform.y_pixel_size().abs().into(),
+            ),
+            max_error_px,
         }
     }
 
@@ -38,7 +44,10 @@ impl<'p, P: CoordinateProjection> ApproxProjection<'p, P> {
     pub fn project_row(&self, row: &[Coordinate2D], projected: &mut [Option<Coordinate2D>]) {
         debug_assert_eq!(row.len(), projected.len());
         // the interpolation needs x to increase along the row
-        if row.len() <= MAX_EXACT_ROW_LEN || row[row.len() - 1].x <= row[0].x {
+        if self.max_error_px.get() == 0.
+            || row.len() <= MAX_EXACT_ROW_LEN
+            || row[row.len() - 1].x <= row[0].x
+        {
             self.project_exactly(row, projected);
             return;
         }
@@ -88,10 +97,10 @@ impl<'p, P: CoordinateProjection> ApproxProjection<'p, P> {
             )
         };
         let interpolated_middle = interpolate(row[middle_index]);
-        let error_px = (interpolated_middle.x - middle.x).abs() / self.in_pixel_size.0
-            + (interpolated_middle.y - middle.y).abs() / self.in_pixel_size.1;
+        let error_px = (interpolated_middle.x - middle.x).abs() / self.in_pixel_size.0.get()
+            + (interpolated_middle.y - middle.y).abs() / self.in_pixel_size.1.get();
 
-        if error_px <= self.max_error_px {
+        if error_px <= self.max_error_px.get() {
             for (projected, coordinate) in projected.iter_mut().zip(row) {
                 *projected = Some(interpolate(*coordinate));
             }
@@ -141,6 +150,14 @@ mod tests {
     use super::*;
     use geoengine_datatypes::spatial_reference::{DefaultCoordinateProjector, SpatialReference};
 
+    /// GDAL's default for `gdalwarp -et`
+    const THRESHOLD: NonNegativeFiniteF64 = NonNegativeFiniteF64::new_unchecked(0.125);
+
+    /// An EPSG:4326 grid of 0.1° pixels
+    fn grid() -> GeoTransform {
+        GeoTransform::new_unchecked((-180., 90.).into(), 0.1, -0.1)
+    }
+
     /// The rows of a 512 × 512 tile of 1 km pixels in EPSG:3857 at about 70° N, projected into an
     /// EPSG:4326 grid of 0.1° pixels, deviate from the exact projection by at most the threshold
     #[test]
@@ -151,7 +168,7 @@ mod tests {
         )
         .unwrap();
         let in_pixel_size = (0.1, 0.1);
-        let approx = ApproxProjection::new(&projector, in_pixel_size);
+        let approx = ApproxProjection::new(&projector, &grid(), THRESHOLD);
 
         let mut max_error_px: f64 = 0.;
         let mut interpolated = 0;
@@ -176,7 +193,7 @@ mod tests {
         }
 
         assert!(
-            max_error_px <= APPROX_ERROR_THRESHOLD_PX,
+            max_error_px <= THRESHOLD.get(),
             "the error {max_error_px} exceeds the threshold"
         );
         assert!(interpolated > 0, "no coordinate was interpolated");
@@ -189,7 +206,7 @@ mod tests {
             SpatialReference::epsg_4326(),
         )
         .unwrap();
-        let approx = ApproxProjection::new(&projector, (0.1, 0.1));
+        let approx = ApproxProjection::new(&projector, &grid(), THRESHOLD);
         let row: Vec<Coordinate2D> = (0..5)
             .map(|x| Coordinate2D::new(f64::from(x) * 100_000., 8_000_000.))
             .collect();
@@ -199,5 +216,37 @@ mod tests {
 
         let exact = projector.project_coordinates(&row).unwrap();
         assert_eq!(projected, exact.into_iter().map(Some).collect::<Vec<_>>());
+    }
+
+    /// A threshold of 0 projects every coordinate exactly, as `gdalwarp -et 0`
+    #[test]
+    fn it_projects_exactly_with_a_threshold_of_zero() {
+        let projector = DefaultCoordinateProjector::from_known_srs(
+            SpatialReference::web_mercator(),
+            SpatialReference::epsg_4326(),
+        )
+        .unwrap();
+        let row: Vec<Coordinate2D> = (0..512)
+            .map(|x| Coordinate2D::new(1_000_000. + f64::from(x) * 1_000., 11_000_000.))
+            .collect();
+        let exact = projector.project_coordinates(&row).unwrap();
+
+        let project = |max_error_px: f64| {
+            let mut projected = vec![None; row.len()];
+            ApproxProjection::new(
+                &projector,
+                &grid(),
+                NonNegativeFiniteF64::new(max_error_px).unwrap(),
+            )
+            .project_row(&row, &mut projected);
+            projected
+                .into_iter()
+                .map(Option::unwrap)
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(project(0.), exact);
+        // the same row is interpolated with the default threshold
+        assert_ne!(project(THRESHOLD.get()), exact);
     }
 }
