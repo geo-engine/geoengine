@@ -140,7 +140,7 @@ impl RasterOperator for Warp {
             self.params,
             context.tiling_specification(),
         )?;
-        warp.ensure_mode_fits_memory_budget(
+        let warp = warp.with_mode_memory_budget(
             context.warp_mode_max_memory_per_tile(),
             context.thread_pool().current_num_threads(),
         )?;
@@ -284,6 +284,8 @@ pub struct InitializedWarp<O: InitializedRasterOperator> {
     /// the resolution of the input that the kernel compares with the output's: if reprojected,
     /// the one of the reprojected input grid
     kernel_in_resolution: SpatialResolution,
+    /// the limit for the memory of `mode` per output tile
+    mode_memory_budget: usize,
     tiling_specification: TilingSpecification,
 }
 
@@ -400,25 +402,28 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             reproject,
             kernel,
             kernel_in_resolution: in_resolution,
+            mode_memory_budget: crate::engine::DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
             tiling_specification,
         })
     }
 
-    /// Checks that `mode` keeps at most `budget` bytes per output tile (see
-    /// [`kernels::mode_memory_per_tile`]), with `threads` threads that compute output rows at the
-    /// same time.
+    /// Sets the limit for the memory of `mode` per output tile to `budget` bytes and checks that
+    /// `mode` keeps at most that (see [`kernels::mode_memory_per_tile`]), with `threads` threads
+    /// that compute output rows at the same time. With reprojection, the footprints also depend on
+    /// the output tile, so the processor checks them again for each tile.
     ///
     /// # Errors
     /// If the estimate exceeds `budget`.
-    pub fn ensure_mode_fits_memory_budget(&self, budget: usize, threads: usize) -> Result<()> {
+    pub fn with_mode_memory_budget(mut self, budget: usize, threads: usize) -> Result<Self> {
+        self.mode_memory_budget = budget;
         if self.kernel != Some(WarpKernel::Mode) {
-            return Ok(());
+            return Ok(self);
         }
-        let in_descriptor = self.source.result_descriptor();
+        let data_type = self.source.result_descriptor().data_type;
         let in_resolution = self.kernel_in_resolution;
         let out_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
         let estimate = kernels::mode_memory_per_tile(
-            in_descriptor.data_type,
+            data_type,
             (
                 (out_resolution.y() / in_resolution.y()).get(),
                 (out_resolution.x() / in_resolution.x()).get(),
@@ -426,18 +431,8 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             self.tiling_specification.tile_size_in_pixels,
             threads,
         );
-        let budget = budget as u64;
-        // the positions in a footprint are `u32` (see `kernels::ModeEntry`)
-        if estimate.bytes > budget || estimate.footprint_pixels > u64::from(u32::MAX) {
-            const MB: u64 = 1024 * 1024;
-            return Err(Error::WarpModeExceedsMemoryBudget {
-                estimated_mb: estimate.bytes.div_ceil(MB),
-                budget_mb: budget / MB,
-                footprint_pixels: estimate.footprint_pixels,
-                data_type: in_descriptor.data_type,
-            });
-        }
-        Ok(())
+        kernels::ensure_mode_fits_memory_budget(&estimate, budget, data_type)?;
+        Ok(self)
     }
 }
 
@@ -603,6 +598,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
             kernel,
             projection,
             descriptor,
+            self.mode_memory_budget,
         ).boxed().into());
         Ok(converted_processor(
             warped,
@@ -1208,6 +1204,72 @@ mod tests {
             );
             assert_eq_two_list_of_tiles(&part, &whole, false);
         }
+    }
+
+    #[tokio::test]
+    async fn it_checks_the_memory_of_mode_per_tile_when_reprojecting() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = GdalSource {
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+        }
+        .typed();
+        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+        // towards the pole, the footprints of 10 km in the polar stereographic projection grow
+        // from 5 × 5 pixels of 0.1° at the reference resolution to up to 1800 pixels. With them,
+        // `mode` keeps ≈ 12.3 MB, while the estimate at initialization is ≈ 10 MB.
+        let operator = warp(
+            ndvi,
+            WarpParams {
+                target_spatial_reference: Some(SpatialReference::new(
+                    geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+                    3413,
+                )),
+                output_resolution: Some(SpatialResolution::new_unchecked(10_000., 10_000.)),
+                downsampling: WarpDownsampling::Mode,
+                ..WarpParams::default()
+            },
+        );
+
+        let (_, tiles) = query(operator.clone(), &exe_ctx, ndvi_time(), None).await;
+        assert!(tiles.iter().any(|tile| !tile.is_empty()));
+
+        exe_ctx.warp_mode_max_memory_per_tile = 12 * 1024 * 1024;
+        let initialized = operator
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+        let processor = initialized.query_processor().unwrap().get_u8().unwrap();
+        let bounds = initialized
+            .result_descriptor()
+            .spatial_grid
+            .as_parts()
+            .1
+            .grid_bounds();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
+        let results: Vec<_> = processor
+            .raster_query(
+                RasterQueryRectangle::new(bounds, ndvi_time(), BandSelection::first()),
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .collect()
+            .await;
+        assert!(
+            results.iter().any(|result| matches!(
+                result,
+                Err(Error::WarpModeExceedsMemoryBudget {
+                    budget_mb: 12,
+                    data_type: RasterDataType::U8,
+                    ..
+                })
+            )),
+            "{:?}",
+            results
+                .iter()
+                .filter_map(|result| result.as_ref().err())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[tokio::test]

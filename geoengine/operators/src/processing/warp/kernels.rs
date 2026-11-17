@@ -307,6 +307,17 @@ impl TileSpans {
         }
     }
 
+    /// The spans (y, x) of each pixel, row-major, `None` for pixels that cannot be projected
+    fn iter(&self) -> Box<dyn Iterator<Item = Option<(Span, Span)>> + '_> {
+        match self {
+            Self::Separable { y, x } => Box::new(
+                y.iter()
+                    .flat_map(move |y| x.iter().map(move |x| Some((*y, *x)))),
+            ),
+            Self::PerPixel { pixels, .. } => Box::new(pixels.iter().copied()),
+        }
+    }
+
     /// The input pixels the output tile needs, within the same spatial reference
     fn separable_input_bounds(y: &[Span], x: &[Span]) -> GridBoundingBox2D {
         let range = |spans: &[Span]| {
@@ -473,6 +484,117 @@ pub struct ModeMemoryEstimate {
     pub footprint_pixels: u64,
 }
 
+/// Checks that `estimate` for `mode` on `data_type` keeps at most `budget` bytes.
+///
+/// # Errors
+/// If it exceeds `budget`, or a footprint has more input pixels than its positions can hold.
+pub fn ensure_mode_fits_memory_budget(
+    estimate: &ModeMemoryEstimate,
+    budget: usize,
+    data_type: RasterDataType,
+) -> Result<()> {
+    const MB: u64 = 1024 * 1024;
+    let budget = budget as u64;
+    // the positions in a footprint are `u32` (see `ModeEntry`)
+    if estimate.bytes > budget || estimate.footprint_pixels > u64::from(u32::MAX) {
+        return Err(crate::error::Error::WarpModeExceedsMemoryBudget {
+            estimated_mb: estimate.bytes.div_ceil(MB),
+            budget_mb: budget / MB,
+            footprint_pixels: estimate.footprint_pixels,
+            data_type,
+        });
+    }
+    Ok(())
+}
+
+/// The memory of the state of `mode` for an output pixel with `footprint_pixels` input pixels of
+/// `data_type`, at most
+fn mode_pixel_bytes(data_type: RasterDataType, footprint_pixels: u64) -> u64 {
+    let (distinct_values, entry_bytes) = match data_type {
+        RasterDataType::U8 | RasterDataType::I8 => (256, size_of::<ModeEntry<u8>>()),
+        RasterDataType::U16 | RasterDataType::I16 => (65_536, size_of::<ModeEntry<u16>>()),
+        RasterDataType::U32 | RasterDataType::I32 | RasterDataType::F32 => {
+            (u64::MAX, size_of::<ModeEntry<u32>>())
+        }
+        RasterDataType::U64 | RasterDataType::I64 | RasterDataType::F64 => {
+            (u64::MAX, size_of::<ModeEntry<u64>>())
+        }
+    };
+    let entries = footprint_pixels.min(distinct_values);
+    if distinct_values == 256 && entries > SPARSE_MODE_ENTRIES as u64 {
+        size_of::<DenseMode>() as u64
+    } else {
+        // the capacity of the list doubles
+        entries
+            .checked_next_power_of_two()
+            .unwrap_or(u64::MAX)
+            .saturating_mul(entry_bytes as u64)
+    }
+}
+
+/// The memory that `mode` keeps at most at the same time for the output pixels with `spans`, with
+/// input tiles of `tile_shape`.
+///
+/// Unlike [`mode_memory_per_tile`], this uses the actual footprints, so it also holds when the
+/// output grid is rotated against the input grid. An output pixel keeps its state from the first
+/// input tile of its footprint until the one with its lower right input pixel, as the input tiles
+/// come row by row (see [`WarpKernelAccu::fold`]).
+fn mode_memory_of_spans(
+    spans: &TileSpans,
+    data_type: RasterDataType,
+    tile_shape: GridShape2D,
+) -> ModeMemoryEstimate {
+    let [tile_height, tile_width] = tile_shape.shape_array.map(|size| size as isize);
+    let tile_of = |y: isize, x: isize| [y.div_euclid(tile_height), x.div_euclid(tile_width)];
+
+    // the input tiles of the footprints
+    let (mut min, mut max) = ([isize::MAX; 2], [isize::MIN; 2]);
+    for (y, x) in spans.iter().flatten() {
+        let (first, last) = (tile_of(y.start, x.start), tile_of(y.end - 1, x.end - 1));
+        for axis in 0..2 {
+            min[axis] = min[axis].min(first[axis]);
+            max[axis] = max[axis].max(last[axis]);
+        }
+    }
+    let states = spans.len() as u64 * size_of::<PixelState<u64>>() as u64;
+    if min[0] > max[0] {
+        return ModeMemoryEstimate {
+            bytes: states,
+            footprint_pixels: 0,
+        };
+    }
+    // the input tiles row by row, as they come
+    #[allow(clippy::cast_sign_loss)]
+    let columns = (max[1] - min[1] + 1) as usize;
+    #[allow(clippy::cast_sign_loss)]
+    let order = |[y, x]: [isize; 2]| (y - min[0]) as usize * columns + (x - min[1]) as usize;
+    #[allow(clippy::cast_sign_loss)]
+    let tiles = (max[0] - min[0] + 1) as usize * columns;
+
+    // the bytes of the pixels that start at a tile and of those that are finalized after it
+    let (mut starting, mut ending) = (vec![0_u64; tiles], vec![0_u64; tiles]);
+    let mut footprint_pixels = 0;
+    for (y, x) in spans.iter().flatten() {
+        #[allow(clippy::cast_sign_loss)]
+        let footprint = (y.end - y.start) as u64 * (x.end - x.start) as u64;
+        footprint_pixels = footprint_pixels.max(footprint);
+        let bytes = mode_pixel_bytes(data_type, footprint);
+        starting[order(tile_of(y.start, x.start))] += bytes;
+        ending[order(tile_of(y.end - 1, x.end - 1))] += bytes;
+    }
+    let (mut open, mut peak) = (0_u64, 0_u64);
+    for (starting, ending) in starting.into_iter().zip(ending) {
+        open += starting;
+        peak = peak.max(open);
+        open -= ending;
+    }
+
+    ModeMemoryEstimate {
+        bytes: states.saturating_add(peak),
+        footprint_pixels,
+    }
+}
+
 /// An upper bound of the memory that `mode` keeps for one output tile of `tile_shape` pixels, for
 /// inputs of `data_type` whose pixels are `ratio` times smaller than the output pixels (y, x), with
 /// `threads` threads that compute output rows at the same time.
@@ -502,26 +624,7 @@ pub fn mode_memory_per_tile(
     let along = |ratio: f64| ratio.ceil() as u64 + 1;
     let footprint_pixels = along(ratio_y).saturating_mul(along(ratio_x));
 
-    let (distinct_values, entry_bytes) = match data_type {
-        RasterDataType::U8 | RasterDataType::I8 => (256, size_of::<ModeEntry<u8>>()),
-        RasterDataType::U16 | RasterDataType::I16 => (65_536, size_of::<ModeEntry<u16>>()),
-        RasterDataType::U32 | RasterDataType::I32 | RasterDataType::F32 => {
-            (u64::MAX, size_of::<ModeEntry<u32>>())
-        }
-        RasterDataType::U64 | RasterDataType::I64 | RasterDataType::F64 => {
-            (u64::MAX, size_of::<ModeEntry<u64>>())
-        }
-    };
-    let entries = footprint_pixels.min(distinct_values);
-    let pixel_bytes = if distinct_values == 256 && entries > SPARSE_MODE_ENTRIES as u64 {
-        size_of::<DenseMode>() as u64
-    } else {
-        // the capacity of the list doubles
-        entries
-            .checked_next_power_of_two()
-            .unwrap_or(u64::MAX)
-            .saturating_mul(entry_bytes as u64)
-    };
+    let pixel_bytes = mode_pixel_bytes(data_type, footprint_pixels);
 
     // the output pixels that one input tile touches along an axis
     let per_input_tile =
@@ -751,6 +854,8 @@ where
     kernel: WarpKernel,
     projection: Option<KernelProjection>,
     out_result_descriptor: RasterResultDescriptor,
+    /// the limit for the memory of `mode` per output tile
+    mode_memory_budget: usize,
 }
 
 impl<Q, P> WarpKernelProcessor<Q, P>
@@ -760,11 +865,16 @@ where
 {
     /// `out_result_descriptor` must have the data type of `source`, and the spatial reference of
     /// `source` if `projection` is `None`.
+    ///
+    /// With `projection`, `mode` checks for each output tile that its footprints keep at most
+    /// `mode_memory_budget` bytes (see [`mode_memory_of_spans`]). Without, the footprints are the
+    /// same for all tiles, so [`mode_memory_per_tile`] checks that once at initialization.
     pub fn new(
         source: Q,
         kernel: WarpKernel,
         projection: Option<KernelProjection>,
         out_result_descriptor: RasterResultDescriptor,
+        mode_memory_budget: usize,
     ) -> Self {
         debug_assert_eq!(
             source.raster_result_descriptor().data_type,
@@ -775,6 +885,7 @@ where
             kernel,
             projection,
             out_result_descriptor,
+            mode_memory_budget,
         }
     }
 }
@@ -825,6 +936,9 @@ where
                 .tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
             output_geo_transform: out_tiling_grid.tiling_geo_transform(),
+            mode_memory_budget: (self.kernel == WarpKernel::Mode && self.projection.is_some())
+                .then_some(self.mode_memory_budget),
+            tile_shape: ctx.tiling_specification().tile_size_in_pixels,
             _phantom_pixel_type: PhantomData,
         };
 
@@ -851,6 +965,10 @@ struct WarpKernelSubQuery<P> {
     projection: Option<KernelProjection>,
     input_geo_transform: GeoTransform,
     output_geo_transform: GeoTransform,
+    /// the limit for the memory of `mode` per output tile, if it is checked per tile
+    mode_memory_budget: Option<usize>,
+    /// the size of the input tiles
+    tile_shape: GridShape2D,
     _phantom_pixel_type: PhantomData<P>,
 }
 
@@ -873,6 +991,7 @@ impl<'a, P: Pixel> SubQueryTileAggregator<'a, P> for WarpKernelSubQuery<P> {
         let projection = self.projection;
         let (output_geo_transform, input_geo_transform) =
             (self.output_geo_transform, self.input_geo_transform);
+        let (mode_memory_budget, tile_shape) = (self.mode_memory_budget, self.tile_shape);
         let time = query_rect.time_interval();
         let pool = pool.clone();
         crate::util::spawn_blocking(move || {
@@ -885,6 +1004,10 @@ impl<'a, P: Pixel> SubQueryTileAggregator<'a, P> for WarpKernelSubQuery<P> {
                     &input_geo_transform,
                 ),
             };
+            if let Some(budget) = mode_memory_budget {
+                let estimate = mode_memory_of_spans(&spans, P::TYPE, tile_shape);
+                ensure_mode_fits_memory_budget(&estimate, budget, P::TYPE)?;
+            }
             Ok(WarpKernelAccu::new(kernel, tile_info, spans, time, pool))
         })
         .map_err(From::from)
@@ -1105,7 +1228,7 @@ impl<'a, P: Pixel> InputTile<'a, P> {
             return;
         };
         // the row-major position in the footprint, which fits into `u32` (see
-        // `InitializedWarp::ensure_mode_fits_memory_budget`)
+        // `InitializedWarp::with_mode_memory_budget` and `mode_memory_of_spans`)
         let footprint_width = x_span.end - x_span.start;
         for in_y in self.y_range(y_span) {
             let weight_y = y_span.weight(in_y);
@@ -1503,6 +1626,44 @@ mod tests {
                 Some(7),
                 Some(9)
             ]
+        );
+    }
+
+    #[test]
+    fn it_measures_the_mode_memory_of_the_open_footprints() {
+        let span = |start: f64, end: f64| Span::footprint(start, end);
+        // input tiles of 3 × 3 pixels, so the tiles (0, 0), (0, 1), (1, 0) and (1, 1)
+        let spans = TileSpans::PerPixel {
+            width: 4,
+            pixels: vec![
+                // 4 pixels, within tile (0, 0)
+                Some((span(0., 2.), span(0., 2.))),
+                // 4 pixels, from tile (0, 0) to (1, 1)
+                Some((span(2., 4.), span(2., 4.))),
+                // 2 pixels, within tile (1, 0)
+                Some((span(3., 5.), span(0., 1.))),
+                None,
+            ],
+        };
+
+        let estimate = mode_memory_of_spans(&spans, RasterDataType::U16, [3, 3].into());
+
+        // at tile (0, 0), the first two pixels are open, with lists of 4 entries
+        let entry = size_of::<ModeEntry<u16>>() as u64;
+        let states = 4 * size_of::<PixelState<u64>>() as u64;
+        assert_eq!(estimate.bytes, states + 2 * 4 * entry);
+        assert_eq!(estimate.footprint_pixels, 4);
+        assert_eq!(
+            mode_memory_of_spans(
+                &TileSpans::PerPixel {
+                    width: 1,
+                    pixels: vec![None],
+                },
+                RasterDataType::U16,
+                [3, 3].into(),
+            )
+            .bytes,
+            size_of::<PixelState<u64>>() as u64
         );
     }
 
