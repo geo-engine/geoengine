@@ -271,7 +271,7 @@ where
         Ok(times)
     }
 
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _precision: crate::engine::FootprintPrecision,

@@ -589,7 +589,7 @@ where
         Ok(stream)
     }
 
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         precision: crate::engine::FootprintPrecision,

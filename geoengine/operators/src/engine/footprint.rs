@@ -444,6 +444,47 @@ mod tests {
     use super::*;
     use futures::{TryStreamExt, stream};
 
+    #[tokio::test]
+    async fn it_ends_the_footprint_stream_with_an_error_when_the_query_is_aborted() {
+        use crate::engine::{
+            MockExecutionContext, ProcessingGraphOperatorPath, QueryContext as _,
+            RasterQueryProcessor as _,
+        };
+        use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
+        use geoengine_datatypes::util::test::TestDefault;
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels =
+            geoengine_datatypes::raster::GridShape2D::new_2d(2, 2);
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        let abort = query_ctx.abort_trigger().unwrap();
+        let processor = super::test_util::two_band_source()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+        let query = RasterQueryRectangle::new(
+            grid_box(-2, -1, 0, 3),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+
+        let mut footprints = processor
+            .footprint_query(query, FootprintPrecision::Coverage, &query_ctx)
+            .await
+            .unwrap();
+        abort.abort();
+
+        assert!(matches!(
+            footprints.next().await,
+            Some(Err(crate::error::Error::QueryCanceled))
+        ));
+        assert!(footprints.next().await.is_none());
+    }
+
     #[test]
     fn it_drops_covered_boxes_in_any_order() {
         let outer = grid_box(0, 9, 0, 9);
