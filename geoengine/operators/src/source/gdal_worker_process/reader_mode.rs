@@ -355,8 +355,10 @@ impl OverviewAxisReadAdvise {
         overview_level: isize,
         tile_bounds: [isize; 2],
     ) -> Option<Self> {
-        // tile pixel = file overview pixel + shift
-        let shift = (file_offset + phase).div_euclid(overview_level);
+        // tile pixel = file overview pixel + shift: each tile pixel takes the overview pixel under
+        // its center, as GDAL's nearest resampling does, so a file shifted against the tile grid
+        // is off by at most half an overview pixel. `ceil((offset - level / 2) / level)`
+        let shift = (file_offset + phase + overview_level / 2 - 1).div_euclid(overview_level);
 
         let first_overview_pixel = (readable[0] - phase)
             .div_euclid(overview_level)
@@ -934,6 +936,28 @@ mod tests {
             read_advise.read_window_bounds,
             GridBoundingBox2D::new_unchecked([-56, -113], [-1, -1])
         );
+    }
+
+    /// Each tile pixel takes the overview pixel under its center, as GDAL's nearest resampling.
+    #[test]
+    fn it_maps_tile_pixels_to_the_overview_pixel_under_their_center() {
+        // file_offset, expected target bounds of the 16 overview pixels of a 64 px file at level 4
+        for (file_offset, target) in [
+            (0, [0, 15]),
+            // the overview pixel 0 covers [1, 5) and holds the center 2 of tile pixel 0
+            (1, [0, 15]),
+            // the edge case: the center 2 of tile pixel 0 is on the left edge of overview pixel 0
+            (2, [0, 15]),
+            // [3, 7) holds the center 6 of tile pixel 1, tile pixel 0 has its center outside the file
+            (3, [1, 16]),
+            // [-3, 1) holds the center -2 of tile pixel -1
+            (-3, [-1, 14]),
+        ] {
+            let advise =
+                OverviewAxisReadAdvise::new(file_offset, 64, [0, 63], 0, 4, [-100, 100]).unwrap();
+            assert_eq!(advise.target_bounds, target, "file offset {file_offset}");
+            assert_eq!((advise.window_start, advise.window_size), (0, 64));
+        }
     }
 
     /// A mosaic of 2x2 files whose edges are not aligned to the overview grid must still fill every overview pixel
