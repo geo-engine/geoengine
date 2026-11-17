@@ -1,0 +1,67 @@
+{
+  "properties": {
+    "name": "ndvi_utm32n",
+    "displayName": "NDVI UTM 32N",
+    "description": "NDVI data from MODIS of April 2014, warped to EPSG:32632 at 5 km over Central Europe",
+    "sourceOperator": "GdalSource",
+    "provenance": [
+      {
+        "citation": "Nasa Earth Observations, MODIS Vegetation Index Products",
+        "license": "https://earthdata.nasa.gov/collaborate/open-data-services-and-software/data-information-policy",
+        "uri": "https://modis.gsfc.nasa.gov/data/dataprod/mod13.php"
+      }
+    ]
+  },
+  "metaData": {
+    "type": "GdalStatic",
+    "resultDescriptor": {
+      "dataType": "U8",
+      "spatialReference": "EPSG:32632",
+      "time": {
+        "bounds": null,
+        "dimension": "irregular"
+      },
+      "spatialGrid": {
+        "state": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": -500000.0,
+              "y": 6600000.0
+            },
+            "xPixelSize": 5000.0,
+            "yPixelSize": -5000.0
+          },
+          "gridBounds": {
+            "min": [0, 0],
+            "max": [439, 399]
+          }
+        }
+      },
+      "bands": [
+        {
+          "name": "ndvi",
+          "measurement": {
+            "type": "unitless"
+          }
+        }
+      ]
+    },
+    "params": {
+      "filePath": "test_data/raster/modis_ndvi/utm32n/MOD13A2_M_NDVI_2014-04-01.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -500000.0,
+          "y": 6600000.0
+        },
+        "xPixelSize": 5000.0,
+        "yPixelSize": -5000.0
+      },
+      "width": 400,
+      "height": 440,
+      "fileNotFoundHandling": "NoData",
+      "noDataValue": 0.0
+    }
+  }
+}

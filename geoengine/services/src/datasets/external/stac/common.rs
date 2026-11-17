@@ -24,7 +24,7 @@ use super::StacProviderS3Config;
 /// `assets.*.proj:code`) and the STAC 1.0.0 metadata (`assets.*.raster:bands`,
 /// item-level projection fields, and `assets.*.proj:epsg`) so that items of either version
 /// survive the field filter.
-pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,assets.*.title,assets.*.href,assets.*.data_type,assets.*.nodata,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
+pub const STAC_ITEM_FIELDS: &str = "stac_version,properties.datetime,properties.updated,properties.gsd,properties.proj:code,properties.proj:epsg,properties.proj:shape,properties.proj:transform,assets.*.title,assets.*.href,assets.*.data_type,assets.*.nodata,assets.*.bands,assets.*.raster:bands,assets.*.proj:code,assets.*.proj:epsg,assets.*.proj:shape,assets.*.proj:transform";
 
 // ---------------------------------------------------------------------------
 // STAC extension version types
@@ -59,14 +59,16 @@ pub fn no_data_value_for_rasterband(asset: &stac::Asset, rasterband_channel: usi
 
 /// Extract a `GeoTransform` from `proj:transform` in asset/collection fields.
 ///
-/// The STAC `proj:transform` is a 6-element array in GDAL convention:
+/// The STAC `proj:transform` is the affine transform in row-major order:
 /// `[pixel_width, rotation, origin_x, rotation, pixel_height, origin_y]`.
+/// The projection extension also allows the full 3×3 matrix with 9 elements. Its last row
+/// must then be `[0, 0, 1]`, and only the first six values are used.
 pub fn geo_transform_from_fields(
     fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<GeoTransform> {
     let proj_transform = fields.get("proj:transform")?;
     let proj_transform_array = proj_transform.as_array()?;
-    if proj_transform_array.len() != 6 {
+    if proj_transform_array.len() != 6 && proj_transform_array.len() != 9 {
         return None;
     }
 
@@ -74,7 +76,11 @@ pub fn geo_transform_from_fields(
         .iter()
         .filter_map(serde_json::Value::as_f64)
         .collect();
-    if values.len() != 6 {
+    if values.len() != proj_transform_array.len() {
+        return None;
+    }
+    #[allow(clippy::float_cmp)] // the last row of an affine transform is exactly `[0, 0, 1]`
+    if values.len() == 9 && values[6..] != [0.0, 0.0, 1.0] {
         return None;
     }
 
@@ -104,6 +110,42 @@ pub fn proj_shape_from_fields(
     let width = proj_shape.get(1)?.as_u64()? as usize;
 
     Some((height, width))
+}
+
+/// Return the fields that hold `key` for an asset of an item: the asset's own fields if they
+/// contain `key`, otherwise the item's `properties`.
+///
+/// Per the STAC projection extension, item-level fields apply to every asset that does not
+/// override them. Precedence depends on whether the asset has the key, not on whether its value
+/// is valid, so an asset with an invalid value never inherits the item's value.
+fn asset_or_item_fields<'a>(
+    asset: &'a stac::Asset,
+    item: &'a stac::Item,
+    key: &str,
+) -> &'a serde_json::Map<String, serde_json::Value> {
+    if asset.additional_fields.contains_key(key) {
+        &asset.additional_fields
+    } else {
+        &item.properties.additional_fields
+    }
+}
+
+/// Extract the `GeoTransform` of an asset from its `proj:transform`, falling back to the
+/// item's `properties.proj:transform` if the asset has none.
+pub fn geo_transform_from_asset_or_item(
+    asset: &stac::Asset,
+    item: &stac::Item,
+) -> Option<GeoTransform> {
+    geo_transform_from_fields(asset_or_item_fields(asset, item, "proj:transform"))
+}
+
+/// Extract `(height, width)` of an asset from its `proj:shape`, falling back to the item's
+/// `properties.proj:shape` if the asset has none.
+pub fn proj_shape_from_asset_or_item(
+    asset: &stac::Asset,
+    item: &stac::Item,
+) -> Option<(usize, usize)> {
+    proj_shape_from_fields(asset_or_item_fields(asset, item, "proj:shape"))
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +204,25 @@ pub fn epsg_code_from_item(
     };
 
     epsg_code_from_fields(fallback_version, &properties)
+}
+
+/// Extract the EPSG code of an asset, falling back to `item_epsg` only if the asset declares
+/// neither `proj:code` nor `proj:epsg`.
+///
+/// Like the transform and shape fallback, whether the asset has the key decides precedence, not
+/// whether its value is valid. Per the STAC projection extension, an explicit `null` on an asset
+/// (e.g. a thumbnail) marks it as unlocated, so it must not inherit the item's CRS.
+pub fn epsg_code_from_asset_or_item(
+    asset: &stac::Asset,
+    item_epsg: Option<u32>,
+    proj_extension_version: StacExtensionMajorVersion,
+) -> Option<u32> {
+    let fields = &asset.additional_fields;
+    if fields.contains_key("proj:code") || fields.contains_key("proj:epsg") {
+        epsg_code_from_fields(proj_extension_version, fields)
+    } else {
+        item_epsg
+    }
 }
 
 /// Parse an EPSG code from a `proj:code` string like `"EPSG:32632"` or
@@ -764,6 +825,197 @@ mod tests {
     fn test_proj_shape_from_fields_missing() {
         let fields = serde_json::Map::new();
         assert!(proj_shape_from_fields(&fields).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // 9-element transforms and item-level fallback
+    // -----------------------------------------------------------------------
+
+    fn fields_with_transform(
+        transform: serde_json::Value,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut fields = serde_json::Map::new();
+        fields.insert("proj:transform".to_string(), transform);
+        fields
+    }
+
+    #[test]
+    fn it_parses_9_element_transform() {
+        let fields = fields_with_transform(serde_json::json!([
+            100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1
+        ]));
+
+        let gt = geo_transform_from_fields(&fields).expect("should parse 9-element transform");
+        assert_eq!(
+            gt,
+            GeoTransform::new_unchecked((4_200_000.0, 3_100_000.0).into(), 100.0, -100.0)
+        );
+    }
+
+    #[test]
+    fn it_rejects_9_element_transform_with_invalid_last_row() {
+        for last_row in [[0, 1, 1], [0, 0, 2], [1, 0, 1], [0, 0, 0]] {
+            let fields = fields_with_transform(serde_json::json!([
+                100,
+                0,
+                4_200_000,
+                0,
+                -100,
+                3_100_000,
+                last_row[0],
+                last_row[1],
+                last_row[2]
+            ]));
+            assert!(
+                geo_transform_from_fields(&fields).is_none(),
+                "last row {last_row:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn it_rejects_transforms_of_other_lengths_or_non_numbers() {
+        for transform in [
+            serde_json::json!([100, 0, 4_200_000, 0, -100]),
+            serde_json::json!([100, 0, 4_200_000, 0, -100, 3_100_000, 0]),
+            serde_json::json!([100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0]),
+            serde_json::json!([100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1, 0]),
+            serde_json::json!([100, 0, 4_200_000, 0, -100, "x"]),
+            serde_json::json!([100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, "1"]),
+        ] {
+            assert!(
+                geo_transform_from_fields(&fields_with_transform(transform.clone())).is_none(),
+                "transform {transform} must be rejected"
+            );
+        }
+    }
+
+    /// A STAC item shaped like the CLMS WSI items on CODE-DE: projection fields only in
+    /// `properties`, with a 9-element transform.
+    fn item_with_projection_properties(asset: &serde_json::Value) -> stac::Item {
+        serde_json::from_value(serde_json::json!({
+            "type": "Feature",
+            "stac_version": "1.1.0",
+            "id": "item",
+            "geometry": null,
+            "properties": {
+                "datetime": "2025-09-01T00:00:00Z",
+                "proj:code": "EPSG:3035",
+                "proj:shape": [1000, 1000],
+                "proj:transform": [100, 0, 4_200_000, 0, -100, 3_100_000, 0, 0, 1]
+            },
+            "links": [],
+            "assets": { "WCD": asset }
+        }))
+        .expect("valid STAC item")
+    }
+
+    #[test]
+    fn it_falls_back_to_item_transform_and_shape() {
+        let item = item_with_projection_properties(&serde_json::json!({
+            "href": "https://example.com/wcd.tif",
+            "title": "WCD"
+        }));
+        let asset = &item.assets["WCD"];
+
+        assert_eq!(
+            geo_transform_from_asset_or_item(asset, &item),
+            Some(GeoTransform::new_unchecked(
+                (4_200_000.0, 3_100_000.0).into(),
+                100.0,
+                -100.0
+            ))
+        );
+        assert_eq!(
+            proj_shape_from_asset_or_item(asset, &item),
+            Some((1000, 1000))
+        );
+    }
+
+    #[test]
+    fn it_prefers_asset_transform_and_shape_over_item() {
+        let item = item_with_projection_properties(&serde_json::json!({
+            "href": "https://example.com/wcd.tif",
+            "title": "WCD",
+            "proj:shape": [500, 400],
+            "proj:transform": [200, 0, 7_300_000, 0, -200, 2_300_000]
+        }));
+        let asset = &item.assets["WCD"];
+
+        assert_eq!(
+            geo_transform_from_asset_or_item(asset, &item),
+            Some(GeoTransform::new_unchecked(
+                (7_300_000.0, 2_300_000.0).into(),
+                200.0,
+                -200.0
+            ))
+        );
+        assert_eq!(
+            proj_shape_from_asset_or_item(asset, &item),
+            Some((500, 400))
+        );
+    }
+
+    #[test]
+    fn it_does_not_fall_back_when_asset_fields_are_invalid() {
+        let item = item_with_projection_properties(&serde_json::json!({
+            "href": "https://example.com/wcd.tif",
+            "title": "WCD",
+            "proj:shape": [500],
+            "proj:transform": [539_085.0, 30.0, 0.0, 5_846_715.0, 0.0, -30.0]
+        }));
+        let asset = &item.assets["WCD"];
+
+        assert!(geo_transform_from_asset_or_item(asset, &item).is_none());
+        assert!(proj_shape_from_asset_or_item(asset, &item).is_none());
+    }
+
+    #[test]
+    fn it_falls_back_to_item_epsg_only_without_asset_crs_fields() {
+        let item = item_with_projection_properties(&serde_json::json!({
+            "href": "https://example.com/wcd.tif",
+            "title": "WCD"
+        }));
+        let version = StacExtensionMajorVersion::V2;
+        let item_epsg = epsg_code_from_item(&item, version);
+        assert_eq!(item_epsg, Some(3035));
+
+        // no CRS field on the asset: inherit the item's EPSG
+        assert_eq!(
+            epsg_code_from_asset_or_item(&item.assets["WCD"], item_epsg, version),
+            Some(3035)
+        );
+
+        // an explicit value on the asset wins
+        let item = item_with_projection_properties(&serde_json::json!({
+            "href": "https://example.com/wcd.tif",
+            "title": "WCD",
+            "proj:code": "EPSG:32632"
+        }));
+        assert_eq!(
+            epsg_code_from_asset_or_item(&item.assets["WCD"], item_epsg, version),
+            Some(32632)
+        );
+
+        // an explicit `null` marks the asset as unlocated
+        for key in ["proj:code", "proj:epsg"] {
+            let item = item_with_projection_properties(&serde_json::json!({
+                "href": "https://example.com/thumbnail.png",
+                "title": "WCD",
+                key: null
+            }));
+            assert!(
+                epsg_code_from_asset_or_item(&item.assets["WCD"], item_epsg, version).is_none(),
+                "{key}: null must not inherit the item's EPSG"
+            );
+        }
+    }
+
+    #[test]
+    fn it_requests_item_level_projection_fields() {
+        for field in ["properties.proj:shape", "properties.proj:transform"] {
+            assert!(STAC_ITEM_FIELDS.split(',').any(|f| f == field), "{field}");
+        }
     }
 
     // -----------------------------------------------------------------------
