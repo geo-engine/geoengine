@@ -71,21 +71,9 @@ pub async fn raster_grid<C: SessionContext>(
 ) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
 
-    let wrapped = load_on_grid(&ctx, &query, &execution_context).await?;
-
-    raster_grid_from_operator(ctx, query, wrapped, encoding).await
-}
-
-/// Queries `query` from `wrapped`, which is already projected and resampled onto the query's grid,
-/// and encodes the result as `encoding`
-pub async fn raster_grid_from_operator<C: SessionContext>(
-    ctx: C,
-    query: RasterGridQuery,
-    wrapped: WrapWithProjectionAndResample,
-    encoding: RasterEncoding,
-) -> Result<(Vec<u8>, CacheHint, ComputationId)> {
-    let execution_context = ctx.execution_context()?;
     let tiling_spec = execution_context.tiling_specification();
+
+    let wrapped = load_on_grid(&ctx, &query, &execution_context).await?;
 
     let grid_bounds = wrapped
         .result_descriptor
@@ -204,7 +192,8 @@ fn misses_data(
     false
 }
 
-async fn encode<Q: QueryContext + 'static>(
+/// Encodes the raster stream of `processor` for `query_rect` as `encoding`
+pub(crate) async fn encode<Q: QueryContext + 'static>(
     processor: TypedRasterQueryProcessor,
     query_rect: RasterQueryRectangle,
     query_ctx: Q,

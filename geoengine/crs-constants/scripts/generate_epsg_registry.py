@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Regenerate `src/epsg/epsg_registry.rs` from PROJ's EPSG database.
 
-The registry stores static metadata per EPSG CRS code (type, area of use, and
-semi-major axis) so that the `crs-constants` crate has no runtime dependency on
+The registry stores static metadata per EPSG CRS code (type, area of use,
+semi-major axis and axis order) so that the `crs-constants` crate has no runtime dependency on
 a PROJ installation.
 
 Data sources:
 - `proj.db` (from a PROJ installation): codes, names, CRS type, ellipsoid
   semi-major axis, and the geographic area of use.
+- The axis order is read from the PROJJSON of each CRS, with the same rules as
+  `ProjJson` in `services/src/api/handlers/spatial_references.rs`.
 - The projected area of use (native bounds) is computed by reprojecting a
   densified box along the area of use boundary via `pyproj`.
 
@@ -143,6 +145,25 @@ def projected_bounds(
     return (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
 
 
+def axis_order(proj: pyproj.CRS) -> str | None:
+    """`EastNorth` or `NorthEast` if the server's `ProjJson` parses the PROJJSON and finds that order.
+
+    `None` makes the server ask PROJ itself, e.g. for axes in feet, whose unit is an object, or
+    pointing south, which `ProjJson` does not parse.
+    """
+    json = proj.to_json_dict()
+    axes = json.get("coordinate_system", {}).get("axis")
+    if not isinstance(json.get("name"), str) or not isinstance(axes, list):
+        return None
+    parsed = all(
+        isinstance(a.get(key), str) for a in axes for key in ("name", "abbreviation", "unit")
+    ) and all(a.get("direction") in ("east", "north") for a in axes)
+    directions = [a["direction"] for a in axes] if parsed else []
+    return {("east", "north"): "EastNorth", ("north", "east"): "NorthEast"}.get(
+        tuple(directions)
+    )
+
+
 def fmt_bounds(
     bounds: tuple[float, float, float, float] | None, decimals: int
 ) -> str:
@@ -156,7 +177,7 @@ def render(rows: list[dict]) -> str:
     lines = [
         "macro_rules! build_epsg_registry {",
         "    ($(",
-        "        $name:ident | $code:literal | $string_name:literal | $crs_type:ident | $unit:literal | $meters_per_unit:literal | $wgs84:tt | $native_id:ident $( ( $($native_tt:tt)* ) )? |",
+        "        $name:ident | $code:literal | $string_name:literal | $crs_type:ident | $unit:literal | $meters_per_unit:literal | $wgs84:tt | $native_id:ident $( ( $($native_tt:tt)* ) )? | $axis_id:ident $( ( $axis_order:ident ) )? |",
         "    )*) => {",
         "        $(",
         "            pub const $name: super::EpsgBounds = super::EpsgBounds {",
@@ -169,6 +190,7 @@ def render(rows: list[dict]) -> str:
         "                meters_per_unit: $meters_per_unit,",
         "                wgs84_bounds: $wgs84,",
         "                native_bounds: $native_id $( ( $($native_tt)* ) )?,",
+        "                axis_order: $axis_id $( ( super::AxisOrder::$axis_order ) )?,",
         "            };",
         "        )*",
         "",
@@ -190,6 +212,7 @@ def render(rows: list[dict]) -> str:
             f'{r["crs_type"]}{sep}"{r["unit"]}"{sep}{r["meters_per_unit"]!r}{sep}'
             f'{fmt_bounds(r["wgs84"], 2)}{sep}'
             f'{"Some(" + fmt_bounds(r["native_bounds"], 3) + ")" if r["native_bounds"] is not None else "None"}{sep}'
+            f'{"Some(" + r["axis_order"] + ")" if r["axis_order"] is not None else "None"}{sep}'
         )
     lines.append("}")
     return "\n".join(lines)
@@ -207,8 +230,10 @@ def main() -> None:
         except Exception:
             r["wgs84"] = None
             r["native_bounds"] = None
+            r["axis_order"] = None
             continue
 
+        r["axis_order"] = axis_order(proj)
         r["wgs84"] = area_of_use(proj)
         if r["wgs84"] is not None:
             n_with_aou += 1
