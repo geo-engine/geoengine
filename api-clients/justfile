@@ -102,6 +102,11 @@ _build-rust-postprocess:
 build-rust-dist: common::_clear
     cargo fetch
 
+# Download the OpenAPI Generator jar (from Maven Central into the `npx` cache), retrying on failure, since the CLI tries only once.
+[group('install')]
+prefetch-generator attempts="5" backoff="15":
+    just common::retry {{ attempts }} {{ backoff }} {{ OPENAPI_GENERATOR_CLI }} version
+
 lint: lint-openapi-spec lint-generator-version
 
 [group('config')]
