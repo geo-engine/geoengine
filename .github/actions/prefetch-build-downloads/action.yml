@@ -1,0 +1,19 @@
+name: "Prefetch Build Downloads"
+description: >
+  Restore the files that build scripts download (ONNX Runtime binaries for `ort-sys`) from the cache,
+  or download them with retries, since the build scripts try only once.
+runs:
+  using: "composite"
+  steps:
+    - name: Read ort-sys version
+      id: ort-sys
+      shell: bash
+      run: echo "version=$(awk '/^name = "ort-sys"$/ { getline; gsub(/"/, "", $3); print $3 }' geoengine/Cargo.lock)" >> "$GITHUB_OUTPUT"
+    - name: Cache ONNX Runtime binaries
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ort.pyke.io
+        key: onnxruntime-${{ runner.os }}-${{ steps.ort-sys.outputs.version }}
+    - name: Prefetch build downloads
+      shell: bash
+      run: just backend prefetch-build-downloads

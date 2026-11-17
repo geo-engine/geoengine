@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
 use crate::spatial_reference::{CrsMetadataProvider, SpatialReference, SpatialReferenceAuthority};
-use crs_constants::EpsgBounds;
+use crs_constants::{AxisOrder, EpsgBounds};
 
 /// A [`CrsMetadataProvider`] backed by the compile-time EPSG metadata of the
 /// `crs-constants` crate (generated from PROJ's EPSG database).
@@ -16,6 +16,18 @@ pub struct StaticEpsgMetadataProvider {
     projected_bounds: Option<BoundingBox2D>,
     /// How many meters correspond to one unit of the CRS's native unit.
     meters_per_unit: f64,
+}
+
+impl StaticEpsgMetadataProvider {
+    /// The axis order of an EPSG code from the registry, without asking PROJ.
+    /// `None` if the registry does not know the code or its axis order.
+    pub fn axis_order(def: SpatialReference) -> Option<AxisOrder> {
+        if !matches!(def.authority(), SpatialReferenceAuthority::Epsg) {
+            return None;
+        }
+        // codes beyond u16 are not in the registry and must not wrap around onto one that is
+        EpsgBounds::from_code(u16::try_from(def.code()).ok()?)?.axis_order
+    }
 }
 
 impl CrsMetadataProvider for StaticEpsgMetadataProvider {
@@ -83,5 +95,34 @@ impl CrsMetadataProvider for StaticEpsgMetadataProvider {
 
     fn meters_per_unit(&self) -> super::Result<f64> {
         Ok(self.meters_per_unit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_returns_the_static_axis_order() {
+        let epsg = |code| SpatialReference::new(SpatialReferenceAuthority::Epsg, code);
+        assert_eq!(
+            StaticEpsgMetadataProvider::axis_order(epsg(4326)),
+            Some(AxisOrder::NorthEast)
+        );
+        assert_eq!(
+            StaticEpsgMetadataProvider::axis_order(epsg(3857)),
+            Some(AxisOrder::EastNorth)
+        );
+        // feet, left to PROJ
+        assert_eq!(StaticEpsgMetadataProvider::axis_order(epsg(2263)), None);
+        // 4326 + 2^16 must not wrap around onto 4326
+        assert_eq!(StaticEpsgMetadataProvider::axis_order(epsg(69_862)), None);
+        assert_eq!(
+            StaticEpsgMetadataProvider::axis_order(SpatialReference::new(
+                SpatialReferenceAuthority::Esri,
+                4326
+            )),
+            None
+        );
     }
 }

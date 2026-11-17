@@ -5,8 +5,8 @@
     reason = "okay in benchmarks"
 )]
 
-//! Tile load on a `geoengine-server` child process pinned to the first N cores with `taskset`, shared by
-//! the `wms_load` (WMS `GetMap`) and `ogc_tiles_load` (OGC API tiles of a layer, `WebMercatorQuad`) benches.
+//! Tile load on a `geoengine-server` child process pinned to N cores with `taskset`, shared by the
+//! `wms_load` (WMS `GetMap`) and `ogc_tiles_load` (OGC API tiles of a layer) benches.
 //!
 //! For each core count, the server starts on its own cleared schema. Each client requests 256 px
 //! EPSG:3857 tiles of the NDVI test dataset in its own loop, alone and next to a looping export of the
@@ -24,6 +24,13 @@
 //!   settings and test data of that directory.
 //! - `TILE_LOAD_CORES`: comma separated core counts, default `8,16,32`. Use it rather than a criterion
 //!   filter, which still starts a server per core count.
+//! - `TILE_LOAD_CPUS`: comma separated CPUs for the server, default all in order; a core count of N
+//!   uses the first N. Pin the bench itself to other CPUs, e.g. with `taskset`, to keep the clients off
+//!   the server's CPUs.
+//! - `TILE_LOAD_BACKGROUNDS`: comma separated `none` and `export`, default both.
+//! - `TILE_LOAD_TILE_MATRIX_SETS` (`ogc_tiles_load` only): comma separated `WebMercatorQuad`, which
+//!   requests the same tiles as `wms_load`, and `Custom`, the layer's own tile matrix set at its finest
+//!   tile matrix with at most 1024 tiles; default `WebMercatorQuad`.
 //! - `TILE_LOAD_COLD=1`: clear the server caches (`POST /cache/clear`) before each case.
 //! - `TILE_LOAD_LOG_SPEC`: the log spec of the server, default `warn`.
 
@@ -63,7 +70,8 @@ struct Server {
 }
 
 impl Server {
-    fn start(binary: &Path, name: &str, cores: usize) -> Self {
+    fn start(binary: &Path, name: &str, cpus: &[usize]) -> Self {
+        let cores = cpus.len();
         assert!(
             std::net::TcpListener::bind(ADDRESS).is_ok(),
             "{ADDRESS} is in use, is another server running?"
@@ -75,7 +83,12 @@ impl Server {
         let log = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}-server-{cores}.log"));
         let child = Command::new("taskset")
             .arg("-c")
-            .arg(format!("0-{}", cores - 1))
+            .arg(
+                cpus.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            )
             .arg(binary)
             .current_dir(workspace)
             .env("GEOENGINE__POSTGRES__SCHEMA", name)
@@ -209,17 +222,26 @@ impl Api {
             .unwrap();
     }
 
-    /// Requests the tile with index `tile` modulo the tiles in use, by WMS or, with a layer, as OGC API
-    /// tile; returns whether it got a PNG
+    /// Requests the tile with index `tile` modulo the tiles of `target`, by WMS or as OGC API tile;
+    /// returns whether it got a PNG
     async fn get_tile(&self, target: &Target, tile: u64) -> bool {
-        let tile = tile % (ZOOM_TILES * ROWS);
-        let (row, col) = (4 + tile / ZOOM_TILES, tile % ZOOM_TILES);
-        let url = if let Some(layer) = &target.layer {
+        let url = if let Some(OgcTiles {
+            layer,
+            tile_matrix_set,
+            tile_matrix,
+            width,
+            rows,
+        }) = &target.ogc
+        {
+            let tile = tile % (width * (rows.end - rows.start));
+            let (row, col) = (rows.start + tile / width, tile % width);
             format!(
-                "http://{ADDRESS}/api/ogc/{LAYER_DB}/{layer}/collections/{layer}/map/tiles/WebMercatorQuad\
-                 /{ZOOM}/{row}/{col}?datetime={TIME}"
+                "http://{ADDRESS}/api/ogc/{LAYER_DB}/{layer}/collections/{layer}/map/tiles/{tile_matrix_set}\
+                 /{tile_matrix}/{row}/{col}?datetime={TIME}"
             )
         } else {
+            let tile = tile % (ZOOM_TILES * ROWS);
+            let (row, col) = (4 + tile / ZOOM_TILES, tile % ZOOM_TILES);
             let graph = &target.graph;
             let size = 2. * HALF_WORLD / ZOOM_TILES as f64;
             let x_min = -HALF_WORLD + col as f64 * size;
@@ -242,14 +264,107 @@ impl Api {
     }
 }
 
-/// The NDVI processing graph, and for OGC API tiles a layer of it that anonymous sessions may read
+/// The NDVI processing graph, and for OGC API tiles the tiles of a layer of it that anonymous sessions may read
 struct Target {
     graph: String,
-    layer: Option<String>,
+    ogc: Option<OgcTiles>,
 }
 
-/// Waits for the server, then returns an anonymous session, an admin session and the target
-async fn prepare(server: &mut Server, client: &reqwest::Client, ogc: bool) -> (Api, Api, Target) {
+impl Target {
+    /// The WMS target, or with a `layer` one OGC API target per tile matrix set
+    async fn all(
+        api: &Api,
+        graph: String,
+        layer: Option<String>,
+        tile_matrix_sets: &[String],
+    ) -> Vec<Self> {
+        let Some(layer) = layer else {
+            return vec![Self { graph, ogc: None }];
+        };
+        let mut targets = Vec::new();
+        for tile_matrix_set in tile_matrix_sets {
+            let ogc = OgcTiles::new(api, &layer, tile_matrix_set).await;
+            targets.push(Self {
+                graph: graph.clone(),
+                ogc: Some(ogc),
+            });
+        }
+        targets
+    }
+
+    /// `WebMercatorQuad` keeps the group names of `ogc_tiles_load` from before tile matrix sets
+    fn group_name(&self, name: &str, cores: usize, cold: bool) -> String {
+        let tile_matrix_set = match &self.ogc {
+            Some(ogc) if ogc.tile_matrix_set != "WebMercatorQuad" => {
+                format!("{}/", ogc.tile_matrix_set)
+            }
+            _ => String::new(),
+        };
+        let cold = if cold { "_cold" } else { "" };
+        format!("{name}/{tile_matrix_set}cores_{cores}{cold}")
+    }
+}
+
+/// OGC API tiles: the rows `rows` of `tile_matrix` in `tile_matrix_set`, `width` tiles wide
+struct OgcTiles {
+    layer: String,
+    tile_matrix_set: String,
+    tile_matrix: String,
+    width: u64,
+    rows: std::ops::Range<u64>,
+}
+
+impl OgcTiles {
+    /// `WebMercatorQuad` uses the tiles of `wms_load`; other tile matrix sets their finest tile
+    /// matrix with at most 1024 tiles, from their definition
+    async fn new(api: &Api, layer: &str, tile_matrix_set: &str) -> Self {
+        if tile_matrix_set == "WebMercatorQuad" {
+            return Self {
+                layer: layer.to_owned(),
+                tile_matrix_set: tile_matrix_set.to_owned(),
+                tile_matrix: ZOOM.to_string(),
+                width: ZOOM_TILES,
+                rows: 4..4 + ROWS,
+            };
+        }
+        let definition = api
+            .get(&format!(
+                "/ogc/{LAYER_DB}/{layer}/tileMatrixSets/{tile_matrix_set}"
+            ))
+            .await
+            .unwrap();
+        let (tile_matrix, width, height) = definition["tileMatrices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| {
+                (
+                    m["id"].as_str().unwrap().to_owned(),
+                    m["matrixWidth"].as_u64().unwrap(),
+                    m["matrixHeight"].as_u64().unwrap(),
+                )
+            })
+            .filter(|(_, width, height)| width * height <= 1024)
+            .max_by_key(|(_, width, height)| width * height)
+            .expect("a tile matrix should have at most 1024 tiles");
+        println!("{tile_matrix_set}: tile matrix {tile_matrix}, {width}×{height} tiles");
+        Self {
+            layer: layer.to_owned(),
+            tile_matrix_set: tile_matrix_set.to_owned(),
+            tile_matrix,
+            width,
+            rows: 0..height,
+        }
+    }
+}
+
+/// Waits for the server, then returns an anonymous session, an admin session, the NDVI processing
+/// graph and, if `ogc`, a layer of it that anonymous sessions may read
+async fn prepare(
+    server: &mut Server,
+    client: &reqwest::Client,
+    ogc: bool,
+) -> (Api, Api, String, Option<String>) {
     server.wait_until_ready(client).await;
     let api = Api::session(client, "/anonymous", None).await;
     // the default admin of `[user]` in `Settings-default.toml`
@@ -273,7 +388,7 @@ async fn prepare(server: &mut Server, client: &reqwest::Client, ogc: bool) -> (A
         admin.put("/permissions", &read).await.unwrap();
         layer = Some(id);
     }
-    (api, admin, Target { graph, layer })
+    (api, admin, graph, layer)
 }
 
 /// Runs `clients` clients that each send `requests` tile requests one after another; returns latency and success per request
@@ -454,16 +569,61 @@ fn print_case(
     }
 }
 
+/// The `TILE_LOAD_*` environment variables described at the top
+struct Config {
+    binary: PathBuf,
+    cores: Vec<usize>,
+    cpus: Vec<usize>,
+    backgrounds: Vec<String>,
+    tile_matrix_sets: Vec<String>,
+    cold: bool,
+}
+
+impl Config {
+    fn from_env() -> Self {
+        let var = |name: &str, default: &str| -> Vec<String> {
+            std::env::var(name)
+                .unwrap_or_else(|_| default.to_owned())
+                .split(',')
+                .map(|v| v.trim().to_owned())
+                .collect()
+        };
+        let binary = std::env::var("TILE_LOAD_SERVER").map_or_else(
+            |_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/release/geoengine-server"),
+            PathBuf::from,
+        );
+        let all_cpus = (0..std::thread::available_parallelism().unwrap().get())
+            .map(|cpu| cpu.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        Self {
+            binary: fs::canonicalize(&binary)
+                .unwrap_or_else(|_| panic!("{} should exist", binary.display())),
+            cores: var("TILE_LOAD_CORES", "8,16,32")
+                .iter()
+                .map(|n| n.parse().unwrap())
+                .collect(),
+            cpus: var("TILE_LOAD_CPUS", &all_cpus)
+                .iter()
+                .map(|n| n.parse().unwrap())
+                .collect(),
+            backgrounds: var("TILE_LOAD_BACKGROUNDS", "none,export"),
+            tile_matrix_sets: var("TILE_LOAD_TILE_MATRIX_SETS", "WebMercatorQuad"),
+            cold: std::env::var("TILE_LOAD_COLD").is_ok_and(|v| v == "1"),
+        }
+    }
+}
+
 /// Runs the bench `name`, with OGC API tiles if `ogc`, else with WMS `GetMap`
 pub fn run(c: &mut Criterion, name: &str, ogc: bool) {
-    let binary = std::env::var("TILE_LOAD_SERVER").map_or_else(
-        |_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/release/geoengine-server"),
-        PathBuf::from,
-    );
-    let binary =
-        fs::canonicalize(&binary).unwrap_or_else(|_| panic!("{} should exist", binary.display()));
-    let cores = std::env::var("TILE_LOAD_CORES").unwrap_or_else(|_| "8,16,32".to_owned());
-    let cold = std::env::var("TILE_LOAD_COLD").is_ok_and(|v| v == "1");
+    let Config {
+        binary,
+        cores,
+        cpus,
+        backgrounds,
+        tile_matrix_sets,
+        cold,
+    } = Config::from_env();
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let client = reqwest::Client::builder()
@@ -472,81 +632,86 @@ pub fn run(c: &mut Criterion, name: &str, ogc: bool) {
         .unwrap();
     let next_tile = AtomicU64::new(0);
 
-    for cores in cores.split(',').map(|n| n.trim().parse::<usize>().unwrap()) {
-        let mut server = Server::start(&binary, name, cores);
-        let (api, admin, target) = runtime.block_on(prepare(&mut server, &client, ogc));
+    for cores in cores {
+        assert!(
+            cores <= cpus.len(),
+            "{cores} cores, but only {cpus:?} given"
+        );
+        let mut server = Server::start(&binary, name, &cpus[..cores]);
+        let (api, admin, graph, layer) = runtime.block_on(prepare(&mut server, &client, ogc));
+        let targets = runtime.block_on(Target::all(&api, graph, layer, &tile_matrix_sets));
 
-        let mut group = c.benchmark_group(format!(
-            "{name}/cores_{cores}{}",
-            if cold { "_cold" } else { "" }
-        ));
-        group
-            .sampling_mode(SamplingMode::Flat)
-            .sample_size(10)
-            .warm_up_time(Duration::from_secs(3))
-            .measurement_time(Duration::from_secs(20));
+        for target in &targets {
+            let group_name = target.group_name(name, cores, cold);
+            let mut group = c.benchmark_group(&group_name);
+            group
+                .sampling_mode(SamplingMode::Flat)
+                .sample_size(10)
+                .warm_up_time(Duration::from_secs(3))
+                .measurement_time(Duration::from_secs(20));
 
-        for background in ["none", "export"] {
-            for clients in CLIENTS {
-                if cold {
-                    runtime.block_on(admin.clear_caches());
-                }
-                let stop = Arc::new(AtomicBool::new(false));
-                let export = (background == "export").then(|| {
-                    let export =
-                        runtime.spawn(export_loop(api.clone(), target.graph.clone(), stop.clone()));
-                    std::thread::sleep(Duration::from_secs(5)); // let the export get going
-                    export
-                });
+            for background in backgrounds.iter().map(String::as_str) {
+                for clients in CLIENTS {
+                    if cold {
+                        runtime.block_on(admin.clear_caches());
+                    }
+                    let stop = Arc::new(AtomicBool::new(false));
+                    let export = (background == "export").then(|| {
+                        let export = runtime.spawn(export_loop(
+                            api.clone(),
+                            target.graph.clone(),
+                            stop.clone(),
+                        ));
+                        std::thread::sleep(Duration::from_secs(5)); // let the export get going
+                        export
+                    });
 
-                let latencies = Mutex::new(Vec::new());
-                // taken after each iteration, so that Criterion's analysis does not count
-                let end = Mutex::new(None);
-                let pid = server.pid();
-                let before = thread_groups(pid).0;
-                let case_start = Instant::now();
-                group.throughput(Throughput::Elements(clients as u64));
-                group.bench_function(
-                    BenchmarkId::new(background, format!("clients_{clients}")),
-                    |b| {
-                        b.to_async(&runtime).iter_custom(|iters| {
-                            let (api, target, next_tile, latencies, end) =
-                                (&api, &target, &next_tile, &latencies, &end);
-                            async move {
-                                let start = Instant::now();
-                                let results =
-                                    run_clients(api, target, clients, iters, next_tile).await;
-                                let elapsed = start.elapsed();
-                                latencies.lock().unwrap().extend(results);
-                                *end.lock().unwrap() =
-                                    Some((case_start.elapsed(), thread_groups(pid)));
-                                elapsed
-                            }
-                        });
-                    },
-                );
-                let (elapsed, after) = end.into_inner().unwrap().unwrap();
-                let id = format!(
-                    "{name}/cores_{cores}{}/{background}/clients_{clients}",
-                    if cold { "_cold" } else { "" }
-                );
-                print_case(
-                    &id,
-                    &latencies.into_inner().unwrap(),
-                    elapsed,
-                    &before,
-                    &after,
-                );
+                    let latencies = Mutex::new(Vec::new());
+                    // taken after each iteration, so that Criterion's analysis does not count
+                    let end = Mutex::new(None);
+                    let pid = server.pid();
+                    let before = thread_groups(pid).0;
+                    let case_start = Instant::now();
+                    group.throughput(Throughput::Elements(clients as u64));
+                    group.bench_function(
+                        BenchmarkId::new(background, format!("clients_{clients}")),
+                        |b| {
+                            b.to_async(&runtime).iter_custom(|iters| {
+                                let (api, next_tile, latencies, end) =
+                                    (&api, &next_tile, &latencies, &end);
+                                async move {
+                                    let start = Instant::now();
+                                    let results =
+                                        run_clients(api, target, clients, iters, next_tile).await;
+                                    let elapsed = start.elapsed();
+                                    latencies.lock().unwrap().extend(results);
+                                    *end.lock().unwrap() =
+                                        Some((case_start.elapsed(), thread_groups(pid)));
+                                    elapsed
+                                }
+                            });
+                        },
+                    );
+                    let (elapsed, after) = end.into_inner().unwrap().unwrap();
+                    let id = format!("{group_name}/{background}/clients_{clients}");
+                    print_case(
+                        &id,
+                        &latencies.into_inner().unwrap(),
+                        elapsed,
+                        &before,
+                        &after,
+                    );
 
-                stop.store(true, Ordering::Relaxed);
-                if let Some(export) = export {
-                    // finish the running export before the next case
-                    let completed = runtime.block_on(export).unwrap();
-                    println!("  {completed} exports completed");
+                    stop.store(true, Ordering::Relaxed);
+                    if let Some(export) = export {
+                        // finish the running export before the next case
+                        let completed = runtime.block_on(export).unwrap();
+                        println!("  {completed} exports completed");
+                    }
                 }
             }
+            group.finish();
         }
-        group.finish();
         drop(server);
     }
 }

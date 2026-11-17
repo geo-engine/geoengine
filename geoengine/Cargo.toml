@@ -201,7 +201,7 @@ tracing-subscriber = { version = "0.3", features = ["local-time", "ansi", "traci
 typed_floats = { version = "1.0.7", features = ["serde"] }
 url = { version = "2.5", features = ["serde"] }
 utoipa = { version = "6.0", features = ["actix_extras", "chrono", "debug", "url", "uuid"] }
-utoipa-swagger-ui = { version = "10", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "10", features = ["actix-web", "vendored"] }
 uuid = { version = "1.29", features = ["serde", "v4", "v5"] } # major version must match `tokio-postgres`' `with-uuid-1` feature
 validator = { version = "0.21", features = ["derive"] }
 vergen = "10.0"
