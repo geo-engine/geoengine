@@ -27,6 +27,8 @@ mod geodesy_projector;
 pub use geodesy_projector::{Error as GeodesyProjectorError, GeodesyCoordinateProjector};
 
 mod static_epsg_metadata_provider;
+/// The axis order of an EPSG code in the static registry
+pub use crs_constants::AxisOrder as StaticAxisOrder;
 pub use static_epsg_metadata_provider::StaticEpsgMetadataProvider;
 
 mod projection_provider;

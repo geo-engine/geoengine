@@ -1270,15 +1270,17 @@ fn try_create_tile_for_band(
     }
 
     // Extract the item's actual EPSG code from the asset
-    let item_epsg = common::epsg_code_from_fields(proj_extension_version, &asset.additional_fields)
-        .or_else(|| {
-            // Also try to extract from serialized properties as fallback
-            let props_val = serde_json::to_value(&item.properties)
-                .ok()
-                .and_then(|v| v.as_object().cloned())
-                .unwrap_or_default();
-            common::epsg_code_from_fields(proj_extension_version, &props_val)
-        })?;
+    // Fall back to the item's EPSG from its serialized properties unless the asset declares
+    // its own CRS (an explicit `null` marks the asset as unlocated).
+    let props_val = serde_json::to_value(&item.properties)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    let item_epsg = common::epsg_code_from_asset_or_item(
+        asset,
+        common::epsg_code_from_fields(proj_extension_version, &props_val),
+        proj_extension_version,
+    )?;
 
     // Only process assets whose EPSG matches the dataset's projection
     if dataset.projection != SpatialReference::new(SpatialReferenceAuthority::Epsg, item_epsg) {
@@ -1287,7 +1289,7 @@ fn try_create_tile_for_band(
 
     let actual_dataset_name = dataset_name_for_harvest(&provider_def.collection_name, dataset);
 
-    let geo_transform = common::geo_transform_from_fields(&asset.additional_fields)?;
+    let geo_transform = common::geo_transform_from_asset_or_item(asset, item)?;
 
     if (geo_transform.x_pixel_size().get().abs() - dataset.resolution.x().get()).abs() > 1e-9
         || (geo_transform.y_pixel_size().get().abs() - dataset.resolution.y().get()).abs() > 1e-9
@@ -1295,7 +1297,7 @@ fn try_create_tile_for_band(
         return None;
     }
 
-    let (height, width) = common::proj_shape_from_fields(&asset.additional_fields)?;
+    let (height, width) = common::proj_shape_from_asset_or_item(asset, item)?;
 
     let rasterband_channel = common::rasterband_channel_for_dataset_band(
         asset,

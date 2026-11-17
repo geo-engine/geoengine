@@ -3,7 +3,7 @@
 //!
 //! The `epsg` module provides [`EpsgBounds`] entries for every known EPSG
 //! code: the WGS 84 (longitude/latitude) bounds, the native projected bounds
-//! (if any), the unit and its meters-per-unit factor, plus optional code and
+//! (if any), the unit and its meters-per-unit factor, the axis order, plus optional code and
 //! name fields gated by cargo features.
 //!
 //! This crate intentionally contains **only static data** and no logic: it can
@@ -18,7 +18,7 @@
 
 mod epsg;
 
-pub use epsg::EpsgBounds;
+pub use epsg::{AxisOrder, EpsgBounds};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CrsType {

@@ -3,6 +3,7 @@
   "spaces": 2,
   "generator-cli": {
     "version": "7.26.0",
+    "storageDir": "~/.cache/openapi-generator",
     "generators": {
       "typescript": {
         "generatorName": "typescript-fetch",

@@ -1,4 +1,5 @@
 use crate::{
+    api::handlers::spatial_references::SpatialReferenceCache,
     api::model::services::Volume,
     config::{Cache, Oidc, Quota, get_config_element},
     contexts::{
@@ -77,6 +78,7 @@ where
     gdal_read_ahead: GdalReadAhead,
     /// runs query tasks, so they leave the single-threaded HTTP workers
     processing_runtime: tokio::runtime::Handle,
+    spatial_reference_cache: SpatialReferenceCache,
 }
 
 /// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
@@ -168,6 +170,7 @@ where
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         })
     }
 
@@ -242,6 +245,7 @@ where
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         })
     }
 
@@ -326,6 +330,7 @@ where
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
             // the server builds its context on the main runtime, which then runs all queries
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         };
 
         info!(
@@ -478,6 +483,10 @@ where
 
     fn oidc_manager(&self) -> &OidcManager {
         &self.oidc_manager
+    }
+
+    fn spatial_reference_cache(&self) -> &SpatialReferenceCache {
+        &self.spatial_reference_cache
     }
 
     async fn clear_caches(&self, session: Self::Session) -> Result<()> {

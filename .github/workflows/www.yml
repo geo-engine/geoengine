@@ -13,6 +13,12 @@ permissions:
     pages: write
     id-token: write
 
+env:
+    # retry transient network failures when downloading dependencies
+    npm_config_fetch_retries: 5
+    npm_config_fetch_retry_mintimeout: 20000
+    npm_config_fetch_retry_maxtimeout: 120000
+
 jobs:
     build:
         runs-on: ubuntu-latest
