@@ -14,7 +14,7 @@ use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
 use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 use super::wcs::request::WcsBoundingbox;
-use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
+use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceCache};
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result, UnableToParseQueryString, UnableToSerializeQueryString};
 use crate::processing_graphs::processing_graph::ProcessingGraphId;
@@ -41,8 +41,15 @@ impl OgcBoundingBox {
         }
     }
 
-    pub fn bounds<A: AxisAlignedRectangle>(self, spatial_reference: SpatialReference) -> Result<A> {
-        rectangle_from_ogc_params(self.values, spatial_reference)
+    pub fn bounds<A: AxisAlignedRectangle>(
+        self,
+        spatial_reference: SpatialReference,
+        spatial_reference_cache: &SpatialReferenceCache,
+    ) -> Result<A> {
+        rectangle_from_ogc_params(
+            self.values,
+            spatial_reference_cache.axis_order(spatial_reference)?,
+        )
     }
 
     pub fn bounds_naive<A: AxisAlignedRectangle>(self) -> Result<A> {
@@ -217,36 +224,23 @@ where
     }
 }
 
-/// create an axis aligned rectangle using the values "a,b,c,d" from OGC bbox-like parameters using the axis ordering for `spatial_reference`
+/// create an axis aligned rectangle using the values "a,b,c,d" from OGC bbox-like parameters in the `axis_order` of their spatial reference
 pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
     values: [f64; 4],
-    spatial_reference: SpatialReference,
+    axis_order: AxisOrder,
 ) -> Result<A> {
     let [a, b, c, d] = values;
-    let axis_order = spatial_reference_specification(spatial_reference)?
-        .axis_order
-        .ok_or(error::Error::AxisOrderingNotKnownForSrs {
-            srs_string: spatial_reference.srs_string(),
-        })?;
     match axis_order {
         AxisOrder::EastNorth => A::from_min_max((a, b).into(), (c, d).into()).map_err(Into::into),
         AxisOrder::NorthEast => A::from_min_max((b, a).into(), (d, c).into()).map_err(Into::into),
     }
 }
 
-/// reorders the given tuple of coordinates, resolutions, etc. using the axis ordering for `spatial_reference` to give (x, y)
-pub fn tuple_from_ogc_params(
-    a: f64,
-    b: f64,
-    spatial_reference: SpatialReference,
-) -> Result<(f64, f64)> {
-    match spatial_reference_specification(spatial_reference)?
-        .axis_order
-        .ok_or(error::Error::AxisOrderingNotKnownForSrs {
-            srs_string: spatial_reference.srs_string(),
-        })? {
-        AxisOrder::EastNorth => Ok((a, b)),
-        AxisOrder::NorthEast => Ok((b, a)),
+/// reorders the given tuple of coordinates, resolutions, etc. in the `axis_order` of their spatial reference to give (x, y)
+pub fn tuple_from_ogc_params(a: f64, b: f64, axis_order: AxisOrder) -> (f64, f64) {
+    match axis_order {
+        AxisOrder::EastNorth => (a, b),
+        AxisOrder::NorthEast => (b, a),
     }
 }
 
@@ -529,6 +523,49 @@ mod tests {
             parse_wcs_crs(to_deserializer(s)).unwrap(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326),
         );
+    }
+
+    #[test]
+    fn it_orders_ogc_params_by_the_axis_order_of_the_spatial_reference() {
+        let cache = SpatialReferenceCache::default();
+        let east_north = SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857);
+        let bbox: BoundingBox2D = OgcBoundingBox::new(1., 2., 3., 4.)
+            .bounds(east_north, &cache)
+            .unwrap();
+        assert_eq!(
+            bbox,
+            BoundingBox2D::new_unchecked((1., 2.).into(), (3., 4.).into())
+        );
+        let axis_order = cache.axis_order(east_north).unwrap();
+        assert_eq!(tuple_from_ogc_params(1., 2., axis_order), (1., 2.));
+
+        // EPSG:4326 is (lat, lon), EPSG:31467 is (northing, easting)
+        for code in [4326, 31467] {
+            let north_east = SpatialReference::new(SpatialReferenceAuthority::Epsg, code);
+            let bbox: BoundingBox2D = OgcBoundingBox::new(1., 2., 3., 4.)
+                .bounds(north_east, &cache)
+                .unwrap();
+            assert_eq!(
+                bbox,
+                BoundingBox2D::new_unchecked((2., 1.).into(), (4., 3.).into())
+            );
+            let axis_order = cache.axis_order(north_east).unwrap();
+            assert_eq!(tuple_from_ogc_params(1., 2., axis_order), (2., 1.));
+        }
+    }
+
+    #[test]
+    fn it_rejects_ogc_params_of_unknown_spatial_references() {
+        let cache = SpatialReferenceCache::default();
+        let unknown = SpatialReference::new(SpatialReferenceAuthority::Epsg, 99999);
+        assert!(matches!(
+            OgcBoundingBox::new(1., 2., 3., 4.).bounds::<BoundingBox2D>(unknown, &cache),
+            Err(error::Error::UnknownSrsString { .. })
+        ));
+        assert!(matches!(
+            cache.axis_order(unknown),
+            Err(error::Error::UnknownSrsString { .. })
+        ));
     }
 
     #[test]
