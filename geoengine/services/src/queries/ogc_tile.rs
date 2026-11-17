@@ -5,12 +5,15 @@ use crate::{
         OgcApiResult, error,
         error::OgcApiError,
         tms_spec::{TileMatrixSetProvider, TypedTileMatrixSetProvider},
-        util::{get_initialized_raster_operator, load_layer, reproject_if_necessary},
+        util::{
+            get_initialized_raster_operator, initialize_raster_graph, load_layer,
+            reproject_if_necessary,
+        },
     },
     api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
-    processing_graphs::registry::ProcessingGraphRegistry,
+    processing_graphs::{processing_graph::ProcessingGraph, registry::ProcessingGraphRegistry},
     projects::Symbology,
     queries::raster_grid::{RasterEncoding, RasterGridQuery, raster_grid_from_operator},
     quota::ComputationId,
@@ -22,7 +25,7 @@ use geoengine_datatypes::{
         AxisAlignedRectangle, BandSelection, CacheHint, Coordinate2D, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, TimeInterval,
     },
-    raster::GridShape2D,
+    raster::{GridBoundingBox2D, GridShape2D},
     util::Identifier,
 };
 #[cfg(debug_assertions)]
@@ -192,8 +195,8 @@ async fn load_tile_source<C: ApplicationContext>(
             &query.tile_matrix_set_id,
             initialized_operator.result_descriptor(),
         )?;
-    reproject_if_necessary::<C::SessionContext>(
-        &mut layer,
+    reproject_if_necessary(
+        &mut layer.processing_graph,
         &mut initialized_operator,
         execution_context,
         TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id),
@@ -225,13 +228,101 @@ pub async fn render_tile<C: ApplicationContext>(
     query: TileQuery,
 ) -> OgcApiResult<(Vec<u8>, CacheHint, ComputationId)> {
     let execution_context = ctx.execution_context()?;
+
+    let layer: Layer = load_layer::<C>(&ctx, query.data_connector_id, query.layer_id.clone())
+        .instrument(debug_span!("load_processing_graph"))
+        .await?;
+
+    let tile = tile_on_grid(layer.processing_graph.clone(), &execution_context, &query)
+        .instrument(debug_span!("initialize"))
+        .await?;
+
+    let query_rect = RasterQueryRectangle::new(
+        tile.grid_bounds,
+        query.time_interval,
+        band_selection(&layer),
+    );
+
+    let (processor, query_ctx, computation_id) = create_query_processor_and_query_context(
+        tile.processing_graph,
+        &tile.initialized_operator,
+        &ctx,
+    )
+    .await?;
+
+    // cancellation is handled by the task that runs this function
+    let not_canceled = Box::pin(futures::future::pending());
+
+    let (image_bytes, cache_hint) = call_on_generic_raster_processor!(
+        processor,
+        p => raster_stream_to_png_bytes(
+            p,
+            query_rect,
+            query_ctx,
+            tile.width,
+            tile.height,
+            Some(query.time_interval),
+            layer.symbology.and_then(Symbology::into_raster_symbology).map(|symbology| symbology.raster_colorizer),
+            not_canceled,
+        ).await
+    )
+    .map_err(crate::error::Error::from)?;
+
+    Ok((image_bytes, cache_hint, computation_id))
+}
+
+/// A layer's processing graph on the grid of a tile matrix, and the pixels of one tile in that grid
+pub struct TileOnGrid {
+    /// the processing graph the tile is computed with, e.g. the layer's graph reprojected
+    pub processing_graph: ProcessingGraph,
+    pub initialized_operator: Box<dyn InitializedRasterOperator>,
+    /// the tile's pixels in the grid of `initialized_operator`
+    pub grid_bounds: GridBoundingBox2D,
+    /// the size of the encoded tile
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Puts `processing_graph` onto the grid of the tile matrix of `query` and finds the tile's pixels
+///
+/// # Errors
+/// If the graph is no raster or cannot be initialized, or the tile is outside the tile matrix.
+pub async fn tile_on_grid(
+    mut processing_graph: ProcessingGraph,
+    execution_context: &dyn ExecutionContext,
+    query: &TileQuery,
+) -> OgcApiResult<TileOnGrid> {
+    let mut initialized_operator = initialize_raster_graph(&processing_graph, execution_context)
+        .instrument(debug_span!("initialize_layer"))
+        .await?;
     let tiling_specification = execution_context.tiling_specification();
 
-    let TileSource {
-        layer,
-        mut initialized_operator,
-        tms_spec,
-    } = load_tile_source::<C>(&ctx, &execution_context, &query).await?;
+    let required_origin_and_resolution =
+        debug_span!("required_origin_and_resolution").in_scope(|| {
+            TypedTileMatrixSetProvider::required_origin_and_resolution(
+                &query.tile_matrix_set_id,
+                initialized_operator.result_descriptor(),
+            )
+        })?;
+    reproject_if_necessary(
+        &mut processing_graph,
+        &mut initialized_operator,
+        execution_context,
+        TypedTileMatrixSetProvider::required_srs(&query.tile_matrix_set_id),
+        required_origin_and_resolution,
+    )
+    .instrument(debug_span!("initialize_reprojection"))
+    .await?;
+
+    let tms_spec = TypedTileMatrixSetProvider::resolve(
+        &query.tile_matrix_set_id,
+        initialized_operator.result_descriptor(),
+        tiling_specification,
+    )?;
+
+    let (expected_number_of_tiles_at_zoom_level, _) =
+        tms_spec.grid_shape_and_origin(query.tile_matrix);
+    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
 
     #[cfg(debug_assertions)]
     let original_result_descriptor = initialized_operator.result_descriptor().clone();
@@ -244,8 +335,8 @@ pub async fn render_tile<C: ApplicationContext>(
             .spatial_resolution()
     {
         initialized_operator = initialized_operator
-            .optimize_and_reinitialize(spatial_resolution, &execution_context)
-            .instrument(debug_span!("initialize"))
+            .optimize_and_reinitialize(spatial_resolution, execution_context)
+            .instrument(debug_span!("initialize_optimized"))
             .await
             .boxed_context(error::InitializingProcessingGraph)?;
     }
@@ -257,46 +348,23 @@ pub async fn render_tile<C: ApplicationContext>(
     );
 
     let tile_size_in_pixels = tms_spec.tile_size_in_pixels(query.tile_matrix);
-    let (tile_width, tile_height) = (
-        u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
-        u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
-    );
 
-    let query_rect = RasterQueryRectangle::new(
-        tms_spec.tile_grid_bbox(
-            &initialized_operator
-                .result_descriptor()
-                .tiling_grid_definition(tiling_specification),
-            query.tile_matrix,
-            query.tile_row,
-            query.tile_col,
-        )?,
-        query.time_interval,
-        band_selection(&layer),
-    );
+    let grid_bounds = tms_spec.tile_grid_bbox(
+        &initialized_operator
+            .result_descriptor()
+            .tiling_grid_definition(tiling_specification),
+        query.tile_matrix,
+        query.tile_row,
+        query.tile_col,
+    )?;
 
-    let (processor, query_ctx, computation_id) =
-        create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
-
-    // cancellation is handled by the task that runs this function
-    let not_canceled = Box::pin(futures::future::pending());
-
-    let (image_bytes, cache_hint) = call_on_generic_raster_processor!(
-        processor,
-        p => raster_stream_to_png_bytes(
-            p,
-            query_rect,
-            query_ctx,
-            tile_width,
-            tile_height,
-            Some(query.time_interval),
-            layer.symbology.and_then(Symbology::into_raster_symbology).map(|symbology| symbology.raster_colorizer),
-            not_canceled,
-        ).await
-    )
-    .map_err(crate::error::Error::from)?;
-
-    Ok((image_bytes, cache_hint, computation_id))
+    Ok(TileOnGrid {
+        processing_graph,
+        initialized_operator,
+        grid_bounds,
+        width: u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
+        height: u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
+    })
 }
 
 /// Renders the coverage tile of `query` as `GeoTIFF` with the fields of `field_selection` as bands.
@@ -449,13 +517,13 @@ fn band_selection(layer: &Layer) -> BandSelection {
 }
 
 async fn create_query_processor_and_query_context<C: SessionContext>(
-    layer: &Layer,
+    processing_graph: ProcessingGraph,
     initialized_operator: &dyn InitializedRasterOperator,
     ctx: &C,
 ) -> OgcApiResult<(TypedRasterQueryProcessor, C::QueryContext, ComputationId)> {
     let processing_graph_id = ctx
         .db()
-        .register_processing_graph(layer.processing_graph.clone())
+        .register_processing_graph(processing_graph)
         .instrument(debug_span!("register_processing_graph"))
         .await?; // TODO: can we get this without re-registering it?
     let computation_id = ComputationId::new();
