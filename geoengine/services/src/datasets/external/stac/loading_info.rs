@@ -29,8 +29,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalRetryOptions, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile,
+    GdalRetryOptions, LoadingInfoDetail, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
@@ -166,7 +166,7 @@ impl
         let time_interval =
             stac_query_time_interval(query.query_rectangle.time_interval(), self.time_dimension)?;
 
-        if !query.fetch_tiles {
+        if query.detail == LoadingInfoDetail::TimeSteps {
             // Regular layers expose every step, including steps without any assets.
             // Their time axis is defined by the provider, so no STAC search is needed.
             return Ok(MultiBandGdalLoadingInfo::new(
@@ -1312,7 +1312,7 @@ mod tests {
                         bounds,
                         time,
                         BandSelection::first(),
-                        true,
+                        LoadingInfoDetail::Files,
                     ))
                     .await
                     .unwrap();
@@ -1387,7 +1387,7 @@ mod tests {
                     bounds,
                     interval,
                     BandSelection::first(),
-                    true,
+                    LoadingInfoDetail::Files,
                 ))
                 .await
                 .unwrap();
@@ -1633,7 +1633,7 @@ mod tests {
             spatial_bounds,
             time_interval,
             BandSelection::new_unchecked(vec![0, 1]),
-            true,
+            LoadingInfoDetail::Files,
         );
 
         let loading_info = meta
@@ -1937,7 +1937,7 @@ mod grid_request_tests {
         StacAssetBand, StacDataProvider, StacDataProviderDefinition, StacGrid, StacProviderDataset,
         StacProviderDatasetBand, cache::StacQueryCache,
     };
-    use super::stac_query_bbox;
+    use super::{LoadingInfoDetail, stac_query_bbox};
     use geoengine_datatypes::{
         dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
         primitives::{
@@ -1991,7 +1991,12 @@ mod grid_request_tests {
         bounds: SpatialPartition2D,
         time: TimeInterval,
     ) -> MultiBandGdalLoadingInfoQueryRectangle {
-        MultiBandGdalLoadingInfoQueryRectangle::new(bounds, time, BandSelection::first(), true)
+        MultiBandGdalLoadingInfoQueryRectangle::new(
+            bounds,
+            time,
+            BandSelection::first(),
+            LoadingInfoDetail::Files,
+        )
     }
 
     fn item(id: &str, left: f64) -> Value {
@@ -2128,7 +2133,7 @@ mod grid_request_tests {
                         world,
                         time,
                         BandSelection::first(),
-                        false,
+                        LoadingInfoDetail::TimeSteps,
                     ),
                 ),
             )
@@ -2159,7 +2164,7 @@ mod grid_request_tests {
                 world,
                 TimeInterval::new(DateTime::new_utc(2024, 2, 15, 12, 0, 0), april).unwrap(),
                 BandSelection::first(),
-                false,
+                LoadingInfoDetail::TimeSteps,
             ))
             .await
             .unwrap();
@@ -2196,7 +2201,7 @@ mod grid_request_tests {
                     bounds(0., 1.),
                     interval(3),
                     BandSelection::first(),
-                    false,
+                    LoadingInfoDetail::TimeSteps,
                 ))
                 .await;
             assert!(matches!(
