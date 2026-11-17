@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.coordinate2_d import Coordinate2D
+from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource
 from geoengine_api_client.models.raster_data_type import RasterDataType
 from geoengine_api_client.models.spatial_resolution import SpatialResolution
 from geoengine_api_client.models.warp_downsampling_method import WarpDownsamplingMethod
@@ -38,7 +39,8 @@ class WarpParameters(BaseModel):
     downsampling: Optional[WarpDownsamplingMethod] = Field(default=None, description="How to compute an output pixel that is coarser than the input in at least one axis. Defaults to `nearest`.")
     upsampling: Optional[WarpUpsamplingMethod] = Field(default=None, description="How to compute an output pixel that is finer than the input in both axes. Defaults to `nearest`.")
     output_data_type: Optional[RasterDataType] = Field(default=None, description="The data type of the output. Defaults to the data type of the input. Integer types round half up and clip values to their range.", alias="outputDataType")
-    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "downsampling", "upsampling", "outputDataType"]
+    derive_out_spec: Optional[DeriveOutRasterSpecsSource] = Field(default=None, description="How the output grid is derived when reprojecting, as in `Reprojection`: `projectionBounds` (default) derives it from the area of use of the input's spatial reference, `dataBounds` from the data bounds.", alias="deriveOutSpec")
+    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "downsampling", "upsampling", "outputDataType", "deriveOutSpec"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -122,7 +124,8 @@ class WarpParameters(BaseModel):
             "outputOriginReference": Coordinate2D.from_dict(obj["outputOriginReference"]) if obj.get("outputOriginReference") is not None else None,
             "downsampling": obj.get("downsampling"),
             "upsampling": obj.get("upsampling"),
-            "outputDataType": obj.get("outputDataType")
+            "outputDataType": obj.get("outputDataType"),
+            "deriveOutSpec": obj.get("deriveOutSpec")
         })
         return _obj
 

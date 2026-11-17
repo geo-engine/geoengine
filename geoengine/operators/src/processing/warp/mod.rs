@@ -72,6 +72,10 @@ pub struct WarpParams {
     /// values to their range.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_data_type: Option<RasterDataType>,
+    /// How the output grid is derived when reprojecting: from the area of use of the source's
+    /// spatial reference (default) or from the data bounds, as in `Reprojection`
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
 /// How [`Warp`] computes an output pixel that is coarser than the input in at least one axis, with
@@ -129,14 +133,18 @@ impl RasterOperator for Warp {
             .sources
             .initialize_sources(path.clone(), context)
             .await?;
-        InitializedWarp::new(
+        let warp = InitializedWarp::new(
             name,
             path,
             initialized_source.raster,
             self.params,
             context.tiling_specification(),
-        )
-        .map(InitializedRasterOperator::boxed)
+        )?;
+        warp.ensure_mode_fits_memory_budget(
+            context.warp_mode_max_memory_per_tile(),
+            context.thread_pool().current_num_threads(),
+        )?;
+        Ok(warp.boxed())
     }
 
     span_fn!(Warp);
@@ -161,7 +169,7 @@ pub fn warped_spatial_grid(
             in_srs,
             ReprojectionParams {
                 target_spatial_reference: target_srs,
-                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+                derive_out_spec: params.derive_out_spec,
             },
         )?,
         _ => in_grid,
@@ -273,6 +281,9 @@ pub struct InitializedWarp<O: InitializedRasterOperator> {
     reproject: bool,
     /// the kernel for the output pixels, `None` for nearest neighbour
     kernel: Option<WarpKernel>,
+    /// the resolution of the input that the kernel compares with the output's: if reprojected,
+    /// the one of the reprojected input grid
+    kernel_in_resolution: SpatialResolution,
     tiling_specification: TilingSpecification,
 }
 
@@ -356,6 +367,17 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             in_descriptor.spatial_grid.spatial_resolution()
         };
         let kernel = warp_kernel(&params, in_resolution, out_grid.spatial_resolution());
+        // `mode` counts each distinct value, which floats rarely repeat
+        if kernel == Some(WarpKernel::Mode)
+            && matches!(
+                in_descriptor.data_type,
+                RasterDataType::F32 | RasterDataType::F64
+            )
+        {
+            return Err(Error::WarpModeRequiresIntegerInput {
+                data_type: in_descriptor.data_type,
+            });
+        }
 
         let result_descriptor = RasterResultDescriptor {
             spatial_reference: target_srs.into(),
@@ -377,8 +399,45 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             target_srs,
             reproject,
             kernel,
+            kernel_in_resolution: in_resolution,
             tiling_specification,
         })
+    }
+
+    /// Checks that `mode` keeps at most `budget` bytes per output tile (see
+    /// [`kernels::mode_memory_per_tile`]), with `threads` threads that compute output rows at the
+    /// same time.
+    ///
+    /// # Errors
+    /// If the estimate exceeds `budget`.
+    pub fn ensure_mode_fits_memory_budget(&self, budget: usize, threads: usize) -> Result<()> {
+        if self.kernel != Some(WarpKernel::Mode) {
+            return Ok(());
+        }
+        let in_descriptor = self.source.result_descriptor();
+        let in_resolution = self.kernel_in_resolution;
+        let out_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+        let estimate = kernels::mode_memory_per_tile(
+            in_descriptor.data_type,
+            (
+                (out_resolution.y() / in_resolution.y()).get(),
+                (out_resolution.x() / in_resolution.x()).get(),
+            ),
+            self.tiling_specification.tile_size_in_pixels,
+            threads,
+        );
+        let budget = budget as u64;
+        // the positions in a footprint are `u32` (see `kernels::ModeEntry`)
+        if estimate.bytes > budget || estimate.footprint_pixels > u64::from(u32::MAX) {
+            const MB: u64 = 1024 * 1024;
+            return Err(Error::WarpModeExceedsMemoryBudget {
+                estimated_mb: estimate.bytes.div_ceil(MB),
+                budget_mb: budget / MB,
+                footprint_pixels: estimate.footprint_pixels,
+                data_type: in_descriptor.data_type,
+            });
+        }
+        Ok(())
     }
 }
 
@@ -515,10 +574,17 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
             ));
         };
 
-        // compute in the output data type if it holds the input values, e.g. the average of `U8`
-        // values in `F32`, otherwise in the input type and convert the results
-        let working_data_type = if out_data_type.represents_losslessly(in_descriptor.data_type) {
+        // `mode` picks one of the input values, so it computes in the input type, which keeps the
+        // histogram for 8-bit inputs (see `kernels::ModeState`); the others compute in the output
+        // data type if it holds the input values, e.g. the average of `U8` values in `F32`; for a
+        // float output that does not, e.g. `I32` → `F32`, in `F64`, so that the fractions are kept
+        // until the end; otherwise in the input type, rounding once at the end
+        let working_data_type = if kernel == WarpKernel::Mode {
+            in_descriptor.data_type
+        } else if out_data_type.represents_losslessly(in_descriptor.data_type) {
             out_data_type
+        } else if matches!(out_data_type, RasterDataType::F32 | RasterDataType::F64) {
+            RasterDataType::F64
         } else {
             in_descriptor.data_type
         };
@@ -1403,6 +1469,105 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_keeps_the_fractions_of_an_integer_average_in_a_float_output() {
+        let exe_ctx = mock_exe_ctx();
+        // `F32` cannot hold every `I32`, so the kernel must not compute in `I32` and round there
+        let source = input().mock_raster_source::<i32>().typed();
+
+        let (descriptor, tiles) = query_typed(
+            warp(
+                source,
+                WarpParams {
+                    output_data_type: Some(RasterDataType::F32),
+                    ..downsampling_params(2., WarpDownsampling::Average)
+                },
+            ),
+            &exe_ctx,
+            TimeInterval::new_unchecked(0, 10),
+            None,
+            TypedRasterQueryProcessor::get_f32,
+        )
+        .await;
+
+        assert_eq!(descriptor.data_type, RasterDataType::F32);
+        // the mean of 10 × row + column over 2 × 2 pixels, e.g. (0 + 1 + 10 + 11) / 4 = 5.5
+        assert_raster_tiles_eq_ascii(
+            &tiles,
+            &two_degrees(indoc! {"
+                [0, 10)
+                +----------------+
+                |  5.5  7.5  9.5 |
+                | 25.5 27.5 29.5 |
+                | 45.5 47.5 49.5 |
+                +----------------+
+            "}),
+        );
+    }
+
+    #[tokio::test]
+    async fn it_treats_nan_like_no_data_in_every_method() {
+        let exe_ctx = mock_exe_ctx();
+        let input = |nan: &str| {
+            AsciiRasterTiles::new(
+                &indoc! {"
+                    [0, 10)
+                    +-------------+-------------+
+                    |  0  1  2    |  3  4  5    |
+                    | 10  X 12    | 13 14 15    |
+                    | 20 21 22    | 23  X 25    |
+                    +-------------+-------------+
+                    | 30 31 32    | 33 34 35    |
+                    |  X 41 42    | 43 44 45    |
+                    | 50 51 52    | 53 54  X    |
+                    +-------------+-------------+
+                "}
+                .replace('X', nan),
+            )
+            .tile_origin([-2, 0])
+            .mock_raster_source::<f32>()
+            .typed()
+        };
+        let half_degree = SpatialResolution::new_unchecked(0.5, 0.5);
+        let cases = [
+            downsampling_params(2., WarpDownsampling::Average),
+            downsampling_params(2., WarpDownsampling::Min),
+            downsampling_params(2., WarpDownsampling::Max),
+            downsampling_params(1.5, WarpDownsampling::Average),
+            WarpParams {
+                upsampling: WarpUpsampling::Bilinear,
+                output_origin_reference: Some(Coordinate2D::new(0.25, 0.25)),
+                ..resample_params(half_degree)
+            },
+            WarpParams {
+                upsampling: WarpUpsampling::Bilinear,
+                ..resample_params(half_degree)
+            },
+        ];
+
+        for params in cases {
+            let query = |source| async {
+                let (_, tiles) = query_typed(
+                    warp(source, params),
+                    &exe_ctx,
+                    TimeInterval::new_unchecked(0, 10),
+                    None,
+                    TypedRasterQueryProcessor::get_f32,
+                )
+                .await;
+                pixels(&tiles)
+            };
+            let with_nan = query(input("NaN")).await;
+            let with_no_data = query(input("_")).await;
+
+            assert!(
+                with_no_data.iter().any(|(_, value)| value.is_some()),
+                "{params:?} should have data"
+            );
+            assert_eq!(with_nan, with_no_data, "{params:?}");
+        }
+    }
+
+    #[tokio::test]
     async fn it_converts_nearest_neighbor_results_to_the_output_data_type() {
         let exe_ctx = mock_exe_ctx();
         let source = input().mock_raster_source::<u8>().typed();
@@ -1432,6 +1597,83 @@ mod tests {
                 | 31 33 35 |
                 | 51 53 55 |
                 +----------+
+            "}),
+        );
+    }
+
+    #[tokio::test]
+    async fn it_rejects_mode_for_float_inputs() {
+        let exe_ctx = mock_exe_ctx();
+        let source = input().mock_raster_source::<f32>().typed();
+
+        let result = warp(source, downsampling_params(2., WarpDownsampling::Mode))
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(Error::WarpModeRequiresIntegerInput {
+                data_type: RasterDataType::F32
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn it_rejects_mode_beyond_the_memory_budget() {
+        // at 16×, a footprint has 17 × 17 pixels: up to 289 values for `U16`, but only a histogram of
+        // 256 values for `U8`, so that 9 open pixels need ≈ 54 KB and ≈ 18 KB
+        let mut exe_ctx = mock_exe_ctx();
+        exe_ctx.warp_mode_max_memory_per_tile = 32 * 1024;
+        let initialize = |source: TypedRasterOperator| {
+            warp(source, downsampling_params(16., WarpDownsampling::Mode))
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        };
+
+        let result = initialize(input().mock_raster_source::<u16>().typed()).await;
+        assert!(
+            matches!(
+                result,
+                Err(Error::WarpModeExceedsMemoryBudget {
+                    footprint_pixels: 289,
+                    data_type: RasterDataType::U16,
+                    ..
+                })
+            ),
+            "{:?}",
+            result.err()
+        );
+
+        assert!(
+            initialize(input().mock_raster_source::<u8>().typed())
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_computes_the_mode_of_wider_integer_types() {
+        let exe_ctx = mock_exe_ctx();
+        let source = classes().mock_raster_source::<u16>().typed();
+
+        let (_, tiles) = query_typed(
+            warp(source, downsampling_params(2., WarpDownsampling::Mode)),
+            &exe_ctx,
+            TimeInterval::new_unchecked(0, 10),
+            None,
+            TypedRasterQueryProcessor::get_u16,
+        )
+        .await;
+
+        // the same as for `U8`, see `it_aggregates_coarser_pixels_with_the_downsampling_method`
+        assert_raster_tiles_eq_ascii(
+            &tiles,
+            &two_degrees(indoc! {"
+                [0, 10)
+                +-------+
+                | 1 2 4 |
+                | 5 6 _ |
+                | 7 7 9 |
+                +-------+
             "}),
         );
     }

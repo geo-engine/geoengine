@@ -285,6 +285,7 @@ impl TryFrom<&OperatorsWarp> for Warp {
                     OperatorsWarpUpsampling::Bilinear => WarpUpsamplingMethod::Bilinear,
                 },
                 output_data_type: value.params.output_data_type.map(Into::into),
+                derive_out_spec: value.params.derive_out_spec.into(),
             },
             sources: crate::api::model::processing_graphs::source_parameters::SingleRasterSource {
                 raster: raster_operator_from_runtime(&value.sources.raster)?,
@@ -886,12 +887,18 @@ mod tests {
                         downsampling: geoengine_operators::processing::WarpDownsampling::Average,
                         upsampling: geoengine_operators::processing::WarpUpsampling::Bilinear,
                         output_data_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
+                        derive_out_spec:
+                            geoengine_operators::processing::DeriveOutRasterSpecsSource::DataBounds,
                     },
                     sources: SingleRasterSource {
                         raster: raster_source(),
                     },
                 }),
-                |graph| matches!(graph, RasterOperator::Warp(_)),
+                |graph| {
+                    matches!(graph, RasterOperator::Warp(warp)
+                        if warp.params.derive_out_spec
+                            == crate::api::model::processing_graphs::DeriveOutRasterSpecsSource::DataBounds)
+                },
             ),
             (
                 TypedRasterOperator::from(OperatorsBandFilter {

@@ -289,6 +289,7 @@ where
     default_cache_ttl: CacheTtlSeconds,
     ort_environment: OrtEnvironment,
     expression_environment: ExpressionEnvironment,
+    warp_mode_max_memory_per_tile: usize,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -305,6 +306,7 @@ where
         default_cache_ttl: CacheTtlSeconds,
         ort_environment: OrtEnvironment,
         expression_environment: ExpressionEnvironment,
+        warp_mode_max_memory_per_tile: usize,
     ) -> Self {
         Self {
             db,
@@ -315,6 +317,7 @@ where
             default_cache_ttl,
             ort_environment,
             expression_environment,
+            warp_mode_max_memory_per_tile,
         }
     }
 }
@@ -473,6 +476,10 @@ where
 
     fn expression_environment(&self) -> &ExpressionEnvironment {
         &self.expression_environment
+    }
+
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.warp_mode_max_memory_per_tile
     }
 }
 
