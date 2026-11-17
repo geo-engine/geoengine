@@ -179,7 +179,7 @@ impl CrsMetadataProvider for ProjMetadataProvider {
 
     fn uses_meters(&self) -> Result<bool> {
         let (meters_per_unit, linear) = self.axis_unit()?;
-        Ok(linear && float_cmp::approx_eq!(f64, meters_per_unit, 1.0, ulps = 2))
+        Ok(linear && float_cmp::approx_eq!(f64, meters_per_unit, 1.0))
     }
 
     fn meters_per_unit(&self) -> Result<f64> {

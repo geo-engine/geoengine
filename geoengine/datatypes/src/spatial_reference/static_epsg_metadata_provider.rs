@@ -88,12 +88,7 @@ impl CrsMetadataProvider for StaticEpsgMetadataProvider {
     }
 
     fn uses_meters(&self) -> super::Result<bool> {
-        Ok(float_cmp::approx_eq!(
-            f64,
-            self.meters_per_unit,
-            1.0,
-            ulps = 2
-        ))
+        Ok(float_cmp::approx_eq!(f64, self.meters_per_unit, 1.0))
     }
 
     fn meters_per_unit(&self) -> super::Result<f64> {
