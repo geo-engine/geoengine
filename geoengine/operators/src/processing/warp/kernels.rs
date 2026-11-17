@@ -11,7 +11,8 @@
 //!   Neighbours without data are left out and the weights of the others are renormalised. If the
 //!   input pixel under the output pixel center has no data, the output pixel has none either.
 //!
-//! Input pixels without data are left out; an output pixel without any input pixel has no data.
+//! Input pixels without data and NaN values are left out; an output pixel without any input pixel
+//! has no data.
 //! Integer outputs round half up (see [`pixel_from_f64_rounded`]).
 
 use crate::adapters::{
@@ -235,6 +236,11 @@ impl<P: Pixel> PixelState<P> {
         position: (isize, isize),
         center: bool,
     ) {
+        // an unmasked NaN counts as no data in every method, as GDAL skips invalid float values
+        let value_f64: f64 = value.as_();
+        if value_f64.is_nan() {
+            return;
+        }
         match self {
             Self::Sum {
                 sum,
@@ -243,16 +249,11 @@ impl<P: Pixel> PixelState<P> {
             } => {
                 *has_center |= center;
                 if weight > 0. {
-                    let value: f64 = value.as_();
-                    *sum += weight * value;
+                    *sum += weight * value_f64;
                     *total += weight;
                 }
             }
             Self::Extreme(extreme) => {
-                let value_f64: f64 = value.as_();
-                if value_f64.is_nan() {
-                    return;
-                }
                 let replace = match extreme {
                     None => true,
                     Some(current) if kernel == WarpKernel::Min => value < *current,

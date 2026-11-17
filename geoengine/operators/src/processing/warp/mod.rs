@@ -1390,6 +1390,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_treats_nan_like_no_data_in_every_method() {
+        let exe_ctx = mock_exe_ctx();
+        let input = |nan: &str| {
+            AsciiRasterTiles::new(
+                &indoc! {"
+                    [0, 10)
+                    +-------------+-------------+
+                    |  0  1  2    |  3  4  5    |
+                    | 10  X 12    | 13 14 15    |
+                    | 20 21 22    | 23  X 25    |
+                    +-------------+-------------+
+                    | 30 31 32    | 33 34 35    |
+                    |  X 41 42    | 43 44 45    |
+                    | 50 51 52    | 53 54  X    |
+                    +-------------+-------------+
+                "}
+                .replace('X', nan),
+            )
+            .tile_origin([-2, 0])
+            .mock_raster_source::<f32>()
+            .typed()
+        };
+        let half_degree = SpatialResolution::new_unchecked(0.5, 0.5);
+        let cases = [
+            downsampling_params(2., WarpDownsampling::Average),
+            downsampling_params(2., WarpDownsampling::Min),
+            downsampling_params(2., WarpDownsampling::Max),
+            downsampling_params(1.5, WarpDownsampling::Average),
+            WarpParams {
+                upsampling: WarpUpsampling::Bilinear,
+                output_origin_reference: Some(Coordinate2D::new(0.25, 0.25)),
+                ..resample_params(half_degree)
+            },
+            WarpParams {
+                upsampling: WarpUpsampling::Bilinear,
+                ..resample_params(half_degree)
+            },
+        ];
+
+        for params in cases {
+            let query = |source| async {
+                let (_, tiles) = query_typed(
+                    warp(source, params),
+                    &exe_ctx,
+                    TimeInterval::new_unchecked(0, 10),
+                    None,
+                    TypedRasterQueryProcessor::get_f32,
+                )
+                .await;
+                pixels(&tiles)
+            };
+            let with_nan = query(input("NaN")).await;
+            let with_no_data = query(input("_")).await;
+
+            assert!(
+                with_no_data.iter().any(|(_, value)| value.is_some()),
+                "{params:?} should have data"
+            );
+            assert_eq!(with_nan, with_no_data, "{params:?}");
+        }
+    }
+
+    #[tokio::test]
     async fn it_converts_nearest_neighbor_results_to_the_output_data_type() {
         let exe_ctx = mock_exe_ctx();
         let source = input().mock_raster_source::<u8>().typed();
