@@ -12,6 +12,7 @@ import type { SpatialResolution } from './SpatialResolution';
 import type { Coordinate2D } from './Coordinate2D';
 import type { WarpDownsamplingMethod } from './WarpDownsamplingMethod';
 import type { WarpUpsamplingMethod } from './WarpUpsamplingMethod';
+import type { DeriveOutRasterSpecsSource } from './DeriveOutRasterSpecsSource';
 import type { RasterDataType } from './RasterDataType';
 /**
  * Parameters for the `Warp` operator.
@@ -47,6 +48,12 @@ export interface WarpParameters {
      * Integer types round half up and clip values to their range.
      */
     outputDataType?: RasterDataType | null;
+    /**
+     * How the output grid is derived when reprojecting, as in `Reprojection`:
+     * `projectionBounds` (default) derives it from the area of use of the input's spatial
+     * reference, `dataBounds` from the data bounds.
+     */
+    deriveOutSpec?: DeriveOutRasterSpecsSource;
 }
 /**
  * Check if a given object implements the WarpParameters interface.

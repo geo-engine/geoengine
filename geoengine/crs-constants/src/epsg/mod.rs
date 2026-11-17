@@ -4,6 +4,13 @@ pub enum CrsType {
     Geographic2d,
 }
 
+/// The order of the axes of a CRS, as defined by its authority
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AxisOrder {
+    EastNorth,
+    NorthEast,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct EpsgBounds {
     #[cfg(feature = "metadata")]
@@ -16,6 +23,8 @@ pub struct EpsgBounds {
     pub meters_per_unit: f64,
     pub wgs84_bounds: [f64; 4],
     pub native_bounds: Option<[f64; 4]>,
+    /// `None` if the axes are not east and north or have units the server does not parse
+    pub axis_order: Option<AxisOrder>,
 }
 
 impl EpsgBounds {

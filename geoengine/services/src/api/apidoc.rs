@@ -41,10 +41,10 @@ use crate::{
             projects::{LayerUpdate, Plot, PlotUpdate, Project, ProjectLayer, UpdateProject},
             quota::ComputationQuota,
             responses::{
-                BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse,
-                PngResponse, UnauthorizedAdminResponse, UnauthorizedUserResponse,
-                UnsupportedMediaTypeForJsonResponse, ZipResponse, datasets::DatasetNameResponse,
-                ml_models::MlModelNameResponse,
+                BadRequestQueryResponse, ErrorResponse, GeoTiffResponse, IdResponse,
+                PayloadTooLargeResponse, PngResponse, UnauthorizedAdminResponse,
+                UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse, ZipResponse,
+                datasets::DatasetNameResponse, ml_models::MlModelNameResponse,
             },
             services::{
                 AddDataset, AddLayer, CopernicusDataspaceDataProviderDefinition, CreateDataset,
@@ -213,6 +213,7 @@ use utoipa::{
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             PngResponse,
+            GeoTiffResponse,
             ZipResponse,
         ),
         schemas(

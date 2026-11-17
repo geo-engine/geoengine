@@ -51,6 +51,12 @@ rayon_threads = 0
 gdal_source_read_ahead = 8
 # GDAL tile reads a MultiBandGdalSource query keeps in flight
 multi_band_gdal_source_read_ahead = 16
+# Upper limit in MB for the memory that a Warp with the downsampling method `mode` keeps per output
+# tile. It keeps the sums of the weights per distinct value of each output pixel whose input pixels
+# it is still reading. Warp estimates the worst case when it is initialized and rejects the
+# processing graph if that exceeds the limit, e.g. for a large factor on 16-bit data without
+# overviews; usually, it needs far less.
+warp_mode_max_memory_per_tile_mb = 64
 
 [expression]
 # seconds a compiled expression stays in the cache without being requested; running queries keep

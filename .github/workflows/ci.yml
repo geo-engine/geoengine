@@ -14,6 +14,14 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # retry transient network failures when downloading dependencies
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  PIP_RETRIES: 10
+  UV_HTTP_RETRIES: 10
+  npm_config_fetch_retries: 5
+  npm_config_fetch_retry_mintimeout: 20000
+  npm_config_fetch_retry_maxtimeout: 120000
 
 jobs:
   geoengine-test:
@@ -86,6 +94,8 @@ jobs:
           env-vars: ""
           workspaces: "geoengine"
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
       - name: Rustfmt
         run: just backend lint-rustfmt
       - name: Cargo.toml format
@@ -128,12 +138,14 @@ jobs:
           env-vars: ""
           workspaces: "geoengine"
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
       - name: Build
         run: just backend build "${{ matrix.build }}"
       - name: Install dependencies for OGC validation
         if: ${{ matrix.build == '' }}
         run: |
-          apt-get update && apt-get -y install podman # required for ogc-validator
+          apt-get -o Acquire::Retries=5 update && apt-get -o Acquire::Retries=5 -y install podman # required for ogc-validator
           just backend install # install the request-logging-proxy binary
           service postgresql start
 
@@ -195,7 +207,7 @@ jobs:
         if: ${{ matrix.build == '' }}
         env:
           PROXY_PORT: 8123
-      - name: Validate service
+      - name: Validate service (map tiles)
         if: ${{ matrix.build == '' }}
         uses: geo-engine/ogc-validator@v3
         with:
@@ -206,6 +218,25 @@ jobs:
           service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
           ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
           ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/map/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
+          ogc-api-tiles-tilematrix: "1"
+          ogc-api-tiles-mintilerow: "0"
+          ogc-api-tiles-maxtilerow: "1"
+          ogc-api-tiles-mintilecol: "0"
+          ogc-api-tiles-maxtilecol: "1"
+          ogc-api-tiles-ignore: ""
+        env:
+          PROXY_URL: "http://127.0.0.1:8123"
+      - name: Validate service (coverage tiles)
+        if: ${{ matrix.build == '' }}
+        uses: geo-engine/ogc-validator@v3
+        with:
+          teamengine-image: "teamengine-dev:1.0-SNAPSHOT"
+          ogc-api-processes: false
+          ogc-api-features: false
+          ogc-api-tiles: true
+          service-url: ${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}
+          ogc-api-tiles-tilematrixsetdefinitionurl: "http://www.opengis.net/def/tilematrixset/OGC/1.0/WebMercatorQuad"
+          ogc-api-tiles-urltemplatefortiles: "${{ env.PROXY_URL }}/api/ogc/${{ steps.prepare-service.outputs.DATA_CONNECTOR_ID }}/${{ steps.prepare-service.outputs.LAYER_ID }}/collections/${{ steps.prepare-service.outputs.LAYER_ID }}/coverage/tiles/WebMercatorQuad/{tileMatrix}/{tileRow}/{tileCol}?datetime=2014-04-01T00:00:00Z"
           ogc-api-tiles-tilematrix: "1"
           ogc-api-tiles-mintilerow: "0"
           ogc-api-tiles-maxtilerow: "1"
@@ -261,6 +292,8 @@ jobs:
           workspaces: "geoengine"
           # build job already saves the cache, so we can skip saving here
           save-if: false
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v7
         with:
@@ -410,8 +443,10 @@ jobs:
         run: |
           # deleted in devcontainer image, but required by java installer
           mkdir -p /usr/share/man/man1
-          apt-get update
-          apt-get install -y openjdk-21-jre-headless
+          apt-get -o Acquire::Retries=5 update
+          apt-get -o Acquire::Retries=5 install -y openjdk-21-jre-headless
+      - name: Prefetch OpenAPI Generator
+        uses: ./.github/actions/prefetch-openapi-generator
       - name: Lint OpenAPI specification
         run: just api-clients lint-openapi-spec
       - name: Check OpenAPI Generator version of generated clients
@@ -505,6 +540,10 @@ jobs:
         run: |
           # Add the workspace to safe.directory to bypass the ownership check
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
+      - name: Prefetch OpenAPI Generator
+        uses: ./.github/actions/prefetch-openapi-generator
       - name: Lint repository-wide formats & versions
         run: just ci repo
 

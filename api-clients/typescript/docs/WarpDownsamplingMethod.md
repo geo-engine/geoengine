@@ -1,7 +1,7 @@
 
 # WarpDownsamplingMethod
 
-How `Warp` computes an output pixel that is coarser than the input in at least one axis, as `gdalwarp -r` with the same name. Input pixels without data are left out.
+How `Warp` computes an output pixel that is coarser than the input in at least one axis, as `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
 
 ## Properties
 

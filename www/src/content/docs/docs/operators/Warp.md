@@ -22,19 +22,22 @@ resolution that differs from the processing graph's.
 
 ## Errors
 
-The operator returns an error if the input has no spatial reference or if the input data
-cannot be reprojected to the target spatial reference.
+The operator returns an error if the input has no spatial reference, if the input data
+cannot be reprojected to the target spatial reference, or if `mode` is used with a float
+input or could need more memory than the limit
+`[query_context] warp_mode_max_memory_per_tile_mb`.
 
 ## Parameters
 
-| Name                   | Type                      | Description                                                                                                   | Examples            |
-| ---------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------- |
-| targetSpatialReference | string,null               | Target spatial reference system. Defaults to the spatial reference of the input.                              | `"EPSG:3857"`       |
-| outputResolution       | SpatialResolution or null |                                                                                                               | `{"x":0.5,"y":0.5}` |
-| outputOriginReference  | Coordinate2D or null      |                                                                                                               |                     |
-| downsampling           | WarpDownsamplingMethod    | How to compute an output pixel that is coarser than the input in at least one axis.<br>Defaults to `nearest`. | `"average"`         |
-| upsampling             | WarpUpsamplingMethod      | How to compute an output pixel that is finer than the input in both axes.<br>Defaults to `nearest`.           | `"bilinear"`        |
-| outputDataType         | RasterDataType or null    |                                                                                                               | `"F32"`             |
+| Name                   | Type                       | Description                                                                                                                                                                                                     | Examples            |
+| ---------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| targetSpatialReference | string,null                | Target spatial reference system. Defaults to the spatial reference of the input.                                                                                                                                | `"EPSG:3857"`       |
+| outputResolution       | SpatialResolution or null  |                                                                                                                                                                                                                 | `{"x":0.5,"y":0.5}` |
+| outputOriginReference  | Coordinate2D or null       |                                                                                                                                                                                                                 |                     |
+| downsampling           | WarpDownsamplingMethod     | How to compute an output pixel that is coarser than the input in at least one axis.<br>Defaults to `nearest`.                                                                                                   | `"average"`         |
+| upsampling             | WarpUpsamplingMethod       | How to compute an output pixel that is finer than the input in both axes.<br>Defaults to `nearest`.                                                                                                             | `"bilinear"`        |
+| outputDataType         | RasterDataType or null     |                                                                                                                                                                                                                 | `"F32"`             |
+| deriveOutSpec          | DeriveOutRasterSpecsSource | How the output grid is derived when reprojecting, as in `Reprojection`:<br>`projectionBounds` (default) derives it from the area of use of the input's spatial<br>reference, `dataBounds` from the data bounds. |                     |
 
 ## Sources
 

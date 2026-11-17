@@ -10,8 +10,8 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
-/// WarpDownsamplingMethod : How `Warp` computes an output pixel that is coarser than the input in at least one axis, as `gdalwarp -r` with the same name. Input pixels without data are left out.
-/// How `Warp` computes an output pixel that is coarser than the input in at least one axis, as `gdalwarp -r` with the same name. Input pixels without data are left out.
+/// WarpDownsamplingMethod : How `Warp` computes an output pixel that is coarser than the input in at least one axis, as `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
+/// How `Warp` computes an output pixel that is coarser than the input in at least one axis, as `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum WarpDownsamplingMethod {
     #[serde(rename = "nearest")]

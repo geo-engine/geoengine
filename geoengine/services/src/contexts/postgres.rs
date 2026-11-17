@@ -1,4 +1,5 @@
 use crate::{
+    api::handlers::spatial_references::SpatialReferenceCache,
     api::model::services::Volume,
     config::{Cache, Oidc, Quota, get_config_element},
     contexts::{
@@ -75,8 +76,11 @@ where
     ort_environment: OrtEnvironment,
     expression_environment: ExpressionEnvironment,
     gdal_read_ahead: GdalReadAhead,
+    /// see [`geoengine_operators::engine::ExecutionContext::warp_mode_max_memory_per_tile`]
+    warp_mode_max_memory_per_tile: usize,
     /// runs query tasks, so they leave the single-threaded HTTP workers
     processing_runtime: tokio::runtime::Handle,
+    spatial_reference_cache: SpatialReferenceCache,
 }
 
 /// Specification of a [`PostgresContext`] created by [`PostgresContext::new_with_context_spec`].
@@ -167,7 +171,10 @@ where
             ort_environment,
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
+            warp_mode_max_memory_per_tile: get_config_element::<crate::config::QueryContext>()?
+                .warp_mode_max_memory_per_tile(),
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         })
     }
 
@@ -241,7 +248,10 @@ where
             ort_environment,
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
+            warp_mode_max_memory_per_tile: get_config_element::<crate::config::QueryContext>()?
+                .warp_mode_max_memory_per_tile(),
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         })
     }
 
@@ -324,8 +334,11 @@ where
             ort_environment,
             expression_environment,
             gdal_read_ahead: get_config_element::<crate::config::QueryContext>()?.gdal_read_ahead(),
+            warp_mode_max_memory_per_tile: get_config_element::<crate::config::QueryContext>()?
+                .warp_mode_max_memory_per_tile(),
             // the server builds its context on the main runtime, which then runs all queries
             processing_runtime: tokio::runtime::Handle::current(),
+            spatial_reference_cache: SpatialReferenceCache::default(),
         };
 
         info!(
@@ -480,6 +493,10 @@ where
         &self.oidc_manager
     }
 
+    fn spatial_reference_cache(&self) -> &SpatialReferenceCache {
+        &self.spatial_reference_cache
+    }
+
     async fn clear_caches(&self, session: Self::Session) -> Result<()> {
         if !session.is_admin() {
             return Err(Error::Unauthorized {
@@ -577,6 +594,7 @@ where
             self.context.default_cache_ttl,
             self.context.ort_environment.clone(),
             self.context.expression_environment.clone(),
+            self.context.warp_mode_max_memory_per_tile,
         ))
     }
 

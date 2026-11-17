@@ -21,7 +21,7 @@ use crate::{
         registry::ProcessingGraphRegistry,
     },
     queries::{
-        raster_grid::{RasterEncoding, RasterGridQuery, default_colorizer, raster_grid},
+        raster_grid::{RasterEncoding, RasterGridQuery, raster_grid},
         run_query,
     },
     quota::ComputationId,
@@ -349,7 +349,9 @@ async fn wms_get_map<C: ApplicationContext>(
         let conn_closed = connection_closed(&req, request_timeout_seconds.map(Duration::from_secs));
 
         let crs = request.crs.ok_or(error::Error::MissingSpatialReference)?;
-        let bounds: SpatialPartition2D = request.bbox.bounds(crs)?;
+        let bounds: SpatialPartition2D = request
+            .bbox
+            .bounds(crs, app_ctx.spatial_reference_cache())?;
         let resolution = SpatialResolution::new(
             (bounds.size_x() / f64::from(request.width)).abs(),
             (bounds.size_y() / f64::from(request.height)).abs(),
@@ -362,10 +364,8 @@ async fn wms_get_map<C: ApplicationContext>(
             |colorizer| RasterColorizer::band_selection(colorizer).try_into(),
         )?;
         let ctx = app_ctx.session_context(session);
-        let colorizer = match colorizer {
-            Some(colorizer) => colorizer.into(),
-            None => default_colorizer(&ctx, &layer).await?,
-        };
+        let colorizer: Option<geoengine_datatypes::operations::image::RasterColorizer> =
+            colorizer.map(Into::into);
 
         let query = RasterGridQuery {
             processing_graph: layer,
@@ -378,11 +378,21 @@ async fn wms_get_map<C: ApplicationContext>(
                 .map_or_else(config::default_time_from_config::<config::Wms>, Into::into),
             bands,
         };
-        let encoding = RasterEncoding::Png {
-            width: request.width,
-            height: request.height,
-            colorizer,
-        };
+        // without a style, the default colorizer for the data of band 0, from the same
+        // initialization of the processing graph as the map
+        let (width, height) = (request.width, request.height);
+        let encoding =
+            move |result_descriptor: &geoengine_operators::engine::RasterResultDescriptor| {
+                RasterEncoding::Png {
+                    width,
+                    height,
+                    colorizer: colorizer.unwrap_or_else(|| {
+                        geoengine_operators::util::raster_stream_to_png::default_raster_colorizer(
+                            result_descriptor,
+                        )
+                    }),
+                }
+            };
 
         run_query(&ctx, conn_closed, raster_grid(ctx.clone(), query, encoding)).await
     }

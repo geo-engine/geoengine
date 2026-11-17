@@ -208,9 +208,20 @@ pub struct QueryContext {
     pub gdal_source_read_ahead: NonZeroUsize,
     /// GDAL tile reads a `MultiBandGdalSource` query keeps in flight
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
+    /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
+    /// output tile
+    pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,
 }
 
 impl QueryContext {
+    /// The upper limit in bytes for the memory that a `Warp` with the downsampling method `mode`
+    /// keeps per output tile
+    pub fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.warp_mode_max_memory_per_tile_mb
+            .get()
+            .saturating_mul(1024 * 1024)
+    }
+
     pub fn gdal_read_ahead(&self) -> geoengine_operators::engine::GdalReadAhead {
         geoengine_operators::engine::GdalReadAhead {
             gdal_source: self.gdal_source_read_ahead.get(),
@@ -1077,6 +1088,19 @@ mod tests {
         assert!(rejects::<QueryContext>("gdal_source_read_ahead", 0));
         assert!(rejects::<QueryContext>(
             "multi_band_gdal_source_read_ahead",
+            0
+        ));
+    }
+
+    #[test]
+    fn it_defaults_the_warp_mode_memory_to_the_operators_default() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.warp_mode_max_memory_per_tile(),
+            geoengine_operators::engine::DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE
+        );
+        assert!(rejects::<QueryContext>(
+            "warp_mode_max_memory_per_tile_mb",
             0
         ));
     }
