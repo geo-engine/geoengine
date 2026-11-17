@@ -45,7 +45,9 @@
 //! - `GEOENGINE_BENCH_ROUNDS`: run each mode this many times, cold and then warm, plus one cold run for
 //!   the hash, instead of letting criterion pick. For remote files, to bound the traffic.
 //! - `GEOENGINE_BENCH_UNDECLARED_LEVELS`: register the single-file datasets without their overview
-//!   levels, as STAC datasets are, so that only the files' own headers name them.
+//!   levels, as STAC datasets are, so that only the files' own headers name them. Adds the views
+//!   `view_overview_32` and `view_overview_64` of the single-band cases, 2 and 4 times coarser than
+//!   the files' coarsest overview, which only datasets without declared levels may ask for.
 //!
 //! Modes: `window` queries without the raster cache, `block` with it.
 //! Cold cases clear the GDAL workers and the raster cache before each iteration, untimed; warm
@@ -731,6 +733,12 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
     if max_overview_level >= 4 {
         cases.extend(overview_4_view_cases(prefix, &source(data, Some(4)), size));
     }
+    cases.extend(beyond_overview_cases(
+        prefix,
+        data,
+        max_overview_level,
+        size,
+    ));
     // the COG driver builds overviews down to the block size, so small files have fewer
     for level in [2, 4]
         .into_iter()
@@ -757,6 +765,30 @@ fn jp2_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Cas
     ];
     cases.extend(view_cases(prefix, source, size));
     cases
+}
+
+/// Views 2 and 4 times coarser than the file's coarsest overview, if the dataset does not declare
+/// its levels: blocks read the coarsest overview and subsample it.
+fn beyond_overview_cases(
+    prefix: &str,
+    data: &NamedData,
+    max_overview_level: u32,
+    size: usize,
+) -> Vec<Case> {
+    if std::env::var_os("GEOENGINE_BENCH_UNDECLARED_LEVELS").is_none() {
+        return Vec::new();
+    }
+    [2, 4]
+        .into_iter()
+        .map(|times| {
+            let level = max_overview_level * times;
+            Case::new(
+                format!("{prefix}/view_overview_{level}"),
+                source(data, Some(level)),
+                Query::Views(views(size / level as usize, 0, false)),
+            )
+        })
+        .collect()
 }
 
 /// A first view and a panning session of a map client four times further out than `view`.
@@ -855,7 +887,8 @@ fn block_reads(c: &mut Criterion) {
 
         for (suffix, open_option) in TILE_AS_BLOCK {
             let open_options = open_option.map(|option| vec![option.to_string()]);
-            let (jp2, _) = add_dataset(&mut env, &server, &band("B04.jp2"), open_options);
+            let (jp2, max_overview_level) =
+                add_dataset(&mut env, &server, &band("B04.jp2"), open_options);
             cases.extend(jp2_cases(
                 &format!("s2_jp2_{suffix}"),
                 &source(&jp2, None),
@@ -864,6 +897,12 @@ fn block_reads(c: &mut Criterion) {
             cases.extend(overview_4_view_cases(
                 &format!("s2_jp2_{suffix}"),
                 &source(&jp2, Some(4)),
+                size,
+            ));
+            cases.extend(beyond_overview_cases(
+                &format!("s2_jp2_{suffix}"),
+                &jp2,
+                max_overview_level,
                 size,
             ));
         }
