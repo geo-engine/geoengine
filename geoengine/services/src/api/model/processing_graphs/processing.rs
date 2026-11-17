@@ -322,6 +322,15 @@ impl From<DeriveOutRasterSpecsSource> for OperatorsDeriveOutRasterSpecsSource {
     }
 }
 
+impl From<OperatorsDeriveOutRasterSpecsSource> for DeriveOutRasterSpecsSource {
+    fn from(value: OperatorsDeriveOutRasterSpecsSource) -> Self {
+        match value {
+            OperatorsDeriveOutRasterSpecsSource::DataBounds => Self::DataBounds,
+            OperatorsDeriveOutRasterSpecsSource::ProjectionBounds => Self::ProjectionBounds,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
@@ -1011,8 +1020,10 @@ impl TryFrom<Downsampling> for OperatorsDownsampling {
 ///
 /// ## Errors
 ///
-/// The operator returns an error if the input has no spatial reference or if the input data
-/// cannot be reprojected to the target spatial reference.
+/// The operator returns an error if the input has no spatial reference, if the input data
+/// cannot be reprojected to the target spatial reference, or if `mode` is used with a float
+/// input or could need more memory than the limit
+/// `[query_context] warp_mode_max_memory_per_tile_mb`.
 #[api_operator(
     title = "Warp",
     examples(
@@ -1083,6 +1094,12 @@ pub struct WarpParameters {
     #[schema(examples("F32"))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_data_type: Option<RasterDataType>,
+    /// How the output grid is derived when reprojecting, as in `Reprojection`:
+    /// `projectionBounds` (default) derives it from the area of use of the input's spatial
+    /// reference, `dataBounds` from the data bounds.
+    #[schema(examples("projectionBounds"))]
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
@@ -1090,7 +1107,7 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
 }
 
 /// How `Warp` computes an output pixel that is coarser than the input in at least one axis, as
-/// `gdalwarp -r` with the same name. Input pixels without data are left out.
+/// `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum WarpDownsamplingMethod {
@@ -1101,7 +1118,10 @@ pub enum WarpDownsamplingMethod {
     /// that the output pixel covers.
     Average,
     /// The most common value of the input pixels under the output pixel, weighted by the area of
-    /// each that the output pixel covers.
+    /// each that the output pixel covers. Only for integer inputs. The operator returns an error if
+    /// it could need more memory per output tile than the limit
+    /// `[query_context] warp_mode_max_memory_per_tile_mb`, e.g. for a large factor on 16-bit data
+    /// without overviews.
     Mode,
     /// The minimum of the input pixels under the output pixel.
     Min,
@@ -1156,6 +1176,7 @@ impl TryFrom<Warp> for OperatorsWarp {
                 downsampling: value.params.downsampling.into(),
                 upsampling: value.params.upsampling.into(),
                 output_data_type: value.params.output_data_type.map(Into::into),
+                derive_out_spec: value.params.derive_out_spec.into(),
             },
             sources: (*value.sources).try_into()?,
         })
@@ -3881,6 +3902,7 @@ mod tests {
                 downsampling: OperatorsWarpDownsampling::Mode,
                 upsampling: OperatorsWarpUpsampling::Bilinear,
                 output_data_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
+                derive_out_spec: OperatorsDeriveOutRasterSpecsSource::ProjectionBounds,
             }
         );
     }

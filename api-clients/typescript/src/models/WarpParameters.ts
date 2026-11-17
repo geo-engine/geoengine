@@ -40,6 +40,13 @@ import {
     WarpUpsamplingMethodToJSON,
     WarpUpsamplingMethodToJSONTyped,
 } from './WarpUpsamplingMethod';
+import type { DeriveOutRasterSpecsSource } from './DeriveOutRasterSpecsSource';
+import {
+    DeriveOutRasterSpecsSourceFromJSON,
+    DeriveOutRasterSpecsSourceFromJSONTyped,
+    DeriveOutRasterSpecsSourceToJSON,
+    DeriveOutRasterSpecsSourceToJSONTyped,
+} from './DeriveOutRasterSpecsSource';
 import type { RasterDataType } from './RasterDataType';
 import {
     RasterDataTypeFromJSON,
@@ -82,6 +89,12 @@ export interface WarpParameters {
      * Integer types round half up and clip values to their range.
      */
     outputDataType?: RasterDataType | null;
+    /**
+     * How the output grid is derived when reprojecting, as in `Reprojection`:
+     * `projectionBounds` (default) derives it from the area of use of the input's spatial
+     * reference, `dataBounds` from the data bounds.
+     */
+    deriveOutSpec?: DeriveOutRasterSpecsSource;
 }
 
 
@@ -109,6 +122,7 @@ export function WarpParametersFromJSONTyped(json: any, ignoreDiscriminator: bool
         'downsampling': json['downsampling'] == null ? undefined : WarpDownsamplingMethodFromJSON(json['downsampling']),
         'upsampling': json['upsampling'] == null ? undefined : WarpUpsamplingMethodFromJSON(json['upsampling']),
         'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : RasterDataTypeFromJSON(json['outputDataType']),
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
     };
 }
 
@@ -129,6 +143,7 @@ export function WarpParametersToJSONTyped(value?: WarpParameters | null, ignoreD
         'downsampling': WarpDownsamplingMethodToJSON(value['downsampling']),
         'upsampling': WarpUpsamplingMethodToJSON(value['upsampling']),
         'outputDataType': RasterDataTypeToJSON(value['outputDataType']),
+        'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
     };
 }
 

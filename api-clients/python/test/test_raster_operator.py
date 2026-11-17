@@ -42,7 +42,8 @@ class TestRasterOperator(unittest.TestCase):
                     output_origin_reference = null, 
                     downsampling = null, 
                     upsampling = null, 
-                    output_data_type = null, ),
+                    output_data_type = null, 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, )
             )
@@ -55,7 +56,8 @@ class TestRasterOperator(unittest.TestCase):
                     output_origin_reference = null, 
                     downsampling = null, 
                     upsampling = null, 
-                    output_data_type = null, ),
+                    output_data_type = null, 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
         )
