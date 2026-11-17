@@ -35,6 +35,7 @@ use geoengine_operators::source::{
 };
 use itertools::Itertools;
 use stac::Item;
+use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -249,30 +250,29 @@ impl
             .await?;
 
         tile_files.retain(|file| {
-            time_interval.intersects(&file.time)
-                && file.spatial_partition.intersects(&spatial_bounds)
+            time_interval.intersects(&file.file.time)
+                && file.file.spatial_partition.intersects(&spatial_bounds)
         });
         tile_files.sort_by(|left, right| {
-            StacTileIdentity::from(left).cmp(&StacTileIdentity::from(right))
+            StacTileIdentity::from(&left.file).cmp(&StacTileIdentity::from(&right.file))
         });
         tile_files.dedup_by(|left, right| {
-            StacTileIdentity::from(&*left) == StacTileIdentity::from(&*right)
+            StacTileIdentity::from(&left.file) == StacTileIdentity::from(&right.file)
         });
-        if self
+        let tile_files = if self
             .dataset
             .bands
             .iter()
             .any(|band| !band.coarser_assets.is_empty())
         {
-            let resolution = match query.resolution {
-                LoadingInfoResolution::Native => self.dataset.resolution,
-                LoadingInfoResolution::OverviewLevel(level) => SpatialResolution::new_unchecked(
-                    self.dataset.resolution.x().get() * f64::from(level.get()),
-                    self.dataset.resolution.y().get() * f64::from(level.get()),
-                ),
+            let level = match query.resolution {
+                LoadingInfoResolution::Native => NonZeroU32::MIN,
+                LoadingInfoResolution::OverviewLevel(level) => level,
             };
-            tile_files = select_file_resolution(tile_files, resolution);
-        }
+            select_file_resolution(tile_files, level)
+        } else {
+            tile_files.into_iter().map(|file| file.file).collect()
+        };
 
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
@@ -386,7 +386,7 @@ impl StacMultiBandMetaData {
     }
 
     /// Estimate the metadata cache weight of a complete query result, in bytes.
-    pub fn cache_weight(files: &[TileFile]) -> usize {
+    pub fn cache_weight(files: &[StacTileFile]) -> usize {
         super::cache::result_bytes(files)
     }
 
@@ -430,7 +430,7 @@ impl StacMultiBandMetaData {
         items_url: Url,
         bbox: geoengine_datatypes::primitives::BoundingBox2D,
         time_interval: TimeInterval,
-    ) -> geoengine_operators::util::Result<Vec<TileFile>> {
+    ) -> geoengine_operators::util::Result<Vec<StacTileFile>> {
         let mut files = Vec::new();
         let mut state = StacQueryState::FirstPage {
             query_url: items_url,
@@ -494,16 +494,23 @@ impl StacMultiBandMetaData {
     }
 
     /// Append matching assets from a STAC item to the dataset's tile file list.
-    pub fn process_stac_item(&self, item: &Item, files: &mut Vec<TileFile>) -> Result<()> {
+    pub fn process_stac_item(&self, item: &Item, files: &mut Vec<StacTileFile>) -> Result<()> {
         let Some((time, z_index)) = self.item_time_and_z_index(item)? else {
             return Ok(());
         };
 
         let item_epsg = common::epsg_code_from_item(item, common::StacExtensionMajorVersion::V2);
 
+        let mut item_files = Vec::new();
         for asset in item.assets.values() {
-            self.process_stac_asset(item, asset, item_epsg, time, z_index, files)?;
+            self.process_stac_asset(item, asset, item_epsg, time, z_index, &mut item_files)?;
         }
+        let item_id: Arc<str> = item.id.as_str().into();
+        files.extend(item_files.into_iter().map(|(factor, file)| StacTileFile {
+            item_id: item_id.clone(),
+            factor,
+            file,
+        }));
 
         Ok(())
     }
@@ -587,7 +594,7 @@ impl StacMultiBandMetaData {
         item_epsg: Option<u32>,
         time: TimeInterval,
         z_index: i64,
-        files: &mut Vec<TileFile>,
+        files: &mut Vec<(NonZeroU32, TileFile)>,
     ) -> Result<()> {
         if common::data_type_from_asset_v1_1_0_fallback(asset) != Some(self.dataset.data_type) {
             return Ok(());
@@ -643,19 +650,7 @@ impl StacMultiBandMetaData {
         let grid_bounds = stac_asset_grid_bounds(height, width)?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
-        let file_path = if asset.href.starts_with("http://")
-            || asset.href.starts_with("https://")
-            || asset.href.starts_with("s3://")
-        {
-            PathBuf::from(&asset.href)
-        } else {
-            return Err(
-                geoengine_operators::error::Error::InvalidDataProviderConfig {
-                    reason: format!("unsupported STAC asset href scheme in {:?}", asset.href),
-                }
-                .into(),
-            );
-        };
+        let file_path = asset_file_path(&asset.href)?;
 
         let gdal_config_options =
             common::gdal_config_options_for_file_path(&file_path, self.s3_config.as_ref(), None);
@@ -675,30 +670,36 @@ impl StacMultiBandMetaData {
                 continue;
             };
 
-            files.push(TileFile {
-                time,
-                spatial_partition,
-                band: dataset_band_idx as u32,
-                z_index,
-                params: GdalDatasetParameters {
-                    file_path: file_path.clone(),
-                    rasterband_channel,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: geo_transform.origin_coordinate(),
-                        x_pixel_size: geo_transform.x_pixel_size().into(),
-                        y_pixel_size: geo_transform.y_pixel_size().into(),
+            files.push((
+                factor,
+                TileFile {
+                    time,
+                    spatial_partition,
+                    band: dataset_band_idx as u32,
+                    z_index,
+                    params: GdalDatasetParameters {
+                        file_path: file_path.clone(),
+                        rasterband_channel,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: geo_transform.origin_coordinate(),
+                            x_pixel_size: geo_transform.x_pixel_size().into(),
+                            y_pixel_size: geo_transform.y_pixel_size().into(),
+                        },
+                        width,
+                        height,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: common::no_data_value_for_rasterband(
+                            asset,
+                            rasterband_channel,
+                        ),
+                        properties_mapping: None,
+                        gdal_open_options: gdal_open_options.clone(),
+                        gdal_config_options: gdal_config_options.clone(),
+                        allow_alphaband_as_mask: false,
+                        retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
                     },
-                    width,
-                    height,
-                    file_not_found_handling: FileNotFoundHandling::Error,
-                    no_data_value: common::no_data_value_for_rasterband(asset, rasterband_channel),
-                    properties_mapping: None,
-                    gdal_open_options: gdal_open_options.clone(),
-                    gdal_config_options: gdal_config_options.clone(),
-                    allow_alphaband_as_mask: false,
-                    retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
                 },
-            });
+            ));
         }
 
         Ok(())
@@ -757,57 +758,79 @@ impl<'a> From<&'a TileFile> for StacTileIdentity<'a> {
     }
 }
 
-/// The files of one item and band in several resolutions share their time, z-index and origin.
-type StacFileGroup = (i64, i64, u32, i64, [Option<NonNaN>; 2]);
-
-fn stac_file_group(file: &TileFile) -> StacFileGroup {
-    let origin = file.params.geo_transform.origin_coordinate;
-    (
-        file.time.start().inner(),
-        file.time.end().inner(),
-        file.band,
-        file.z_index,
-        [coordinate_key(origin.x), coordinate_key(origin.y)],
-    )
+/// A file that a STAC search found, with what loading info needs to choose between the
+/// resolutions of a band.
+#[derive(Clone, Debug)]
+pub struct StacTileFile {
+    /// The STAC item the file belongs to. Its assets of one band in several resolutions are
+    /// alternatives, so loading info reads only one of them.
+    pub item_id: Arc<str>,
+    /// How many times coarser than the dataset the file is: 1 for the dataset's resolution.
+    pub factor: NonZeroU32,
+    pub file: TileFile,
 }
 
-/// Keeps, of each item's band, the coarsest file that is not coarser than `resolution`, or the
-/// finest file if all are coarser. The order of the files is kept.
-fn select_file_resolution(files: Vec<TileFile>, resolution: SpatialResolution) -> Vec<TileFile> {
-    let pixel_size = |file: &TileFile| file.params.geo_transform.x_pixel_size.get().abs();
-    let fits = |file: &TileFile| {
-        pixel_size(file) <= resolution.x().get() + 1e-9
-            && file.params.geo_transform.y_pixel_size.get().abs() <= resolution.y().get() + 1e-9
-    };
+/// The files of one band of one STAC item, in several resolutions.
+///
+/// The time and z-index of a file are those of its item, so they need not be part of the key.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct StacFileGroup<'a> {
+    /// The id of the item, unique within the dataset's collection.
+    item_id: &'a str,
+    /// The index of the dataset band the files hold.
+    band: u32,
+}
 
-    let mut chosen: std::collections::HashMap<StacFileGroup, (bool, f64)> =
-        std::collections::HashMap::new();
-    for file in &files {
-        let candidate = (fits(file), pixel_size(file));
-        chosen
-            .entry(stac_file_group(file))
-            .and_modify(|best| {
-                let better = match (candidate.0, best.0) {
-                    (true, false) => true,
-                    (true, true) => candidate.1 > best.1,
-                    (false, false) => candidate.1 < best.1,
-                    (false, true) => false,
-                };
-                if better {
-                    *best = candidate;
-                }
-            })
-            .or_insert(candidate);
+impl<'a> From<&'a StacTileFile> for StacFileGroup<'a> {
+    fn from(file: &'a StacTileFile) -> Self {
+        Self {
+            item_id: &file.item_id,
+            band: file.file.band,
+        }
     }
+}
+
+/// Keeps, of each item's band, the coarsest file whose factor is not larger than `level`, or the
+/// finest file if all are coarser. The order of the files is kept.
+fn select_file_resolution(files: Vec<StacTileFile>, level: NonZeroU32) -> Vec<TileFile> {
+    let mut chosen: HashMap<StacFileGroup, NonZeroU32> = HashMap::new();
+    for file in &files {
+        chosen
+            .entry(StacFileGroup::from(file))
+            .and_modify(|best| {
+                *best = match (file.factor <= level, *best <= level) {
+                    (true, true) => (*best).max(file.factor),
+                    (true, false) => file.factor,
+                    (false, true) => *best,
+                    (false, false) => (*best).min(file.factor),
+                };
+            })
+            .or_insert(file.factor);
+    }
+    let keep: Vec<bool> = files
+        .iter()
+        .map(|file| chosen.get(&StacFileGroup::from(file)) == Some(&file.factor))
+        .collect();
+    drop(chosen);
 
     files
         .into_iter()
-        .filter(|file| {
-            chosen
-                .get(&stac_file_group(file))
-                .is_some_and(|best| (pixel_size(file) - best.1).abs() <= 1e-9)
-        })
+        .zip(keep)
+        .filter_map(|(file, keep)| keep.then_some(file.file))
         .collect()
+}
+
+/// The path GDAL opens an asset by. Only remote assets are supported.
+fn asset_file_path(href: &str) -> geoengine_operators::util::Result<PathBuf> {
+    if href.starts_with("http://") || href.starts_with("https://") || href.starts_with("s3://") {
+        Ok(PathBuf::from(href))
+    } else {
+        Err(
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("unsupported STAC asset href scheme in {href:?}"),
+            },
+        )
+    }
 }
 
 /// Snaps the pixel size of an asset to `resolution`, a multiple of the dataset's resolution,
@@ -1284,6 +1307,36 @@ mod tests {
     }
 
     #[test]
+    fn it_selects_the_resolution_per_item_and_band() {
+        let file = |item_id: &str, band: u32, factor: u32, path: &str| {
+            let mut file = identity_tile();
+            file.band = band;
+            file.params.file_path = PathBuf::from(path);
+            StacTileFile {
+                item_id: item_id.into(),
+                factor: NonZeroU32::new(factor).unwrap(),
+                file,
+            }
+        };
+        // `a` and `b` share time, z-index and origin; only `a` has a coarser file
+        let files = vec![
+            file("a", 0, 1, "a_10m"),
+            file("a", 0, 6, "a_60m"),
+            file("a", 1, 1, "a_band_1"),
+            file("b", 0, 1, "b_10m"),
+        ];
+        let paths = |level: u32| {
+            select_file_resolution(files.clone(), NonZeroU32::new(level).unwrap())
+                .into_iter()
+                .map(|file| file.params.file_path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(paths(1), ["a_10m", "a_band_1", "b_10m"]);
+        assert_eq!(paths(8), ["a_60m", "a_band_1", "b_10m"]);
+    }
+
+    #[test]
     fn tile_identity_orders_time_then_band_then_z_index() {
         let mut later_time = identity_tile();
         later_time.time = TimeInterval::new_unchecked(10_i64, 20_i64);
@@ -1731,7 +1784,7 @@ mod tests {
         meta.process_stac_item(&item, &mut files).unwrap();
 
         assert_eq!(files.len(), 1, "only the located asset yields a file");
-        let file = &files[0];
+        let file = &files[0].file;
         assert_eq!(
             file.params.file_path,
             PathBuf::from("https://example.com/WCD.tif")
@@ -1833,7 +1886,7 @@ mod tests {
         meta.process_stac_item(&item, &mut files).unwrap();
 
         assert_eq!(files.len(), 1, "{files:?}");
-        let file = &files[0];
+        let file = &files[0].file;
         assert_eq!(
             file.params.file_path,
             PathBuf::from("s3://example/B04_60m.jp2")

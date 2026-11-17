@@ -24,7 +24,7 @@ use cache::StacQueryCache;
 pub(crate) use coordinator::StacClient;
 pub use coordinator::StacRequestRegistry;
 pub use grid::{ProjectedStacGrid, StacGrid, StacGridCell, StacGridCells};
-pub use loading_info::StacMultiBandMetaData;
+pub use loading_info::{StacMultiBandMetaData, StacTileFile};
 
 const DEFAULT_QUERY_TIMEOUT_SECS: i64 = 60;
 const DEFAULT_PAGE_LIMIT: i64 = 100;
