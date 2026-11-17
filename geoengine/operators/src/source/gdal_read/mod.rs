@@ -108,7 +108,13 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
         ) {
             (Some(factor), Some(blocks)) => {
                 blocks
-                    .read::<T>(&params, read_advise, factor, plan.cache_hint)
+                    .read::<T>(
+                        &params,
+                        read_advise,
+                        factor,
+                        level_factor.is_none(),
+                        plan.cache_hint,
+                    )
                     .await
             }
             (Some(factor), None) if level_factor.is_some() && factor.get() > 1 => {
@@ -455,13 +461,19 @@ mod tests {
 
     /// A 64x64 u16 `GeoTIFF` in 16x16 blocks with overviews 2 and 4, every pixel distinct.
     fn tiled_tiff_with_overviews(dir: &std::path::Path) -> GdalDatasetParameters {
-        let file_path = dir.join("blocks.tif");
+        tiled_tiff(dir, 64, &[2, 4])
+    }
+
+    /// A `size`² `u16` file in 16 px blocks whose pixel values are `y * size + x`, with origin
+    /// (0, 64) and the given overviews.
+    fn tiled_tiff(dir: &std::path::Path, size: usize, overviews: &[i32]) -> GdalDatasetParameters {
+        let file_path = dir.join(format!("blocks_{size}.tif"));
         let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
         let options: gdal::cpl::CslStringList = ["TILED=YES", "BLOCKXSIZE=16", "BLOCKYSIZE=16"]
             .into_iter()
             .collect();
         let mut dataset = driver
-            .create_with_band_type_with_options::<u16, _>(&file_path, 64, 64, 1, &options)
+            .create_with_band_type_with_options::<u16, _>(&file_path, size, size, 1, &options)
             .unwrap();
         dataset
             .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap())
@@ -470,13 +482,13 @@ mod tests {
             .set_geo_transform(&[0., 1., 0., 64., 0., -1.])
             .unwrap();
         let mut buffer =
-            gdal::raster::Buffer::new((64, 64), (0..64 * 64).map(|v| v as u16).collect());
+            gdal::raster::Buffer::new((size, size), (0..size * size).map(|v| v as u16).collect());
         dataset
             .rasterband(1)
             .unwrap()
-            .write((0, 0), (64, 64), &mut buffer)
+            .write((0, 0), (size, size), &mut buffer)
             .unwrap();
-        dataset.build_overviews("NEAREST", &[2, 4], &[]).unwrap();
+        dataset.build_overviews("NEAREST", overviews, &[]).unwrap();
         dataset.close().unwrap();
 
         GdalDatasetParameters {
@@ -487,8 +499,8 @@ mod tests {
                 x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
                 y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
             },
-            width: 64,
-            height: 64,
+            width: size,
+            height: size,
             file_not_found_handling: FileNotFoundHandling::Error,
             no_data_value: None,
             properties_mapping: None,
@@ -734,6 +746,56 @@ mod tests {
             .unwrap();
             assert_eq!(tile, from_gdal, "declared: {files_have_level}");
         }
+    }
+
+    /// GDAL scales a window by the sizes of the level and of the file, not by the level's factor.
+    /// Level 4 of 61 px has 16 px, 3.8 times fewer, so a window read that starts at its pixel 11
+    /// or later starts one pixel later in the level. Blocks cannot stand in for that read.
+    #[tokio::test]
+    async fn undeclared_levels_that_gdal_reads_shifted_stay_window_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff(dir.path(), 61, &[4]);
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+        let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+            original_dataset_grid: file_grid,
+            overview_level: 4,
+            files_have_level: false,
+        });
+
+        for tile_y in 0..4 {
+            for tile_x in 0..4 {
+                let plan = TilePlan {
+                    tile: TileInformation::new(
+                        [tile_y, tile_x].into(),
+                        GridShape2D::new([4, 4]),
+                        GeoTransform::new_unchecked((0., 64.).into(), 4., -4.),
+                    ),
+                    time: TimeInterval::default(),
+                    band: 0,
+                    files: vec![params.clone()],
+                    cache_hint: CacheHint::max_duration(),
+                };
+                let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
+                    .await
+                    .unwrap();
+                let with_blocks =
+                    assemble_tile::<u16>(plan, reader_mode, &gdal_worker, Some(&blocks))
+                        .await
+                        .unwrap();
+                assert_eq!(with_blocks, from_gdal, "tile [{tile_y}, {tile_x}]");
+            }
+        }
+        assert_eq!(cache.stats().stored, 0, "no tile was read through blocks");
     }
 
     #[tokio::test]

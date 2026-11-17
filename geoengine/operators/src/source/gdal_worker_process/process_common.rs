@@ -130,6 +130,25 @@ impl RasterInfo {
         level_of_factor(&self.levels, factor)
     }
 
+    /// Whether GDAL's window read takes the pixels of `level`, which is `factor` times coarser,
+    /// one to one. GDAL scales a window by the sizes of the level and of the full resolution, not
+    /// by `factor`. A level of `ceil(size / factor)` pixels is a little finer than `factor`, so
+    /// towards the end of a file a window starts one pixel later in the level, once the two
+    /// scales are half a pixel apart: from pixel 458 on in level 16 of 10 980 pixels.
+    pub fn window_reads_take_level_pixels(&self, level: usize, factor: NonZeroUsize) -> bool {
+        let (Some(full), Some(layout)) = (self.levels.first(), self.levels.get(level)) else {
+            return false;
+        };
+        // the scales drift apart steadily, so the pixel before the last one decides; the last one
+        // has no pixel after it to take
+        let is_itself = |size: usize, full_size: usize| {
+            size.checked_sub(2).is_none_or(|pixel| {
+                (2 * pixel + 1) * factor.get() * size / (2 * full_size.max(1)) == pixel
+            })
+        };
+        is_itself(layout.size_x, full.size_x) && is_itself(layout.size_y, full.size_y)
+    }
+
     /// The first of the power-of-two overview levels `2..=max_overview_level` the band lacks.
     pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<u32> {
         let missing = largest_overview_level(&self.levels).checked_mul(2)?;
