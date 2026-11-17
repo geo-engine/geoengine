@@ -1137,6 +1137,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_fills_whole_tiles_when_reprojecting_with_a_method() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = GdalSource {
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+        }
+        .typed();
+        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(16, 16));
+        let tile_size = 16;
+
+        // coarser with `average`, finer with `bilinear`
+        for resolution in [30_000., 5_000.] {
+            let operator = warp(
+                ndvi.clone(),
+                WarpParams {
+                    target_spatial_reference: Some(SpatialReference::web_mercator()),
+                    output_resolution: Some(SpatialResolution::new_unchecked(
+                        resolution, resolution,
+                    )),
+                    downsampling: WarpDownsampling::Average,
+                    upsampling: WarpUpsampling::Bilinear,
+                    ..WarpParams::default()
+                },
+            );
+            let initialized = operator
+                .clone()
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .unwrap();
+            // the tile over land in Central Europe (10° E, 50° N)
+            let [y, x] = initialized
+                .result_descriptor()
+                .spatial_grid
+                .tiling_grid_definition(exe_ctx.tiling_specification)
+                .tiling_geo_transform()
+                .coordinate_to_grid_idx_2d((1_113_195., 6_446_276.).into())
+                .0;
+            let [min_y, min_x] =
+                [y.div_euclid(tile_size), x.div_euclid(tile_size)].map(|tile| tile * tile_size);
+            let tile = GridBoundingBox2D::new_unchecked(
+                [min_y, min_x],
+                [min_y + tile_size - 1, min_x + tile_size - 1],
+            );
+            // only its upper left quarter
+            let quarter = GridBoundingBox2D::new_unchecked(
+                [min_y, min_x],
+                [min_y + tile_size / 2 - 1, min_x + tile_size / 2 - 1],
+            );
+
+            let (_, whole) = query(operator.clone(), &exe_ctx, ndvi_time(), Some(tile)).await;
+            let (_, part) = query(operator, &exe_ctx, ndvi_time(), Some(quarter)).await;
+
+            // one tile per time step
+            assert_ne!(whole.len(), 0);
+            let outside_of_the_quarter = whole.iter().all(|tile| {
+                (tile_size / 2..tile_size)
+                    .any(|y| tile.get_at_grid_index_unchecked([y, y]).is_some())
+            });
+            assert!(
+                outside_of_the_quarter,
+                "{resolution} m: the tile should have data outside of the quarter"
+            );
+            assert_eq_two_list_of_tiles(&part, &whole, false);
+        }
+    }
+
+    #[tokio::test]
     async fn it_reads_an_overview_level_for_a_coarser_output() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let ndvi = GdalSource {

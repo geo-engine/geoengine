@@ -369,20 +369,18 @@ impl KernelProjection {
         Ok(projected)
     }
 
-    /// The input pixels the output tile `tile_info` needs within `query_bounds`: the projected
-    /// bounds of the tile, with a margin of one pixel for the footprints and the bilinear
-    /// neighbours at its edges. `None` if the tile cannot be projected.
-    fn input_bounds(
-        &self,
-        tile_info: &TileInformation,
-        query_bounds: &GridBoundingBox2D,
-    ) -> Result<Option<GridBoundingBox2D>> {
+    /// The input pixels the output tile `tile_info` needs: the projected bounds of the tile, with a
+    /// margin of one pixel for the footprints and the bilinear neighbours at its edges. `None` if
+    /// the tile cannot be projected.
+    ///
+    /// This covers the whole tile, also where it reaches beyond the query rectangle, as a tile is
+    /// always filled completely, independently of the query.
+    fn input_bounds(&self, tile_info: &TileInformation) -> Result<Option<GridBoundingBox2D>> {
         let Some(out_bounds) = self
             .grids
             .out_spatial_grid
             .grid_bounds()
             .intersection(&tile_info.global_pixel_bounds())
-            .and_then(|bounds| bounds.intersection(query_bounds))
         else {
             return Ok(None);
         };
@@ -890,14 +888,12 @@ impl<'a, P: Pixel> SubQueryTileAggregator<'a, P> for WarpKernelSubQuery<P> {
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
+        _query_rect: RasterQueryRectangle,
         time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let bounds = match &self.projection {
-            Some(projection) => {
-                projection.input_bounds(&tile_info, &query_rect.spatial_bounds())?
-            }
+            Some(projection) => projection.input_bounds(&tile_info)?,
             None => {
                 let TileSpans::Separable { y, x } = TileSpans::separable(
                     self.kernel,
