@@ -185,18 +185,13 @@ fn combine_bounds(
                 all.union(bounds, max_boxes)
             }),
         FootprintCombine::Intersection => {
+            let Some(inputs) = inputs.iter().copied().collect::<Option<Vec<_>>>() else {
+                return FootprintBounds::empty();
+            };
             inputs
-                .iter()
-                .copied()
-                .try_fold(None::<FootprintBounds>, |all, bounds| {
-                    bounds.map(|bounds| {
-                        Some(all.map_or_else(
-                            || bounds.clone(),
-                            |all| all.intersection(bounds, max_boxes),
-                        ))
-                    })
-                })
-                .flatten()
+                .into_iter()
+                .cloned()
+                .reduce(|all, bounds| all.intersection(&bounds, max_boxes))
                 .unwrap_or_else(FootprintBounds::empty)
         }
     }
