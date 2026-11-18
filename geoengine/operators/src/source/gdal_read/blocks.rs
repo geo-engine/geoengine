@@ -148,11 +148,14 @@ impl BlockIo {
     }
 
     /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
-    /// than the full resolution.
+    /// than the full resolution. If the dataset does not declare the level (`undeclared`), the
+    /// read stands in for GDAL's window read and only takes a level whose pixels that read takes
+    /// one to one.
     ///
     /// # Errors
-    /// Returns an error if a header or block read fails, if the file lacks the level or if the
-    /// read does not start at a pixel of the level.
+    /// Returns an error if a header or block read fails, if the file lacks the level (or, for an
+    /// undeclared level, GDAL's window read takes other pixels of it) or if the read does not
+    /// start at a pixel of the level.
     ///
     /// # Panics
     /// Never: the level window has the size of the read by construction.
@@ -161,6 +164,7 @@ impl BlockIo {
         params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
         factor: NonZeroUsize,
+        undeclared: bool,
         cache_hint: CacheHint,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
@@ -196,7 +200,11 @@ impl BlockIo {
         let Some(info) = info else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
-        let Some(level) = info.level_of_factor(factor) else {
+        // the caller reads a level that blocks cannot stand in for in a window, like a missing one
+        let level = info
+            .level_of_factor(factor)
+            .filter(|&level| !undeclared || info.window_reads_take_level_pixels(level, factor));
+        let Some(level) = level else {
             return Err(IpcProcessError::MissingOverviewLevel {
                 file: params.file_path.display().to_string(),
                 factor,
@@ -582,6 +590,34 @@ mod tests {
             "ceil(10 980 / 8) = 1 373"
         );
         assert_eq!(layout.level_of_factor(factor(16)), None);
+    }
+
+    #[test]
+    fn it_knows_the_levels_whose_pixels_a_window_read_takes_one_to_one() {
+        let sentinel_2 = raster_info(vec![
+            level(10_980, 1024),
+            level(5490, 512),
+            level(2745, 512),
+            level(1373, 512),
+            level(687, 512),
+        ]);
+        for (index, level_factor) in [(1, 2), (2, 4), (3, 8)] {
+            assert!(
+                sentinel_2.window_reads_take_level_pixels(index, factor(level_factor)),
+                "level {level_factor}"
+            );
+        }
+        // 687 px are 15.98 times fewer: pixel 685 of a window read is the level's pixel 686
+        assert!(!sentinel_2.window_reads_take_level_pixels(4, factor(16)));
+
+        let small = raster_info(vec![level(61, 16), level(16, 16)]);
+        assert!(!small.window_reads_take_level_pixels(1, factor(4)));
+        let even = raster_info(vec![level(64, 16), level(16, 16)]);
+        assert!(even.window_reads_take_level_pixels(1, factor(4)));
+        assert!(
+            !even.window_reads_take_level_pixels(2, factor(8)),
+            "no such level"
+        );
     }
 
     #[test]

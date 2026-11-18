@@ -26,7 +26,7 @@
 //! four times and reads only the tiles it has not seen, after the previous view is done.
 //! `view_512` and `view_512_pan` cover the same screen in 4 x 3 aligned 512 px tiles, like the
 //! OGC API tiles of `eodyssey`: one source tile per request. `view_overview_4` is a view four
-//! times further out. They print
+//! times further out, `view_overview_4_pan` pans it. They print
 //! the time from the start of a view to its first tile and to the median, p99 and last tile.
 //!
 //! The pool, the runtime and the GDAL options of the workers come from the server settings, as in
@@ -44,6 +44,8 @@
 //!   server then counts no GETs and bytes for them.
 //! - `GEOENGINE_BENCH_ROUNDS`: run each mode this many times, cold and then warm, plus one cold run for
 //!   the hash, instead of letting criterion pick. For remote files, to bound the traffic.
+//! - `GEOENGINE_BENCH_UNDECLARED_LEVELS`: register the single-file datasets without their overview
+//!   levels, as STAC datasets are, so that only the files' own headers name them.
 //!
 //! Modes: `window` queries without the raster cache, `block` with it.
 //! Cold cases clear the GDAL workers and the raster cache before each iteration, untimed; warm
@@ -222,11 +224,15 @@ fn add_dataset(
     let dataset = gdal_open_dataset(file).unwrap();
     let mut params = gdal_parameters_from_dataset(&dataset, 1, file, None, open_options).unwrap();
     params.file_path = vsicurl_path(server, file).into();
-    let result_descriptor = raster_descriptor_from_dataset(&dataset, 1).unwrap();
+    let mut result_descriptor = raster_descriptor_from_dataset(&dataset, 1).unwrap();
     let max_overview_level = result_descriptor
         .spatial_grid
         .max_overview_level()
         .unwrap_or(1);
+    if std::env::var_os("GEOENGINE_BENCH_UNDECLARED_LEVELS").is_some() {
+        result_descriptor.spatial_grid =
+            result_descriptor.spatial_grid.with_max_overview_level(None);
+    }
 
     let name = env.add_data(
         &format!("file_{}", DatasetId::new()),
@@ -723,11 +729,7 @@ fn cog_cases(prefix: &str, data: &NamedData, max_overview_level: u32, size: usiz
     ];
     cases.extend(view_cases(prefix, &source(data, None), size));
     if max_overview_level >= 4 {
-        cases.push(Case::new(
-            format!("{prefix}/view_overview_4"),
-            source(data, Some(4)),
-            Query::Views(views(size / 4, 0, false)),
-        ));
+        cases.extend(overview_4_view_cases(prefix, &source(data, Some(4)), size));
     }
     // the COG driver builds overviews down to the block size, so small files have fewer
     for level in [2, 4]
@@ -755,6 +757,21 @@ fn jp2_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> Vec<Cas
     ];
     cases.extend(view_cases(prefix, source, size));
     cases
+}
+
+/// A first view and a panning session of a map client four times further out than `view`.
+fn overview_4_view_cases(prefix: &str, source: &TypedRasterOperator, size: usize) -> [Case; 2] {
+    [0, VIEW_PAN_MOVES].map(|moves| {
+        Case::new(
+            if moves == 0 {
+                format!("{prefix}/view_overview_4")
+            } else {
+                format!("{prefix}/view_overview_4_pan")
+            },
+            source.clone(),
+            Query::Views(views(size / 4, moves, false)),
+        )
+    })
 }
 
 /// A first view and a panning session of a map client, unaligned and aligned.
@@ -844,10 +861,10 @@ fn block_reads(c: &mut Criterion) {
                 &source(&jp2, None),
                 size,
             ));
-            cases.push(Case::new(
-                format!("s2_jp2_{suffix}/view_overview_4"),
-                source(&jp2, Some(4)),
-                Query::Views(views(size / 4, 0, false)),
+            cases.extend(overview_4_view_cases(
+                &format!("s2_jp2_{suffix}"),
+                &source(&jp2, Some(4)),
+                size,
             ));
         }
         let jp2_4band = multi_band_source(&add_multi_band_dataset(
