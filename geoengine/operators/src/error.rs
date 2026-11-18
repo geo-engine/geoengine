@@ -277,11 +277,6 @@ pub enum Error {
     NotYetImplemented,
 
     #[snafu(display(
-        "Warp supports resampling methods other than nearest neighbour only within the same spatial reference yet"
-    ))]
-    WarpResamplingMethodRequiresSameSpatialReference,
-
-    #[snafu(display(
         "Warp supports the downsampling method `mode` only for integer inputs, not for {data_type:?}"
     ))]
     WarpModeRequiresIntegerInput {

@@ -8,10 +8,11 @@
 //! `Interpolation` for finer outputs and the one of `Downsampling` otherwise; with another spatial
 //! reference, it uses the sub-query of `Reprojection`.
 //!
-//! Within the same spatial reference, [`WarpParams::downsampling`] (`average`, `mode`, `min`,
-//! `max`) and [`WarpParams::upsampling`] (`bilinear`) compute the output pixels from several input
-//! pixels instead, as `gdalwarp -r` does (see [`kernels`]). [`WarpParams::output_data_type`]
-//! converts the output, e.g. to keep the fractions of an average.
+//! [`WarpParams::downsampling`] (`average`, `mode`, `min`, `max`) and [`WarpParams::upsampling`]
+//! (`bilinear`) compute the output pixels from several input pixels instead, as `gdalwarp -r` does
+//! (see [`kernels`]), with one sub-query per output tile as well. With another spatial reference,
+//! whether the output is coarser or finer is relative to the resolution of the reprojected input.
+//! [`WarpParams::output_data_type`] converts the output, e.g. to keep the fractions of an average.
 //!
 //! `Reprojection` (raster), `Downsampling` and `Interpolation` (`NearestNeighbor`) keep their own
 //! parameters, validation and output grid, but initialize to an [`InitializedWarp`] onto that grid,
@@ -43,7 +44,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod kernels;
 
-use kernels::{RoundingTypeConversionProcessor, WarpKernel, WarpKernelProcessor};
+use kernels::{KernelProjection, RoundingTypeConversionProcessor, WarpKernel, WarpKernelProcessor};
 
 /// The parameters of [`Warp`]: the grid to put the raster onto. Without any of them, the output
 /// is the input.
@@ -139,7 +140,7 @@ impl RasterOperator for Warp {
             self.params,
             context.tiling_specification(),
         )?;
-        warp.ensure_mode_fits_memory_budget(
+        let warp = warp.with_mode_memory_budget(
             context.warp_mode_max_memory_per_tile(),
             context.thread_pool().current_num_threads(),
         )?;
@@ -280,6 +281,11 @@ pub struct InitializedWarp<O: InitializedRasterOperator> {
     reproject: bool,
     /// the kernel for the output pixels, `None` for nearest neighbour
     kernel: Option<WarpKernel>,
+    /// the resolution of the input that the kernel compares with the output's: if reprojected,
+    /// the one of the reprojected input grid
+    kernel_in_resolution: SpatialResolution,
+    /// the limit for the memory of `mode` per output tile
+    mode_memory_budget: usize,
     tiling_specification: TilingSpecification,
 }
 
@@ -345,14 +351,24 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
         };
 
         let reproject = always_reproject || source_srs != target_srs;
-        let kernel = warp_kernel(
-            &params,
-            in_descriptor.spatial_grid.spatial_resolution(),
-            out_grid.spatial_resolution(),
-        );
-        if kernel.is_some() && reproject {
-            return Err(Error::WarpResamplingMethodRequiresSameSpatialReference);
-        }
+        let uses_methods = params.downsampling != WarpDownsampling::Nearest
+            || params.upsampling != WarpUpsampling::Nearest;
+        // whether the output is coarser or finer: compared with the input's resolution in the
+        // target spatial reference, as the one of the reprojected input grid
+        let in_resolution = if uses_methods && source_srs != target_srs {
+            warped_spatial_grid(
+                in_descriptor,
+                &WarpParams {
+                    output_resolution: None,
+                    output_origin_reference: None,
+                    ..params
+                },
+            )?
+            .spatial_resolution()
+        } else {
+            in_descriptor.spatial_grid.spatial_resolution()
+        };
+        let kernel = warp_kernel(&params, in_resolution, out_grid.spatial_resolution());
         // `mode` counts each distinct value, which floats rarely repeat
         if kernel == Some(WarpKernel::Mode)
             && matches!(
@@ -385,25 +401,29 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             target_srs,
             reproject,
             kernel,
+            kernel_in_resolution: in_resolution,
+            mode_memory_budget: crate::engine::DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
             tiling_specification,
         })
     }
 
-    /// Checks that `mode` keeps at most `budget` bytes per output tile (see
-    /// [`kernels::mode_memory_per_tile`]), with `threads` threads that compute output rows at the
-    /// same time.
+    /// Sets the limit for the memory of `mode` per output tile to `budget` bytes and checks that
+    /// `mode` keeps at most that (see [`kernels::mode_memory_per_tile`]), with `threads` threads
+    /// that compute output rows at the same time. With reprojection, the footprints also depend on
+    /// the output tile, so the processor checks them again for each tile.
     ///
     /// # Errors
     /// If the estimate exceeds `budget`.
-    pub fn ensure_mode_fits_memory_budget(&self, budget: usize, threads: usize) -> Result<()> {
+    pub fn with_mode_memory_budget(mut self, budget: usize, threads: usize) -> Result<Self> {
+        self.mode_memory_budget = budget;
         if self.kernel != Some(WarpKernel::Mode) {
-            return Ok(());
+            return Ok(self);
         }
-        let in_descriptor = self.source.result_descriptor();
-        let in_resolution = in_descriptor.spatial_grid.spatial_resolution();
+        let data_type = self.source.result_descriptor().data_type;
+        let in_resolution = self.kernel_in_resolution;
         let out_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
         let estimate = kernels::mode_memory_per_tile(
-            in_descriptor.data_type,
+            data_type,
             (
                 (out_resolution.y() / in_resolution.y()).get(),
                 (out_resolution.x() / in_resolution.x()).get(),
@@ -411,18 +431,8 @@ impl<O: InitializedRasterOperator> InitializedWarp<O> {
             self.tiling_specification.tile_size_in_pixels,
             threads,
         );
-        let budget = budget as u64;
-        // the positions in a footprint are `u32` (see `kernels::ModeEntry`)
-        if estimate.bytes > budget || estimate.footprint_pixels > u64::from(u32::MAX) {
-            const MB: u64 = 1024 * 1024;
-            return Err(Error::WarpModeExceedsMemoryBudget {
-                estimated_mb: estimate.bytes.div_ceil(MB),
-                budget_mb: budget / MB,
-                footprint_pixels: estimate.footprint_pixels,
-                data_type: in_descriptor.data_type,
-            });
-        }
-        Ok(())
+        kernels::ensure_mode_fits_memory_budget(&estimate, budget, data_type)?;
+        Ok(self)
     }
 }
 
@@ -578,10 +588,17 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
             data_type: working_data_type,
             ..self.result_descriptor.clone()
         };
+        let projection = self.reproject.then_some(KernelProjection {
+            in_srs: self.source_srs,
+            out_srs: self.target_srs,
+            grids: self.state,
+        });
         let warped = call_on_generic_raster_processor!(source, p => WarpKernelProcessor::new(
             p,
             kernel,
+            projection,
             descriptor,
+            self.mode_memory_budget,
         ).boxed().into());
         Ok(converted_processor(
             warped,
@@ -1116,6 +1133,146 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn it_fills_whole_tiles_when_reprojecting() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = GdalSource {
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+        }
+        .typed();
+        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(16, 16));
+        let tile_size = 16;
+
+        // coarser with `average`, finer with `bilinear`, and both with nearest neighbour
+        let methods = [
+            (WarpDownsampling::Average, WarpUpsampling::Bilinear),
+            (WarpDownsampling::Nearest, WarpUpsampling::Nearest),
+        ];
+        for ((downsampling, upsampling), resolution) in methods
+            .into_iter()
+            .flat_map(|methods| [30_000., 5_000.].map(|resolution| (methods, resolution)))
+        {
+            let operator = warp(
+                ndvi.clone(),
+                WarpParams {
+                    target_spatial_reference: Some(SpatialReference::web_mercator()),
+                    output_resolution: Some(SpatialResolution::new_unchecked(
+                        resolution, resolution,
+                    )),
+                    downsampling,
+                    upsampling,
+                    ..WarpParams::default()
+                },
+            );
+            let initialized = operator
+                .clone()
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .unwrap();
+            // the tile over land in Central Europe (10° E, 50° N)
+            let [y, x] = initialized
+                .result_descriptor()
+                .spatial_grid
+                .tiling_grid_definition(exe_ctx.tiling_specification)
+                .tiling_geo_transform()
+                .coordinate_to_grid_idx_2d((1_113_195., 6_446_276.).into())
+                .0;
+            let [min_y, min_x] =
+                [y.div_euclid(tile_size), x.div_euclid(tile_size)].map(|tile| tile * tile_size);
+            let tile = GridBoundingBox2D::new_unchecked(
+                [min_y, min_x],
+                [min_y + tile_size - 1, min_x + tile_size - 1],
+            );
+            // only its upper left quarter
+            let quarter = GridBoundingBox2D::new_unchecked(
+                [min_y, min_x],
+                [min_y + tile_size / 2 - 1, min_x + tile_size / 2 - 1],
+            );
+
+            let (_, whole) = query(operator.clone(), &exe_ctx, ndvi_time(), Some(tile)).await;
+            let (_, part) = query(operator, &exe_ctx, ndvi_time(), Some(quarter)).await;
+
+            // one tile per time step
+            assert_ne!(whole.len(), 0);
+            let outside_of_the_quarter = whole.iter().all(|tile| {
+                (tile_size / 2..tile_size)
+                    .any(|y| tile.get_at_grid_index_unchecked([y, y]).is_some())
+            });
+            assert!(
+                outside_of_the_quarter,
+                "{downsampling:?}, {upsampling:?} at {resolution} m: the tile should have data \
+                 outside of the quarter"
+            );
+            assert_eq_two_list_of_tiles(&part, &whole, false);
+        }
+    }
+
+    #[tokio::test]
+    async fn it_checks_the_memory_of_mode_per_tile_when_reprojecting() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = GdalSource {
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+        }
+        .typed();
+        exe_ctx.tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+        // towards the pole, the footprints of 10 km in the polar stereographic projection grow
+        // from 5 × 5 pixels of 0.1° at the reference resolution to up to 1800 pixels. With them,
+        // `mode` keeps ≈ 12.3 MB, while the estimate at initialization is ≈ 10 MB.
+        let operator = warp(
+            ndvi,
+            WarpParams {
+                target_spatial_reference: Some(SpatialReference::new(
+                    geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+                    3413,
+                )),
+                output_resolution: Some(SpatialResolution::new_unchecked(10_000., 10_000.)),
+                downsampling: WarpDownsampling::Mode,
+                ..WarpParams::default()
+            },
+        );
+
+        let (_, tiles) = query(operator.clone(), &exe_ctx, ndvi_time(), None).await;
+        assert!(tiles.iter().any(|tile| !tile.is_empty()));
+
+        exe_ctx.warp_mode_max_memory_per_tile = 12 * 1024 * 1024;
+        let initialized = operator
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+        let processor = initialized.query_processor().unwrap().get_u8().unwrap();
+        let bounds = initialized
+            .result_descriptor()
+            .spatial_grid
+            .as_parts()
+            .1
+            .grid_bounds();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
+        let results: Vec<_> = processor
+            .raster_query(
+                RasterQueryRectangle::new(bounds, ndvi_time(), BandSelection::first()),
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .collect()
+            .await;
+        assert!(
+            results.iter().any(|result| matches!(
+                result,
+                Err(Error::WarpModeExceedsMemoryBudget {
+                    budget_mb: 12,
+                    data_type: RasterDataType::U8,
+                    ..
+                })
+            )),
+            "{:?}",
+            results
+                .iter()
+                .filter_map(|result| result.as_ref().err())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
     async fn it_reads_an_overview_level_for_a_coarser_output() {
         let mut exe_ctx = MockExecutionContext::test_default();
         let ndvi = GdalSource {
@@ -1581,29 +1738,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn it_rejects_resampling_methods_with_reprojection() {
-        let exe_ctx = mock_exe_ctx();
-        let source = input().mock_raster_source::<u8>().typed();
-
-        let result = warp(
-            source,
-            WarpParams {
-                target_spatial_reference: Some(SpatialReference::web_mercator()),
-                downsampling: WarpDownsampling::Average,
-                upsampling: WarpUpsampling::Bilinear,
-                ..WarpParams::default()
-            },
-        )
-        .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
-        .await;
-
-        assert!(matches!(
-            result,
-            Err(Error::WarpResamplingMethodRequiresSameSpatialReference)
-        ));
-    }
-
-    #[tokio::test]
     async fn it_rejects_mode_for_float_inputs() {
         let exe_ctx = mock_exe_ctx();
         let source = input().mock_raster_source::<f32>().typed();
@@ -1724,18 +1858,9 @@ mod tests {
         (values, geo_transform, size)
     }
 
-    /// Warps `test_data/raster/warp/<input>.tif` onto the grid of `expected` with `params` and
-    /// compares the result with GDAL's in `expected/<expected>.tif` (see the README there): the
-    /// same no-data pixels and values that differ by at most `tolerance`. Where GDAL's float result
-    /// in `halfway_reference` lies halfway between two integers, both are accepted.
-    async fn assert_like_gdal<T: Pixel>(
-        input: &str,
-        expected: &str,
-        params: WarpParams,
-        tolerance: f64,
-        halfway_reference: Option<&str>,
-        get: fn(TypedRasterQueryProcessor) -> Option<BoxRasterQueryProcessor<T>>,
-    ) {
+    /// An execution context with tiles of 16 × 16 pixels and `test_data/raster/warp/<input>.tif`
+    /// as a dataset, and the name of the dataset.
+    fn warp_input(input: &str) -> (MockExecutionContext, NamedData) {
         let input_path = test_data!(format!("raster/warp/{input}.tif")).to_path_buf();
         let input_dataset = gdal_open_dataset(&input_path).unwrap();
         let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
@@ -1753,8 +1878,28 @@ mod tests {
                 cache_ttl: None,
             }),
         );
+        (exe_ctx, name)
+    }
+
+    /// Warps `test_data/raster/warp/<input>.tif` onto the grid of `expected` with `params` and
+    /// compares the result with GDAL's in `expected/<expected>.tif` (see the README there): the
+    /// same no-data pixels and values that differ by at most `tolerance`. Where GDAL's float result
+    /// in `halfway_reference` lies halfway between two integers, both are accepted.
+    async fn assert_like_gdal<T: Pixel>(
+        input: &str,
+        expected: &str,
+        params: WarpParams,
+        tolerance: f64,
+        halfway_reference: Option<&str>,
+        get: fn(TypedRasterQueryProcessor) -> Option<BoxRasterQueryProcessor<T>>,
+    ) {
+        let (exe_ctx, name) = warp_input(input);
 
         let (expected_values, expected_geo_transform, (width, height)) = read_expected(expected);
+        assert!(
+            expected_values.iter().any(Option::is_some),
+            "{expected}: GDAL's result has no valid pixels to compare with"
+        );
         let halfway_values = halfway_reference.map(|name| read_expected(name).0);
 
         let operator = warp(
@@ -1908,6 +2053,76 @@ mod tests {
         )
         .await;
         for case in ["2x_finer", "2_5x_finer_shifted"] {
+            assert_like_gdal(
+                "ndvi",
+                &format!("ndvi_bilinear_{case}_Float32"),
+                params,
+                1e-3,
+                None,
+                TypedRasterQueryProcessor::get_f32,
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn it_aggregates_with_reprojection_like_gdal() {
+        let cases = [
+            ("ndvi", WarpDownsampling::Average),
+            ("ndvi", WarpDownsampling::Max),
+            ("landcover", WarpDownsampling::Mode),
+        ];
+        for (input, downsampling) in cases {
+            let method = serde_json::to_value(downsampling).unwrap();
+            let method = method.as_str().unwrap();
+            let halfway_reference = format!("{input}_{method}_3857_30km_Float32");
+            assert_like_gdal(
+                input,
+                &format!("{input}_{method}_3857_30km_Byte"),
+                WarpParams {
+                    target_spatial_reference: Some(SpatialReference::web_mercator()),
+                    downsampling,
+                    ..WarpParams::default()
+                },
+                0.,
+                (downsampling == WarpDownsampling::Average).then_some(halfway_reference.as_str()),
+                TypedRasterQueryProcessor::get_u8,
+            )
+            .await;
+        }
+        assert_like_gdal(
+            "ndvi",
+            "ndvi_average_3857_30km_Float32",
+            WarpParams {
+                target_spatial_reference: Some(SpatialReference::web_mercator()),
+                downsampling: WarpDownsampling::Average,
+                ..WarpParams::default()
+            },
+            1e-3,
+            None,
+            TypedRasterQueryProcessor::get_f32,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn it_interpolates_bilinearly_with_reprojection_like_gdal() {
+        let params = WarpParams {
+            target_spatial_reference: Some(SpatialReference::web_mercator()),
+            upsampling: WarpUpsampling::Bilinear,
+            ..WarpParams::default()
+        };
+        // on land and on the coast, where water is no-data
+        for case in ["3857_2km", "3857_2km_coast"] {
+            assert_like_gdal(
+                "ndvi",
+                &format!("ndvi_bilinear_{case}_Byte"),
+                params,
+                0.,
+                Some(&format!("ndvi_bilinear_{case}_Float32")),
+                TypedRasterQueryProcessor::get_u8,
+            )
+            .await;
             assert_like_gdal(
                 "ndvi",
                 &format!("ndvi_bilinear_{case}_Float32"),
