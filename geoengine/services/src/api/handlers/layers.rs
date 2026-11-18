@@ -1336,8 +1336,8 @@ mod tests {
     use crate::{
         api::model::{
             processing_graphs::{
-                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
-                SpatialBoundsDerive, TypedOperator, VectorOperator,
+                MockPointSource, MockPointSourceParameters, SpatialBoundsDerive, TypedOperator,
+                VectorOperator,
             },
             responses::ErrorResponse,
             services::CopernicusDataspaceDataProviderDefinition,
@@ -1387,7 +1387,6 @@ mod tests {
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{TimeShift, TimeShiftParams},
-        source::GdalSource as OperatorsGdalSource,
         util::test::assert_eq_two_raster_operator_res_u8,
     };
 
@@ -2776,7 +2775,7 @@ mod tests {
                 .as_ref()
                 .clone()
         } else {
-            panic!("Task must be completed");
+            panic!("Task must be completed, but is {status:?}");
         }
     }
 
@@ -2800,22 +2799,18 @@ mod tests {
         let processing_graph_operator = mock_source.processing_graph.operator.get_raster().unwrap();
 
         // query the newly created dataset
-        let dataset_operator = GdalSource {
-            r#type: Default::default(),
-            params: GdalSourceParameters {
-                data: response.dataset.into(),
-                overview_level: None,
-            },
-        };
 
         assert_eq_two_raster_operator_res_u8(
             &ctx.execution_context().unwrap(),
             &ctx.query_context(ServicesProcessingGraphId::new(), ComputationId::new())
                 .unwrap(),
             processing_graph_operator,
-            OperatorsGdalSource::try_from(dataset_operator)
-                .unwrap()
-                .typed(),
+            geoengine_operators::source::MultiBandGdalSource {
+                params: geoengine_operators::source::MultiBandGdalSourceParameters::new(
+                    response.dataset.into(),
+                ),
+            }
+            .typed(),
             mock_source.query_rectangle,
             false,
         )
