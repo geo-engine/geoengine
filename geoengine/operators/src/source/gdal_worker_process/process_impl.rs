@@ -659,12 +659,16 @@ impl GdalHandling {
             )
         };
         if status != gdal_sys::CPLErr::CE_None {
-            // SAFETY: GDAL owns the message and keeps it until the next error
+            // SAFETY: GDAL owns the message and keeps it until the next error, which the copy
+            // is taken before. Like the gdal crate, reset the error afterwards, so that it does
+            // not show up in later errors of this thread.
             let (number, msg) = unsafe {
                 let msg = std::ffi::CStr::from_ptr(gdal_sys::CPLGetLastErrorMsg())
                     .to_string_lossy()
                     .into_owned();
-                (gdal_sys::CPLGetLastErrorNo(), msg)
+                let number = gdal_sys::CPLGetLastErrorNo();
+                gdal_sys::CPLErrorReset();
+                (number, msg)
             };
             return Err(GdalError::CplError {
                 class: status,
