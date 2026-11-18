@@ -1321,6 +1321,7 @@ mod tests {
     use crate::contexts::{ApplicationContext, PostgresContext, SessionContext};
     use crate::layers::storage::LayerProviderDb;
     use crate::util::tests::admin_login;
+    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::dataset::{DataProviderId, ExternalDataId};
     use geoengine_datatypes::primitives::{
         BandSelection, DateTime, RegularTimeDimension, SpatialPartition2D, SpatialResolution,
@@ -2385,10 +2386,13 @@ mod tests {
         assert_eq!((file.params.width, file.params.height), (16, 8));
         assert_eq!(file.params.no_data_value, Some(255.));
         let origin = file.params.geo_transform.origin_coordinate;
-        assert!((origin.x + 10.995_535_714_285_715).abs() < 1e-12);
-        assert!((origin.y - 75.004_464_285_714_29).abs() < 1e-12);
-        assert!(
-            (file.params.geo_transform.x_pixel_size.get() - 0.008_928_571_428_571).abs() < 1e-15
+        assert_approx_eq!(f64, origin.x, -10.995_535_714_285_715, epsilon = 1e-12);
+        assert_approx_eq!(f64, origin.y, 75.004_464_285_714_29, epsilon = 1e-12);
+        assert_approx_eq!(
+            f64,
+            file.params.geo_transform.x_pixel_size.get(),
+            0.008_928_571_428_571,
+            epsilon = 1e-15
         );
         assert!(
             file.params

@@ -2078,11 +2078,31 @@ mod tests {
         assert_eq!(info.no_data_value, Some(255.));
         assert_eq!((info.levels[0].size_x, info.levels[0].size_y), (16, 8));
         let geo_transform = info.geo_transform.expect("the fixture has a geo transform");
-        assert!((geo_transform.origin_coordinate.x + 10.995_535_714_285_715).abs() < 1e-12);
-        assert!((geo_transform.origin_coordinate.y - 75.004_464_285_714_29).abs() < 1e-12);
+        assert_approx_eq!(
+            f64,
+            geo_transform.origin_coordinate.x,
+            -10.995_535_714_285_715,
+            epsilon = 1e-12
+        );
+        assert_approx_eq!(
+            f64,
+            geo_transform.origin_coordinate.y,
+            75.004_464_285_714_29,
+            epsilon = 1e-12
+        );
         // GDAL derives the pixel size from the coordinate vectors, rounded to 15 digits
-        assert!((geo_transform.x_pixel_size.get() - 0.008_928_571_428_571).abs() < 1e-15);
-        assert!((geo_transform.y_pixel_size.get() + 0.008_928_571_428_571).abs() < 1e-15);
+        assert_approx_eq!(
+            f64,
+            geo_transform.x_pixel_size.get(),
+            0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
+        assert_approx_eq!(
+            f64,
+            geo_transform.y_pixel_size.get(),
+            -0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
     }
 
     /// A 64x64 u16 `GeoTIFF` in 16x16 blocks. Its overviews (2, 4) hold 7, its full resolution 9.
