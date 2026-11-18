@@ -57,8 +57,8 @@ pub struct GdalReadWindow {
 pub struct SubpixelWindow {
     pub(crate) start_x: isize,
     pub(crate) start_y: isize,
-    pub(crate) size_x: usize,
-    pub(crate) size_y: usize,
+    pub(crate) size_x: NonZeroUsize,
+    pub(crate) size_y: NonZeroUsize,
     pub(crate) divisor: NonZeroUsize,
 }
 
@@ -69,8 +69,8 @@ impl SubpixelWindow {
         [
             self.start_x as f64 / divisor,
             self.start_y as f64 / divisor,
-            self.size_x as f64 / divisor,
-            self.size_y as f64 / divisor,
+            self.size_x.get() as f64 / divisor,
+            self.size_y.get() as f64 / divisor,
         ]
     }
 }

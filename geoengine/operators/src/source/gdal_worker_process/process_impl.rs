@@ -512,7 +512,15 @@ impl GdalHandling {
             window = %format!("({},{})", read_window.size_x, read_window.size_y),
         )
         .entered();
-        let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
+        let (Some(out_x), Some(out_y)) = (
+            NonZeroUsize::new(out_shape.axis_size_x()),
+            NonZeroUsize::new(out_shape.axis_size_y()),
+        ) else {
+            return Err(IpcProcessError::IpcOther {
+                msg: format!("cannot read window {read_window:?} into an empty grid"),
+            });
+        };
+        let gdal_out_shape = (out_x, out_y);
 
         let dataset_mask_flags = rasterband.mask_flags()?;
 
@@ -588,8 +596,9 @@ impl GdalHandling {
     fn read_window_as<T: GdalType + Copy + Default>(
         band: &GdalRasterBand,
         read_window: &GdalReadWindow,
-        out_shape: (usize, usize),
+        out_shape: (NonZeroUsize, NonZeroUsize),
     ) -> Result<Vec<T>, IpcProcessError> {
+        let out_shape = (out_shape.0.get(), out_shape.1.get());
         let Some(subpixel) = read_window.subpixel else {
             let buffer = band.read_as::<T>(
                 read_window.gdal_window_start(), // pixelspace origin
