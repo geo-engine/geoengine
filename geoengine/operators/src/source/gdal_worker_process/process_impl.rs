@@ -609,13 +609,13 @@ impl GdalHandling {
             return Ok(buffer.into_shape_and_vec().1);
         };
 
-        let (x, y) = read_window.gdal_window_start();
-        let (width, height) = read_window.gdal_window_size();
+        // the envelope of the window is only for checking whether data is stored
+        let ([x, y], [width, height]) = subpixel.gdal_integer_window();
         let (Ok(x), Ok(y), Ok(width), Ok(height), Ok(out_x), Ok(out_y)) = (
             x.try_into(),
             y.try_into(),
-            width.try_into(),
-            height.try_into(),
+            width.get().try_into(),
+            height.get().try_into(),
             out_shape.0.try_into(),
             out_shape.1.try_into(),
         ) else {
