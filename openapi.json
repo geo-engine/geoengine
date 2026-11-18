@@ -17908,6 +17908,10 @@
           "method": {
             "$ref": "#/components/schemas/WarpMethod",
             "description": "Resampling method."
+          },
+          "deriveOutSpec": {
+            "$ref": "#/components/schemas/DeriveOutRasterSpecsSource",
+            "description": "How the output grid is derived when reprojecting, as in `Reprojection`:\n`projectionBounds` (default) derives it from the area of use of the input's spatial\nreference, `dataBounds` from the data bounds."
           }
         }
       },

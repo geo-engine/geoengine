@@ -322,6 +322,15 @@ impl From<DeriveOutRasterSpecsSource> for OperatorsDeriveOutRasterSpecsSource {
     }
 }
 
+impl From<OperatorsDeriveOutRasterSpecsSource> for DeriveOutRasterSpecsSource {
+    fn from(value: OperatorsDeriveOutRasterSpecsSource) -> Self {
+        match value {
+            OperatorsDeriveOutRasterSpecsSource::DataBounds => Self::DataBounds,
+            OperatorsDeriveOutRasterSpecsSource::ProjectionBounds => Self::ProjectionBounds,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
@@ -1047,6 +1056,12 @@ pub struct WarpParameters {
     #[schema(examples("nearestNeighbor"))]
     #[serde(default)]
     pub method: WarpMethod,
+    /// How the output grid is derived when reprojecting, as in `Reprojection`:
+    /// `projectionBounds` (default) derives it from the area of use of the input's spatial
+    /// reference, `dataBounds` from the data bounds.
+    #[schema(examples("projectionBounds"))]
+    #[serde(default)]
+    pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Default, ToSchema)]
@@ -1075,6 +1090,7 @@ impl TryFrom<Warp> for OperatorsWarp {
                 output_resolution: value.params.output_resolution.map(Into::into),
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
                 method: value.params.method.into(),
+                derive_out_spec: value.params.derive_out_spec.into(),
             },
             sources: (*value.sources).try_into()?,
         })
@@ -3795,6 +3811,7 @@ mod tests {
                 ),
                 output_origin_reference: None,
                 method: OperatorsWarpMethod::NearestNeighbor,
+                derive_out_spec: OperatorsDeriveOutRasterSpecsSource::ProjectionBounds,
             }
         );
     }

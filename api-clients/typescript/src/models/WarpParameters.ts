@@ -33,6 +33,13 @@ import {
     WarpMethodToJSON,
     WarpMethodToJSONTyped,
 } from './WarpMethod';
+import type { DeriveOutRasterSpecsSource } from './DeriveOutRasterSpecsSource';
+import {
+    DeriveOutRasterSpecsSourceFromJSON,
+    DeriveOutRasterSpecsSourceFromJSONTyped,
+    DeriveOutRasterSpecsSourceToJSON,
+    DeriveOutRasterSpecsSourceToJSONTyped,
+} from './DeriveOutRasterSpecsSource';
 
 /**
  * Parameters for the `Warp` operator.
@@ -57,6 +64,12 @@ export interface WarpParameters {
      * Resampling method.
      */
     method?: WarpMethod;
+    /**
+     * How the output grid is derived when reprojecting, as in `Reprojection`:
+     * `projectionBounds` (default) derives it from the area of use of the input's spatial
+     * reference, `dataBounds` from the data bounds.
+     */
+    deriveOutSpec?: DeriveOutRasterSpecsSource;
 }
 
 
@@ -82,6 +95,7 @@ export function WarpParametersFromJSONTyped(json: any, ignoreDiscriminator: bool
         'outputResolution': json['outputResolution'] === undefined ? undefined : json['outputResolution'] === null ? null : SpatialResolutionFromJSON(json['outputResolution']),
         'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
         'method': json['method'] == null ? undefined : WarpMethodFromJSON(json['method']),
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
     };
 }
 
@@ -100,6 +114,7 @@ export function WarpParametersToJSONTyped(value?: WarpParameters | null, ignoreD
         'outputResolution': SpatialResolutionToJSON(value['outputResolution']),
         'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
         'method': WarpMethodToJSON(value['method']),
+        'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
     };
 }
 

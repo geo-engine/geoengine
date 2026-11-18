@@ -13,6 +13,7 @@
 import { SpatialResolutionFromJSON, SpatialResolutionToJSON, } from './SpatialResolution';
 import { Coordinate2DFromJSON, Coordinate2DToJSON, } from './Coordinate2D';
 import { WarpMethodFromJSON, WarpMethodToJSON, } from './WarpMethod';
+import { DeriveOutRasterSpecsSourceFromJSON, DeriveOutRasterSpecsSourceToJSON, } from './DeriveOutRasterSpecsSource';
 /**
  * Check if a given object implements the WarpParameters interface.
  */
@@ -31,6 +32,7 @@ export function WarpParametersFromJSONTyped(json, ignoreDiscriminator) {
         'outputResolution': json['outputResolution'] === undefined ? undefined : json['outputResolution'] === null ? null : SpatialResolutionFromJSON(json['outputResolution']),
         'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
         'method': json['method'] == null ? undefined : WarpMethodFromJSON(json['method']),
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
     };
 }
 export function WarpParametersToJSON(json) {
@@ -45,5 +47,6 @@ export function WarpParametersToJSONTyped(value, ignoreDiscriminator = false) {
         'outputResolution': SpatialResolutionToJSON(value['outputResolution']),
         'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
         'method': WarpMethodToJSON(value['method']),
+        'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
     };
 }

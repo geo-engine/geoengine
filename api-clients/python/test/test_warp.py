@@ -40,7 +40,8 @@ class TestWarp(unittest.TestCase):
                     target_spatial_reference = '', 
                     output_resolution = null, 
                     output_origin_reference = null, 
-                    method = null, ),
+                    method = null, 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, )
             )
@@ -51,7 +52,8 @@ class TestWarp(unittest.TestCase):
                     target_spatial_reference = '', 
                     output_resolution = null, 
                     output_origin_reference = null, 
-                    method = null, ),
+                    method = null, 
+                    derive_out_spec = null, ),
                 sources = geoengine_api_client.models.single_raster_source.SingleRasterSource(
                     raster = null, ),
         )

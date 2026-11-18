@@ -20,6 +20,7 @@ exports.WarpParametersToJSONTyped = WarpParametersToJSONTyped;
 const SpatialResolution_1 = require("./SpatialResolution");
 const Coordinate2D_1 = require("./Coordinate2D");
 const WarpMethod_1 = require("./WarpMethod");
+const DeriveOutRasterSpecsSource_1 = require("./DeriveOutRasterSpecsSource");
 /**
  * Check if a given object implements the WarpParameters interface.
  */
@@ -38,6 +39,7 @@ function WarpParametersFromJSONTyped(json, ignoreDiscriminator) {
         'outputResolution': json['outputResolution'] === undefined ? undefined : json['outputResolution'] === null ? null : (0, SpatialResolution_1.SpatialResolutionFromJSON)(json['outputResolution']),
         'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : (0, Coordinate2D_1.Coordinate2DFromJSON)(json['outputOriginReference']),
         'method': json['method'] == null ? undefined : (0, WarpMethod_1.WarpMethodFromJSON)(json['method']),
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceFromJSON)(json['deriveOutSpec']),
     };
 }
 function WarpParametersToJSON(json) {
@@ -52,5 +54,6 @@ function WarpParametersToJSONTyped(value, ignoreDiscriminator = false) {
         'outputResolution': (0, SpatialResolution_1.SpatialResolutionToJSON)(value['outputResolution']),
         'outputOriginReference': (0, Coordinate2D_1.Coordinate2DToJSON)(value['outputOriginReference']),
         'method': (0, WarpMethod_1.WarpMethodToJSON)(value['method']),
+        'deriveOutSpec': (0, DeriveOutRasterSpecsSource_1.DeriveOutRasterSpecsSourceToJSON)(value['deriveOutSpec']),
     };
 }

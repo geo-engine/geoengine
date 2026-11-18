@@ -11,6 +11,7 @@
 import type { SpatialResolution } from './SpatialResolution';
 import type { Coordinate2D } from './Coordinate2D';
 import type { WarpMethod } from './WarpMethod';
+import type { DeriveOutRasterSpecsSource } from './DeriveOutRasterSpecsSource';
 /**
  * Parameters for the `Warp` operator.
  * @export
@@ -34,6 +35,12 @@ export interface WarpParameters {
      * Resampling method.
      */
     method?: WarpMethod;
+    /**
+     * How the output grid is derived when reprojecting, as in `Reprojection`:
+     * `projectionBounds` (default) derives it from the area of use of the input's spatial
+     * reference, `dataBounds` from the data bounds.
+     */
+    deriveOutSpec?: DeriveOutRasterSpecsSource;
 }
 /**
  * Check if a given object implements the WarpParameters interface.

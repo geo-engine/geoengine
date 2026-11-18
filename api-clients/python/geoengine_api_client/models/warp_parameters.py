@@ -20,6 +20,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.coordinate2_d import Coordinate2D
+from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource
 from geoengine_api_client.models.spatial_resolution import SpatialResolution
 from geoengine_api_client.models.warp_method import WarpMethod
 from typing import Optional, Set
@@ -34,7 +35,8 @@ class WarpParameters(BaseModel):
     output_resolution: Optional[SpatialResolution] = Field(default=None, description="Output resolution (`x`, `y`) in units of the target spatial reference. Defaults to the resolution of the (reprojected) input.", alias="outputResolution")
     output_origin_reference: Optional[Coordinate2D] = Field(default=None, description="Optional reference point used to align the output grid origin.", alias="outputOriginReference")
     method: Optional[WarpMethod] = Field(default=None, description="Resampling method.")
-    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "method"]
+    derive_out_spec: Optional[DeriveOutRasterSpecsSource] = Field(default=None, description="How the output grid is derived when reprojecting, as in `Reprojection`: `projectionBounds` (default) derives it from the area of use of the input's spatial reference, `dataBounds` from the data bounds.", alias="deriveOutSpec")
+    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "method", "deriveOutSpec"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -111,7 +113,8 @@ class WarpParameters(BaseModel):
             "targetSpatialReference": obj.get("targetSpatialReference"),
             "outputResolution": SpatialResolution.from_dict(obj["outputResolution"]) if obj.get("outputResolution") is not None else None,
             "outputOriginReference": Coordinate2D.from_dict(obj["outputOriginReference"]) if obj.get("outputOriginReference") is not None else None,
-            "method": obj.get("method")
+            "method": obj.get("method"),
+            "deriveOutSpec": obj.get("deriveOutSpec")
         })
         return _obj
 
