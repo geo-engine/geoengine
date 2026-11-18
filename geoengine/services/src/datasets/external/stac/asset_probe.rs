@@ -257,6 +257,6 @@ mod tests {
             },
         };
         assert!(error.is_userfaultfd_unavailable());
-        assert!(error.to_string().contains("seccomp"));
+        assert!(format!("{error:?}").contains("seccomp"));
     }
 }
