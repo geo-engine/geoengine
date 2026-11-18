@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, Coordinate2D};
 use geoengine_datatypes::raster::{GeoTransform, RasterDataType};
-use geoengine_datatypes::spatial_reference::{SpatialReferenceAuthority, SpatialReferenceOption};
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::NonZeroFiniteF64;
 use geoengine_operators::source::gdal_worker_process::{
     GdalPoolDispatcher, GdalPoolReader, GdalProcessPool, GdalProcessPoolError, RasterInfo,
@@ -36,8 +36,8 @@ pub struct AssetProbe {
     pub height: NonZeroUsize,
     pub data_type: RasterDataType,
     pub no_data_value: Option<f64>,
-    /// `None` if the file declares no CRS or a CRS without an identifiable EPSG code.
-    pub epsg: Option<u32>,
+    /// `None` if the file declares no CRS.
+    pub spatial_reference: Option<SpatialReference>,
 }
 
 #[derive(Debug, Snafu)]
@@ -190,14 +190,7 @@ fn asset_probe_from_raster_info(
         height,
         data_type: info.data_type,
         no_data_value: info.no_data_value,
-        epsg: match info.spatial_reference {
-            SpatialReferenceOption::SpatialReference(spatial_reference)
-                if *spatial_reference.authority() == SpatialReferenceAuthority::Epsg =>
-            {
-                Some(spatial_reference.code())
-            }
-            _ => None,
-        },
+        spatial_reference: info.spatial_reference.into(),
     })
 }
 
@@ -222,7 +215,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(probe.data_type, RasterDataType::U8);
-        assert_eq!(probe.epsg, Some(4326));
+        assert_eq!(probe.spatial_reference, Some(SpatialReference::epsg_4326()));
         assert_eq!(probe.no_data_value, Some(255.));
         assert_eq!((probe.width.get(), probe.height.get()), (16, 8));
         // GDAL derives the pixel size from the coordinate vectors, rounded to 15 digits

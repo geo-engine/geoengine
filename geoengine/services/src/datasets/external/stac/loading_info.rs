@@ -827,14 +827,18 @@ impl StacMultiBandMetaData {
                 continue;
             }
 
-            let Some(epsg) = unprobed.asset_epsg.or(probe.epsg) else {
+            let spatial_reference = unprobed
+                .asset_epsg
+                .map(|epsg| SpatialReference::new(SpatialReferenceAuthority::Epsg, epsg))
+                .or(probe.spatial_reference);
+            let Some(spatial_reference) = spatial_reference else {
                 tracing::warn!(
-                    "Skipping asset with href {} because its file declares no identifiable CRS",
+                    "Skipping asset with href {} because its file declares no CRS",
                     unprobed.asset.href
                 );
                 continue;
             };
-            if !self.is_dataset_projection(epsg) {
+            if spatial_reference != self.dataset.projection {
                 continue;
             }
 
