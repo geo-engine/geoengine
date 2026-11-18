@@ -7,7 +7,7 @@ use geoengine_datatypes::raster::{
 use ipc_channel::IpcError;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::{
     borrow::Cow,
     hash::{Hash, Hasher},
@@ -130,13 +130,14 @@ impl RasterInfo {
         level_of_factor(&self.levels, factor)
     }
 
-    /// Whether GDAL's window read takes the pixels of `level`, which is `factor` times coarser,
+    /// Whether GDAL's window read takes the pixels of the level at `level_index` (0 is the full
+    /// resolution), which is `factor` times coarser,
     /// one to one. GDAL scales a window by the sizes of the level and of the full resolution, not
     /// by `factor`. A level of `ceil(size / factor)` pixels is a little finer than `factor`, so
     /// towards the end of a file a window starts one pixel later in the level, once the two
     /// scales are half a pixel apart: from pixel 458 on in level 16 of 10 980 pixels.
-    pub fn window_reads_take_level_pixels(&self, level: usize, factor: NonZeroUsize) -> bool {
-        let (Some(full), Some(layout)) = (self.levels.first(), self.levels.get(level)) else {
+    pub fn window_reads_take_level_pixels(&self, level_index: usize, factor: NonZeroUsize) -> bool {
+        let (Some(full), Some(layout)) = (self.levels.first(), self.levels.get(level_index)) else {
             return false;
         };
         // the scales drift apart steadily, so the pixel before the last one decides; the last one
@@ -150,9 +151,12 @@ impl RasterInfo {
     }
 
     /// The first of the power-of-two overview levels `2..=max_overview_level` the band lacks.
-    pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<u32> {
+    /// `max_overview_level` 0 or 1 declares no overview.
+    pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<NonZeroU32> {
         let missing = largest_overview_level(&self.levels).checked_mul(2)?;
-        (missing <= max_overview_level).then_some(missing)
+        (missing <= max_overview_level)
+            .then_some(missing)
+            .and_then(NonZeroU32::new)
     }
 }
 

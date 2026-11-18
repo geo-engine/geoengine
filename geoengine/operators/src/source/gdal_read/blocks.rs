@@ -33,7 +33,7 @@ use crate::source::gdal_worker_process::process_common::{
 use crate::source::gdal_worker_process::reader::{GdalPoolReader, flip_grid_y_if_needed};
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-    GridAndProperties, RasterInfo,
+    GridAndProperties, RasterInfo, ReadLevel,
 };
 use futures::future::{join_all, try_join_all};
 use gdal::raster::GdalType;
@@ -192,10 +192,9 @@ impl BlockIo {
         Ok((Some(info), is_new))
     }
 
-    /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
-    /// than the full resolution. A file without that level reads its coarsest finer overview and
-    /// keeps the pixel under the center of each output pixel, as GDAL's nearest resampling does.
-    /// If the dataset does not declare the level (`undeclared`), the read stands in for GDAL's
+    /// Reads `read_advise` of the file from whole blocks of `level`. A file without that level
+    /// reads its coarsest finer overview and keeps the pixel under the center of each output
+    /// pixel, as GDAL's nearest resampling does. An undeclared level stands in for GDAL's
     /// window read, which scales by the sizes of the level and of the file: a level whose pixels
     /// that read does not take one to one is resampled alike, from itself. Such tiles can differ
     /// from GDAL's by one level pixel, see `source_pixels`.
@@ -210,22 +209,22 @@ impl BlockIo {
         &self,
         params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        factor: NonZeroUsize,
-        undeclared: bool,
+        level: ReadLevel,
         cache_hint: CacheHint,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
+        let factor = level.factor();
         let file = file_id(params);
         let (info, new_header) = self.header(params, &file, cache_hint).await?;
         let Some(info) = info else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
         // a file without the level reads the coarsest finer one and resamples it, as GDAL does
-        let Some((level, read_factor)) = info
+        let Some((level_index, read_factor)) = info
             .level_of_factor(factor)
-            .map(|level| (level, factor))
+            .map(|index| (index, factor))
             .or_else(|| finer_level(&info, factor))
         else {
             return Err(IpcProcessError::MissingOverviewLevel {
@@ -251,13 +250,19 @@ impl BlockIo {
             );
         }
         let one_to_one = read_factor == factor
-            && (!undeclared || info.window_reads_take_level_pixels(level, factor));
-        let Some((level_advise, resampled)) =
-            level_read(&info, level, read_factor, one_to_one, factor, read_advise)
-        else {
+            && (!matches!(level, ReadLevel::Undeclared(_))
+                || info.window_reads_take_level_pixels(level_index, factor));
+        let Some((level_advise, resampled)) = level_read(
+            &info,
+            level_index,
+            read_factor,
+            one_to_one,
+            factor,
+            read_advise,
+        ) else {
             return Err(not_inside());
         };
-        let Some(level_window) = level_window(&info, level, read_factor, level_advise) else {
+        let Some(level_window) = level_window(&info, level_index, read_factor, level_advise) else {
             return Err(not_inside());
         };
 
