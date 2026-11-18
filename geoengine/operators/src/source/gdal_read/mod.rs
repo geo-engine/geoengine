@@ -98,7 +98,28 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             continue;
         }
 
-        // without declared levels, blocks read the level from the files that have it
+        // Which of the three reads a file gets. Two inputs decide:
+        //
+        // - The level to read, if the read maps onto its pixels without resampling:
+        //   - `level_factor`: 1 at the full resolution, the level if the dataset declares it
+        //     (every file has it), `None` otherwise.
+        //   - `undeclared_factor`: the level of a dataset that does not declare its levels, so
+        //     a file may lack it. Only if the read starts at a pixel of that level.
+        // - `blocks`: the block reader, if this file goes through it (the new raster cache is
+        //   on, the tile's cache lifetime is long enough, and with `block_reads = "auto"` the
+        //   file is remote).
+        //
+        // | level              | blocks | read                                               |
+        // |--------------------|--------|----------------------------------------------------|
+        // | any of the above   | yes    | `BlockIo::read`: whole cached blocks of the level  |
+        // | declared, above 1  | no     | `read_level_data`: the level's band, pixel by pixel |
+        // | anything else      | any    | `read_tile_data`: GDAL's window read, GDAL picks   |
+        // |                    |        | the level and may resample                         |
+        //
+        // The second row needs a declared level: only then does every file have it. For an
+        // undeclared level without blocks, GDAL's window read picks the level itself, as it did
+        // before blocks existed. At the full resolution (1) the window read already reads pixel
+        // for pixel, so the level read would read the same.
         let undeclared_factor = reader_mode
             .undeclared_level_factor()
             .filter(|&factor| level_read_advise(read_advise, factor).is_some());
@@ -106,6 +127,8 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             level_factor.or(undeclared_factor),
             blocks.filter(|blocks| blocks.reads(&params)),
         ) {
+            // a declared level, the full resolution, or an undeclared level from a file that has
+            // it; a file without the level answers `MissingOverviewLevel`, handled below
             (Some(factor), Some(blocks)) => {
                 blocks
                     .read::<T>(
@@ -117,6 +140,9 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
                     )
                     .await
             }
+            // a declared overview level without blocks: every file has it, so read it as is.
+            // The reader mode snaps declared reads to the level's pixels, so a read that does not
+            // start at one is a bug, not a file to fall back for.
             (Some(factor), None) if level_factor.is_some() && factor.get() > 1 => {
                 let Some(level_advise) = level_read_advise(read_advise, factor) else {
                     return Err(misaligned_read(&params, factor));
@@ -125,12 +151,16 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
                     .read_level_data::<T>(params.clone(), factor, level_advise)
                     .await
             }
+            // the full resolution without blocks; an undeclared level without blocks or whose
+            // read does not start at a pixel of the level
             _ => {
                 reader
                     .read_tile_data::<T>(params.clone(), read_advise)
                     .await
             }
         };
+        // A file that lacks the level, or (undeclared) whose level GDAL does not read one to one,
+        // falls back to GDAL's window read. Only for a declared level is that a broken promise.
         let read = match read {
             Err(GdalProcessPoolError::IpcProcessError {
                 source: IpcProcessError::MissingOverviewLevel { file, factor },
