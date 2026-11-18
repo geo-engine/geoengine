@@ -142,6 +142,18 @@ impl Pixel for i64 {}
 impl Pixel for f32 {}
 impl Pixel for f64 {}
 
+/// Converts a resampled `value` to `T` the way GDAL writes it: integer types round half up and
+/// saturate at their bounds, float types cast. `None` (no data) for `NaN`.
+pub fn pixel_from_f64_rounded<T: Pixel>(value: f64) -> Option<T> {
+    if value.is_nan() {
+        return None;
+    }
+    Some(match T::TYPE {
+        RasterDataType::F32 | RasterDataType::F64 => <T as FromPrimitive<f64>>::from_(value),
+        _ => <T as FromPrimitive<f64>>::from_((value + 0.5).floor()),
+    })
+}
+
 #[derive(
     Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Deserialize, Serialize, Copy, Clone, FromSql, ToSql,
 )]
@@ -176,6 +188,22 @@ impl RasterDataType {
             RasterDataType::F32 => value.is_nan() || value as f32 as f64 == value,
             RasterDataType::F64 => true,
         }
+    }
+
+    /// Whether every value of `other` is a value of `self`, e.g. `F32` for `U8`, but not `F32` for `I32`.
+    pub fn represents_losslessly(self, other: RasterDataType) -> bool {
+        use RasterDataType::{F32, F64, I8, I16, I32, I64, U8, U16, U32, U64};
+        self == other
+            || match other {
+                U8 => matches!(self, U16 | U32 | U64 | I16 | I32 | I64 | F32 | F64),
+                I8 => matches!(self, I16 | I32 | I64 | F32 | F64),
+                U16 => matches!(self, U32 | U64 | I32 | I64 | F32 | F64),
+                I16 => matches!(self, I32 | I64 | F32 | F64),
+                U32 => matches!(self, U64 | I64 | F64),
+                I32 => matches!(self, I64 | F64),
+                F32 => self == F64,
+                U64 | I64 | F64 => false,
+            }
     }
 
     pub fn from_gdal_data_type(gdal_data_type: GdalDataType) -> Result<Self> {
@@ -390,5 +418,28 @@ mod tests {
 
         assert!(RasterDataType::F32.is_valid(1.5));
         assert!(!RasterDataType::F32.is_valid(f64::MIN));
+    }
+
+    #[test]
+    fn it_rounds_resampled_values_like_gdal() {
+        assert_eq!(pixel_from_f64_rounded::<u8>(1.5), Some(2));
+        assert_eq!(pixel_from_f64_rounded::<u8>(1.49), Some(1));
+        assert_eq!(pixel_from_f64_rounded::<u8>(-3.), Some(0));
+        assert_eq!(pixel_from_f64_rounded::<u8>(300.), Some(255));
+        assert_eq!(pixel_from_f64_rounded::<i16>(-1.5), Some(-1));
+        assert_eq!(pixel_from_f64_rounded::<i16>(-1.51), Some(-2));
+        assert_eq!(pixel_from_f64_rounded::<f32>(1.25), Some(1.25));
+        assert_eq!(pixel_from_f64_rounded::<u8>(f64::NAN), None);
+        assert_eq!(pixel_from_f64_rounded::<f64>(f64::NAN), None);
+    }
+
+    #[test]
+    fn it_knows_which_types_represent_others_losslessly() {
+        assert!(RasterDataType::F32.represents_losslessly(RasterDataType::U8));
+        assert!(RasterDataType::U8.represents_losslessly(RasterDataType::U8));
+        assert!(RasterDataType::I16.represents_losslessly(RasterDataType::U8));
+        assert!(!RasterDataType::U16.represents_losslessly(RasterDataType::I8));
+        assert!(!RasterDataType::F32.represents_losslessly(RasterDataType::I32));
+        assert!(!RasterDataType::U8.represents_losslessly(RasterDataType::F32));
     }
 }
