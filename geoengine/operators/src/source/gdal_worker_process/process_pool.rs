@@ -332,6 +332,10 @@ pub struct GdalProcessPool {
     counters: PoolCounters,
 }
 
+/// Lets structs that hold the pool, such as `PostgresDb` and `StacDataProvider` in services,
+/// derive `Debug`. It prints only the request stats: a derived `Debug` would list every read in
+/// flight with its full request and lock each shard of `in_flight_tiles` while formatting, and
+/// the std derive cannot skip fields.
 impl std::fmt::Debug for GdalProcessPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("GdalProcessPool")
