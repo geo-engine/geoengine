@@ -199,6 +199,7 @@ fn asset_probe_from_raster_info(
 mod tests {
     use super::*;
     use crate::util::tests::gdal_process_pool_with_workers;
+    use float_cmp::assert_approx_eq;
     use geoengine_operators::source::gdal_worker_process::process_common::{
         IpcProcessError, IpcProcessGdalErrorKind,
     };
@@ -219,10 +220,30 @@ mod tests {
         assert_eq!(probe.no_data_value, Some(255.));
         assert_eq!((probe.width, probe.height), (16, 8));
         // GDAL derives the pixel size from the coordinate vectors, rounded to 15 digits
-        assert!((probe.geo_transform.x_pixel_size().get() - 0.008_928_571_428_571).abs() < 1e-15);
-        assert!((probe.geo_transform.y_pixel_size().get() + 0.008_928_571_428_571).abs() < 1e-15);
-        assert!((probe.geo_transform.origin_coordinate().x + 10.995_535_714_285_715).abs() < 1e-12);
-        assert!((probe.geo_transform.origin_coordinate().y - 75.004_464_285_714_29).abs() < 1e-12);
+        assert_approx_eq!(
+            f64,
+            probe.geo_transform.x_pixel_size().get(),
+            0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
+        assert_approx_eq!(
+            f64,
+            probe.geo_transform.y_pixel_size().get(),
+            -0.008_928_571_428_571,
+            epsilon = 1e-15
+        );
+        assert_approx_eq!(
+            f64,
+            probe.geo_transform.origin_coordinate().x,
+            -10.995_535_714_285_715,
+            epsilon = 1e-12
+        );
+        assert_approx_eq!(
+            f64,
+            probe.geo_transform.origin_coordinate().y,
+            75.004_464_285_714_29,
+            epsilon = 1e-12
+        );
 
         // the second probe comes from the pool's header cache
         let cached = prober
