@@ -1162,10 +1162,10 @@ mod tests {
                         .collect::<Vec<_>>()
                 });
             let info = MultiBandGdalLoadingInfo::new(steps, Vec::new(), None).with_next(next);
-            Ok(match has_data {
+            match has_data {
                 Some(has_data) => info.with_availability(has_data),
-                None => info,
-            })
+                None => Ok(info),
+            }
         }
 
         async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {

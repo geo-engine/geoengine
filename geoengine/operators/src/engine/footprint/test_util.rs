@@ -36,11 +36,27 @@ pub(crate) fn boxes(bounds: &FootprintBounds) -> &[GridBoundingBox2D] {
     }
 }
 
-/// The tile at x position `tile_x` of the test grid: 2×2 pixels, in one row of tiles.
+/// The tile at x position `tile_x` of the test grid: 2×2 pixels, in one row of tiles, for the
+/// time step of 5 that starts at `start`.
 pub(crate) fn tile(start: i64, tile_x: isize, band: u32, has_data: bool) -> RasterTile2D<u8> {
+    tile_in(
+        TimeInterval::new_unchecked(start, start + 5),
+        tile_x,
+        band,
+        has_data,
+    )
+}
+
+/// Like [`tile`], for any time step.
+pub(crate) fn tile_in(
+    time: TimeInterval,
+    tile_x: isize,
+    band: u32,
+    has_data: bool,
+) -> RasterTile2D<u8> {
     let shape = GridShape2D::new_2d(2, 2);
     RasterTile2D {
-        time: TimeInterval::new_unchecked(start, start + 5),
+        time,
         tile_position: [-1, tile_x].into(),
         band,
         global_geo_transform: TestDefault::test_default(),
