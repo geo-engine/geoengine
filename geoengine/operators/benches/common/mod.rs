@@ -73,7 +73,7 @@ use geoengine_operators::{
         gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig},
     },
     util::{
-        WrapWithProjectionAndResample, create_rayon_thread_pool,
+        WarpMethods, WrapWithProjectionAndResample, create_rayon_thread_pool,
         gdal::create_ndvi_meta_data_with_cache_ttl,
     },
 };
@@ -432,7 +432,13 @@ impl Env {
                 .await
                 .unwrap();
             WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
-                .wrap_with_projection_and_resample(None, Some(resolution), srs, &self.exe_ctx)
+                .wrap_with_projection_and_resample(
+                    None,
+                    Some(resolution),
+                    srs,
+                    WarpMethods::NEAREST,
+                    &self.exe_ctx,
+                )
                 .await
                 .unwrap()
                 .operator
