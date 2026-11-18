@@ -37,11 +37,14 @@ impl FootprintBounds {
         boxes: impl IntoIterator<Item = GridBoundingBox2D>,
         max_boxes: usize,
     ) -> Self {
-        let mut kept = MergingBoxes::new(max_boxes);
+        let mut kept = Vec::new();
         for grid_box in boxes {
-            kept.add(grid_box);
+            add_box(&mut kept, grid_box);
+            if kept.len() > max_boxes {
+                merge_cheapest_pair(&mut kept);
+            }
         }
-        Self::Boxes(kept.into_boxes().collect())
+        Self::Boxes(kept.into())
     }
 
     /// `true` if the time step certainly has no data.
@@ -127,165 +130,28 @@ impl MergeCost {
     }
 }
 
-/// The boxes of a footprint while they are added, merged greedily (agglomerative clustering)
-/// whenever there are more than `max_boxes`. A box covered by another is dropped.
-///
-/// Each box remembers its cheapest partner, so adding a box costs one pass over the boxes, not
-/// one over all pairs. A merge only recomputes the boxes whose partner was merged.
-struct MergingBoxes {
-    max_boxes: usize,
-    /// In the order they were added; `None` once dropped or merged.
-    boxes: Vec<Option<GridBoundingBox2D>>,
-    /// For each box its cheapest partner, kept only once there are more boxes than `max_boxes`.
-    partners: Option<Vec<Option<(usize, MergeCost)>>>,
-    count: usize,
+/// Adds a box unless another covers it, and drops the boxes it covers.
+fn add_box(kept: &mut Vec<GridBoundingBox2D>, grid_box: GridBoundingBox2D) {
+    if !kept.iter().any(|other| other.contains(&grid_box)) {
+        kept.retain(|other| !grid_box.contains(other));
+        kept.push(grid_box);
+    }
 }
 
-impl MergingBoxes {
-    fn new(max_boxes: usize) -> Self {
-        Self {
-            max_boxes,
-            boxes: Vec::new(),
-            partners: None,
-            count: 0,
-        }
-    }
-
-    fn add(&mut self, grid_box: GridBoundingBox2D) {
-        if self
-            .boxes
-            .iter()
-            .flatten()
-            .any(|other| other.contains(&grid_box))
-        {
-            return;
-        }
-        for slot in &mut self.boxes {
-            if slot.is_some_and(|other| grid_box.contains(&other)) {
-                *slot = None;
-                self.count -= 1;
-            }
-        }
-        if self.boxes.len() > self.max_boxes.saturating_add(1).saturating_mul(2) {
-            self.compact();
-        }
-
-        let index = self.boxes.len();
-        self.boxes.push(Some(grid_box));
-        self.count += 1;
-
-        if let Some(partners) = &mut self.partners {
-            partners.push(None);
-            for (other_index, other) in self.boxes.iter().enumerate() {
-                let Some(other) = other.filter(|_| other_index != index) else {
-                    continue;
-                };
-                let cost = MergeCost::of(&grid_box, &other);
-                for (row, partner) in [(other_index, index), (index, other_index)] {
-                    if partners[row].is_none_or(|(_, best)| cost.is_below(&best)) {
-                        partners[row] = Some((partner, cost));
-                    }
-                }
-            }
-            self.refresh_partners();
-        } else if self.count > self.max_boxes {
-            self.compute_partners();
-        }
-
-        if self.count > self.max_boxes {
-            self.merge_cheapest_pair();
-        }
-    }
-
-    /// Merges the pair with the cheapest hull, and drops the boxes that hull covers.
-    fn merge_cheapest_pair(&mut self) {
-        self.refresh_partners();
-        let Some((a, b)) = self.partners.as_ref().and_then(|partners| {
-            partners
-                .iter()
-                .enumerate()
-                .filter(|(row, _)| self.boxes[*row].is_some())
-                .filter_map(|(row, partner)| partner.map(|(other, cost)| (row, other, cost)))
-                .reduce(|best, candidate| {
-                    if candidate.2.is_below(&best.2) {
-                        candidate
-                    } else {
-                        best
-                    }
-                })
-                .map(|(a, b, _)| (a, b))
-        }) else {
-            return;
-        };
-        let (Some(box_a), Some(box_b)) = (self.boxes[a], self.boxes[b]) else {
-            debug_assert!(false, "partners are refreshed before a merge");
-            return;
-        };
-        self.boxes[a] = None;
-        self.boxes[b] = None;
-        self.count -= 2;
-        self.add(box_a.extended(&box_b));
-    }
-
-    /// Finds a new partner for each box whose partner is gone.
-    fn refresh_partners(&mut self) {
-        let Some(partners) = &self.partners else {
-            return;
-        };
-        let stale = partners
-            .iter()
-            .enumerate()
-            .filter(|(row, partner)| {
-                self.boxes[*row].is_some()
-                    && partner.is_none_or(|(other, _)| self.boxes[other].is_none())
-            })
-            .map(|(row, _)| row)
-            .collect::<Vec<_>>();
-        for row in stale {
-            let partner = self.cheapest_partner(row);
-            if let Some(partners) = &mut self.partners {
-                partners[row] = partner;
-            }
-        }
-    }
-
-    fn cheapest_partner(&self, row: usize) -> Option<(usize, MergeCost)> {
-        let grid_box = self.boxes[row]?;
-        self.boxes
-            .iter()
-            .enumerate()
-            .filter(|(other_index, _)| *other_index != row)
-            .filter_map(|(other_index, other)| {
-                other.map(|other| (other_index, MergeCost::of(&grid_box, &other)))
-            })
-            .reduce(|best, candidate| {
-                if candidate.1.is_below(&best.1) {
-                    candidate
-                } else {
-                    best
-                }
-            })
-    }
-
-    fn compute_partners(&mut self) {
-        self.partners = Some(
-            (0..self.boxes.len())
-                .map(|row| self.cheapest_partner(row))
-                .collect(),
-        );
-    }
-
-    /// Removes the dropped boxes, which renumbers the boxes and so their partners.
-    fn compact(&mut self) {
-        self.boxes.retain(Option::is_some);
-        if self.partners.is_some() {
-            self.compute_partners();
-        }
-    }
-
-    fn into_boxes(self) -> impl Iterator<Item = GridBoundingBox2D> {
-        self.boxes.into_iter().flatten()
-    }
+/// Merges the pair of boxes with the cheapest hull (greedy agglomerative clustering). Called
+/// after each added box, so it tries the pairs of at most `max_boxes + 1` boxes.
+fn merge_cheapest_pair(kept: &mut Vec<GridBoundingBox2D>) {
+    let pairs = (0..kept.len()).flat_map(|i| ((i + 1)..kept.len()).map(move |j| (i, j)));
+    let Some((i, j, _)) = pairs
+        .map(|(i, j)| (i, j, MergeCost::of(&kept[i], &kept[j])))
+        .reduce(|best, pair| if pair.2.is_below(&best.2) { pair } else { best })
+    else {
+        return;
+    };
+    let hull = kept[i].extended(&kept[j]);
+    kept.remove(j);
+    kept.remove(i);
+    add_box(kept, hull);
 }
 
 /// The footprint of one time step of a query.
@@ -542,77 +408,6 @@ mod tests {
         assert_eq!(boxes.len(), 3);
         assert!(boxes.contains(&grid_box(100, 109, 0, 22)));
         assert!(boxes.contains(&overlapping_a) && boxes.contains(&overlapping_b));
-    }
-
-    #[test]
-    fn it_merges_the_same_pairs_as_trying_all_pairs() {
-        // the plain algorithm: after each box over the limit, merge the cheapest of all pairs
-        fn merge_by_trying_all_pairs(
-            input: &[GridBoundingBox2D],
-            max_boxes: usize,
-        ) -> Vec<GridBoundingBox2D> {
-            let mut kept: Vec<GridBoundingBox2D> = Vec::new();
-            let add = |kept: &mut Vec<GridBoundingBox2D>, grid_box: GridBoundingBox2D| {
-                if !kept.iter().any(|other| other.contains(&grid_box)) {
-                    kept.retain(|other| !grid_box.contains(other));
-                    kept.push(grid_box);
-                }
-            };
-            for &grid_box in input {
-                add(&mut kept, grid_box);
-                if kept.len() > max_boxes {
-                    let (i, j) = (0..kept.len())
-                        .flat_map(|i| ((i + 1)..kept.len()).map(move |j| (i, j)))
-                        .reduce(|best, pair| {
-                            let cost = |(i, j): (usize, usize)| MergeCost::of(&kept[i], &kept[j]);
-                            if cost(pair).is_below(&cost(best)) {
-                                pair
-                            } else {
-                                best
-                            }
-                        })
-                        .unwrap();
-                    let hull = kept[i].extended(&kept[j]);
-                    kept.remove(j);
-                    kept.remove(i);
-                    add(&mut kept, hull);
-                }
-            }
-            kept
-        }
-
-        // scattered boxes of different sizes, so that no two pairs cost the same
-        let mut seed: u64 = 7;
-        let mut random = |below: u64| {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            (seed % below) as isize
-        };
-        let input = (0..500)
-            .map(|_| {
-                let (y, x) = (random(100_000), random(100_000));
-                grid_box(y, y + random(2_000), x, x + random(2_000))
-            })
-            .collect::<Vec<_>>();
-
-        for max_boxes in [1, 8, DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT] {
-            let mut expected = merge_by_trying_all_pairs(&input, max_boxes);
-            let bounds = FootprintBounds::from_boxes(input.clone(), max_boxes);
-            let mut merged = boxes(&bounds).to_vec();
-            let order = |grid_box: &GridBoundingBox2D| {
-                (
-                    grid_box.y_min(),
-                    grid_box.x_min(),
-                    grid_box.y_max(),
-                    grid_box.x_max(),
-                )
-            };
-            expected.sort_by_key(order);
-            merged.sort_by_key(order);
-
-            assert_eq!(merged, expected, "max_boxes {max_boxes}");
-        }
     }
 
     #[test]
