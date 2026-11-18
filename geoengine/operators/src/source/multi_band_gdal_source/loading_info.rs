@@ -88,15 +88,20 @@ impl MultiBandGdalLoadingInfo {
     }
 
     /// Marks this answer as telling for each time step whether it has data, without its files.
-    #[must_use]
-    pub fn with_availability(mut self, has_data: Vec<bool>) -> Self {
-        debug_assert_eq!(
-            has_data.len(),
-            self.time_steps.len(),
-            "one entry per time step"
+    ///
+    /// # Errors
+    /// If `has_data` does not have one entry per time step, because a missing entry would read as
+    /// a step without data.
+    pub fn with_availability(mut self, has_data: Vec<bool>) -> crate::util::Result<Self> {
+        snafu::ensure!(
+            has_data.len() == self.time_steps.len(),
+            crate::error::LoadingInfoAvailabilityLength {
+                entries: has_data.len(),
+                time_steps: self.time_steps.len(),
+            }
         );
         self.availability = Some(has_data);
-        self
+        Ok(self)
     }
 
     /// Whether the time step with this index has data, if the provider told without files.
@@ -180,5 +185,30 @@ impl MultiBandGdalLoadingInfo {
             files,
             cache_hint: self.cache_hint(default_ttl),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_rejects_an_availability_without_one_entry_per_time_step() {
+        let info = || {
+            MultiBandGdalLoadingInfo::new(
+                vec![
+                    TimeInterval::new_unchecked(0, 5),
+                    TimeInterval::new_unchecked(5, 10),
+                ],
+                Vec::new(),
+                None,
+            )
+        };
+
+        assert!(info().with_availability(vec![true]).is_err());
+        assert_eq!(
+            info().with_availability(vec![true, false]).unwrap().has_data(1),
+            Some(false)
+        );
     }
 }
