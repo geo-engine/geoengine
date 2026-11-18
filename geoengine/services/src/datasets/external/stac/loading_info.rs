@@ -231,11 +231,9 @@ impl
                 .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
                 .await
         {
-            return Ok(
-                MultiBandGdalLoadingInfo::new(time_steps, Vec::new(), self.cache_ttl_secs)
-                    .with_next(next)
-                    .with_availability(has_data),
-            );
+            return MultiBandGdalLoadingInfo::new(time_steps, Vec::new(), self.cache_ttl_secs)
+                .with_next(next)
+                .with_availability(has_data);
         }
 
         if query.in_parts {
