@@ -188,7 +188,8 @@ impl BlockIo {
     /// keeps the pixel under the center of each output pixel, as GDAL's nearest resampling does.
     /// If the dataset does not declare the level (`undeclared`), the read stands in for GDAL's
     /// window read, which scales by the sizes of the level and of the file: a level whose pixels
-    /// that read does not take one to one is resampled alike, from itself.
+    /// that read does not take one to one is resampled alike, from itself. Such tiles can differ
+    /// from GDAL's by one level pixel, see `source_pixels`.
     ///
     /// # Errors
     /// Returns an error if a header or block read fails, if the file has neither the level nor a
@@ -514,6 +515,14 @@ fn level_read(
 /// it. As GDAL, this scales by the sizes of the level and the full resolution (`full_size`), not
 /// by the level's nominal factor: GDAL sizes a level 3 of 64 px 22 px, 2.9 times smaller.
 /// `start` is the read's first pixel at full resolution.
+///
+/// Note: GDAL's window read does not return these pixels for every window. It rounds the start
+/// and the size of each window in the level to whole pixels and takes the pixels from there, so
+/// it moves a whole window by a pixel where this rule decides pixel by pixel. Where the factor
+/// does not divide the file evenly (level 16 of 10 980 px has 687 px), a tile read through blocks
+/// can therefore differ from a window read by one level pixel, in the part of the file where
+/// the two scales are half a pixel or more apart. Unlike GDAL's, the pixels here do not depend
+/// on the tile grid. This is a deliberate choice: one rule for every tile, not GDAL's per window.
 fn source_pixels(
     start: isize,
     out: usize,
