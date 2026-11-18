@@ -59,7 +59,7 @@ pub struct StacMultiBandMetaData {
     /// Shared query-result cache from the provider.
     query_cache: Arc<StacQueryCache>,
     /// Upper bound of STAC cell searches one loading info request runs in parallel.
-    max_concurrent_cell_searches: usize,
+    max_concurrent_cell_searches: NonZeroUsize,
     /// Upper bound of asset file headers one STAC search reads in parallel.
     max_concurrent_asset_probes: NonZeroUsize,
     item_time: StacItemTime,
@@ -242,7 +242,7 @@ impl
                     move || async move { metadata.search_bbox(url, bbox, step).await },
                 )
             })
-            .buffer_unordered(self.max_concurrent_cell_searches)
+            .buffer_unordered(self.max_concurrent_cell_searches.get())
             .map_err(
                 |error| geoengine_operators::error::Error::QueryingProcessorFailed {
                     source: Box::new(error),
@@ -1793,7 +1793,7 @@ mod tests {
                 )
                 .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
-                max_concurrent_cell_searches: 8,
+                max_concurrent_cell_searches: NonZeroUsize::new(8).unwrap(),
                 max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
                 item_time: StacItemTime::Datetime,
                 cache_ttl_secs: None,
@@ -1913,7 +1913,7 @@ mod tests {
             )
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
-            max_concurrent_cell_searches: 8,
+            max_concurrent_cell_searches: NonZeroUsize::new(8).unwrap(),
             max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             cache_ttl_secs: None,
@@ -1990,7 +1990,7 @@ mod tests {
             )
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
-            max_concurrent_cell_searches: 8,
+            max_concurrent_cell_searches: NonZeroUsize::new(8).unwrap(),
             max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
@@ -2083,7 +2083,7 @@ mod tests {
             )
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
-            max_concurrent_cell_searches: 8,
+            max_concurrent_cell_searches: NonZeroUsize::new(8).unwrap(),
             max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
@@ -2185,7 +2185,7 @@ mod tests {
             )
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
-            max_concurrent_cell_searches: 8,
+            max_concurrent_cell_searches: NonZeroUsize::new(8).unwrap(),
             max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
@@ -2297,7 +2297,7 @@ mod tests {
             )
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
-            max_concurrent_cell_searches: 8,
+            max_concurrent_cell_searches: NonZeroUsize::new(8).unwrap(),
             max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time,
             grid: StacGrid::default(),
