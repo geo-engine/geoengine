@@ -302,15 +302,13 @@ impl Env {
             ),
             WorkerConfig {
                 // without the server's options GDAL caches 5% of the RAM per worker
-                gdal_config_options: Some(
+                gdal_config_options: Some(WorkerConfig::gdal_config_options_of_settings(
                     setting::<HashMap<String, String>>(
                         &settings,
                         "gdal_process_pool.worker.gdal_config_options",
                         HashMap::new(),
-                    )
-                    .into_iter()
-                    .collect(),
-                ),
+                    ),
+                )),
                 blas_threads: setting(&settings, "gdal_process_pool.worker.blas_threads", 1),
                 ..WorkerConfig::default()
             },

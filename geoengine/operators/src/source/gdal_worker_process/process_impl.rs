@@ -129,6 +129,30 @@ fn default_blas_threads() -> usize {
     1
 }
 
+impl WorkerConfig {
+    /// One entry per GDAL config option of the worker settings, named in upper case and sorted.
+    ///
+    /// GDAL ignores the case of an option's name, the settings do not. `Settings-default.toml`
+    /// spells `CPL_VSIL_CURL_CHUNK_SIZE`, and an override by the environment variable
+    /// `GEOENGINE__GDAL_PROCESS_POOL__WORKER__GDAL_CONFIG_OPTIONS__CPL_VSIL_CURL_CHUNK_SIZE`
+    /// arrives in lower case, as a second entry. The worker would set both, in the order of a hash
+    /// map, so that the override applied in some processes only. The spelling that is not upper
+    /// case wins: it is the override.
+    pub fn gdal_config_options_of_settings(
+        options: impl IntoIterator<Item = (String, String)>,
+    ) -> Vec<(String, String)> {
+        // upper-case spellings first, so that the others replace them
+        let mut options: Vec<(String, String)> = options.into_iter().collect();
+        options.sort_by_key(|(name, _)| (*name != name.to_ascii_uppercase(), name.clone()));
+        options
+            .into_iter()
+            .map(|(name, value)| (name.to_ascii_uppercase(), value))
+            .collect::<std::collections::BTreeMap<_, _>>()
+            .into_iter()
+            .collect()
+    }
+}
+
 impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
@@ -850,6 +874,35 @@ mod tests {
         },
     };
     use super::*;
+
+    #[test]
+    fn it_keeps_one_entry_per_gdal_option_and_prefers_the_override() {
+        let option = |name: &str, value: &str| (name.to_string(), value.to_string());
+        for options in [
+            vec![
+                option("CPL_VSIL_CURL_CHUNK_SIZE", "1048576"),
+                option("cpl_vsil_curl_chunk_size", "65536"),
+                option("VSI_CACHE", "TRUE"),
+                option("gdal_num_threads", "8"),
+            ],
+            // the order of the settings' hash map must not matter
+            vec![
+                option("gdal_num_threads", "8"),
+                option("cpl_vsil_curl_chunk_size", "65536"),
+                option("VSI_CACHE", "TRUE"),
+                option("CPL_VSIL_CURL_CHUNK_SIZE", "1048576"),
+            ],
+        ] {
+            assert_eq!(
+                WorkerConfig::gdal_config_options_of_settings(options),
+                [
+                    option("CPL_VSIL_CURL_CHUNK_SIZE", "65536"),
+                    option("GDAL_NUM_THREADS", "8"),
+                    option("VSI_CACHE", "TRUE"),
+                ]
+            );
+        }
+    }
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::{
         primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance, TimeInterval},

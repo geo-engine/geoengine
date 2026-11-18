@@ -611,7 +611,9 @@ impl From<GdalProcessPoolWorkerConfig>
         config: GdalProcessPoolWorkerConfig,
     ) -> geoengine_operators::source::gdal_worker_process::WorkerConfig {
         geoengine_operators::source::gdal_worker_process::WorkerConfig {
-            gdal_config_options: config.gdal_config_options.map(|m| m.into_iter().collect()),
+            gdal_config_options: config.gdal_config_options.map(
+                geoengine_operators::source::gdal_worker_process::WorkerConfig::gdal_config_options_of_settings,
+            ),
             logging: geoengine_operators::source::gdal_worker_process::WorkerLoggingConfig {
                 log_spec: config.logging.log_spec,
                 log_to_file: config.logging.log_to_file,
@@ -968,6 +970,40 @@ mod tests {
     fn it_accepts_limits_above_the_number_of_processes() {
         assert!(pool(8, 16, 8).validate().is_ok());
         assert!(pool(32, 8, 16).validate().is_ok());
+    }
+
+    #[test]
+    fn it_overrides_a_worker_gdal_option_by_an_environment_variable() {
+        let variable =
+            "GEOENGINE__GDAL_PROCESS_POOL__WORKER__GDAL_CONFIG_OPTIONS__CPL_VSIL_CURL_CHUNK_SIZE";
+        let config = Config::builder()
+            .add_source(default_settings())
+            .add_source(
+                Environment::with_prefix("geoengine")
+                    .separator("__")
+                    .source(Some(
+                        [(variable.to_string(), "65536".to_string())]
+                            .into_iter()
+                            .collect(),
+                    )),
+            )
+            .build()
+            .unwrap();
+        let pool: GdalProcessPool = config.get(GdalProcessPool::KEY).unwrap();
+
+        let worker =
+            geoengine_operators::source::gdal_worker_process::WorkerConfig::from(pool.worker);
+        let chunk_sizes: Vec<_> = worker
+            .gdal_config_options
+            .unwrap()
+            .into_iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case("CPL_VSIL_CURL_CHUNK_SIZE"))
+            .collect();
+        // the default file and the variable spell the name in different cases
+        assert_eq!(
+            chunk_sizes,
+            [("CPL_VSIL_CURL_CHUNK_SIZE".to_string(), "65536".to_string())]
+        );
     }
 
     fn default_element<T: ConfigElement + for<'a> Deserialize<'a>>() -> T {
