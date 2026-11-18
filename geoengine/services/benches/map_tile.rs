@@ -66,7 +66,7 @@ use geoengine_operators::{
         TileFile,
     },
     util::{
-        WrapWithProjectionAndResample,
+        WarpMethods, WrapWithProjectionAndResample,
         gdal::{gdal_open_dataset, gdal_parameters_from_dataset, raster_descriptor_from_dataset},
         raster_stream_to_png::{default_colorizer_gradient, raster_stream_to_png_bytes},
     },
@@ -359,13 +359,15 @@ fn tile_bounds(zoom: u8, (dx, dy): (i32, i32)) -> SpatialPartition2D {
     .unwrap()
 }
 
-/// Same steps as `queries::raster_grid` for a WMS `GetMap`, after loading the processing graph.
-/// `cache` must be set if the execution context caches the raster operators.
+/// Same steps as `queries::raster_grid` for a WMS `GetMap`, after loading the processing graph,
+/// resampling with `methods`. `cache` must be set if the execution context caches the raster
+/// operators.
 async fn render_tile(
     env: &Env,
     source: TypedRasterOperator,
     (zoom, offset): (u8, (i32, i32)),
     colorizer: &RasterColorizer,
+    methods: WarpMethods,
     cache: Option<Arc<NewRasterCacheEnum>>,
 ) -> Vec<u8> {
     let exec_ctx = &env.exe_ctx;
@@ -384,7 +386,7 @@ async fn render_tile(
             .await
             .unwrap();
         WrapWithProjectionAndResample::new_create_result_descriptor(source, initialized)
-            .wrap_with_projection_and_resample(None, Some(resolution), crs, exec_ctx)
+            .wrap_with_projection_and_resample(None, Some(resolution), crs, methods, exec_ctx)
             .await
             .unwrap()
     }
@@ -434,7 +436,10 @@ async fn clear_caches(env: &Env, cold: bool) {
     }
 }
 
-/// Times one tile as `<group_name>/<name>`, then records its stages if the metrics are enabled
+/// Times one tile as `<group_name>/<name>`, then records its stages if the metrics are enabled.
+/// It resamples with the methods for `colorizer`, as the WMS does, or with nearest neighbour if
+/// `nearest`.
+#[allow(clippy::too_many_arguments)]
 fn bench_tile(
     group: &mut BenchmarkGroup<WallTime>,
     group_name: &str,
@@ -443,7 +448,13 @@ fn bench_tile(
     (source, colorizer): (&TypedRasterOperator, &RasterColorizer),
     zoom: u8,
     cold: bool,
+    nearest: bool,
 ) {
+    let methods = if nearest {
+        WarpMethods::NEAREST
+    } else {
+        WarpMethods::for_symbology(colorizer)
+    };
     group.bench_function(name, |b| {
         b.to_async(&env.runtime).iter_custom(|iters| async move {
             let mut elapsed = Duration::ZERO;
@@ -451,7 +462,15 @@ fn bench_tile(
                 clear_caches(env, cold).await;
                 let start = Instant::now();
                 // measure computation, not cache hits
-                render_tile(env, source.clone(), (zoom, (0, 0)), colorizer, None).await;
+                render_tile(
+                    env,
+                    source.clone(),
+                    (zoom, (0, 0)),
+                    colorizer,
+                    methods,
+                    None,
+                )
+                .await;
                 elapsed += start.elapsed();
             }
             elapsed
@@ -465,7 +484,15 @@ fn bench_tile(
     metrics::record(&format!("{group_name}/{name}"), STAGE_RUNS, || {
         env.runtime.block_on(async {
             clear_caches(env, cold).await;
-            render_tile(env, source.clone(), (zoom, (0, 0)), colorizer, None).await;
+            render_tile(
+                env,
+                source.clone(),
+                (zoom, (0, 0)),
+                colorizer,
+                methods,
+                None,
+            )
+            .await;
         });
     });
 }
@@ -493,11 +520,13 @@ async fn render_session(
 ) -> Vec<Vec<u8>> {
     futures::stream::iter(viewport_tiles())
         .map(|offset| {
+            // the methods for the colorizer, as the WMS chooses them by default
             render_tile(
                 env,
                 source.clone(),
                 (zoom, offset),
                 colorizer,
+                WarpMethods::for_symbology(colorizer),
                 cache.clone(),
             )
         })
@@ -618,7 +647,12 @@ fn map_tile(c: &mut Criterion) {
     let colorizer: RasterColorizer = default_colorizer_gradient::<u16>().into();
 
     let mut group = c.benchmark_group("map_tile");
-    for (cold, suffix) in [(false, ""), (true, "_cold")] {
+    // with the methods for the gradient (`average`, `bilinear`), and with nearest neighbour
+    for (cold, nearest, suffix) in [
+        (false, false, ""),
+        (true, false, "_cold"),
+        (false, true, "_nearest"),
+    ] {
         for zoom in ZOOM_LEVELS {
             let name = format!("z{zoom}{suffix}");
             bench_tile(
@@ -629,6 +663,7 @@ fn map_tile(c: &mut Criterion) {
                 (&source, &colorizer),
                 zoom,
                 cold,
+                nearest,
             );
         }
     }
@@ -649,6 +684,7 @@ fn map_tile(c: &mut Criterion) {
                 (&source, &colorizer),
                 zoom,
                 false,
+                false,
             );
         }
     }
@@ -668,6 +704,7 @@ fn map_tile(c: &mut Criterion) {
                     (&source, &colorizer),
                     zoom,
                     cold,
+                    false,
                 );
             }
         }

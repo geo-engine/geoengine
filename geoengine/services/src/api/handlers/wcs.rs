@@ -396,10 +396,12 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             .map_or_else(config::default_time_from_config::<config::Wcs>, Into::into),
         bands: BandSelection::first(), // TODO: support multi bands in API and set the selection here
     };
-    let encoding = RasterEncoding::GeoTiff {
-        no_data_value: request.nodatavalue,
-        band_order: None,
-    };
+    let no_data_value = request.nodatavalue;
+    let encoding =
+        move |_: &geoengine_operators::engine::RasterResultDescriptor| RasterEncoding::GeoTiff {
+            no_data_value,
+            band_order: None,
+        };
 
     let ctx = app_ctx.session_context(session);
     let (bytes, cache_hint, computation_id) =
