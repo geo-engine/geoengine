@@ -1247,8 +1247,9 @@ mod footprint_tests {
     #[tokio::test]
     async fn raster_stacker_zips_sources_with_other_time_steps() {
         // the first source has one step of ten, the second two of five: the stack splits at 5
+        let ten = TimeInterval::new_unchecked(0, 10);
         let slow = source(
-            vec![tile(0, 0, 0, true), tile(0, 1, 0, false)],
+            vec![tile_in(ten, 0, 0, true), tile_in(ten, 1, 0, false)],
             1,
             TimeDescriptor::new_irregular(None),
         );
@@ -1274,7 +1275,8 @@ mod footprint_tests {
         );
 
         // The stack has the time steps of all sources, also if only the bands of one are
-        // selected: the second source still splits the gap after the first one's step at 10.
+        // selected: the second source still splits the first one's step at 5, and both halves
+        // have the first one's data.
         let only_slow = checked_footprints(stack(vec![slow, fast]), &[0]).await;
         assert_eq!(
             only_slow.iter().map(|step| step.time).collect::<Vec<_>>(),
@@ -1285,7 +1287,7 @@ mod footprint_tests {
         );
         assert_eq!(
             step_boxes(&only_slow),
-            [[tile_box(0)].as_slice(), [].as_slice()]
+            [[tile_box(0)].as_slice(), [tile_box(0)].as_slice()]
         );
     }
 }
