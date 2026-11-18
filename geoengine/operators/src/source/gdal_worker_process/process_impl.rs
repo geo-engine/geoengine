@@ -2089,7 +2089,10 @@ mod tests {
         );
 
         assert_eq!(layout.missing_overview_level(4), None);
-        assert_eq!(layout.missing_overview_level(8), Some(8));
+        assert_eq!(
+            layout.missing_overview_level(8),
+            std::num::NonZeroU32::new(8)
+        );
 
         let window = GridBoundingBox2D::new([0, 0], [7, 7]).unwrap();
         let read_advise = GdalReadAdvise {

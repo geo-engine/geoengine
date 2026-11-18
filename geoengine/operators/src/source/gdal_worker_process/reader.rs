@@ -174,21 +174,15 @@ impl GdalPoolReader {
         )
     }
 
-    /// The header of `file` if it was remembered and is still valid.
-    pub fn remembered_raster_info(&self, file: &str) -> Option<RasterInfo> {
-        self.dispatcher().remembered_raster_info(file)
+    /// The header of `file` if it is cached and still valid.
+    pub fn cached_header(&self, file: &str) -> Option<RasterInfo> {
+        self.dispatcher().cached_header(file)
     }
 
-    /// Remembers the header of `file` until `cache_hint` expires. Returns whether no valid header
-    /// of `file` was known.
-    pub fn remember_raster_info(
-        &self,
-        file: Arc<str>,
-        info: RasterInfo,
-        cache_hint: CacheHint,
-    ) -> bool {
-        self.dispatcher()
-            .remember_raster_info(file, info, cache_hint)
+    /// Caches the header of `file` until `cache_hint` expires. Returns whether no valid header
+    /// of `file` was cached before.
+    pub fn cache_header(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) -> bool {
+        self.dispatcher().cache_header(file, info, cache_hint)
     }
 
     async fn read_header(

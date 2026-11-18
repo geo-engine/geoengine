@@ -22,7 +22,7 @@ pub use process_pool::{
     PoolRequestStats,
 };
 pub use reader::{GdalPoolReader, GdalProcessReadResult};
-pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
+pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReadLevel, ReaderState};
 
 /// Computes a reduced-resolution spatial grid for a given overview level.
 ///
