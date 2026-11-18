@@ -19,7 +19,6 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use futures::TryStreamExt as _;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::{
     dataset::NamedData,
@@ -109,9 +108,6 @@ pub enum LoadingInfoDetail {
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
     pub detail: LoadingInfoDetail,
-    /// The caller follows [`MultiBandGdalLoadingInfo::next`], so the provider may answer a long
-    /// time range part by part. A remote catalog may then also search the steps of a part together.
-    pub in_parts: bool,
 }
 
 impl MultiBandGdalLoadingInfoQueryRectangle {
@@ -134,14 +130,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle,
             detail,
-            in_parts: false,
         }
-    }
-
-    #[must_use]
-    pub fn in_parts(mut self) -> Self {
-        self.in_parts = true;
-        self
     }
 }
 
@@ -352,63 +341,41 @@ where
         let query_bounds = query.spatial_bounds();
         let bands = query.attributes().clone().as_vec();
 
-        // The provider answers a long time range part by part, and each part is read when the
-        // stream gets there, so only one part is held at a time.
-        let parts = stream::try_unfold(Some(query.time_interval()), move |time| {
-            let query = query.clone();
-            let bands = bands.clone();
-            async move {
-                let Some(time) = time else {
-                    return Ok(None);
+        let detail = match precision {
+            FootprintPrecision::Availability => LoadingInfoDetail::Availability,
+            FootprintPrecision::Coverage => LoadingInfoDetail::Files,
+        };
+        let loading_info_query =
+            raster_query_rectangle_to_loading_info_query_rectangle(&query, tiling_grid, detail);
+        let loading_info = self.meta_data.loading_info(loading_info_query).await?;
+
+        let footprints = loading_info
+            .time_steps()
+            .iter()
+            .enumerate()
+            .map(|(i, &time)| {
+                // A provider may tell whether a step has data without its files. Then the whole
+                // query is the box of a step with data.
+                let bounds = match loading_info.has_data(i) {
+                    Some(true) => FootprintBounds::from_boxes([query_bounds], max_boxes),
+                    Some(false) => FootprintBounds::empty(),
+                    None => FootprintBounds::from_boxes(
+                        loading_info
+                            .file_bounds(time, &bands)
+                            .filter_map(|partition| {
+                                geo_transform
+                                    .spatial_to_grid_bounds(&partition)
+                                    .intersection(&query_bounds)
+                            }),
+                        max_boxes,
+                    ),
                 };
-                let detail = match precision {
-                    FootprintPrecision::Availability => LoadingInfoDetail::Availability,
-                    FootprintPrecision::Coverage => LoadingInfoDetail::Files,
-                };
-                let loading_info_query = raster_query_rectangle_to_loading_info_query_rectangle(
-                    &query.select_time_interval(time),
-                    tiling_grid,
-                    detail,
-                )
-                .in_parts();
-                let loading_info = self.meta_data.loading_info(loading_info_query).await?;
 
-                let footprints = loading_info
-                    .time_steps()
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &time)| {
-                        // A provider may tell whether a step has data without its files. Then
-                        // the whole query is the box of a step with data.
-                        let bounds = match loading_info.has_data(i) {
-                            Some(true) => FootprintBounds::from_boxes([query_bounds], max_boxes),
-                            Some(false) => FootprintBounds::empty(),
-                            None => FootprintBounds::from_boxes(
-                                loading_info
-                                    .file_bounds(time, &bands)
-                                    .filter_map(|partition| {
-                                        geo_transform
-                                            .spatial_to_grid_bounds(&partition)
-                                            .intersection(&query_bounds)
-                                    }),
-                                max_boxes,
-                            ),
-                        };
+                Ok(Footprint { time, bounds })
+            })
+            .collect::<Vec<Result<Footprint>>>();
 
-                        Ok(Footprint { time, bounds })
-                    })
-                    .collect::<Vec<Result<Footprint>>>();
-
-                // a rest that does not start later would loop forever
-                let next = loading_info
-                    .next()
-                    .filter(|next| next.start() > time.start());
-
-                Ok::<_, crate::error::Error>(Some((stream::iter(footprints), next)))
-            }
-        });
-
-        Ok(parts.try_flatten().boxed())
+        Ok(stream::iter(footprints).boxed())
     }
 }
 
@@ -1116,18 +1083,13 @@ mod tests {
             .collect()
     }
 
-    /// A provider that answers a long time range three steps at a time, like a STAC provider
-    /// that searches in chunks. It has no files and records the times it was asked for.
+    /// A provider with steps of 10 and no files.
     #[derive(Debug, Clone)]
-    struct ChunkedMetaData {
+    struct StepsMetaData {
         result_descriptor: RasterResultDescriptor,
-        asked: std::sync::Arc<std::sync::Mutex<Vec<TimeInterval>>>,
-        /// Answers an availability query without files, with data in every second step.
-        knows_availability: bool,
     }
 
     const STEP_MS: i64 = 10;
-    const STEPS_PER_ANSWER: usize = 3;
 
     #[async_trait::async_trait]
     impl
@@ -1135,33 +1097,24 @@ mod tests {
             MultiBandGdalLoadingInfo,
             RasterResultDescriptor,
             MultiBandGdalLoadingInfoQueryRectangle,
-        > for ChunkedMetaData
+        > for StepsMetaData
     {
         async fn loading_info(
             &self,
             query: MultiBandGdalLoadingInfoQueryRectangle,
         ) -> Result<MultiBandGdalLoadingInfo> {
             let time = query.query_rectangle.time_interval();
-            self.asked.lock().unwrap().push(time);
 
             let first = time.start().inner().div_euclid(STEP_MS);
             let last = (time.end().inner() - 1).div_euclid(STEP_MS);
-            let answered_last = last.min(first + STEPS_PER_ANSWER as i64 - 1);
-            let steps = (first..=answered_last)
+            let steps = (first..=last)
                 .map(|i| TimeInterval::new(i * STEP_MS, (i + 1) * STEP_MS))
                 .collect::<std::result::Result<Vec<_>, _>>()?;
-            let next = (answered_last < last)
-                .then(|| TimeInterval::new((answered_last + 1) * STEP_MS, time.end()))
-                .transpose()?;
 
-            let has_data = (query.detail == LoadingInfoDetail::Availability
-                && self.knows_availability)
-                .then(|| {
-                    (first..=answered_last)
-                        .map(|i| i % 2 == 0)
-                        .collect::<Vec<_>>()
-                });
-            let info = MultiBandGdalLoadingInfo::new(steps, Vec::new(), None).with_next(next);
+            // answers an availability query without files, with data in every second step
+            let has_data = (query.detail == LoadingInfoDetail::Availability)
+                .then(|| (first..=last).map(|i| i % 2 == 0).collect::<Vec<_>>());
+            let info = MultiBandGdalLoadingInfo::new(steps, Vec::new(), None);
             match has_data {
                 Some(has_data) => info.with_availability(has_data),
                 None => Ok(info),
@@ -1185,13 +1138,10 @@ mod tests {
         }
     }
 
-    /// A source on the fake provider, the context to query it with and the times it was asked for.
-    async fn chunked_source(
-        knows_availability: bool,
-    ) -> Result<(
+    /// A source on the fake provider and the context to query it with.
+    async fn steps_source() -> Result<(
         crate::engine::BoxRasterQueryProcessor<u16>,
         crate::engine::MockQueryContext,
-        std::sync::Arc<std::sync::Mutex<Vec<TimeInterval>>>,
     )> {
         let mut execution_context = MockExecutionContext::test_default();
         let query_ctx = execution_context.mock_query_context_test_default();
@@ -1211,14 +1161,9 @@ mod tests {
             .try_into()
             .unwrap(),
         };
-        let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let id: DataId = DatasetId::new().into();
-        let name = NamedData::with_system_name("chunked");
-        let meta: MultiBandGdalMetaData = Box::new(ChunkedMetaData {
-            result_descriptor,
-            asked: asked.clone(),
-            knows_availability,
-        });
+        let name = NamedData::with_system_name("steps");
+        let meta: MultiBandGdalMetaData = Box::new(StepsMetaData { result_descriptor });
         execution_context.add_meta_data(id, name.clone(), meta);
 
         let processor = MultiBandGdalSource {
@@ -1234,7 +1179,7 @@ mod tests {
         .get_u16()
         .unwrap();
 
-        Ok((processor, query_ctx, asked))
+        Ok((processor, query_ctx))
     }
 
     fn ten_steps_query() -> RasterQueryRectangle {
@@ -1246,42 +1191,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_footprint_stream_asks_for_a_long_range_part_by_part() -> Result<()> {
-        let (processor, query_ctx, asked) = chunked_source(true).await?;
-
-        // ten steps, so four answers of at most three steps
-        let mut stream = processor
-            .footprint_query(ten_steps_query(), FootprintPrecision::Coverage, &query_ctx)
-            .await?;
-
-        // nothing beyond the first answer is asked before the stream gets there
-        let first = stream.try_next().await?.unwrap();
-        assert_eq!(first.time, TimeInterval::new(0, STEP_MS).unwrap());
-        assert_eq!(asked.lock().unwrap().len(), 1);
-
-        let mut times = vec![first.time];
-        while let Some(footprint) = stream.try_next().await? {
-            assert!(footprint.bounds.is_empty());
-            times.push(footprint.time);
-        }
-
-        assert_eq!(
-            times,
-            (0..10)
-                .map(|i| TimeInterval::new(i * STEP_MS, (i + 1) * STEP_MS).unwrap())
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(
-            *asked.lock().unwrap(),
-            [(0, 100), (30, 100), (60, 100), (90, 100)]
-                .map(|(start, end)| TimeInterval::new(start, end).unwrap())
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn availability_gives_the_query_bounds_to_steps_with_data() -> Result<()> {
-        let (processor, query_ctx, _) = chunked_source(true).await?;
+        let (processor, query_ctx) = steps_source().await?;
         let query = ten_steps_query();
 
         let footprints: Vec<Footprint> = processor
