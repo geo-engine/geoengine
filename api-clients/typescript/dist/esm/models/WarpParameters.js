@@ -12,7 +12,10 @@
  */
 import { SpatialResolutionFromJSON, SpatialResolutionToJSON, } from './SpatialResolution';
 import { Coordinate2DFromJSON, Coordinate2DToJSON, } from './Coordinate2D';
-import { WarpMethodFromJSON, WarpMethodToJSON, } from './WarpMethod';
+import { WarpDownsamplingMethodFromJSON, WarpDownsamplingMethodToJSON, } from './WarpDownsamplingMethod';
+import { WarpUpsamplingMethodFromJSON, WarpUpsamplingMethodToJSON, } from './WarpUpsamplingMethod';
+import { DeriveOutRasterSpecsSourceFromJSON, DeriveOutRasterSpecsSourceToJSON, } from './DeriveOutRasterSpecsSource';
+import { RasterDataTypeFromJSON, RasterDataTypeToJSON, } from './RasterDataType';
 /**
  * Check if a given object implements the WarpParameters interface.
  */
@@ -30,7 +33,11 @@ export function WarpParametersFromJSONTyped(json, ignoreDiscriminator) {
         'targetSpatialReference': json['targetSpatialReference'] === undefined ? undefined : json['targetSpatialReference'] === null ? null : json['targetSpatialReference'],
         'outputResolution': json['outputResolution'] === undefined ? undefined : json['outputResolution'] === null ? null : SpatialResolutionFromJSON(json['outputResolution']),
         'outputOriginReference': json['outputOriginReference'] === undefined ? undefined : json['outputOriginReference'] === null ? null : Coordinate2DFromJSON(json['outputOriginReference']),
-        'method': json['method'] == null ? undefined : WarpMethodFromJSON(json['method']),
+        'downsampling': json['downsampling'] == null ? undefined : WarpDownsamplingMethodFromJSON(json['downsampling']),
+        'upsampling': json['upsampling'] == null ? undefined : WarpUpsamplingMethodFromJSON(json['upsampling']),
+        'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : RasterDataTypeFromJSON(json['outputDataType']),
+        'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
+        'approximationErrorThreshold': json['approximationErrorThreshold'] === undefined ? undefined : json['approximationErrorThreshold'] === null ? null : json['approximationErrorThreshold'],
     };
 }
 export function WarpParametersToJSON(json) {
@@ -44,6 +51,10 @@ export function WarpParametersToJSONTyped(value, ignoreDiscriminator = false) {
         'targetSpatialReference': value['targetSpatialReference'],
         'outputResolution': SpatialResolutionToJSON(value['outputResolution']),
         'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
-        'method': WarpMethodToJSON(value['method']),
+        'downsampling': WarpDownsamplingMethodToJSON(value['downsampling']),
+        'upsampling': WarpUpsamplingMethodToJSON(value['upsampling']),
+        'outputDataType': RasterDataTypeToJSON(value['outputDataType']),
+        'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
+        'approximationErrorThreshold': value['approximationErrorThreshold'],
     };
 }

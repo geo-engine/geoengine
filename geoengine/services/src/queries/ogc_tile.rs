@@ -1,5 +1,6 @@
 //! OGC API tiles of a layer: map tiles as PNG and coverage tiles as `GeoTIFF`.
 
+use crate::config::{self, get_config_element};
 use crate::{
     api::handlers::ogc::{
         OgcApiResult, error,
@@ -17,7 +18,6 @@ use crate::{
 };
 use geoengine_datatypes::{
     error::BoxedResultExt,
-    operations::image::RasterColorizer,
     primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{GridBoundingBox2D, GridShape2D},
     util::Identifier,
@@ -25,10 +25,13 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
-        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors, TypedOperator,
-        TypedRasterQueryProcessor,
+        ExecutionContext, InitializedRasterOperator, RasterBandDescriptors, RasterResultDescriptor,
+        TypedOperator, TypedRasterQueryProcessor,
     },
-    util::{WrapWithProjectionAndResample, raster_stream_to_png::raster_stream_to_png_bytes},
+    util::{
+        WarpMethods, WrapWithProjectionAndResample,
+        raster_stream_to_png::{default_raster_colorizer, raster_stream_to_png_bytes},
+    },
 };
 use ogcapi_types::tiles::TileMatrixSetId;
 use std::collections::HashSet;
@@ -172,14 +175,34 @@ pub async fn render_tile<C: ApplicationContext>(
         .instrument(debug_span!("load_processing_graph"))
         .await?;
 
-    let tile = tile_on_grid(layer.processing_graph.clone(), &execution_context, &query)
-        .instrument(debug_span!("initialize"))
-        .await?;
+    // the colorizer of the layer's symbology, or else one for the layer's data; it also chooses the
+    // resampling methods (see `WarpMethods::for_symbology`), unless `[ogc] map_resampling` is
+    // `"nearest"`
+    let symbology_colorizer = layer
+        .symbology
+        .and_then(Symbology::into_raster_symbology)
+        .map(|symbology| symbology.raster_colorizer);
+    let tile = tile_on_grid(
+        layer.processing_graph,
+        &execution_context,
+        &query,
+        |layer_descriptor| {
+            let colorizer =
+                symbology_colorizer.unwrap_or_else(|| default_raster_colorizer(layer_descriptor));
+            let methods = get_config_element::<config::Ogc>()?
+                .map_resampling
+                .methods(&colorizer);
+            Ok((methods, colorizer))
+        },
+    )
+    .instrument(debug_span!("initialize"))
+    .await?;
+    let colorizer = tile.chosen;
 
     let query_rect = RasterQueryRectangle::new(
         tile.grid_bounds,
         query.time_interval,
-        band_selection(&layer),
+        colorizer.band_selection(),
     );
 
     let (processor, query_ctx, computation_id) = create_query_processor_and_query_context(
@@ -201,7 +224,7 @@ pub async fn render_tile<C: ApplicationContext>(
             tile.width,
             tile.height,
             Some(query.time_interval),
-            layer.symbology.and_then(Symbology::into_raster_symbology).map(|symbology| symbology.raster_colorizer),
+            Some(colorizer),
             not_canceled,
         ).await
     )
@@ -211,7 +234,7 @@ pub async fn render_tile<C: ApplicationContext>(
 }
 
 /// A layer's processing graph on the grid of a tile matrix, and the pixels of one tile in that grid
-pub struct TileOnGrid {
+pub struct TileOnGrid<T> {
     /// the processing graph the tile is computed with: the layer's graph on the tile matrix's grid
     pub processing_graph: ProcessingGraph,
     pub initialized_operator: Box<dyn InitializedRasterOperator>,
@@ -220,22 +243,29 @@ pub struct TileOnGrid {
     /// the size of the encoded tile
     pub width: u32,
     pub height: u32,
+    /// what `choose_methods` of [`tile_on_grid`] returned besides the methods
+    pub chosen: T,
 }
 
 /// Puts `processing_graph` onto the grid of the tile matrix of `query` with one `Warp`, the same as
-/// for a WMS `GetMap`, and finds the tile's pixels in it
+/// for a WMS `GetMap`, and finds the tile's pixels in it. It initializes the graph once:
+/// `choose_methods` gets the result descriptor of the initialized graph and returns the resampling
+/// methods of the `Warp`, together with anything else derived from it.
 ///
 /// # Errors
-/// If the graph is no raster or cannot be initialized, or the tile is outside the tile matrix.
-pub async fn tile_on_grid(
+/// If the graph is no raster or cannot be initialized, the tile is outside the tile matrix, or
+/// `choose_methods` fails.
+pub async fn tile_on_grid<T>(
     processing_graph: ProcessingGraph,
     execution_context: &dyn ExecutionContext,
     query: &TileQuery,
-) -> OgcApiResult<TileOnGrid> {
+    choose_methods: impl FnOnce(&RasterResultDescriptor) -> OgcApiResult<(WarpMethods, T)>,
+) -> OgcApiResult<TileOnGrid<T>> {
     let initialized_operator = initialize_raster_graph(&processing_graph, execution_context)
         .instrument(debug_span!("initialize_layer"))
         .await?;
     let tiling_specification = execution_context.tiling_specification();
+    let (methods, chosen) = choose_methods(initialized_operator.result_descriptor())?;
 
     let layer_descriptor = TypedTileMatrixSetProvider::layer_descriptor(
         &query.tile_matrix_set_id,
@@ -269,6 +299,7 @@ pub async fn tile_on_grid(
                 Some(origin),
                 Some(tms_spec.spatial_resolution(query.tile_matrix)),
                 spatial_reference,
+                methods,
                 execution_context,
             )
             .instrument(debug_span!("initialize_warp"))
@@ -293,6 +324,7 @@ pub async fn tile_on_grid(
         grid_bounds,
         width: u32::try_from(tile_size_in_pixels.x()).unwrap_or(u32::MAX),
         height: u32::try_from(tile_size_in_pixels.y()).unwrap_or(u32::MAX),
+        chosen,
     })
 }
 
@@ -313,9 +345,12 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
         .instrument(debug_span!("load_processing_graph"))
         .await?;
 
-    let tile = tile_on_grid(layer.processing_graph, &execution_context, &query)
-        .instrument(debug_span!("initialize"))
-        .await?;
+    // nearest neighbour, so that the values are values of the data
+    let tile = tile_on_grid(layer.processing_graph, &execution_context, &query, |_| {
+        Ok((WarpMethods::NEAREST, ()))
+    })
+    .instrument(debug_span!("initialize"))
+    .await?;
 
     let result_descriptor = tile.initialized_operator.result_descriptor();
     let band_order = field_selection.band_order(&result_descriptor.bands)?;
@@ -350,18 +385,6 @@ pub async fn render_coverage_tile<C: ApplicationContext>(
     .await?;
 
     Ok((image_bytes, cache_hint, computation_id))
-}
-
-fn band_selection(layer: &Layer) -> BandSelection {
-    layer
-        .symbology
-        .as_ref()
-        .and_then(Symbology::as_raster_symbology)
-        .map(|symbology| &symbology.raster_colorizer)
-        .map_or_else(
-            BandSelection::first, // matches to fallback linear gradient colorizer
-            RasterColorizer::band_selection,
-        )
 }
 
 async fn create_query_processor_and_query_context<C: SessionContext>(
@@ -479,9 +502,11 @@ mod tests {
                 tile_col,
             };
 
-            tile_on_grid(processing_graph.clone(), &exe_ctx, &query)
-                .await
-                .unwrap();
+            tile_on_grid(processing_graph.clone(), &exe_ctx, &query, |_| {
+                Ok((WarpMethods::NEAREST, ()))
+            })
+            .await
+            .unwrap();
 
             assert_eq!(count.load(Ordering::Relaxed), initializations, "{name}");
         }

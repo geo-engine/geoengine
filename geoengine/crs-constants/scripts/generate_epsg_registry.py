@@ -65,22 +65,25 @@ def load_epsg_crs(db: sqlite3.Connection) -> list[dict]:
     # active geographic 2D CRS (EPSG); meters per unit = equatorial arc of one degree
     geodetic = db.execute(
         """
-        SELECT g.code, g.name, e.semi_major_axis
+        SELECT g.code, g.name, e.semi_major_axis, u.conv_factor
         FROM geodetic_crs g
         JOIN geodetic_datum d
           ON d.auth_name = g.datum_auth_name AND d.code = g.datum_code
         JOIN ellipsoid e
           ON e.auth_name = d.ellipsoid_auth_name AND e.code = d.ellipsoid_code
+        JOIN unit_of_measure u
+          ON u.auth_name = e.uom_auth_name AND u.code = e.uom_code
         WHERE g.auth_name = 'EPSG' AND g.type = 'geographic 2D' AND g.deprecated = 0
         """
     ).fetchall()
-    for code, name, semi_major in geodetic:
+    # the semi-major axis is in the ellipsoid's unit, e.g. Clarke's foot for Clarke 1880
+    for code, name, semi_major, conv_factor in geodetic:
         rows.append(
             {
                 "code": int(code),
                 "name": name,
                 "crs_type": "Geographic2d",
-                "meters_per_unit": float(semi_major) * 2.0 * math.pi / 360.0,
+                "meters_per_unit": float(semi_major) * float(conv_factor) * 2.0 * math.pi / 360.0,
                 "unit": "deg",
             }
         )
