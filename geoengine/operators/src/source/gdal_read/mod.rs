@@ -57,12 +57,21 @@ pub struct TilePlan {
 /// left pixels invalid. Files whose read area sticks out of the areas of the files above are read
 /// at the same time, since those can never cover them; a file inside those areas waits for the
 /// files above it and is only read if they left a pixel of its area invalid. So the same files
-/// are read as one after another, and the merge in z-order gives the same pixels. The
-/// properties come from the first file that was read. A tile no file covers is empty.
+/// are read as one after another, and merging in the order of the files gives the same pixels.
+/// The properties come from the first file that was read. A tile no file covers is empty.
+///
+/// The traces of the reads are in a span per tile, so that the reads of one tile, which run at
+/// the same time, can be told apart from those of other tiles.
 ///
 /// # Errors
 /// Returns an error if a pool read fails. A missing file counts as no data if its parameters
 /// say so.
+#[tracing::instrument(
+    name = "gdal_assemble_tile",
+    level = "trace",
+    skip_all,
+    fields(tile = ?plan.tile.global_tile_position, band = plan.band, time = ?plan.time)
+)]
 pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType>(
     plan: TilePlan,
     reader_mode: GdalReaderMode,
@@ -100,7 +109,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
         .map(|(_, read_advise)| read_advise.read_window_bounds)
         .collect();
 
-    // reads in flight, merged in z-order as they finish
+    // reads in flight, merged in the order of the files (highest z-index first) as they finish
     let mut reads = FuturesOrdered::new();
     for (index, (params, read_advise)) in files.into_iter().enumerate() {
         if is_covered(areas[index], &areas[..index]) {
@@ -114,7 +123,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             {
                 trace!(
                     file = %params.file_path.display(),
-                    "skipping file whose read area is covered by higher-z valid pixels"
+                    "skipping file whose read area is covered by valid pixels of files above it"
                 );
                 continue;
             }
@@ -143,7 +152,24 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     ))
 }
 
-/// Reads `read_advise` of one file for `assemble_tile`.
+/// Reads `read_advise` of one file for `assemble_tile`. Which of three reads the file gets
+/// depends on the [`ReadLevel`] of `reader_mode` and on whether `blocks` reads the file:
+///
+/// | level                | blocks | read                                                |
+/// |----------------------|--------|-----------------------------------------------------|
+/// | any                  | yes    | `BlockIo::read`: whole cached blocks of the level   |
+/// | `Declared`           | no     | `read_level_data`: the level's band, pixel by pixel |
+/// | `Full`, `Undeclared` | no     | `read_tile_data`: GDAL's window read, GDAL picks    |
+/// |                      |        | the level and may resample                          |
+///
+/// `blocks` reads the file if the new raster cache is on, the tile's cache lifetime is long
+/// enough, and, with `block_reads = "auto"`, the file is remote. An undeclared level only goes
+/// through blocks if the read starts at a pixel of the level. Only a declared level is read
+/// pixel by pixel without blocks, since only then does every file have it; at the full
+/// resolution the window read reads pixel for pixel anyway.
+///
+/// A file that lacks the level, and through blocks any finer overview, falls back to GDAL's
+/// window read.
 async fn read_file<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType>(
     params: GdalDatasetParameters,
     read_advise: GdalReadAdvise,
@@ -153,21 +179,6 @@ async fn read_file<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType
     cache_hint: CacheHint,
 ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
     let level = reader_mode.read_level();
-    // Which of the three reads a file gets:
-    //
-    // | level               | blocks | read                                               |
-    // |---------------------|--------|----------------------------------------------------|
-    // | any                 | yes    | `BlockIo::read`: whole cached blocks of the level  |
-    // | `Declared`          | no     | `read_level_data`: the level's band, pixel by pixel |
-    // | `Full`, `Undeclared` | no     | `read_tile_data`: GDAL's window read, GDAL picks   |
-    // |                     |        | the level and may resample                         |
-    //
-    // `blocks` is the block reader if this file goes through it: the new raster cache is on,
-    // the tile's cache lifetime is long enough, and with `block_reads = "auto"` the file is
-    // remote. An undeclared level only goes through blocks if the read starts at a pixel of
-    // the level. Only a declared level is read pixel by pixel without blocks, since only then
-    // does every file have it; at the full resolution the window read reads pixel for pixel
-    // anyway.
     let blocks_for_file = blocks.filter(|blocks| {
         blocks.reads(&params)
             && match level {
@@ -446,7 +457,7 @@ mod tests {
     /// for it and is skipped, since A's pixels are all valid. The pixels are those of A where A
     /// lies and of B elsewhere, as if the files were read one after another.
     #[tokio::test]
-    async fn it_reads_files_of_a_tile_together_and_merges_them_in_z_order() {
+    async fn it_reads_files_of_a_tile_together_and_merges_them_in_file_order() {
         let dir = tempfile::tempdir().unwrap();
         let a = tiled_tiff(dir.path(), 64, &[2]);
         // the same pixels in a second file, 32 px to the right
