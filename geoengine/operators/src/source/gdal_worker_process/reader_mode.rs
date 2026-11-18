@@ -138,27 +138,37 @@ impl GdalReaderMode {
         }
     }
 
-    /// The level of the files that reads map onto pixel by pixel: 1 for the full resolution,
-    /// the overview level if the dataset declares it. `None`: GDAL picks an overview and may
-    /// resample.
-    pub fn level_factor(&self) -> Option<NonZeroUsize> {
+    /// The level the reads of the files map onto.
+    pub fn read_level(&self) -> ReadLevel {
         match self {
-            GdalReaderMode::OriginalResolution(_) => Some(NonZeroUsize::MIN),
+            GdalReaderMode::OriginalResolution(_) => ReadLevel::Full,
             GdalReaderMode::OverviewLevel(rs) if rs.files_have_level => {
-                Some(NonZeroUsize::new(rs.overview_level as usize).unwrap_or(NonZeroUsize::MIN))
+                ReadLevel::Declared(rs.overview_level)
             }
-            GdalReaderMode::OverviewLevel(_) => None,
+            GdalReaderMode::OverviewLevel(rs) => ReadLevel::Undeclared(rs.overview_level),
         }
     }
+}
 
-    /// The overview level of a dataset that does not declare its levels, so only some of its
-    /// files may have it. `None` for the full resolution and for declared levels.
-    pub fn undeclared_level_factor(&self) -> Option<NonZeroUsize> {
+/// The level of the files that a source reads, and whether every file has it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ReadLevel {
+    /// The full resolution: every file has it, and reads take its pixels one to one.
+    Full,
+    /// An overview level, this many times coarser, that the dataset declares
+    /// (`max_overview_level`): every file has it, and reads take its pixels one to one.
+    Declared(NonZeroUsize),
+    /// An overview level, this many times coarser, of a dataset that does not declare its
+    /// levels: a file may lack it. GDAL's window read then picks a level itself and resamples.
+    Undeclared(NonZeroUsize),
+}
+
+impl ReadLevel {
+    /// How many times coarser than the full resolution the level is: 1 for the full resolution.
+    pub fn factor(self) -> NonZeroUsize {
         match self {
-            GdalReaderMode::OverviewLevel(rs) if !rs.files_have_level => {
-                NonZeroUsize::new(rs.overview_level as usize).filter(|factor| factor.get() > 1)
-            }
-            _ => None,
+            ReadLevel::Full => NonZeroUsize::MIN,
+            ReadLevel::Declared(factor) | ReadLevel::Undeclared(factor) => factor,
         }
     }
 }
@@ -166,7 +176,9 @@ impl GdalReaderMode {
 #[derive(Copy, Clone, Debug)]
 pub struct OverviewReaderState {
     pub original_dataset_grid: SpatialGridDefinition,
-    pub overview_level: u32,
+    /// How many times coarser than the full resolution the read level is, 2 or more: the
+    /// sources read levels 0 and 1 in [`GdalReaderMode::OriginalResolution`].
+    pub overview_level: NonZeroUsize,
     /// The dataset declares its overview levels (`max_overview_level`), so every file has
     /// `overview_level`: it is read from that level as is, never resampled.
     pub files_have_level: bool,
@@ -192,7 +204,7 @@ impl OverviewReaderState {
             self.normalize_y_axis(actual_gdal_dataset_spatial_grid_definition);
 
         let file_geo_transform = file_grid.geo_transform();
-        let overview_level = self.overview_level as isize;
+        let overview_level = self.overview_level.get() as isize;
 
         debug_assert!(
             float_cmp::approx_eq!(
@@ -608,7 +620,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 2,
+            overview_level: std::num::NonZeroUsize::new(2).unwrap(),
             files_have_level: false,
         };
 
@@ -656,7 +668,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
             files_have_level: false,
         };
 
@@ -704,7 +716,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
             files_have_level: false,
         };
 
@@ -755,7 +767,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
             files_have_level: false,
         };
 
@@ -809,7 +821,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
             files_have_level: false,
         };
 
@@ -857,7 +869,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
             files_have_level: false,
         };
 
@@ -907,7 +919,7 @@ mod tests {
                 ),
                 grid_bounds: GridBoundingBox2D::new_unchecked([0, 0], [899, 1799]),
             },
-            overview_level: 2,
+            overview_level: std::num::NonZeroUsize::new(2).unwrap(),
             files_have_level: false,
         };
 
@@ -1018,7 +1030,7 @@ mod tests {
 
                 let reader_state = OverviewReaderState {
                     original_dataset_grid: mosaic_grid,
-                    overview_level: overview_level as u32,
+                    overview_level: std::num::NonZeroUsize::new(overview_level as usize).unwrap(),
                     files_have_level: false,
                 };
 
