@@ -201,17 +201,21 @@ where
 
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
 
-        let reader_mode = match self.original_resolution_spatial_grid {
-            None => GdalReaderMode::OriginalResolution(ReaderState {
-                dataset_spatial_grid: grid_produced_by_source,
-            }),
-            Some(original_resolution_spatial_grid) => {
+        // only levels from 2 up have an overview grid, see `overview_level_spatial_grid`
+        let reader_mode = match (
+            self.original_resolution_spatial_grid,
+            std::num::NonZeroUsize::new(self.overview_level as usize),
+        ) {
+            (Some(original_resolution_spatial_grid), Some(overview_level)) => {
                 GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: original_resolution_spatial_grid,
-                    overview_level: self.overview_level,
+                    overview_level,
                     files_have_level: self.files_have_level,
                 })
             }
+            _ => GdalReaderMode::OriginalResolution(ReaderState {
+                dataset_spatial_grid: grid_produced_by_source,
+            }),
         };
 
         let loading_info = self.meta_data.loading_info(query.clone()).await?;
@@ -593,7 +597,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 
     fn reads_cached_blocks(&self) -> bool {
-        // see `GdalReaderMode::level_factor`: else GDAL picks an overview, which has no blocks
+        // see `ReadLevel`: a file may lack an undeclared level, GDAL then reads it without blocks
         self.original_resolution_spatial_grid.is_none() || self.max_overview_level.is_some()
     }
 

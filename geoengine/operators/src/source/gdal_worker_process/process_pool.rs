@@ -327,7 +327,7 @@ pub struct GdalProcessPool {
     /// operation touches one key, so reads of different tiles only share a shard lock. A shard
     /// lock is held only briefly and never across an `.await`.
     in_flight_tiles: DashMap<u64, InFlightRead, BuildHasherDefault<FxHasher>>,
-    raster_infos: RasterInfos,
+    header_cache: HeaderCache,
     counters: PoolCounters,
 }
 
@@ -336,15 +336,15 @@ pub const DEFAULT_HEADER_CACHE_ENTRIES: NonZeroUsize = NonZeroUsize::new(4096).e
 
 /// Recently read headers by file, so that a tile does not queue behind the workers that decode for
 /// one on every read.
-struct RasterInfos(Mutex<LruCache<Arc<str>, (CacheHint, RasterInfo)>>);
+struct HeaderCache(Mutex<LruCache<Arc<str>, (CacheHint, RasterInfo)>>);
 
-impl Default for RasterInfos {
+impl Default for HeaderCache {
     fn default() -> Self {
         Self::new(DEFAULT_HEADER_CACHE_ENTRIES)
     }
 }
 
-impl RasterInfos {
+impl HeaderCache {
     fn new(entries: NonZeroUsize) -> Self {
         Self(Mutex::new(LruCache::new(entries)))
     }
@@ -355,8 +355,8 @@ impl RasterInfos {
         cache_hint.may_cache().then(|| info.clone())
     }
 
-    /// Returns whether no valid header of the file was known. Tiles that wait for the same header
-    /// all put it, this is true for the first one.
+    /// Returns whether no valid header of the file was cached before. Tiles that wait for the
+    /// same header all put it, this is true for the first one.
     fn put(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) -> bool {
         let mut infos = safe_lock_mutex(&self.0);
         let is_new = !infos
@@ -420,7 +420,7 @@ impl GdalProcessPool {
     /// `CLEAR_CACHES_TIMEOUT` bounds the entire operation, including broker submission and response.
     /// Queued clears may still run after a timeout, and concurrent queries may refill caches.
     pub async fn clear_caches(&self) -> Result<(), GdalProcessPoolError> {
-        self.raster_infos.clear();
+        self.header_cache.clear();
         tokio::time::timeout(CLEAR_CACHES_TIMEOUT, async {
             let (tx, rx) = oneshot::channel();
             self.broker_tx
@@ -503,7 +503,7 @@ impl GdalProcessPool {
         Arc::new(Self {
             broker_tx,
             in_flight_tiles: DashMap::default(),
-            raster_infos: RasterInfos::new(header_cache_entries),
+            header_cache: HeaderCache::new(header_cache_entries),
             counters: PoolCounters::default(),
         })
     }
@@ -1316,19 +1316,15 @@ impl GdalPoolDispatcher {
         Ok(payload)
     }
 
-    /// The header of `file` if it was read recently, see [`RasterInfos`].
-    pub fn remembered_raster_info(&self, file: &str) -> Option<RasterInfo> {
-        self.pool.raster_infos.get(file)
+    /// The header of `file` if it was read recently, see [`HeaderCache`].
+    pub fn cached_header(&self, file: &str) -> Option<RasterInfo> {
+        self.pool.header_cache.get(file)
     }
 
-    /// Returns whether no valid header of `file` was known, see [`RasterInfos`].
-    pub fn remember_raster_info(
-        &self,
-        file: Arc<str>,
-        info: RasterInfo,
-        cache_hint: CacheHint,
-    ) -> bool {
-        self.pool.raster_infos.put(file, info, cache_hint)
+    /// Caches the header of `file`. Returns whether no valid header of `file` was cached before,
+    /// see [`HeaderCache`].
+    pub fn cache_header(&self, file: Arc<str>, info: RasterInfo, cache_hint: CacheHint) -> bool {
+        self.pool.header_cache.put(file, info, cache_hint)
     }
 
     /// Read a header (`GdalRequest::Header`) without pixel
@@ -1494,7 +1490,7 @@ mod tests {
 
     #[test]
     fn it_reports_only_the_first_valid_header_of_a_file_as_new() {
-        let infos = RasterInfos::default();
+        let infos = HeaderCache::default();
         let info = RasterInfo {
             data_type: geoengine_datatypes::raster::RasterDataType::U8,
             spatial_reference:
@@ -1717,7 +1713,7 @@ mod tests {
             GdalProcessPool {
                 broker_tx,
                 in_flight_tiles: DashMap::default(),
-                raster_infos: RasterInfos::default(),
+                header_cache: HeaderCache::default(),
                 counters: PoolCounters::default(),
             },
             broker_rx,
@@ -2509,7 +2505,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: DashMap::default(),
-            raster_infos: RasterInfos::default(),
+            header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
         });
         (pool, held_rx)
@@ -2615,7 +2611,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: DashMap::default(),
-            raster_infos: RasterInfos::default(),
+            header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
         });
 
@@ -2668,7 +2664,7 @@ mod tests {
         let pool = Arc::new(GdalProcessPool {
             broker_tx,
             in_flight_tiles: DashMap::default(),
-            raster_infos: RasterInfos::default(),
+            header_cache: HeaderCache::default(),
             counters: PoolCounters::default(),
         });
 
