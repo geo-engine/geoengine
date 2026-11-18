@@ -1,7 +1,7 @@
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
-use config::{Config, Environment, File};
+use config::{Config, ConfigError, Environment, File, Map, Source, Value, ValueKind};
 use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::new_raster_cache::{
@@ -32,11 +32,11 @@ fn init_settings() -> RwLock<Config> {
     #[cfg(not(test))]
     let files = ["Settings-default.toml", "Settings.toml"];
 
-    let files: Vec<File<_, _>> = files
+    let files: Vec<GdalOptionNamesInLowerCase<File<_, _>>> = files
         .iter()
         .map(|f| dir.join(f))
         .filter(|p| p.exists())
-        .map(File::from)
+        .map(|p| GdalOptionNamesInLowerCase(File::from(p)))
         .collect();
 
     settings = settings.add_source(files);
@@ -51,6 +51,46 @@ fn init_settings() -> RwLock<Config> {
         .build()
         .expect("it should crash the program if this fails");
     RwLock::new(config)
+}
+
+/// A settings file whose GDAL options of the workers (`gdal_process_pool.worker.gdal_config_options`)
+/// are named in lower case.
+///
+/// GDAL ignores the case of an option's name, the settings do not. Environment variables always
+/// arrive in lower case, while `Settings-default.toml` spells the options in upper case, so an
+/// override by `GEOENGINE__GDAL_PROCESS_POOL__WORKER__GDAL_CONFIG_OPTIONS__CPL_VSIL_CURL_CHUNK_SIZE`
+/// became a second option next to the default. With the names of the files in lower case too,
+/// each option is one key, and the order of the settings decides as for any other key:
+/// `Settings-default.toml`, then `Settings.toml`, then the environment.
+#[derive(Debug, Clone)]
+struct GdalOptionNamesInLowerCase<S>(S);
+
+impl<S: Source + Clone + Send + Sync + 'static> Source for GdalOptionNamesInLowerCase<S> {
+    fn clone_into_box(&self) -> Box<dyn Source + Send + Sync> {
+        Box::new(self.clone())
+    }
+
+    fn collect(&self) -> std::result::Result<Map<String, Value>, ConfigError> {
+        fn table<'a>(value: Option<&'a mut Value>, key: &str) -> Option<&'a mut Value> {
+            match &mut value?.kind {
+                ValueKind::Table(table) => table.get_mut(key),
+                _ => None,
+            }
+        }
+
+        let mut settings = self.0.collect()?;
+        let options = table(
+            table(settings.get_mut("gdal_process_pool"), "worker"),
+            "gdal_config_options",
+        );
+        if let Some(ValueKind::Table(options)) = options.map(|options| &mut options.kind) {
+            *options = std::mem::take(options)
+                .into_iter()
+                .map(|(name, value)| (name.to_ascii_lowercase(), value))
+                .collect();
+        }
+        Ok(settings)
+    }
 }
 
 /// test may run in subdirectory
@@ -611,9 +651,13 @@ impl From<GdalProcessPoolWorkerConfig>
         config: GdalProcessPoolWorkerConfig,
     ) -> geoengine_operators::source::gdal_worker_process::WorkerConfig {
         geoengine_operators::source::gdal_worker_process::WorkerConfig {
-            gdal_config_options: config.gdal_config_options.map(
-                geoengine_operators::source::gdal_worker_process::WorkerConfig::gdal_config_options_of_settings,
-            ),
+            // GDAL ignores the case; the settings name the options in lower case
+            gdal_config_options: config.gdal_config_options.map(|options| {
+                options
+                    .into_iter()
+                    .map(|(name, value)| (name.to_ascii_uppercase(), value))
+                    .collect()
+            }),
             logging: geoengine_operators::source::gdal_worker_process::WorkerLoggingConfig {
                 log_spec: config.logging.log_spec,
                 log_to_file: config.logging.log_to_file,
@@ -907,11 +951,11 @@ mod tests {
     /// `Settings-default.toml` alone, without the overrides of `Settings-test.toml`
     fn default_settings() -> Config {
         Config::builder()
-            .add_source(File::from(
+            .add_source(GdalOptionNamesInLowerCase(File::from(
                 retrieve_settings_dir()
                     .unwrap()
                     .join("Settings-default.toml"),
-            ))
+            )))
             .build()
             .unwrap()
     }
@@ -972,17 +1016,24 @@ mod tests {
         assert!(pool(32, 8, 16).validate().is_ok());
     }
 
-    #[test]
-    fn it_overrides_a_worker_gdal_option_by_an_environment_variable() {
+    /// The chunk sizes the workers get from `Settings-default.toml`, a `Settings.toml` with
+    /// `local` and the environment variable set to `env`.
+    fn worker_chunk_sizes(local: Option<&str>, env: Option<&str>) -> Vec<(String, String)> {
+        let mut config = Config::builder().add_source(default_settings());
+        if let Some(local) = local {
+            config = config.add_source(GdalOptionNamesInLowerCase(File::from_str(
+                local,
+                config::FileFormat::Toml,
+            )));
+        }
         let variable =
             "GEOENGINE__GDAL_PROCESS_POOL__WORKER__GDAL_CONFIG_OPTIONS__CPL_VSIL_CURL_CHUNK_SIZE";
-        let config = Config::builder()
-            .add_source(default_settings())
+        let config = config
             .add_source(
                 Environment::with_prefix("geoengine")
                     .separator("__")
                     .source(Some(
-                        [(variable.to_string(), "65536".to_string())]
+                        env.map(|env| (variable.to_string(), env.to_string()))
                             .into_iter()
                             .collect(),
                     )),
@@ -991,19 +1042,42 @@ mod tests {
             .unwrap();
         let pool: GdalProcessPool = config.get(GdalProcessPool::KEY).unwrap();
 
-        let worker =
-            geoengine_operators::source::gdal_worker_process::WorkerConfig::from(pool.worker);
-        let chunk_sizes: Vec<_> = worker
+        geoengine_operators::source::gdal_worker_process::WorkerConfig::from(pool.worker)
             .gdal_config_options
             .unwrap()
             .into_iter()
             .filter(|(name, _)| name.eq_ignore_ascii_case("CPL_VSIL_CURL_CHUNK_SIZE"))
-            .collect();
-        // the default file and the variable spell the name in different cases
-        assert_eq!(
-            chunk_sizes,
-            [("CPL_VSIL_CURL_CHUNK_SIZE".to_string(), "65536".to_string())]
-        );
+            .collect()
+    }
+
+    #[test]
+    fn it_lets_the_order_of_the_settings_decide_a_worker_gdal_option() {
+        let chunk_size =
+            |size: &str| vec![("CPL_VSIL_CURL_CHUNK_SIZE".to_string(), size.to_string())];
+        let local = |name: &str| {
+            format!("[gdal_process_pool.worker.gdal_config_options]\n{name} = \"262144\"\n")
+        };
+
+        assert_eq!(worker_chunk_sizes(None, None), chunk_size("1048576"));
+        // the environment overrides the default file, which spells the name in upper case
+        assert_eq!(worker_chunk_sizes(None, Some("65536")), chunk_size("65536"));
+        // a local file overrides the default in any spelling, the environment overrides both
+        for name in [
+            "CPL_VSIL_CURL_CHUNK_SIZE",
+            "cpl_vsil_curl_chunk_size",
+            "Cpl_Vsil_Curl_Chunk_Size",
+        ] {
+            assert_eq!(
+                worker_chunk_sizes(Some(&local(name)), None),
+                chunk_size("262144"),
+                "{name}"
+            );
+            assert_eq!(
+                worker_chunk_sizes(Some(&local(name)), Some("65536")),
+                chunk_size("65536"),
+                "{name}"
+            );
+        }
     }
 
     fn default_element<T: ConfigElement + for<'a> Deserialize<'a>>() -> T {

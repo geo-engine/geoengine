@@ -36,7 +36,7 @@
 pub mod metrics;
 pub mod range_server;
 
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, Environment, File, Map, Source, Value, ValueKind};
 use criterion::{BenchmarkGroup, Criterion, SamplingMode, measurement::WallTime};
 use futures::{StreamExt, future::join_all};
 use geoengine_datatypes::{
@@ -302,13 +302,16 @@ impl Env {
             ),
             WorkerConfig {
                 // without the server's options GDAL caches 5% of the RAM per worker
-                gdal_config_options: Some(WorkerConfig::gdal_config_options_of_settings(
+                gdal_config_options: Some(
                     setting::<HashMap<String, String>>(
                         &settings,
                         "gdal_process_pool.worker.gdal_config_options",
                         HashMap::new(),
-                    ),
-                )),
+                    )
+                    .into_iter()
+                    .map(|(name, value)| (name.to_ascii_uppercase(), value))
+                    .collect(),
+                ),
                 blas_threads: setting(&settings, "gdal_process_pool.worker.blas_threads", 1),
                 ..WorkerConfig::default()
             },
@@ -579,11 +582,49 @@ fn raster_meta_data() -> GdalMetaDataRegular {
 fn settings() -> Config {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     Config::builder()
-        .add_source(File::from(dir.join("Settings-default.toml")))
-        .add_source(File::from(dir.join("Settings.toml")).required(false))
+        .add_source(GdalOptionNamesInLowerCase(File::from(
+            dir.join("Settings-default.toml"),
+        )))
+        .add_source(GdalOptionNamesInLowerCase(
+            File::from(dir.join("Settings.toml")).required(false),
+        ))
         .add_source(Environment::with_prefix("geoengine").separator("__"))
         .build()
         .unwrap()
+}
+
+/// A copy of `GdalOptionNamesInLowerCase` in `services::config`, which the benches cannot use:
+/// names the GDAL options of a settings file in lower case, as environment variables are, so
+/// that the order of the settings decides between them.
+#[derive(Debug, Clone)]
+struct GdalOptionNamesInLowerCase<S>(S);
+
+impl<S: Source + Clone + Send + Sync + 'static> Source for GdalOptionNamesInLowerCase<S> {
+    fn clone_into_box(&self) -> Box<dyn Source + Send + Sync> {
+        Box::new(self.clone())
+    }
+
+    fn collect(&self) -> Result<Map<String, Value>, ConfigError> {
+        fn table<'a>(value: Option<&'a mut Value>, key: &str) -> Option<&'a mut Value> {
+            match &mut value?.kind {
+                ValueKind::Table(table) => table.get_mut(key),
+                _ => None,
+            }
+        }
+
+        let mut settings = self.0.collect()?;
+        let options = table(
+            table(settings.get_mut("gdal_process_pool"), "worker"),
+            "gdal_config_options",
+        );
+        if let Some(ValueKind::Table(options)) = options.map(|options| &mut options.kind) {
+            *options = std::mem::take(options)
+                .into_iter()
+                .map(|(name, value)| (name.to_ascii_lowercase(), value))
+                .collect();
+        }
+        Ok(settings)
+    }
 }
 
 /// The setting `key`, or `default` while the settings do not have the key (the keys that wp1 adds,
