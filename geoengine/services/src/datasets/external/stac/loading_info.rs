@@ -256,10 +256,9 @@ impl
         tile_files.sort_by(|left, right| {
             StacTileIdentity::from(&left.file).cmp(&StacTileIdentity::from(&right.file))
         });
-        tile_files.dedup_by(|left, right| {
-            StacTileIdentity::from(&left.file) == StacTileIdentity::from(&right.file)
-        });
-        let tile_files = if self
+        // Selection comes first: it keeps one resolution per item, so a file that another item
+        // shares must still be there for each of them.
+        let mut tile_files = if self
             .dataset
             .bands
             .iter()
@@ -273,6 +272,7 @@ impl
         } else {
             tile_files.into_iter().map(|file| file.file).collect()
         };
+        dedup_tile_files(&mut tile_files);
 
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
@@ -814,6 +814,11 @@ fn select_file_resolution(files: Vec<StacTileFile>, level: NonZeroU32) -> Vec<Ti
         .collect()
 }
 
+/// Removes consecutive files that read the same data, e.g. those that several searches found.
+fn dedup_tile_files(files: &mut Vec<TileFile>) {
+    files.dedup_by(|left, right| StacTileIdentity::from(&*left) == StacTileIdentity::from(&*right));
+}
+
 /// The path GDAL opens an asset by. Only remote assets are supported.
 fn asset_file_path(href: &str) -> geoengine_operators::util::Result<PathBuf> {
     if href.starts_with("http://") || href.starts_with("https://") || href.starts_with("s3://") {
@@ -1331,6 +1336,37 @@ mod tests {
         assert_eq!(paths(1), ["a_10m", "a_band_1", "b_10m"]);
         assert_eq!(paths(4), ["a_10m", "a_band_1", "b_10m"]);
         assert_eq!(paths(8), ["a_60m", "a_band_1", "b_10m", "c_60m"]);
+    }
+
+    #[test]
+    fn it_deduplicates_shared_files_after_selecting_the_resolution() {
+        let file = |item_id: &str, factor: u32, path: &str| {
+            let mut file = identity_tile();
+            file.params.file_path = PathBuf::from(path);
+            file.params.width = 10 / factor as usize;
+            StacTileFile {
+                item_id: item_id.into(),
+                factor: NonZeroU32::new(factor).unwrap(),
+                file,
+            }
+        };
+        // `a` and `b` share their native file, but only `a` has a coarser one
+        let files = vec![
+            file("a", 1, "shared_10m"),
+            file("b", 1, "shared_10m"),
+            file("a", 2, "a_20m"),
+        ];
+        let paths = |level: u32| {
+            let mut files = select_file_resolution(files.clone(), NonZeroU32::new(level).unwrap());
+            dedup_tile_files(&mut files);
+            files
+                .into_iter()
+                .map(|file| file.params.file_path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(paths(1), ["shared_10m"]);
+        assert_eq!(paths(2), ["shared_10m", "a_20m"]);
     }
 
     #[test]
