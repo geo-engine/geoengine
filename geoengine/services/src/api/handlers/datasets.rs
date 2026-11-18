@@ -5705,9 +5705,9 @@ mod tests {
                 SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
                 time,
                 BandSelection::first(),
-                true,
+                geoengine_operators::source::LoadingInfoDetail::Files,
             )
-            .searching_in_chunks()
+            .in_parts()
         };
 
         // 40 monthly steps, the tiles are in the last four months
@@ -5720,10 +5720,7 @@ mod tests {
             )?))
             .await?;
         assert_eq!(first.time_steps().len(), 32);
-        assert_eq!(
-            first.file_partitions(first.time_steps()[0], &[0]).count(),
-            0
-        );
+        assert_eq!(first.file_bounds(first.time_steps()[0], &[0]).count(), 0);
         let next = first.next().expect("the rest of the time comes next");
         assert_eq!(
             next.start(),
@@ -5735,7 +5732,7 @@ mod tests {
         assert_eq!(rest.time_steps().len(), 8);
         assert_eq!(rest.next(), None);
         let last = *rest.time_steps().last().unwrap();
-        assert!(rest.file_partitions(last, &[0]).count() > 0);
+        assert!(rest.file_bounds(last, &[0]).count() > 0);
 
         Ok(())
     }

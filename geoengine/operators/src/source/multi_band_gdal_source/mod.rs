@@ -91,23 +91,27 @@ type MultiBandGdalMetaData = Box<
         >,
 >;
 
-/// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request tiles that are anchored in coordinates space.
-/// Additionaly you can also specify to fetch tiles (with gdal params).
-/// Set `fetch_tiles` to false if you only want to access the time steps.
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "independent options of one query, no state machine"
-)]
+/// What a caller needs to know about the data of a loading-info query, from least to most.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoadingInfoDetail {
+    /// Only the time steps, without files.
+    TimeSteps,
+    /// For each time step whether it has data. A provider that can tell without the files
+    /// answers with [`MultiBandGdalLoadingInfo::has_data`] and no files, others with the files.
+    Availability,
+    /// The files to read.
+    Files,
+}
+
+/// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request
+/// tiles that are anchored in coordinates space.
 #[derive(Clone, Debug)]
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
-    pub fetch_tiles: bool,
-    /// The caller needs many time steps per area, so remote catalogs should search them together.
-    pub search_in_chunks: bool,
-    /// The caller only needs to know which time steps have data, not the files. A provider that
-    /// can tell without the files may answer with [`MultiBandGdalLoadingInfo::has_data`] and no
-    /// files. Others answer with files as usual.
-    pub availability_only: bool,
+    pub detail: LoadingInfoDetail,
+    /// The caller follows [`MultiBandGdalLoadingInfo::next`], so the provider may answer a long
+    /// time range part by part. A remote catalog may then also search the steps of a part together.
+    pub in_parts: bool,
     /// The answer is shown to a user, see [`crate::engine::QueryContext::footprints_for_display`].
     pub for_display: bool,
 }
@@ -117,39 +121,29 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         spatial_bounds: SpatialPartition2D,
         time_interval: TimeInterval,
         attributes: BandSelection,
-        fetch_tiles: bool,
+        detail: LoadingInfoDetail,
     ) -> Self {
-        Self {
-            query_rectangle: QueryRectangle::new(spatial_bounds, time_interval, attributes),
-            fetch_tiles,
-            search_in_chunks: false,
-            availability_only: false,
-            for_display: false,
-        }
+        Self::with_query_rectangle(
+            QueryRectangle::new(spatial_bounds, time_interval, attributes),
+            detail,
+        )
     }
 
     pub fn with_query_rectangle(
         query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
-        fetch_tiles: bool,
+        detail: LoadingInfoDetail,
     ) -> Self {
         Self {
             query_rectangle,
-            fetch_tiles,
-            search_in_chunks: false,
-            availability_only: false,
+            detail,
+            in_parts: false,
             for_display: false,
         }
     }
 
     #[must_use]
-    pub fn searching_in_chunks(mut self) -> Self {
-        self.search_in_chunks = true;
-        self
-    }
-
-    #[must_use]
-    pub fn availability_only(mut self) -> Self {
-        self.availability_only = true;
+    pub fn in_parts(mut self) -> Self {
+        self.in_parts = true;
         self
     }
 
@@ -163,7 +157,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
 fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
-    fetch_tiles: bool,
+    detail: LoadingInfoDetail,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
     MultiBandGdalLoadingInfoQueryRectangle::new(
         tiling_spatial_grid
@@ -171,7 +165,7 @@ fn raster_query_rectangle_to_loading_info_query_rectangle(
             .grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
-        fetch_tiles,
+        detail,
     )
 }
 
@@ -261,7 +255,7 @@ where
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
                 &query,
                 produced_tiling_grid,
-                true,
+                LoadingInfoDetail::Files,
             ))
             .await?;
         if let Some(loading_info_start) = loading_info_start {
@@ -340,7 +334,7 @@ where
         let qrect = raster_query_rectangle_to_loading_info_query_rectangle(
             &query,
             produced_tiling_grid,
-            false,
+            LoadingInfoDetail::TimeSteps,
         );
 
         let loading_info = self.meta_data.loading_info(qrect).await?;
@@ -352,7 +346,7 @@ where
         Ok(stream)
     }
 
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         precision: crate::engine::FootprintPrecision,
@@ -376,16 +370,17 @@ where
                 let Some(time) = time else {
                     return Ok(None);
                 };
+                let detail = match precision {
+                    FootprintPrecision::Availability => LoadingInfoDetail::Availability,
+                    FootprintPrecision::Coverage => LoadingInfoDetail::Files,
+                };
                 let mut loading_info_query =
                     raster_query_rectangle_to_loading_info_query_rectangle(
                         &query.select_time_interval(time),
                         tiling_grid,
-                        true,
+                        detail,
                     )
-                    .searching_in_chunks();
-                if precision == FootprintPrecision::Availability {
-                    loading_info_query = loading_info_query.availability_only();
-                }
+                    .in_parts();
                 if ctx.footprints_for_display() {
                     loading_info_query = loading_info_query.for_display();
                 }
@@ -402,13 +397,13 @@ where
                             Some(true) => FootprintBounds::from_boxes([query_bounds], max_boxes),
                             Some(false) => FootprintBounds::empty(),
                             None => FootprintBounds::from_boxes(
-                                loading_info.file_partitions(time, &bands).filter_map(
-                                    |partition| {
+                                loading_info
+                                    .file_bounds(time, &bands)
+                                    .filter_map(|partition| {
                                         geo_transform
                                             .spatial_to_grid_bounds(&partition)
                                             .intersection(&query_bounds)
-                                    },
-                                ),
+                                    }),
                                 max_boxes,
                             ),
                         };
@@ -1172,11 +1167,13 @@ mod tests {
                 .then(|| TimeInterval::new((answered_last + 1) * STEP_MS, time.end()))
                 .transpose()?;
 
-            let has_data = (query.availability_only && self.knows_availability).then(|| {
-                (first..=answered_last)
-                    .map(|i| i % 2 == 0)
-                    .collect::<Vec<_>>()
-            });
+            let has_data = (query.detail == LoadingInfoDetail::Availability
+                && self.knows_availability)
+                .then(|| {
+                    (first..=answered_last)
+                        .map(|i| i % 2 == 0)
+                        .collect::<Vec<_>>()
+                });
             let info = MultiBandGdalLoadingInfo::new(steps, Vec::new(), None).with_next(next);
             Ok(match has_data {
                 Some(has_data) => info.with_availability(has_data),

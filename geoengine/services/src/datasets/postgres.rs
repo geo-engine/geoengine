@@ -35,7 +35,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    GdalDatasetParameters, GdalLoadingInfo, LoadingInfoDetail, MultiBandGdalLoadingInfo,
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
@@ -972,7 +972,7 @@ where
     Ok(time_steps)
 }
 
-/// Time steps of one part of a footprint query, see `searching_in_chunks`.
+/// Time steps of one part of a loading-info query in parts, see `in_parts`.
 const STEPS_PER_PART: usize = 32;
 
 #[async_trait]
@@ -1014,14 +1014,17 @@ where
         // not hold the files of all steps at once. The source asks for `next` when it gets there.
         let mut files_time = query.query_rectangle.time_interval();
         let mut next = None;
-        if query.search_in_chunks && time_steps.len() > STEPS_PER_PART {
+        if query.in_parts && time_steps.len() > STEPS_PER_PART {
             let part_end = time_steps[STEPS_PER_PART - 1].end();
             time_steps.truncate(STEPS_PER_PART);
             next = TimeInterval::new(part_end, files_time.end()).ok();
             files_time = TimeInterval::new(files_time.start(), part_end)?;
         }
 
-        let files = if query.fetch_tiles {
+        let files = if matches!(
+            query.detail,
+            LoadingInfoDetail::Availability | LoadingInfoDetail::Files
+        ) {
             // query the files
             let rows = conn
                 .query(

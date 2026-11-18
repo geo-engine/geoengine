@@ -472,7 +472,10 @@ pub(super) async fn validate_trace_capture() {
     use geoengine_datatypes::primitives::{
         BandSelection, DateTime, SpatialPartition2D, TimeInterval,
     };
-    use geoengine_operators::{engine::MetaData, source::MultiBandGdalLoadingInfoQueryRectangle};
+    use geoengine_operators::{
+        engine::MetaData,
+        source::{LoadingInfoDetail, MultiBandGdalLoadingInfoQueryRectangle},
+    };
 
     if !CacheTraceCapture::enabled() {
         return;
@@ -501,7 +504,7 @@ pub(super) async fn validate_trace_capture() {
                 )
                 .expect("test day"),
                 BandSelection::first(),
-                true,
+                LoadingInfoDetail::Files,
             )
         };
         let (first, follower) =

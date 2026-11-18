@@ -31,8 +31,8 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalRetryOptions, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile,
+    GdalRetryOptions, LoadingInfoDetail, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
@@ -170,7 +170,7 @@ impl
         let time_interval =
             stac_query_time_interval(query.query_rectangle.time_interval(), self.time_dimension)?;
 
-        if !query.fetch_tiles {
+        if query.detail == LoadingInfoDetail::TimeSteps {
             // Regular layers expose every step, including steps without any assets.
             // Their time axis is defined by the provider, so no STAC search is needed.
             return Ok(MultiBandGdalLoadingInfo::new(
@@ -183,7 +183,7 @@ impl
 
         // A window search answers one chunk and tells where the rest starts. Map tiles read
         // their own time step and are not split.
-        let (time_interval, next) = if query.search_in_chunks {
+        let (time_interval, next) = if query.in_parts {
             self.first_chunk(time_interval)?
         } else {
             (time_interval, None)
@@ -226,7 +226,7 @@ impl
         // no search and nothing written to the cache. It counts the items of all cells, also next
         // to the view, so few cells are searched instead, which is exact and warms the cache of the
         // map. Without aggregation the files are searched as well.
-        if query.availability_only
+        if query.detail == LoadingInfoDetail::Availability
             && cell_bboxes.len() > self.query_cache.availability_search_cells()
             && let Some(has_data) = self
                 .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
@@ -239,7 +239,7 @@ impl
             );
         }
 
-        if query.search_in_chunks {
+        if query.in_parts {
             // footprints that answer a raster query search like the raster query would
             let lane = if query.for_display {
                 RequestLane::Footprints
@@ -1664,7 +1664,7 @@ mod tests {
                         bounds,
                         time,
                         BandSelection::first(),
-                        true,
+                        LoadingInfoDetail::Files,
                     ))
                     .await
                     .unwrap();
@@ -1739,7 +1739,7 @@ mod tests {
                     bounds,
                     interval,
                     BandSelection::first(),
-                    true,
+                    LoadingInfoDetail::Files,
                 ))
                 .await
                 .unwrap();
@@ -1985,7 +1985,7 @@ mod tests {
             spatial_bounds,
             time_interval,
             BandSelection::new_unchecked(vec![0, 1]),
-            true,
+            LoadingInfoDetail::Files,
         );
 
         let loading_info = meta
@@ -2289,7 +2289,7 @@ mod grid_request_tests {
         StacAssetBand, StacDataProvider, StacDataProviderDefinition, StacGrid, StacProviderDataset,
         StacProviderDatasetBand, cache::StacQueryCache,
     };
-    use super::stac_query_bbox;
+    use super::{LoadingInfoDetail, stac_query_bbox};
     use geoengine_datatypes::{
         dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
         primitives::{
@@ -2352,7 +2352,25 @@ mod grid_request_tests {
         bounds: SpatialPartition2D,
         time: TimeInterval,
     ) -> MultiBandGdalLoadingInfoQueryRectangle {
-        MultiBandGdalLoadingInfoQueryRectangle::new(bounds, time, BandSelection::first(), true)
+        MultiBandGdalLoadingInfoQueryRectangle::new(
+            bounds,
+            time,
+            BandSelection::first(),
+            LoadingInfoDetail::Files,
+        )
+    }
+
+    /// The query of a calendar: which steps have data, not the files.
+    fn availability_query(
+        bounds: SpatialPartition2D,
+        time: TimeInterval,
+    ) -> MultiBandGdalLoadingInfoQueryRectangle {
+        MultiBandGdalLoadingInfoQueryRectangle::new(
+            bounds,
+            time,
+            BandSelection::first(),
+            LoadingInfoDetail::Availability,
+        )
     }
 
     fn item(id: &str, left: f64) -> Value {
@@ -2489,7 +2507,7 @@ mod grid_request_tests {
                         world,
                         time,
                         BandSelection::first(),
-                        false,
+                        LoadingInfoDetail::TimeSteps,
                     ),
                 ),
             )
@@ -2520,7 +2538,7 @@ mod grid_request_tests {
                 world,
                 TimeInterval::new(DateTime::new_utc(2024, 2, 15, 12, 0, 0), april).unwrap(),
                 BandSelection::first(),
-                false,
+                LoadingInfoDetail::TimeSteps,
             ))
             .await
             .unwrap();
@@ -2557,7 +2575,7 @@ mod grid_request_tests {
                     bounds(0., 1.),
                     interval(3),
                     BandSelection::first(),
-                    false,
+                    LoadingInfoDetail::TimeSteps,
                 ))
                 .await;
             assert!(matches!(
@@ -2833,7 +2851,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -2881,7 +2899,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(5, 7)).searching_in_chunks())
+            .loading_info(query(bounds(0.1, 0.4), window(5, 7)).in_parts())
             .await
             .unwrap();
 
@@ -2931,7 +2949,7 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(6), tile(0.), 0).len(), 1);
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -2939,7 +2957,7 @@ mod grid_request_tests {
 
         // a warm window costs no request, and neither does a step it filled
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -2973,7 +2991,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(3)).searching_in_chunks())
+            .loading_info(query(bounds(0.1, 0.4), interval(3)).in_parts())
             .await
             .unwrap();
         assert_file(&info, 0., "found");
@@ -3029,7 +3047,7 @@ mod grid_request_tests {
         let mut answers = 0;
         while let Some(time) = rest {
             rest = meta
-                .loading_info(query(bounds(0.1, 0.4), time).searching_in_chunks())
+                .loading_info(query(bounds(0.1, 0.4), time).in_parts())
                 .await
                 .unwrap()
                 .next();
@@ -3079,7 +3097,7 @@ mod grid_request_tests {
         .unwrap();
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window).searching_in_chunks())
+            .loading_info(query(bounds(0.1, 0.4), window).in_parts())
             .await
             .unwrap();
 
@@ -3147,11 +3165,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(
-                query(bounds(0.1, 0.4), window(3, 5))
-                    .searching_in_chunks()
-                    .availability_only(),
-            )
+            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
             .await
             .unwrap();
 
@@ -3212,11 +3226,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let info = meta
-            .loading_info(
-                query(world, window(3, 5))
-                    .searching_in_chunks()
-                    .availability_only(),
-            )
+            .loading_info(availability_query(world, window(3, 5)).in_parts())
             .await
             .unwrap();
         assert_eq!(info.has_data(1), Some(false));
@@ -3251,13 +3261,9 @@ mod grid_request_tests {
         );
         let meta = metadata(&provider, 0).await;
 
-        meta.loading_info(
-            query(bounds(0.1, 0.4), window(3, 5))
-                .searching_in_chunks()
-                .availability_only(),
-        )
-        .await
-        .unwrap();
+        meta.loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -3283,11 +3289,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(
-                query(bounds(0.1, 0.4), window(3, 5))
-                    .searching_in_chunks()
-                    .availability_only(),
-            )
+            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
             .await
             .unwrap();
 
@@ -3329,11 +3331,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(
-                query(bounds(0.1, 0.4), window(3, 5))
-                    .searching_in_chunks()
-                    .availability_only(),
-            )
+            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
             .await
             .unwrap();
 
@@ -3371,7 +3369,7 @@ mod grid_request_tests {
 
         // the aggregation is expected once, so a second request for it would fail the test
         for _ in 0..2 {
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks())
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
                 .await
                 .unwrap();
         }
@@ -3417,7 +3415,7 @@ mod grid_request_tests {
             )
             .unwrap()
         }] {
-            meta.loading_info(query(bounds(0.1, 0.4), window).searching_in_chunks())
+            meta.loading_info(query(bounds(0.1, 0.4), window).in_parts())
                 .await
                 .unwrap();
         }
@@ -3447,8 +3445,8 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let (first, second) = futures::join!(
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks()),
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).searching_in_chunks()),
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts()),
+            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts()),
         );
         assert_eq!(first.unwrap().tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(
@@ -3475,7 +3473,7 @@ mod grid_request_tests {
 
         for time in [window(3, 5), interval(3)] {
             let result = meta
-                .loading_info(query(world, time).searching_in_chunks().for_display())
+                .loading_info(query(world, time).in_parts().for_display())
                 .await;
 
             assert!(matches!(
@@ -3506,7 +3504,7 @@ mod grid_request_tests {
 
         // more cells than `max_footprint_searches` (50 in tests), which only bounds footprints to show
         let loading_info = meta
-            .loading_info(query(world, window(3, 5)).searching_in_chunks())
+            .loading_info(query(world, window(3, 5)).in_parts())
             .await
             .unwrap();
 

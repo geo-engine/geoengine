@@ -361,7 +361,7 @@ where
         self.processor.time_query(query, ctx).await
     }
 
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::RasterQueryRectangle,
         precision: crate::engine::FootprintPrecision,
