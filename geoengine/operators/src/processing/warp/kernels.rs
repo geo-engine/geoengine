@@ -19,7 +19,7 @@
 //! upper left and lower right corner in the input, as in GDAL, and `bilinear` interpolates around
 //! its projected center. Output pixels whose corners or center cannot be projected have no data.
 
-use crate::adapters::TileReprojectionSubqueryGridInfo;
+use crate::adapters::{ApproxProjection, TileReprojectionSubqueryGridInfo};
 use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
 };
@@ -258,7 +258,7 @@ impl TileSpans {
                     .into_par_iter()
                     .map(|i| coordinate((i / width) as f64 + 0.5, (i % width) as f64 + 0.5))
                     .collect();
-                let centers = projection.project(&centers, pool)?;
+                let centers = projection.project(&centers, width, pool)?;
                 Ok::<_, crate::error::Error>(
                     centers
                         .into_par_iter()
@@ -273,7 +273,7 @@ impl TileSpans {
                     .into_par_iter()
                     .flat_map_iter(|y| (0..=width).map(move |x| coordinate(y as f64, x as f64)))
                     .collect();
-                let corners = projection.project(&corners, pool)?;
+                let corners = projection.project(&corners, width + 1, pool)?;
                 let corner = |y: usize, x: usize| to_input_pixels(corners[y * (width + 1) + x]);
                 Ok((0..height * width)
                     .into_par_iter()
@@ -341,24 +341,31 @@ pub struct KernelProjection {
     pub out_srs: SpatialReference,
     /// the tiling grids of input and output
     pub grids: TileReprojectionSubqueryGridInfo,
+    /// the largest error in input pixels of the approximate projection, 0 to project exactly (see
+    /// [`ApproxProjection`])
+    pub approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl KernelProjection {
-    /// Projects `coordinates` from the output into the input spatial reference, `None` for
-    /// coordinates outside of the output grid (as in the nearest-neighbour reprojection) or that
-    /// cannot be projected.
+    /// Projects `coordinates`, rows of `row_len` coordinates, from the output into the input
+    /// spatial reference, `None` for coordinates outside of the output grid (as in the
+    /// nearest-neighbour reprojection) or that cannot be projected. Rows within the output grid are
+    /// projected approximately, with an error of at most `approximation_error` input pixels (see
+    /// [`ApproxProjection`]).
     fn project(
         &self,
         coordinates: &[Coordinate2D],
+        row_len: usize,
         pool: &ThreadPool,
     ) -> Result<Vec<Option<Coordinate2D>>> {
-        const CHUNK_SIZE: usize = 64 * 512;
+        let chunk_size = row_len * (64 * 512_usize).div_ceil(row_len);
         let valid_area = self.grids.out_spatial_grid.spatial_partition().as_bbox();
+        let in_geo_transform = self.grids.in_spatial_grid.geo_transform();
         let mut projected = vec![None; coordinates.len()];
         pool.install(|| {
             projected
-                .par_chunks_mut(CHUNK_SIZE)
-                .zip(coordinates.par_chunks(CHUNK_SIZE))
+                .par_chunks_mut(chunk_size)
+                .zip(coordinates.par_chunks(chunk_size))
                 .try_for_each(|(projected, coordinates)| {
                     let Some(bounds) = BoundingBox2D::from_coord_ref_iter(coordinates.iter())
                     else {
@@ -366,12 +373,18 @@ impl KernelProjection {
                     };
                     let projector =
                         DefaultCoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
-                    // the whole chunk at once if it lies in the valid area, else coordinate by coordinate
-                    if valid_area.contains_bbox(&bounds)
-                        && let Ok(coordinates) = projector.project_coordinates(coordinates)
-                    {
-                        for (projected, coordinate) in projected.iter_mut().zip(coordinates) {
-                            *projected = Some(coordinate);
+                    // row by row if the chunk lies in the valid area, else coordinate by coordinate
+                    if valid_area.contains_bbox(&bounds) {
+                        let approx = ApproxProjection::new(
+                            &projector,
+                            &in_geo_transform,
+                            self.approximation_error,
+                        );
+                        for (projected, row) in projected
+                            .chunks_mut(row_len)
+                            .zip(coordinates.chunks(row_len))
+                        {
+                            approx.project_row(row, projected);
                         }
                         return Ok(());
                     }

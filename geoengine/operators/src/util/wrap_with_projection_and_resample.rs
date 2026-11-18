@@ -167,7 +167,7 @@ impl WrapWithProjectionAndResample {
                 ProcessingGraphOperatorPath::initialize_root(),
                 source.initialized_operator,
                 params,
-                exe_ctx.tiling_specification(),
+                exe_ctx,
             )?
             .boxed(),
             span,

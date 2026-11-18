@@ -14,6 +14,7 @@ Name | Type
 `upsampling` | [WarpUpsamplingMethod](WarpUpsamplingMethod.md)
 `outputDataType` | [RasterDataType](RasterDataType.md)
 `deriveOutSpec` | [DeriveOutRasterSpecsSource](DeriveOutRasterSpecsSource.md)
+`approximationErrorThreshold` | number
 
 ## Example
 
@@ -29,6 +30,7 @@ const example = {
   "upsampling": null,
   "outputDataType": null,
   "deriveOutSpec": null,
+  "approximationErrorThreshold": null,
 } satisfies WarpParameters
 
 console.log(example)

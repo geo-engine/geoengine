@@ -17952,6 +17952,18 @@
           "deriveOutSpec": {
             "$ref": "#/components/schemas/DeriveOutRasterSpecsSource",
             "description": "How the output grid is derived when reprojecting, as in `Reprojection`:\n`projectionBounds` (default) derives it from the area of use of the input's spatial\nreference, `dataBounds` from the data bounds."
+          },
+          "approximationErrorThreshold": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "The largest error in input pixels of the approximate coordinate transformation when\nreprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's\n`[query_context] reprojection_approximation_error_px` (`0.125` by default).",
+            "examples": [
+              0.125,
+              0.0
+            ]
           }
         }
       },

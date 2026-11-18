@@ -34,6 +34,9 @@ pub struct WarpParameters {
     /// How the output grid is derived when reprojecting, as in `Reprojection`: `projectionBounds` (default) derives it from the area of use of the input's spatial reference, `dataBounds` from the data bounds.
     #[serde(rename = "deriveOutSpec", skip_serializing_if = "Option::is_none")]
     pub derive_out_spec: Option<models::DeriveOutRasterSpecsSource>,
+    /// The largest error in input pixels of the approximate coordinate transformation when reprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's `[query_context] reprojection_approximation_error_px` (`0.125` by default).
+    #[serde(rename = "approximationErrorThreshold", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub approximation_error_threshold: Option<Option<f64>>,
 }
 
 impl WarpParameters {
@@ -47,6 +50,7 @@ impl WarpParameters {
             upsampling: None,
             output_data_type: None,
             derive_out_spec: None,
+            approximation_error_threshold: None,
         }
     }
 }

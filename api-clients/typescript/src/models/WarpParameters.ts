@@ -95,6 +95,12 @@ export interface WarpParameters {
      * reference, `dataBounds` from the data bounds.
      */
     deriveOutSpec?: DeriveOutRasterSpecsSource;
+    /**
+     * The largest error in input pixels of the approximate coordinate transformation when
+     * reprojecting, as `gdalwarp -et`. `0` projects every pixel exactly. Defaults to the server's
+     * `[query_context] reprojection_approximation_error_px` (`0.125` by default).
+     */
+    approximationErrorThreshold?: number | null;
 }
 
 
@@ -123,6 +129,7 @@ export function WarpParametersFromJSONTyped(json: any, ignoreDiscriminator: bool
         'upsampling': json['upsampling'] == null ? undefined : WarpUpsamplingMethodFromJSON(json['upsampling']),
         'outputDataType': json['outputDataType'] === undefined ? undefined : json['outputDataType'] === null ? null : RasterDataTypeFromJSON(json['outputDataType']),
         'deriveOutSpec': json['deriveOutSpec'] == null ? undefined : DeriveOutRasterSpecsSourceFromJSON(json['deriveOutSpec']),
+        'approximationErrorThreshold': json['approximationErrorThreshold'] === undefined ? undefined : json['approximationErrorThreshold'] === null ? null : json['approximationErrorThreshold'],
     };
 }
 
@@ -144,6 +151,7 @@ export function WarpParametersToJSONTyped(value?: WarpParameters | null, ignoreD
         'upsampling': WarpUpsamplingMethodToJSON(value['upsampling']),
         'outputDataType': RasterDataTypeToJSON(value['outputDataType']),
         'deriveOutSpec': DeriveOutRasterSpecsSourceToJSON(value['deriveOutSpec']),
+        'approximationErrorThreshold': value['approximationErrorThreshold'],
     };
 }
 

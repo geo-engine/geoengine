@@ -1096,11 +1096,13 @@ mod tests {
 
     /// The same tiles as on the code before the tile path ran on `Warp`, except for the tiles
     /// coarser than the data, which are now resampled with `average` for the default gradient (see
-    /// `WarpMethods::for_symbology`): per source (EPSG:4326, EPSG:3857, UTM 32N) and tile matrix
-    /// set, three tile matrices with tiles inside, at the edge of and outside the data. The fixture
-    /// holds a SHA-256 of each PNG, or the status of a failed request; it is written if it does not
-    /// exist. With `GEOENGINE_TEST_TILES_DIR`, the
-    /// PNGs are written there, e.g. to compare the pixels of two versions.
+    /// `WarpMethods::for_symbology`), and one tile at the edge of the UTM data, where the
+    /// approximate projection (see `ApproxProjection`) moves pixels by up to an eighth of an input
+    /// pixel: per source (EPSG:4326, EPSG:3857, UTM 32N) and tile matrix set, three tile matrices
+    /// with tiles inside, at the edge of and outside the data. The fixture holds a SHA-256 of each
+    /// PNG, or the status of a failed request; it is written if it does not exist. With
+    /// `GEOENGINE_TEST_TILES_DIR`, the PNGs are written there, e.g. to compare the pixels of two
+    /// versions.
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_renders_the_tiles_of_the_regression_fixture(app_ctx: PostgresContext<NoTls>) {

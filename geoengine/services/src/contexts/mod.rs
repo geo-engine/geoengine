@@ -294,6 +294,7 @@ where
     ort_environment: OrtEnvironment,
     expression_environment: ExpressionEnvironment,
     warp_mode_max_memory_per_tile: usize,
+    reprojection_approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -311,6 +312,7 @@ where
         ort_environment: OrtEnvironment,
         expression_environment: ExpressionEnvironment,
         warp_mode_max_memory_per_tile: usize,
+        reprojection_approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
     ) -> Self {
         Self {
             db,
@@ -322,6 +324,7 @@ where
             ort_environment,
             expression_environment,
             warp_mode_max_memory_per_tile,
+            reprojection_approximation_error,
         }
     }
 }
@@ -484,6 +487,10 @@ where
 
     fn warp_mode_max_memory_per_tile(&self) -> usize {
         self.warp_mode_max_memory_per_tile
+    }
+
+    fn reprojection_approximation_error(&self) -> geoengine_datatypes::util::NonNegativeFiniteF64 {
+        self.reprojection_approximation_error
     }
 }
 

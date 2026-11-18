@@ -211,6 +211,9 @@ pub struct QueryContext {
     /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
     /// output tile
     pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,
+    /// The largest error in input pixels of the approximate coordinate transformation of a raster
+    /// reprojection, for a `Warp` without `approximationErrorThreshold`; `0` projects exactly
+    pub reprojection_approximation_error_px: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl QueryContext {
@@ -1102,6 +1105,20 @@ mod tests {
         assert!(rejects::<QueryContext>(
             "warp_mode_max_memory_per_tile_mb",
             0
+        ));
+    }
+
+    #[test]
+    fn it_defaults_the_reprojection_approximation_error_to_gdals_default() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.reprojection_approximation_error_px.get(),
+            0.125,
+            "GDAL's default for `gdalwarp -et`"
+        );
+        assert!(rejects::<QueryContext>(
+            "reprojection_approximation_error_px",
+            -1
         ));
     }
 
