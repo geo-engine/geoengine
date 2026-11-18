@@ -41,7 +41,7 @@ pub struct AssetProbe {
 }
 
 #[derive(Debug, Snafu)]
-#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)) /* disables default `Snafu` suffix */, module(error), visibility(pub(crate)))]
 pub enum AssetProbeError {
     #[snafu(display("Could not read the header of {}: {source}", path.display()))]
     Read {
@@ -125,7 +125,7 @@ impl AssetProber {
                 let info = reader
                     .read_raster_info(params)
                     .await
-                    .context(ReadSnafu { path: &file_path })?;
+                    .context(error::Read { path: &file_path })?;
                 if let (Some(key), Some(ttl)) = (cache_key, cache_ttl) {
                     reader.cache_header(key, info.clone(), CacheHint::seconds(ttl.seconds()));
                 }
@@ -170,19 +170,20 @@ fn asset_probe_from_raster_info(
     info: &RasterInfo,
     path: PathBuf,
 ) -> Result<AssetProbe, AssetProbeError> {
-    let full_resolution = info.levels.first().context(NoBandSnafu { path: &path })?;
-    let width = NonZeroUsize::new(full_resolution.size_x).context(NoPixelsSnafu { path: &path })?;
+    let full_resolution = info.levels.first().context(error::NoBand { path: &path })?;
+    let width =
+        NonZeroUsize::new(full_resolution.size_x).context(error::NoPixels { path: &path })?;
     let height =
-        NonZeroUsize::new(full_resolution.size_y).context(NoPixelsSnafu { path: &path })?;
+        NonZeroUsize::new(full_resolution.size_y).context(error::NoPixels { path: &path })?;
     let geo_transform = info
         .geo_transform
-        .context(NoGeoTransformSnafu { path: &path })?;
+        .context(error::NoGeoTransform { path: &path })?;
     let geo_transform = GeoTransform::new(
         geo_transform.origin_coordinate,
         geo_transform.x_pixel_size.get(),
         geo_transform.y_pixel_size.get(),
     )
-    .context(GeoTransformSnafu { path })?;
+    .context(error::GeoTransform { path })?;
 
     Ok(AssetProbe {
         geo_transform,
