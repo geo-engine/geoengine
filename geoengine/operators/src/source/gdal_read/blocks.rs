@@ -148,8 +148,17 @@ impl BlockIo {
         block_cache_hint(cache_hint, self.min_ttl).may_cache()
     }
 
-    /// The header of the file, remembered or read and then remembered, and whether this call
-    /// remembered it. `None` if the file is missing and counts as no data.
+    /// The file's header: its levels with their sizes and block sizes, which a block read needs
+    /// to find the level and map the read onto whole blocks.
+    ///
+    /// It comes from the pool's header cache if any worker read it before. Otherwise one worker
+    /// reads it (concurrent reads of the same file join that read), and it is cached for as long
+    /// as the file's blocks: the dataset's cache lifetime, but at least `min_ttl`.
+    ///
+    /// The `bool` is whether this call put the header into the cache. It is true once per file
+    /// and cache lifetime, so the caller logs what it learns from the header, such as a missing
+    /// level, once and not for every tile. The header is `None` if the file does not exist and
+    /// its dataset counts a missing file as no data.
     async fn header(
         &self,
         params: &GdalDatasetParameters,
