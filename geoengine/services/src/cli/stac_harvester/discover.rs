@@ -428,7 +428,13 @@ fn process_sample_assets(
                 item_epsg,
                 common::StacExtensionMajorVersion::V2,
             )
-            .or(probe.and_then(|probe| probe.epsg));
+            // dataset keys, names and the `--epsg` filter use EPSG codes
+            .or(probe
+                .and_then(|probe| probe.spatial_reference)
+                .filter(|spatial_reference| {
+                    *spatial_reference.authority() == SpatialReferenceAuthority::Epsg
+                })
+                .map(SpatialReference::code));
             let Some(epsg) = epsg else {
                 continue;
             };
@@ -1701,7 +1707,7 @@ mod tests {
                 height: std::num::NonZeroUsize::new(5601).unwrap(),
                 data_type: RasterDataType::U8,
                 no_data_value: Some(255.),
-                epsg: Some(4326),
+                spatial_reference: Some(SpatialReference::epsg_4326()),
             },
         )]);
 
