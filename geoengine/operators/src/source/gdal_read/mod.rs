@@ -127,8 +127,9 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             level_factor.or(undeclared_factor),
             blocks.filter(|blocks| blocks.reads(&params)),
         ) {
-            // a declared level, the full resolution, or an undeclared level from a file that has
-            // it; a file without the level answers `MissingOverviewLevel`, handled below
+            // a declared level, the full resolution, or an undeclared level. A file without the
+            // level is resampled from its coarsest finer overview; only a file without any
+            // overview answers `MissingOverviewLevel`, handled below
             (Some(factor), Some(blocks)) => {
                 blocks
                     .read::<T>(
@@ -159,8 +160,8 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
                     .await
             }
         };
-        // A file that lacks the level, or (undeclared) whose level GDAL does not read one to one,
-        // falls back to GDAL's window read. Only for a declared level is that a broken promise.
+        // A file that lacks the level (and, through blocks, any finer overview) falls back to
+        // GDAL's window read. Only for a declared level is that a broken promise.
         let read = match read {
             Err(GdalProcessPoolError::IpcProcessError {
                 source: IpcProcessError::MissingOverviewLevel { file, factor },
