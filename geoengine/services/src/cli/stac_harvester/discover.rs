@@ -24,6 +24,9 @@ use crate::datasets::external::stac::{
 use crate::util::retry::{RetryPolicy, retry_http};
 use futures::StreamExt;
 use geoengine_operators::engine::SpatialGridDescriptor as GeoOpSpatialGridDescriptor;
+use geoengine_operators::source::gdal_worker_process::{
+    DEFAULT_HEADER_CACHE_ENTRIES, GdalProcessPool, WorkerConfig,
+};
 
 // ---------------------------------------------------------------------------
 // Discover Mapping
@@ -946,9 +949,24 @@ async fn probe_netcdf_sample_assets(
         }
     }
 
+    if sample_hrefs.is_empty() {
+        return SampleAssetProbes::new();
+    }
+
+    // the workers inherit the `AWS_*` environment variables
+    let workers = sample_hrefs.len().min(MAX_CONCURRENT_SAMPLE_PROBES);
+    let prober = asset_probe::AssetProber::new(GdalProcessPool::new(
+        workers,
+        workers,
+        workers,
+        DEFAULT_HEADER_CACHE_ENTRIES,
+        WorkerConfig::default(),
+    ));
+    let prober = &prober;
+
     futures::stream::iter(sample_hrefs)
         .map(|(asset_key, href)| async move {
-            match asset_probe::probe_asset(PathBuf::from(&href), None).await {
+            match prober.probe(PathBuf::from(&href), None, None).await {
                 Ok(probe) => Some((asset_key, probe)),
                 Err(error) => {
                     warn!("Skipping NetCDF asset '{asset_key}', could not read {href}: {error}");

@@ -2891,7 +2891,6 @@ dependencies = [
  "futures",
  "futures-util",
  "gdal",
- "gdal-sys",
  "geo",
  "geoengine-api-client",
  "geoengine-datatypes",
