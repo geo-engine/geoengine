@@ -8,6 +8,7 @@
 //! The header is read by the `gdalsource-process` workers (`GdalRequest::Header`), like every
 //! other GDAL read, and kept in the pool's header cache.
 
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -31,8 +32,8 @@ use super::common;
 pub struct AssetProbe {
     /// The geo transform exactly as GDAL reports it, so tiles match what the GDAL source reads.
     pub geo_transform: GeoTransform,
-    pub width: usize,
-    pub height: usize,
+    pub width: NonZeroUsize,
+    pub height: NonZeroUsize,
     pub data_type: RasterDataType,
     pub no_data_value: Option<f64>,
     /// `None` if the file declares no CRS or a CRS without an identifiable EPSG code.
@@ -56,6 +57,8 @@ pub enum AssetProbeError {
     },
     #[snafu(display("{} has no raster band", path.display()))]
     NoBand { path: PathBuf },
+    #[snafu(display("{} has a raster without pixels", path.display()))]
+    NoPixels { path: PathBuf },
 }
 
 impl AssetProbeError {
@@ -168,6 +171,9 @@ fn asset_probe_from_raster_info(
     path: PathBuf,
 ) -> Result<AssetProbe, AssetProbeError> {
     let full_resolution = info.levels.first().context(NoBandSnafu { path: &path })?;
+    let width = NonZeroUsize::new(full_resolution.size_x).context(NoPixelsSnafu { path: &path })?;
+    let height =
+        NonZeroUsize::new(full_resolution.size_y).context(NoPixelsSnafu { path: &path })?;
     let geo_transform = info
         .geo_transform
         .context(NoGeoTransformSnafu { path: &path })?;
@@ -180,8 +186,8 @@ fn asset_probe_from_raster_info(
 
     Ok(AssetProbe {
         geo_transform,
-        width: full_resolution.size_x,
-        height: full_resolution.size_y,
+        width,
+        height,
         data_type: info.data_type,
         no_data_value: info.no_data_value,
         epsg: match info.spatial_reference {
@@ -218,7 +224,7 @@ mod tests {
         assert_eq!(probe.data_type, RasterDataType::U8);
         assert_eq!(probe.epsg, Some(4326));
         assert_eq!(probe.no_data_value, Some(255.));
-        assert_eq!((probe.width, probe.height), (16, 8));
+        assert_eq!((probe.width.get(), probe.height.get()), (16, 8));
         // GDAL derives the pixel size from the coordinate vectors, rounded to 15 digits
         assert_approx_eq!(
             f64,
