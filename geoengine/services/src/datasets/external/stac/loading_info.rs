@@ -61,7 +61,7 @@ pub struct StacMultiBandMetaData {
     /// Upper bound of STAC cell searches one loading info request runs in parallel.
     max_concurrent_cell_searches: usize,
     /// Upper bound of asset file headers one STAC search reads in parallel.
-    max_concurrent_asset_probes: usize,
+    max_concurrent_asset_probes: NonZeroUsize,
     item_time: StacItemTime,
     grid: StacGrid,
     asset_prober: asset_probe::AssetProber,
@@ -807,7 +807,7 @@ impl StacMultiBandMetaData {
                     .await;
                 (file_path, probe)
             })
-            .buffer_unordered(self.max_concurrent_asset_probes)
+            .buffer_unordered(self.max_concurrent_asset_probes.get())
             .collect::<std::collections::HashMap<_, _>>()
             .await;
         let probes = probes
@@ -1794,7 +1794,7 @@ mod tests {
                 .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 max_concurrent_cell_searches: 8,
-                max_concurrent_asset_probes: 8,
+                max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
                 item_time: StacItemTime::Datetime,
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
@@ -1914,7 +1914,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
-            max_concurrent_asset_probes: 8,
+            max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             cache_ttl_secs: None,
             grid: StacGrid::default(),
@@ -1991,7 +1991,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
-            max_concurrent_asset_probes: 8,
+            max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
             asset_prober: asset_probe::AssetProber::new(
@@ -2084,7 +2084,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
-            max_concurrent_asset_probes: 8,
+            max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
             asset_prober: asset_probe::AssetProber::new(
@@ -2186,7 +2186,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
-            max_concurrent_asset_probes: 8,
+            max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
             asset_prober: asset_probe::AssetProber::new(
@@ -2298,7 +2298,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
-            max_concurrent_asset_probes: 8,
+            max_concurrent_asset_probes: NonZeroUsize::new(8).unwrap(),
             item_time,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
