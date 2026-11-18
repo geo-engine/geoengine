@@ -148,7 +148,7 @@ impl MultiBandGdalLoadingInfo {
     }
 
     /// The areas of all files of a time step and bands, regardless of which tile needs them.
-    pub fn file_partitions<'a>(
+    pub fn file_bounds<'a>(
         &'a self,
         time: TimeInterval,
         bands: &'a [u32],

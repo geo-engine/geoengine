@@ -37,21 +37,11 @@ impl FootprintBounds {
         boxes: impl IntoIterator<Item = GridBoundingBox2D>,
         max_boxes: usize,
     ) -> Self {
-        let mut kept: Vec<GridBoundingBox2D> = Vec::new();
-
+        let mut kept = MergingBoxes::new(max_boxes);
         for grid_box in boxes {
-            if kept.iter().any(|other| other.contains(&grid_box)) {
-                continue;
-            }
-            kept.retain(|other| !grid_box.contains(other));
-            kept.push(grid_box);
-
-            if kept.len() > max_boxes {
-                merge_closest_boxes(&mut kept);
-            }
+            kept.add(grid_box);
         }
-
-        Self::Boxes(kept.into())
+        Self::Boxes(kept.into_boxes().collect())
     }
 
     /// `true` if the time step certainly has no data.
@@ -96,63 +86,206 @@ impl FootprintBounds {
     }
 }
 
-/// Merges the two boxes whose hull adds the least area and drops the boxes that hull covers.
+/// The cost of merging two boxes into their hull: first the area the hull adds, then how far the
+/// hull is from a square.
 ///
 /// One hull of all boxes would claim the space between scattered scenes, which is wrong for a
 /// view from Italy to Denmark. Boxes that touch or overlap merge first, so a block of scenes
 /// stays a block. Among pairs that add the same area, such as the neighbors in a row, the pair
 /// with the squarest hull merges, so blocks grow in both directions and not into long strips.
-/// Cost is quadratic in the number of boxes, which is at most one above the limit.
-fn merge_closest_boxes(boxes: &mut Vec<GridBoundingBox2D>) {
-    struct Candidate {
-        i: usize,
-        j: usize,
-        extra: u128,
-        long: u128,
-        short: u128,
-        hull: GridBoundingBox2D,
+/// The added area is the waste measure of Guttman's quadratic R-tree split ("R-Trees: A Dynamic
+/// Index Structure for Spatial Searching", 1984), minimized here instead of maximized.
+#[derive(Debug, Clone, Copy)]
+struct MergeCost {
+    added_area: u128,
+    long_side: u128,
+    short_side: u128,
+}
+
+impl MergeCost {
+    fn of(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> Self {
+        let area = |grid_box: &GridBoundingBox2D| {
+            let [height, width] = grid_box.axis_size();
+            height as u128 * width as u128
+        };
+        let hull = a.extended(b);
+        // an overlap of the two boxes is covered once, not twice
+        let overlap = a.intersection(b).map_or(0, |overlap| area(&overlap));
+        let [height, width] = hull.axis_size();
+        Self {
+            added_area: area(&hull) - (area(a) + area(b) - overlap),
+            long_side: height.max(width) as u128,
+            short_side: height.min(width) as u128,
+        }
     }
 
-    let area = |grid_box: &GridBoundingBox2D| {
-        let [height, width] = grid_box.axis_size();
-        height as u128 * width as u128
-    };
-    // the long and the short side, to compare how far from a square a box is without floats
-    let sides = |grid_box: &GridBoundingBox2D| {
-        let [height, width] = grid_box.axis_size();
-        (height.max(width) as u128, height.min(width) as u128)
-    };
+    fn is_below(&self, other: &Self) -> bool {
+        // compares the ratios of the sides without floats
+        self.added_area < other.added_area
+            || (self.added_area == other.added_area
+                && self.long_side * other.short_side < other.long_side * self.short_side)
+    }
+}
 
-    let mut best: Option<Candidate> = None;
-    for i in 0..boxes.len() {
-        for j in (i + 1)..boxes.len() {
-            let hull = boxes[i].extended(&boxes[j]);
-            let extra = area(&hull).saturating_sub(area(&boxes[i]) + area(&boxes[j]));
-            let (long, short) = sides(&hull);
-            let is_better = best.as_ref().is_none_or(|best| {
-                extra < best.extra || (extra == best.extra && long * best.short < best.long * short)
-            });
-            if is_better {
-                best = Some(Candidate {
-                    i,
-                    j,
-                    extra,
-                    long,
-                    short,
-                    hull,
-                });
+/// The boxes of a footprint while they are added, merged greedily (agglomerative clustering)
+/// whenever there are more than `max_boxes`. A box covered by another is dropped.
+///
+/// Each box remembers its cheapest partner, so adding a box costs one pass over the boxes, not
+/// one over all pairs. A merge only recomputes the boxes whose partner was merged.
+struct MergingBoxes {
+    max_boxes: usize,
+    /// In the order they were added; `None` once dropped or merged.
+    boxes: Vec<Option<GridBoundingBox2D>>,
+    /// For each box its cheapest partner, kept only once there are more boxes than `max_boxes`.
+    partners: Option<Vec<Option<(usize, MergeCost)>>>,
+    count: usize,
+}
+
+impl MergingBoxes {
+    fn new(max_boxes: usize) -> Self {
+        Self {
+            max_boxes,
+            boxes: Vec::new(),
+            partners: None,
+            count: 0,
+        }
+    }
+
+    fn add(&mut self, grid_box: GridBoundingBox2D) {
+        if self
+            .boxes
+            .iter()
+            .flatten()
+            .any(|other| other.contains(&grid_box))
+        {
+            return;
+        }
+        for slot in &mut self.boxes {
+            if slot.is_some_and(|other| grid_box.contains(&other)) {
+                *slot = None;
+                self.count -= 1;
+            }
+        }
+        if self.boxes.len() > self.max_boxes.saturating_add(1).saturating_mul(2) {
+            self.compact();
+        }
+
+        let index = self.boxes.len();
+        self.boxes.push(Some(grid_box));
+        self.count += 1;
+
+        if let Some(partners) = &mut self.partners {
+            partners.push(None);
+            for (other_index, other) in self.boxes.iter().enumerate() {
+                let Some(other) = other.filter(|_| other_index != index) else {
+                    continue;
+                };
+                let cost = MergeCost::of(&grid_box, &other);
+                for (row, partner) in [(other_index, index), (index, other_index)] {
+                    if partners[row].is_none_or(|(_, best)| cost.is_below(&best)) {
+                        partners[row] = Some((partner, cost));
+                    }
+                }
+            }
+            self.refresh_partners();
+        } else if self.count > self.max_boxes {
+            self.compute_partners();
+        }
+
+        if self.count > self.max_boxes {
+            self.merge_cheapest_pair();
+        }
+    }
+
+    /// Merges the pair with the cheapest hull, and drops the boxes that hull covers.
+    fn merge_cheapest_pair(&mut self) {
+        self.refresh_partners();
+        let Some((a, b)) = self.partners.as_ref().and_then(|partners| {
+            partners
+                .iter()
+                .enumerate()
+                .filter(|(row, _)| self.boxes[*row].is_some())
+                .filter_map(|(row, partner)| partner.map(|(other, cost)| (row, other, cost)))
+                .reduce(|best, candidate| {
+                    if candidate.2.is_below(&best.2) {
+                        candidate
+                    } else {
+                        best
+                    }
+                })
+                .map(|(a, b, _)| (a, b))
+        }) else {
+            return;
+        };
+        let (Some(box_a), Some(box_b)) = (self.boxes[a], self.boxes[b]) else {
+            debug_assert!(false, "partners are refreshed before a merge");
+            return;
+        };
+        self.boxes[a] = None;
+        self.boxes[b] = None;
+        self.count -= 2;
+        self.add(box_a.extended(&box_b));
+    }
+
+    /// Finds a new partner for each box whose partner is gone.
+    fn refresh_partners(&mut self) {
+        let Some(partners) = &self.partners else {
+            return;
+        };
+        let stale = partners
+            .iter()
+            .enumerate()
+            .filter(|(row, partner)| {
+                self.boxes[*row].is_some()
+                    && partner.is_none_or(|(other, _)| self.boxes[other].is_none())
+            })
+            .map(|(row, _)| row)
+            .collect::<Vec<_>>();
+        for row in stale {
+            let partner = self.cheapest_partner(row);
+            if let Some(partners) = &mut self.partners {
+                partners[row] = partner;
             }
         }
     }
 
-    let Some(Candidate { i, j, hull, .. }) = best else {
-        return;
-    };
-    // j > i, so removing j first keeps i valid
-    boxes.swap_remove(j);
-    boxes.swap_remove(i);
-    boxes.retain(|other| !hull.contains(other));
-    boxes.push(hull);
+    fn cheapest_partner(&self, row: usize) -> Option<(usize, MergeCost)> {
+        let grid_box = self.boxes[row]?;
+        self.boxes
+            .iter()
+            .enumerate()
+            .filter(|(other_index, _)| *other_index != row)
+            .filter_map(|(other_index, other)| {
+                other.map(|other| (other_index, MergeCost::of(&grid_box, &other)))
+            })
+            .reduce(|best, candidate| {
+                if candidate.1.is_below(&best.1) {
+                    candidate
+                } else {
+                    best
+                }
+            })
+    }
+
+    fn compute_partners(&mut self) {
+        self.partners = Some(
+            (0..self.boxes.len())
+                .map(|row| self.cheapest_partner(row))
+                .collect(),
+        );
+    }
+
+    /// Removes the dropped boxes, which renumbers the boxes and so their partners.
+    fn compact(&mut self) {
+        self.boxes.retain(Option::is_some);
+        if self.partners.is_some() {
+            self.compute_partners();
+        }
+    }
+
+    fn into_boxes(self) -> impl Iterator<Item = GridBoundingBox2D> {
+        self.boxes.into_iter().flatten()
+    }
 }
 
 /// The footprint of one time step of a query.
@@ -277,7 +410,9 @@ pub fn zip_footprints(
     .boxed()
 }
 
-/// How exact the boxes of a footprint stream have to be. A source may answer more exactly than asked.
+/// How exact the boxes of a footprint stream have to be: `Availability` answers *when* there is
+/// data, `Coverage` also *where*. Both are one query, because every operator combines them by the
+/// same rule. A source may answer more exactly than asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FootprintPrecision {
     /// Only whether a step has data. A step with data may carry the whole query bounds as its
@@ -303,41 +438,53 @@ pub fn unknown_footprints(
 }
 
 #[cfg(test)]
+pub(crate) mod test_util;
+
+#[cfg(test)]
 mod tests {
+    use super::test_util::{boxes, grid_box};
     use super::*;
-    use crate::{
-        engine::{
-            MockExecutionContext, MultipleRasterSources, ProcessingGraphOperatorPath,
-            RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterQueryProcessor as _,
-            RasterResultDescriptor, SingleRasterOrVectorSource, SingleRasterSource,
-            SpatialGridDescriptor, TimeDescriptor, TypedRasterOperator,
-        },
-        mock::{MockRasterSource, MockRasterSourceParams},
-        processing::{
-            BandFilter, BandFilterParams, BandsByNameOrIndex, Expression, ExpressionParams,
-            RasterStacker, RasterStackerParams, TimeShift, TimeShiftParams,
-        },
-    };
     use futures::{TryStreamExt, stream};
-    use geoengine_datatypes::{
-        primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeGranularity, TimeStep},
-        raster::{
-            EmptyGrid2D, GeoTransform, Grid2D, GridShape2D, RasterDataType, RasterTile2D,
-            RenameBands,
-        },
-        spatial_reference::SpatialReference,
-        util::test::TestDefault,
-    };
 
-    fn grid_box(y_min: isize, y_max: isize, x_min: isize, x_max: isize) -> GridBoundingBox2D {
-        GridBoundingBox2D::new_min_max(y_min, y_max, x_min, x_max).unwrap()
-    }
+    #[tokio::test]
+    async fn it_ends_the_footprint_stream_with_an_error_when_the_query_is_aborted() {
+        use crate::engine::{
+            MockExecutionContext, ProcessingGraphOperatorPath, QueryContext as _,
+            RasterQueryProcessor as _,
+        };
+        use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
+        use geoengine_datatypes::util::test::TestDefault;
 
-    fn boxes(bounds: &FootprintBounds) -> &[GridBoundingBox2D] {
-        match bounds {
-            FootprintBounds::Unknown => panic!("expected boxes"),
-            FootprintBounds::Boxes(boxes) => boxes,
-        }
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels =
+            geoengine_datatypes::raster::GridShape2D::new_2d(2, 2);
+        let mut query_ctx = exe_ctx.mock_query_context_test_default();
+        let abort = query_ctx.abort_trigger().unwrap();
+        let processor = super::test_util::two_band_source()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+        let query = RasterQueryRectangle::new(
+            grid_box(-2, -1, 0, 3),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+
+        let mut footprints = processor
+            .footprint_query(query, FootprintPrecision::Coverage, &query_ctx)
+            .await
+            .unwrap();
+        abort.abort();
+
+        assert!(matches!(
+            footprints.next().await,
+            Some(Err(crate::error::Error::QueryCanceled))
+        ));
+        assert!(footprints.next().await.is_none());
     }
 
     #[test]
@@ -375,13 +522,97 @@ mod tests {
         // and the blocks one of 5 x 4
         let (strip_a, strip_b) = (grid_box(0, 0, 5, 8), grid_box(0, 0, 9, 12));
         let (block, below) = (grid_box(0, 3, 0, 3), grid_box(4, 4, 0, 3));
-        let mut boxes = vec![strip_a, strip_b, block, below];
-
-        merge_closest_boxes(&mut boxes);
+        let bounds = FootprintBounds::from_boxes([strip_a, strip_b, block, below], 3);
+        let boxes = boxes(&bounds);
 
         assert_eq!(boxes.len(), 3);
         assert!(boxes.contains(&grid_box(0, 4, 0, 3)));
         assert!(boxes.contains(&strip_a) && boxes.contains(&strip_b));
+    }
+
+    #[test]
+    fn it_counts_the_overlap_of_two_boxes_once() {
+        // the overlapping pair adds 50 pixels (hull 225, boxes 175 together), the other pair 30
+        let (overlapping_a, overlapping_b) = (grid_box(0, 9, 0, 9), grid_box(5, 14, 5, 14));
+        let (apart_a, apart_b) = (grid_box(100, 109, 0, 9), grid_box(100, 109, 13, 22));
+        let bounds =
+            FootprintBounds::from_boxes([overlapping_a, overlapping_b, apart_a, apart_b], 3);
+        let boxes = boxes(&bounds);
+
+        assert_eq!(boxes.len(), 3);
+        assert!(boxes.contains(&grid_box(100, 109, 0, 22)));
+        assert!(boxes.contains(&overlapping_a) && boxes.contains(&overlapping_b));
+    }
+
+    #[test]
+    fn it_merges_the_same_pairs_as_trying_all_pairs() {
+        // the plain algorithm: after each box over the limit, merge the cheapest of all pairs
+        fn merge_by_trying_all_pairs(
+            input: &[GridBoundingBox2D],
+            max_boxes: usize,
+        ) -> Vec<GridBoundingBox2D> {
+            let mut kept: Vec<GridBoundingBox2D> = Vec::new();
+            let add = |kept: &mut Vec<GridBoundingBox2D>, grid_box: GridBoundingBox2D| {
+                if !kept.iter().any(|other| other.contains(&grid_box)) {
+                    kept.retain(|other| !grid_box.contains(other));
+                    kept.push(grid_box);
+                }
+            };
+            for &grid_box in input {
+                add(&mut kept, grid_box);
+                if kept.len() > max_boxes {
+                    let (i, j) = (0..kept.len())
+                        .flat_map(|i| ((i + 1)..kept.len()).map(move |j| (i, j)))
+                        .reduce(|best, pair| {
+                            let cost = |(i, j): (usize, usize)| MergeCost::of(&kept[i], &kept[j]);
+                            if cost(pair).is_below(&cost(best)) {
+                                pair
+                            } else {
+                                best
+                            }
+                        })
+                        .unwrap();
+                    let hull = kept[i].extended(&kept[j]);
+                    kept.remove(j);
+                    kept.remove(i);
+                    add(&mut kept, hull);
+                }
+            }
+            kept
+        }
+
+        // scattered boxes of different sizes, so that no two pairs cost the same
+        let mut seed: u64 = 7;
+        let mut random = |below: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % below) as isize
+        };
+        let input = (0..500)
+            .map(|_| {
+                let (y, x) = (random(100_000), random(100_000));
+                grid_box(y, y + random(2_000), x, x + random(2_000))
+            })
+            .collect::<Vec<_>>();
+
+        for max_boxes in [1, 8, DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT] {
+            let mut expected = merge_by_trying_all_pairs(&input, max_boxes);
+            let bounds = FootprintBounds::from_boxes(input.clone(), max_boxes);
+            let mut merged = boxes(&bounds).to_vec();
+            let order = |grid_box: &GridBoundingBox2D| {
+                (
+                    grid_box.y_min(),
+                    grid_box.x_min(),
+                    grid_box.y_max(),
+                    grid_box.x_max(),
+                )
+            };
+            expected.sort_by_key(order);
+            merged.sort_by_key(order);
+
+            assert_eq!(merged, expected, "max_boxes {max_boxes}");
+        }
     }
 
     #[test]
@@ -460,347 +691,6 @@ mod tests {
 
         assert_eq!(boxes(&union), [a, b]);
         assert!(!union.intersects(&grid_box(3, 3, 3, 3)));
-    }
-
-    /// The tile at x position `tile_x` of the test grid: 2×2 pixels, in one row of tiles.
-    fn tile(start: i64, tile_x: isize, band: u32, has_data: bool) -> RasterTile2D<u8> {
-        let shape = GridShape2D::new_2d(2, 2);
-        RasterTile2D {
-            time: TimeInterval::new_unchecked(start, start + 5),
-            tile_position: [-1, tile_x].into(),
-            band,
-            global_geo_transform: TestDefault::test_default(),
-            grid_array: if has_data {
-                Grid2D::new(shape, vec![1, 2, 3, 4]).unwrap().into()
-            } else {
-                EmptyGrid2D::new(shape).into()
-            },
-            properties: Default::default(),
-            cache_hint: CacheHint::no_cache(),
-        }
-    }
-
-    fn tile_box(tile_x: isize) -> GridBoundingBox2D {
-        grid_box(-2, -1, tile_x * 2, tile_x * 2 + 1)
-    }
-
-    fn regular_time() -> TimeDescriptor {
-        TimeDescriptor::new_regular_with_epoch(
-            Some(TimeInterval::new_unchecked(0, 10)),
-            TimeStep::millis(5).unwrap(),
-        )
-    }
-
-    /// A source with `band_count` bands. Time steps without tiles need empty tiles to exist.
-    fn source(
-        data: Vec<RasterTile2D<u8>>,
-        band_count: u32,
-        time: TimeDescriptor,
-    ) -> TypedRasterOperator {
-        let bands = (0..band_count)
-            .map(|band| RasterBandDescriptor::new_unitless(format!("band{band}")))
-            .collect();
-
-        MockRasterSource {
-            params: MockRasterSourceParams {
-                data,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time,
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::test_default(),
-                        grid_box(-2, -1, 0, 3),
-                    ),
-                    bands: RasterBandDescriptors::new(bands).unwrap(),
-                },
-            },
-        }
-        .typed()
-    }
-
-    /// Band 0 has data in tile 0 at the first step, band 1 in tile 1 at both steps.
-    fn two_band_source() -> TypedRasterOperator {
-        source(
-            vec![
-                tile(0, 0, 0, true),
-                tile(0, 0, 1, false),
-                tile(0, 1, 0, false),
-                tile(0, 1, 1, true),
-                tile(5, 0, 0, false),
-                tile(5, 0, 1, false),
-                tile(5, 1, 0, false),
-                tile(5, 1, 1, true),
-            ],
-            2,
-            regular_time(),
-        )
-    }
-
-    /// Runs the footprint query and the real query, and checks that no valid tile lies outside of
-    /// its footprint, because a footprint that is too tight would silently hide data.
-    async fn checked_footprints(operator: TypedRasterOperator, bands: &[u32]) -> Vec<Footprint> {
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape2D::new_2d(2, 2);
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-
-        let processor = operator
-            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap()
-            .query_processor()
-            .unwrap()
-            .get_u8()
-            .unwrap();
-
-        let query = RasterQueryRectangle::new(
-            grid_box(-2, -1, 0, 3),
-            TimeInterval::new_unchecked(0, 10),
-            BandSelection::new(bands.to_vec()).unwrap(),
-        );
-
-        let footprints: Vec<Footprint> = processor
-            .footprint_query(query.clone(), FootprintPrecision::Coverage, &query_ctx)
-            .await
-            .unwrap()
-            .try_collect()
-            .await
-            .unwrap();
-
-        // a footprint stream has exactly the time steps of the time stream
-        let times: Vec<TimeInterval> = processor
-            .time_query(query.time_interval(), &query_ctx)
-            .await
-            .unwrap()
-            .try_collect()
-            .await
-            .unwrap();
-        assert_eq!(
-            footprints.iter().map(|step| step.time).collect::<Vec<_>>(),
-            times
-        );
-
-        let tiles: Vec<RasterTile2D<u8>> = processor
-            .raster_query(query, &query_ctx)
-            .await
-            .unwrap()
-            .try_collect()
-            .await
-            .unwrap();
-        assert_ne!(tiles.len(), 0);
-
-        for tile in tiles.iter().filter(|tile| !tile.is_empty()) {
-            let footprint = footprints
-                .iter()
-                .find(|footprint| footprint.time == tile.time)
-                .expect("every time step of the data has a footprint");
-            assert!(
-                footprint
-                    .bounds
-                    .intersects(&tile.tile_information().global_pixel_bounds()),
-                "tile {:?} at {:?} is outside of {:?}",
-                tile.tile_position,
-                tile.time,
-                footprint.bounds
-            );
-        }
-
-        footprints
-    }
-
-    fn step_boxes(footprints: &[Footprint]) -> Vec<&[GridBoundingBox2D]> {
-        footprints.iter().map(|step| boxes(&step.bounds)).collect()
-    }
-
-    #[tokio::test]
-    async fn band_filter_answers_for_the_selected_input_band() {
-        let band_filter = BandFilter {
-            params: BandFilterParams {
-                bands: BandsByNameOrIndex::Name(vec!["band1".to_string()]),
-            },
-            sources: SingleRasterSource {
-                raster: two_band_source(),
-            },
-        }
-        .typed();
-
-        let footprints = checked_footprints(band_filter, &[0]).await;
-
-        assert_eq!(
-            step_boxes(&footprints),
-            [[tile_box(1)].as_slice(), [tile_box(1)].as_slice()]
-        );
-    }
-
-    fn stack(rasters: Vec<TypedRasterOperator>) -> TypedRasterOperator {
-        RasterStacker {
-            params: RasterStackerParams {
-                rename_bands: RenameBands::Default,
-            },
-            sources: MultipleRasterSources { rasters },
-        }
-        .typed()
-    }
-
-    /// Two sources: tile 0 at the first step and tile 1 at the first step.
-    fn stack_inputs() -> Vec<TypedRasterOperator> {
-        vec![
-            source(
-                vec![
-                    tile(0, 0, 0, true),
-                    tile(0, 1, 0, false),
-                    tile(5, 0, 0, false),
-                    tile(5, 1, 0, false),
-                ],
-                1,
-                regular_time(),
-            ),
-            source(
-                vec![
-                    tile(0, 0, 0, false),
-                    tile(0, 1, 0, true),
-                    tile(5, 0, 0, false),
-                    tile(5, 1, 0, false),
-                ],
-                1,
-                regular_time(),
-            ),
-        ]
-    }
-
-    #[tokio::test]
-    async fn raster_stacker_unions_the_sources_of_the_selected_bands() {
-        let both = checked_footprints(stack(stack_inputs()), &[0, 1]).await;
-        assert_eq!(
-            step_boxes(&both),
-            [[tile_box(0), tile_box(1)].as_slice(), [].as_slice()]
-        );
-
-        let second = checked_footprints(stack(stack_inputs()), &[1]).await;
-        assert_eq!(
-            step_boxes(&second),
-            [[tile_box(1)].as_slice(), [].as_slice()]
-        );
-    }
-
-    #[tokio::test]
-    async fn raster_stacker_zips_sources_with_other_time_steps() {
-        // the first source has one step of ten, the second two of five: the stack splits at 5
-        let slow = source(
-            vec![tile(0, 0, 0, true), tile(0, 1, 0, false)],
-            1,
-            TimeDescriptor::new_irregular(None),
-        );
-        let fast = source(
-            vec![
-                tile(0, 0, 0, false),
-                tile(0, 1, 0, true),
-                tile(5, 0, 0, false),
-                tile(5, 1, 0, true),
-            ],
-            1,
-            TimeDescriptor::new_irregular(None),
-        );
-
-        let footprints = checked_footprints(stack(vec![slow, fast]), &[0, 1]).await;
-
-        // every step has data in one of the sources, and none is unknown
-        assert!(footprints.len() >= 2);
-        assert!(
-            footprints
-                .iter()
-                .all(|step| step.bounds != FootprintBounds::Unknown)
-        );
-    }
-
-    fn expression_of(expression: &str, map_no_data: bool) -> TypedRasterOperator {
-        Expression {
-            params: ExpressionParams {
-                expression: expression.to_string(),
-                output_type: RasterDataType::U8,
-                output_band: None,
-                map_no_data,
-            },
-            sources: SingleRasterSource {
-                raster: stack(stack_inputs()),
-            },
-        }
-        .typed()
-    }
-
-    fn expression(map_no_data: bool) -> TypedRasterOperator {
-        expression_of("A + B", map_no_data)
-    }
-
-    #[tokio::test]
-    async fn expression_has_data_only_where_all_inputs_have() {
-        // the inputs have data in different tiles, so no pixel has data in both
-        let footprints = checked_footprints(expression(false), &[0]).await;
-        assert_eq!(step_boxes(&footprints), [[].as_slice(), [].as_slice()]);
-
-        // here both have data in tile 1, and only the first in tile 0
-        let overlapping = Expression {
-            params: ExpressionParams {
-                expression: "A + B".to_string(),
-                output_type: RasterDataType::U8,
-                output_band: None,
-                map_no_data: false,
-            },
-            sources: SingleRasterSource {
-                raster: stack(vec![
-                    source(
-                        vec![
-                            tile(0, 0, 0, true),
-                            tile(0, 1, 0, true),
-                            tile(5, 0, 0, false),
-                            tile(5, 1, 0, false),
-                        ],
-                        1,
-                        regular_time(),
-                    ),
-                    source(
-                        vec![
-                            tile(0, 0, 0, false),
-                            tile(0, 1, 0, true),
-                            tile(5, 0, 0, false),
-                            tile(5, 1, 0, false),
-                        ],
-                        1,
-                        regular_time(),
-                    ),
-                ]),
-            },
-        }
-        .typed();
-        let footprints = checked_footprints(overlapping, &[0]).await;
-        assert_eq!(
-            step_boxes(&footprints),
-            [[tile_box(1)].as_slice(), [].as_slice()]
-        );
-    }
-
-    #[tokio::test]
-    async fn expression_with_map_no_data_has_data_where_any_input_has() {
-        // `A + B` gives no data for inputs without data, so there is data where an input has some
-        let footprints = checked_footprints(expression(true), &[0]).await;
-
-        assert_eq!(
-            step_boxes(&footprints),
-            [[tile_box(0), tile_box(1)].as_slice(), [].as_slice()]
-        );
-    }
-
-    #[tokio::test]
-    async fn expression_that_makes_data_of_no_data_cannot_tell() {
-        let footprints =
-            checked_footprints(expression_of("if A IS NODATA { 1 } else { A }", true), &[0]).await;
-
-        assert_eq!(footprints.len(), 2);
-        assert!(
-            footprints
-                .iter()
-                .all(|step| step.bounds == FootprintBounds::Unknown)
-        );
     }
 
     fn step(start: i64, end: i64, boxes: &[GridBoundingBox2D]) -> Footprint {
@@ -930,25 +820,5 @@ mod tests {
             ),
             FootprintBounds::Unknown
         );
-    }
-
-    #[tokio::test]
-    async fn time_shift_answers_with_the_output_times() {
-        let shifted = TimeShift {
-            params: TimeShiftParams::Relative {
-                granularity: TimeGranularity::Millis,
-                value: 5,
-            },
-            sources: SingleRasterOrVectorSource {
-                source: stack_inputs().remove(0).into(),
-            },
-        }
-        .typed();
-
-        // shifted by one step, the query of [0, 5) reads the empty input step [5, 10)
-        let footprints = checked_footprints(shifted, &[0]).await;
-
-        assert_eq!(footprints[0].time, TimeInterval::new_unchecked(0, 5));
-        assert!(footprints[0].bounds.is_empty());
     }
 }

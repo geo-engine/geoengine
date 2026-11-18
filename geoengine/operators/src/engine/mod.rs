@@ -45,6 +45,8 @@ pub use typed_operators::{TypedPlotOperator, TypedRasterOperator, TypedVectorOpe
 mod clonable_operator;
 mod execution_context;
 mod footprint;
+#[cfg(test)]
+pub(crate) use footprint::test_util as footprint_test_util;
 mod initialized_sources;
 mod operator;
 mod operator_impl;

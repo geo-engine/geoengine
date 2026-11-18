@@ -164,12 +164,10 @@ pub trait RasterQueryProcessor:
         ))
     }
 
-    /// For each time step of `query`, tells where the raster may contain data.
-    ///
-    /// Yields the same time steps as [`Self::time_query`]. Without a better answer, each step is
+    /// Inner logic of [`Self::footprint_query`]. Without a better answer, each step is
     /// [`FootprintBounds::Unknown`]. Processors that only pass tiles through must forward this
     /// to their source, or the source's answer is lost.
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _precision: crate::engine::FootprintPrecision,
@@ -178,6 +176,26 @@ pub trait RasterQueryProcessor:
         let time_steps = self.time_query(query.time_interval(), ctx).await?;
 
         Ok(unknown_footprints(time_steps))
+    }
+
+    /// For each time step of `query`, tells where the raster may contain data.
+    ///
+    /// Yields the same time steps as [`Self::time_query`]. A footprint is a superset: a step can
+    /// be empty (no data), have boxes (data only inside of them) or be
+    /// [`FootprintBounds::Unknown`] (data anywhere). The stream ends with
+    /// [`crate::error::Error::QueryCanceled`] when the query is aborted, so a cut off stream
+    /// never looks complete.
+    async fn footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        #[allow(clippy::used_underscore_items)] // like `query` and `time_query`
+        Ok(Box::pin(
+            ctx.abort_registration()
+                .wrap(self._footprint_query(query, precision, ctx).await?),
+        ))
     }
 }
 
@@ -319,7 +337,7 @@ impl<T: Pixel> RasterQueryProcessor for BoxRasterQueryProcessor<T> {
         self.as_ref().time_query(query, ctx).await
     }
 
-    async fn footprint_query<'a>(
+    async fn _footprint_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         precision: crate::engine::FootprintPrecision,
