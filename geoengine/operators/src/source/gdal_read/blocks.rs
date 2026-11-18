@@ -33,7 +33,7 @@ use crate::source::gdal_worker_process::process_common::{
 use crate::source::gdal_worker_process::reader::{GdalPoolReader, flip_grid_y_if_needed};
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-    GridAndProperties, RasterInfo,
+    GridAndProperties, RasterInfo, ReadLevel,
 };
 use futures::future::{join_all, try_join_all};
 use gdal::raster::GdalType;
@@ -147,10 +147,9 @@ impl BlockIo {
         block_cache_hint(cache_hint, self.min_ttl).may_cache()
     }
 
-    /// Reads `read_advise` of the file from whole blocks of the level `factor` times coarser
-    /// than the full resolution. If the dataset does not declare the level (`undeclared`), the
-    /// read stands in for GDAL's window read and only takes a level whose pixels that read takes
-    /// one to one.
+    /// Reads `read_advise` of the file from whole blocks of `level`. An undeclared level stands
+    /// in for GDAL's window read, so it is only taken if that read takes the level's pixels one
+    /// to one.
     ///
     /// # Errors
     /// Returns an error if a header or block read fails, if the file lacks the level (or, for an
@@ -163,13 +162,13 @@ impl BlockIo {
         &self,
         params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        factor: NonZeroUsize,
-        undeclared: bool,
+        level: ReadLevel,
         cache_hint: CacheHint,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
+        let factor = level.factor();
         let file = file_id(params);
         let info = match self.reader.remembered_raster_info(&file) {
             Some(info) => Some(info),
@@ -201,17 +200,18 @@ impl BlockIo {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
         // the caller reads a level that blocks cannot stand in for in a window, like a missing one
-        let level = info
-            .level_of_factor(factor)
-            .filter(|&level| !undeclared || info.window_reads_take_level_pixels(level, factor));
-        let Some(level) = level else {
+        let level_index = info.level_of_factor(factor).filter(|&index| {
+            !matches!(level, ReadLevel::Undeclared(_))
+                || info.window_reads_take_level_pixels(index, factor)
+        });
+        let Some(level_index) = level_index else {
             return Err(IpcProcessError::MissingOverviewLevel {
                 file: params.file_path.display().to_string(),
                 factor,
             }
             .into());
         };
-        let Some(level_window) = level_window(&info, level, factor, read_advise) else {
+        let Some(level_window) = level_window(&info, level_index, factor, read_advise) else {
             return Err(IpcProcessError::IpcOther {
                 msg: format!(
                     "read {:?} of {} is not inside its level {factor}",

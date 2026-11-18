@@ -19,7 +19,7 @@ use crate::source::gdal_worker_process::process_common::{
 use crate::source::gdal_worker_process::reader::GdalPoolReader;
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-    GdalReaderMode,
+    GdalReaderMode, ReadLevel,
 };
 use crate::util::Result;
 use futures::stream::BoxStream;
@@ -72,7 +72,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
         GridOrEmpty::from(EmptyGrid::new(tile_bounds));
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
-    let level_factor = reader_mode.level_factor();
+    let level = reader_mode.read_level();
     let blocks = blocks.filter(|blocks| blocks.caches(plan.cache_hint));
 
     for params in plan.files {
@@ -98,52 +98,40 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             continue;
         }
 
-        // Which of the three reads a file gets. Two inputs decide:
+        // Which of the three reads a file gets:
         //
-        // - The level to read, if the read maps onto its pixels without resampling:
-        //   - `level_factor`: 1 at the full resolution, the level if the dataset declares it
-        //     (every file has it), `None` otherwise.
-        //   - `undeclared_factor`: the level of a dataset that does not declare its levels, so
-        //     a file may lack it. Only if the read starts at a pixel of that level.
-        // - `blocks`: the block reader, if this file goes through it (the new raster cache is
-        //   on, the tile's cache lifetime is long enough, and with `block_reads = "auto"` the
-        //   file is remote).
+        // | level               | blocks | read                                               |
+        // |---------------------|--------|----------------------------------------------------|
+        // | any                 | yes    | `BlockIo::read`: whole cached blocks of the level  |
+        // | `Declared`          | no     | `read_level_data`: the level's band, pixel by pixel |
+        // | `Full`, `Undeclared` | no     | `read_tile_data`: GDAL's window read, GDAL picks   |
+        // |                     |        | the level and may resample                         |
         //
-        // | level              | blocks | read                                               |
-        // |--------------------|--------|----------------------------------------------------|
-        // | any of the above   | yes    | `BlockIo::read`: whole cached blocks of the level  |
-        // | declared, above 1  | no     | `read_level_data`: the level's band, pixel by pixel |
-        // | anything else      | any    | `read_tile_data`: GDAL's window read, GDAL picks   |
-        // |                    |        | the level and may resample                         |
-        //
-        // The second row needs a declared level: only then does every file have it. For an
-        // undeclared level without blocks, GDAL's window read picks the level itself, as it did
-        // before blocks existed. At the full resolution (1) the window read already reads pixel
-        // for pixel, so the level read would read the same.
-        let undeclared_factor = reader_mode
-            .undeclared_level_factor()
-            .filter(|&factor| level_read_advise(read_advise, factor).is_some());
-        let read = match (
-            level_factor.or(undeclared_factor),
-            blocks.filter(|blocks| blocks.reads(&params)),
-        ) {
-            // a declared level, the full resolution, or an undeclared level from a file that has
-            // it; a file without the level answers `MissingOverviewLevel`, handled below
-            (Some(factor), Some(blocks)) => {
+        // `blocks` is the block reader if this file goes through it: the new raster cache is on,
+        // the tile's cache lifetime is long enough, and with `block_reads = "auto"` the file is
+        // remote. An undeclared level only goes through blocks if the read starts at a pixel of
+        // the level. Only a declared level is read pixel by pixel without blocks, since only then
+        // does every file have it; at the full resolution the window read reads pixel for pixel
+        // anyway.
+        let blocks_for_file = blocks.filter(|blocks| {
+            blocks.reads(&params)
+                && match level {
+                    ReadLevel::Undeclared(factor) => {
+                        level_read_advise(read_advise, factor).is_some()
+                    }
+                    ReadLevel::Full | ReadLevel::Declared(_) => true,
+                }
+        });
+        let read = match (level, blocks_for_file) {
+            // a file without the level answers `MissingOverviewLevel`, handled below
+            (level, Some(blocks)) => {
                 blocks
-                    .read::<T>(
-                        &params,
-                        read_advise,
-                        factor,
-                        level_factor.is_none(),
-                        plan.cache_hint,
-                    )
+                    .read::<T>(&params, read_advise, level, plan.cache_hint)
                     .await
             }
-            // a declared overview level without blocks: every file has it, so read it as is.
             // The reader mode snaps declared reads to the level's pixels, so a read that does not
             // start at one is a bug, not a file to fall back for.
-            (Some(factor), None) if level_factor.is_some() && factor.get() > 1 => {
+            (ReadLevel::Declared(factor), None) => {
                 let Some(level_advise) = level_read_advise(read_advise, factor) else {
                     return Err(misaligned_read(&params, factor));
                 };
@@ -151,9 +139,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
                     .read_level_data::<T>(params.clone(), factor, level_advise)
                     .await
             }
-            // the full resolution without blocks; an undeclared level without blocks or whose
-            // read does not start at a pixel of the level
-            _ => {
+            (ReadLevel::Full | ReadLevel::Undeclared(_), None) => {
                 reader
                     .read_tile_data::<T>(params.clone(), read_advise)
                     .await
@@ -165,8 +151,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             Err(GdalProcessPoolError::IpcProcessError {
                 source: IpcProcessError::MissingOverviewLevel { file, factor },
             }) => {
-                // GDAL picks another level; only a dataset that declares the level promised it
-                if level_factor.is_some() {
+                if matches!(level, ReadLevel::Declared(_)) {
                     tracing::warn!(
                         "{file} lacks the overview level {factor}, GDAL may resample it"
                     );
@@ -755,7 +740,7 @@ mod tests {
         let reader_mode = |files_have_level| {
             GdalReaderMode::OverviewLevel(OverviewReaderState {
                 original_dataset_grid: file_grid,
-                overview_level: 8,
+                overview_level: std::num::NonZeroUsize::new(8).unwrap(),
                 files_have_level,
             })
         };
@@ -798,7 +783,7 @@ mod tests {
         let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
         let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
             original_dataset_grid: file_grid,
-            overview_level: 4,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
             files_have_level: false,
         });
 
@@ -860,7 +845,7 @@ mod tests {
         let reader_mode = |files_have_level| {
             GdalReaderMode::OverviewLevel(OverviewReaderState {
                 original_dataset_grid: file_grid,
-                overview_level: 4,
+                overview_level: std::num::NonZeroUsize::new(4).unwrap(),
                 files_have_level,
             })
         };
@@ -944,7 +929,8 @@ mod tests {
                 } else {
                     GdalReaderMode::OverviewLevel(OverviewReaderState {
                         original_dataset_grid: file_grid,
-                        overview_level,
+                        overview_level: std::num::NonZeroUsize::new(overview_level as usize)
+                            .unwrap(),
                         files_have_level,
                     })
                 }
