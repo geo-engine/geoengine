@@ -21,8 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.coordinate2_d import Coordinate2D
 from geoengine_api_client.models.derive_out_raster_specs_source import DeriveOutRasterSpecsSource
+from geoengine_api_client.models.raster_data_type import RasterDataType
 from geoengine_api_client.models.spatial_resolution import SpatialResolution
-from geoengine_api_client.models.warp_method import WarpMethod
+from geoengine_api_client.models.warp_downsampling_method import WarpDownsamplingMethod
+from geoengine_api_client.models.warp_upsampling_method import WarpUpsamplingMethod
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -34,9 +36,11 @@ class WarpParameters(BaseModel):
     target_spatial_reference: Optional[StrictStr] = Field(default=None, description="Target spatial reference system. Defaults to the spatial reference of the input.", alias="targetSpatialReference")
     output_resolution: Optional[SpatialResolution] = Field(default=None, description="Output resolution (`x`, `y`) in units of the target spatial reference. Defaults to the resolution of the (reprojected) input.", alias="outputResolution")
     output_origin_reference: Optional[Coordinate2D] = Field(default=None, description="Optional reference point used to align the output grid origin.", alias="outputOriginReference")
-    method: Optional[WarpMethod] = Field(default=None, description="Resampling method.")
+    downsampling: Optional[WarpDownsamplingMethod] = Field(default=None, description="How to compute an output pixel that is coarser than the input in at least one axis. Defaults to `nearest`.")
+    upsampling: Optional[WarpUpsamplingMethod] = Field(default=None, description="How to compute an output pixel that is finer than the input in both axes. Defaults to `nearest`.")
+    output_data_type: Optional[RasterDataType] = Field(default=None, description="The data type of the output. Defaults to the data type of the input. Integer types round half up and clip values to their range.", alias="outputDataType")
     derive_out_spec: Optional[DeriveOutRasterSpecsSource] = Field(default=None, description="How the output grid is derived when reprojecting, as in `Reprojection`: `projectionBounds` (default) derives it from the area of use of the input's spatial reference, `dataBounds` from the data bounds.", alias="deriveOutSpec")
-    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "method", "deriveOutSpec"]
+    __properties: ClassVar[List[str]] = ["targetSpatialReference", "outputResolution", "outputOriginReference", "downsampling", "upsampling", "outputDataType", "deriveOutSpec"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -98,6 +102,11 @@ class WarpParameters(BaseModel):
         if self.output_origin_reference is None and "output_origin_reference" in self.model_fields_set:
             _dict['outputOriginReference'] = None
 
+        # set to None if output_data_type (nullable) is None
+        # and model_fields_set contains the field
+        if self.output_data_type is None and "output_data_type" in self.model_fields_set:
+            _dict['outputDataType'] = None
+
         return _dict
 
     @classmethod
@@ -113,7 +122,9 @@ class WarpParameters(BaseModel):
             "targetSpatialReference": obj.get("targetSpatialReference"),
             "outputResolution": SpatialResolution.from_dict(obj["outputResolution"]) if obj.get("outputResolution") is not None else None,
             "outputOriginReference": Coordinate2D.from_dict(obj["outputOriginReference"]) if obj.get("outputOriginReference") is not None else None,
-            "method": obj.get("method"),
+            "downsampling": obj.get("downsampling"),
+            "upsampling": obj.get("upsampling"),
+            "outputDataType": obj.get("outputDataType"),
             "deriveOutSpec": obj.get("deriveOutSpec")
         })
         return _obj

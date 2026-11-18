@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use super::map_query::MapQueryProcessor;
-use crate::processing::{InitializedWarp, WarpMethod, WarpOrigin, WarpParams};
+use crate::processing::{InitializedWarp, WarpOrigin, WarpParams};
 use crate::{
     adapters::{
         RasterSubQueryAdapter, TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
@@ -401,8 +401,8 @@ impl RasterOperator for Reprojection {
             target_spatial_reference: Some(self.params.target_spatial_reference),
             output_resolution: None,
             output_origin_reference: None,
-            method: WarpMethod::NearestNeighbor,
             derive_out_spec: self.params.derive_out_spec,
+            ..WarpParams::default()
         };
 
         InitializedWarp::with_output_grid(

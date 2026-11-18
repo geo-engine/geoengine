@@ -86,7 +86,16 @@ pub trait ExecutionContext: Send
 
     /// The environment for compiling expressions and sharing their libraries.
     fn expression_environment(&self) -> &ExpressionEnvironment;
+
+    /// The upper limit in bytes for the memory that a `Warp` with the downsampling method `mode` may
+    /// keep per output tile (`[query_context] warp_mode_max_memory_per_tile_mb`).
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE
+    }
 }
+
+/// The default of [`ExecutionContext::warp_mode_max_memory_per_tile`], 64 MB
+pub const DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE: usize = 64 * 1024 * 1024;
 
 #[async_trait]
 pub trait MetaDataProvider<L, R, Q>
@@ -126,6 +135,8 @@ pub struct MockExecutionContext {
     pub gdal_process_pool: Arc<GdalProcessPool>,
     pub ort_environment: OrtEnvironment,
     pub expression_environment: ExpressionEnvironment,
+    /// see [`ExecutionContext::warp_mode_max_memory_per_tile`]
+    pub warp_mode_max_memory_per_tile: usize,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -146,6 +157,7 @@ impl TestDefault for MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
         }
     }
 }
@@ -172,6 +184,7 @@ impl MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
         }
     }
 
@@ -192,6 +205,7 @@ impl MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
         }
     }
 
@@ -215,6 +229,7 @@ impl MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
         }
     }
 
@@ -360,6 +375,10 @@ impl ExecutionContext for MockExecutionContext {
 
     fn expression_environment(&self) -> &ExpressionEnvironment {
         &self.expression_environment
+    }
+
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.warp_mode_max_memory_per_tile
     }
 }
 
@@ -585,6 +604,10 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 
     fn expression_environment(&self) -> &ExpressionEnvironment {
         self.inner.expression_environment()
+    }
+
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.inner.warp_mode_max_memory_per_tile()
     }
 }
 

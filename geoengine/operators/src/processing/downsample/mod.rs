@@ -7,9 +7,7 @@ use crate::engine::{
     OperatorName, ProcessingGraphOperatorPath, QueryContext, QueryProcessor, RasterOperator,
     RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
 };
-use crate::processing::{
-    DeriveOutRasterSpecsSource, InitializedWarp, WarpMethod, WarpOrigin, WarpParams,
-};
+use crate::processing::{InitializedWarp, WarpOrigin, WarpParams};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -100,8 +98,7 @@ impl RasterOperator for Downsampling {
             target_spatial_reference: None,
             output_resolution: Some(out_grid.spatial_resolution()),
             output_origin_reference: self.params.output_origin_reference,
-            method: WarpMethod::NearestNeighbor,
-            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+            ..WarpParams::default()
         };
 
         InitializedWarp::with_output_grid(

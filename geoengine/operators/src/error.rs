@@ -276,6 +276,31 @@ pub enum Error {
 
     NotYetImplemented,
 
+    #[snafu(display(
+        "Warp supports resampling methods other than nearest neighbour only within the same spatial reference yet"
+    ))]
+    WarpResamplingMethodRequiresSameSpatialReference,
+
+    #[snafu(display(
+        "Warp supports the downsampling method `mode` only for integer inputs, not for {data_type:?}"
+    ))]
+    WarpModeRequiresIntegerInput {
+        data_type: geoengine_datatypes::raster::RasterDataType,
+    },
+
+    #[snafu(display(
+        "Warp with the downsampling method `mode` could keep up to {estimated_mb} MB per output \
+         tile for a footprint of {footprint_pixels} {data_type:?} input pixels per output pixel, more \
+         than the limit of {budget_mb} MB (`[query_context] warp_mode_max_memory_per_tile_mb`). Add \
+         overviews to the input or choose a finer output resolution."
+    ))]
+    WarpModeExceedsMemoryBudget {
+        estimated_mb: u64,
+        budget_mb: u64,
+        footprint_pixels: u64,
+        data_type: geoengine_datatypes::raster::RasterDataType,
+    },
+
     TemporalRasterAggregationLastValidRequiresNoData,
     TemporalRasterAggregationFirstValidRequiresNoData,
     TemporalRasterAggregationMeanRequiresNoData,

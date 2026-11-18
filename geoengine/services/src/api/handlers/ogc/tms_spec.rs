@@ -1307,9 +1307,7 @@ mod tests {
                     target_spatial_reference: None,
                     output_resolution: Some(resolution),
                     output_origin_reference: Some(origin),
-                    method: geoengine_operators::processing::WarpMethod::NearestNeighbor,
-                    derive_out_spec:
-                        geoengine_operators::processing::DeriveOutRasterSpecsSource::ProjectionBounds,
+                    ..geoengine_operators::processing::WarpParams::default()
                 },
             )
             .unwrap()
@@ -1580,9 +1578,7 @@ mod tests {
                 target_spatial_reference: Some(SpatialReference::web_mercator()),
                 output_resolution: Some(tms_spec.spatial_resolution(0)),
                 output_origin_reference: Some(origin),
-                method: geoengine_operators::processing::WarpMethod::NearestNeighbor,
-                derive_out_spec:
-                    geoengine_operators::processing::DeriveOutRasterSpecsSource::ProjectionBounds,
+                ..geoengine_operators::processing::WarpParams::default()
             },
         )
         .unwrap()

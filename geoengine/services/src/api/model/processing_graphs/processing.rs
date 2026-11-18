@@ -79,8 +79,8 @@ use geoengine_operators::{
         VectorJoinSources as OperatorsVectorJoinSources, VectorJoinType as OperatorsVectorJoinType,
         VisualPointClustering as OperatorsVisualPointClustering,
         VisualPointClusteringParams as OperatorsVisualPointClusteringParameters,
-        Warp as OperatorsWarp, WarpMethod as OperatorsWarpMethod,
-        WarpParams as OperatorsWarpParameters,
+        Warp as OperatorsWarp, WarpDownsampling as OperatorsWarpDownsampling,
+        WarpParams as OperatorsWarpParameters, WarpUpsampling as OperatorsWarpUpsampling,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -1003,32 +1003,58 @@ impl TryFrom<Downsampling> for OperatorsDownsampling {
 /// The `Warp` operator puts a raster onto another grid in one step: another spatial reference,
 /// another resolution and another grid origin, in any combination.
 ///
-/// For each output pixel, the operator uses the value of the input pixel under the center of the
-/// output pixel. The output resolution can be coarser or finer than the input resolution, also
-/// coarser in one axis and finer in the other.
+/// The output resolution can be coarser or finer than the input resolution, also coarser in one
+/// axis and finer in the other. By default, each output pixel takes the value of the input pixel
+/// under its center. `downsampling` and `upsampling` choose other methods, with the semantics of
+/// [`gdalwarp -r`](https://gdal.org/en/stable/programs/gdalwarp.html#cmdoption-gdalwarp-r):
+/// `downsampling` applies to outputs that are coarser than the input in at least one axis,
+/// `upsampling` to outputs that are finer in both axes. Other methods than `nearest` require the
+/// output to be in the spatial reference of the input.
+///
+/// Integer outputs of `average` and `bilinear` round half up. `outputDataType` keeps the fractions,
+/// e.g. `F32` for the average of `U8` values.
 ///
 /// Geo Engine uses `Warp` to answer queries, e.g., WMS requests, in a spatial reference or at a
 /// resolution that differs from the processing graph's.
 ///
 /// ## Errors
 ///
-/// The operator returns an error if the input has no spatial reference or if the input data
-/// cannot be reprojected to the target spatial reference.
+/// The operator returns an error if the input has no spatial reference, if the input data
+/// cannot be reprojected to the target spatial reference, if a method other than `nearest`
+/// is used with another spatial reference, or if `mode` is used with a float input or could
+/// need more memory than the limit `[query_context] warp_mode_max_memory_per_tile_mb`.
 #[api_operator(
     title = "Warp",
-    examples(json!({
-        "type": "Warp",
-        "params": {
-            "targetSpatialReference": "EPSG:3857",
-            "outputResolution": { "x": 20000.0, "y": 10000.0 }
-        },
-        "sources": {
-            "raster": {
-                "type": "GdalSource",
-                "params": { "data": "ndvi" }
+    examples(
+        json!({
+            "type": "Warp",
+            "params": {
+                "targetSpatialReference": "EPSG:3857",
+                "outputResolution": { "x": 20000.0, "y": 10000.0 }
+            },
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": { "data": "ndvi" }
+                }
             }
-        }
-    }))
+        }),
+        json!({
+            "type": "Warp",
+            "params": {
+                "outputResolution": { "x": 0.5, "y": 0.5 },
+                "downsampling": "average",
+                "upsampling": "bilinear",
+                "outputDataType": "F32"
+            },
+            "sources": {
+                "raster": {
+                    "type": "GdalSource",
+                    "params": { "data": "ndvi" }
+                }
+            }
+        })
+    )
 )]
 pub struct Warp {
     pub params: WarpParameters,
@@ -1052,30 +1078,87 @@ pub struct WarpParameters {
     #[schema(examples(json!({ "x": 0.0, "y": 0.0 })))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_origin_reference: Option<Coordinate2D>,
-    /// Resampling method.
-    #[schema(examples("nearestNeighbor"))]
-    #[serde(default)]
-    pub method: WarpMethod,
+    /// How to compute an output pixel that is coarser than the input in at least one axis.
+    /// Defaults to `nearest`.
+    #[schema(examples("average"))]
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub downsampling: WarpDownsamplingMethod,
+    /// How to compute an output pixel that is finer than the input in both axes.
+    /// Defaults to `nearest`.
+    #[schema(examples("bilinear"))]
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub upsampling: WarpUpsamplingMethod,
+    /// The data type of the output. Defaults to the data type of the input.
+    /// Integer types round half up and clip values to their range.
+    #[schema(examples("F32"))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_data_type: Option<RasterDataType>,
     /// How the output grid is derived when reprojecting, as in `Reprojection`:
     /// `projectionBounds` (default) derives it from the area of use of the input's spatial
     /// reference, `dataBounds` from the data bounds.
     #[schema(examples("projectionBounds"))]
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_default")]
     pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Default, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum WarpMethod {
-    /// The value of the input pixel under the center of the output pixel.
-    #[default]
-    NearestNeighbor,
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
 }
 
-impl From<WarpMethod> for OperatorsWarpMethod {
-    fn from(value: WarpMethod) -> Self {
+/// How `Warp` computes an output pixel that is coarser than the input in at least one axis, as
+/// `gdalwarp -r` with the same name. Input pixels without data and NaN values are left out.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum WarpDownsamplingMethod {
+    /// The value of the input pixel under the center of the output pixel.
+    #[default]
+    Nearest,
+    /// The average of the input pixels under the output pixel, weighted by the area of each
+    /// that the output pixel covers.
+    Average,
+    /// The most common value of the input pixels under the output pixel, weighted by the area of
+    /// each that the output pixel covers. Only for integer inputs. The operator returns an error if
+    /// it could need more memory per output tile than the limit
+    /// `[query_context] warp_mode_max_memory_per_tile_mb`, e.g. for a large factor on 16-bit data
+    /// without overviews.
+    Mode,
+    /// The minimum of the input pixels under the output pixel.
+    Min,
+    /// The maximum of the input pixels under the output pixel.
+    Max,
+}
+
+impl From<WarpDownsamplingMethod> for OperatorsWarpDownsampling {
+    fn from(value: WarpDownsamplingMethod) -> Self {
         match value {
-            WarpMethod::NearestNeighbor => Self::NearestNeighbor,
+            WarpDownsamplingMethod::Nearest => Self::Nearest,
+            WarpDownsamplingMethod::Average => Self::Average,
+            WarpDownsamplingMethod::Mode => Self::Mode,
+            WarpDownsamplingMethod::Min => Self::Min,
+            WarpDownsamplingMethod::Max => Self::Max,
+        }
+    }
+}
+
+/// How `Warp` computes an output pixel that is finer than the input in both axes, as
+/// `gdalwarp -r` with the same name.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum WarpUpsamplingMethod {
+    /// The value of the input pixel under the center of the output pixel.
+    #[default]
+    Nearest,
+    /// The bilinear interpolation of the four input pixel centers around the center of the output
+    /// pixel. Neighbours without data are left out. If the input pixel under the center has no
+    /// data, the output pixel has none either.
+    Bilinear,
+}
+
+impl From<WarpUpsamplingMethod> for OperatorsWarpUpsampling {
+    fn from(value: WarpUpsamplingMethod) -> Self {
+        match value {
+            WarpUpsamplingMethod::Nearest => Self::Nearest,
+            WarpUpsamplingMethod::Bilinear => Self::Bilinear,
         }
     }
 }
@@ -1089,7 +1172,9 @@ impl TryFrom<Warp> for OperatorsWarp {
                 target_spatial_reference: value.params.target_spatial_reference.map(Into::into),
                 output_resolution: value.params.output_resolution.map(Into::into),
                 output_origin_reference: value.params.output_origin_reference.map(Into::into),
-                method: value.params.method.into(),
+                downsampling: value.params.downsampling.into(),
+                upsampling: value.params.upsampling.into(),
+                output_data_type: value.params.output_data_type.map(Into::into),
                 derive_out_spec: value.params.derive_out_spec.into(),
             },
             sources: (*value.sources).try_into()?,
@@ -3785,7 +3870,10 @@ mod tests {
             "type": "Warp",
             "params": {
                 "targetSpatialReference": "EPSG:3857",
-                "outputResolution": { "x": 20000.0, "y": 10000.0 }
+                "outputResolution": { "x": 20000.0, "y": 10000.0 },
+                "downsampling": "mode",
+                "upsampling": "bilinear",
+                "outputDataType": "F32"
             },
             "sources": {
                 "raster": {
@@ -3810,7 +3898,9 @@ mod tests {
                     )
                 ),
                 output_origin_reference: None,
-                method: OperatorsWarpMethod::NearestNeighbor,
+                downsampling: OperatorsWarpDownsampling::Mode,
+                upsampling: OperatorsWarpUpsampling::Bilinear,
+                output_data_type: Some(geoengine_datatypes::raster::RasterDataType::F32),
                 derive_out_spec: OperatorsDeriveOutRasterSpecsSource::ProjectionBounds,
             }
         );

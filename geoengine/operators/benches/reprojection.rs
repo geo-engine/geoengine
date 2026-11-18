@@ -14,12 +14,13 @@
 
 mod common;
 
-use common::{Area, Env, mercator, reproject, stack};
+use common::{Area, Case, Env, mercator, reproject, stack};
 use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::{
     primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution},
     spatial_reference::SpatialReference,
 };
+use geoengine_operators::processing::{WarpDownsampling, WarpUpsampling};
 fn reprojection(c: &mut Criterion) {
     let env = Env::new();
     let mut cases = vec![
@@ -94,6 +95,67 @@ fn tile_at_10e_50n() -> Area {
     ))
 }
 
+/// The resampling methods besides nearest neighbour for the `resolutions` of `resampling` in `area`,
+/// named `<resolution>_<area_name>_<method>`. The tile has all of them, the extent only the
+/// cheaper ones for coarser and finer outputs.
+fn method_cases(
+    env: &Env,
+    resolutions: &[(&str, SpatialResolution)],
+    area: impl Fn() -> Area,
+    area_name: &str,
+) -> Vec<(String, Case)> {
+    let methods = [
+        (
+            "mixed",
+            "average",
+            WarpDownsampling::Average,
+            WarpUpsampling::Nearest,
+        ),
+        (
+            "coarser",
+            "average",
+            WarpDownsampling::Average,
+            WarpUpsampling::Nearest,
+        ),
+        (
+            "coarser",
+            "mode",
+            WarpDownsampling::Mode,
+            WarpUpsampling::Nearest,
+        ),
+        (
+            "finer",
+            "bilinear",
+            WarpDownsampling::Nearest,
+            WarpUpsampling::Bilinear,
+        ),
+    ];
+    let on_extent = [("coarser", "average"), ("finer", "bilinear")];
+    methods
+        .into_iter()
+        .filter(|(name, method, _, _)| area_name == "tile" || on_extent.contains(&(*name, *method)))
+        .map(|(name, method, downsampling, upsampling)| {
+            let (_, resolution) = resolutions
+                .iter()
+                .find(|(resolution_name, _)| *resolution_name == name)
+                .unwrap();
+            (
+                format!("{name}_{area_name}_{method}"),
+                env.case(
+                    env.resample_with_methods(
+                        env.raster(),
+                        SpatialReference::epsg_4326(),
+                        *resolution,
+                        (downsampling, upsampling),
+                    ),
+                    area(),
+                    env.one_step(),
+                ),
+            )
+        })
+        .collect()
+}
+
 fn resampling(c: &mut Criterion) {
     let env = Env::new();
     let wgs84 = SpatialReference::epsg_4326();
@@ -113,6 +175,7 @@ fn resampling(c: &mut Criterion) {
             ),
         ));
     }
+    cases.extend(method_cases(&env, &resolutions, tile_at_10e_50n, "tile"));
     // the `wms_tile` of `reprojection` with pixels that are coarser in x and finer in y than the
     // ~11 km of the reprojected raster: reprojection and resampling in one wrapper
     cases.push((
@@ -142,6 +205,10 @@ fn resampling(c: &mut Criterion) {
                 ),
             ));
         }
+    }
+
+    if !common::ci() {
+        cases.extend(method_cases(&env, &resolutions, || Area::Extent, "extent"));
     }
 
     let mut group = common::group(c, "resampling");

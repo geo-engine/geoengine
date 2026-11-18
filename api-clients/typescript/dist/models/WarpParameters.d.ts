@@ -10,8 +10,10 @@
  */
 import type { SpatialResolution } from './SpatialResolution';
 import type { Coordinate2D } from './Coordinate2D';
-import type { WarpMethod } from './WarpMethod';
+import type { WarpDownsamplingMethod } from './WarpDownsamplingMethod';
+import type { WarpUpsamplingMethod } from './WarpUpsamplingMethod';
 import type { DeriveOutRasterSpecsSource } from './DeriveOutRasterSpecsSource';
+import type { RasterDataType } from './RasterDataType';
 /**
  * Parameters for the `Warp` operator.
  * @export
@@ -32,9 +34,20 @@ export interface WarpParameters {
      */
     outputOriginReference?: Coordinate2D | null;
     /**
-     * Resampling method.
+     * How to compute an output pixel that is coarser than the input in at least one axis.
+     * Defaults to `nearest`.
      */
-    method?: WarpMethod;
+    downsampling?: WarpDownsamplingMethod;
+    /**
+     * How to compute an output pixel that is finer than the input in both axes.
+     * Defaults to `nearest`.
+     */
+    upsampling?: WarpUpsamplingMethod;
+    /**
+     * The data type of the output. Defaults to the data type of the input.
+     * Integer types round half up and clip values to their range.
+     */
+    outputDataType?: RasterDataType | null;
     /**
      * How the output grid is derived when reprojecting, as in `Reprojection`:
      * `projectionBounds` (default) derives it from the area of use of the input's spatial
