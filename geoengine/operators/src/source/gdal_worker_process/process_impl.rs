@@ -626,6 +626,10 @@ impl GdalHandling {
         let [x_off, y_off, x_size, y_size] = subpixel.in_file_pixels();
         let mut buffer = vec![T::default(); out_shape.0 * out_shape.1];
 
+        // TODO: The gdal crate cannot read floating-point windows yet, hence the FFI call. Once
+        // https://github.com/georust/gdal/pull/738 is released, use
+        // `RasterBand::read_into_slice_with_options` with a `FloatingPointWindow` instead.
+
         // SAFETY: an all-zero `GDALRasterIOExtraArg` is valid: null pointers and no callback
         let mut extra_arg: gdal_sys::GDALRasterIOExtraArg = unsafe { std::mem::zeroed() };
         extra_arg.nVersion = 1;
