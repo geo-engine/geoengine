@@ -414,7 +414,7 @@ fn process_sample_assets(
             let geo_transform = common::geo_transform_from_asset_or_item(asset, item)
                 .or(probe.map(|probe| probe.geo_transform));
             let proj_shape = common::proj_shape_from_asset_or_item(asset, item)
-                .or(probe.map(|probe| (probe.height, probe.width)));
+                .or(probe.map(|probe| (probe.height.get(), probe.width.get())));
 
             let data_type = common::data_type_from_asset_v1_1_0(asset)
                 .or_else(|| common::data_type_from_asset_v1_0_0_fallback(asset))
@@ -1697,8 +1697,8 @@ mod tests {
             "NDVI".to_owned(),
             AssetProbe {
                 geo_transform,
-                width: 8176,
-                height: 5601,
+                width: std::num::NonZeroUsize::new(8176).unwrap(),
+                height: std::num::NonZeroUsize::new(5601).unwrap(),
                 data_type: RasterDataType::U8,
                 no_data_value: Some(255.),
                 epsg: Some(4326),

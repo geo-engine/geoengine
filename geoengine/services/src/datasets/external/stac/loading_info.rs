@@ -37,7 +37,7 @@ use geoengine_operators::source::{
 use itertools::Itertools;
 use stac::Item;
 use std::collections::HashMap;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -732,6 +732,18 @@ impl StacMultiBandMetaData {
             );
             return Ok(());
         };
+        let (Some(height), Some(width)) = (NonZeroUsize::new(height), NonZeroUsize::new(width))
+        else {
+            return Err(
+                geoengine_operators::error::Error::InvalidDataProviderConfig {
+                    reason: format!(
+                        "STAC asset {} has an empty projection shape ({height}, {width})",
+                        asset.href
+                    ),
+                }
+                .into(),
+            );
+        };
 
         self.push_asset_tiles(
             asset,
@@ -886,7 +898,7 @@ impl StacMultiBandMetaData {
             return Ok(());
         };
 
-        let grid_bounds = stac_asset_grid_bounds(height, width)?;
+        let grid_bounds = stac_asset_grid_bounds(height.get(), width.get())?;
         let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
         let file_path = asset_file_path(&asset.href)?;
@@ -924,8 +936,8 @@ impl StacMultiBandMetaData {
                             x_pixel_size: geo_transform.x_pixel_size().into(),
                             y_pixel_size: geo_transform.y_pixel_size().into(),
                         },
-                        width,
-                        height,
+                        width: width.get(),
+                        height: height.get(),
                         file_not_found_handling: FileNotFoundHandling::Error,
                         no_data_value: common::no_data_value_for_rasterband(
                             asset,
@@ -950,8 +962,8 @@ impl StacMultiBandMetaData {
 #[derive(Clone, Copy)]
 struct AssetGrid {
     geo_transform: GeoTransform,
-    width: usize,
-    height: usize,
+    width: NonZeroUsize,
+    height: NonZeroUsize,
     /// The file's no-data value, used when the STAC metadata declares none.
     no_data_value: Option<f64>,
 }
