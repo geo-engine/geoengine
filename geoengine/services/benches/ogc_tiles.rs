@@ -40,7 +40,10 @@ use geoengine_operators::{
         TypedRasterOperator,
     },
     source::{GdalSource, GdalSourceParameters},
-    util::{WrapWithProjectionAndResample, raster_stream_to_png::raster_stream_to_png_bytes},
+    util::{
+        WarpMethods, WrapWithProjectionAndResample,
+        raster_stream_to_png::raster_stream_to_png_bytes,
+    },
 };
 use geoengine_services::{
     api::model::datatypes::{DataProviderId, LayerId},
@@ -147,7 +150,8 @@ async fn render(env: &Env, source: &TypedRasterOperator, tile: Tile, describe: b
             let graph = ProcessingGraph {
                 operator: TypedOperator::Raster(source.clone()),
             };
-            let tile = tile_on_grid(graph, exec_ctx, &query)
+            // nearest neighbour in both paths, so that they compare the same
+            let tile = tile_on_grid(graph, exec_ctx, &query, |_| Ok((WarpMethods::NEAREST, ())))
                 .instrument(tracing::debug_span!("initialize"))
                 .await
                 .unwrap();
@@ -183,6 +187,7 @@ async fn render(env: &Env, source: &TypedRasterOperator, tile: Tile, describe: b
                     None,
                     Some(resolution),
                     SpatialReference::web_mercator(),
+                    WarpMethods::NEAREST,
                     exec_ctx,
                 )
                 .await

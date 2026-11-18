@@ -66,13 +66,14 @@ use geoengine_operators::{
         NeighborhoodAggregateParams, NeighborhoodParams, RasterScaling, RasterScalingParams,
         RasterStacker, RasterStackerParams, Reprojection, ReprojectionParams, ScalingMode,
         SlopeOffsetSelection, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+        WarpDownsampling, WarpUpsampling,
     },
     source::{
         GdalMetaDataRegular, GdalProcessPool, GdalSource, GdalSourceParameters,
         gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig},
     },
     util::{
-        WrapWithProjectionAndResample, create_rayon_thread_pool,
+        WarpMethods, WrapWithProjectionAndResample, create_rayon_thread_pool,
         gdal::create_ndvi_meta_data_with_cache_ttl,
     },
 };
@@ -432,11 +433,33 @@ impl Env {
                 .await
                 .unwrap();
             WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
-                .wrap_with_projection_and_resample(None, Some(resolution), srs, &self.exe_ctx)
+                .wrap_with_projection_and_resample(
+                    None,
+                    Some(resolution),
+                    srs,
+                    WarpMethods::NEAREST,
+                    &self.exe_ctx,
+                )
                 .await
                 .unwrap()
                 .operator
         })
+    }
+
+    /// `resample`, with `downsampling` and `upsampling` in the `Warp` it wraps the operator with.
+    pub fn resample_with_methods(
+        &self,
+        operator: TypedRasterOperator,
+        srs: SpatialReference,
+        resolution: SpatialResolution,
+        (downsampling, upsampling): (WarpDownsampling, WarpUpsampling),
+    ) -> TypedRasterOperator {
+        let TypedRasterOperator::Warp(mut warp) = self.resample(operator, srs, resolution) else {
+            panic!("the resampled operator should be a warp");
+        };
+        warp.params.downsampling = downsampling;
+        warp.params.upsampling = upsampling;
+        TypedRasterOperator::Warp(warp)
     }
 
     /// Initializes the operator and queries all of its bands in `area` and `time`.
