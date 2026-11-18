@@ -505,7 +505,9 @@ where
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
+/// The kind of a GDAL error. `Display` is a short text for users, `Debug` adds how to fix it, for
+/// admins and logs.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum IpcProcessGdalErrorKind {
     FileNotFound,
     AccessDenied,
@@ -549,7 +551,7 @@ pub enum IpcProcessError {
     #[snafu(display("Unsupported or invalid data type: {datatype}"))]
     DataType { datatype: Cow<'static, str> },
 
-    #[snafu(display("GDAL operational error ({kind:?}): {details}{}", kind.hint()))]
+    #[snafu(display("GDAL operational error ({kind}): {details}"))]
     GdalError {
         kind: IpcProcessGdalErrorKind,
         details: String,
@@ -577,17 +579,33 @@ pub enum IpcProcessError {
     AlphaBandAsMaskNotAllowed,
 }
 
-impl IpcProcessGdalErrorKind {
-    /// How to fix errors of this kind, appended to the error message.
-    fn hint(self) -> &'static str {
-        match self {
+impl std::fmt::Display for IpcProcessGdalErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::FileNotFound => "file not found",
+            Self::AccessDenied => "access denied",
+            Self::InvalidDataset => "invalid dataset",
+            Self::ConnectionTimeout => "connection timeout",
+            Self::UserfaultfdUnavailable => "remote NetCDF files cannot be read on this server",
+            Self::Unknown => "unknown",
+        })
+    }
+}
+
+impl std::fmt::Debug for IpcProcessGdalErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::FileNotFound => "FileNotFound",
+            Self::AccessDenied => "AccessDenied",
+            Self::InvalidDataset => "InvalidDataset",
+            Self::ConnectionTimeout => "ConnectionTimeout",
             Self::UserfaultfdUnavailable => {
-                " Geo Engine reads remote NetCDF files through the Linux `userfaultfd` syscall. \
-                 In a container, allow it with a seccomp profile that permits `userfaultfd`, \
-                 e.g. `--security-opt seccomp=unconfined`."
+                "UserfaultfdUnavailable: GDAL reads remote NetCDF files through the Linux \
+                 `userfaultfd` syscall. In a container, allow it with a seccomp profile that \
+                 permits `userfaultfd`, e.g. `--security-opt seccomp=unconfined`"
             }
-            _ => "",
-        }
+            Self::Unknown => "Unknown",
+        })
     }
 }
 
@@ -655,6 +673,10 @@ impl From<gdal::errors::GdalError> for IpcProcessError {
             }
             _ => IpcProcessGdalErrorKind::Unknown,
         };
+
+        if kind == IpcProcessGdalErrorKind::UserfaultfdUnavailable {
+            tracing::error!(kind = ?kind, "cannot read a remote NetCDF file: {err_string}");
+        }
 
         IpcProcessError::GdalError {
             kind,
@@ -774,10 +796,8 @@ mod tests {
                 ..
             }
         ));
-        assert!(
-            error
-                .to_string()
-                .contains("seccomp profile that permits `userfaultfd`")
-        );
+        // users get a short message, admins the fix in the debug output
+        assert!(!error.to_string().contains("Linux `userfaultfd` syscall"));
+        assert!(format!("{error:?}").contains("seccomp profile that permits `userfaultfd`"));
     }
 }
