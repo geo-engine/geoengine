@@ -64,6 +64,7 @@ pub struct StacMultiBandMetaData {
     max_concurrent_asset_probes: usize,
     item_time: StacItemTime,
     grid: StacGrid,
+    asset_prober: asset_probe::AssetProber,
 }
 
 #[derive(Debug, Clone)]
@@ -388,6 +389,7 @@ impl StacMultiBandMetaData {
             max_concurrent_asset_probes: provider.max_concurrent_asset_probes,
             item_time: provider.item_time,
             grid: provider.grid,
+            asset_prober: provider.asset_prober.clone(),
         }
     }
 
@@ -783,26 +785,31 @@ impl StacMultiBandMetaData {
             .collect::<std::collections::BTreeSet<_>>();
 
         let probes = futures::stream::iter(file_paths)
-            .map(|file_path| {
-                let s3_config = self.s3_config.clone();
-                async move {
-                    let probe = asset_probe::probe_asset(file_path.clone(), s3_config).await;
-                    (file_path, probe)
-                }
+            .map(|file_path| async move {
+                let probe = self
+                    .asset_prober
+                    .probe(
+                        file_path.clone(),
+                        self.s3_config.as_ref(),
+                        self.cache_ttl_secs,
+                    )
+                    .await;
+                (file_path, probe)
             })
             .buffer_unordered(self.max_concurrent_asset_probes)
             .collect::<std::collections::HashMap<_, _>>()
             .await;
+        let probes = probes
+            .into_iter()
+            .map(|(file_path, probe)| probe.map(|probe| (file_path, probe)))
+            .collect::<std::result::Result<std::collections::HashMap<_, _>, _>>()
+            .map_err(|error| geoengine_operators::error::Error::LoadingInfo {
+                source: Box::new(error),
+            })?;
 
         for unprobed in unprobed_assets {
-            let probe = match probes.get(&unprobed.file_path) {
-                Some(Ok(probe)) => probe,
-                Some(Err(error)) => {
-                    return Err(geoengine_operators::error::Error::LoadingInfo {
-                        source: error.to_string().into(),
-                    });
-                }
-                None => continue,
+            let Some(probe) = probes.get(&unprobed.file_path) else {
+                continue;
             };
 
             if probe.data_type != self.dataset.data_type {
@@ -1777,6 +1784,9 @@ mod tests {
                 item_time: StacItemTime::Datetime,
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
+                asset_prober: asset_probe::AssetProber::new(
+                    crate::util::tests::gdal_process_pool_without_workers(),
+                ),
             };
             let bounds = SpatialPartition2D::new(
                 (500_000., 5_800_000.).into(),
@@ -1894,6 +1904,9 @@ mod tests {
             item_time: StacItemTime::Datetime,
             cache_ttl_secs: None,
             grid: StacGrid::default(),
+            asset_prober: asset_probe::AssetProber::new(
+                crate::util::tests::gdal_process_pool_without_workers(),
+            ),
         };
         let bounds =
             SpatialPartition2D::new((500_000., 5_800_000.).into(), (500_120., 5_799_880.).into())
@@ -1967,6 +1980,9 @@ mod tests {
             max_concurrent_asset_probes: 8,
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
+            asset_prober: asset_probe::AssetProber::new(
+                crate::util::tests::gdal_process_pool_without_workers(),
+            ),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
         let bounds = SpatialPartition2D::new(
@@ -2057,6 +2073,9 @@ mod tests {
             max_concurrent_asset_probes: 8,
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
+            asset_prober: asset_probe::AssetProber::new(
+                crate::util::tests::gdal_process_pool_without_workers(),
+            ),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
 
@@ -2163,6 +2182,9 @@ mod tests {
             max_concurrent_asset_probes: 8,
             item_time: StacItemTime::Datetime,
             grid: StacGrid::default(),
+            asset_prober: asset_probe::AssetProber::new(
+                crate::util::tests::gdal_process_pool_without_workers(),
+            ),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
         let asset = |href: &str, title: &str, pixel_size: Option<f64>| {
@@ -2229,7 +2251,11 @@ mod tests {
 
     /// A U8 EPSG:4326 dataset with an `NDVI` band on the 1/112 degree Sentinel-3 SYN grid, with
     /// the origin of the EUROPE region file that discovery samples.
-    fn netcdf_meta(server: &Server, item_time: StacItemTime) -> StacMultiBandMetaData {
+    fn netcdf_meta(
+        server: &Server,
+        item_time: StacItemTime,
+        gdal_process_pool: Arc<geoengine_operators::source::gdal_worker_process::GdalProcessPool>,
+    ) -> StacMultiBandMetaData {
         let definition = make_stac_provider_def(DataProviderId::new(), server.url_str("/"));
         let mut dataset = definition.datasets[0].clone();
         dataset.data_type = geoengine_datatypes::raster::RasterDataType::U8;
@@ -2275,6 +2301,7 @@ mod tests {
             item_time,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
+            asset_prober: asset_probe::AssetProber::new(gdal_process_pool),
         }
     }
 
@@ -2346,10 +2373,26 @@ mod tests {
         );
         // no expectation for `/data/saa.nc`: the server fails the test on any request to it
 
-        let meta = netcdf_meta(&server, StacItemTime::Datetime);
+        let meta = netcdf_meta(
+            &server,
+            StacItemTime::Datetime,
+            crate::util::tests::gdal_process_pool_with_workers(1),
+        );
         let items_url = Url::parse(&server.url_str("/collections/sentinel-2-l2a/items")).unwrap();
         let bbox = BoundingBox2D::new((-11.0, 74.9).into(), (-10.8, 75.0).into()).unwrap();
-        let files = meta.search_bbox(items_url, bbox, day(1)).await.unwrap();
+        let files = match meta.search_bbox(items_url, bbox, day(1)).await {
+            Ok(files) => files,
+            Err(geoengine_operators::error::Error::LoadingInfo { source })
+                if source
+                    .downcast_ref::<asset_probe::AssetProbeError>()
+                    .is_some_and(asset_probe::AssetProbeError::is_userfaultfd_unavailable) =>
+            {
+                // e.g. in a container with the default seccomp profile
+                tracing::warn!("skipping the header assertions: {source}");
+                return;
+            }
+            Err(error) => panic!("the search should succeed: {error}"),
+        };
 
         assert_eq!(files.len(), 1, "only the NDVI asset yields a file");
         assert_eq!(files[0].factor.get(), 1);
@@ -2384,7 +2427,11 @@ mod tests {
         ))
         .unwrap();
 
-        let range_meta = netcdf_meta(&server, StacItemTime::Range);
+        let range_meta = netcdf_meta(
+            &server,
+            StacItemTime::Range,
+            crate::util::tests::gdal_process_pool_without_workers(),
+        );
         assert_eq!(
             range_meta
                 .item_time_and_z_index(&item, Some(day(5)))
@@ -2406,7 +2453,11 @@ mod tests {
             None
         );
 
-        let datetime_meta = netcdf_meta(&server, StacItemTime::Datetime);
+        let datetime_meta = netcdf_meta(
+            &server,
+            StacItemTime::Datetime,
+            crate::util::tests::gdal_process_pool_without_workers(),
+        );
         assert_eq!(
             datetime_meta
                 .item_time_and_z_index(&item, Some(day(5)))
@@ -3095,6 +3146,7 @@ mod grid_request_tests {
                 max_concurrent_asset_probes: None,
             },
             request_registry,
+            crate::util::tests::gdal_process_pool_without_workers(),
         )
         .unwrap();
         provider.query_cache = Arc::new(StacQueryCache::new(cache_bytes, Duration::from_mins(1)));

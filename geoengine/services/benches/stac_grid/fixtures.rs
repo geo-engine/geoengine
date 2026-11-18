@@ -13,6 +13,9 @@ use geoengine_datatypes::{
     util::Identifier,
 };
 use geoengine_operators::engine::SpatialGridDescriptor;
+use geoengine_operators::source::gdal_worker_process::{
+    DEFAULT_HEADER_CACHE_ENTRIES, GdalProcessPool, WorkerConfig,
+};
 use geoengine_services::datasets::external::stac::{
     StacAssetBand, StacDataProvider, StacDataProviderDefinition, StacGrid, StacMultiBandMetaData,
     StacProviderDataset, StacProviderDatasetBand,
@@ -423,7 +426,7 @@ pub(super) fn provider(
         })],
     };
     let api_url = server.url_str("/").trim_end_matches('/').to_owned();
-    let provider = StacDataProvider::from_definition(StacDataProviderDefinition {
+    let definition = StacDataProviderDefinition {
         id: DataProviderId::new(),
         name: "benchmark".to_owned(),
         description: String::new(),
@@ -446,8 +449,18 @@ pub(super) fn provider(
         max_concurrent_cell_searches: None,
         item_time: None,
         max_concurrent_asset_probes: None,
-    })
-    .expect("benchmark provider config is valid");
+    };
+    // a pool without workers: the synthetic assets have grid metadata, so the provider reads no
+    // headers
+    let gdal_process_pool = GdalProcessPool::new(
+        0,
+        0,
+        0,
+        DEFAULT_HEADER_CACHE_ENTRIES,
+        WorkerConfig::default(),
+    );
+    let provider = StacDataProvider::from_definition(definition, gdal_process_pool)
+        .expect("benchmark provider config is valid");
     // Fresh, local cache for every scenario; cache=0 keeps in-flight coalescing.
     let provider = provider.with_query_cache_capacity(cache_bytes, Duration::from_hours(1));
     ProviderFixture {

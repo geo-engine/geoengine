@@ -8,6 +8,7 @@ use geoengine_datatypes::primitives::{CacheTtlSeconds, SpatialResolution, TimeDi
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
+use geoengine_operators::source::gdal_worker_process::GdalProcessPool;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::{fmt, num::NonZeroU32, sync::Arc};
@@ -393,6 +394,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
         let mut provider = StacDataProvider::from_definition_with_request_registry(
             definition,
             db.stac_request_registry().clone(),
+            db.gdal_process_pool().clone(),
         )?;
 
         provider.client = provider.client.with_authentication(authentication).await?;
@@ -485,6 +487,8 @@ pub struct StacDataProvider {
     max_concurrent_asset_probes: usize,
     item_time: StacItemTime,
     grid: StacGrid,
+    /// Reads the headers of assets that lack grid metadata
+    asset_prober: asset_probe::AssetProber,
 }
 
 impl StacDataProvider {
@@ -494,14 +498,22 @@ impl StacDataProvider {
     /// [`Self::from_definition_with_request_registry`] to share quotas across providers.
     ///
     /// Authentication is installed asynchronously by [`StacDataProviderDefinition::initialize`].
-    pub fn from_definition(definition: StacDataProviderDefinition) -> crate::error::Result<Self> {
-        Self::from_definition_with_request_registry(definition, StacRequestRegistry::new())
+    pub fn from_definition(
+        definition: StacDataProviderDefinition,
+        gdal_process_pool: Arc<GdalProcessPool>,
+    ) -> crate::error::Result<Self> {
+        Self::from_definition_with_request_registry(
+            definition,
+            StacRequestRegistry::new(),
+            gdal_process_pool,
+        )
     }
 
     /// Builds a provider with the registry shared by its application or standalone operation.
     pub fn from_definition_with_request_registry(
         definition: StacDataProviderDefinition,
         request_registry: StacRequestRegistry,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> crate::error::Result<Self> {
         validate_s3_config(definition.s3_config.as_ref())?;
         validate_time_dimension(definition.time_dimension)?;
@@ -536,6 +548,7 @@ impl StacDataProvider {
             max_concurrent_asset_probes,
             item_time: definition.item_time.unwrap_or_default(),
             grid,
+            asset_prober: asset_probe::AssetProber::new(gdal_process_pool),
         })
     }
 
@@ -588,6 +601,7 @@ mod tests {
             crate::users::UserSession::admin_session(),
             Arc::new(crate::layers::provider_registry::DataConnectorRegistry::default()),
             request_registry.clone(),
+            crate::util::tests::gdal_process_pool_without_workers(),
         );
         let mut definition: StacDataProviderDefinition =
             serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
