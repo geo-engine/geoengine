@@ -4,7 +4,7 @@
 
 mod blocks;
 
-pub use blocks::BlockIo;
+pub use blocks::{BlockIo, MdSlice};
 pub use blocks::{UnitRead, UnitResult};
 
 use crate::cache::new_raster_cache::SupportedRasterDataType;
