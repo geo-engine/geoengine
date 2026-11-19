@@ -35,7 +35,9 @@ use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
     GridAndProperties, RasterInfo, ReadLevel,
 };
+use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
+use futures::stream::FuturesUnordered;
 use gdal::raster::GdalType;
 use geoengine_datatypes::primitives::{CacheHint, CacheTtlSeconds, TimeInterval};
 use geoengine_datatypes::raster::{
@@ -269,6 +271,19 @@ impl BlockIo {
             return Err(not_inside());
         };
 
+        if let Some(picked) = picked {
+            return self
+                .read_picked::<T>(
+                    params,
+                    &file,
+                    &level_window,
+                    &picked,
+                    read_advise,
+                    cache_hint,
+                )
+                .await;
+        }
+
         let blocks = try_join_all(
             level_window
                 .pieces_in(level_window.window)
@@ -291,10 +306,6 @@ impl BlockIo {
         let window = level_window.window;
         let (grid, properties) = crate::util::spawn_blocking(move || {
             let grid = compose(window, &blocks);
-            let grid = match &picked {
-                None => grid,
-                Some(Picked { rows, columns }) => pick(grid, rows, columns),
-            };
             let properties = blocks.first().map(|block| block.properties.clone());
             let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
                 .set_grid_bounds(read_advise.read_window_bounds)
@@ -309,6 +320,91 @@ impl BlockIo {
         Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
             grid,
             properties: properties.unwrap_or_default(),
+        })))
+    }
+
+    /// Reads the pixels `picked` of `level_window`, for a read that resamples a level.
+    ///
+    /// The window can be many times the output: a level 64 from the full resolution spans 64
+    /// times the output per axis. So the window is never composed. Each unit is fetched, its
+    /// picked pixels are written into the output, and it is dropped; the cache keeps its pieces
+    /// within its size limit. The read thus holds the output and the units in flight, which the
+    /// worker pool bounds.
+    async fn read_picked<T>(
+        &self,
+        params: &GdalDatasetParameters,
+        file: &Arc<str>,
+        level_window: &LevelWindow,
+        picked: &Picked,
+        read_advise: GdalReadAdvise,
+        cache_hint: CacheHint,
+    ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
+    where
+        T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
+    {
+        let mut units: FuturesUnordered<_> = level_window
+            .pieces_in(level_window.window)
+            .enumerate()
+            .filter(|&(_, piece)| picked.has_pixels_in(level_window.piece_bounds(piece)))
+            .map(|(index, piece)| async move {
+                let unit = self
+                    .piece::<T>(params, file, level_window, piece, cache_hint)
+                    .await;
+                (index, piece, unit)
+            })
+            .collect();
+
+        let pixels = picked.rows.len() * picked.columns.len();
+        let mut data = vec![T::zero(); pixels];
+        let mut valid = vec![false; pixels];
+        let mut any_valid = false;
+        // of the first piece in piece order, as for reads that compose
+        let mut properties = None;
+        while let Some((index, piece, unit)) = units.next().await {
+            let Some(unit) = unit? else {
+                return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
+            };
+            // A unit that was just read comes back for each of its pieces. Each piece writes
+            // only its own pixels, so none is written twice.
+            any_valid |= picked.blit_from(
+                &unit,
+                level_window.piece_bounds(piece),
+                &mut data,
+                &mut valid,
+            );
+            if properties.as_ref().is_none_or(|&(first, _)| index < first) {
+                properties = Some((index, unit.properties.clone()));
+            }
+        }
+
+        let bounds = GridBoundingBox2D::new_min_max(
+            0,
+            picked.rows.len() as isize - 1,
+            0,
+            picked.columns.len() as isize - 1,
+        )
+        .expect("a read has pixels");
+        // as for window reads, a read without valid pixels is empty
+        let grid: GridOrEmpty<GridBoundingBox2D, T> = if any_valid {
+            MaskedGrid::new(
+                Grid::new(bounds, data).expect("one value per output pixel"),
+                Grid::new(bounds, valid).expect("one value per output pixel"),
+            )
+            .expect("data and mask have the same bounds")
+            .into()
+        } else {
+            EmptyGrid::new(bounds).into()
+        };
+        // the pixels are in the file's row order, south-up files are flipped afterwards
+        let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
+            .set_grid_bounds(read_advise.read_window_bounds)
+            .expect("the picked pixels are those of the read");
+
+        Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
+            grid,
+            properties: properties
+                .map(|(_, properties)| properties)
+                .unwrap_or_default(),
         })))
     }
 
@@ -500,10 +596,58 @@ struct LevelRead {
     picked: Option<Picked>,
 }
 
-/// Pixels of a level window that a read takes, per axis, counted in the level from 0.
+/// Pixels of a level that a read takes, per axis, counted in the level from 0 and ascending. The
+/// output pixel (i, j) is the level pixel (`rows[i]`, `columns[j]`).
 struct Picked {
     rows: Vec<usize>,
     columns: Vec<usize>,
+}
+
+impl Picked {
+    /// The positions in `pixels` (rows or columns) of those in `min..=max`.
+    fn positions(pixels: &[usize], min: isize, max: isize) -> std::ops::Range<usize> {
+        pixels.partition_point(|&pixel| (pixel as isize) < min)
+            ..pixels.partition_point(|&pixel| pixel as isize <= max)
+    }
+
+    /// Whether one of the pixels lies in `bounds` of the level.
+    fn has_pixels_in(&self, bounds: GridBoundingBox2D) -> bool {
+        !Self::positions(&self.rows, bounds.y_min(), bounds.y_max()).is_empty()
+            && !Self::positions(&self.columns, bounds.x_min(), bounds.x_max()).is_empty()
+    }
+
+    /// Writes the pixels that lie in `bounds` of the level from `block`, which covers `bounds`,
+    /// to their places in `data` and `valid`, the output in row order. Returns whether one of
+    /// them is valid.
+    fn blit_from<T: Pixel>(
+        &self,
+        block: &Block<T>,
+        bounds: GridBoundingBox2D,
+        data: &mut [T],
+        valid: &mut [bool],
+    ) -> bool {
+        let GridOrEmpty::Grid(grid) = &block.grid else {
+            return false;
+        };
+        let block_bounds = grid.inner_grid.shape;
+        let [_, block_width] = block_bounds.axis_size();
+        let rows = Self::positions(&self.rows, bounds.y_min(), bounds.y_max());
+        let columns = Self::positions(&self.columns, bounds.x_min(), bounds.x_max());
+        let mut any_valid = false;
+        for row in rows {
+            let from_row = (self.rows[row] as isize - block_bounds.y_min()) as usize * block_width;
+            let to_row = row * self.columns.len();
+            for column in columns.clone() {
+                let from =
+                    from_row + (self.columns[column] as isize - block_bounds.x_min()) as usize;
+                let is_valid = grid.validity_mask.data[from];
+                data[to_row + column] = grid.inner_grid.data[from];
+                valid[to_row + column] = is_valid;
+                any_valid |= is_valid;
+            }
+        }
+        any_valid
+    }
 }
 
 /// The coarsest level of the file with a whole-number factor below `factor`: the level GDAL
@@ -606,46 +750,6 @@ fn source_pixels(
             .map(|pixel| ((2 * pixel + 1) * factor * level_size / (2 * full_size)).min(last_pixel))
             .collect(),
     )
-}
-
-/// The pixels `rows` × `columns` of `grid`, whose first pixel is (`rows[0]`, `columns[0]`).
-fn pick<T: Pixel>(
-    grid: GridOrEmpty<GridBoundingBox2D, T>,
-    rows: &[usize],
-    columns: &[usize],
-) -> GridOrEmpty<GridBoundingBox2D, T> {
-    let bounds =
-        GridBoundingBox2D::new_min_max(0, rows.len() as isize - 1, 0, columns.len() as isize - 1)
-            .expect("a read has pixels");
-    let GridOrEmpty::Grid(grid) = grid else {
-        return EmptyGrid::new(bounds).into();
-    };
-    let [_, width] = grid.inner_grid.shape.axis_size();
-    let indices = rows
-        .iter()
-        .flat_map(|row| {
-            columns
-                .iter()
-                .map(move |column| (row - rows[0]) * width + column - columns[0])
-        })
-        .collect::<Vec<_>>();
-    MaskedGrid::new(
-        Grid::new(
-            bounds,
-            indices.iter().map(|&i| grid.inner_grid.data[i]).collect(),
-        )
-        .expect("one value per output pixel"),
-        Grid::new(
-            bounds,
-            indices
-                .iter()
-                .map(|&i| grid.validity_mask.data[i])
-                .collect(),
-        )
-        .expect("one value per output pixel"),
-    )
-    .expect("data and mask have the same bounds")
-    .into()
 }
 
 /// Identifies a file and everything that changes how its pixels and properties are read.
@@ -780,16 +884,63 @@ mod tests {
     }
 
     #[test]
-    fn it_picks_pixels_of_a_grid() {
-        let bounds = GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap();
-        let grid = GridOrEmpty::from(MaskedGrid::new_with_data(
-            Grid::new(bounds, (0..25_u16).collect()).unwrap(),
-        ));
-        // the grid's first pixel is the level pixel (2, 2)
-        let GridOrEmpty::Grid(out) = pick(grid, &[2, 4, 5], &[2, 4, 6]) else {
-            panic!("the read has valid pixels")
+    fn it_blits_the_picked_pixels_of_a_piece() {
+        // the level pixels (2, 4, 5) x (2, 4, 6, 9): a 3 x 4 output
+        let picked = Picked {
+            rows: vec![2, 4, 5],
+            columns: vec![2, 4, 6, 9],
         };
-        assert_eq!(out.inner_grid.data, vec![0, 2, 4, 10, 12, 14, 15, 17, 19]);
+        let bounds = |y_min, y_max, x_min, x_max| {
+            GridBoundingBox2D::new_min_max(y_min, y_max, x_min, x_max).unwrap()
+        };
+        // a unit of the level pixels (0..=7, 0..=7) whose values are `y * 10 + x`
+        let unit_bounds = bounds(0, 7, 0, 7);
+        let mut unit = MaskedGrid::new_with_data(
+            Grid::new(
+                unit_bounds,
+                (0..64_u16).map(|i| i / 8 * 10 + i % 8).collect(),
+            )
+            .unwrap(),
+        );
+        // (5, 6) is no data
+        unit.validity_mask.data[5 * 8 + 6] = false;
+        let unit = Block {
+            grid: GridOrEmpty::from(unit),
+            properties: RasterProperties::default(),
+        };
+
+        let mut data = vec![0_u16; 12];
+        let mut valid = vec![false; 12];
+        // the piece (4..=7, 4..=7) of the unit: only its pixels are written
+        let piece = bounds(4, 7, 4, 7);
+        assert!(picked.has_pixels_in(piece));
+        assert!(picked.blit_from(&unit, piece, &mut data, &mut valid));
+        assert_eq!(data, vec![0, 0, 0, 0, 0, 44, 46, 0, 0, 54, 56, 0]);
+        assert_eq!(
+            valid,
+            vec![
+                false, false, false, false, false, true, true, false, false, true, false, false
+            ]
+        );
+        // the piece (0..=3, 0..=3) holds the pixel (2, 2) only
+        assert!(picked.blit_from(&unit, bounds(0, 3, 0, 3), &mut data, &mut valid));
+        assert_eq!(data[0], 22);
+        assert!(valid[0]);
+
+        // pieces without picked pixels: no picked row, no picked column
+        assert!(!picked.has_pixels_in(bounds(6, 7, 0, 7)));
+        assert!(!picked.has_pixels_in(bounds(0, 7, 7, 8)));
+        // the piece of the column 9 alone, at the edge of its bounds
+        assert!(picked.has_pixels_in(bounds(0, 7, 9, 15)));
+
+        // an empty block writes nothing and has no valid pixel
+        let empty = Block::<u16> {
+            grid: EmptyGrid::new(unit_bounds).into(),
+            properties: RasterProperties::default(),
+        };
+        let before = data.clone();
+        assert!(!picked.blit_from(&empty, piece, &mut data, &mut valid));
+        assert_eq!(data, before);
     }
 
     #[test]

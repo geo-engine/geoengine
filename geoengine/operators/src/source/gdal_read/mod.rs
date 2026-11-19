@@ -808,6 +808,50 @@ mod tests {
         }
     }
 
+    /// A resampling read does not hold its level window: level 16 of a 256 px file without
+    /// overviews spans the whole file, 131 kB of pixels, and reads it through a block cache of
+    /// 20 kB with the pixels of GDAL's window read.
+    #[tokio::test]
+    async fn resampling_reads_do_not_need_their_window_in_the_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff(dir.path(), 256, &[]);
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(20_000));
+        let blocks = BlockIo::new(cache, gdal_worker.clone(), CacheTtlSeconds::new(60));
+
+        let plan = TilePlan {
+            tile: TileInformation::new(
+                [0, 0].into(),
+                GridShape2D::new([16, 16]),
+                GeoTransform::new_unchecked((0., 64.).into(), 16., -16.),
+            ),
+            time: TimeInterval::default(),
+            band: 0,
+            files: vec![params.clone()],
+            cache_hint: CacheHint::max_duration(),
+        };
+        let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+            original_dataset_grid: file_grid,
+            overview_level: std::num::NonZeroUsize::new(16).unwrap(),
+            files_have_level: false,
+        });
+        let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
+            .await
+            .unwrap();
+        let tile = assemble_tile::<u16>(plan, reader_mode, &gdal_worker, Some(&blocks))
+            .await
+            .unwrap();
+        assert_eq!(tile, from_gdal);
+    }
+
     #[tokio::test]
     async fn reads_of_a_level_the_file_lacks_give_the_same_pixels_on_both_paths() {
         let dir = tempfile::tempdir().unwrap();
