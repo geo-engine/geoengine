@@ -597,7 +597,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 
     fn reads_cached_blocks(&self) -> bool {
-        // see `ReadLevel`: a file may lack an undeclared level, GDAL then reads it without blocks
+        // see `ReadLevel`: a file may lack an undeclared level and is then resampled on every read
         self.original_resolution_spatial_grid.is_none() || self.max_overview_level.is_some()
     }
 

@@ -48,10 +48,36 @@ pub struct TilePlan {
     pub cache_hint: CacheHint,
 }
 
-/// Reads the files of `plan` and composes its tile. Reads of a level the dataset declares go
-/// through `blocks` if given, else they read the level directly; neither resamples. Datasets
-/// without declared levels read the level through `blocks` from each file that has it; other
-/// files, and all of them without `blocks`, are left to GDAL, which may resample.
+/// How the files of a tile are read. The path is chosen once per tile and holds for all its
+/// files: a file never switches to the other path, so the pixels of a tile follow one rule.
+#[derive(Clone, Copy)]
+enum ReadPath<'a> {
+    /// Through whole cached blocks of the files, see [`BlockIo::read`]. A file that lacks the
+    /// level is resampled from its blocks of a finer level, in the server.
+    Blocks(&'a BlockIo),
+    /// Through GDAL in the workers, see [`read_through_gdal`]. A file that lacks the level is
+    /// resampled by GDAL.
+    Gdal,
+}
+
+impl<'a> ReadPath<'a> {
+    /// Blocks, if there is a block reader, the blocks read for the tile stay cached, and the
+    /// reader reads every file of the tile (with `block_reads = "auto"`: all are remote).
+    fn of(blocks: Option<&'a BlockIo>, plan: &TilePlan) -> Self {
+        match blocks {
+            Some(blocks)
+                if blocks.caches(plan.cache_hint)
+                    && plan.files.iter().all(|file| blocks.reads(file)) =>
+            {
+                ReadPath::Blocks(blocks)
+            }
+            _ => ReadPath::Gdal,
+        }
+    }
+}
+
+/// Reads the files of `plan` and composes its tile, all of them on one [`ReadPath`]: through
+/// `blocks` if given and usable for the tile, else through GDAL.
 ///
 /// The highest z-index wins at each valid pixel. A file is read only where the files above it
 /// left pixels invalid, so files are read one after another. The properties come from the first
@@ -73,7 +99,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
     let level = reader_mode.read_level();
-    let blocks = blocks.filter(|blocks| blocks.caches(plan.cache_hint));
+    let path = ReadPath::of(blocks, &plan);
 
     for params in plan.files {
         let Some(read_advise) = reader_mode
@@ -98,68 +124,13 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             continue;
         }
 
-        // Which of the three reads a file gets:
-        //
-        // | level               | blocks | read                                               |
-        // |---------------------|--------|----------------------------------------------------|
-        // | any                 | yes    | `BlockIo::read`: whole cached blocks of the level  |
-        // | `Declared`          | no     | `read_level_data`: the level's band, pixel by pixel |
-        // | `Full`, `Undeclared` | no     | `read_tile_data`: GDAL's window read, GDAL picks   |
-        // |                     |        | the level and may resample                         |
-        //
-        // `blocks` is the block reader if this file goes through it: the new raster cache is on,
-        // the tile's cache lifetime is long enough, and with `block_reads = "auto"` the file is
-        // remote. An undeclared level only goes through blocks if the read starts at a pixel of
-        // the level. Only a declared level is read pixel by pixel without blocks, since only then
-        // does every file have it; at the full resolution the window read reads pixel for pixel
-        // anyway.
-        let blocks_for_file = blocks.filter(|blocks| {
-            blocks.reads(&params)
-                && match level {
-                    ReadLevel::Undeclared(factor) => {
-                        level_read_advise(read_advise, factor).is_some()
-                    }
-                    ReadLevel::Full | ReadLevel::Declared(_) => true,
-                }
-        });
-        let read = match (level, blocks_for_file) {
-            // A file without the level is resampled from its coarsest finer overview; only a file
-            // without any overview answers `MissingOverviewLevel`, handled below.
-            (level, Some(blocks)) => {
+        let read = match path {
+            ReadPath::Blocks(blocks) => {
                 blocks
                     .read::<T>(&params, read_advise, level, plan.cache_hint)
-                    .await
+                    .await?
             }
-            // The reader mode snaps declared reads to the level's pixels, so a read that does not
-            // start at one is a bug, not a file to fall back for.
-            (ReadLevel::Declared(factor), None) => {
-                let Some(level_advise) = level_read_advise(read_advise, factor) else {
-                    return Err(misaligned_read(&params, factor));
-                };
-                reader
-                    .read_level_data::<T>(params.clone(), factor, level_advise)
-                    .await
-            }
-            (ReadLevel::Full | ReadLevel::Undeclared(_), None) => {
-                reader
-                    .read_tile_data::<T>(params.clone(), read_advise)
-                    .await
-            }
-        };
-        // A file that lacks the level (and, through blocks, any finer overview) falls back to
-        // GDAL's window read. Only for a declared level is that a broken promise.
-        let read = match read {
-            Err(GdalProcessPoolError::IpcProcessError {
-                source: IpcProcessError::MissingOverviewLevel { file, factor },
-            }) => {
-                if matches!(level, ReadLevel::Declared(_)) {
-                    tracing::warn!(
-                        "{file} lacks the overview level {factor}, GDAL may resample it"
-                    );
-                }
-                reader.read_tile_data::<T>(params, read_advise).await?
-            }
-            read => read?,
+            ReadPath::Gdal => read_through_gdal::<T>(&reader, params, read_advise, level).await?,
         };
         let file_data = match read {
             GdalProcessReadResult::Grid(grid_and_properties) => *grid_and_properties,
@@ -252,6 +223,45 @@ pub(crate) fn overview_source(
         sources: SingleRasterSource { raster: source },
     }
     .typed()
+}
+
+/// Reads `read_advise` of one file through GDAL in a worker, without blocks:
+///
+/// | level                | read                                                              |
+/// |----------------------|-------------------------------------------------------------------|
+/// | `Declared`           | `read_level_data`: the level's band, pixel by pixel               |
+/// | `Full`, `Undeclared` | `read_tile_data`: GDAL's window read, GDAL picks the level and    |
+/// |                      | may resample                                                      |
+///
+/// Only a declared level is read pixel by pixel, since only then does every file have it; at
+/// the full resolution the window read reads pixel for pixel anyway. A file that lacks its
+/// declared level is read by the window read as well, with a warning.
+async fn read_through_gdal<T: Pixel + GdalType + FromPrimitive>(
+    reader: &GdalPoolReader,
+    params: GdalDatasetParameters,
+    read_advise: GdalReadAdvise,
+    level: ReadLevel,
+) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
+    let ReadLevel::Declared(factor) = level else {
+        return reader.read_tile_data::<T>(params, read_advise).await;
+    };
+    // The reader mode snaps declared reads to the level's pixels, so a read that does not
+    // start at one is a bug.
+    let Some(level_advise) = level_read_advise(read_advise, factor) else {
+        return Err(misaligned_read(&params, factor));
+    };
+    match reader
+        .read_level_data::<T>(params.clone(), factor, level_advise)
+        .await
+    {
+        Err(GdalProcessPoolError::IpcProcessError {
+            source: IpcProcessError::MissingOverviewLevel { file, factor },
+        }) => {
+            tracing::warn!("{file} lacks the overview level {factor}, GDAL resamples it");
+            reader.read_tile_data::<T>(params, read_advise).await
+        }
+        read => read,
+    }
 }
 
 /// `read_advise` in the pixel space of the level `factor` times coarser than the full
@@ -368,6 +378,31 @@ mod tests {
         let on = blocks(BlockReadMode::On).unwrap();
         assert!(on.reads(&local));
         assert!(on.reads(&remote(remote_paths[0])));
+
+        // one path per tile: a tile with a file the block reader does not read goes through GDAL
+        let plan = |files| TilePlan {
+            tile: TileInformation::new(
+                [0, 0].into(),
+                GridShape2D::new([8, 8]),
+                GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
+            ),
+            time: TimeInterval::default(),
+            band: 0,
+            files,
+            cache_hint: CacheHint::max_duration(),
+        };
+        let all_remote = plan(vec![remote(remote_paths[0]), remote(remote_paths[1])]);
+        let mixed = plan(vec![remote(remote_paths[0]), local.clone()]);
+        assert!(matches!(
+            ReadPath::of(Some(&auto), &all_remote),
+            ReadPath::Blocks(_)
+        ));
+        assert!(matches!(ReadPath::of(Some(&auto), &mixed), ReadPath::Gdal));
+        assert!(matches!(
+            ReadPath::of(Some(&on), &mixed),
+            ReadPath::Blocks(_)
+        ));
+        assert!(matches!(ReadPath::of(None, &all_remote), ReadPath::Gdal));
     }
 
     fn ndvi_jan_2014_params() -> GdalDatasetParameters {
@@ -504,7 +539,9 @@ mod tests {
             .unwrap()
             .write((0, 0), (size, size), &mut buffer)
             .unwrap();
-        dataset.build_overviews("NEAREST", overviews, &[]).unwrap();
+        if !overviews.is_empty() {
+            dataset.build_overviews("NEAREST", overviews, &[]).unwrap();
+        }
         dataset.close().unwrap();
 
         GdalDatasetParameters {
@@ -710,8 +747,69 @@ mod tests {
         assert_eq!(gpp.request_stats().headers, 2);
     }
 
+    /// A file without any overview stays on the block path: its level 4 and 8 are resampled
+    /// from blocks of the full resolution, with the pixels of GDAL's window read.
     #[tokio::test]
-    async fn reads_of_a_level_the_file_lacks_fall_back_to_gdal() {
+    async fn files_without_overviews_are_resampled_from_full_resolution_blocks() {
+        let dir = tempfile::tempdir().unwrap();
+        let params = tiled_tiff(dir.path(), 64, &[]);
+        let file_grid = params.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+
+        for level in [4_usize, 8] {
+            let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+            let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+            let size = 64 / level;
+            let plan = TilePlan {
+                tile: TileInformation::new(
+                    [0, 0].into(),
+                    GridShape2D::new([size, size]),
+                    GeoTransform::new_unchecked((0., 64.).into(), level as f64, -(level as f64)),
+                ),
+                time: TimeInterval::default(),
+                band: 0,
+                files: vec![params.clone()],
+                cache_hint: CacheHint::max_duration(),
+            };
+            for files_have_level in [false, true] {
+                let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                    original_dataset_grid: file_grid,
+                    overview_level: std::num::NonZeroUsize::new(level).unwrap(),
+                    files_have_level,
+                });
+                let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
+                    .await
+                    .unwrap();
+                let reads = gpp.request_stats().reads;
+                let tile =
+                    assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, Some(&blocks))
+                        .await
+                        .unwrap();
+                assert_eq!(
+                    tile, from_gdal,
+                    "level {level}, declared: {files_have_level}"
+                );
+                assert!(cache.byte_size() > 0, "level {level}: blocks were cached");
+                if files_have_level {
+                    assert_eq!(
+                        gpp.request_stats().reads,
+                        reads,
+                        "level {level}: the second read took the cached blocks"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn reads_of_a_level_the_file_lacks_give_the_same_pixels_on_both_paths() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff_with_overviews(dir.path());
         let file_grid = params.spatial_grid_definition();
