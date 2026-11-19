@@ -20,7 +20,7 @@ use crate::source::gdal_worker_process::{
     GdalReaderMode,
 };
 use crate::util::Result;
-use futures::stream::BoxStream;
+use futures::stream::{BoxStream, FuturesOrdered};
 use futures::{Stream, StreamExt};
 use gdal::raster::GdalType;
 use geoengine_datatypes::dataset::NamedData;
@@ -29,7 +29,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{
     BoundedGrid, ChangeGridBounds, EmptyGrid, GridBlit, GridBoundingBox2D, GridIdx2D, GridOrEmpty,
-    GridShapeAccess, Pixel, RasterTile2D, TileInformation,
+    GridShapeAccess, Pixel, RasterProperties, RasterTile2D, TileInformation,
 };
 use num::FromPrimitive;
 use std::num::NonZeroUsize;
@@ -88,12 +88,24 @@ impl<'a> ReadPath<'a> {
 /// `blocks` if given and usable for the tile, else through GDAL.
 ///
 /// The highest z-index wins at each valid pixel. A file is read only where the files above it
-/// left pixels invalid, so files are read one after another. The properties come from the first
-/// file that was read. A tile no file covers is empty.
+/// left pixels invalid. Files whose read area sticks out of the areas of the files above are read
+/// at the same time, since those can never cover them; a file inside those areas waits for the
+/// files above it and is only read if they left a pixel of its area invalid. So the same files
+/// are read as one after another, and merging in the order of the files gives the same pixels.
+/// The properties come from the first file that was read. A tile no file covers is empty.
+///
+/// The traces of the reads are in a span per tile, so that the reads of one tile, which run at
+/// the same time, can be told apart from those of other tiles.
 ///
 /// # Errors
 /// Returns an error if a pool read fails. A missing file counts as no data if its parameters
 /// say so.
+#[tracing::instrument(
+    name = "gdal_assemble_tile",
+    level = "trace",
+    skip_all,
+    fields(tile = ?plan.tile.global_tile_position, band = plan.band, time = ?plan.time)
+)]
 pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType>(
     plan: TilePlan,
     reader_mode: GdalReaderMode,
@@ -109,52 +121,63 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     let factor = reader_mode.level_factor();
     let path = ReadPath::of(blocks, &plan, &reader_mode);
 
-    for params in plan.files {
-        let Some(read_advise) = reader_mode
-            .tiling_to_dataset_read_advise(&params.spatial_grid_definition(), &tile_spatial_grid)
-        else {
-            trace!(
-                file = %params.file_path.display(),
-                "file does not intersect tile {:?}",
-                plan.tile.global_tile_position,
+    let files: Vec<(GdalDatasetParameters, GdalReadAdvise)> = plan
+        .files
+        .into_iter()
+        .filter_map(|params| {
+            let read_advise = reader_mode.tiling_to_dataset_read_advise(
+                &params.spatial_grid_definition(),
+                &tile_spatial_grid,
             );
-            continue;
-        };
-
-        if raster
-            .as_masked_grid()
-            .is_some_and(|grid| grid.all_valid_in_bbox(&read_advise.read_window_bounds))
-        {
-            trace!(
-                file = %params.file_path.display(),
-                "skipping file whose read area is covered by higher-z valid pixels"
-            );
-            continue;
-        }
-
-        let read = match path {
-            ReadPath::Blocks(blocks) => {
-                blocks
-                    .read::<T>(&params, read_advise, factor, plan.cache_hint)
-                    .await?
+            if read_advise.is_none() {
+                trace!(
+                    file = %params.file_path.display(),
+                    "file does not intersect tile {:?}",
+                    plan.tile.global_tile_position,
+                );
             }
-            ReadPath::Gdal => reader.read_tile_data::<T>(params, read_advise).await?,
-        };
-        let file_data = match read {
-            GdalProcessReadResult::Grid(grid_and_properties) => *grid_and_properties,
-            GdalProcessReadResult::FileNotFoundAsNoData => continue,
-        };
+            read_advise.map(|read_advise| (params, read_advise))
+        })
+        .collect();
+    let areas: Vec<GridBoundingBox2D> = files
+        .iter()
+        .map(|(_, read_advise)| read_advise.read_window_bounds)
+        .collect();
 
-        if raster.is_empty() && file_data.grid.bounding_box() == tile_bounds {
-            // nothing to merge with: take the grid instead of copying it
-            raster = file_data.grid;
-        } else if raster.is_empty() {
-            // nothing to merge with either: copy whole rows, the merge below checks each pixel
-            raster.grid_blit_from(&file_data.grid);
-        } else {
-            raster.grid_blit_fill_no_data(&file_data.grid);
+    // reads in flight, merged in the order of the files (highest z-index first) as they finish
+    let mut reads = FuturesOrdered::new();
+    for (index, (params, read_advise)) in files.into_iter().enumerate() {
+        if is_covered(areas[index], &areas[..index]) {
+            // the files above may fill this one's area: merge them first, then decide
+            while let Some(read) = reads.next().await {
+                merge(&mut raster, &mut properties, tile_bounds, read?);
+            }
+            if raster
+                .as_masked_grid()
+                .is_some_and(|grid| grid.all_valid_in_bbox(&read_advise.read_window_bounds))
+            {
+                trace!(
+                    file = %params.file_path.display(),
+                    "skipping file whose read area is covered by valid pixels of files above it"
+                );
+                continue;
+            }
         }
-        properties.get_or_insert(file_data.properties);
+        let reader = &reader;
+        let cache_hint = plan.cache_hint;
+        reads.push_back(async move {
+            match path {
+                ReadPath::Blocks(blocks) => {
+                    blocks
+                        .read::<T>(&params, read_advise, factor, cache_hint)
+                        .await
+                }
+                ReadPath::Gdal => reader.read_tile_data::<T>(params, read_advise).await,
+            }
+        });
+    }
+    while let Some(read) = reads.next().await {
+        merge(&mut raster, &mut properties, tile_bounds, read?);
     }
 
     Ok(RasterTile2D::new_with_properties(
@@ -166,6 +189,59 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
         properties.unwrap_or_default(),
         plan.cache_hint,
     ))
+}
+
+/// Merges one file's read into the tile below the pixels of the files merged before it.
+fn merge<T: Pixel>(
+    raster: &mut GridOrEmpty<GridBoundingBox2D, T>,
+    properties: &mut Option<RasterProperties>,
+    tile_bounds: GridBoundingBox2D,
+    read: GdalProcessReadResult<T>,
+) {
+    let file_data = match read {
+        GdalProcessReadResult::Grid(grid_and_properties) => *grid_and_properties,
+        GdalProcessReadResult::FileNotFoundAsNoData => return,
+    };
+
+    if raster.is_empty() && file_data.grid.bounding_box() == tile_bounds {
+        // nothing to merge with: take the grid instead of copying it
+        *raster = file_data.grid;
+    } else if raster.is_empty() {
+        // nothing to merge with either: copy whole rows, the merge below checks each pixel
+        raster.grid_blit_from(&file_data.grid);
+    } else {
+        raster.grid_blit_fill_no_data(&file_data.grid);
+    }
+    properties.get_or_insert(file_data.properties);
+}
+
+/// Whether every pixel of `area` lies in one of `above`. Only then can the files above fill it.
+fn is_covered(area: GridBoundingBox2D, above: &[GridBoundingBox2D]) -> bool {
+    // split `area` at every edge of the boxes above; each cell is inside a box or outside all
+    let cuts = |min: isize, max: isize, edges: &mut dyn Iterator<Item = isize>| {
+        let mut cuts: Vec<isize> = edges.filter(|&edge| edge > min && edge <= max).collect();
+        cuts.push(min);
+        cuts.sort_unstable();
+        cuts.dedup();
+        cuts
+    };
+    let ys = cuts(
+        area.y_min(),
+        area.y_max(),
+        &mut above.iter().flat_map(|b| [b.y_min(), b.y_max() + 1]),
+    );
+    let xs = cuts(
+        area.x_min(),
+        area.x_max(),
+        &mut above.iter().flat_map(|b| [b.x_min(), b.x_max() + 1]),
+    );
+    ys.iter().all(|&y| {
+        xs.iter().all(|&x| {
+            above.iter().any(|b| {
+                (b.y_min()..=b.y_max()).contains(&y) && (b.x_min()..=b.x_max()).contains(&x)
+            })
+        })
+    })
 }
 
 /// Checks the overview level a processing graph asks for against the levels its dataset
@@ -296,12 +372,112 @@ mod tests {
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{
         GeoTransform, GridShape2D, RasterPropertiesEntry, RasterPropertiesEntryType,
-        RasterPropertiesKey,
+        RasterPropertiesKey, SpatialGridDefinition,
     };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::NonZeroFiniteF64;
     use geoengine_datatypes::util::test::TestDefault;
     use std::sync::Arc;
+
+    #[test]
+    fn it_knows_whether_the_areas_above_cover_an_area() {
+        let area = |y_min, y_max, x_min, x_max| {
+            GridBoundingBox2D::new_min_max(y_min, y_max, x_min, x_max).unwrap()
+        };
+        let file = area(0, 9, 0, 9);
+        assert!(!is_covered(file, &[]));
+        assert!(is_covered(file, &[area(0, 9, 0, 9)]));
+        assert!(is_covered(file, &[area(-5, 20, -5, 20)]));
+        // two halves that meet, in either order
+        assert!(is_covered(file, &[area(0, 9, 0, 4), area(0, 9, 5, 9)]));
+        assert!(is_covered(file, &[area(0, 9, 5, 9), area(0, 9, 0, 4)]));
+        // four quarters, one of them overlapping the others
+        assert!(is_covered(
+            file,
+            &[
+                area(0, 4, 0, 4),
+                area(0, 4, 5, 9),
+                area(5, 9, 0, 4),
+                area(3, 9, 3, 9)
+            ]
+        ));
+        // a gap of one column, one missing corner pixel
+        assert!(!is_covered(file, &[area(0, 9, 0, 3), area(0, 9, 5, 9)]));
+        assert!(!is_covered(file, &[area(0, 9, 0, 8), area(0, 8, 9, 9)]));
+        // sticking out of a box that covers most of it
+        assert!(!is_covered(file, &[area(0, 9, 1, 20)]));
+    }
+
+    /// Three files of one tile: A, then B shifted 32 px to the right, then a copy of A. A and B
+    /// stick out of each other and are read together; the copy of A lies in A's area, waits
+    /// for it and is skipped, since A's pixels are all valid. The pixels are those of A where A
+    /// lies and of B elsewhere, as if the files were read one after another.
+    #[tokio::test]
+    async fn it_reads_files_of_a_tile_together_and_merges_them_in_file_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = tiled_tiff(dir.path(), 64, &[2]);
+        // the same pixels in a second file, 32 px to the right
+        let b_dir = tempfile::tempdir().unwrap();
+        let mut b = tiled_tiff(b_dir.path(), 64, &[2]);
+        gdal::Dataset::open_ex(
+            &b.file_path,
+            gdal::DatasetOptions {
+                open_flags: gdal::GdalOpenFlags::GDAL_OF_UPDATE,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .set_geo_transform(&[32., 1., 0., 64., 0., -1.])
+        .unwrap();
+        b.geo_transform.origin_coordinate = (32., 64.).into();
+        let gpp = GdalProcessPool::new(
+            4,
+            4,
+            4,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+        let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
+            dataset_spatial_grid: SpatialGridDefinition::new(
+                GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
+                GridBoundingBox2D::new_min_max(0, 63, 0, 95).unwrap(),
+            ),
+        });
+        let plan = TilePlan {
+            tile: TileInformation::new(
+                [0, 0].into(),
+                GridShape2D::new([64, 96]),
+                GeoTransform::new_unchecked((0., 64.).into(), 1., -1.),
+            ),
+            time: TimeInterval::default(),
+            band: 0,
+            files: vec![a.clone(), b, a],
+            cache_hint: CacheHint::max_duration(),
+        };
+
+        let tile = assemble_tile::<u16>(plan, reader_mode, &gdal_worker, None)
+            .await
+            .unwrap()
+            .grid_array
+            .into_materialized_masked_grid();
+
+        for y in 0..64 {
+            for x in 0..96 {
+                let from = if x < 64 { x } else { x - 32 };
+                assert_eq!(
+                    tile.inner_grid.data[y * 96 + x],
+                    (y * 64 + from) as u16,
+                    "pixel [{y}, {x}]"
+                );
+            }
+        }
+        assert_eq!(
+            gpp.request_stats().reads + gpp.request_stats().reads_joined,
+            2,
+            "the copy of A is not read"
+        );
+    }
 
     #[tokio::test]
     async fn it_reads_only_remote_files_through_blocks_in_auto_mode() {
