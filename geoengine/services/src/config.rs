@@ -2,12 +2,14 @@ use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
 use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
+use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::primitives::{CacheTtlSeconds, MAX_CACHE_TTL_SECONDS, TimeInterval};
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::new_raster_cache::{
     BlockReadMode, DEFAULT_MIN_BLOCK_TTL_SECONDS, NewRasterCacheEnum,
 };
 use geoengine_operators::processing::ExpressionCacheConfig;
+use geoengine_operators::util::WarpMethods;
 use geoengine_operators::util::raster_stream_to_geotiff::GdalCompressionNumThreads;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -208,9 +210,23 @@ pub struct QueryContext {
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
     /// The most boxes a footprint keeps for one time step. Footprints with more boxes are merged.
     pub footprint_boxes_per_step_limit: usize,
+    /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
+    /// output tile
+    pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,
+    /// The largest error in input pixels of the approximate coordinate transformation of a raster
+    /// reprojection, for a `Warp` without `approximationErrorThreshold`; `0` projects exactly
+    pub reprojection_approximation_error_px: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl QueryContext {
+    /// The upper limit in bytes for the memory that a `Warp` with the downsampling method `mode`
+    /// keeps per output tile
+    pub fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.warp_mode_max_memory_per_tile_mb
+            .get()
+            .saturating_mul(1024 * 1024)
+    }
+
     pub fn gdal_read_ahead(&self) -> geoengine_operators::engine::GdalReadAhead {
         geoengine_operators::engine::GdalReadAhead {
             gdal_source: self.gdal_source_read_ahead.get(),
@@ -382,6 +398,32 @@ pub struct Ogc {
     pub default_time: Option<OgcDefaultTime>,
     pub tiles: Option<OgcApiTilesConfig>,
     pub cors: Option<CorsConfig>,
+    /// How WMS `GetMap` and OGC API tiles resample rasters onto the requested grid
+    #[serde(default)]
+    pub map_resampling: MapResampling,
+}
+
+/// How rendered maps (WMS `GetMap`, OGC API tiles) resample rasters onto the requested grid.
+/// WCS always uses nearest neighbor, as it returns data values.
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum MapResampling {
+    /// The methods for the colorizer: the most common class for a palette, the average and
+    /// bilinear interpolation for gradients and RGB composites
+    #[default]
+    Symbology,
+    /// Nearest neighbor, which is faster
+    Nearest,
+}
+
+impl MapResampling {
+    /// The methods for rendering with `colorizer`
+    pub fn methods(self, colorizer: &RasterColorizer) -> WarpMethods {
+        match self {
+            Self::Symbology => WarpMethods::for_symbology(colorizer),
+            Self::Nearest => WarpMethods::NEAREST,
+        }
+    }
 }
 
 impl ConfigElement for Ogc {
@@ -959,6 +1001,41 @@ mod tests {
     }
 
     #[test]
+    fn it_resamples_maps_by_symbology_unless_configured_otherwise() {
+        use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
+
+        let config: Ogc = default_settings().get(Ogc::KEY).unwrap();
+        assert_eq!(config.map_resampling, MapResampling::Symbology);
+
+        let config = Config::builder()
+            .add_source(default_settings())
+            .set_override("ogc.map_resampling", "nearest")
+            .unwrap()
+            .build()
+            .unwrap();
+        let config: Ogc = config.get(Ogc::KEY).unwrap();
+        assert_eq!(config.map_resampling, MapResampling::Nearest);
+
+        let palette = RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: Colorizer::palette(
+                [(1.0.try_into().unwrap(), RgbaColor::white())].into(),
+                RgbaColor::transparent(),
+                RgbaColor::black(),
+            )
+            .unwrap(),
+        };
+        assert_eq!(
+            MapResampling::Symbology.methods(&palette),
+            WarpMethods::CLASSES
+        );
+        assert_eq!(
+            MapResampling::Nearest.methods(&palette),
+            WarpMethods::NEAREST
+        );
+    }
+
+    #[test]
     fn it_rejects_an_expression_sweep_interval_of_zero() {
         let config = Config::builder()
             .add_source(default_settings())
@@ -1049,6 +1126,33 @@ mod tests {
         assert!(rejects::<QueryContext>(
             "multi_band_gdal_source_read_ahead",
             0
+        ));
+    }
+
+    #[test]
+    fn it_defaults_the_warp_mode_memory_to_the_operators_default() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.warp_mode_max_memory_per_tile(),
+            geoengine_operators::engine::DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE
+        );
+        assert!(rejects::<QueryContext>(
+            "warp_mode_max_memory_per_tile_mb",
+            0
+        ));
+    }
+
+    #[test]
+    fn it_defaults_the_reprojection_approximation_error_to_gdals_default() {
+        let config: QueryContext = default_element();
+        assert_eq!(
+            config.reprojection_approximation_error_px.get(),
+            0.125,
+            "GDAL's default for `gdalwarp -et`"
+        );
+        assert!(rejects::<QueryContext>(
+            "reprojection_approximation_error_px",
+            -1
         ));
     }
 

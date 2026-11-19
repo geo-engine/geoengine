@@ -1,20 +1,25 @@
 
-# WarpMethod
+# StacCoarserAsset
 
+A coarser asset that holds the same band as a dataset band, e.g. the 60 m file of a band whose dataset has a resolution of 10 m.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
+`factor` | number
+`assetBand` | [StacAssetBand](StacAssetBand.md)
 
 ## Example
 
 ```typescript
-import type { WarpMethod } from '@geoengine/api-client'
+import type { StacCoarserAsset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-} satisfies WarpMethod
+  "factor": null,
+  "assetBand": null,
+} satisfies StacCoarserAsset
 
 console.log(example)
 
@@ -23,7 +28,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as WarpMethod
+const exampleParsed = JSON.parse(exampleJSON) as StacCoarserAsset
 console.log(exampleParsed)
 ```
 

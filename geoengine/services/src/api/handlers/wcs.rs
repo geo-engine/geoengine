@@ -1,11 +1,8 @@
 use crate::api::model::processing_graphs::ProcessingGraphId;
 use crate::{
-    api::{
-        handlers::spatial_references::spatial_reference_specification,
-        ogc::{
-            util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url},
-            wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion},
-        },
+    api::ogc::{
+        util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url},
+        wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion},
     },
     config::{self},
     contexts::{ApplicationContext, SessionContext},
@@ -261,7 +258,9 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
 
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
-    let spatial_reference_spec = spatial_reference_specification(spatial_reference.into())?;
+    let spatial_reference_spec = app_ctx
+        .spatial_reference_cache()
+        .specification(spatial_reference.into())?;
     let spatial_ref_axis_order =
         spatial_reference_spec
             .axis_order
@@ -381,22 +380,28 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
-    let bounds = request.spatial_partition()?;
+    // `spatial_ref` below ensures that the grid base CRS is the bbox CRS, so one axis order serves both
+    let axis_order = app_ctx
+        .spatial_reference_cache()
+        .axis_order(request.bbox_spatial_reference())?;
+    let bounds = request.spatial_partition(axis_order)?;
     let query = RasterGridQuery {
         processing_graph: identifier,
         crs: request.spatial_ref().map(Into::into)?,
         bounds,
-        resolution: request.spatial_resolution().transpose()?,
+        resolution: request.spatial_resolution(axis_order).transpose()?,
         origin: Some(bounds.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
         time: request
             .time
             .map_or_else(config::default_time_from_config::<config::Wcs>, Into::into),
         bands: BandSelection::first(), // TODO: support multi bands in API and set the selection here
     };
-    let encoding = RasterEncoding::GeoTiff {
-        no_data_value: request.nodatavalue,
-        band_order: None,
-    };
+    let no_data_value = request.nodatavalue;
+    let encoding =
+        move |_: &geoengine_operators::engine::RasterResultDescriptor| RasterEncoding::GeoTiff {
+            no_data_value,
+            band_order: None,
+        };
 
     let ctx = app_ctx.session_context(session);
     let (bytes, cache_hint, computation_id) =

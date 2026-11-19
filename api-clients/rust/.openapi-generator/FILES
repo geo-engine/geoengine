@@ -353,6 +353,7 @@ docs/SpatialResolution.md
 docs/StRectangle.md
 docs/StacApiRetries.md
 docs/StacAssetBand.md
+docs/StacCoarserAsset.md
 docs/StacDataProviderDefinition.md
 docs/StacGrid.md
 docs/StacProviderAuthentication.md
@@ -462,8 +463,9 @@ docs/VisualPointClusteringParameters.md
 docs/Volume.md
 docs/VolumeFileLayersResponse.md
 docs/Warp.md
-docs/WarpMethod.md
+docs/WarpDownsamplingMethod.md
 docs/WarpParameters.md
+docs/WarpUpsamplingMethod.md
 docs/WcsRequest.md
 docs/WcsService.md
 docs/WcsVersion.md
@@ -835,6 +837,7 @@ src/models/spatial_resolution.rs
 src/models/st_rectangle.rs
 src/models/stac_api_retries.rs
 src/models/stac_asset_band.rs
+src/models/stac_coarser_asset.rs
 src/models/stac_data_provider_definition.rs
 src/models/stac_grid.rs
 src/models/stac_provider_authentication.rs
@@ -941,8 +944,9 @@ src/models/visual_point_clustering_parameters.rs
 src/models/volume.rs
 src/models/volume_file_layers_response.rs
 src/models/warp.rs
-src/models/warp_method.rs
+src/models/warp_downsampling_method.rs
 src/models/warp_parameters.rs
+src/models/warp_upsampling_method.rs
 src/models/wcs_request.rs
 src/models/wcs_service.rs
 src/models/wcs_version.rs

@@ -8,6 +8,7 @@ Name | Type
 ------------ | -------------
 `assetBand` | [StacAssetBand](StacAssetBand.md)
 `bandDescriptor` | [RasterBandDescriptor](RasterBandDescriptor.md)
+`coarserAssets` | [Array&lt;StacCoarserAsset&gt;](StacCoarserAsset.md)
 
 ## Example
 
@@ -18,6 +19,7 @@ import type { StacProviderDatasetBand } from '@geoengine/api-client'
 const example = {
   "assetBand": null,
   "bandDescriptor": null,
+  "coarserAssets": null,
 } satisfies StacProviderDatasetBand
 
 console.log(example)

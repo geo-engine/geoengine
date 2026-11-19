@@ -43,3 +43,27 @@ wait-for-port port sleep="1.0":
         except (socket.timeout, ConnectionRefusedError, ConnectionAbortedError):
           print(f"Port {port} is not open. Retrying in {sleep_time} seconds...")
           time.sleep(sleep_time)
+
+# Run a command in the current directory and retry it after a linearly growing pause if it fails. Use it for downloads that have no retries of their own.
+[arg("backoff", help="Pause in seconds after the first failed attempt, growing linearly with each further one.")]
+[arg("command", help="Command and its arguments.")]
+[arg("attempts", help="Maximum number of attempts.")]
+[group('ci')]
+[no-cd]
+[positional-arguments]
+retry attempts backoff +command:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    attempts="$1"
+    backoff="$2"
+    shift 2
+    for attempt in $(seq 1 "$attempts"); do
+      "$@" && exit 0
+      if [ "$attempt" -lt "$attempts" ]; then
+        pause=$((attempt * backoff))
+        echo "Attempt $attempt/$attempts of \`$*\` failed. Retrying in ${pause}s..." >&2
+        sleep "$pause"
+      fi
+    done
+    echo "All $attempts attempts of \`$*\` failed." >&2
+    exit 1

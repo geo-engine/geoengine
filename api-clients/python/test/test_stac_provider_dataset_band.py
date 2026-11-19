@@ -40,7 +40,12 @@ class TestStacProviderDatasetBand(unittest.TestCase):
                     band_name = '', ),
                 band_descriptor = geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
                     name = '', 
-                    measurement = null, )
+                    measurement = null, ),
+                coarser_assets = [
+                    geoengine_api_client.models.stac_coarser_asset.StacCoarserAsset(
+                        factor = 2, 
+                        asset_band = null, )
+                    ]
             )
         else:
             return StacProviderDatasetBand(
