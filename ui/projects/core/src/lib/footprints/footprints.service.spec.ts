@@ -101,6 +101,18 @@ describe('FootprintsService overlay', () => {
         expect(getFootprints).toHaveBeenCalledWith('graph', expect.objectContaining({limit: 1}), expect.anything());
     });
 
+    it('asks for no boxes where the map does not load the tiles of the layer', async () => {
+        const service = createService();
+        service.overlayBlocked.set(true);
+        service.overlayVisible.set(true);
+        await settle();
+        expect(boxesRequests()).toBe(0);
+
+        service.overlayBlocked.set(false);
+        await settle();
+        expect(boxesRequests()).toBe(1);
+    });
+
     it('asks the calendar for availability only', async () => {
         const service = createService();
 
@@ -131,7 +143,7 @@ describe('FootprintsService overlay', () => {
 
         const bounds = (precision: RasterFootprintsPrecision): string | undefined =>
             getFootprints.mock.calls.find(([, query]) => query.precision === precision)?.[1].spatialBounds;
-        expect(bounds(RasterFootprintsPrecision.Coverage)).toBe('-0.5,-0.5,1.5,1.5');
+        expect(bounds(RasterFootprintsPrecision.Coverage)).toBe('-0.25,-0.25,1.25,1.25');
         expect(bounds(RasterFootprintsPrecision.Availability)).toBe('0,0,1,1');
     });
 

@@ -67,6 +67,7 @@ describe('EOdyssey debug reprojection', () => {
                     useValue: {
                         layer: signal(undefined),
                         overlayLight: signal(false),
+                        overlayBlocked: signal(false),
                         timeStepOverride: signal(undefined),
                         overlayVisible: signal(false),
                         overlayTooLarge: signal(false),

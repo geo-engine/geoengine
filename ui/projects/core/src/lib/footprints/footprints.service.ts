@@ -43,7 +43,7 @@ const WINDOW_TIME_STEPS = 100;
 const MAX_WINDOW_REQUESTS = 8;
 const VIEWPORT_DEBOUNCE_MS = 500;
 /** Extra view widths and heights the overlay asks for on each side, so a scene larger than the view is not drawn as the view. */
-const OVERLAY_MARGIN = 0.5;
+const OVERLAY_MARGIN = 0.25;
 /** A view is a rectangle in the map's projection only, so its bounds in the layer's projection need its edges. */
 const EXTENT_EDGE_STOPS = 16;
 
@@ -86,6 +86,8 @@ export class FootprintsService {
     /** The app shows the dates of the layer outside of the calendar, e.g. next to the date with arrows. Set by the app. */
     readonly datesNeeded = signal(false);
     readonly overlayVisible = signal(false);
+    /** The map does not load the tiles of the layer at this zoom, so the overlay asks for nothing either. Set by the app. */
+    readonly overlayBlocked = signal(false);
     /** Draw the overlay lighter, e.g. while the layer is on the map and its imagery lies below. Set by the app. */
     readonly overlayLight = signal(false);
     /** What the calendar shows. At least `WINDOW_TIME_STEPS` steps from its start are loaded. */
@@ -162,7 +164,7 @@ export class FootprintsService {
             const mapSpatialReference = this.mapSpatialReference();
             const viewport = this.viewport();
             const time = this.time();
-            if (!this.overlayVisible() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
+            if (!this.overlayVisible() || this.overlayBlocked() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
             return {layer, mapSpatialReference, viewport, time};
         },
         loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<Footprints | undefined> => {

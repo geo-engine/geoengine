@@ -128,6 +128,13 @@ export class MainComponent {
                 },
             );
         });
+        // the zoom limit is known only for the layer on the map, so a selected layer that is not applied yet is not blocked
+        effect(() => {
+            const preset = this.eodysseyLayerService.selectedPreset();
+            const mapLayer = this.eodysseyLayerService.mapTileLayer();
+            const isMapLayer = !preset || (preset.connectorId === mapLayer?.dataConnectorId && preset.layerId === mapLayer.layerId);
+            this.footprintsService.overlayBlocked.set(!!mapLayer && isMapLayer && this.zoomRequired());
+        });
 
         // the stripes would hide the imagery of the layer on the map
         effect(() => this.footprintsService.overlayLight.set(!!this.eodysseyLayerService.mapTileLayer()));
