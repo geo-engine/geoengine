@@ -42,7 +42,11 @@ class TestWarpParameters(unittest.TestCase):
                 output_origin_reference = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                     x = 1.337, 
                     y = 1.337, ),
-                method = 'nearestNeighbor'
+                downsampling = 'nearest',
+                upsampling = 'nearest',
+                output_data_type = 'U8',
+                derive_out_spec = 'dataBounds',
+                approximation_error_threshold = 1.337
             )
         else:
             return WarpParameters(

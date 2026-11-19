@@ -379,6 +379,7 @@ __all__ = [
     "SpatialResolution",
     "StacApiRetries",
     "StacAssetBand",
+    "StacCoarserAsset",
     "StacDataProviderDefinition",
     "StacGrid",
     "StacProviderAuthentication",
@@ -483,8 +484,9 @@ __all__ = [
     "Volume",
     "VolumeFileLayersResponse",
     "Warp",
-    "WarpMethod",
+    "WarpDownsamplingMethod",
     "WarpParameters",
+    "WarpUpsamplingMethod",
     "WcsRequest",
     "WcsService",
     "WcsVersion",
@@ -865,6 +867,7 @@ from geoengine_api_client.models.spatial_reference_specification import SpatialR
 from geoengine_api_client.models.spatial_resolution import SpatialResolution as SpatialResolution
 from geoengine_api_client.models.stac_api_retries import StacApiRetries as StacApiRetries
 from geoengine_api_client.models.stac_asset_band import StacAssetBand as StacAssetBand
+from geoengine_api_client.models.stac_coarser_asset import StacCoarserAsset as StacCoarserAsset
 from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition as StacDataProviderDefinition
 from geoengine_api_client.models.stac_grid import StacGrid as StacGrid
 from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication as StacProviderAuthentication
@@ -969,8 +972,9 @@ from geoengine_api_client.models.visual_point_clustering_parameters import Visua
 from geoengine_api_client.models.volume import Volume as Volume
 from geoengine_api_client.models.volume_file_layers_response import VolumeFileLayersResponse as VolumeFileLayersResponse
 from geoengine_api_client.models.warp import Warp as Warp
-from geoengine_api_client.models.warp_method import WarpMethod as WarpMethod
+from geoengine_api_client.models.warp_downsampling_method import WarpDownsamplingMethod as WarpDownsamplingMethod
 from geoengine_api_client.models.warp_parameters import WarpParameters as WarpParameters
+from geoengine_api_client.models.warp_upsampling_method import WarpUpsamplingMethod as WarpUpsamplingMethod
 from geoengine_api_client.models.wcs_request import WcsRequest as WcsRequest
 from geoengine_api_client.models.wcs_service import WcsService as WcsService
 from geoengine_api_client.models.wcs_version import WcsVersion as WcsVersion

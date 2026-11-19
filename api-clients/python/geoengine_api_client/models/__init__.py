@@ -347,6 +347,7 @@ from geoengine_api_client.models.spatial_reference_specification import SpatialR
 from geoengine_api_client.models.spatial_resolution import SpatialResolution
 from geoengine_api_client.models.stac_api_retries import StacApiRetries
 from geoengine_api_client.models.stac_asset_band import StacAssetBand
+from geoengine_api_client.models.stac_coarser_asset import StacCoarserAsset
 from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition
 from geoengine_api_client.models.stac_grid import StacGrid
 from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication
@@ -451,8 +452,9 @@ from geoengine_api_client.models.visual_point_clustering_parameters import Visua
 from geoengine_api_client.models.volume import Volume
 from geoengine_api_client.models.volume_file_layers_response import VolumeFileLayersResponse
 from geoengine_api_client.models.warp import Warp
-from geoengine_api_client.models.warp_method import WarpMethod
+from geoengine_api_client.models.warp_downsampling_method import WarpDownsamplingMethod
 from geoengine_api_client.models.warp_parameters import WarpParameters
+from geoengine_api_client.models.warp_upsampling_method import WarpUpsamplingMethod
 from geoengine_api_client.models.wcs_request import WcsRequest
 from geoengine_api_client.models.wcs_service import WcsService
 from geoengine_api_client.models.wcs_version import WcsVersion

@@ -14,10 +14,10 @@
 
 import unittest
 
-from geoengine_api_client.models.warp_method import WarpMethod
+from geoengine_api_client.models.warp_downsampling_method import WarpDownsamplingMethod
 
-class TestWarpMethod(unittest.TestCase):
-    """WarpMethod unit test stubs"""
+class TestWarpDownsamplingMethod(unittest.TestCase):
+    """WarpDownsamplingMethod unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,9 +25,9 @@ class TestWarpMethod(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def testWarpMethod(self):
-        """Test WarpMethod"""
-        # inst = WarpMethod()
+    def testWarpDownsamplingMethod(self):
+        """Test WarpDownsamplingMethod"""
+        # inst = WarpDownsamplingMethod()
 
 if __name__ == '__main__':
     unittest.main()

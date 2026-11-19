@@ -97,6 +97,15 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             continue;
         }
 
+        // a file coarser than the dataset has no level of the dataset: GDAL resamples it
+        let level_factor = if reader_mode
+            .coarser_file_factor(&params.spatial_grid_definition())
+            .is_some()
+        {
+            None
+        } else {
+            level_factor
+        };
         let read = match (level_factor, blocks.filter(|blocks| blocks.reads(&params))) {
             (Some(factor), Some(blocks)) => {
                 blocks
