@@ -20,8 +20,9 @@ pub use self::gdal_worker_process::{
 };
 pub use self::multi_band_gdal_source::{
     GdalMultiBand, GdalSourceError as MultiBandGdalSourceError,
-    GdalSourceParameters as MultiBandGdalSourceParameters, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource, TileFile,
+    GdalSourceParameters as MultiBandGdalSourceParameters, LoadingInfoResolution,
+    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
+    TileFile,
 };
 pub use self::ogr_source::{
     AttributeFilter, CsvHeader, FormatSpecifics, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,

@@ -10,6 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import { StacCoarserAssetFromJSON, StacCoarserAssetToJSON, } from './StacCoarserAsset';
 import { StacAssetBandFromJSON, StacAssetBandToJSON, } from './StacAssetBand';
 import { RasterBandDescriptorFromJSON, RasterBandDescriptorToJSON, } from './RasterBandDescriptor';
 /**
@@ -32,6 +33,7 @@ export function StacProviderDatasetBandFromJSONTyped(json, ignoreDiscriminator) 
     return {
         'assetBand': StacAssetBandFromJSON(json['assetBand']),
         'bandDescriptor': RasterBandDescriptorFromJSON(json['bandDescriptor']),
+        'coarserAssets': json['coarserAssets'] == null ? undefined : (json['coarserAssets'].map(StacCoarserAssetFromJSON)),
     };
 }
 export function StacProviderDatasetBandToJSON(json) {
@@ -44,5 +46,6 @@ export function StacProviderDatasetBandToJSONTyped(value, ignoreDiscriminator = 
     return {
         'assetBand': StacAssetBandToJSON(value['assetBand']),
         'bandDescriptor': RasterBandDescriptorToJSON(value['bandDescriptor']),
+        'coarserAssets': value['coarserAssets'] == null ? undefined : (value['coarserAssets'].map(StacCoarserAssetToJSON)),
     };
 }
