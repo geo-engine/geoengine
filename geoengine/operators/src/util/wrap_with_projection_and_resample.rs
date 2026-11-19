@@ -180,10 +180,14 @@ impl WrapWithProjectionAndResample {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::SingleRasterSource;
     use crate::engine::{
         MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
+    use crate::processing::{Expression, ExpressionParams};
+    use crate::source::{GdalSource, GdalSourceParameters};
+    use crate::util::gdal::add_ndvi_dataset;
     use geoengine_datatypes::primitives::TimeInterval;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
     use geoengine_datatypes::util::test::TestDefault;
@@ -369,5 +373,307 @@ mod tests {
         };
         assert_eq!(warp.params.downsampling, WarpDownsampling::Mode);
         assert_eq!(warp.params.upsampling, WarpUpsampling::Nearest);
+    }
+
+    /// The NDVI of 0.1° in EPSG:4326 with overviews
+    fn ndvi(exe_ctx: &mut MockExecutionContext) -> TypedRasterOperator {
+        GdalSource {
+            params: GdalSourceParameters::new(add_ndvi_dataset(exe_ctx)),
+        }
+        .typed()
+    }
+
+    fn warp(source: TypedRasterOperator, params: WarpParams) -> TypedRasterOperator {
+        Warp {
+            params,
+            sources: SingleRasterSource { raster: source },
+        }
+        .typed()
+    }
+
+    fn resample(resolution: f64) -> WarpParams {
+        WarpParams {
+            output_resolution: Some(SpatialResolution::new_unchecked(resolution, resolution)),
+            ..WarpParams::default()
+        }
+    }
+
+    fn identity(source: TypedRasterOperator) -> TypedRasterOperator {
+        Expression {
+            params: ExpressionParams {
+                expression: "A".to_string(),
+                output_type: RasterDataType::U8,
+                output_band: None,
+                map_no_data: false,
+            },
+            sources: SingleRasterSource { raster: source },
+        }
+        .typed()
+    }
+
+    /// Wraps `operator` as WMS and OGC API Tiles do, for an output of `resolution` in `srs`.
+    async fn wrap_graph(
+        operator: TypedRasterOperator,
+        resolution: SpatialResolution,
+        srs: SpatialReference,
+        exe_ctx: &MockExecutionContext,
+    ) -> WrapWithProjectionAndResample {
+        let initialized = operator
+            .clone()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
+            .await
+            .unwrap();
+        WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
+            .wrap_with_projection_and_resample(
+                None,
+                Some(resolution),
+                srs,
+                WarpMethods::CONTINUOUS,
+                exe_ctx,
+            )
+            .await
+            .unwrap()
+    }
+
+    /// The single child of `operator`, for the operators of these tests
+    fn child(operator: &TypedRasterOperator) -> Option<&TypedRasterOperator> {
+        match operator {
+            TypedRasterOperator::Warp(warp) => Some(&warp.sources.raster),
+            TypedRasterOperator::Expression(expression) => Some(&expression.sources.raster),
+            _ => None,
+        }
+    }
+
+    /// The operators from `operator` down to its leaf
+    fn path(operator: &TypedRasterOperator) -> Vec<&TypedRasterOperator> {
+        std::iter::successors(Some(operator), |operator| child(operator)).collect()
+    }
+
+    fn warps(operator: &TypedRasterOperator) -> Vec<&WarpParams> {
+        path(operator)
+            .into_iter()
+            .filter_map(|operator| match operator {
+                TypedRasterOperator::Warp(warp) => Some(&warp.params),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn overview_level(operator: &TypedRasterOperator) -> Option<u32> {
+        match path(operator).last() {
+            Some(TypedRasterOperator::GdalSource(gdal)) => gdal.params.overview_level,
+            leaf => panic!("the leaf should be a GDAL source, was {leaf:?}"),
+        }
+    }
+
+    /// Queries the first tile of `wrapped` at the first time step of the NDVI.
+    async fn query_first_tile(
+        wrapped: WrapWithProjectionAndResample,
+        exe_ctx: &MockExecutionContext,
+    ) -> geoengine_datatypes::raster::RasterTile2D<u8> {
+        use futures::StreamExt;
+        use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
+
+        let tiling = wrapped
+            .result_descriptor
+            .tiling_grid_definition(exe_ctx.tiling_specification());
+        let first_tile = tiling
+            .generate_data_tiling_strategy()
+            .tile_information_iterator_from_pixel_bounds(tiling.tiling_grid_bounds())
+            .next()
+            .unwrap();
+        let processor = wrapped
+            .initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
+        let tiles: Vec<_> = processor
+            .query(
+                RasterQueryRectangle::new(
+                    first_tile.global_pixel_bounds(),
+                    TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001),
+                    BandSelection::first(),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+            .await;
+        assert_eq!(tiles.len(), 1);
+        tiles.into_iter().next().unwrap()
+    }
+
+    #[tokio::test]
+    async fn it_rewrites_the_resolution_of_a_warp_in_the_graph_for_overviews() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = ndvi(&mut exe_ctx);
+        let graph = identity(warp(ndvi, resample(0.2)));
+
+        let wrapped = wrap_graph(
+            graph,
+            SpatialResolution::new_unchecked(0.8, 0.8),
+            SpatialReference::epsg_4326(),
+            &exe_ctx,
+        )
+        .await;
+
+        assert_eq!(
+            wrapped.result_descriptor.spatial_grid.spatial_resolution(),
+            SpatialResolution::new_unchecked(0.8, 0.8)
+        );
+        assert!(warps(&wrapped.operator).iter().all(|params| {
+            params.output_resolution == Some(SpatialResolution::new_unchecked(0.8, 0.8))
+        }));
+        assert_eq!(overview_level(&wrapped.operator), Some(8));
+
+        let tile = query_first_tile(wrapped, &exe_ctx).await;
+        assert!(!tile.is_empty());
+    }
+
+    fn max_warp(source: TypedRasterOperator, resolution: f64) -> TypedRasterOperator {
+        warp(
+            source,
+            WarpParams {
+                downsampling: WarpDownsampling::Max,
+                ..resample(resolution)
+            },
+        )
+    }
+
+    #[tokio::test]
+    async fn it_keeps_the_kernel_of_a_warp_between_overview_levels() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = ndvi(&mut exe_ctx);
+
+        // 0.3° × 4 = 1.2° lies between the overview levels of 0.8° and 1.6°
+        let wrapped = wrap_graph(
+            max_warp(ndvi, 0.3),
+            SpatialResolution::new_unchecked(1.2, 1.2),
+            SpatialReference::epsg_4326(),
+            &exe_ctx,
+        )
+        .await;
+
+        let warps = warps(&wrapped.operator);
+        assert_eq!(warps.len(), 1, "the warp of the graph stays, no other one");
+        assert_eq!(warps[0].downsampling, WarpDownsampling::Max);
+        assert_eq!(
+            warps[0].output_resolution,
+            Some(SpatialResolution::new_unchecked(1.2, 1.2))
+        );
+        assert_eq!(overview_level(&wrapped.operator), Some(8));
+    }
+
+    #[tokio::test]
+    async fn it_drops_a_warp_with_a_kernel_on_an_overview_level() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = ndvi(&mut exe_ctx);
+
+        let wrapped = wrap_graph(
+            max_warp(ndvi, 0.2),
+            SpatialResolution::new_unchecked(0.8, 0.8),
+            SpatialReference::epsg_4326(),
+            &exe_ctx,
+        )
+        .await;
+
+        // the overview level of 0.8° is the output: always overviews, regardless of the kernel
+        assert!(
+            warps(&wrapped.operator).is_empty(),
+            "nothing to warp, was {:?}",
+            wrapped.operator
+        );
+        assert_eq!(overview_level(&wrapped.operator), Some(8));
+    }
+
+    #[tokio::test]
+    async fn it_rewrites_the_resolution_of_nested_warps_for_overviews() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = ndvi(&mut exe_ctx);
+        let graph = warp(warp(ndvi, resample(0.2)), resample(0.4));
+
+        let wrapped = wrap_graph(
+            graph,
+            SpatialResolution::new_unchecked(1.6, 1.6),
+            SpatialReference::epsg_4326(),
+            &exe_ctx,
+        )
+        .await;
+
+        assert_eq!(
+            wrapped.result_descriptor.spatial_grid.spatial_resolution(),
+            SpatialResolution::new_unchecked(1.6, 1.6)
+        );
+        assert_eq!(overview_level(&wrapped.operator), Some(16));
+
+        let tile = query_first_tile(wrapped, &exe_ctx).await;
+        assert!(!tile.is_empty());
+    }
+
+    #[tokio::test]
+    async fn it_rewrites_the_resolution_of_a_reprojecting_warp_in_the_graph_for_overviews() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = GdalSource {
+            params: GdalSourceParameters::new(
+                crate::util::gdal::add_ndvi_dataset_cropped_to_valid_webmercator_bounds(
+                    &mut exe_ctx,
+                ),
+            ),
+        }
+        .typed();
+        let web_mercator = SpatialReference::new(
+            geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+            3857,
+        );
+        let graph = identity(warp(
+            ndvi,
+            WarpParams {
+                target_spatial_reference: Some(web_mercator),
+                ..WarpParams::default()
+            },
+        ));
+        let initialized = graph
+            .clone()
+            .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+        let native = initialized
+            .result_descriptor()
+            .spatial_grid
+            .spatial_resolution();
+        let origin = initialized
+            .result_descriptor()
+            .spatial_grid
+            .geo_transform()
+            .origin_coordinate;
+        let target = (native * 8.).unwrap();
+
+        let wrapped = wrap_graph(graph, target, web_mercator, &exe_ctx).await;
+
+        assert_eq!(
+            wrapped.result_descriptor.spatial_grid.spatial_resolution(),
+            target
+        );
+        assert_eq!(
+            wrapped
+                .result_descriptor
+                .spatial_grid
+                .geo_transform()
+                .origin_coordinate,
+            origin,
+            "the output keeps the alignment of the warp"
+        );
+        assert!(
+            overview_level(&wrapped.operator).is_some_and(|level| level >= 4),
+            "the source should read an overview, was {:?}",
+            wrapped.operator
+        );
+
+        let tile = query_first_tile(wrapped, &exe_ctx).await;
+        assert!(!tile.is_empty());
     }
 }
