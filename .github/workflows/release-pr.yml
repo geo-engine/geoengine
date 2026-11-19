@@ -27,6 +27,16 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # retry transient network failures when downloading dependencies
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  PIP_RETRIES: 10
+  UV_HTTP_RETRIES: 10
+  npm_config_fetch_retries: 5
+  npm_config_fetch_retry_mintimeout: 20000
+  npm_config_fetch_retry_maxtimeout: 120000
+
 jobs:
   release-pr:
     name: Create Release PR
@@ -79,6 +89,16 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-edit,git-cliff
+
+      - name: Prefetch build downloads
+        uses: ./.github/actions/prefetch-build-downloads
+        env:
+          # same as for `increase-version-number`, so that its build reuses the build of `ort-sys`
+          CARGO_PROFILE_DEV_DEBUG: 0
+          CARGO_INCREMENTAL: 0
+
+      - name: Prefetch OpenAPI Generator
+        uses: ./.github/actions/prefetch-openapi-generator
 
       - name: Store old version
         id: old

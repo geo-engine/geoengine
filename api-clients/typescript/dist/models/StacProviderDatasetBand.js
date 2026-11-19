@@ -17,6 +17,7 @@ exports.StacProviderDatasetBandFromJSON = StacProviderDatasetBandFromJSON;
 exports.StacProviderDatasetBandFromJSONTyped = StacProviderDatasetBandFromJSONTyped;
 exports.StacProviderDatasetBandToJSON = StacProviderDatasetBandToJSON;
 exports.StacProviderDatasetBandToJSONTyped = StacProviderDatasetBandToJSONTyped;
+const StacCoarserAsset_1 = require("./StacCoarserAsset");
 const StacAssetBand_1 = require("./StacAssetBand");
 const RasterBandDescriptor_1 = require("./RasterBandDescriptor");
 /**
@@ -39,6 +40,7 @@ function StacProviderDatasetBandFromJSONTyped(json, ignoreDiscriminator) {
     return {
         'assetBand': (0, StacAssetBand_1.StacAssetBandFromJSON)(json['assetBand']),
         'bandDescriptor': (0, RasterBandDescriptor_1.RasterBandDescriptorFromJSON)(json['bandDescriptor']),
+        'coarserAssets': json['coarserAssets'] == null ? undefined : (json['coarserAssets'].map(StacCoarserAsset_1.StacCoarserAssetFromJSON)),
     };
 }
 function StacProviderDatasetBandToJSON(json) {
@@ -51,5 +53,6 @@ function StacProviderDatasetBandToJSONTyped(value, ignoreDiscriminator = false) 
     return {
         'assetBand': (0, StacAssetBand_1.StacAssetBandToJSON)(value['assetBand']),
         'bandDescriptor': (0, RasterBandDescriptor_1.RasterBandDescriptorToJSON)(value['bandDescriptor']),
+        'coarserAssets': value['coarserAssets'] == null ? undefined : (value['coarserAssets'].map(StacCoarserAsset_1.StacCoarserAssetToJSON)),
     };
 }
