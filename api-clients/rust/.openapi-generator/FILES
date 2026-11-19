@@ -351,6 +351,7 @@ docs/SpatialResolution.md
 docs/StRectangle.md
 docs/StacApiRetries.md
 docs/StacAssetBand.md
+docs/StacCoarserAsset.md
 docs/StacDataProviderDefinition.md
 docs/StacGrid.md
 docs/StacProviderAuthentication.md
@@ -830,6 +831,7 @@ src/models/spatial_resolution.rs
 src/models/st_rectangle.rs
 src/models/stac_api_retries.rs
 src/models/stac_asset_band.rs
+src/models/stac_coarser_asset.rs
 src/models/stac_data_provider_definition.rs
 src/models/stac_grid.rs
 src/models/stac_provider_authentication.rs
