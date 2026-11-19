@@ -631,6 +631,7 @@ mod tests {
         api::handlers::ogc::test_util::{
             session_and_3857_layer_id, session_and_4326_layer_id, session_and_4326_rgb_layer_id,
             session_and_native_3857_layer_id, session_and_ndvi_multi_band_layer_id,
+            session_and_utm32n_layer_id,
         },
         contexts::PostgresContext,
         ge_context,
@@ -1079,6 +1080,157 @@ mod tests {
             );
             assert_eq!(content_type.as_deref(), Some("image/png"));
         }
+    }
+
+    /// The `WebMercatorQuad` tile at `zoom` that contains `(lon, lat)`
+    fn web_mercator_quad_tile(zoom: u8, lon: f64, lat: f64) -> (u64, u64) {
+        let tiles = f64::from(1_u32 << zoom);
+        let lat = lat.to_radians();
+        let col = ((lon + 180.) / 360. * tiles).floor();
+        let row = ((1. - lat.tan().asinh() / std::f64::consts::PI) / 2. * tiles).floor();
+        (
+            row.clamp(0., tiles - 1.) as u64,
+            col.clamp(0., tiles - 1.) as u64,
+        )
+    }
+
+    /// The same tiles as on the code before the tile path ran on `Warp`, except for the tiles
+    /// coarser than the data, which are now resampled with `average` for the default gradient (see
+    /// `WarpMethods::for_symbology`), and one tile at the edge of the UTM data, where the
+    /// approximate projection (see `ApproxProjection`) moves pixels by up to an eighth of an input
+    /// pixel: per source (EPSG:4326, EPSG:3857, UTM 32N) and tile matrix set, three tile matrices
+    /// with tiles inside, at the edge of and outside the data. The fixture holds a SHA-256 of each
+    /// PNG, or the status of a failed request; it is written if it does not exist. With
+    /// `GEOENGINE_TEST_TILES_DIR`, the PNGs are written there, e.g. to compare the pixels of two
+    /// versions.
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_renders_the_tiles_of_the_regression_fixture(app_ctx: PostgresContext<NoTls>) {
+        use sha2::Digest;
+        use std::fmt::Write;
+
+        const FRANKFURT: (f64, f64) = (8.68, 50.11);
+        const WORLD_CORNER: (f64, f64) = (-180., 85.);
+        /// outside the UTM data, water in the others
+        const PACIFIC: (f64, f64) = (-150., -40.);
+        /// the west edge of the UTM data
+        const UTM_WEST_EDGE: (f64, f64) = (-4.646, 48.839);
+
+        let mut sources = Vec::new();
+        for (name, (session_id, data_connector_id, layer_id)) in [
+            ("ndvi_4326", session_and_4326_layer_id(&app_ctx).await),
+            (
+                "ndvi_3857",
+                session_and_native_3857_layer_id(&app_ctx).await,
+            ),
+            ("ndvi_utm32n", session_and_utm32n_layer_id(&app_ctx).await),
+        ] {
+            sources.push((name, session_id, data_connector_id, layer_id));
+        }
+
+        let mut found = std::collections::BTreeMap::<String, String>::new();
+        for (source, session_id, data_connector_id, layer_id) in &sources {
+            let get = |path: String| {
+                let req = actix_web::test::TestRequest::get()
+                    .uri(&format!("/ogc/{data_connector_id}/{layer_id}/{path}"))
+                    .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+                send_test_request(req, app_ctx.clone())
+            };
+
+            let mut tiles = Vec::new();
+            for tile_matrix_set in ["Custom", "CustomWebMercator"] {
+                let definition =
+                    read_body_json(get(format!("tileMatrixSets/{tile_matrix_set}")).await).await;
+                let matrices = definition["tileMatrices"].as_array().unwrap();
+                let mut indices = vec![0, matrices.len() / 2, matrices.len() - 1];
+                indices.dedup();
+                for matrix in indices.into_iter().map(|i| &matrices[i]) {
+                    let id = matrix["id"].as_str().unwrap().to_owned();
+                    let (width, height) = (
+                        matrix["matrixWidth"].as_u64().unwrap(),
+                        matrix["matrixHeight"].as_u64().unwrap(),
+                    );
+                    let mut positions = vec![
+                        (0, 0),
+                        (height / 2, width / 2),
+                        (height - 1, width - 1),
+                        (height, width),
+                    ];
+                    positions.dedup();
+                    for (row, col) in positions {
+                        tiles.push((tile_matrix_set, id.clone(), row, col));
+                    }
+                }
+            }
+            for zoom in [2, 5, 8] {
+                let mut positions = [FRANKFURT, WORLD_CORNER, PACIFIC, UTM_WEST_EDGE]
+                    .map(|(lon, lat)| web_mercator_quad_tile(zoom, lon, lat))
+                    .to_vec();
+                positions.sort_unstable();
+                positions.dedup();
+                for (row, col) in positions {
+                    tiles.push(("WebMercatorQuad", zoom.to_string(), row, col));
+                }
+            }
+
+            for (tile_matrix_set, tile_matrix, row, col) in tiles {
+                let res = get(format!(
+                    "collections/{layer_id}/map/tiles/{tile_matrix_set}/{tile_matrix}/{row}/{col}?datetime=2014-04-01T00:00:00Z"
+                ))
+                .await;
+                let status = res.status();
+                let body = actix_web::test::read_body(res).await;
+                let name = format!("{source}/{tile_matrix_set}/{tile_matrix}/{row}/{col}");
+                let value = if status == 200 {
+                    if let Ok(dir) = std::env::var("GEOENGINE_TEST_TILES_DIR") {
+                        std::fs::write(
+                            std::path::Path::new(&dir)
+                                .join(format!("{}.png", name.replace('/', "_"))),
+                            &body,
+                        )
+                        .unwrap();
+                    }
+                    sha2::Sha256::digest(&body)
+                        .iter()
+                        .fold(String::new(), |mut hex, byte| {
+                            let _ = write!(hex, "{byte:02x}");
+                            hex
+                        })
+                } else {
+                    format!("status {}", status.as_u16())
+                };
+                found.insert(name, value);
+            }
+        }
+
+        let file_path = test_data!("ogc/tiles/regression_fixture.json").to_path_buf();
+        save_test_bytes_if_not_exists(
+            format!("{}\n", serde_json::to_string_pretty(&found).unwrap()).as_bytes(),
+            &file_path,
+        );
+        let expected: std::collections::BTreeMap<String, String> =
+            serde_json::from_slice(&std::fs::read(&file_path).unwrap()).unwrap();
+        let differences = expected
+            .keys()
+            .chain(found.keys())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .filter(|name| expected.get(*name) != found.get(*name))
+            .map(|name| {
+                format!(
+                    "{name}: expected {:?}, found {:?}",
+                    expected.get(name),
+                    found.get(name)
+                )
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            differences.is_empty(),
+            "{} of {} tiles differ:\n{}",
+            differences.len(),
+            expected.len(),
+            differences.join("\n")
+        );
     }
 
     /// A `GeoTIFF` read back with GDAL

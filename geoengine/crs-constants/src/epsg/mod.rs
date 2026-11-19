@@ -4,6 +4,13 @@ pub enum CrsType {
     Geographic2d,
 }
 
+/// The order of the axes of a CRS, as defined by its authority
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AxisOrder {
+    EastNorth,
+    NorthEast,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct EpsgBounds {
     #[cfg(feature = "metadata")]
@@ -16,6 +23,8 @@ pub struct EpsgBounds {
     pub meters_per_unit: f64,
     pub wgs84_bounds: [f64; 4],
     pub native_bounds: Option<[f64; 4]>,
+    /// `None` if the axes are not east and north or have units the server does not parse
+    pub axis_order: Option<AxisOrder>,
 }
 
 impl EpsgBounds {
@@ -37,4 +46,31 @@ pub mod registry {
     #![allow(clippy::unreadable_literal, clippy::approx_constant)]
 
     include!("epsg_registry.rs");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One degree along the equator is about 111 km on every earth ellipsoid. Ellipsoids that
+    /// proj.db defines in feet gave 3.28 times that before their unit was taken into account.
+    #[test]
+    fn it_has_the_meters_per_degree_of_an_earth_ellipsoid() {
+        let mut checked = 0;
+        for code in 0..=u16::MAX {
+            let Some(bounds) = EpsgBounds::from_code(code) else {
+                continue;
+            };
+            if bounds.crs_type != CrsType::Geographic2d {
+                continue;
+            }
+            assert!(
+                (110_000.0..112_000.0).contains(&bounds.meters_per_unit),
+                "EPSG:{code}: {}",
+                bounds.meters_per_unit
+            );
+            checked += 1;
+        }
+        assert!(checked > 0);
+    }
 }

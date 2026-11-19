@@ -38,6 +38,7 @@ use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 use std::time::Instant;
 use tracing::{debug, trace};
 
@@ -112,6 +113,22 @@ pub struct MultiBandGdalLoadingInfoQueryRectangle {
     /// The caller follows [`MultiBandGdalLoadingInfo::next`], so the provider may answer a long
     /// time range part by part. A remote catalog may then also search the steps of a part together.
     pub in_parts: bool,
+    /// The resolution the source produces its tiles in: the native resolution or an
+    /// overview level.
+    ///
+    /// For an overview level, metadata may return files that are coarser than the native
+    /// resolution, but not coarser than the level, to read less data.
+    pub resolution: LoadingInfoResolution,
+}
+
+/// The resolution a source produces its tiles in, relative to the native resolution of the data.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LoadingInfoResolution {
+    /// The native resolution of the data.
+    #[default]
+    Native,
+    /// An overview level: its pixels are this many times larger than the native pixels.
+    OverviewLevel(NonZeroU32),
 }
 
 impl MultiBandGdalLoadingInfoQueryRectangle {
@@ -135,6 +152,7 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
             query_rectangle,
             detail,
             in_parts: false,
+            resolution: LoadingInfoResolution::Native,
         }
     }
 
@@ -143,21 +161,29 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         self.in_parts = true;
         self
     }
+
+    /// Sets the resolution the source produces its tiles in.
+    #[must_use]
+    pub fn with_resolution(mut self, resolution: LoadingInfoResolution) -> Self {
+        self.resolution = resolution;
+        self
+    }
 }
 
 fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
+    resolution: LoadingInfoResolution,
     detail: LoadingInfoDetail,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
+    let tiling_geo_transform = tiling_spatial_grid.tiling_geo_transform();
     MultiBandGdalLoadingInfoQueryRectangle::new(
-        tiling_spatial_grid
-            .tiling_geo_transform()
-            .grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
+        tiling_geo_transform.grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
         detail,
     )
+    .with_resolution(resolution)
 }
 
 pub struct GdalSourceProcessor<T>
@@ -176,7 +202,21 @@ where
     pub _phantom_data: PhantomData<T>,
 }
 
-impl<T> GdalSourceProcessor<T> where T: gdal::raster::GdalType + Pixel {}
+impl<T> GdalSourceProcessor<T>
+where
+    T: gdal::raster::GdalType + Pixel,
+{
+    /// The resolution this processor produces its tiles in, for the metadata.
+    fn loading_info_resolution(&self) -> LoadingInfoResolution {
+        self.original_resolution_spatial_grid
+            .and_then(|_| NonZeroU32::new(self.overview_level))
+            .filter(|level| level.get() > 1)
+            .map_or(
+                LoadingInfoResolution::Native,
+                LoadingInfoResolution::OverviewLevel,
+            )
+    }
+}
 
 #[async_trait]
 impl<P> QueryProcessor for GdalSourceProcessor<P>
@@ -246,6 +286,7 @@ where
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
                 &query,
                 produced_tiling_grid,
+                self.loading_info_resolution(),
                 LoadingInfoDetail::Files,
             ))
             .await?;
@@ -325,6 +366,7 @@ where
         let qrect = raster_query_rectangle_to_loading_info_query_rectangle(
             &query,
             produced_tiling_grid,
+            LoadingInfoResolution::Native,
             LoadingInfoDetail::TimeSteps,
         );
 
@@ -368,6 +410,7 @@ where
                 let loading_info_query = raster_query_rectangle_to_loading_info_query_rectangle(
                     &query.select_time_interval(time),
                     tiling_grid,
+                    LoadingInfoResolution::Native,
                     detail,
                 )
                 .in_parts();
@@ -2558,6 +2601,173 @@ mod tests {
                         full_resolution.len(),
                         &full_resolution[..full_resolution.len().min(5)]
                     ));
+                }
+            }
+        }
+
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_places_a_coarser_file_at_an_overview_level() {
+        use gdal::raster::Buffer;
+        use geoengine_datatypes::raster::GridIndexAccess;
+
+        // the dataset has pixels of 1 unit, the file of 6 units, the tiles of 8 units
+        const DATASET_SIZE: isize = 120;
+        const FACTOR: isize = 6;
+        const FILE_SIZE: isize = DATASET_SIZE / FACTOR;
+        const LEVEL: isize = 8;
+        const TILE_SIZE: isize = 16;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let time_interval = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+        );
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+
+        let mut failures = Vec::new();
+        // an origin aligned to the tiles, and one that is not
+        for (origin_x, origin_y) in [(0_isize, 0_isize), (3, -9)] {
+            let file_path = temp_dir
+                .path()
+                .join(format!("coarser_{origin_x}_{origin_y}.tif"));
+            let driver = gdal::DriverManager::get_driver_by_name("GTiff").unwrap();
+            let mut dataset = driver
+                .create_with_band_type::<u16, _>(
+                    &file_path,
+                    FILE_SIZE as usize,
+                    FILE_SIZE as usize,
+                    1,
+                )
+                .unwrap();
+            dataset
+                .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap())
+                .unwrap();
+            dataset
+                .set_geo_transform(&[
+                    origin_x as f64,
+                    FACTOR as f64,
+                    0.,
+                    origin_y as f64,
+                    0.,
+                    -FACTOR as f64,
+                ])
+                .unwrap();
+            // every file pixel encodes its row and column
+            let values = (0..FILE_SIZE)
+                .flat_map(|row| (0..FILE_SIZE).map(move |col| (row * FILE_SIZE + col + 1) as u16))
+                .collect();
+            {
+                let mut band = dataset.rasterband(1).unwrap();
+                band.set_no_data_value(Some(0.)).unwrap();
+                band.write(
+                    (0, 0),
+                    (FILE_SIZE as usize, FILE_SIZE as usize),
+                    &mut Buffer::new((FILE_SIZE as usize, FILE_SIZE as usize), values),
+                )
+                .unwrap();
+            }
+            dataset.close().unwrap();
+
+            let file = TileFile {
+                time: time_interval,
+                spatial_partition: SpatialPartition2D::new_unchecked(
+                    (origin_x as f64, origin_y as f64).into(),
+                    (
+                        (origin_x + DATASET_SIZE) as f64,
+                        (origin_y - DATASET_SIZE) as f64,
+                    )
+                        .into(),
+                ),
+                band: 0,
+                z_index: 0,
+                params: GdalDatasetParameters {
+                    file_path,
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: (origin_x as f64, origin_y as f64).into(),
+                        x_pixel_size: NonZeroFiniteF64::new_unchecked(FACTOR as f64),
+                        y_pixel_size: NonZeroFiniteF64::new_unchecked(-FACTOR as f64),
+                    },
+                    width: FILE_SIZE as usize,
+                    height: FILE_SIZE as usize,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: Some(0.0),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
+                    retry: None,
+                },
+            };
+
+            let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: SpatialGridDefinition::new(
+                    GeoTransform::new_unchecked(
+                        (origin_x as f64, origin_y as f64).into(),
+                        1.0,
+                        -1.0,
+                    ),
+                    GridBoundingBox2D::new([0, 0], [DATASET_SIZE - 1, DATASET_SIZE - 1]).unwrap(),
+                ),
+                overview_level: LEVEL as u32,
+                files_have_level: false,
+            });
+            let tile_info = TileInformation::new(
+                [0, 0].into(),
+                GridShape2D::new([TILE_SIZE as usize, TILE_SIZE as usize]),
+                GeoTransform::new_unchecked((0.0, 0.0).into(), LEVEL as f64, -LEVEL as f64),
+            );
+            let tile = assemble_tile::<u16>(
+                MultiBandGdalLoadingInfo::new(vec![time_interval], vec![file], None).tile_plan(
+                    time_interval,
+                    tile_info,
+                    0,
+                    CacheTtlSeconds::new(0),
+                ),
+                reader_mode,
+                &gpp.get_gdal_worker(),
+                None,
+            )
+            .await
+            .unwrap();
+
+            // tile pixels that lie completely inside the file
+            let x_min = -(-origin_x).div_euclid(LEVEL);
+            let x_max = (origin_x + DATASET_SIZE).div_euclid(LEVEL) - 1;
+            let y_min = -origin_y.div_euclid(LEVEL);
+            let y_max = (DATASET_SIZE - origin_y).div_euclid(LEVEL) - 1;
+            for y in y_min..=y_max {
+                for x in x_min..=x_max {
+                    // the file pixel under the tile pixel's center
+                    let expected_col = (x * LEVEL + LEVEL / 2 - origin_x).div_euclid(FACTOR);
+                    let expected_row = (origin_y + y * LEVEL + LEVEL / 2).div_euclid(FACTOR);
+                    let Some(value) = tile
+                        .grid_array
+                        .get_at_grid_index_unchecked(GridIdx2D::new_y_x(y, x))
+                    else {
+                        failures.push(format!(
+                            "origin ({origin_x}, {origin_y}): no data at ({y}, {x})"
+                        ));
+                        continue;
+                    };
+                    let row = ((value as isize) - 1).div_euclid(FILE_SIZE);
+                    let col = ((value as isize) - 1).rem_euclid(FILE_SIZE);
+                    // rounding the read window to file pixels moves it by less than one file pixel
+                    if (row - expected_row).abs() > 1 || (col - expected_col).abs() > 1 {
+                        failures.push(format!(
+                            "origin ({origin_x}, {origin_y}): file pixel ({row}, {col}) at ({y}, {x}), expected ({expected_row}, {expected_col})"
+                        ));
+                    }
                 }
             }
         }

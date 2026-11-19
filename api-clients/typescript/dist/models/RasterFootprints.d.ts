@@ -28,10 +28,6 @@ export interface RasterFootprints {
      * The next time step to ask for, if more steps exist within the requested time interval.
      */
     next?: TimeInterval | null;
-    /**
-     * Answering needs too many catalog searches. Query a smaller area or time range.
-     */
-    tooLarge: boolean;
 }
 /**
  * Check if a given object implements the RasterFootprints interface.

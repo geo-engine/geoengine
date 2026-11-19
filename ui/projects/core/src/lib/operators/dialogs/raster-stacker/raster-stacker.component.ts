@@ -45,9 +45,55 @@ enum RenameBandsTypes {
 
 type SpatialReferenceString = string;
 
-interface Regrid {
+export interface Regrid {
     origin: Coordinate2D;
     resolution: {x: number; y: number};
+}
+
+/**
+ * Puts a layer onto the target grid with a single `Warp`.
+ * It reprojects if the spatial reference differs, and resamples if the resolution or origin of the layer,
+ * after reprojection, differs from the target grid.
+ * `Warp` handles grids that are coarser in one axis and finer in the other, so no case distinction is needed.
+ *
+ * @param operator the layer's operator
+ * @param sourceSpatialReference the layer's spatial reference
+ * @param targetSpatialReference the spatial reference of the stacked output
+ * @param layerGrid the layer's grid after reprojection to `targetSpatialReference`
+ * @param targetRegrid the origin and resolution of the stacked output
+ * @returns `operator` itself if nothing differs, otherwise `operator` wrapped in a `Warp`
+ */
+export function regriddedOperator(
+    operator: RasterOperator,
+    sourceSpatialReference: SpatialReferenceString,
+    targetSpatialReference: SpatialReferenceString,
+    layerGrid: SpatialGridDefinition,
+    targetRegrid: Regrid,
+): RasterOperator {
+    const spatialReferenceDiffers = sourceSpatialReference !== targetSpatialReference;
+
+    const targetResolution = {x: Math.abs(targetRegrid.resolution.x), y: Math.abs(targetRegrid.resolution.y)};
+    const resolutionDiffers =
+        Math.abs(layerGrid.pixelSizeX) !== targetResolution.x || Math.abs(layerGrid.pixelSizeY) !== targetResolution.y;
+
+    const layerOrigin = layerGrid.originCoordinate;
+    const originDiffers = layerOrigin.x !== targetRegrid.origin.x || layerOrigin.y !== targetRegrid.origin.y;
+
+    if (!spatialReferenceDiffers && !resolutionDiffers && !originDiffers) {
+        return operator;
+    }
+
+    return {
+        type: 'Warp',
+        params: {
+            ...(spatialReferenceDiffers ? {targetSpatialReference} : {}),
+            ...(resolutionDiffers ? {outputResolution: targetResolution} : {}),
+            ...(originDiffers ? {outputOriginReference: {x: targetRegrid.origin.x, y: targetRegrid.origin.y}} : {}),
+        },
+        sources: {
+            raster: operator,
+        },
+    };
 }
 
 @Component({
@@ -460,87 +506,21 @@ export class RasterStackerComponent implements AfterViewInit {
         this.loading$.next(true);
 
         try {
-            // Process each layer: reproject, regrid, convert data type
+            // Process each layer: reproject and regrid, convert data type
             const processedOperators: Array<RasterOperator> = workflowOperators.map((operator, index) => {
                 let processedOperator: RasterOperator = operator;
                 const originalSpatialReference = originalMetadata[index].spatialReference.srsString;
 
-                // Step 1: Reproject to target spatial reference if needed
-                if (originalSpatialReference !== targetSpatialReference) {
-                    processedOperator = {
-                        type: 'Reprojection',
-                        params: {
-                            targetSpatialReference,
-                        },
-                        sources: {
-                            source: processedOperator,
-                        },
-                    };
-                }
+                // Step 1: Reproject and regrid in one step if needed
+                processedOperator = regriddedOperator(
+                    processedOperator,
+                    originalSpatialReference,
+                    targetSpatialReference,
+                    reprojectedMetadata[index].spatialGrid.spatialGrid,
+                    targetRegrid,
+                );
 
-                // Step 2: Regrid if needed
-                const layerGrid = reprojectedMetadata[index].spatialGrid.spatialGrid;
-                const layerResolutionX = Math.abs(layerGrid.pixelSizeX);
-                const layerResolutionY = Math.abs(layerGrid.pixelSizeY);
-                const targetResolution = targetRegrid.resolution;
-
-                // Check if resolution differs
-                const resolutionDiffers =
-                    layerResolutionX !== Math.abs(targetResolution.x) || layerResolutionY !== Math.abs(targetResolution.y);
-
-                const layerOrigin = layerGrid.originCoordinate;
-                const targetOrigin = targetRegrid.origin;
-
-                // Check if origin differs
-                const originDiffers = layerOrigin.x !== targetOrigin.x || layerOrigin.y !== targetOrigin.y;
-
-                if (resolutionDiffers || originDiffers) {
-                    // Determine if layer resolution is coarser or finer than target
-                    const layerResolutionSize = layerResolutionX * layerResolutionY;
-                    const targetResolutionSize = Math.abs(targetResolution.x) * Math.abs(targetResolution.y);
-                    const isCoarser = layerResolutionSize > targetResolutionSize;
-
-                    const outputResolution = {
-                        type: 'resolution' as const,
-                        x: Math.abs(targetResolution.x),
-                        y: Math.abs(targetResolution.y),
-                    };
-
-                    const outputOriginReference = {
-                        x: targetOrigin.x,
-                        y: targetOrigin.y,
-                    };
-
-                    if (isCoarser) {
-                        // Use interpolation for coarser → finer
-                        processedOperator = {
-                            type: 'Interpolation',
-                            params: {
-                                interpolation: 'nearestNeighbor' as const,
-                                outputResolution,
-                                outputOriginReference,
-                            },
-                            sources: {
-                                raster: processedOperator,
-                            },
-                        };
-                    } else {
-                        // Use downsampling for finer → coarser
-                        processedOperator = {
-                            type: 'Downsampling',
-                            params: {
-                                samplingMethod: 'nearestNeighbor' as const,
-                                outputResolution,
-                                outputOriginReference,
-                            },
-                            sources: {
-                                raster: processedOperator,
-                            },
-                        };
-                    }
-                }
-
-                // Step 3: Convert data type if needed
+                // Step 2: Convert data type if needed
                 const inputDataType = this.inputDataTypes()[index];
                 if (inputDataType !== dataType) {
                     processedOperator = {

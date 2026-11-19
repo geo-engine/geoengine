@@ -1,12 +1,9 @@
-use crate::config::StacCache;
-use crate::datasets::external::stac::StacProviderDataset;
+use crate::config::{StacCache, get_config_element};
+use crate::datasets::external::stac::{StacProviderDataset, StacTileFile};
 use futures::FutureExt;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::raster::GridIdx2D;
-use geoengine_operators::{
-    error::Error,
-    source::{TileFile, gdal_worker_process::GdalMetadataMapping},
-};
+use geoengine_operators::{error::Error, source::gdal_worker_process::GdalMetadataMapping};
 use moka::future::Cache;
 use std::{
     future::Future,
@@ -16,18 +13,19 @@ use std::{
 };
 use tracing::trace;
 
-pub(crate) type StacQueryCacheResult = Result<Arc<Vec<TileFile>>, Arc<Error>>;
+pub(crate) type StacQueryCacheResult = Result<Arc<Vec<StacTileFile>>, Arc<Error>>;
 
 /// Approximate result payload, key, and value size for Moka's weighted capacity.
 /// This is a lower vound for the actual byte size.
 /// It includes the actual key and Arc value sizes plus known nested allocations.
 /// It excludes cache internals, allocator overhead, the dataset registry, and active requests.
-pub(crate) fn result_bytes(result: &[TileFile]) -> usize {
+pub(crate) fn result_bytes(result: &[StacTileFile]) -> usize {
     let mut total = std::mem::size_of::<Key>()
-        + std::mem::size_of::<Arc<Vec<TileFile>>>()
-        + std::mem::size_of::<Vec<TileFile>>();
-    for file in result {
-        total += std::mem::size_of::<TileFile>() + file.params.file_path.as_os_str().len();
+        + std::mem::size_of::<Arc<Vec<StacTileFile>>>()
+        + std::mem::size_of::<Vec<StacTileFile>>();
+    // the item ids are shared by the files of an item, so they are left out
+    for StacTileFile { file, .. } in result {
+        total += std::mem::size_of::<StacTileFile>() + file.params.file_path.as_os_str().len();
         if let Some(mappings) = &file.params.properties_mapping {
             for mapping in mappings {
                 total += std::mem::size_of::<GdalMetadataMapping>()
@@ -56,7 +54,7 @@ pub(crate) fn result_bytes(result: &[TileFile]) -> usize {
 /// The dataset registry assigns stable compact keys while retaining full
 /// `PartialEq` comparisons, including fields containing floating-point data.
 pub(crate) struct StacQueryCache {
-    cache: Cache<Key, Arc<Vec<TileFile>>>,
+    cache: Cache<Key, Arc<Vec<StacTileFile>>>,
     datasets: Mutex<Vec<StacProviderDataset>>,
     max_bytes: usize,
     ttl: Duration,
@@ -88,7 +86,7 @@ enum InitError {
     Fetch(Arc<Error>),
     /// Moka shares initializer errors with current waiters but does not cache
     /// them, so successful results rejected by admission use this variant.
-    Uncached(Arc<Vec<TileFile>>),
+    Uncached(Arc<Vec<StacTileFile>>),
 }
 
 impl StacQueryCache {
@@ -105,10 +103,12 @@ impl StacQueryCache {
         }
     }
 
-    /// A cache for use without a context, e.g. in tests and the harvester, with the sizes of
-    /// `Settings-default.toml`.
+    /// A cache for use without a context, e.g. in the harvester, configured by `[stac_cache]` of
+    /// the settings like the one of a context.
     pub(crate) fn standalone() -> Self {
-        Self::new(100 * 1024 * 1024, Duration::from_hours(1))
+        let config = get_config_element::<StacCache>()
+            .expect("`[stac_cache]` is part of `Settings-default.toml`");
+        Self::from_config(&config)
     }
 
     pub(crate) async fn clear(&self) {
@@ -116,11 +116,13 @@ impl StacQueryCache {
         self.cache.run_pending_tasks().await;
     }
 
+    /// A cache of the given size, for tests and benches: the planning values are fixed so that
+    /// they do not change with the settings. The server uses [`Self::from_config`].
     pub(crate) fn new(max_bytes: usize, ttl: Duration) -> Self {
         let cache = Cache::builder()
             .max_capacity(max_bytes as u64)
             .time_to_live(ttl)
-            .weigher(|_key: &Key, result: &Arc<Vec<TileFile>>| {
+            .weigher(|_key: &Key, result: &Arc<Vec<StacTileFile>>| {
                 u32::try_from(result_bytes(result.as_slice())).unwrap_or(u32::MAX)
             })
             .build();
@@ -175,20 +177,21 @@ impl StacQueryCache {
             .await;
     }
 
+    /// Whether the cache keeps results at all. A search done only to fill it is wasted otherwise.
+    pub(crate) fn stores_results(&self) -> bool {
+        self.max_bytes > 0 && !self.ttl.is_zero()
+    }
+
     /// Stores what a wider search found for one cell and time step, so that step needs no search.
     pub(crate) async fn insert(
         &self,
         dataset: StacProviderDataset,
         cell: GridIdx2D,
         time: TimeInterval,
-        files: Vec<TileFile>,
+        files: Vec<StacTileFile>,
     ) {
         let bytes = result_bytes(&files);
-        if self.max_bytes == 0
-            || self.ttl.is_zero()
-            || bytes > self.max_bytes
-            || u32::try_from(bytes).is_err()
-        {
+        if !self.stores_results() || bytes > self.max_bytes || u32::try_from(bytes).is_err() {
             return;
         }
 
@@ -216,7 +219,7 @@ impl StacQueryCache {
     ) -> StacQueryCacheResult
     where
         F: FnOnce() -> Fut + Send + 'static,
-        Fut: Future<Output = Result<Vec<TileFile>, Error>> + Send + 'static,
+        Fut: Future<Output = Result<Vec<StacTileFile>, Error>> + Send + 'static,
     {
         let key = Key {
             dataset_id: self.dataset_id(dataset),
@@ -262,7 +265,7 @@ impl StacQueryCache {
     async fn get_or_initialize<F, Fut>(&self, key: Key, fetch: F) -> StacQueryCacheResult
     where
         F: FnOnce() -> Fut + Send + 'static,
-        Fut: Future<Output = Result<Vec<TileFile>, Error>> + Send + 'static,
+        Fut: Future<Output = Result<Vec<StacTileFile>, Error>> + Send + 'static,
     {
         let cache = &self.cache;
         let max_bytes = self.max_bytes;
@@ -347,7 +350,7 @@ impl StacQueryCache {
 
 #[cfg(test)]
 mod tests {
-    use super::{StacQueryCache, StacQueryCacheResult, TileFile, result_bytes};
+    use super::{StacQueryCache, StacQueryCacheResult, StacTileFile, result_bytes};
     use crate::datasets::external::stac::{
         StacAssetBand, StacProviderDataset, StacProviderDatasetBand,
     };
@@ -393,7 +396,7 @@ mod tests {
     ) -> StacQueryCacheResult
     where
         F: FnOnce() -> Fut + Send + 'static,
-        Fut: Future<Output = Result<Vec<TileFile>, Error>> + Send + 'static,
+        Fut: Future<Output = Result<Vec<StacTileFile>, Error>> + Send + 'static,
     {
         cache
             .get_or_fetch(dataset, GridIdx2D::new_y_x(0, x), time, fetch)
@@ -723,7 +726,7 @@ mod tests {
             dataset("same"),
             0,
             time,
-            move || -> std::future::Ready<Result<Vec<TileFile>, Error>> {
+            move || -> std::future::Ready<Result<Vec<StacTileFile>, Error>> {
                 panic!("synchronous panic before returning the fetch future");
             },
         )
@@ -769,7 +772,7 @@ mod tests {
     async fn admission_rejection_no_retention() {
         uncached_success_contract(0, Duration::from_mins(1)).await;
         uncached_success_contract(4096, Duration::ZERO).await;
-        let r: Vec<TileFile> = Vec::new();
+        let r: Vec<StacTileFile> = Vec::new();
         uncached_success_contract(result_bytes(&r) - 1, Duration::from_mins(1)).await;
     }
 

@@ -5,10 +5,7 @@ use crate::{
             ogc::{OgcApiResult, error::OgcApiError},
             processing_graphs::processing_graph_metadata,
         },
-        model::{
-            datatypes::{DataProviderId, LayerId},
-            processing_graphs::DeriveOutRasterSpecsSource,
-        },
+        model::datatypes::{DataProviderId, LayerId},
     },
     contexts::{ApplicationContext, SessionContext},
     layers::{
@@ -20,11 +17,11 @@ use crate::{
 };
 use geoengine_datatypes::{
     error::BoxedResultExt,
-    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution},
-    spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
+    primitives::{AxisAlignedRectangle, SpatialPartition2D},
+    spatial_reference::{SpatialReferenceAuthority, SpatialReferenceOption},
 };
 use geoengine_operators::engine::{
-    InitializedRasterOperator, ProcessingGraphOperatorPath, RasterOperator as _,
+    ExecutionContext, InitializedRasterOperator, ProcessingGraphOperatorPath,
     RasterResultDescriptor, TypedResultDescriptor,
 };
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
@@ -180,7 +177,15 @@ pub async fn get_initialized_raster_operator<C: SessionContext>(
     layer: &Layer,
     execution_context: &C::ExecutionContext,
 ) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
-    let operator = match &layer.processing_graph.operator {
+    initialize_raster_graph(&layer.processing_graph, execution_context).await
+}
+
+/// Initializes the raster operator of `processing_graph`
+pub async fn initialize_raster_graph(
+    processing_graph: &ProcessingGraph,
+    execution_context: &dyn ExecutionContext,
+) -> OgcApiResult<Box<dyn InitializedRasterOperator>> {
+    let operator = match &processing_graph.operator {
         geoengine_operators::engine::TypedOperator::Raster(operator) => operator.clone(),
         geoengine_operators::engine::TypedOperator::Vector(_) => {
             return Err(OgcApiError::ExpectedRaster {
@@ -203,89 +208,6 @@ pub async fn get_initialized_raster_operator<C: SessionContext>(
         .boxed_context(error::InitializingProcessingGraph)
 }
 
-/// Reprojects the given processing graph to the target spatial reference
-///
-/// Modifies the processing graph in place.
-pub fn processing_graph_with_reprojection(
-    processing_graph: &mut ProcessingGraph,
-    target_spatial_reference: SpatialReference,
-) -> OgcApiResult<()> {
-    const DERIVE_OUT_SPEC: DeriveOutRasterSpecsSource = DeriveOutRasterSpecsSource::DataBounds;
-
-    processing_graph.operator = match &processing_graph.operator {
-        geoengine_operators::engine::TypedOperator::Raster(operator) => {
-            geoengine_operators::engine::TypedOperator::Raster(
-                geoengine_operators::processing::Reprojection {
-                    params: geoengine_operators::processing::ReprojectionParams {
-                        target_spatial_reference,
-                        derive_out_spec: DERIVE_OUT_SPEC.into(),
-                    },
-                    sources: geoengine_operators::engine::SingleRasterOrVectorSource {
-                        source: geoengine_operators::util::input::RasterOrVectorOperator::Raster(
-                            operator.clone(),
-                        ),
-                    },
-                }
-                .typed(),
-            )
-        }
-        geoengine_operators::engine::TypedOperator::Vector(_) => {
-            Err(OgcApiError::ExpectedRaster {
-                found: "vector".to_string(),
-            })?
-        }
-        geoengine_operators::engine::TypedOperator::Plot(_) => Err(OgcApiError::ExpectedRaster {
-            found: "plot".to_string(),
-        })?,
-    };
-
-    Ok(())
-}
-
-/// Resamples the given processing graph to the target spatial reference
-///
-/// Modifies the processing graph in place.
-pub fn processing_graph_with_resampling(
-    processing_graph: &mut ProcessingGraph,
-    target_origin: Coordinate2D,
-    target_resolution: SpatialResolution,
-) -> OgcApiResult<()> {
-    processing_graph.operator = match &processing_graph.operator {
-        geoengine_operators::engine::TypedOperator::Raster(operator) => {
-            geoengine_operators::engine::TypedOperator::Raster(
-                geoengine_operators::processing::Interpolation {
-                    params: geoengine_operators::processing::InterpolationParams {
-                        interpolation:
-                            geoengine_operators::processing::InterpolationMethod::NearestNeighbor,
-                        output_resolution:
-                            geoengine_operators::processing::InterpolationResolution::Fraction(
-                                geoengine_operators::processing::Fraction {
-                                    x: target_resolution.x().get(),
-                                    y: target_resolution.y().get(),
-                                },
-                            ),
-                        output_origin_reference: Some(target_origin),
-                    },
-                    sources: geoengine_operators::engine::SingleRasterSource {
-                        raster: operator.clone(),
-                    },
-                }
-                .typed(),
-            )
-        }
-        geoengine_operators::engine::TypedOperator::Vector(_) => {
-            Err(OgcApiError::ExpectedRaster {
-                found: "vector".to_string(),
-            })?
-        }
-        geoengine_operators::engine::TypedOperator::Plot(_) => Err(OgcApiError::ExpectedRaster {
-            found: "plot".to_string(),
-        })?,
-    };
-
-    Ok(())
-}
-
 pub fn to_non_zero_u16(value: usize) -> NonZeroU16 {
     let value = u16::try_from(value).unwrap_or(u16::MAX);
     NonZeroU16::new(value.max(1)).unwrap_or(NonZeroU16::MIN)
@@ -295,59 +217,10 @@ pub fn to_non_zero_u64(value: usize) -> NonZeroU64 {
     NonZeroU64::try_from(value as u64).unwrap_or(NonZeroU64::MIN)
 }
 
-pub struct OriginAndResolution {
-    pub origin: Coordinate2D,
-    pub resolution: SpatialResolution,
-}
-
-/// Check if the layer's spatial reference matches the required spatial reference for the requested TMS.
-///
-/// If the layer's spatial reference does not match, modify the processing graph to include a reprojection operator
-/// to the required spatial reference.
-///
-/// Then, reinitialize the raster operator to reflect the updated processing graph.
-pub async fn reproject_if_necessary<C: SessionContext>(
-    layer: &mut Layer,
-    initialized_operator: &mut Box<dyn InitializedRasterOperator>,
-    execution_context: &C::ExecutionContext,
-    required_srs: Option<SpatialReference>,
-    required_origin_and_resolution: Option<OriginAndResolution>,
-) -> OgcApiResult<()> {
-    let Some(layer_srs) = initialized_operator
-        .result_descriptor()
-        .spatial_reference
-        .as_option()
-    else {
-        return Err(OgcApiError::MissingSpatialReference);
-    };
-
-    // If the required SRS is provided, check if it is different from the layer's SRS.
-    let required_srs = required_srs.filter(|required_srs| layer_srs != *required_srs);
-
-    if required_srs.is_none() && required_origin_and_resolution.is_none() {
-        return Ok(());
-    }
-
-    if let Some(target_srs) = required_srs {
-        processing_graph_with_reprojection(&mut layer.processing_graph, target_srs)?;
-    }
-
-    if let Some(target) = required_origin_and_resolution {
-        processing_graph_with_resampling(
-            &mut layer.processing_graph,
-            target.origin,
-            target.resolution,
-        )?;
-    }
-
-    *initialized_operator = get_initialized_raster_operator::<C>(layer, execution_context).await?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use geoengine_datatypes::{primitives::Coordinate2D, spatial_reference::SpatialReference};
 
     #[test]
     fn it_converts_values_to_non_zero_u64() {

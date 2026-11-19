@@ -1,6 +1,7 @@
 pub use self::band_names::RenameBands;
 pub use self::data_type::{
     DynamicRasterDataType, FromPrimitive, Pixel, RasterDataType, StaticRasterDataType, TypedValue,
+    pixel_from_f64_rounded,
 };
 pub use self::empty_grid::{EmptyGrid, EmptyGrid1D, EmptyGrid2D, EmptyGrid3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};

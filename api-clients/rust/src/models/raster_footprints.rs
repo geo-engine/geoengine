@@ -21,19 +21,15 @@ pub struct RasterFootprints {
     /// The next time step to ask for, if more steps exist within the requested time interval.
     #[serde(rename = "next", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub next: Option<Option<Box<models::TimeInterval>>>,
-    /// Answering needs too many catalog searches. Query a smaller area or time range.
-    #[serde(rename = "tooLarge")]
-    pub too_large: bool,
 }
 
 impl RasterFootprints {
     /// When and where the data of a raster processing graph may exist.
-    pub fn new(spatial_reference: String, steps: Vec<models::TimeStepFootprint>, too_large: bool) -> RasterFootprints {
+    pub fn new(spatial_reference: String, steps: Vec<models::TimeStepFootprint>) -> RasterFootprints {
         RasterFootprints {
             spatial_reference,
             steps,
             next: None,
-            too_large,
         }
     }
 }

@@ -58,6 +58,17 @@ multi_band_gdal_source_read_ahead = 16
 # merge adds the least empty area are merged. Combining footprints, e.g. in an expression, takes
 # time in the product of the numbers of boxes.
 footprint_boxes_per_step_limit = 64
+# Upper limit in MB for the memory that a Warp with the downsampling method `mode` keeps per output
+# tile. It keeps the sums of the weights per distinct value of each output pixel whose input pixels
+# it is still reading. Warp estimates the worst case when it is initialized and rejects the
+# processing graph if that exceeds the limit, e.g. for a large factor on 16-bit data without
+# overviews; usually, it needs far less.
+warp_mode_max_memory_per_tile_mb = 64
+# the largest error in input pixels of the approximate coordinate transformation of a raster
+# reprojection, as `gdalwarp -et`, for a `Warp` without the parameter `approximationErrorThreshold`.
+# Rows of output pixels are projected exactly only at a few points and interpolated in between,
+# which is much faster. `0.125` is the default of `gdalwarp -et`; `0` projects every pixel exactly.
+reprojection_approximation_error_px = 0.125
 
 [expression]
 # seconds a compiled expression stays in the cache without being requested; running queries keep
@@ -107,6 +118,12 @@ filename_prefix = "geo_engine"
 # when the source is part of #[snafu(display())]. But in some cases this could
 # improve debugging.
 raw_error_messages = false
+
+[ogc]
+# How WMS GetMap and OGC API tiles resample rasters onto the requested grid: "symbology" uses the
+# methods for the colorizer ("mode" for palettes, "average"/"bilinear" for gradients and RGB),
+# "nearest" always uses nearest neighbor, which is faster. WCS always uses nearest neighbor.
+map_resampling = "symbology"
 
 [ogc.default_time]
 # type "Value" with start/end as ISO strings or "Now" for using the current time, use wcs.default_time etc. for override
@@ -341,7 +358,9 @@ ttl_secs = 3600
 # follow the months. More steps mean fewer requests for a long window, but each one returns more items
 # (up to the pages of a whole chunk) even if only a few days are looked at.
 search_chunk_steps = 30
-# footprint queries needing more STAC searches than this are answered with "too large"
+# A footprint request needing more STAC searches than this for one chunk of `search_chunk_steps` time steps is
+# answered with "too large". A request covers at most 100 time steps, so with the defaults it needs at most four
+# chunks of 50 searches.
 max_footprint_searches = 50
 # A STAC server allows a number of requests per time window (e.g. 10 per second). Map tiles and the
 # calendar's searches wait in two queues and share it. While both queues have requests, the calendar

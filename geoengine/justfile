@@ -11,6 +11,11 @@ install:
     cargo install --locked git-cliff
     cargo install --locked request-logging-proxy
 
+# Run the build scripts that download files, with retries, since they try only once. `ort-sys` stores the ONNX Runtime binaries in `~/.cache/ort.pyke.io` (or `$ORT_CACHE_DIR`) and skips the download if they are there.
+[group("install")]
+prefetch-build-downloads attempts="5" backoff="15":
+    just common::retry {{ attempts }} {{ backoff }} cargo build --package ort-sys
+
 # Generate OpenAPI specification as JSON file. The file is generated in the current directory.
 [group("build")]
 generate-openapi-spec: common::_clear
