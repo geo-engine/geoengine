@@ -604,8 +604,6 @@ pub struct RasterFootprints {
     pub steps: Vec<TimeStepFootprint>,
     /// The next time step to ask for, if more steps exist within the requested time interval.
     pub next: Option<TimeInterval>,
-    /// Answering needs too many catalog searches. Query a smaller area or time range.
-    pub too_large: bool,
 }
 
 /// Gets when and where the data of a raster processing graph may exist.
@@ -614,7 +612,13 @@ pub struct RasterFootprints {
     get,
     path = "/processingGraphs/{id}/footprints",
     responses(
-        (status = 200, description = "The footprints per time step", body = RasterFootprints)
+        (status = 200, description = "The footprints per time step", body = RasterFootprints),
+        (status = 400, description = "Bad request", body = crate::api::model::responses::ErrorResponse, examples(
+            ("Needs too many catalog searches, query a smaller area or time range" = (value = json!({
+                "error": "FootprintQueryTooLarge",
+                "message": "Footprint query needs 120 catalog searches, the limit is 50. Query a smaller area or time range."
+            })))
+        ))
     ),
     params(
         ("id" = ProcessingGraphId, description = "Processing graph id"),
@@ -1416,7 +1420,6 @@ mod tests {
 
         let body: serde_json::Value = serde_json::from_str(&res_body).unwrap();
         assert_eq!(body["spatialReference"], "EPSG:4326");
-        assert_eq!(body["tooLarge"], false);
         assert_eq!(body["next"], serde_json::Value::Null);
         let steps = body["steps"].as_array().unwrap();
         assert_eq!(steps.len(), 1, "{body}");
