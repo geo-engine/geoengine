@@ -75,7 +75,7 @@ describe('FootprintsService overlay', () => {
     /** The calendar header opens the calendar and asks for the window of its month. */
     function openCalendar(service: FootprintsService): void {
         service.calendarOpen.set(true);
-        service.showDate(new Date(2026, 3, 1));
+        service.showDate(new Date(2026, 3, 1), 'month');
     }
 
     /** The viewport is debounced, then the requests of the resources run. */

@@ -1,6 +1,14 @@
 import {describe, expect, it} from 'vitest';
 import {ResponseError, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-import {calendarStartView, cellClasses, footprintsOrTooLarge, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
+import {
+    calendarStartView,
+    cellClasses,
+    footprintsOrTooLarge,
+    mergeFootprints,
+    stepAt,
+    visiblePeriodStart,
+    windowRequests,
+} from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
     return {time: {start: Date.parse(startIso), end: Date.parse(endIso)}, status, bounds: []};
@@ -72,8 +80,13 @@ describe('footprints', () => {
         expect(stepAt([data, empty], Date.parse('2026-03-16T00:00:00Z'))).toBeUndefined();
     });
 
-    it('takes the month start from the local fields of a calendar date', () => {
-        expect(monthStartUtc(new Date(2026, 2, 15))).toBe(Date.UTC(2026, 2, 1));
+    it('starts the visible period at the month, the year or the page of years the calendar shows', () => {
+        // the local fields of a calendar date count
+        expect(visiblePeriodStart(new Date(2026, 2, 15), 'month')).toBe(Date.UTC(2026, 2, 1));
+        // a monthly dataset opened in April shows January to March in the year view as well
+        expect(visiblePeriodStart(new Date(2026, 3, 15), 'year')).toBe(Date.UTC(2026, 0, 1));
+        // 2016 is a multiple of 24, so the page of 2026 starts there
+        expect(visiblePeriodStart(new Date(2026, 3, 15), 'multi-year')).toBe(Date.UTC(2016, 0, 1));
     });
 
     it('requests the month of the window start first and the rest afterwards', () => {

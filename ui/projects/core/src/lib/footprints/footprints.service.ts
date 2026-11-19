@@ -26,8 +26,8 @@ import {
     footprintsOrTooLarge,
     mergeFootprints,
     monthStartOfTime,
-    monthStartUtc,
     stepAt,
+    visiblePeriodStart,
     windowRequests,
 } from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
@@ -211,6 +211,7 @@ export class FootprintsService {
     constructor() {
         effect(() => this.updateOverlay());
         // while the calendar is closed, the window follows the selected time; the calendar header moves it when open
+        // shortcut: a window is 100 steps, so it covers a month only for steps of a day or longer; hourly data would need a window per day
         effect(() => {
             const time = this.time();
             if (!time || this.calendarOpen() || !this.datesNeeded()) return;
@@ -287,11 +288,11 @@ export class FootprintsService {
 
     readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) => cellClasses(this.steps(), date, view);
 
-    /** Loads the window of `date` unless it is loaded already. Takes a calendar date. */
-    showDate(date: Date): void {
-        const timeMs = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
-        if (stepAt(this.steps(), timeMs)) return;
-        this.windowStart.set(monthStartUtc(date));
+    /** Loads the window from the start of what the calendar shows in `view`, unless it is loaded already. Takes a calendar date. */
+    showDate(date: Date, view: MatCalendarView): void {
+        const start = visiblePeriodStart(date, view);
+        if (stepAt(this.steps(), start)) return;
+        this.windowStart.set(start);
     }
 
     private updateOverlay(): void {

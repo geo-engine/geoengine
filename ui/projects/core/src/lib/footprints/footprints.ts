@@ -1,4 +1,4 @@
-import {MatCalendarView} from '@angular/material/datepicker';
+import {MatCalendarView, yearsPerPage} from '@angular/material/datepicker';
 import {RasterFootprints, ResponseError, TimeInterval, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
 
 /** The calendar's dates are UTC dates in the local fields of a `Date` (see `setDate` in the layers component). */
@@ -56,9 +56,20 @@ export function monthStartOfTime(timeMs: number): number {
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
 }
 
-/** The first of the month of `date`, which is a calendar date, as a UTC time. */
-export function monthStartUtc(date: Date): number {
-    return Date.UTC(date.getFullYear(), date.getMonth(), 1);
+/**
+ * The first day the calendar shows in `view` around `date`, a calendar date, as a UTC time: of its month, its year or its
+ * page of years. Without a minimum or maximum date, the calendar starts a page of years at a multiple of `yearsPerPage`.
+ */
+export function visiblePeriodStart(date: Date, view: MatCalendarView): number {
+    const year = date.getFullYear();
+    switch (view) {
+        case 'month':
+            return Date.UTC(year, date.getMonth(), 1);
+        case 'year':
+            return Date.UTC(year, 0, 1);
+        case 'multi-year':
+            return Date.UTC(year - (((year % yearsPerPage) + yearsPerPage) % yearsPerPage), 0, 1);
+    }
 }
 
 /** The requests of a window: the month of its start first, so the visible month shows soonest, then the rest. */

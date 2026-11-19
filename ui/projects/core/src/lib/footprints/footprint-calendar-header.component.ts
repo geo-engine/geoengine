@@ -21,9 +21,9 @@ export class FootprintCalendarHeaderComponent {
         const footprintsService = this.footprintsService;
 
         footprintsService.calendarOpen.set(true);
-        footprintsService.showDate(calendar.activeDate);
+        footprintsService.showDate(calendar.activeDate, calendar.currentView);
 
-        const subscription = calendar.stateChanges.subscribe(() => footprintsService.showDate(calendar.activeDate));
+        const subscription = calendar.stateChanges.subscribe(() => footprintsService.showDate(calendar.activeDate, calendar.currentView));
 
         inject(DestroyRef).onDestroy(() => {
             subscription.unsubscribe();
