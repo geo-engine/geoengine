@@ -3166,10 +3166,22 @@ mod grid_request_tests {
 
     /// The aggregation of the days with items: each given day has two items.
     fn expect_aggregation(server: &Server, datetime: &str, days_with_items: &[&str]) {
-        let buckets = days_with_items
-            .iter()
-            .map(|day| json!({"key": day, "data_type": "datetime", "frequency": 2}))
-            .collect::<Vec<_>>();
+        // like CODE-DE: the buckets from the first to the last day with items, the others empty
+        let day_of = |day: &str| chrono::DateTime::parse_from_rfc3339(day).unwrap();
+        let mut buckets = Vec::new();
+        if let (Some(first), Some(last)) = (days_with_items.first(), days_with_items.last()) {
+            let mut day = day_of(first);
+            while day <= day_of(last) {
+                let key = day.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+                let frequency = if days_with_items.contains(&key.as_str()) {
+                    2
+                } else {
+                    0
+                };
+                buckets.push(json!({"key": key, "data_type": "datetime", "frequency": frequency}));
+                day += chrono::Duration::days(1);
+            }
+        }
         server.expect(
             Expectation::matching(all_of![
                 request::method_path("GET", "/collections/test/aggregate"),
