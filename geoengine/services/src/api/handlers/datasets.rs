@@ -365,7 +365,7 @@ async fn validate_tile(
         .and_then(|declared| rd.missing_overview_level(declared))
     {
         return Err(AddDatasetTilesError::TileFileMissingOverviewLevel {
-            overview_level,
+            overview_level: overview_level.get(),
             file_path: tile.params.file_path.to_string_lossy().to_string(),
         });
     }

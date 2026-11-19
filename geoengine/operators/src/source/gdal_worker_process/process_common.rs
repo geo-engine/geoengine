@@ -7,7 +7,7 @@ use geoengine_datatypes::raster::{
 use ipc_channel::IpcError;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::{
     borrow::Cow,
     hash::{Hash, Hasher},
@@ -131,9 +131,12 @@ impl RasterInfo {
     }
 
     /// The first of the power-of-two overview levels `2..=max_overview_level` the band lacks.
-    pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<u32> {
+    /// `max_overview_level` 0 or 1 declares no overview.
+    pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<NonZeroU32> {
         let missing = largest_overview_level(&self.levels).checked_mul(2)?;
-        (missing <= max_overview_level).then_some(missing)
+        (missing <= max_overview_level)
+            .then_some(missing)
+            .and_then(NonZeroU32::new)
     }
 }
 
