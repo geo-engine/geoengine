@@ -13,13 +13,11 @@ use crate::error::Error;
 use crate::processing::{
     Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
 };
-use crate::source::gdal_worker_process::process_common::{
-    GdalReadAdvise, GdalReadWindow, IpcProcessError,
-};
+use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
 use crate::source::gdal_worker_process::reader::GdalPoolReader;
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-    GdalReaderMode, ReadLevel,
+    GdalReaderMode,
 };
 use crate::util::Result;
 use futures::stream::{BoxStream, FuturesOrdered};
@@ -50,13 +48,17 @@ pub struct TilePlan {
 
 /// How the files of a tile are read. The path is chosen once per tile and holds for all its
 /// files: a file never switches to the other path, so the pixels of a tile follow one rule.
+///
+/// Both paths read alike: at the full resolution the pixels as they are, at a coarser level each
+/// output pixel from the nearest pixel of the coarsest level of the file that is fine enough,
+/// placed by that level's real size. So a level the file has and whose size fits is read as is.
 #[derive(Clone, Copy)]
 enum ReadPath<'a> {
-    /// Through whole cached blocks of the files, see [`BlockIo::read`]. A file that lacks the
-    /// level is resampled from its blocks of a finer level, in the server.
+    /// Through whole cached blocks of the files, see [`BlockIo::read`]: the server picks the
+    /// level and its pixels.
     Blocks(&'a BlockIo),
-    /// Through GDAL in the workers, see [`read_through_gdal`]. A file that lacks the level is
-    /// resampled by GDAL.
+    /// Through GDAL's window read in the workers (`read_tile_data`): GDAL picks the level and
+    /// its pixels.
     Gdal,
 }
 
@@ -110,7 +112,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
         GridOrEmpty::from(EmptyGrid::new(tile_bounds));
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
-    let level = reader_mode.read_level();
+    let factor = reader_mode.level_factor();
     let path = ReadPath::of(blocks, &plan);
 
     let files: Vec<(GdalDatasetParameters, GdalReadAdvise)> = plan
@@ -161,10 +163,10 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
             match path {
                 ReadPath::Blocks(blocks) => {
                     blocks
-                        .read::<T>(&params, read_advise, level, cache_hint)
+                        .read::<T>(&params, read_advise, factor, cache_hint)
                         .await
                 }
-                ReadPath::Gdal => read_through_gdal::<T>(reader, params, read_advise, level).await,
+                ReadPath::Gdal => reader.read_tile_data::<T>(params, read_advise).await,
             }
         });
     }
@@ -301,45 +303,6 @@ pub(crate) fn overview_source(
     .typed()
 }
 
-/// Reads `read_advise` of one file through GDAL in a worker, without blocks:
-///
-/// | level                | read                                                              |
-/// |----------------------|-------------------------------------------------------------------|
-/// | `Declared`           | `read_level_data`: the level's band, pixel by pixel               |
-/// | `Full`, `Undeclared` | `read_tile_data`: GDAL's window read, GDAL picks the level and    |
-/// |                      | may resample                                                      |
-///
-/// Only a declared level is read pixel by pixel, since only then does every file have it; at
-/// the full resolution the window read reads pixel for pixel anyway. A file that lacks its
-/// declared level is read by the window read as well, with a warning.
-async fn read_through_gdal<T: Pixel + GdalType + FromPrimitive>(
-    reader: &GdalPoolReader,
-    params: GdalDatasetParameters,
-    read_advise: GdalReadAdvise,
-    level: ReadLevel,
-) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError> {
-    let ReadLevel::Declared(factor) = level else {
-        return reader.read_tile_data::<T>(params, read_advise).await;
-    };
-    // The reader mode snaps declared reads to the level's pixels, so a read that does not
-    // start at one is a bug.
-    let Some(level_advise) = level_read_advise(read_advise, factor) else {
-        return Err(misaligned_read(&params, factor));
-    };
-    match reader
-        .read_level_data::<T>(params.clone(), factor, level_advise)
-        .await
-    {
-        Err(GdalProcessPoolError::IpcProcessError {
-            source: IpcProcessError::MissingOverviewLevel { file, factor },
-        }) => {
-            tracing::warn!("{file} lacks the overview level {factor}, GDAL resamples it");
-            reader.read_tile_data::<T>(params, read_advise).await
-        }
-        read => read,
-    }
-}
-
 /// `read_advise` in the pixel space of the level `factor` times coarser than the full
 /// resolution, where its window has the size of its output. `None` if it does not start at a
 /// pixel of the level.
@@ -362,16 +325,6 @@ pub(crate) fn level_read_advise(
         ),
         ..read_advise
     })
-}
-
-fn misaligned_read(params: &GdalDatasetParameters, factor: NonZeroUsize) -> GdalProcessPoolError {
-    IpcProcessError::IpcOther {
-        msg: format!(
-            "a read of {} does not start at a pixel of its level {factor}",
-            params.file_path.display()
-        ),
-    }
-    .into()
 }
 
 /// Assembles the tiles of `plans` in their order, with up to `read_ahead` tiles in flight.
@@ -954,11 +907,10 @@ mod tests {
                 files: vec![params.clone()],
                 cache_hint: CacheHint::max_duration(),
             };
-            for files_have_level in [false, true] {
+            for repeated in [false, true] {
                 let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: file_grid,
                     overview_level: std::num::NonZeroUsize::new(level).unwrap(),
-                    files_have_level,
                 });
                 let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
                     .await
@@ -968,12 +920,9 @@ mod tests {
                     assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, Some(&blocks))
                         .await
                         .unwrap();
-                assert_eq!(
-                    tile, from_gdal,
-                    "level {level}, declared: {files_have_level}"
-                );
+                assert_eq!(tile, from_gdal, "level {level}, repeated: {repeated}");
                 assert!(cache.byte_size() > 0, "level {level}: blocks were cached");
-                if files_have_level {
+                if repeated {
                     assert_eq!(
                         gpp.request_stats().reads,
                         reads,
@@ -1017,7 +966,6 @@ mod tests {
         let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
             original_dataset_grid: file_grid,
             overview_level: std::num::NonZeroUsize::new(16).unwrap(),
-            files_have_level: false,
         });
         let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
             .await
@@ -1056,29 +1004,19 @@ mod tests {
             cache_hint: CacheHint::max_duration(),
         };
         // the file has the overviews 2 and 4
-        let reader_mode = |files_have_level| {
-            GdalReaderMode::OverviewLevel(OverviewReaderState {
-                original_dataset_grid: file_grid,
-                overview_level: std::num::NonZeroUsize::new(8).unwrap(),
-                files_have_level,
-            })
-        };
+        let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+            original_dataset_grid: file_grid,
+            overview_level: std::num::NonZeroUsize::new(8).unwrap(),
+        });
 
-        let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker, None)
+        let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
             .await
             .unwrap();
-        for (files_have_level, blocks) in
-            [(true, None), (true, Some(&blocks)), (false, Some(&blocks))]
-        {
-            let tile = assemble_tile::<u16>(
-                plan.clone(),
-                reader_mode(files_have_level),
-                &gdal_worker,
-                blocks,
-            )
-            .await
-            .unwrap();
-            assert_eq!(tile, from_gdal, "declared: {files_have_level}");
+        for blocks in [None, Some(&blocks)] {
+            let tile = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, blocks)
+                .await
+                .unwrap();
+            assert_eq!(tile, from_gdal, "blocks: {}", blocks.is_some());
         }
     }
 
@@ -1087,7 +1025,7 @@ mod tests {
     /// or later starts one pixel later in the level. Blocks resample such a level from itself:
     /// each tile pixel takes the level pixel under its center, in every tile alike.
     #[tokio::test]
-    async fn undeclared_levels_that_gdal_reads_shifted_are_resampled_from_themselves() {
+    async fn levels_whose_size_does_not_fit_are_resampled_from_themselves() {
         let dir = tempfile::tempdir().unwrap();
         let params = tiled_tiff(dir.path(), 61, &[4]);
         let file_grid = params.spatial_grid_definition();
@@ -1101,13 +1039,10 @@ mod tests {
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
-        let reader_mode = |files_have_level| {
-            GdalReaderMode::OverviewLevel(OverviewReaderState {
-                original_dataset_grid: file_grid,
-                overview_level: std::num::NonZeroUsize::new(4).unwrap(),
-                files_have_level,
-            })
-        };
+        let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+            original_dataset_grid: file_grid,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
+        });
         let plan = |tile_size: usize, position: [isize; 2]| TilePlan {
             tile: TileInformation::new(
                 position.into(),
@@ -1121,21 +1056,17 @@ mod tests {
         };
 
         // the level as it is in the file
-        let level = assemble_tile::<u16>(plan(16, [0, 0]), reader_mode(true), &gdal_worker, None)
+        let level = assemble_tile::<u16>(plan(16, [0, 0]), reader_mode, &gdal_worker, None)
             .await
             .unwrap()
             .grid_array
             .into_materialized_masked_grid();
-        let whole = assemble_tile::<u16>(
-            plan(16, [0, 0]),
-            reader_mode(false),
-            &gdal_worker,
-            Some(&blocks),
-        )
-        .await
-        .unwrap()
-        .grid_array
-        .into_materialized_masked_grid();
+        let whole =
+            assemble_tile::<u16>(plan(16, [0, 0]), reader_mode, &gdal_worker, Some(&blocks))
+                .await
+                .unwrap()
+                .grid_array
+                .into_materialized_masked_grid();
         // the center of tile pixel `p` lies at 4 p + 2 of the file's 61 px, which its 16 level
         // pixels share
         let under_center = |pixel: usize| ((2 * pixel + 1) * 4 * 16 / (2 * 61)).min(15);
@@ -1156,7 +1087,7 @@ mod tests {
                 for tile_x in 0..16_usize.div_ceil(tile_size) {
                     let tile = assemble_tile::<u16>(
                         plan(tile_size, [tile_y as isize, tile_x as isize]),
-                        reader_mode(false),
+                        reader_mode,
                         &gdal_worker,
                         Some(&blocks),
                     )
@@ -1218,7 +1149,6 @@ mod tests {
             let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
                 original_dataset_grid: file_grid,
                 overview_level: std::num::NonZeroUsize::new(level as usize).unwrap(),
-                files_have_level: false,
             });
             let size = 64 / level as usize;
             // one tile of the whole file: GDAL's window then maps onto the level exactly
@@ -1311,47 +1241,40 @@ mod tests {
             {
                 let pixel_size = f64::from(overview_level);
                 let tiles_per_axis = (64 / overview_level as usize).div_ceil(tile_size);
-                for files_have_level in [false, true] {
-                    let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
-                        original_dataset_grid: file_grid,
-                        overview_level: std::num::NonZeroUsize::new(overview_level as usize)
-                            .unwrap(),
-                        files_have_level,
-                    });
-                    for tile_y in 0..tiles_per_axis {
-                        for tile_x in 0..tiles_per_axis {
-                            let plan = TilePlan {
-                                tile: TileInformation::new(
-                                    [tile_y as isize, tile_x as isize].into(),
-                                    GridShape2D::new([tile_size, tile_size]),
-                                    GeoTransform::new_unchecked(
-                                        (0., 64.).into(),
-                                        pixel_size,
-                                        -pixel_size,
-                                    ),
+
+                let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                    original_dataset_grid: file_grid,
+                    overview_level: std::num::NonZeroUsize::new(overview_level as usize).unwrap(),
+                });
+                for tile_y in 0..tiles_per_axis {
+                    for tile_x in 0..tiles_per_axis {
+                        let plan = TilePlan {
+                            tile: TileInformation::new(
+                                [tile_y as isize, tile_x as isize].into(),
+                                GridShape2D::new([tile_size, tile_size]),
+                                GeoTransform::new_unchecked(
+                                    (0., 64.).into(),
+                                    pixel_size,
+                                    -pixel_size,
                                 ),
-                                time: TimeInterval::default(),
-                                band: 0,
-                                files: vec![params.clone()],
-                                cache_hint: CacheHint::max_duration(),
-                            };
-                            let from_gdal =
-                                assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
-                                    .await
-                                    .unwrap();
-                            let from_blocks = assemble_tile::<u16>(
-                                plan,
-                                reader_mode,
-                                &block_worker,
-                                Some(&blocks),
-                            )
-                            .await
-                            .unwrap();
-                            assert_eq!(
-                                from_blocks, from_gdal,
-                                "level {overview_level}, tile size {tile_size}, declared {files_have_level}, tile [{tile_y}, {tile_x}]"
-                            );
-                        }
+                            ),
+                            time: TimeInterval::default(),
+                            band: 0,
+                            files: vec![params.clone()],
+                            cache_hint: CacheHint::max_duration(),
+                        };
+                        let from_gdal =
+                            assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
+                                .await
+                                .unwrap();
+                        let from_blocks =
+                            assemble_tile::<u16>(plan, reader_mode, &block_worker, Some(&blocks))
+                                .await
+                                .unwrap();
+                        assert_eq!(
+                            from_blocks, from_gdal,
+                            "level {overview_level}, tile size {tile_size}, tile [{tile_y}, {tile_x}]"
+                        );
                     }
                 }
             }
@@ -1394,13 +1317,10 @@ mod tests {
             CacheTtlSeconds::new(60),
         );
         // as MGRS tiles: the file starts 3 px right of and below a pixel edge of the level-4 tile grid
-        let reader_mode = |files_have_level| {
-            GdalReaderMode::OverviewLevel(OverviewReaderState {
-                original_dataset_grid: file_grid,
-                overview_level: std::num::NonZeroUsize::new(4).unwrap(),
-                files_have_level,
-            })
-        };
+        let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+            original_dataset_grid: file_grid,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
+        });
 
         for tile_y in 0..3 {
             for tile_x in 0..3 {
@@ -1415,7 +1335,7 @@ mod tests {
                     files: vec![params.clone()],
                     cache_hint: CacheHint::max_duration(),
                 };
-                if let Some(read_advise) = reader_mode(false)
+                if let Some(read_advise) = reader_mode
                     .tiling_to_dataset_read_advise(&file_grid, &plan.tile.spatial_grid_definition())
                 {
                     assert!(
@@ -1423,19 +1343,13 @@ mod tests {
                         "the read of tile [{tile_y}, {tile_x}] starts on a pixel of level 4"
                     );
                 }
-                let from_gdal =
-                    assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker, None)
-                        .await
-                        .unwrap();
-                let from_level =
-                    assemble_tile::<u16>(plan.clone(), reader_mode(true), &gdal_worker, None)
-                        .await
-                        .unwrap();
+                let from_gdal = assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
+                    .await
+                    .unwrap();
                 let from_blocks =
-                    assemble_tile::<u16>(plan, reader_mode(false), &block_worker, Some(&blocks))
+                    assemble_tile::<u16>(plan, reader_mode, &block_worker, Some(&blocks))
                         .await
                         .unwrap();
-                assert_eq!(from_level, from_gdal, "tile [{tile_y}, {tile_x}]");
                 assert_eq!(from_blocks, from_gdal, "tile [{tile_y}, {tile_x}]");
             }
         }
@@ -1464,16 +1378,9 @@ mod tests {
         let gdal_worker = gpp.get_gdal_worker();
         let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
         let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
-        // a dataset that does not declare its levels, in its own cache to see that it is used
-        let undeclared_cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
-        let undeclared_blocks = BlockIo::new(
-            undeclared_cache.clone(),
-            gdal_worker.clone(),
-            CacheTtlSeconds::new(60),
-        );
 
         for (overview_level, tile_size) in [(0_u32, 8_usize), (0, 12), (2, 8), (2, 12), (4, 12)] {
-            let reader_mode = |files_have_level| {
+            let reader_mode = {
                 if overview_level == 0 {
                     GdalReaderMode::OriginalResolution(ReaderState {
                         dataset_spatial_grid: file_grid,
@@ -1483,7 +1390,6 @@ mod tests {
                         original_dataset_grid: file_grid,
                         overview_level: std::num::NonZeroUsize::new(overview_level as usize)
                             .unwrap(),
-                        files_have_level,
                     })
                 }
             };
@@ -1506,45 +1412,22 @@ mod tests {
 
                     // GDAL picks the overview itself; the sizes divide, so it reads the same pixels
                     let from_gdal =
-                        assemble_tile::<u16>(plan.clone(), reader_mode(false), &gdal_worker, None)
+                        assemble_tile::<u16>(plan.clone(), reader_mode, &gdal_worker, None)
                             .await
                             .unwrap();
-                    let from_level =
-                        assemble_tile::<u16>(plan.clone(), reader_mode(true), &gdal_worker, None)
+                    let from_blocks =
+                        assemble_tile::<u16>(plan, reader_mode, &gdal_worker, Some(&blocks))
                             .await
                             .unwrap();
-                    let from_blocks = assemble_tile::<u16>(
-                        plan.clone(),
-                        reader_mode(true),
-                        &gdal_worker,
-                        Some(&blocks),
-                    )
-                    .await
-                    .unwrap();
-                    let from_undeclared_blocks = assemble_tile::<u16>(
-                        plan,
-                        reader_mode(false),
-                        &gdal_worker,
-                        Some(&undeclared_blocks),
-                    )
-                    .await
-                    .unwrap();
 
                     let case = format!(
                         "overview {overview_level}, tile size {tile_size}, tile [{tile_y}, {tile_x}]"
                     );
-                    assert_eq!(from_level, from_gdal, "{case}");
                     assert_eq!(from_blocks, from_gdal, "{case}");
-                    assert_eq!(from_undeclared_blocks, from_gdal, "{case}");
                 }
             }
         }
 
         assert!(cache.byte_size() > 0, "the reads went through the blocks");
-        assert_eq!(
-            undeclared_cache.byte_size(),
-            cache.byte_size(),
-            "the overview reads of the undeclared dataset went through the same blocks"
-        );
     }
 }
