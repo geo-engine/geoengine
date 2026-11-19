@@ -539,7 +539,7 @@ impl StacMultiBandMetaData {
         let aggregate_url = items_url.join("aggregate").ok()?;
 
         self.client
-            .intervals_with_items(aggregate_url, bbox, range, step)
+            .datetime_frequency(aggregate_url, bbox, range, step)
             .await
     }
 

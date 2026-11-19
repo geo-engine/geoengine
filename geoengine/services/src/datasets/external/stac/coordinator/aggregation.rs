@@ -57,11 +57,12 @@ struct Bucket {
 }
 
 impl StacClient {
-    /// The intervals in `range` that have at least one item within `bbox`, or `None` if the server
-    /// cannot tell. A step that overlaps none of them has no item in `bbox`.
+    /// The intervals in `range` that have at least one item within `bbox`, from the
+    /// `datetime_frequency` aggregation, or `None` if the server cannot tell. A step that overlaps
+    /// none of them has no item in `bbox`. Footprint requests use it to skip searches.
     ///
     /// Anything unexpected gives `None`, because a wrongly empty step would hide data.
-    pub(crate) async fn intervals_with_items(
+    pub(crate) async fn datetime_frequency(
         &self,
         aggregate_url: Url,
         bbox: BoundingBox2D,
@@ -111,7 +112,7 @@ impl StacClient {
             return None;
         }
 
-        intervals_with_items(&aggregation.buckets, bucket, range)
+        checked_intervals_with_items(&aggregation.buckets, bucket, range)
     }
 }
 
@@ -121,7 +122,7 @@ impl StacClient {
 /// the first to the last one with items, with the empty ones in between. A single bucket shows no
 /// size, so it is used only if it cannot be a larger bucket, or if the whole range lies in it. No
 /// bucket at all means no item, whatever the size.
-fn intervals_with_items(
+fn checked_intervals_with_items(
     buckets: &[Bucket],
     bucket: TimeStep,
     range: TimeInterval,
@@ -242,7 +243,7 @@ mod tests {
         let range = TimeInterval::new(day(1).start(), day(9).start()).unwrap();
 
         assert_eq!(
-            intervals_with_items(&answer, ONE_DAY, range),
+            checked_intervals_with_items(&answer, ONE_DAY, range),
             Some(vec![day(3), day(6)])
         );
     }
@@ -252,7 +253,7 @@ mod tests {
         let answer = buckets(&[("01-01", 12.), ("02-01", 3.)]);
         let range = TimeInterval::new(day(1).start(), day(28).start()).unwrap();
 
-        assert_eq!(intervals_with_items(&answer, ONE_DAY, range), None);
+        assert_eq!(checked_intervals_with_items(&answer, ONE_DAY, range), None);
     }
 
     #[test]
@@ -261,21 +262,24 @@ mod tests {
 
         // the only day with items in the range
         assert_eq!(
-            intervals_with_items(&buckets(&[("01-03", 1.)]), ONE_DAY, range),
+            checked_intervals_with_items(&buckets(&[("01-03", 1.)]), ONE_DAY, range),
             Some(vec![day(3)])
         );
         // on the first of a month it may be the month bucket of a server that ignores the interval
         let first = buckets(&[("01-01", 1.)]);
-        assert_eq!(intervals_with_items(&first, ONE_DAY, range), None);
+        assert_eq!(checked_intervals_with_items(&first, ONE_DAY, range), None);
         // unless the range is that one day
         assert_eq!(
-            intervals_with_items(&first, ONE_DAY, day(1)),
+            checked_intervals_with_items(&first, ONE_DAY, day(1)),
             Some(vec![day(1)])
         );
     }
 
     #[test]
     fn no_bucket_means_no_item() {
-        assert_eq!(intervals_with_items(&[], ONE_DAY, day(3)), Some(vec![]));
+        assert_eq!(
+            checked_intervals_with_items(&[], ONE_DAY, day(3)),
+            Some(vec![])
+        );
     }
 }
