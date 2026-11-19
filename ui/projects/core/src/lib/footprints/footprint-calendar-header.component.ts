@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, DestroyRef, effect, inject, ViewEncapsulation} from '@angular/core';
+import {ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal, ViewEncapsulation} from '@angular/core';
 import {MatCalendar, MatCalendarHeader} from '@angular/material/datepicker';
 import {MatProgressBarModule} from '@angular/material/progress-bar';
 import {FootprintsService} from './footprints.service';
@@ -15,15 +15,21 @@ import {FootprintsService} from './footprints.service';
 })
 export class FootprintCalendarHeaderComponent {
     readonly footprintsService = inject(FootprintsService);
+    /** Shown instead of the dates with data in a view that is too coarse for them. */
+    readonly hint = signal<string | undefined>(undefined);
 
     constructor() {
         const calendar = inject<MatCalendar<Date>>(MatCalendar);
         const footprintsService = this.footprintsService;
 
         footprintsService.calendarOpen.set(true);
-        footprintsService.showDate(calendar.activeDate, calendar.currentView);
+        const show = (): void => {
+            footprintsService.showDate(calendar.activeDate, calendar.currentView);
+            this.hint.set(footprintsService.calendarHint(calendar.currentView));
+        };
+        show();
 
-        const subscription = calendar.stateChanges.subscribe(() => footprintsService.showDate(calendar.activeDate, calendar.currentView));
+        const subscription = calendar.stateChanges.subscribe(show);
 
         inject(DestroyRef).onDestroy(() => {
             subscription.unsubscribe();

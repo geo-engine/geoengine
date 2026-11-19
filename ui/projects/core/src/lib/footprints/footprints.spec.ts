@@ -1,14 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {ResponseError, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-import {
-    calendarStartView,
-    cellClasses,
-    footprintsOrTooLarge,
-    mergeFootprints,
-    stepAt,
-    visiblePeriodStart,
-    windowRequests,
-} from './footprints';
+import {calendarHint, calendarStartView, cellClasses, footprintsOrTooLarge, mergeFootprints, stepAt, visiblePeriod} from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
     return {time: {start: Date.parse(startIso), end: Date.parse(endIso)}, status, bounds: []};
@@ -80,30 +72,23 @@ describe('footprints', () => {
         expect(stepAt([data, empty], Date.parse('2026-03-16T00:00:00Z'))).toBeUndefined();
     });
 
-    it('starts the visible period at the month, the year or the page of years the calendar shows', () => {
+    it('knows the month, the year or the page of years the calendar shows', () => {
         // the local fields of a calendar date count
-        expect(visiblePeriodStart(new Date(2026, 2, 15), 'month')).toBe(Date.UTC(2026, 2, 1));
+        expect(visiblePeriod(new Date(2026, 2, 15), 'month')).toEqual({start: Date.UTC(2026, 2, 1), end: Date.UTC(2026, 3, 1)});
         // a monthly dataset opened in April shows January to March in the year view as well
-        expect(visiblePeriodStart(new Date(2026, 3, 15), 'year')).toBe(Date.UTC(2026, 0, 1));
+        expect(visiblePeriod(new Date(2026, 3, 15), 'year')).toEqual({start: Date.UTC(2026, 0, 1), end: Date.UTC(2027, 0, 1)});
         // 2016 is a multiple of 24, so the page of 2026 starts there
-        expect(visiblePeriodStart(new Date(2026, 3, 15), 'multi-year')).toBe(Date.UTC(2016, 0, 1));
+        expect(visiblePeriod(new Date(2026, 3, 15), 'multi-year')).toEqual({start: Date.UTC(2016, 0, 1), end: Date.UTC(2040, 0, 1)});
     });
 
-    it('requests the month of the window start first and the rest afterwards', () => {
-        const start = Date.UTC(2026, 2, 1);
-        const end = Date.UTC(2026, 5, 9);
-
-        expect(windowRequests(start, end)).toEqual([
-            {start, end: Date.UTC(2026, 3, 1)},
-            {start: Date.UTC(2026, 3, 1), end},
-        ]);
-    });
-
-    it('requests a window inside one month at once', () => {
-        const start = Date.UTC(2026, 2, 1);
-        const end = Date.UTC(2026, 2, 20);
-
-        expect(windowRequests(start, end)).toEqual([{start, end}]);
+    it('shows dates with data at most one level above the time step, and a hint in coarser views', () => {
+        expect(calendarHint('days', 'month')).toBeUndefined();
+        expect(calendarHint('days', 'year')).toBeUndefined();
+        expect(calendarHint('days', 'multi-year')).toBe('Select a year to see the months with data.');
+        expect(calendarHint('months', 'multi-year')).toBeUndefined();
+        expect(calendarHint('hours', 'month')).toBeUndefined();
+        expect(calendarHint('hours', 'year')).toBe('Select a month to see the days with data.');
+        expect(calendarHint('hours', 'multi-year')).toBe('Select a year and a month to see the days with data.');
     });
 
     it('merges the steps of two requests and keeps the later cursor', () => {

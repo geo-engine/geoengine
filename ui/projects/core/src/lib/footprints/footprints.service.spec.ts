@@ -16,7 +16,7 @@ describe('FootprintsService overlay', () => {
         vi.fn<
             (
                 id: string,
-                query: {precision?: RasterFootprintsPrecision; limit?: number; spatialBounds?: string},
+                query: {precision?: RasterFootprintsPrecision; limit?: number; spatialBounds?: string; timeInterval?: string},
             ) => Promise<RasterFootprints>
         >();
 
@@ -196,6 +196,62 @@ describe('FootprintsService overlay', () => {
 
         service.timeStepOverride.set({durationAmount: 1, durationUnit: 'months'});
         expect(service.timeStep()?.durationUnit).toBe('months');
+    });
+
+    describe('views coarser than the time step', () => {
+        const DAY = 24 * 60 * 60 * 1000;
+        /** A server with data on every day, which answers `stepsPerAnswer` days and the cursor to the next one. */
+        const answerDays =
+            (stepsPerAnswer: number) =>
+            (_: string, query: {timeInterval?: string}): Promise<RasterFootprints> => {
+                const [start, end] = (query.timeInterval ?? '').split('/').map((time) => Date.parse(time));
+                const answerEnd = Math.min(start + stepsPerAnswer * DAY, end);
+                const steps = [];
+                for (let time = start; time < answerEnd; time += DAY) {
+                    steps.push({time: {start: time, end: time + DAY}, status: TimeStepFootprintStatus.Data, bounds: []});
+                }
+                return Promise.resolve({...FOOTPRINTS, steps, next: answerEnd < end ? {start: answerEnd, end: answerEnd + DAY} : null});
+            };
+
+        it('loads the whole year of daily data in the year view by following the cursor', async () => {
+            getFootprints.mockImplementation(answerDays(100));
+            const service = createService();
+            service.calendarOpen.set(true);
+            service.showDate(new Date(2026, 3, 1), 'year');
+            await settle();
+
+            // January, then four answers of 100 days
+            expect(getFootprints).toHaveBeenCalledTimes(5);
+            expect(service.dateClass(new Date(2026, 11, 1), 'year')).not.toEqual([]);
+            expect(service.steps().length).toBe(365);
+        });
+
+        it('stops following the cursor after eight requests', async () => {
+            getFootprints.mockImplementation(answerDays(1));
+            const service = createService();
+            service.calendarOpen.set(true);
+            service.showDate(new Date(2026, 3, 1), 'year');
+            await settle();
+
+            expect(getFootprints).toHaveBeenCalledTimes(8);
+        });
+
+        it('asks nothing and marks nothing in the view of years for daily data', async () => {
+            getFootprints.mockImplementation(answerDays(100));
+            const service = createService();
+            service.calendarOpen.set(true);
+            service.showDate(new Date(2026, 3, 1), 'multi-year');
+            await settle();
+
+            expect(getFootprints).not.toHaveBeenCalled();
+            expect(service.calendarHint('multi-year')).toBeDefined();
+
+            // the steps of an earlier view do not mark their year alone
+            service.showDate(new Date(2026, 3, 1), 'month');
+            await settle();
+            expect(service.dateClass(new Date(2026, 3, 1), 'month')).not.toEqual([]);
+            expect(service.dateClass(new Date(2026, 0, 1), 'multi-year')).toEqual([]);
+        });
     });
 
     describe('dates of the layer next to the calendar', () => {

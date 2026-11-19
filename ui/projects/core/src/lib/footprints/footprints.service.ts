@@ -20,6 +20,7 @@ import {
 } from '@geoengine/common';
 import {boxFeatures, overlayStyle} from './footprint-overlay';
 import {
+    calendarHint,
     calendarStartView,
     cellClasses,
     Footprints,
@@ -27,8 +28,7 @@ import {
     mergeFootprints,
     monthStartOfTime,
     stepAt,
-    visiblePeriodStart,
-    windowRequests,
+    visiblePeriod,
 } from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
@@ -36,6 +36,11 @@ import {SpatialReferenceService} from '../spatial-references/spatial-reference.s
 
 /** One request covers at most this many time steps of the dataset. */
 const WINDOW_TIME_STEPS = 100;
+/**
+ * The most requests for one window. A month of hourly data needs 8, a year of daily data 5.
+ * shortcut: a month of data with steps below an hour is cut off after 800 steps, it would need a window per day
+ */
+const MAX_WINDOW_REQUESTS = 8;
 const VIEWPORT_DEBOUNCE_MS = 500;
 /** Extra view widths and heights the overlay asks for on each side, so a scene larger than the view is not drawn as the view. */
 const OVERLAY_MARGIN = 0.5;
@@ -83,8 +88,11 @@ export class FootprintsService {
     readonly overlayVisible = signal(false);
     /** Draw the overlay lighter, e.g. while the layer is on the map and its imagery lies below. Set by the app. */
     readonly overlayLight = signal(false);
-    private readonly windowStart = signal<number | undefined>(undefined);
-    /** The visible month of a window while the rest of it loads. */
+    /** What the calendar shows. At least `WINDOW_TIME_STEPS` steps from its start are loaded. */
+    private readonly window = signal<TimeInterval | undefined>(undefined, {
+        equal: (a, b) => a?.start === b?.start && a?.end === b?.end,
+    });
+    /** The loaded part of a window while the rest of it loads. */
     private readonly partialFootprints = signal<Footprints | undefined>(undefined);
 
     private readonly footprintsResource = resource({
@@ -93,24 +101,24 @@ export class FootprintsService {
             const mapSpatialReference = this.mapSpatialReference();
             const timeStep = this.timeStep();
             const viewport = this.viewport();
-            const windowStart = this.windowStart();
+            const window = this.window();
             const isNeeded = this.calendarOpen() || this.datesNeeded();
 
-            if (!isNeeded || !layer || !mapSpatialReference || !timeStep || !viewport || windowStart === undefined) {
+            if (!isNeeded || !layer || !mapSpatialReference || !timeStep || !viewport || !window) {
                 return undefined;
             }
-            return {layer, mapSpatialReference, timeStep, viewport, windowStart};
+            return {layer, mapSpatialReference, timeStep, viewport, window};
         },
         loader: async ({
-            params: {layer, mapSpatialReference, timeStep, viewport, windowStart},
+            params: {layer, mapSpatialReference, timeStep, viewport, window},
             abortSignal,
         }): Promise<Footprints | undefined> => {
             this.partialFootprints.set(undefined);
             const query = await this.queryOf(layer, mapSpatialReference, viewport);
             if (!query) return undefined;
 
-            const start = new Time(new Date(windowStart));
-            const end = start.add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
+            const minimalEnd = new Time(new Date(window.start)).add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
+            const end = Math.max(window.end, minimalEnd.start.valueOf());
             // aborting makes the server stop starting catalog searches for a view the user already left
             const get = (range: TimeInterval): Promise<Footprints> =>
                 footprintsOrTooLarge(
@@ -128,13 +136,22 @@ export class FootprintsService {
                     ),
                 );
 
-            const [month, rest] = windowRequests(start.start.valueOf(), end.start.valueOf());
-            const first = await get(month);
-            if (!rest || first.next || first.tooLarge) return first;
-            // a newer load has reset the partial answer, which this one must not bring back
-            if (abortSignal.aborted) return undefined;
-            this.partialFootprints.set(first);
-            return mergeFootprints(first, await get(rest));
+            // the month of the start first, so the visible month shows soonest, then the server's cursor is followed
+            const startDate = new Date(window.start);
+            const monthEnd = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1);
+            let range = {start: window.start, end: Math.min(monthEnd, end)};
+            let footprints: Footprints | undefined;
+            for (let request = 0; request < MAX_WINDOW_REQUESTS; request++) {
+                const part = await get(range);
+                // a newer load has reset the partial answer, which this one must not bring back
+                if (abortSignal.aborted) return undefined;
+                footprints = footprints ? mergeFootprints(footprints, part) : part;
+                const next = part.next?.start ?? range.end;
+                if (part.tooLarge || next >= end) break;
+                this.partialFootprints.set(footprints);
+                range = {start: next, end};
+            }
+            return footprints;
         },
     });
 
@@ -212,12 +229,12 @@ export class FootprintsService {
     constructor() {
         effect(() => this.updateOverlay());
         // while the calendar is closed, the window follows the selected time; the calendar header moves it when open
-        // shortcut: a window is 100 steps, so it covers a month only for steps of a day or longer; hourly data would need a window per day
         effect(() => {
             const time = this.time();
             if (!time || this.calendarOpen() || !this.datesNeeded()) return;
             untracked(() => {
-                if (!stepAt(this.steps(), time.start.valueOf())) this.windowStart.set(monthStartOfTime(time.start.valueOf()));
+                const start = monthStartOfTime(time.start.valueOf());
+                if (!stepAt(this.steps(), time.start.valueOf())) this.window.set({start, end: start});
             });
         });
     }
@@ -287,18 +304,25 @@ export class FootprintsService {
         return {processingGraphId, spatialBounds: spatialBounds.join(',')};
     }
 
-    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) => cellClasses(this.steps(), date, view);
+    readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) =>
+        this.calendarHint(view) ? [] : cellClasses(this.steps(), date, view);
 
     /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
     readonly dateFilter = (date: Date | null): boolean =>
         !date ||
         stepAt(this.steps(), Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))?.status !== TimeStepFootprintStatus.Empty;
 
-    /** Loads the window from the start of what the calendar shows in `view`, unless it is loaded already. Takes a calendar date. */
+    /** The hint of a view that is too coarse for the time step to show the dates with data, see `calendarHint`. */
+    calendarHint(view: MatCalendarView): string | undefined {
+        return calendarHint(this.timeStep()?.durationUnit, view);
+    }
+
+    /** Loads what the calendar shows in `view`, unless it is loaded already or the view has a hint instead. Takes a calendar date. */
     showDate(date: Date, view: MatCalendarView): void {
-        const start = visiblePeriodStart(date, view);
-        if (stepAt(this.steps(), start)) return;
-        this.windowStart.set(start);
+        if (this.calendarHint(view)) return;
+        const period = visiblePeriod(date, view);
+        if (stepAt(this.steps(), period.start) && stepAt(this.steps(), period.end - 1)) return;
+        this.window.set(period);
     }
 
     private updateOverlay(): void {

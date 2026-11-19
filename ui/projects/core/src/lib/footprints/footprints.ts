@@ -57,33 +57,43 @@ export function monthStartOfTime(timeMs: number): number {
 }
 
 /**
- * The first day the calendar shows in `view` around `date`, a calendar date, as a UTC time: of its month, its year or its
- * page of years. Without a minimum or maximum date, the calendar starts a page of years at a multiple of `yearsPerPage`.
+ * What the calendar shows in `view` around `date`, a calendar date, as UTC times: its month, its year or its page of
+ * years. Without a minimum or maximum date, the calendar starts a page of years at a multiple of `yearsPerPage`.
  */
-export function visiblePeriodStart(date: Date, view: MatCalendarView): number {
-    const year = date.getFullYear();
+export function visiblePeriod(date: Date, view: MatCalendarView): TimeInterval {
+    const [year, month] = [date.getFullYear(), date.getMonth()];
     switch (view) {
         case 'month':
-            return Date.UTC(year, date.getMonth(), 1);
+            return {start: Date.UTC(year, month, 1), end: Date.UTC(year, month + 1, 1)};
         case 'year':
-            return Date.UTC(year, 0, 1);
-        case 'multi-year':
-            return Date.UTC(year - (((year % yearsPerPage) + yearsPerPage) % yearsPerPage), 0, 1);
+            return {start: Date.UTC(year, 0, 1), end: Date.UTC(year + 1, 0, 1)};
+        case 'multi-year': {
+            const pageYear = year - (((year % yearsPerPage) + yearsPerPage) % yearsPerPage);
+            return {start: Date.UTC(pageYear, 0, 1), end: Date.UTC(pageYear + yearsPerPage, 0, 1)};
+        }
     }
 }
 
-/** The requests of a window: the month of its start first, so the visible month shows soonest, then the rest. */
-export function windowRequests(windowStartMs: number, windowEndMs: number): TimeInterval[] {
-    const start = new Date(windowStartMs);
-    const monthEnd = Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1);
-    if (monthEnd >= windowEndMs) return [{start: windowStartMs, end: windowEndMs}];
-    return [
-        {start: windowStartMs, end: monthEnd},
-        {start: monthEnd, end: windowEndMs},
-    ];
+/** The cell size of a time step as a level: 0 for days, 1 for months, 2 for years, like the views. Steps below a day are -1. */
+function stepLevel(unit: string | undefined): number {
+    if (unit === 'year' || unit === 'years') return 2;
+    if (unit === 'month' || unit === 'months') return 1;
+    if (unit === 'day' || unit === 'days' || unit === undefined) return 0;
+    return -1;
 }
 
-/** The footprints of two consecutive requests of one window. */
+/**
+ * What to tell the user in a view whose cells are more than one level coarser than the time step, e.g. years for daily
+ * data: such a view has too many time steps to ask for, so it shows no dates with data. Undefined where it shows them.
+ */
+export function calendarHint(unit: string | undefined, view: MatCalendarView): string | undefined {
+    const level = stepLevel(unit);
+    if (view === 'month' || (view === 'year' ? 1 : 2) - level <= 1) return undefined;
+    if (view === 'year') return 'Select a month to see the days with data.';
+    return level < 0 ? 'Select a year and a month to see the days with data.' : 'Select a year to see the months with data.';
+}
+
+/** The footprints of consecutive requests of one window. */
 export function mergeFootprints(first: Footprints, second: Footprints): Footprints {
     return {...first, steps: [...first.steps, ...second.steps], next: second.next, tooLarge: first.tooLarge || second.tooLarge};
 }
