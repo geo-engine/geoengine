@@ -300,14 +300,14 @@ impl BlockIo {
             let grid = compose(window, &blocks);
             let properties = blocks.first().map(|block| block.properties.clone());
             let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
-                .set_grid_bounds(read_advise.read_window_bounds)
-                .expect("the level window has the size of the read");
+                .set_grid_bounds(read_advise.read_window_bounds);
             (grid, properties)
         })
         .await
         .map_err(|source| IpcProcessError::IpcOther {
             msg: format!("could not compose blocks: {source}"),
         })?;
+        let grid = grid.map_err(|source| grid_error(params, source))?;
 
         Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
             grid,
@@ -375,22 +375,20 @@ impl BlockIo {
             0,
             picked.columns.len() as isize - 1,
         )
-        .expect("a read has pixels");
+        .map_err(|source| grid_error(params, source))?;
         // as for window reads, a read without valid pixels is empty
         let grid: GridOrEmpty<GridBoundingBox2D, T> = if any_valid {
-            MaskedGrid::new(
-                Grid::new(bounds, data).expect("one value per output pixel"),
-                Grid::new(bounds, valid).expect("one value per output pixel"),
-            )
-            .expect("data and mask have the same bounds")
-            .into()
+            Grid::new(bounds, data)
+                .and_then(|data| MaskedGrid::new(data, Grid::new(bounds, valid)?))
+                .map_err(|source| grid_error(params, source))?
+                .into()
         } else {
             EmptyGrid::new(bounds).into()
         };
         // the pixels are in the file's row order, south-up files are flipped afterwards
         let grid = flip_grid_y_if_needed(grid, read_advise.flip_y)
             .set_grid_bounds(read_advise.read_window_bounds)
-            .expect("the picked pixels are those of the read");
+            .map_err(|source| grid_error(params, source))?;
 
         Ok(GdalProcessReadResult::Grid(Box::new(GridAndProperties {
             grid,
@@ -670,8 +668,11 @@ fn level_read(
     let (start_x, start_y) = read_advise.gdal_read_widow.gdal_window_start();
     let (size_x, size_y) = read_advise.gdal_read_widow.gdal_window_size();
     let [out_y, out_x] = read_advise.read_window_bounds.axis_size();
-    let rows = source_pixels(start_y, out_y, factor, layout.size_y, full.size_y)?;
-    let columns = source_pixels(start_x, out_x, factor, layout.size_x, full.size_x)?;
+    // a file without pixels has no read inside it
+    let full_y = NonZeroUsize::new(full.size_y)?;
+    let full_x = NonZeroUsize::new(full.size_x)?;
+    let rows = source_pixels(start_y, out_y, factor, layout.size_y, full_y)?;
+    let columns = source_pixels(start_x, out_x, factor, layout.size_x, full_x)?;
     // the pixels the output takes, as a read of the finer level starting at its first one
     let advise = GdalReadAdvise {
         gdal_read_widow: GdalReadWindow::new(
@@ -714,16 +715,32 @@ fn source_pixels(
     out: usize,
     factor: NonZeroUsize,
     level_size: usize,
-    full_size: usize,
+    full_size: NonZeroUsize,
 ) -> Option<Vec<usize>> {
     let factor = factor.get();
     let first = usize::try_from(start).ok()? / factor;
     let last_pixel = level_size.checked_sub(1)?;
     Some(
         (first..first + out)
-            .map(|pixel| ((2 * pixel + 1) * factor * level_size / (2 * full_size)).min(last_pixel))
+            .map(|pixel| {
+                ((2 * pixel + 1) * factor * level_size / (2 * full_size.get())).min(last_pixel)
+            })
             .collect(),
     )
+}
+
+/// The pixels read from a file do not form the grid of the read.
+fn grid_error(
+    params: &GdalDatasetParameters,
+    source: impl std::fmt::Display,
+) -> GdalProcessPoolError {
+    IpcProcessError::IpcOther {
+        msg: format!(
+            "could not build the grid of a read of {}: {source}",
+            params.file_path.display()
+        ),
+    }
+    .into()
 }
 
 /// Identifies a file and everything that changes how its pixels and properties are read.
@@ -845,14 +862,17 @@ mod tests {
     fn it_takes_the_pixel_under_each_center_of_any_whole_number_level() {
         // level 4 of 64 px from its level 3 of 22 px, as GDAL with the ratio 4 * 22 / 64
         assert_eq!(
-            source_pixels(0, 5, factor(4), 22, 64),
+            source_pixels(0, 5, factor(4), 22, factor(64)),
             Some(vec![0, 2, 3, 4, 6])
         );
         // a read starting at the output pixel 8, i.e. at 32 px: centers at 34 and 38 px
-        assert_eq!(source_pixels(32, 2, factor(4), 22, 64), Some(vec![11, 13]));
+        assert_eq!(
+            source_pixels(32, 2, factor(4), 22, factor(64)),
+            Some(vec![11, 13])
+        );
         // level 8 of 60 px from its level 4 of 15 px: every second pixel, the last center beyond
         assert_eq!(
-            source_pixels(0, 8, factor(8), 15, 60),
+            source_pixels(0, 8, factor(8), 15, factor(60)),
             Some(vec![1, 3, 5, 7, 9, 11, 13, 14])
         );
     }
