@@ -105,9 +105,6 @@ where
     pub meta_data: GdalMetaData,
     pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
-    /// The dataset declares its overview levels (`max_overview_level`), so every file has
-    /// `overview_level`: it is read from that level as is, never resampled.
-    pub files_have_level: bool,
     pub default_cache_ttl: CacheTtlSeconds,
     pub _phantom_data: PhantomData<T>,
 }
@@ -129,7 +126,6 @@ where
             meta_data,
             overview_level,
             original_resolution_spatial_grid,
-            files_have_level: false,
             default_cache_ttl: CacheTtlSeconds::new(0),
             _phantom_data: PhantomData,
         }
@@ -210,7 +206,6 @@ where
                 GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: original_resolution_spatial_grid,
                     overview_level,
-                    files_have_level: self.files_have_level,
                 })
             }
             _ => GdalReaderMode::OriginalResolution(ReaderState {
@@ -548,7 +543,6 @@ impl InitializedGdalSourceOperator {
             meta_data: self.meta_data.clone(),
             overview_level: self.overview_level,
             original_resolution_spatial_grid: self.original_resolution_spatial_grid,
-            files_have_level: self.max_overview_level.is_some(),
             default_cache_ttl: self.default_cache_ttl,
             _phantom_data: PhantomData,
         }
@@ -597,8 +591,8 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 
     fn reads_cached_blocks(&self) -> bool {
-        // see `ReadLevel`: a file may lack an undeclared level and is then resampled on every read
-        self.original_resolution_spatial_grid.is_none() || self.max_overview_level.is_some()
+        // every level of a file, and every level it lacks, is read from its blocks
+        true
     }
 
     fn path(&self) -> ProcessingGraphOperatorPath {
