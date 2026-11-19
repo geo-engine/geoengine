@@ -33,6 +33,11 @@
 //!   tile matrix with at most 1024 tiles; default `WebMercatorQuad`.
 //! - `TILE_LOAD_COLD=1`: clear the server caches (`POST /cache/clear`) before each case.
 //! - `TILE_LOAD_LOG_SPEC`: the log spec of the server, default `warn`.
+//! - `TILE_LOAD_DATA`: the dataset of the `GdalSource`, default `ndvi`. Point the server at more
+//!   datasets with `GEOENGINE__DATAPROVIDER__DATASET_DEFS_PATH`.
+//! - `TILE_LOAD_TIME`: the time of the requests, default `2014-04-01T12:00:00.000Z`.
+//! - `TILE_LOAD_MAX_TILES` (`Custom` tile matrix sets only): use the finest tile matrix with at
+//!   most this many tiles, default 1024. A smaller number reads a coarser level.
 
 use criterion::{BenchmarkId, Criterion, SamplingMode, Throughput};
 use serde_json::{Value, json};
@@ -61,7 +66,11 @@ const TICKS_PER_SECOND: f64 = 100.;
 const LAYER_DB: &str = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74";
 const LAYER_DB_ROOT: &str = "05102bb3-a855-4a37-8a8a-30026a91fef1";
 const ANONYMOUS_ROLE: &str = "fd8e87bf-515c-4f36-8da6-1a53702ff102";
-const TIME: &str = "2014-04-01T12:00:00.000Z";
+
+/// `TILE_LOAD_TIME`
+fn time() -> String {
+    std::env::var("TILE_LOAD_TIME").unwrap_or_else(|_| "2014-04-01T12:00:00.000Z".to_owned())
+}
 
 /// The server child process, stopped with SIGTERM on drop so that it stops its GDAL workers
 struct Server {
@@ -225,6 +234,7 @@ impl Api {
     /// Requests the tile with index `tile` modulo the tiles of `target`, by WMS or as OGC API tile;
     /// returns whether it got a PNG
     async fn get_tile(&self, target: &Target, tile: u64) -> bool {
+        let time = time();
         let url = if let Some(OgcTiles {
             layer,
             tile_matrix_set,
@@ -237,7 +247,7 @@ impl Api {
             let (row, col) = (rows.start + tile / width, tile % width);
             format!(
                 "http://{ADDRESS}/api/ogc/{LAYER_DB}/{layer}/collections/{layer}/map/tiles/{tile_matrix_set}\
-                 /{tile_matrix}/{row}/{col}?datetime={TIME}"
+                 /{tile_matrix}/{row}/{col}?datetime={time}"
             )
         } else {
             let tile = tile % (ZOOM_TILES * ROWS);
@@ -249,7 +259,7 @@ impl Api {
             format!(
                 "http://{ADDRESS}/api/wms/{graph}?service=WMS&version=1.3.0&request=GetMap&layers={graph}\
                  &bbox={x_min},{},{},{y_max}&width=256&height=256&crs=EPSG:3857&format=image/png&styles=\
-                 &time={TIME}",
+                 &time={time}",
                 y_max - size,
                 x_min + size,
             )
@@ -327,6 +337,9 @@ impl OgcTiles {
                 rows: 4..4 + ROWS,
             };
         }
+        let max_tiles: u64 = std::env::var("TILE_LOAD_MAX_TILES").map_or(1024, |max| {
+            max.parse().expect("TILE_LOAD_MAX_TILES should be a number")
+        });
         let definition = api
             .get(&format!(
                 "/ogc/{LAYER_DB}/{layer}/tileMatrixSets/{tile_matrix_set}"
@@ -344,9 +357,9 @@ impl OgcTiles {
                     m["matrixHeight"].as_u64().unwrap(),
                 )
             })
-            .filter(|(_, width, height)| width * height <= 1024)
+            .filter(|(_, width, height)| width * height <= max_tiles)
             .max_by_key(|(_, width, height)| width * height)
-            .expect("a tile matrix should have at most 1024 tiles");
+            .unwrap_or_else(|| panic!("a tile matrix should have at most {max_tiles} tiles"));
         println!("{tile_matrix_set}: tile matrix {tile_matrix}, {width}×{height} tiles");
         Self {
             layer: layer.to_owned(),
@@ -370,8 +383,9 @@ async fn prepare(
     // the default admin of `[user]` in `Settings-default.toml`
     let credentials = json!({"email": "admin@localhost", "password": "adminadmin"});
     let admin = Api::session(client, "/login", Some(credentials)).await;
+    let data = std::env::var("TILE_LOAD_DATA").unwrap_or_else(|_| "ndvi".to_owned());
     let ndvi =
-        json!({"type": "Raster", "operator": {"type": "GdalSource", "params": {"data": "ndvi"}}});
+        json!({"type": "Raster", "operator": {"type": "GdalSource", "params": {"data": data}}});
     let graph = api.post("/processingGraphs", &ndvi).await.unwrap()["id"]
         .as_str()
         .unwrap()
