@@ -598,7 +598,10 @@ class OperatorsTests(unittest.TestCase):
         source_operator = wb.operators.OgrSource("germany")
 
         for value, time in [
-            (wb.operators.PolygonRasterizationValue.constant(3.0), wb.operators.PolygonRasterizationTime.ignore()),
+            (
+                wb.operators.PolygonRasterizationValue.constant(3.0),
+                wb.operators.PolygonRasterizationTime.all_features(),
+            ),
             (wb.operators.PolygonRasterizationValue.count(), wb.operators.PolygonRasterizationTime.feature_times()),
             (
                 wb.operators.PolygonRasterizationValue.attribute("class", "medianEstimate"),

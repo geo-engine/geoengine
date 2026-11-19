@@ -257,8 +257,8 @@ docs/PolygonRasterization.md
 docs/PolygonRasterizationAggregation.md
 docs/PolygonRasterizationParameters.md
 docs/PolygonRasterizationTime.md
+docs/PolygonRasterizationTimeAllFeatures.md
 docs/PolygonRasterizationTimeFeatureTimes.md
-docs/PolygonRasterizationTimeIgnore.md
 docs/PolygonRasterizationTimeRegular.md
 docs/PolygonRasterizationValue.md
 docs/PolygonRasterizationValueAttribute.md
@@ -743,8 +743,8 @@ geoengine_api_client/models/polygon_rasterization.py
 geoengine_api_client/models/polygon_rasterization_aggregation.py
 geoengine_api_client/models/polygon_rasterization_parameters.py
 geoengine_api_client/models/polygon_rasterization_time.py
+geoengine_api_client/models/polygon_rasterization_time_all_features.py
 geoengine_api_client/models/polygon_rasterization_time_feature_times.py
-geoengine_api_client/models/polygon_rasterization_time_ignore.py
 geoengine_api_client/models/polygon_rasterization_time_regular.py
 geoengine_api_client/models/polygon_rasterization_value.py
 geoengine_api_client/models/polygon_rasterization_value_attribute.py
@@ -1217,8 +1217,8 @@ test/test_polygon_rasterization.py
 test/test_polygon_rasterization_aggregation.py
 test/test_polygon_rasterization_parameters.py
 test/test_polygon_rasterization_time.py
+test/test_polygon_rasterization_time_all_features.py
 test/test_polygon_rasterization_time_feature_times.py
-test/test_polygon_rasterization_time_ignore.py
 test/test_polygon_rasterization_time_regular.py
 test/test_polygon_rasterization_value.py
 test/test_polygon_rasterization_value_attribute.py
