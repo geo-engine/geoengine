@@ -3432,7 +3432,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.time_steps().len(), 2);
