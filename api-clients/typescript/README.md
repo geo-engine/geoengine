@@ -492,6 +492,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [SpatialResolution](docs/SpatialResolution.md)
 - [StacApiRetries](docs/StacApiRetries.md)
 - [StacAssetBand](docs/StacAssetBand.md)
+- [StacCoarserAsset](docs/StacCoarserAsset.md)
 - [StacDataProviderDefinition](docs/StacDataProviderDefinition.md)
 - [StacGrid](docs/StacGrid.md)
 - [StacProviderAuthentication](docs/StacProviderAuthentication.md)

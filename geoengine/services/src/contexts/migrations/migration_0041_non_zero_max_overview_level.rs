@@ -1,6 +1,6 @@
 use super::database_migration::{DatabaseVersion, Migration};
 use crate::{
-    contexts::migrations::migration_0039_max_overview_level::Migration0039MaxOverviewLevel,
+    contexts::migrations::migration_0040_stac_coarser_assets::Migration0040StacCoarserAssets,
     error::Result,
 };
 use async_trait::async_trait;
@@ -9,21 +9,21 @@ use tokio_postgres::Transaction;
 /// This migration sets the `max_overview_level` 0 of stored spatial grid descriptors to 1. Both
 /// meant that the files of a dataset have no overviews; the level is at least 1 from now on, so
 /// that 0 is no longer a value. `NULL` (unknown levels) and all other levels stay as they are.
-pub struct Migration0040NonZeroMaxOverviewLevel;
+pub struct Migration0041NonZeroMaxOverviewLevel;
 
 #[async_trait]
-impl Migration for Migration0040NonZeroMaxOverviewLevel {
+impl Migration for Migration0041NonZeroMaxOverviewLevel {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some(Migration0039MaxOverviewLevel.version())
+        Some(Migration0040StacCoarserAssets.version())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0040_non_zero_max_overview_level".into()
+        "0041_non_zero_max_overview_level".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
         tx.batch_execute(include_str!(
-            "migration_0040_non_zero_max_overview_level.sql"
+            "migration_0041_non_zero_max_overview_level.sql"
         ))
         .await?;
 
@@ -63,18 +63,18 @@ mod tests {
             &mut conn,
             &migrations_by_range(
                 &Migration0016MergeProviders.version(),
-                &Migration0039MaxOverviewLevel.version(),
+                &Migration0040StacCoarserAssets.version(),
             ),
         )
         .await
         .unwrap();
 
-        conn.batch_execute(include_str!("migration_0040_test_data.sql"))
+        conn.batch_execute(include_str!("migration_0041_test_data.sql"))
             .await
             .unwrap();
 
         let tx = conn.transaction().await.unwrap();
-        Migration0040NonZeroMaxOverviewLevel
+        Migration0041NonZeroMaxOverviewLevel
             .migrate(&tx)
             .await
             .unwrap();

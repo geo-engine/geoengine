@@ -62,7 +62,12 @@ class TestStacProviderDataset(unittest.TestCase):
                 bands = [
                     geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                         asset_band = null, 
-                        band_descriptor = null, )
+                        band_descriptor = null, 
+                        coarser_assets = [
+                            geoengine_api_client.models.stac_coarser_asset.StacCoarserAsset(
+                                factor = 2, 
+                                asset_band = null, )
+                            ], )
                     ]
             )
         else:
@@ -94,7 +99,12 @@ class TestStacProviderDataset(unittest.TestCase):
                 bands = [
                     geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                         asset_band = null, 
-                        band_descriptor = null, )
+                        band_descriptor = null, 
+                        coarser_assets = [
+                            geoengine_api_client.models.stac_coarser_asset.StacCoarserAsset(
+                                factor = 2, 
+                                asset_band = null, )
+                            ], )
                     ],
         )
         """

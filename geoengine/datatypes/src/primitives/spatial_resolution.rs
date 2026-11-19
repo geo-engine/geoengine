@@ -1,5 +1,4 @@
-use std::num::NonZeroU32;
-use std::{convert::TryFrom, ops::Add, ops::Div, ops::Mul, ops::Sub};
+use std::{convert::TryFrom, num::NonZeroU32, ops::Add, ops::Div, ops::Mul, ops::Sub};
 
 use crate::primitives::error;
 use crate::util::{PositiveFiniteF64, Result};
@@ -81,6 +80,39 @@ impl SpatialResolution {
     /// Returns `None` if the product overflows to infinity or underflows to zero.
     pub fn checked_mul(self, factor: PositiveFiniteF64) -> Option<Self> {
         (self * factor.get()).ok()
+    }
+
+    /// How many times coarser than `finer` these pixels are, if that is the same integer for
+    /// both axes. A ratio counts as an integer if it is within [`Self::INTEGER_MULTIPLE_EPSILON`]
+    /// of it, so that rounding errors of the metadata do not matter.
+    pub fn integer_multiple_of(self, finer: Self) -> Option<NonZeroU32> {
+        let factor = |coarser: f64, finer: f64| {
+            let ratio = coarser / finer;
+            let rounded = ratio.round();
+            (rounded >= 1.
+                && rounded <= f64::from(u32::MAX)
+                && (ratio - rounded).abs() <= Self::INTEGER_MULTIPLE_EPSILON)
+                .then_some(rounded as u32)
+        };
+        let x = factor(self.x().get(), finer.x().get())?;
+        let y = factor(self.y().get(), finer.y().get())?;
+        (x == y).then_some(x).and_then(NonZeroU32::new)
+    }
+
+    /// The tolerance of [`Self::integer_multiple_of`] for the ratio of two pixel sizes.
+    pub const INTEGER_MULTIPLE_EPSILON: f64 = 1e-6;
+
+    /// The resolution `factor` times coarser than this one.
+    ///
+    /// # Panics
+    ///
+    /// If the product overflows to infinity.
+    #[must_use]
+    pub fn times(self, factor: NonZeroU32) -> Self {
+        Self::new_unchecked(
+            self.x().get() * f64::from(factor.get()),
+            self.y().get() * f64::from(factor.get()),
+        )
     }
 
     pub fn div_floor(self, rhs: Self) -> Result<Self> {
@@ -243,6 +275,27 @@ mod test {
             2 * mem::size_of::<f64>()
         );
         assert_eq!(mem::size_of::<SpatialResolution>(), 2 * 8);
+    }
+
+    #[test]
+    fn integer_multiple_of() {
+        let native = SpatialResolution::new_unchecked(10., 10.);
+        let factor = |x: f64, y: f64| {
+            SpatialResolution::new_unchecked(x, y)
+                .integer_multiple_of(native)
+                .map(NonZeroU32::get)
+        };
+        assert_eq!(factor(10., 10.), Some(1));
+        assert_eq!(factor(60., 60.), Some(6));
+        // rounding errors of the metadata
+        assert_eq!(factor(60.000_000_000_6, 59.999_999_999_4), Some(6));
+        assert_eq!(factor(15., 15.), None, "not an integer multiple");
+        assert_eq!(factor(5., 5.), None, "finer");
+        assert_eq!(factor(20., 60.), None, "different factors per axis");
+        assert_eq!(
+            native.times(NonZeroU32::new(6).unwrap()),
+            SpatialResolution::new_unchecked(60., 60.)
+        );
     }
 
     #[test]
