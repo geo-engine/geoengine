@@ -20,7 +20,10 @@ describe('FootprintsService overlay', () => {
             ) => Promise<RasterFootprints>
         >();
 
+    let viewport: BehaviorSubject<unknown>;
+
     beforeEach(() => {
+        viewport = new BehaviorSubject<unknown>({extent: [0, 0, 1, 1], resolution: 1});
         getFootprints.mockReset().mockResolvedValue(FOOTPRINTS);
         registerLayer.mockReset().mockResolvedValue('graph');
         const metadata = Object.assign(Object.create(RasterLayerMetadata.prototype) as object, {
@@ -48,7 +51,7 @@ describe('FootprintsService overlay', () => {
                 {
                     provide: MapService,
                     useValue: {
-                        getViewportSizeStream: (): Observable<unknown> => new BehaviorSubject({extent: [0, 0, 1, 1], resolution: 1}),
+                        getViewportSizeStream: (): Observable<unknown> => viewport,
                     },
                 },
                 {
@@ -130,6 +133,27 @@ describe('FootprintsService overlay', () => {
             getFootprints.mock.calls.find(([, query]) => query.precision === precision)?.[1].spatialBounds;
         expect(bounds(RasterFootprintsPrecision.Coverage)).toBe('-0.5,-0.5,1.5,1.5');
         expect(bounds(RasterFootprintsPrecision.Availability)).toBe('0,0,1,1');
+    });
+
+    it('keeps the boxes of the date while those of a moved view load', async () => {
+        const box = {upperLeftCoordinate: {x: 0, y: 1}, lowerRightCoordinate: {x: 1, y: 0}};
+        getFootprints.mockResolvedValueOnce({
+            ...FOOTPRINTS,
+            steps: [{time: {start: Date.UTC(2026, 3, 1), end: Date.UTC(2026, 3, 2)}, status: TimeStepFootprintStatus.Data, bounds: [box]}],
+        });
+        const service = createService();
+        const boxesOnMap = (): number => service.overlayLayer.getSource()?.getFeatures().length ?? 0;
+        service.overlayVisible.set(true);
+        await settle();
+        expect(boxesOnMap()).toBe(1);
+
+        // the boxes of the moved view do not arrive
+        getFootprints.mockReturnValue(new Promise(() => undefined));
+        viewport.next({extent: [0, 0, 2, 2], resolution: 1});
+        await settle();
+
+        expect(boxesRequests()).toBe(2);
+        expect(boxesOnMap()).toBe(1);
     });
 
     it('asks for the graph of a layer once, however often the view changes', async () => {

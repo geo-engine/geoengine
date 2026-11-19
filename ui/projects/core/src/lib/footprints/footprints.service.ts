@@ -203,6 +203,8 @@ export class FootprintsService {
     });
     /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
     private overlayStyleCache?: Style;
+    /** The date whose boxes the overlay shows. */
+    private overlayDate?: number;
 
     /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
     readonly dateFilter = (date: Date | null): boolean =>
@@ -303,14 +305,18 @@ export class FootprintsService {
 
         this.overlayLight();
         this.overlayStyleCache = undefined;
-        source?.clear();
-        if (!source || !mapSpatialReference || !time || !this.overlayVisible()) return;
-
         // the calendar window only has availability, so the boxes come from the request of the overlay
         const footprints = this.overlayFootprints();
-        if (!footprints) return;
+        // like map tiles, the boxes of the date stay while those of a moved view load
+        const isSameDate = time?.start.valueOf() === this.overlayDate;
+        if (!footprints && this.overlayStepResource.isLoading() && isSameDate && this.overlayVisible()) return;
+
+        source?.clear();
+        this.overlayDate = undefined;
+        if (!source || !mapSpatialReference || !time || !this.overlayVisible() || !footprints) return;
 
         const step = stepAt(footprints.steps, time.start.valueOf());
         source.addFeatures(boxFeatures(step?.bounds ?? [], footprints.spatialReference, mapSpatialReference.srsString));
+        this.overlayDate = time.start.valueOf();
     }
 }
