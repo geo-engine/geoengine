@@ -41,6 +41,7 @@ use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 use tracing::warn;
 
 mod db_types;
@@ -53,7 +54,7 @@ pub mod loading_info;
 pub struct GdalSourceParameters {
     pub data: NamedData,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub overview_level: Option<u32>, // TODO: should also allow a resolution? Add resample method?
+    pub overview_level: Option<NonZeroU32>, // TODO: should also allow a resolution? Add resample method?
 }
 
 impl GdalSourceParameters {
@@ -66,7 +67,7 @@ impl GdalSourceParameters {
     }
 
     #[must_use]
-    pub fn new_with_overview_level(data: NamedData, overview_level: u32) -> Self {
+    pub fn new_with_overview_level(data: NamedData, overview_level: NonZeroU32) -> Self {
         Self {
             data,
             overview_level: Some(overview_level),
@@ -74,7 +75,7 @@ impl GdalSourceParameters {
     }
 
     #[must_use]
-    pub fn with_overview_level(mut self, overview_level: Option<u32>) -> Self {
+    pub fn with_overview_level(mut self, overview_level: Option<NonZeroU32>) -> Self {
         self.overview_level = overview_level;
         self
     }
@@ -103,7 +104,7 @@ where
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     pub meta_data: GdalMetaData,
-    pub overview_level: u32,
+    pub overview_level: NonZeroU32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
     /// The dataset declares its overview levels (`max_overview_level`), so every file has
     /// `overview_level`: it is read from that level as is, never resampled.
@@ -120,7 +121,7 @@ where
         produced_result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
         meta_data: GdalMetaData,
-        overview_level: u32,
+        overview_level: NonZeroU32,
         original_resolution_spatial_grid: Option<SpatialGridDefinition>,
     ) -> Self {
         Self {
@@ -144,7 +145,7 @@ where
             produced_result_descriptor,
             tiling_specification,
             meta_data,
-            0,
+            NonZeroU32::MIN,
             None,
         )
     }
@@ -204,7 +205,7 @@ where
         // only levels from 2 up have an overview grid, see `overview_level_spatial_grid`
         let reader_mode = match (
             self.original_resolution_spatial_grid,
-            std::num::NonZeroUsize::new(self.overview_level as usize),
+            std::num::NonZeroUsize::new(self.overview_level.get() as usize),
         ) {
             (Some(original_resolution_spatial_grid), Some(overview_level)) => {
                 GdalReaderMode::OverviewLevel(OverviewReaderState {
@@ -437,7 +438,7 @@ impl RasterOperator for GdalSource {
                 meta_data,
                 meta_data_result_descriptor,
                 context.tiling_specification(),
-                self.params.overview_level.unwrap_or(0),
+                self.params.overview_level.unwrap_or(NonZeroU32::MIN),
                 context.default_cache_ttl(),
             )
         };
@@ -457,10 +458,10 @@ pub struct InitializedGdalSourceOperator {
     pub tiling_specification: TilingSpecification,
     pub data_name: NamedData,
     // the overview level to use. 0/1 means the highest resolution
-    pub overview_level: u32,
+    pub overview_level: NonZeroU32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
     /// the overview levels the dataset declares, see [`SpatialGridDescriptor::max_overview_level`]
-    pub max_overview_level: Option<u32>,
+    pub max_overview_level: Option<NonZeroU32>,
     pub default_cache_ttl: CacheTtlSeconds,
 }
 
@@ -482,7 +483,7 @@ impl InitializedGdalSourceOperator {
             produced_result_descriptor: result_descriptor,
             meta_data,
             tiling_specification,
-            overview_level: 0,
+            overview_level: NonZeroU32::MIN,
             original_resolution_spatial_grid: None,
             default_cache_ttl,
         }
@@ -502,7 +503,7 @@ impl InitializedGdalSourceOperator {
         meta_data: GdalMetaData,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
-        overview_level: u32,
+        overview_level: NonZeroU32,
         default_cache_ttl: CacheTtlSeconds,
     ) -> Self {
         let max_overview_level = result_descriptor.spatial_grid.max_overview_level();
@@ -617,10 +618,10 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
         // TODO: handle cases where the original processing graph explicitly loads overviews in the source
         ensure!(
-            self.overview_level == 0,
+            self.overview_level.get() == 1,
             SourcesMustNotUseOverviews {
                 data: self.data_name.to_string(),
-                oveview_level: self.overview_level
+                oveview_level: self.overview_level.get()
             }
         );
 

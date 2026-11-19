@@ -501,7 +501,7 @@ pub fn band_levels(band: &RasterBand) -> std::result::Result<Vec<RasterLevelLayo
 }
 
 /// See [`largest_overview_level`].
-pub fn max_overview_level(band: &RasterBand) -> Result<u32> {
+pub fn max_overview_level(band: &RasterBand) -> Result<std::num::NonZeroU32> {
     Ok(largest_overview_level(&band_levels(band)?))
 }
 

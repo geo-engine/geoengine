@@ -2150,7 +2150,7 @@ mod tests {
                     .unwrap(),
                 )
                 // the overview files have no overviews of their own
-                .with_max_overview_level(Some(1)),
+                .with_max_overview_level(Some(std::num::NonZeroU32::MIN)),
                 bands: RasterBandDescriptors::new_single_band(),
             }
         );

@@ -1369,7 +1369,10 @@ mod tests {
         let Some(TypedRasterOperator::GdalSource(gdal_source)) = optimized else {
             panic!("the source should be optimized, was {optimized:?}");
         };
-        assert_eq!(gdal_source.params.overview_level, Some(2));
+        assert_eq!(
+            gdal_source.params.overview_level,
+            std::num::NonZeroU32::new(2)
+        );
 
         // finer in one axis: the source stays as it is
         assert!(
@@ -1411,7 +1414,10 @@ mod tests {
         let TypedRasterOperator::GdalSource(gdal_source) = &optimized.sources.raster else {
             panic!("the source should be a GDAL source");
         };
-        assert_eq!(gdal_source.params.overview_level, Some(2));
+        assert_eq!(
+            gdal_source.params.overview_level,
+            std::num::NonZeroU32::new(2)
+        );
     }
 
     #[test]
