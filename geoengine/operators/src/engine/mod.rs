@@ -3,8 +3,8 @@ pub use clonable_operator::{
     CloneableInitializedVectorOperator,
 };
 pub use execution_context::{
-    ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
-    StatisticsWrappingMockExecutionContext,
+    DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE, ExecutionContext, MetaData, MetaDataProvider,
+    MockExecutionContext, StaticMetaData, StatisticsWrappingMockExecutionContext,
 };
 pub use footprint::{
     DEFAULT_FOOTPRINT_BOXES_PER_STEP_LIMIT, Footprint, FootprintBounds, FootprintCombine,

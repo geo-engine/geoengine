@@ -10,7 +10,11 @@ Name | Type
 `targetSpatialReference` | string
 `outputResolution` | [SpatialResolution](SpatialResolution.md)
 `outputOriginReference` | [Coordinate2D](Coordinate2D.md)
-`method` | [WarpMethod](WarpMethod.md)
+`downsampling` | [WarpDownsamplingMethod](WarpDownsamplingMethod.md)
+`upsampling` | [WarpUpsamplingMethod](WarpUpsamplingMethod.md)
+`outputDataType` | [RasterDataType](RasterDataType.md)
+`deriveOutSpec` | [DeriveOutRasterSpecsSource](DeriveOutRasterSpecsSource.md)
+`approximationErrorThreshold` | number
 
 ## Example
 
@@ -22,7 +26,11 @@ const example = {
   "targetSpatialReference": null,
   "outputResolution": null,
   "outputOriginReference": null,
-  "method": null,
+  "downsampling": null,
+  "upsampling": null,
+  "outputDataType": null,
+  "deriveOutSpec": null,
+  "approximationErrorThreshold": null,
 } satisfies WarpParameters
 
 console.log(example)

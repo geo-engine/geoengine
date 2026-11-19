@@ -86,7 +86,27 @@ pub trait ExecutionContext: Send
 
     /// The environment for compiling expressions and sharing their libraries.
     fn expression_environment(&self) -> &ExpressionEnvironment;
+
+    /// The upper limit in bytes for the memory that a `Warp` with the downsampling method `mode` may
+    /// keep per output tile (`[query_context] warp_mode_max_memory_per_tile_mb`).
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE
+    }
+
+    /// The largest error in input pixels of the approximate coordinate transformation of a raster
+    /// reprojection, for a `Warp` without `approximationErrorThreshold`, as `gdalwarp -et`; 0
+    /// projects every pixel exactly (`[query_context] reprojection_approximation_error_px`).
+    fn reprojection_approximation_error(&self) -> geoengine_datatypes::util::NonNegativeFiniteF64;
 }
+
+/// The default of [`ExecutionContext::warp_mode_max_memory_per_tile`], 64 MB
+pub const DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE: usize = 64 * 1024 * 1024;
+
+/// The [`ExecutionContext::reprojection_approximation_error`] of [`MockExecutionContext`], 0.125
+/// input pixels: GDAL's default for `gdalwarp -et`, as in the server's default settings
+const TEST_DEFAULT_REPROJECTION_APPROXIMATION_ERROR:
+    geoengine_datatypes::util::NonNegativeFiniteF64 =
+    geoengine_datatypes::util::NonNegativeFiniteF64::new_unchecked(0.125);
 
 #[async_trait]
 pub trait MetaDataProvider<L, R, Q>
@@ -126,6 +146,10 @@ pub struct MockExecutionContext {
     pub gdal_process_pool: Arc<GdalProcessPool>,
     pub ort_environment: OrtEnvironment,
     pub expression_environment: ExpressionEnvironment,
+    /// see [`ExecutionContext::warp_mode_max_memory_per_tile`]
+    pub warp_mode_max_memory_per_tile: usize,
+    /// see [`ExecutionContext::reprojection_approximation_error`]
+    pub reprojection_approximation_error: geoengine_datatypes::util::NonNegativeFiniteF64,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -146,6 +170,8 @@ impl TestDefault for MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
+            reprojection_approximation_error: TEST_DEFAULT_REPROJECTION_APPROXIMATION_ERROR,
         }
     }
 }
@@ -172,6 +198,8 @@ impl MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
+            reprojection_approximation_error: TEST_DEFAULT_REPROJECTION_APPROXIMATION_ERROR,
         }
     }
 
@@ -192,6 +220,8 @@ impl MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
+            reprojection_approximation_error: TEST_DEFAULT_REPROJECTION_APPROXIMATION_ERROR,
         }
     }
 
@@ -215,6 +245,8 @@ impl MockExecutionContext {
             ),
             ort_environment: test_ort_environment(),
             expression_environment: test_expression_environment(),
+            warp_mode_max_memory_per_tile: DEFAULT_WARP_MODE_MAX_MEMORY_PER_TILE,
+            reprojection_approximation_error: TEST_DEFAULT_REPROJECTION_APPROXIMATION_ERROR,
         }
     }
 
@@ -361,6 +393,14 @@ impl ExecutionContext for MockExecutionContext {
     fn expression_environment(&self) -> &ExpressionEnvironment {
         &self.expression_environment
     }
+
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.warp_mode_max_memory_per_tile
+    }
+
+    fn reprojection_approximation_error(&self) -> geoengine_datatypes::util::NonNegativeFiniteF64 {
+        self.reprojection_approximation_error
+    }
 }
 
 #[async_trait]
@@ -496,12 +536,16 @@ mod db_types {
 /// A mock execution context that wraps all operators with a statistics operator.
 pub struct StatisticsWrappingMockExecutionContext {
     pub inner: MockExecutionContext,
+    /// Also wraps raster operators with the raster cache, as the server does with
+    /// `[cache] enable_new_raster_cache`. Queries then need a query context with a raster cache.
+    pub cache_raster_operators: bool,
 }
 
 impl TestDefault for StatisticsWrappingMockExecutionContext {
     fn test_default() -> Self {
         Self {
             inner: MockExecutionContext::test_default(),
+            cache_raster_operators: false,
         }
     }
 }
@@ -542,7 +586,13 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         op: Box<dyn InitializedRasterOperator>,
         span: CreateSpan,
     ) -> Box<dyn InitializedRasterOperator> {
-        InitializedOperatorWrapper::new(op, span).boxed()
+        let wrapped = InitializedOperatorWrapper::new(op, span).boxed();
+        if self.cache_raster_operators {
+            return Box::new(
+                crate::cache::new_raster_cache::RasterCacheOperator::wrap_operator(wrapped),
+            );
+        }
+        wrapped
     }
 
     fn wrap_initialized_vector_operator(
@@ -575,6 +625,14 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 
     fn expression_environment(&self) -> &ExpressionEnvironment {
         self.inner.expression_environment()
+    }
+
+    fn warp_mode_max_memory_per_tile(&self) -> usize {
+        self.inner.warp_mode_max_memory_per_tile()
+    }
+
+    fn reprojection_approximation_error(&self) -> geoengine_datatypes::util::NonNegativeFiniteF64 {
+        self.inner.reprojection_approximation_error()
     }
 }
 

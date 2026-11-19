@@ -46,7 +46,8 @@ pub use crate::api::model::processing_graphs::{
         TemporalRasterAggregation, TemporalRasterAggregationParameters, TimeProjection,
         TimeProjectionParameters, TimeShift, TimeShiftParameters, VectorExpression,
         VectorExpressionParameters, VectorJoin, VectorJoinParameters, VectorJoinSources,
-        VisualPointClustering, VisualPointClusteringParameters, Warp, WarpMethod, WarpParameters,
+        VisualPointClustering, VisualPointClusteringParameters, Warp, WarpDownsamplingMethod,
+        WarpParameters, WarpUpsamplingMethod,
     },
     source::{
         AttributeFilter, GdalSource, GdalSourceParameters, MockPointSource,
@@ -385,8 +386,9 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     VisualPointClustering,
     VisualPointClusteringParameters,
     Warp,
-    WarpMethod,
+    WarpDownsamplingMethod,
     WarpParameters,
+    WarpUpsamplingMethod,
     // Plots
     BoxPlot,
     BoxPlotParameters,
