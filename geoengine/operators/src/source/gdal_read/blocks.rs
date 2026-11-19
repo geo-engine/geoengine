@@ -33,7 +33,7 @@ use crate::source::gdal_worker_process::process_common::{
 use crate::source::gdal_worker_process::reader::{GdalPoolReader, flip_grid_y_if_needed};
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-    GridAndProperties, RasterInfo, ReadLevel,
+    GridAndProperties, RasterInfo,
 };
 use futures::StreamExt;
 use futures::future::{join_all, try_join_all};
@@ -195,17 +195,17 @@ impl BlockIo {
         Ok(Some(Header { info, newly_cached }))
     }
 
-    /// Reads `read_advise` of the file from whole blocks of `level`. A file without that level
-    /// reads its coarsest finer level, at last the full resolution, and keeps the pixel under the
-    /// center of each output pixel, as GDAL's nearest resampling does. So a block read never
-    /// needs GDAL's window read for a file. An undeclared level stands in for GDAL's
-    /// window read, which scales by the sizes of the level and of the file: a level whose pixels
-    /// that read does not take one to one is resampled alike, from itself. Such tiles can differ
-    /// from GDAL's by one level pixel, see `source_pixels`.
+    /// Reads `read_advise` of the file at the level `factor` times coarser than the full
+    /// resolution, from whole cached blocks.
+    ///
+    /// It reads the coarsest level of the file that is not coarser than `factor`: the level
+    /// itself if the file has it, else a finer overview, at last the full resolution. Each output
+    /// pixel takes the pixel of that level under its center, placed by the level's real size
+    /// (see [`source_pixels`]). For the full resolution, and for a level whose size fits its
+    /// factor, those are the level's pixels as they are, and nothing is resampled.
     ///
     /// # Errors
-    /// Returns an error if a header or block read fails, or if the read does not start at a pixel
-    /// of the level.
+    /// Returns an error if a header or block read fails, or if the read is not inside the file.
     ///
     /// # Panics
     /// Never: the level window has the size of the read by construction.
@@ -213,13 +213,12 @@ impl BlockIo {
         &self,
         params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        level: ReadLevel,
+        factor: NonZeroUsize,
         cache_hint: CacheHint,
     ) -> Result<GdalProcessReadResult<T>, GdalProcessPoolError>
     where
         T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType,
     {
-        let factor = level.factor();
         let file = file_id(params);
         let Some(Header { info, newly_cached }) = self.header(params, &file, cache_hint).await?
         else {
@@ -249,20 +248,13 @@ impl BlockIo {
             .into()
         };
         if file_level.factor != factor && newly_cached {
-            let file = params.file_path.display();
-            let read_factor = file_level.factor;
-            // only a dataset that declares the level promised it
-            if matches!(level, ReadLevel::Declared(_)) {
-                tracing::warn!(
-                    "{file} lacks the declared overview level {factor}, its level {read_factor} is read and resampled"
-                );
-            } else {
-                tracing::info!(
-                    "{file} has no overview level {factor}, its level {read_factor} is read and resampled"
-                );
-            }
+            tracing::info!(
+                "{} has no overview level {factor}, its level {} is read and resampled",
+                params.file_path.display(),
+                file_level.factor,
+            );
         }
-        let Some(LevelRead { advise, picked }) = level_read(&info, file_level, level, read_advise)
+        let Some(LevelRead { advise, picked }) = level_read(&info, file_level, factor, read_advise)
         else {
             return Err(not_inside());
         };
@@ -664,33 +656,15 @@ fn finer_level(info: &RasterInfo, factor: NonZeroUsize) -> Option<FileLevel> {
         })
 }
 
-/// Whether a read of `level` takes the pixels of `file_level` one to one, so that it reads them
-/// as they are. That holds if the file has the level itself, unless the level is undeclared and
-/// GDAL's window read, which an undeclared read stands in for, takes other pixels of it (see
-/// [`RasterInfo::window_reads_take_level_pixels`]). Otherwise each output pixel takes the pixel
-/// of `file_level` under its center (see [`source_pixels`]).
-fn takes_pixels_one_to_one(info: &RasterInfo, file_level: FileLevel, level: ReadLevel) -> bool {
-    let factor = level.factor();
-    file_level.factor == factor
-        && (!matches!(level, ReadLevel::Undeclared(_))
-            || info.window_reads_take_level_pixels(file_level.index, factor))
-}
-
-/// The read of `file_level` for `read_advise` of `level`. `None` if the read is not inside the
-/// file level.
+/// The read of `file_level` for `read_advise` of the level `factor`: its window, and the pixels
+/// of it that the output takes, unless those are the whole window. `None` if the read is not
+/// inside the file.
 fn level_read(
     info: &RasterInfo,
     file_level: FileLevel,
-    level: ReadLevel,
+    factor: NonZeroUsize,
     read_advise: GdalReadAdvise,
 ) -> Option<LevelRead> {
-    if takes_pixels_one_to_one(info, file_level, level) {
-        return Some(LevelRead {
-            advise: read_advise,
-            picked: None,
-        });
-    }
-    let factor = level.factor();
     let layout = info.levels.get(file_level.index)?;
     let full = info.levels.first()?;
     let (start_x, start_y) = read_advise.gdal_read_widow.gdal_window_start();
@@ -716,10 +690,10 @@ fn level_read(
         .ok()?,
         ..read_advise
     };
-    Some(LevelRead {
-        advise,
-        picked: Some(Picked { rows, columns }),
-    })
+    // pixels next to each other are the window as it is: nothing to pick
+    let is_window = |pixels: &[usize]| pixels.windows(2).all(|pair| pair[1] == pair[0] + 1);
+    let picked = (!is_window(&rows) || !is_window(&columns)).then_some(Picked { rows, columns });
+    Some(LevelRead { advise, picked })
 }
 
 /// Per axis, the pixels of a level of `level_size` that `out` output pixels of the level `factor`
@@ -943,6 +917,52 @@ mod tests {
         assert_eq!(data, before);
     }
 
+    /// One rule for every read: a level whose size fits its factor, and the full resolution, are
+    /// read as they are; a level whose size does not fit, and a missing level, are resampled.
+    #[test]
+    fn it_resamples_only_where_the_level_does_not_fit() {
+        // 64 px with a level 4 of 16 px: fits
+        let fits = raster_info(vec![level(64, 16), level(16, 16)]);
+        let full = FileLevel {
+            index: 0,
+            factor: factor(1),
+        };
+        let level_4 = FileLevel {
+            index: 1,
+            factor: factor(4),
+        };
+        // the full resolution: the window as it is
+        let read = level_read(&fits, full, factor(1), advise([8, 8], [16, 16], [16, 16])).unwrap();
+        assert!(read.picked.is_none());
+        assert_eq!(read.advise.gdal_read_widow.gdal_window_start(), (8, 8));
+        // the level itself: its window as it is
+        let read = level_read(
+            &fits,
+            level_4,
+            factor(4),
+            advise([0, 0], [64, 64], [16, 16]),
+        );
+        assert!(read.unwrap().picked.is_none());
+        // level 8 from level 4: every second pixel
+        let read = level_read(&fits, level_4, factor(8), advise([0, 0], [64, 64], [8, 8]));
+        assert_eq!(
+            read.unwrap().picked.unwrap().rows,
+            vec![1, 3, 5, 7, 9, 11, 13, 15]
+        );
+
+        // 61 px with a level 4 of 16 px, 3.8 times fewer: resampled from itself
+        let shifted = raster_info(vec![level(61, 16), level(16, 16)]);
+        let read = level_read(
+            &shifted,
+            level_4,
+            factor(4),
+            advise([0, 0], [61, 61], [16, 16]),
+        );
+        let picked = read.unwrap().picked.unwrap();
+        assert_eq!(picked.rows.len(), 16);
+        assert_ne!(picked.rows, (0..16).collect::<Vec<_>>());
+    }
+
     #[test]
     fn it_finds_the_coarsest_finer_level_of_a_whole_number_factor() {
         let level = |size: usize| RasterLevelLayout {
@@ -1035,34 +1055,6 @@ mod tests {
             "ceil(10 980 / 8) = 1 373"
         );
         assert_eq!(layout.level_of_factor(factor(16)), None);
-    }
-
-    #[test]
-    fn it_knows_the_levels_whose_pixels_a_window_read_takes_one_to_one() {
-        let sentinel_2 = raster_info(vec![
-            level(10_980, 1024),
-            level(5490, 512),
-            level(2745, 512),
-            level(1373, 512),
-            level(687, 512),
-        ]);
-        for (index, level_factor) in [(1, 2), (2, 4), (3, 8)] {
-            assert!(
-                sentinel_2.window_reads_take_level_pixels(index, factor(level_factor)),
-                "level {level_factor}"
-            );
-        }
-        // 687 px are 15.98 times fewer: pixel 685 of a window read is the level's pixel 686
-        assert!(!sentinel_2.window_reads_take_level_pixels(4, factor(16)));
-
-        let small = raster_info(vec![level(61, 16), level(16, 16)]);
-        assert!(!small.window_reads_take_level_pixels(1, factor(4)));
-        let even = raster_info(vec![level(64, 16), level(16, 16)]);
-        assert!(even.window_reads_take_level_pixels(1, factor(4)));
-        assert!(
-            !even.window_reads_take_level_pixels(2, factor(8)),
-            "no such level"
-        );
     }
 
     #[test]
