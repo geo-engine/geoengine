@@ -155,7 +155,7 @@ describe('LayersComponent', () => {
                         calendarStartView: signal('month'),
                         time: signal(undefined),
                         datesNeeded: signal(false),
-                        dateStatus: signal(undefined),
+                        dateFilter: (): boolean => true,
                         dateWithData: vi.fn(),
                         isLoading: signal(false),
                         overlayLoading: signal(false),
@@ -337,37 +337,12 @@ describe('LayersComponent', () => {
     describe('dates of the layer', () => {
         interface FootprintsMock {
             time: WritableSignal<Time | undefined>;
-            dateStatus: WritableSignal<string | undefined>;
+            datesNeeded: WritableSignal<boolean>;
             dateWithData: Mock;
             overlayVisible: WritableSignal<boolean>;
             overlayAreaCount: WritableSignal<number | undefined>;
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
-
-        it('tells whether the date has data in view and offers the nearest dates with data when it has none', async () => {
-            // the mock is no signal, so it has to be set before the component reads it
-            const previous = new Time(Date.UTC(2026, 3, 3));
-            footprints().dateWithData.mockImplementation((direction: number) => (direction === -1 ? previous : undefined));
-            footprints().time.set(new Time(Date.UTC(2026, 3, 5)));
-            footprints().dateStatus.set('data');
-            fixture.detectChanges();
-            await fixture.whenStable();
-            const element = fixture.nativeElement as HTMLElement;
-            expect(element.querySelector('.date-status')?.textContent).toContain('Data in view');
-            expect(element.querySelector('.nearest-dates')).toBeNull();
-
-            footprints().dateStatus.set('empty');
-            fixture.detectChanges();
-            expect(element.querySelector('.date-status')?.textContent).toContain('No data in view');
-            const buttons = element.querySelectorAll<HTMLButtonElement>('.nearest-dates button');
-            expect(buttons.length).toBe(1);
-            expect(buttons[0].textContent).toContain('03.04.2026');
-            setTime.mockClear();
-
-            buttons[0].click();
-
-            expect(setTime).toHaveBeenCalledWith(previous);
-        });
 
         it('names the number of areas of the date while the coverage is on the map', async () => {
             footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
@@ -387,28 +362,17 @@ describe('LayersComponent', () => {
             expect(text()).toContain('1 area in view on this date.');
         });
 
-        it('offers the default date of the selected data source as example date instead of switching to it', async () => {
+        it('loads the dates with data only once the user steps through the dates', async () => {
             fixture.detectChanges();
             await fixture.whenStable();
-            const defaultTime = eodysseyLayerService.selectedDataSource()?.defaultTime;
-            expect(defaultTime).toBeDefined();
-            footprints().time.set(new Time(Date.UTC(2020, 0, 1)));
-            footprints().dateStatus.set('data');
-            fixture.detectChanges();
-            const element = fixture.nativeElement as HTMLElement;
-            const button = element.querySelector<HTMLButtonElement>('.example-date')!;
-            expect(button.textContent).toContain('Example date:');
-            setTime.mockClear();
+            expect(footprints().datesNeeded()).toBe(false);
 
-            button.click();
+            await fixture.componentInstance.timeForward();
 
-            expect(setTime).toHaveBeenCalledWith(new Time(new Date(defaultTime!)));
-            footprints().time.set(new Time(new Date(defaultTime!)));
-            fixture.detectChanges();
-            expect(element.querySelector('.example-date')).toBeNull();
+            expect(footprints().datesNeeded()).toBe(true);
         });
 
-        it('goes to the next date with data and remembers that the user chose the date', async () => {
+        it('goes to the next date with data', async () => {
             footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
             footprints().dateWithData.mockImplementation((direction: number) =>
                 direction === 1 ? new Time(Date.UTC(2026, 3, 17)) : undefined,

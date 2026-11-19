@@ -190,7 +190,8 @@ describe('FootprintsService overlay', () => {
 
         it('loads the window of the selected time without the calendar when the app needs the dates', async () => {
             const service = createService();
-            expect(service.dateStatus()).toBeUndefined();
+            await settle();
+            expect(getFootprints).not.toHaveBeenCalled();
 
             service.datesNeeded.set(true);
             await settle();
@@ -200,13 +201,16 @@ describe('FootprintsService overlay', () => {
             expect(windowRequests.every(([, query]) => query.precision === RasterFootprintsPrecision.Availability)).toBe(true);
         });
 
-        it('tells whether the selected time has data and finds the nearest dates with data around it', async () => {
+        it('offers only the dates with data in the calendar and finds the nearest ones around the selected time', async () => {
             getFootprints.mockResolvedValueOnce({...FOOTPRINTS, steps}).mockResolvedValue(FOOTPRINTS);
             const service = createService();
             service.datesNeeded.set(true);
             await settle();
 
-            expect(service.dateStatus()).toBe(TimeStepFootprintStatus.Data);
+            expect(service.dateFilter(new Date(2026, 3, 1))).toBe(true);
+            expect(service.dateFilter(new Date(2026, 2, 30))).toBe(false);
+            // not loaded, so it may have data
+            expect(service.dateFilter(new Date(2026, 5, 1))).toBe(true);
             expect(service.dateWithData(1)?.start.valueOf()).toBe(Date.UTC(2026, 3, 3));
             expect(service.dateWithData(-1)?.start.valueOf()).toBe(Date.UTC(2026, 3, -3));
         });

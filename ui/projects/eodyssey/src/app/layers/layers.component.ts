@@ -98,6 +98,7 @@ import {EOdysseyLayerService} from './layers.service';
                     tabindex="-1"
                     aria-label="Selected date"
                     [value]="currentDate()"
+                    [matDatepickerFilter]="footprintsService.dateFilter"
                     (dateChange)="setDate($event)"
                 />
                 <button mat-stroked-button type="button" (click)="picker.open()" class="calendar-open" aria-label="Choose date">
@@ -126,46 +127,6 @@ import {EOdysseyLayerService} from './layers.service';
                 <p class="catalogue-message" role="status">Zoom in to see when and where data is available.</p>
             } @else if (footprintsService.hasError()) {
                 <p class="catalogue-message catalogue-error" role="alert">Could not load the data availability.</p>
-            } @else if (footprintsService.isLoading() && !footprintsService.dateStatus()) {
-                <p class="catalogue-message coverage-status" role="status">
-                    <mat-spinner [diameter]="16"></mat-spinner>
-                    Checking for data…
-                </p>
-            } @else if (dateStatusText(); as text) {
-                <p class="date-status" role="status">
-                    <span class="status-dot" [class.empty]="footprintsService.dateStatus() === 'empty'" aria-hidden="true"></span>
-                    {{ text }}
-                </p>
-                @if (footprintsService.dateStatus() === 'empty' && (previousDateWithData() || nextDateWithData())) {
-                    <p id="nearest-dates-label" class="catalogue-message">Nearest dates with data:</p>
-                    <div class="nearest-dates" role="group" aria-labelledby="nearest-dates-label">
-                        @if (previousDateWithData(); as previous) {
-                            <button mat-stroked-button type="button" (click)="goTo(previous)">
-                                <mat-icon>navigate_before</mat-icon>
-                                {{ previous.start.format('DD.MM.YYYY') }}
-                            </button>
-                        }
-                        @if (nextDateWithData(); as next) {
-                            <button mat-stroked-button type="button" (click)="goTo(next)">
-                                {{ next.start.format('DD.MM.YYYY') }}
-                                <mat-icon iconPositionEnd>navigate_next</mat-icon>
-                            </button>
-                        }
-                    </div>
-                }
-            }
-            @if (exampleDate(); as example) {
-                @if (!isExampleDateShown()) {
-                    <button
-                        mat-stroked-button
-                        type="button"
-                        class="example-date"
-                        [matTooltip]="'A date on which ' + example.source + ' has data'"
-                        (click)="goTo(example.time)"
-                    >
-                        Example date: {{ example.time.start.format('DD.MM.YYYY') }}
-                    </button>
-                }
             }
             <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
                 <span class="coverage-label">
@@ -318,52 +279,6 @@ import {EOdysseyLayerService} from './layers.service';
                 font-size: $text2;
                 line-height: 1.5;
                 color: var(--geoengine-foreground-secondary-text-color);
-            }
-
-            // smaller than the date button above it, which is the main control of the section
-            .example-date {
-                align-self: flex-start;
-                height: 2rem;
-                padding: 0 0.5rem;
-                border-radius: 0.5rem;
-                font-size: 0.75rem;
-                color: var(--geoengine-foreground-secondary-text-color);
-            }
-
-            .date-status {
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                margin: 0;
-                font-size: $text2;
-                line-height: 1.5;
-            }
-
-            .status-dot {
-                box-sizing: border-box;
-                flex: none;
-                width: 0.65rem;
-                height: 0.65rem;
-                border-radius: 50%;
-                background-color: var(--geoengine-accent-color);
-
-                &.empty {
-                    border: 2px solid var(--geoengine-foreground-secondary-text-color);
-                    background-color: transparent;
-                }
-            }
-
-            .nearest-dates {
-                display: flex;
-                gap: 0.5rem;
-
-                button {
-                    flex: 1;
-                    min-width: 0;
-                    padding: 0 0.5rem;
-                    border-radius: 0.5rem;
-                    font-size: $text2;
-                }
             }
 
             // a wrapped label continues next to the swatch, not below it
@@ -654,24 +569,6 @@ export class LayersComponent {
         return time.start.toDate();
     });
 
-    /** The default date of the selected data source, which is always one click away. The date never changes by itself. */
-    readonly exampleDate = computed<{source: string; time: Time} | undefined>(() => {
-        const source = this.eodysseyLayerService.selectedDataSource();
-        return source?.defaultTime === undefined ? undefined : {source: source.name, time: new Time(new Date(source.defaultTime))};
-    });
-    readonly isExampleDateShown = computed(
-        () => this.currentTime()?.start.valueOf() === this.exampleDate()?.time.start.valueOf() && !!this.exampleDate(),
-    );
-    readonly dateStatusText = computed<string | undefined>(() => {
-        switch (this.footprintsService.dateStatus()) {
-            case 'data':
-                return 'Data in view';
-            case 'empty':
-                return 'No data in view';
-            default:
-                return undefined;
-        }
-    });
     /** The areas the coverage on the map shows, once they are known. */
     readonly areasText = computed<string | undefined>(() => {
         const areas = this.footprintsService.overlayVisible() ? this.footprintsService.overlayAreaCount() : undefined;
@@ -735,7 +632,6 @@ export class LayersComponent {
     );
 
     constructor() {
-        this.footprintsService.datesNeeded.set(true);
         inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
     }
 
@@ -745,13 +641,9 @@ export class LayersComponent {
         return preset.connectorId === applied?.connectorId && preset.layerId === applied.layerId;
     }
 
-    /** The time step of a data source is applied with it, the date is only offered, see `exampleDate`. */
+    /** The time step of a data source is applied with it. */
     private applyDataSourceTimeStep(dataSource: DataSourceDefinition): void {
         if (dataSource.defaultTimeStep) this.projectService.setTimeStepDuration(dataSource.defaultTimeStep);
-    }
-
-    async goTo(time: Time): Promise<void> {
-        await this.projectService.setTime(time);
     }
 
     applySelectedPreset(): void {
@@ -771,7 +663,9 @@ export class LayersComponent {
         await this.stepTime(-1);
     }
 
+    /** Before the first step, the dates with data of the layer are not loaded, so selecting a layer costs no request. */
     private async stepTime(direction: 1 | -1): Promise<void> {
+        this.footprintsService.datesNeeded.set(true);
         const time = this.currentTime();
         const timeStepDuration = this.timeStepDuration();
 

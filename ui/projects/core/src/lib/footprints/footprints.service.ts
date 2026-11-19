@@ -203,11 +203,10 @@ export class FootprintsService {
     /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
     private overlayStyleCache?: Style;
 
-    /** Whether the selected time has data in view, undefined until the window is loaded. */
-    readonly dateStatus = computed(() => {
-        const time = this.time();
-        return time ? stepAt(this.steps(), time.start.valueOf())?.status : undefined;
-    });
+    /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
+    readonly dateFilter = (date: Date | null): boolean =>
+        !date ||
+        stepAt(this.steps(), Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))?.status !== TimeStepFootprintStatus.Empty;
 
     constructor() {
         effect(() => this.updateOverlay());
