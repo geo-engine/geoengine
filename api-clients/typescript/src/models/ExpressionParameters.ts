@@ -38,7 +38,7 @@ export interface ExpressionParameters {
     /**
      * Expression script
      * 
-     * Example: `"(A - B) / (A + B)"`
+     * Example: `"(nir - red) / (nir + red)"`
      */
     expression: string;
     /**

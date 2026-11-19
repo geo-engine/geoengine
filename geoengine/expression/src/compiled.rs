@@ -276,4 +276,41 @@ mod tests {
             Some(MultiPoint::from(point!(x: 2.5, y: 3.0)))
         );
     }
+
+    #[test]
+    fn it_compiles_rust_keywords_aliases_and_shadowed_parameters() {
+        let dependencies = ExpressionDependencies::new(&std::env::temp_dir()).unwrap();
+
+        let ast = ExpressionParser::new(
+            &[
+                Parameter::Number("type".into()),
+                Parameter::Number("None".into()),
+            ],
+            DataType::Number,
+        )
+        .unwrap()
+        .with_aliases([("A".into(), "type".into()), ("B".into(), "None".into())])
+        .unwrap()
+        .with_parameter_shadowing(true)
+        .parse(
+            "expression",
+            // `A` still refers to the parameter `type` after it is shadowed
+            "let type = A * 2; type + None + A",
+        )
+        .unwrap();
+
+        assert_eq!(ast.used_aliases().collect::<Vec<_>>(), vec!["A"]);
+
+        let linked_expression =
+            LinkedExpression::new(ast.name(), &ast.code(), &dependencies).unwrap();
+
+        assert_eq!(
+            unsafe {
+                linked_expression
+                    .function_nary::<fn(Option<f64>, Option<f64>) -> Option<f64>>()
+                    .unwrap()
+            }(Some(3.), Some(4.)),
+            Some(13.)
+        );
+    }
 }

@@ -807,7 +807,14 @@ class Reprojection(Operator):
 
 
 class Expression(RasterOperator):
-    """An Expression operator."""
+    """An Expression operator that computes a pixel-wise expression on the bands of a raster.
+
+    The expression refers to the bands by their names, e.g., `(nir - red) / (nir + red)`.
+    Characters in band names that are not letters or digits are replaced by underscores, e.g., `nir 1` becomes `nir_1`.
+    Rename bands with the `RasterStacker` operator to refer to them by other names.
+
+    Referring to the bands as `A`, `B`, `C`, … is deprecated.
+    """
 
     expression: str
     source: RasterOperator
