@@ -207,7 +207,10 @@ mod tests {
 
         assert!(info().with_availability(vec![true]).is_err());
         assert_eq!(
-            info().with_availability(vec![true, false]).unwrap().has_data(1),
+            info()
+                .with_availability(vec![true, false])
+                .unwrap()
+                .has_data(1),
             Some(false)
         );
     }
