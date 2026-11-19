@@ -141,9 +141,10 @@ pub enum RasterizationTime {
         step: TimeStep,
         reference: Option<TimeInstance>,
     },
-    /// The times of the features are ignored, and all features are rasterized into one
-    /// time slice that is valid forever
-    Ignore,
+    /// All features, regardless of their times, are rasterized into one time slice that is
+    /// valid forever.
+    /// Every query gets this slice, whatever its time.
+    AllFeatures,
 }
 
 /// How many slice boundaries one scan of the vector input collects for [`RasterizationTime::FeatureTimes`]
@@ -317,7 +318,9 @@ fn output_time(time: RasterizationTime, input_bounds: Option<TimeInterval>) -> T
             reference.unwrap_or(TimeInstance::EPOCH_START),
             step,
         ),
-        RasterizationTime::Ignore => TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+        RasterizationTime::AllFeatures => {
+            TimeDescriptor::new_irregular(Some(TimeInterval::default()))
+        }
     }
 }
 
@@ -513,7 +516,7 @@ impl<T: Pixel> RasterQueryProcessor for PolygonRasterizationQueryProcessor<T> {
                     })?;
                 Ok(stream::iter(regular_time.intersecting_intervals(query)?.map(Ok)).boxed())
             }
-            RasterizationTime::Ignore => {
+            RasterizationTime::AllFeatures => {
                 Ok(stream::once(async { Ok(TimeInterval::default()) }).boxed())
             }
         }
@@ -633,7 +636,7 @@ impl SharedQueryState {
         ctx: &dyn QueryContext,
     ) -> Result<(Option<Vec<Option<f64>>>, CacheHint)> {
         let (vector_time, feature_time_filter) = match self.time {
-            RasterizationTime::Ignore => (TimeInterval::default(), None),
+            RasterizationTime::AllFeatures => (TimeInterval::default(), None),
             RasterizationTime::FeatureTimes | RasterizationTime::Regular { .. } => {
                 (time_slice, Some(time_slice))
             }

@@ -96,8 +96,8 @@ export function polygonRasterizationParams(values: PolygonRasterizationFormValue
                 reference: values.referenceChecked ? values.reference.valueOf() : undefined,
             };
             break;
-        case 'ignore':
-            time = {type: 'ignore'};
+        case 'allFeatures':
+            time = {type: 'allFeatures'};
             break;
     }
 
@@ -206,7 +206,7 @@ export class PolygonRasterizationComponent {
     readonly timeModes: Record<TimeMode, string> = {
         featureTimes: 'From the feature times',
         regular: 'Regular time steps',
-        ignore: 'Ignore time',
+        allFeatures: 'All features in one time slice',
     };
 
     readonly form = this.formBuilder.nonNullable.group({

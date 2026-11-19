@@ -18,8 +18,8 @@ pub enum PolygonRasterizationTime {
     FeatureTimes(Box<models::PolygonRasterizationTimeFeatureTimes>),
     #[serde(rename="regular")]
     Regular(Box<models::PolygonRasterizationTimeRegular>),
-    #[serde(rename="ignore")]
-    Ignore(Box<models::PolygonRasterizationTimeIgnore>),
+    #[serde(rename="allFeatures")]
+    AllFeatures(Box<models::PolygonRasterizationTimeAllFeatures>),
 }
 
 impl Default for PolygonRasterizationTime {

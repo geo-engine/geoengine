@@ -14,10 +14,10 @@
 
 import unittest
 
-from geoengine_api_client.models.polygon_rasterization_time_ignore import PolygonRasterizationTimeIgnore
+from geoengine_api_client.models.polygon_rasterization_time_all_features import PolygonRasterizationTimeAllFeatures
 
-class TestPolygonRasterizationTimeIgnore(unittest.TestCase):
-    """PolygonRasterizationTimeIgnore unit test stubs"""
+class TestPolygonRasterizationTimeAllFeatures(unittest.TestCase):
+    """PolygonRasterizationTimeAllFeatures unit test stubs"""
 
     def setUp(self):
         pass
@@ -25,26 +25,26 @@ class TestPolygonRasterizationTimeIgnore(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def make_instance(self, include_optional) -> PolygonRasterizationTimeIgnore:
-        """Test PolygonRasterizationTimeIgnore
+    def make_instance(self, include_optional) -> PolygonRasterizationTimeAllFeatures:
+        """Test PolygonRasterizationTimeAllFeatures
             include_optional is a boolean, when False only required
             params are included, when True both required and
             optional params are included """
-        # uncomment below to create an instance of `PolygonRasterizationTimeIgnore`
+        # uncomment below to create an instance of `PolygonRasterizationTimeAllFeatures`
         """
-        model = PolygonRasterizationTimeIgnore()
+        model = PolygonRasterizationTimeAllFeatures()
         if include_optional:
-            return PolygonRasterizationTimeIgnore(
-                type = 'ignore'
+            return PolygonRasterizationTimeAllFeatures(
+                type = 'allFeatures'
             )
         else:
-            return PolygonRasterizationTimeIgnore(
-                type = 'ignore',
+            return PolygonRasterizationTimeAllFeatures(
+                type = 'allFeatures',
         )
         """
 
-    def testPolygonRasterizationTimeIgnore(self):
-        """Test PolygonRasterizationTimeIgnore"""
+    def testPolygonRasterizationTimeAllFeatures(self):
+        """Test PolygonRasterizationTimeAllFeatures"""
         # inst_req_only = self.make_instance(include_optional=False)
         # inst_req_and_optional = self.make_instance(include_optional=True)
 

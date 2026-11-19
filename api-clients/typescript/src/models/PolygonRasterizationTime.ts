@@ -12,6 +12,13 @@
  */
 
 import { parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
+import type { PolygonRasterizationTimeAllFeatures } from './PolygonRasterizationTimeAllFeatures';
+import {
+    instanceOfPolygonRasterizationTimeAllFeatures,
+    PolygonRasterizationTimeAllFeaturesFromJSON,
+    PolygonRasterizationTimeAllFeaturesFromJSONTyped,
+    PolygonRasterizationTimeAllFeaturesToJSON,
+} from './PolygonRasterizationTimeAllFeatures';
 import type { PolygonRasterizationTimeFeatureTimes } from './PolygonRasterizationTimeFeatureTimes';
 import {
     instanceOfPolygonRasterizationTimeFeatureTimes,
@@ -19,13 +26,6 @@ import {
     PolygonRasterizationTimeFeatureTimesFromJSONTyped,
     PolygonRasterizationTimeFeatureTimesToJSON,
 } from './PolygonRasterizationTimeFeatureTimes';
-import type { PolygonRasterizationTimeIgnore } from './PolygonRasterizationTimeIgnore';
-import {
-    instanceOfPolygonRasterizationTimeIgnore,
-    PolygonRasterizationTimeIgnoreFromJSON,
-    PolygonRasterizationTimeIgnoreFromJSONTyped,
-    PolygonRasterizationTimeIgnoreToJSON,
-} from './PolygonRasterizationTimeIgnore';
 import type { PolygonRasterizationTimeRegular } from './PolygonRasterizationTimeRegular';
 import {
     instanceOfPolygonRasterizationTimeRegular,
@@ -39,7 +39,7 @@ import {
  * How the time slices of the output raster are derived from the features.
  * @export
  */
-export type PolygonRasterizationTime = { type: 'featureTimes' } & PolygonRasterizationTimeFeatureTimes | { type: 'ignore' } & PolygonRasterizationTimeIgnore | { type: 'regular' } & PolygonRasterizationTimeRegular;
+export type PolygonRasterizationTime = { type: 'allFeatures' } & PolygonRasterizationTimeAllFeatures | { type: 'featureTimes' } & PolygonRasterizationTimeFeatureTimes | { type: 'regular' } & PolygonRasterizationTimeRegular;
 
 export function PolygonRasterizationTimeFromJSON(json: any): PolygonRasterizationTime {
     return PolygonRasterizationTimeFromJSONTyped(json, false);
@@ -50,10 +50,10 @@ export function PolygonRasterizationTimeFromJSONTyped(json: any, ignoreDiscrimin
         return json;
     }
     switch (json['type']) {
+        case 'allFeatures':
+            return Object.assign({}, PolygonRasterizationTimeAllFeaturesFromJSONTyped(json, true), { type: 'allFeatures' } as const);
         case 'featureTimes':
             return Object.assign({}, PolygonRasterizationTimeFeatureTimesFromJSONTyped(json, true), { type: 'featureTimes' } as const);
-        case 'ignore':
-            return Object.assign({}, PolygonRasterizationTimeIgnoreFromJSONTyped(json, true), { type: 'ignore' } as const);
         case 'regular':
             return Object.assign({}, PolygonRasterizationTimeRegularFromJSONTyped(json, true), { type: 'regular' } as const);
         default:
@@ -70,10 +70,10 @@ export function PolygonRasterizationTimeToJSONTyped(value?: PolygonRasterization
         return value;
     }
     switch (value['type']) {
+        case 'allFeatures':
+            return Object.assign({}, PolygonRasterizationTimeAllFeaturesToJSON(value), { 'type': 'allFeatures' } as const);
         case 'featureTimes':
             return Object.assign({}, PolygonRasterizationTimeFeatureTimesToJSON(value), { 'type': 'featureTimes' } as const);
-        case 'ignore':
-            return Object.assign({}, PolygonRasterizationTimeIgnoreToJSON(value), { 'type': 'ignore' } as const);
         case 'regular':
             return Object.assign({}, PolygonRasterizationTimeRegularToJSON(value), { 'type': 'regular' } as const);
         default:
