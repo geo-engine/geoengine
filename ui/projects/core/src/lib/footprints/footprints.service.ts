@@ -186,12 +186,13 @@ export class FootprintsService {
     );
 
     readonly overlayLoading = computed(() => this.overlayVisible() && this.overlayStepResource.isLoading());
-    /** The areas of the selected time step in view, undefined until they are known. */
-    readonly overlayAreaCount = computed(() => {
+    /** The areas of the selected time step in view, `unknown` if the layer cannot tell, undefined until they are loaded. */
+    readonly overlayAreaCount = computed((): number | 'unknown' | undefined => {
         const time = this.time();
         const footprints = this.overlayFootprints();
         if (!time || !footprints) return undefined;
-        return stepAt(footprints.steps, time.start.valueOf())?.bounds.length ?? 0;
+        const step = stepAt(footprints.steps, time.start.valueOf());
+        return step?.status === TimeStepFootprintStatus.Unknown ? 'unknown' : (step?.bounds.length ?? 0);
     });
 
     /** Stays one object, because replacing a layer redraws all layers of the map. */

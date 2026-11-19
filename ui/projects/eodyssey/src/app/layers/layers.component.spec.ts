@@ -340,7 +340,7 @@ describe('LayersComponent', () => {
             datesNeeded: WritableSignal<boolean>;
             dateWithData: Mock;
             overlayVisible: WritableSignal<boolean>;
-            overlayAreaCount: WritableSignal<number | undefined>;
+            overlayAreaCount: WritableSignal<number | 'unknown' | undefined>;
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
 
@@ -360,6 +360,11 @@ describe('LayersComponent', () => {
             footprints().overlayAreaCount.set(1);
             fixture.detectChanges();
             expect(text()).toContain('1 area in view on this date.');
+
+            footprints().overlayAreaCount.set('unknown');
+            fixture.detectChanges();
+            expect(text()).toContain('is not known');
+            expect(text()).not.toContain('0 areas');
         });
 
         it('loads the dates with data only once the user steps through the dates', async () => {

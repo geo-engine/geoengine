@@ -573,6 +573,7 @@ export class LayersComponent {
     readonly areasText = computed<string | undefined>(() => {
         const areas = this.footprintsService.overlayVisible() ? this.footprintsService.overlayAreaCount() : undefined;
         if (areas === undefined) return undefined;
+        if (areas === 'unknown') return 'Where this layer has data on this date is not known.';
         return `${areas} ${areas === 1 ? 'area' : 'areas'} in view on this date.`;
     });
     readonly previousDateWithData = computed(() => this.footprintsService.dateWithData(-1));
