@@ -1,4 +1,4 @@
-use crate::config::StacCache;
+use crate::config::{StacCache, get_config_element};
 use crate::datasets::external::stac::{StacProviderDataset, StacTileFile};
 use futures::FutureExt;
 use geoengine_datatypes::primitives::TimeInterval;
@@ -103,10 +103,12 @@ impl StacQueryCache {
         }
     }
 
-    /// A cache for use without a context, e.g. in tests and the harvester, with the sizes of
-    /// `Settings-default.toml`.
+    /// A cache for use without a context, e.g. in the harvester, configured by `[stac_cache]` of
+    /// the settings like the one of a context.
     pub(crate) fn standalone() -> Self {
-        Self::new(100 * 1024 * 1024, Duration::from_hours(1))
+        let config = get_config_element::<StacCache>()
+            .expect("`[stac_cache]` is part of `Settings-default.toml`");
+        Self::from_config(&config)
     }
 
     pub(crate) async fn clear(&self) {
@@ -114,6 +116,8 @@ impl StacQueryCache {
         self.cache.run_pending_tasks().await;
     }
 
+    /// A cache of the given size, for tests and benches: the planning values are fixed so that
+    /// they do not change with the settings. The server uses [`Self::from_config`].
     pub(crate) fn new(max_bytes: usize, ttl: Duration) -> Self {
         let cache = Cache::builder()
             .max_capacity(max_bytes as u64)
@@ -173,6 +177,11 @@ impl StacQueryCache {
             .await;
     }
 
+    /// Whether the cache keeps results at all. A search done only to fill it is wasted otherwise.
+    pub(crate) fn stores_results(&self) -> bool {
+        self.max_bytes > 0 && !self.ttl.is_zero()
+    }
+
     /// Stores what a wider search found for one cell and time step, so that step needs no search.
     pub(crate) async fn insert(
         &self,
@@ -182,11 +191,7 @@ impl StacQueryCache {
         files: Vec<StacTileFile>,
     ) {
         let bytes = result_bytes(&files);
-        if self.max_bytes == 0
-            || self.ttl.is_zero()
-            || bytes > self.max_bytes
-            || u32::try_from(bytes).is_err()
-        {
+        if !self.stores_results() || bytes > self.max_bytes || u32::try_from(bytes).is_err() {
             return;
         }
 

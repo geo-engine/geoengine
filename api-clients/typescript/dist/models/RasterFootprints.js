@@ -27,8 +27,6 @@ function instanceOfRasterFootprints(value) {
         return false;
     if (!('steps' in value) || value['steps'] === undefined)
         return false;
-    if (!('tooLarge' in value) || value['tooLarge'] === undefined)
-        return false;
     return true;
 }
 function RasterFootprintsFromJSON(json) {
@@ -42,7 +40,6 @@ function RasterFootprintsFromJSONTyped(json, ignoreDiscriminator) {
         'spatialReference': json['spatialReference'],
         'steps': (json['steps'].map(TimeStepFootprint_1.TimeStepFootprintFromJSON)),
         'next': json['next'] === undefined ? undefined : json['next'] === null ? null : (0, TimeInterval_1.TimeIntervalFromJSON)(json['next']),
-        'tooLarge': json['tooLarge'],
     };
 }
 function RasterFootprintsToJSON(json) {
@@ -56,6 +53,5 @@ function RasterFootprintsToJSONTyped(value, ignoreDiscriminator = false) {
         'spatialReference': value['spatialReference'],
         'steps': (value['steps'].map(TimeStepFootprint_1.TimeStepFootprintToJSON)),
         'next': (0, TimeInterval_1.TimeIntervalToJSON)(value['next']),
-        'tooLarge': value['tooLarge'],
     };
 }

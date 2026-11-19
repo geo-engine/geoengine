@@ -3895,6 +3895,24 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Needs too many catalog searches, query a smaller area or time range": {
+                    "value": {
+                      "error": "FootprintQueryTooLarge",
+                      "message": "Footprint query needs 120 catalog searches, the limit is 50. Query a smaller area or time range."
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -13321,8 +13339,7 @@
         "description": "When and where the data of a raster processing graph may exist.",
         "required": [
           "spatialReference",
-          "steps",
-          "tooLarge"
+          "steps"
         ],
         "properties": {
           "spatialReference": {
@@ -13345,10 +13362,6 @@
                 "type": "null"
               }
             ]
-          },
-          "tooLarge": {
-            "type": "boolean",
-            "description": "Answering needs too many catalog searches. Query a smaller area or time range."
           }
         }
       },

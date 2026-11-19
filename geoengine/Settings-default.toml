@@ -361,7 +361,9 @@ ttl_secs = 3600
 # follow the months. More steps mean fewer requests for a long window, but each one returns more items
 # (up to the pages of a whole chunk) even if only a few days are looked at.
 search_chunk_steps = 30
-# footprint queries needing more STAC searches than this are answered with "too large"
+# A footprint request needing more STAC searches than this for one chunk of `search_chunk_steps` time steps is
+# answered with "too large". A request covers at most 100 time steps, so with the defaults it needs at most four
+# chunks of 50 searches.
 max_footprint_searches = 50
 # A STAC server allows a number of requests per time window (e.g. 10 per second). Map tiles and the
 # calendar's searches wait in two queues and share it. While both queues have requests, the calendar

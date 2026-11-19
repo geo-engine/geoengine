@@ -421,7 +421,6 @@ pub(super) struct ActorChannels {
     /// Set when the server has shown that it does not answer aggregation requests. Like the learned
     /// quota, it belongs to the server and is shared by all providers that use it. It ends after a
     /// while, because a gateway can answer 404 for a moment only.
-    aggregation_pause: aggregation::Pause,
     // Each job owns a permit until its completion is processed, so draining the
     // channel into the actor's queue cannot bypass backpressure.
     jobs: mpsc::Sender<AttemptJob>,
@@ -589,7 +588,6 @@ impl StacRequestRegistry {
         let (jobs, job_receiver) = mpsc::channel(MAX_PENDING_ATTEMPTS);
         (
             Arc::new(ActorChannels {
-                aggregation_pause: aggregation::Pause::default(),
                 jobs,
                 capacity: Arc::new(Semaphore::new(MAX_PENDING_ATTEMPTS)),
                 cancellations: Arc::new(Notify::new()),
