@@ -3761,35 +3761,6 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_rejected_request_does_not_switch_aggregation_off_for_the_server() {
-        let server = Server::run();
-        // A 400 can come from one request only. The search plans and the answer asks once each, and
-        // both must ask, because a server that is switched off is not asked again.
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
-                .times(2)
-                .respond_with(responders::status_code(400)),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/collections/test/items"))
-                .times(0..)
-                .respond_with(responders::json_encoded(collection(&[], None))),
-        );
-        let provider = provider(
-            &server,
-            1024 * 1024,
-            StacGrid {
-                target_number_of_cells: 64_800,
-            },
-        );
-        let meta = metadata(&provider, 0).await;
-
-        meta.loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
     async fn availability_without_aggregation_answers_with_the_files() {
         let server = Server::run();
         let starts = new_starts();
@@ -3890,7 +3861,6 @@ mod grid_request_tests {
         );
         let meta = metadata(&provider, 0).await;
 
-        // the aggregation is expected once, so a second request for it would fail the test
         for _ in 0..2 {
             meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
                 .await
@@ -3898,52 +3868,6 @@ mod grid_request_tests {
         }
 
         assert_eq!(starts.lock().unwrap().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn a_server_that_rejects_aggregation_is_asked_only_once() {
-        let server = Server::run();
-        let starts = new_starts();
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
-                .times(1)
-                .respond_with(responders::status_code(404)),
-        );
-        for datetime in [
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
-            "2026-01-07T00:00:00.000Z/2026-02-06T00:00:00.000Z",
-        ] {
-            expect_search_at(
-                &server,
-                "0.00000,0.00000,1.00000,1.00000",
-                datetime,
-                vec![],
-                Duration::ZERO,
-                starts.clone(),
-            );
-        }
-        let provider = provider(
-            &server,
-            1024 * 1024,
-            StacGrid {
-                target_number_of_cells: 64_800,
-            },
-        );
-        let meta = metadata(&provider, 0).await;
-
-        for window in [window(3, 5), {
-            TimeInterval::new(
-                DateTime::new_utc(2026, 1, 8, 0, 0, 0),
-                DateTime::new_utc(2026, 1, 10, 0, 0, 0),
-            )
-            .unwrap()
-        }] {
-            meta.loading_info(query(bounds(0.1, 0.4), window).in_parts())
-                .await
-                .unwrap();
-        }
-
-        assert_eq!(starts.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]

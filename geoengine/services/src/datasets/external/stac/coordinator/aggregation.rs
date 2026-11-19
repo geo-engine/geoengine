@@ -9,45 +9,12 @@ use geoengine_datatypes::primitives::{
     BoundingBox2D, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
 };
 use serde::Deserialize;
-use std::time::{Duration, Instant};
 use tracing::debug;
 use url::Url;
 
 /// Statuses with which a server says it does not know aggregations or the request. A request
 /// with one of these answers is not retried.
 const UNSUPPORTED_STATUSES: [u16; 5] = [400, 404, 405, 422, 501];
-/// Only these say that the server has no aggregation at all. A 400 or 422 can come from one
-/// request only, for example an interval the server does not know, so it must not switch
-/// aggregation off for the other datasets of the server.
-const SERVER_WITHOUT_AGGREGATION: [u16; 3] = [404, 405, 501];
-
-/// How long a server is not asked for aggregations after it showed that it has none.
-const PAUSE: Duration = Duration::from_secs(300);
-
-/// A pause of aggregation requests that ends by itself.
-#[derive(Debug, Default)]
-pub(super) struct Pause(std::sync::Mutex<Option<Instant>>);
-
-impl Pause {
-    fn start_for(&self, duration: Duration) {
-        *self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Instant::now() + duration);
-    }
-
-    fn start(&self) {
-        self.start_for(PAUSE);
-    }
-
-    fn is_active(&self) -> bool {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_some_and(|until| Instant::now() < until)
-    }
-}
-
 /// The size of a bucket, the finest calendar interval that is not finer than a time step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Interval {
@@ -116,14 +83,6 @@ impl StacClient {
         range: TimeInterval,
         step: TimeStep,
     ) -> Option<Vec<TimeInterval>> {
-        let channels = self
-            .request_registry
-            .shared(&self.origin, self.coordinator_authentication.as_ref())
-            .ok()?;
-        let pause = &channels.aggregation_pause;
-        if pause.is_active() {
-            return None;
-        }
         let interval = Interval::of(step)?;
         let datetime = format!(
             "{}/{}",
@@ -154,25 +113,15 @@ impl StacClient {
         let response = match response {
             Ok(response) => response,
             Err(error) => {
-                if error
-                    .status()
-                    .is_some_and(|status| SERVER_WITHOUT_AGGREGATION.contains(&status.as_u16()))
-                {
-                    pause.start();
-                }
                 debug!("STAC aggregation is not used: {error}");
                 return None;
             }
         };
 
-        let Some(aggregation) = response
+        let aggregation = response
             .aggregations
             .into_iter()
-            .find(|aggregation| aggregation.name == "datetime_frequency")
-        else {
-            pause.start();
-            return None;
-        };
+            .find(|aggregation| aggregation.name == "datetime_frequency")?;
         if aggregation.overflow > 0. {
             return None;
         }
@@ -210,18 +159,6 @@ mod tests {
         let start = geoengine_datatypes::primitives::DateTime::new_utc(2026, 1, day, 0, 0, 0);
         let end = geoengine_datatypes::primitives::DateTime::new_utc(2026, 1, day + 1, 0, 0, 0);
         TimeInterval::new(start, end).unwrap()
-    }
-
-    #[test]
-    fn a_pause_ends_by_itself() {
-        let pause = Pause::default();
-        assert!(!pause.is_active());
-
-        pause.start_for(Duration::from_secs(3600));
-        assert!(pause.is_active());
-
-        pause.start_for(Duration::ZERO);
-        assert!(!pause.is_active());
     }
 
     #[test]
