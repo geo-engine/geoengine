@@ -13,7 +13,7 @@ import type {DataSourceDefinition} from './data-sources';
 import {EOdysseyLayerService} from './layers.service';
 
 /** The dates the strip below the date shows. */
-const STRIP_DATES = 31;
+const STRIP_DATES = 15;
 
 function formatDate(timeMs: number): string {
     return new Time(timeMs).start.format('DD.MM.YYYY');
@@ -367,8 +367,8 @@ function formatDate(timeMs: number): string {
 
             .date-strip {
                 display: flex;
-                gap: 1px;
-                height: 1.75rem;
+                gap: 2px;
+                height: 1rem;
             }
 
             // the bar of a date: tall with scenes, short without, faint where the layer cannot tell
