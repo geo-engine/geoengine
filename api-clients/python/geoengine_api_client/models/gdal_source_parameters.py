@@ -29,7 +29,7 @@ class GdalSourceParameters(BaseModel):
     Parameters for the [`GdalSource`] operator.
     """ # noqa: E501
     data: StrictStr = Field(description="Dataset name or identifier to be loaded.")
-    overview_level: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, description="*Optional*: overview level to use.  If not provided, the data source will determine the resolution, i.e., uses its native resolution.", alias="overviewLevel")
+    overview_level: Optional[Annotated[int, Field(strict=True, ge=1)]] = Field(default=None, description="*Optional*: overview level to use, i.e., how many times coarser than the native resolution the data is read. `1` is the native resolution.  If not provided, the data source will determine the resolution, i.e., uses its native resolution.", alias="overviewLevel")
     __properties: ClassVar[List[str]] = ["data", "overviewLevel"]
 
     model_config = ConfigDict(

@@ -10,10 +10,10 @@ WHERE (result_descriptor).raster.spatial_grid.max_overview_level < 1;
 -- ... and its copy in each kind of GDAL meta data
 UPDATE datasets
 SET
-    meta_data.gdal_meta_data_regular.result_descriptor.spatial_grid.max_overview_level
+    meta_data.gdal_meta_data_regular.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     = 1
 WHERE
-    (meta_data).gdal_meta_data_regular.result_descriptor.spatial_grid.max_overview_level
+    (meta_data).gdal_meta_data_regular.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     < 1;
 
 UPDATE datasets
@@ -24,18 +24,18 @@ WHERE
 
 UPDATE datasets
 SET
-    meta_data.gdal_metadata_net_cdf_cf.result_descriptor.spatial_grid.max_overview_level
+    meta_data.gdal_metadata_net_cdf_cf.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     = 1
 WHERE
-    (meta_data).gdal_metadata_net_cdf_cf.result_descriptor.spatial_grid.max_overview_level
+    (meta_data).gdal_metadata_net_cdf_cf.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     < 1;
 
 UPDATE datasets
 SET
-    meta_data.gdal_meta_data_list.result_descriptor.spatial_grid.max_overview_level
+    meta_data.gdal_meta_data_list.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     = 1
 WHERE
-    (meta_data).gdal_meta_data_list.result_descriptor.spatial_grid.max_overview_level
+    (meta_data).gdal_meta_data_list.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     < 1;
 
 UPDATE datasets
@@ -43,13 +43,13 @@ SET
     meta_data.gdal_multi_band.result_descriptor.spatial_grid.max_overview_level
     = 1
 WHERE
-    (meta_data).gdal_multi_band.result_descriptor.spatial_grid.max_overview_level
+    (meta_data).gdal_multi_band.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     < 1;
 
 -- the datasets of STAC providers
 CREATE FUNCTION pg_temp.with_non_zero_max_overview_levels(
-    datasets "StacProviderDataset" []
-) RETURNS "StacProviderDataset" [] AS $$
+    datasets "StacProviderDataset"[]
+) RETURNS "StacProviderDataset"[] AS $$
 DECLARE
     dataset "StacProviderDataset";
     migrated "StacProviderDataset" [] := '{}';

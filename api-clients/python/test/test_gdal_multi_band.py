@@ -58,7 +58,7 @@ class TestGdalMultiBand(unittest.TestCase):
                                     y_idx = 56, 
                                     x_idx = 56, ), ), ), 
                         descriptor = 'source', 
-                        max_overview_level = 0, ), 
+                        max_overview_level = 1, ), 
                     bands = [
                         geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
                             name = '', 
@@ -91,7 +91,7 @@ class TestGdalMultiBand(unittest.TestCase):
                                     y_idx = 56, 
                                     x_idx = 56, ), ), ), 
                         descriptor = 'source', 
-                        max_overview_level = 0, ), 
+                        max_overview_level = 1, ), 
                     bands = [
                         geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
                             name = '', 

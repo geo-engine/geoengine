@@ -5,28 +5,29 @@ INSERT INTO datasets (
     meta_data
 )
 SELECT
-    id::uuid,
-    ROW(NULL, name)::"DatasetName",
-    name,
-    name,
-    'GdalSource',
-    ROW(NULL, NULL, NULL)::"ResultDescriptor",
+    d.id::uuid AS id,
+    ROW(NULL, d.display_name)::"DatasetName" AS name,
+    d.display_name,
+    d.display_name AS description,
+    'GdalSource' AS source_operator,
+    ROW(NULL, NULL, NULL)::"ResultDescriptor" AS result_descriptor,
     ROW(NULL, NULL, NULL, NULL, NULL, NULL, NULL)::"MetaDataDefinition"
+        AS meta_data
 FROM (
     VALUES
     ('00000000-0000-0000-0000-000000000001', 'zero'),
     ('00000000-0000-0000-0000-000000000002', 'kept')
-) AS d (id, name);
+) AS d (id, display_name);
 
 UPDATE datasets
 SET
     result_descriptor.raster.spatial_grid.max_overview_level = 0,
-    meta_data.gdal_meta_data_regular.result_descriptor.spatial_grid.max_overview_level
+    meta_data.gdal_meta_data_regular.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     = 0,
     meta_data.gdal_static.result_descriptor.spatial_grid.max_overview_level = 0,
-    meta_data.gdal_metadata_net_cdf_cf.result_descriptor.spatial_grid.max_overview_level
+    meta_data.gdal_metadata_net_cdf_cf.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     = 0,
-    meta_data.gdal_meta_data_list.result_descriptor.spatial_grid.max_overview_level
+    meta_data.gdal_meta_data_list.result_descriptor.spatial_grid.max_overview_level -- noqa: LT05
     = 0,
     meta_data.gdal_multi_band.result_descriptor.spatial_grid.max_overview_level
     = 0
@@ -57,9 +58,9 @@ SET
         ROW('c', NULL, NULL, NULL, NULL, NULL, NULL)::"StacProviderDataset"
     ];
 
-UPDATE layer_providers
+UPDATE layer_providers -- noqa: PRS
 SET
-    definition.stac_data_provider_definition.datasets[1].spatial_grid.max_overview_level
+    definition.stac_data_provider_definition.datasets[1].spatial_grid.max_overview_level -- noqa: LT05
     = 0,
-    definition.stac_data_provider_definition.datasets[2].spatial_grid.max_overview_level
+    definition.stac_data_provider_definition.datasets[2].spatial_grid.max_overview_level -- noqa: LT05
     = 4;
