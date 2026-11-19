@@ -130,6 +130,11 @@
                 <mat-icon aria-hidden="true">zoom_in</mat-icon>
                 <span>Zoom in further to load the selected layer.</span>
             </div>
+        } @else if (coverageZoomRequired()) {
+            <div class="zoom-prompt" role="status">
+                <mat-icon aria-hidden="true">zoom_in</mat-icon>
+                <span>Zoom in to see where the scenes of this date are. The calendar knows the dates with data for larger areas.</span>
+            </div>
         }
 
         @if (isLoading()) {

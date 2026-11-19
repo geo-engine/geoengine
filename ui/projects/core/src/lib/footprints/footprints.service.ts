@@ -176,10 +176,13 @@ export class FootprintsService {
         this.footprintsResource.hasValue() ? this.footprintsResource.value() : this.partialFootprints(),
     );
     readonly steps = computed(() => this.footprints()?.steps ?? []);
-    /** The view needs too many catalog searches, so the user has to zoom in. */
-    readonly tooLarge = computed(
-        () => (this.footprints()?.tooLarge ?? false) || (this.overlayVisible() && (this.overlayFootprints()?.tooLarge ?? false)),
-    );
+    /** The dates with data of the view need too many catalog searches, so the user has to zoom in. */
+    readonly tooLarge = computed(() => this.footprints()?.tooLarge ?? false);
+    /**
+     * The boxes of the overlay need too many catalog searches. The dates with data may still be known, because counting
+     * them needs no search where the catalog can count.
+     */
+    readonly overlayTooLarge = computed(() => this.overlayVisible() && (this.overlayFootprints()?.tooLarge ?? false));
     readonly isLoading = computed(() => this.footprintsResource.isLoading());
     readonly hasError = computed(
         () => this.footprintsResource.status() === 'error' || (this.overlayVisible() && this.overlayStepResource.status() === 'error'),
@@ -205,11 +208,6 @@ export class FootprintsService {
     private overlayStyleCache?: Style;
     /** The date whose boxes the overlay shows. */
     private overlayDate?: number;
-
-    /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
-    readonly dateFilter = (date: Date | null): boolean =>
-        !date ||
-        stepAt(this.steps(), Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))?.status !== TimeStepFootprintStatus.Empty;
 
     constructor() {
         effect(() => this.updateOverlay());
@@ -290,6 +288,11 @@ export class FootprintsService {
     }
 
     readonly dateClass: MatCalendarCellClassFunction<Date> = (date: Date, view: MatCalendarView) => cellClasses(this.steps(), date, view);
+
+    /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
+    readonly dateFilter = (date: Date | null): boolean =>
+        !date ||
+        stepAt(this.steps(), Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))?.status !== TimeStepFootprintStatus.Empty;
 
     /** Loads the window from the start of what the calendar shows in `view`, unless it is loaded already. Takes a calendar date. */
     showDate(date: Date, view: MatCalendarView): void {

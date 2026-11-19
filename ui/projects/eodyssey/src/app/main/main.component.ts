@@ -98,6 +98,7 @@ export class MainComponent {
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     readonly minTileMatrixIndex = this.eodysseyLayerService.appliedMinTileMatrixIndex;
     readonly zoomRequired = signal(false);
+    readonly coverageZoomRequired = computed(() => this.footprintsService.overlayTooLarge());
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
 

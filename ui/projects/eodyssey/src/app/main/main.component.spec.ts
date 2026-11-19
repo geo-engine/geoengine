@@ -1,4 +1,4 @@
-import {NO_ERRORS_SCHEMA, signal} from '@angular/core';
+import {NO_ERRORS_SCHEMA, signal, WritableSignal} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatIconRegistry} from '@angular/material/icon';
@@ -69,6 +69,7 @@ describe('EOdyssey debug reprojection', () => {
                         overlayLight: signal(false),
                         timeStepOverride: signal(undefined),
                         overlayVisible: signal(false),
+                        overlayTooLarge: signal(false),
                     },
                 },
                 {
@@ -155,5 +156,16 @@ describe('EOdyssey debug reprojection', () => {
         fixture.componentRef.setInput('debug', 'false');
         fixture.detectChanges();
         expect(tms()).toBe('CustomWebMercator');
+    });
+
+    it('asks to zoom in on the map when the boxes of the coverage need too many catalog searches', () => {
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        expect(element.querySelector('.zoom-prompt')).toBeNull();
+
+        (TestBed.inject(FootprintsService).overlayTooLarge as WritableSignal<boolean>).set(true);
+        fixture.detectChanges();
+
+        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in to see where the scenes of this date are');
     });
 });
