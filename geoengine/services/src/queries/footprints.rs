@@ -80,7 +80,6 @@ pub async fn raster_footprints<C: SessionContext>(
             spatial_reference: spatial_reference.into(),
             steps: Vec::new(),
             next: None,
-            too_large: false,
         });
     };
 
@@ -90,18 +89,8 @@ pub async fn raster_footprints<C: SessionContext>(
         bands,
     );
 
-    let footprints = match query_footprints(&processor, query, precision, &query_ctx).await {
-        Ok(footprints) => footprints,
-        Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. }) => {
-            return Ok(RasterFootprints {
-                spatial_reference: spatial_reference.into(),
-                steps: Vec::new(),
-                next: None,
-                too_large: true,
-            });
-        }
-        Err(error) => return Err(error.into()),
-    };
+    // a query that needs too many catalog searches fails with `FootprintQueryTooLarge`
+    let footprints = query_footprints(&processor, query, precision, &query_ctx).await?;
 
     Ok(RasterFootprints {
         spatial_reference: spatial_reference.into(),
@@ -110,7 +99,6 @@ pub async fn raster_footprints<C: SessionContext>(
             .map(|footprint| time_step_footprint(footprint, geo_transform))
             .collect(),
         next: next.map(Into::into),
-        too_large: false,
     })
 }
 

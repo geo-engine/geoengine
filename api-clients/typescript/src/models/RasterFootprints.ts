@@ -45,10 +45,6 @@ export interface RasterFootprints {
      * The next time step to ask for, if more steps exist within the requested time interval.
      */
     next?: TimeInterval | null;
-    /**
-     * Answering needs too many catalog searches. Query a smaller area or time range.
-     */
-    tooLarge: boolean;
 }
 
 /**
@@ -57,7 +53,6 @@ export interface RasterFootprints {
 export function instanceOfRasterFootprints(value: object): value is RasterFootprints {
     if (!('spatialReference' in value) || value['spatialReference'] === undefined) return false;
     if (!('steps' in value) || value['steps'] === undefined) return false;
-    if (!('tooLarge' in value) || value['tooLarge'] === undefined) return false;
     return true;
 }
 
@@ -74,7 +69,6 @@ export function RasterFootprintsFromJSONTyped(json: any, ignoreDiscriminator: bo
         'spatialReference': json['spatialReference'],
         'steps': ((json['steps'] as Array<any>).map(TimeStepFootprintFromJSON)),
         'next': json['next'] === undefined ? undefined : json['next'] === null ? null : TimeIntervalFromJSON(json['next']),
-        'tooLarge': json['tooLarge'],
     };
 }
 
@@ -92,7 +86,6 @@ export function RasterFootprintsToJSONTyped(value?: RasterFootprints | null, ign
         'spatialReference': value['spatialReference'],
         'steps': ((value['steps'] as Array<any>).map(TimeStepFootprintToJSON)),
         'next': TimeIntervalToJSON(value['next']),
-        'tooLarge': value['tooLarge'],
     };
 }
 

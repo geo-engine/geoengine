@@ -54,8 +54,7 @@ class TestRasterFootprints(unittest.TestCase):
                     ],
                 next = geoengine_api_client.models.time_interval.TimeInterval(
                     start = 56, 
-                    end = 56, ),
-                too_large = True
+                    end = 56, )
             )
         else:
             return RasterFootprints(
@@ -76,7 +75,6 @@ class TestRasterFootprints(unittest.TestCase):
                                     y = 1.337, ), )
                             ], )
                     ],
-                too_large = True,
         )
         """
 

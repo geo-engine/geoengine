@@ -560,7 +560,7 @@ impl StacMultiBandMetaData {
         let aggregate_url = items_url.join("aggregate").ok()?;
 
         self.client
-            .intervals_with_items(aggregate_url, bbox, range, step, lane)
+            .datetime_frequency(aggregate_url, bbox, range, step, lane)
             .await
     }
 
@@ -706,6 +706,10 @@ impl StacMultiBandMetaData {
         }
 
         self.reject_too_many_searches(searches.len(), lane)?;
+        if !self.query_cache.stores_results() {
+            // the steps are searched one by one afterwards anyway
+            return Ok(());
+        }
         self.search_spans(items_url, dataset_id, searches, lane)
             .await
     }
@@ -3193,10 +3197,22 @@ mod grid_request_tests {
 
     /// The aggregation of the days with items: each given day has two items.
     fn expect_aggregation(server: &Server, datetime: &str, days_with_items: &[&str]) {
-        let buckets = days_with_items
-            .iter()
-            .map(|day| json!({"key": day, "data_type": "datetime", "frequency": 2}))
-            .collect::<Vec<_>>();
+        // like CODE-DE: the buckets from the first to the last day with items, the others empty
+        let day_of = |day: &str| chrono::DateTime::parse_from_rfc3339(day).unwrap();
+        let mut buckets = Vec::new();
+        if let (Some(first), Some(last)) = (days_with_items.first(), days_with_items.last()) {
+            let mut day = day_of(first);
+            while day <= day_of(last) {
+                let key = day.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
+                let frequency = if days_with_items.contains(&key.as_str()) {
+                    2
+                } else {
+                    0
+                };
+                buckets.push(json!({"key": key, "data_type": "datetime", "frequency": frequency}));
+                day += chrono::Duration::days(1);
+            }
+        }
         server.expect(
             Expectation::matching(all_of![
                 request::method_path("GET", "/collections/test/aggregate"),
@@ -3422,6 +3438,35 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
 
         assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn without_a_cache_a_window_is_searched_only_step_by_step() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        // one search per step, no window search before them, whose result could not be kept
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                .times(2)
+                .respond_with(responders::json_encoded(collection(
+                    &[item("found", 0.)],
+                    None,
+                ))),
+        );
+        let provider = provider(
+            &server,
+            0,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .await
+            .unwrap();
+        assert_eq!(info.time_steps().len(), 2);
     }
 
     #[tokio::test]
@@ -3788,35 +3833,6 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_rejected_request_does_not_switch_aggregation_off_for_the_server() {
-        let server = Server::run();
-        // A 400 can come from one request only. The search plans and the answer asks once each, and
-        // both must ask, because a server that is switched off is not asked again.
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
-                .times(2)
-                .respond_with(responders::status_code(400)),
-        );
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/collections/test/items"))
-                .times(0..)
-                .respond_with(responders::json_encoded(collection(&[], None))),
-        );
-        let provider = provider(
-            &server,
-            1024 * 1024,
-            StacGrid {
-                target_number_of_cells: 64_800,
-            },
-        );
-        let meta = metadata(&provider, 0).await;
-
-        meta.loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).in_parts())
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
     async fn availability_without_aggregation_answers_with_the_files() {
         let server = Server::run();
         let starts = new_starts();
@@ -3917,7 +3933,6 @@ mod grid_request_tests {
         );
         let meta = metadata(&provider, 0).await;
 
-        // the aggregation is expected once, so a second request for it would fail the test
         for _ in 0..2 {
             meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
                 .await
@@ -3925,52 +3940,6 @@ mod grid_request_tests {
         }
 
         assert_eq!(starts.lock().unwrap().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn a_server_that_rejects_aggregation_is_asked_only_once() {
-        let server = Server::run();
-        let starts = new_starts();
-        server.expect(
-            Expectation::matching(request::method_path("GET", "/collections/test/aggregate"))
-                .times(1)
-                .respond_with(responders::status_code(404)),
-        );
-        for datetime in [
-            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
-            "2026-01-07T00:00:00.000Z/2026-02-06T00:00:00.000Z",
-        ] {
-            expect_search_at(
-                &server,
-                "0.00000,0.00000,1.00000,1.00000",
-                datetime,
-                vec![],
-                Duration::ZERO,
-                starts.clone(),
-            );
-        }
-        let provider = provider(
-            &server,
-            1024 * 1024,
-            StacGrid {
-                target_number_of_cells: 64_800,
-            },
-        );
-        let meta = metadata(&provider, 0).await;
-
-        for window in [window(3, 5), {
-            TimeInterval::new(
-                DateTime::new_utc(2026, 1, 8, 0, 0, 0),
-                DateTime::new_utc(2026, 1, 10, 0, 0, 0),
-            )
-            .unwrap()
-        }] {
-            meta.loading_info(query(bounds(0.1, 0.4), window).in_parts())
-                .await
-                .unwrap();
-        }
-
-        assert_eq!(starts.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]

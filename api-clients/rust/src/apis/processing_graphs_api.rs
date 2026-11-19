@@ -32,6 +32,7 @@ pub enum GetProcessingGraphAllMetadataZipHandlerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetProcessingGraphFootprintsHandlerError {
+    Status400(models::ErrorResponse),
     UnknownValue(serde_json::Value),
 }
 
