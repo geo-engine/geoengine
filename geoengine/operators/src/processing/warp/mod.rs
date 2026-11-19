@@ -37,7 +37,7 @@ use geoengine_datatypes::primitives::{
     Coordinate2D, SpatialResolution, find_next_best_overview_level_resolution,
 };
 use geoengine_datatypes::raster::{
-    DynamicRasterDataType, NearestNeighbor, RasterDataType, TilingSpecification,
+    DynamicRasterDataType, GeoTransform, NearestNeighbor, RasterDataType, TilingSpecification,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
@@ -215,6 +215,25 @@ pub fn source_at_overview_level(
     source: &dyn InitializedRasterOperator,
     params: &WarpParams,
 ) -> Result<Option<TypedRasterOperator>> {
+    let Some(overview_resolution) = overview_level_resolution(source, params)? else {
+        return Ok(None);
+    };
+    source
+        .optimize(overview_resolution)
+        .map(Some)
+        .map_err(|source| Error::Optimization { source })
+}
+
+/// The resolution of the overview level that [`source_at_overview_level`] rewrites `source` to,
+/// a power of two times the resolution of `source`.
+/// `None` if no overview level is coarser than the source.
+///
+/// # Errors
+/// If the output grid cannot be computed.
+fn overview_level_resolution(
+    source: &dyn InitializedRasterOperator,
+    params: &WarpParams,
+) -> Result<Option<SpatialResolution>> {
     let Some(output_resolution) = params.output_resolution else {
         return Ok(None);
     };
@@ -245,11 +264,7 @@ pub fn source_at_overview_level(
     if overview_resolution == in_resolution {
         return Ok(None);
     }
-
-    source
-        .optimize(overview_resolution)
-        .map(Some)
-        .map_err(|source| Error::Optimization { source })
+    Ok(Some(overview_resolution))
 }
 
 fn source_srs(in_descriptor: &RasterResultDescriptor) -> Result<SpatialReference> {
@@ -491,6 +506,37 @@ fn converted_processor(
 }
 
 impl<O: InitializedRasterOperator> InitializedWarp<O> {
+    /// Whether the source, rewritten by `optimize` to `in_resolution`, is on the output grid of
+    /// `target_resolution`, so that a `Warp` would only pass it through.
+    ///
+    /// `optimize` returns the resolution it is asked for and keeps the alignment of the operator,
+    /// e.g. an overview level of a GDAL source keeps the origin of the dataset.
+    fn is_output_grid(
+        &self,
+        in_resolution: SpatialResolution,
+        target_resolution: SpatialResolution,
+    ) -> bool {
+        let in_descriptor = self.source.result_descriptor();
+        let grid = |origin, resolution: SpatialResolution| {
+            GeoTransform::new_unchecked(origin, resolution.x().get(), -resolution.y().get())
+        };
+
+        self.source_srs == self.target_srs
+            && in_descriptor.data_type == self.result_descriptor.data_type
+            && in_resolution == target_resolution
+            && grid(
+                in_descriptor.spatial_grid.geo_transform().origin_coordinate,
+                in_resolution,
+            )
+            .is_compatible_grid(grid(
+                self.result_descriptor
+                    .spatial_grid
+                    .geo_transform()
+                    .origin_coordinate,
+                target_resolution,
+            ))
+    }
+
     /// The processor that looks up the input pixel under the center of each output pixel, in the
     /// input data type.
     fn nearest_neighbor_processor(
@@ -649,29 +695,13 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
             ..self.params
         };
 
-        let source = match source_at_overview_level(&self.source, &params) {
-            Ok(Some(optimized)) => optimized,
-            Ok(None) => {
-                let in_grid = &self.source.result_descriptor().spatial_grid;
-                let optimized_source = self.source.optimize(in_grid.spatial_resolution())?;
-
-                // the source is already on the output grid: nothing to warp
-                if self.source_srs == self.target_srs
-                    && self.source.result_descriptor().data_type == self.result_descriptor.data_type
-                    && in_grid.spatial_resolution() == target_resolution
-                    && in_grid.geo_transform().origin_coordinate
-                        == self
-                            .result_descriptor
-                            .spatial_grid
-                            .geo_transform()
-                            .origin_coordinate
-                {
-                    return Ok(optimized_source);
-                }
-
-                optimized_source
-            }
-            Err(Error::Optimization { source }) => return Err(source),
+        let in_resolution = match overview_level_resolution(&self.source, &params) {
+            Ok(overview_resolution) => overview_resolution.unwrap_or_else(|| {
+                self.source
+                    .result_descriptor()
+                    .spatial_grid
+                    .spatial_resolution()
+            }),
             // the output grid cannot be computed for the optimized source
             Err(error) => {
                 return Err(OptimizationError::ProjectionOptimizationFailed {
@@ -679,6 +709,12 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedWarp
                 });
             }
         };
+        let source = self.source.optimize(in_resolution)?;
+
+        // the optimized source is already on the output grid: nothing to warp
+        if self.is_output_grid(in_resolution, target_resolution) {
+            return Ok(source);
+        }
 
         Ok(Warp {
             params,
@@ -1412,6 +1448,49 @@ mod tests {
             panic!("the source should be a GDAL source");
         };
         assert_eq!(gdal_source.params.overview_level, Some(2));
+    }
+
+    #[tokio::test]
+    async fn it_optimizes_away_a_warp_onto_an_overview_level() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+        let ndvi = GdalSource {
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+        }
+        .typed();
+        let initialize = |params| {
+            warp(ndvi.clone(), params)
+                .initialize(ProcessingGraphOperatorPath::initialize_root(), &exe_ctx)
+        };
+        let target = SpatialResolution::new_unchecked(0.8, 0.8);
+
+        let optimized = initialize(resample_params(SpatialResolution::new_unchecked(0.2, 0.2)))
+            .await
+            .unwrap()
+            .optimize(target)
+            .unwrap();
+        let TypedRasterOperator::GdalSource(gdal_source) = &optimized else {
+            panic!(
+                "the overview level is the output, so there is nothing to warp, was {optimized:?}"
+            );
+        };
+        assert_eq!(gdal_source.params.overview_level, Some(8));
+
+        // the warp still converts the data type
+        let converting = initialize(WarpParams {
+            output_data_type: Some(RasterDataType::F32),
+            ..resample_params(SpatialResolution::new_unchecked(0.2, 0.2))
+        })
+        .await
+        .unwrap()
+        .optimize(target)
+        .unwrap();
+        let TypedRasterOperator::Warp(converting) = &converting else {
+            panic!("the warp should stay to convert the data type, was {converting:?}");
+        };
+        let TypedRasterOperator::GdalSource(gdal_source) = &converting.sources.raster else {
+            panic!("the source should be a GDAL source");
+        };
+        assert_eq!(gdal_source.params.overview_level, Some(8));
     }
 
     #[test]
