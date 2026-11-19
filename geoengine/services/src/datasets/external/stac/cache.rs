@@ -138,6 +138,12 @@ impl StacQueryCache {
     }
 
     #[cfg(test)]
+    pub(crate) fn with_max_footprint_searches(mut self, searches: usize) -> Self {
+        self.max_footprint_searches = searches;
+        self
+    }
+
+    #[cfg(test)]
     pub(crate) fn with_availability_search_cells(mut self, cells: usize) -> Self {
         self.availability_search_cells = cells;
         self
