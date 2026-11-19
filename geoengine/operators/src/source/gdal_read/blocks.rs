@@ -194,15 +194,16 @@ impl BlockIo {
     }
 
     /// Reads `read_advise` of the file from whole blocks of `level`. A file without that level
-    /// reads its coarsest finer overview and keeps the pixel under the center of each output
-    /// pixel, as GDAL's nearest resampling does. An undeclared level stands in for GDAL's
+    /// reads its coarsest finer level, at last the full resolution, and keeps the pixel under the
+    /// center of each output pixel, as GDAL's nearest resampling does. So a block read never
+    /// needs GDAL's window read for a file. An undeclared level stands in for GDAL's
     /// window read, which scales by the sizes of the level and of the file: a level whose pixels
     /// that read does not take one to one is resampled alike, from itself. Such tiles can differ
     /// from GDAL's by one level pixel, see `source_pixels`.
     ///
     /// # Errors
-    /// Returns an error if a header or block read fails, if the file has neither the level nor a
-    /// finer overview, or if the read does not start at a pixel of the level.
+    /// Returns an error if a header or block read fails, or if the read does not start at a pixel
+    /// of the level.
     ///
     /// # Panics
     /// Never: the level window has the size of the read by construction.
@@ -222,7 +223,8 @@ impl BlockIo {
         else {
             return Ok(GdalProcessReadResult::FileNotFoundAsNoData);
         };
-        // a file without the level reads the coarsest finer one and resamples it, as GDAL does
+        // A file without the level reads its coarsest finer one, at last the full resolution,
+        // and resamples it, as GDAL does. Only a header without any level has none.
         let Some(file_level) = info
             .level_of_factor(factor)
             .map(|index| FileLevel { index, factor })
@@ -245,11 +247,18 @@ impl BlockIo {
             .into()
         };
         if file_level.factor != factor && newly_cached {
-            tracing::info!(
-                "{} has no overview level {factor}, its level {} is read and resampled",
-                params.file_path.display(),
-                file_level.factor,
-            );
+            let file = params.file_path.display();
+            let read_factor = file_level.factor;
+            // only a dataset that declares the level promised it
+            if matches!(level, ReadLevel::Declared(_)) {
+                tracing::warn!(
+                    "{file} lacks the declared overview level {factor}, its level {read_factor} is read and resampled"
+                );
+            } else {
+                tracing::info!(
+                    "{file} has no overview level {factor}, its level {read_factor} is read and resampled"
+                );
+            }
         }
         let Some(LevelRead { advise, picked }) = level_read(&info, file_level, level, read_advise)
         else {
@@ -497,10 +506,10 @@ struct Picked {
     columns: Vec<usize>,
 }
 
-/// The coarsest level of the file with a whole-number factor below `factor`: the overview GDAL
-/// resamples from. `None` if it has none from 2 up.
+/// The coarsest level of the file with a whole-number factor below `factor`: the level GDAL
+/// resamples from. That is the full resolution if the file has no overview below `factor`.
 fn finer_level(info: &RasterInfo, factor: NonZeroUsize) -> Option<FileLevel> {
-    (2..factor.get())
+    (1..factor.get())
         .rev()
         .filter_map(NonZeroUsize::new)
         .find_map(|finer| {
@@ -815,7 +824,14 @@ mod tests {
             })
         );
         let info = raster_info(vec![level(64)]);
-        assert_eq!(finer_level(&info, factor(8)), None, "no overviews");
+        assert_eq!(
+            finer_level(&info, factor(8)),
+            Some(FileLevel {
+                index: 0,
+                factor: factor(1)
+            }),
+            "a file without overviews is resampled from its full resolution"
+        );
     }
 
     #[test]
