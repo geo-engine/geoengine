@@ -1,6 +1,15 @@
 import {describe, expect, it} from 'vitest';
 import {ResponseError, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-import {calendarHint, calendarStartView, cellClasses, footprintsOrTooLarge, mergeFootprints, stepAt, visiblePeriod} from './footprints';
+import {
+    calendarHint,
+    calendarStartView,
+    cellClasses,
+    footprintsOrTooLarge,
+    mergeFootprints,
+    stepAt,
+    stepsAround,
+    visiblePeriod,
+} from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
     return {time: {start: Date.parse(startIso), end: Date.parse(endIso)}, status, bounds: []};
@@ -70,6 +79,21 @@ describe('footprints', () => {
     it('finds the time step of a time and treats its end as excluded', () => {
         expect(stepAt([data, empty], Date.parse('2026-03-15T12:00:00Z'))).toBe(data);
         expect(stepAt([data, empty], Date.parse('2026-03-16T00:00:00Z'))).toBeUndefined();
+    });
+
+    it('takes the time steps around a time, shifted where one side has too few', () => {
+        const days = Array.from({length: 10}, (_, i) => ({
+            time: {start: i, end: i + 1},
+            status: TimeStepFootprintStatus.Data,
+            bounds: [],
+        }));
+        const starts = (timeMs: number): number[] => stepsAround(days, timeMs, 5).map((day) => day.time.start);
+
+        expect(starts(5)).toEqual([3, 4, 5, 6, 7]);
+        expect(starts(0)).toEqual([0, 1, 2, 3, 4]);
+        expect(starts(9)).toEqual([5, 6, 7, 8, 9]);
+        expect(starts(20)).toEqual([]);
+        expect(stepsAround(days.slice(0, 2), 1, 5)).toHaveLength(2);
     });
 
     it('knows the month, the year or the page of years the calendar shows', () => {

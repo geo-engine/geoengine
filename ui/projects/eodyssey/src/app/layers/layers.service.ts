@@ -70,6 +70,8 @@ export class EOdysseyLayerService {
         source: () => this.selectedDataSource()?.key,
         computation: () => !untracked(this.mapCenter),
     });
+    /** The user wants the selected visualization on the map. Off at first, so choosing a data source loads no data. */
+    readonly dataOnMap = signal(false);
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
     /**

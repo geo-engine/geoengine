@@ -83,3 +83,25 @@ export function boxFeatures(bounds: TimeStepFootprint['bounds'], fromSrs: string
         return new OlFeature<OlGeometry>(geometry);
     });
 }
+
+/** How much of a view the boxes of a time step cover. */
+export type ViewCoverage = 'full' | 'part' | 'none';
+
+const COVERAGE_SAMPLES = 8;
+
+/**
+ * How much of `extent` the boxes cover, both in the projection of the map. Boxes overlap, so their areas cannot be added
+ * up; a grid of points in the view is tested instead, which misses gaps smaller than an eighth of the view.
+ */
+export function viewCoverage(features: OlFeature<OlGeometry>[], extent: [number, number, number, number]): ViewCoverage {
+    const geometries = features.flatMap((feature) => feature.getGeometry() ?? []).filter((geometry) => geometry.intersectsExtent(extent));
+    if (!geometries.length) return 'none';
+    const [minX, minY, maxX, maxY] = extent;
+    for (let i = 0; i < COVERAGE_SAMPLES; i++) {
+        for (let j = 0; j < COVERAGE_SAMPLES; j++) {
+            const point = [minX + ((maxX - minX) * (i + 0.5)) / COVERAGE_SAMPLES, minY + ((maxY - minY) * (j + 0.5)) / COVERAGE_SAMPLES];
+            if (!geometries.some((geometry) => geometry.intersectsCoordinate(point))) return 'part';
+        }
+    }
+    return 'full';
+}

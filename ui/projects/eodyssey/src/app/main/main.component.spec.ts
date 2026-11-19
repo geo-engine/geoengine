@@ -164,7 +164,11 @@ describe('EOdyssey debug reprojection', () => {
         const element = fixture.nativeElement as HTMLElement;
         expect(element.querySelector('.zoom-prompt')).toBeNull();
 
+        // only while the coverage is on the map; the panel says it otherwise
         (TestBed.inject(FootprintsService).overlayTooLarge as WritableSignal<boolean>).set(true);
+        fixture.detectChanges();
+        expect(element.querySelector('.zoom-prompt')).toBeNull();
+        TestBed.inject(FootprintsService).overlayVisible.set(true);
         fixture.detectChanges();
 
         expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in to see where the scenes of this date are');

@@ -1,17 +1,23 @@
 import {A11yModule} from '@angular/cdk/a11y';
-import {ChangeDetectionStrategy, Component, DestroyRef, computed, inject, resource} from '@angular/core';
-import {toSignal} from '@angular/core/rxjs-interop';
-import {MatCheckboxModule} from '@angular/material/checkbox';
+import {ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, resource, untracked} from '@angular/core';
 import {MatCalendarView, MatDatepicker, MatDatepickerInputEvent, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {CoreModule, FootprintCalendarHeaderComponent, FootprintsService, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
 import type {DataSourceDefinition} from './data-sources';
 import {EOdysseyLayerService} from './layers.service';
+
+/** The dates the strip below the date shows. */
+const STRIP_DATES = 31;
+
+function formatDate(timeMs: number): string {
+    return new Time(timeMs).start.format('DD.MM.YYYY');
+}
 
 @Component({
     selector: 'geoengine-layers',
@@ -83,15 +89,6 @@ import {EOdysseyLayerService} from './layers.service';
         <section class="panel-section time-selection" aria-labelledby="time-heading">
             <h2 id="time-heading">Date</h2>
             <div class="time-controls">
-                <button
-                    matIconButton
-                    type="button"
-                    [attr.aria-label]="backwardsLabel()"
-                    (click)="timeBackwards()"
-                    [matTooltip]="backwardsLabel()"
-                >
-                    <mat-icon>navigate_before</mat-icon>
-                </button>
                 <input
                     matInput
                     [matDatepicker]="picker"
@@ -113,35 +110,84 @@ import {EOdysseyLayerService} from './layers.service';
                     [dateClass]="footprintsService.dateClass"
                     [calendarHeaderComponent]="footprintCalendarHeader"
                 ></mat-datepicker>
-                <button
-                    matIconButton
-                    type="button"
-                    [attr.aria-label]="forwardLabel()"
-                    (click)="timeForward()"
-                    [matTooltip]="forwardLabel()"
-                >
-                    <mat-icon>navigate_next</mat-icon>
+            </div>
+            @if (strip(); as ticks) {
+                @if (ticks.length) {
+                    <div class="date-strip" role="group" aria-label="Dates around the selected date">
+                        @for (tick of ticks; track tick.start) {
+                            <!-- not in the tab order: the buttons below and the calendar reach every date -->
+                            <button
+                                type="button"
+                                tabindex="-1"
+                                class="tick"
+                                [class.tick-data]="tick.status === 'data'"
+                                [class.tick-unknown]="tick.status === 'unknown'"
+                                [class.tick-selected]="tick.isSelected"
+                                [attr.aria-label]="tick.label"
+                                [attr.aria-current]="tick.isSelected ? 'date' : null"
+                                [matTooltip]="tick.label"
+                                (click)="selectTime(tick.start)"
+                            ></button>
+                        }
+                    </div>
+                    <p class="catalogue-message strip-legend">
+                        <span>{{ ticks[0].date }}</span>
+                        <span><span class="tick tick-data" aria-hidden="true"></span> scenes in or near this view</span>
+                        <span>{{ ticks[ticks.length - 1].date }}</span>
+                    </p>
+                }
+            }
+            <div class="time-jumps">
+                <button mat-stroked-button type="button" class="time-backwards" (click)="timeBackwards()">
+                    <mat-icon>navigate_before</mat-icon>
+                    {{ backwards()?.label }}
+                </button>
+                <button mat-stroked-button type="button" class="time-forward" (click)="timeForward()">
+                    {{ forward()?.label }}
+                    <mat-icon iconPositionEnd>navigate_next</mat-icon>
                 </button>
             </div>
             @if (footprintsService.tooLarge()) {
-                <p class="catalogue-message" role="status">Zoom in to see when and where data is available.</p>
-            } @else if (footprintsService.hasError()) {
-                <p class="catalogue-message catalogue-error" role="alert">Could not load the data availability.</p>
+                <p class="catalogue-message" role="status">Zoom in to see the dates with data.</p>
             }
-            <mat-checkbox [checked]="footprintsService.overlayVisible()" (change)="footprintsService.overlayVisible.set($event.checked)">
-                <span class="coverage-label">
-                    <span class="stripe-swatch" aria-hidden="true"></span>
-                    Show coverage on map
-                </span>
-            </mat-checkbox>
-            @if (areasText(); as text) {
-                <p class="catalogue-message" role="status">{{ text }}</p>
+        </section>
+        <mat-divider></mat-divider>
+
+        <section class="panel-section" aria-labelledby="availability-heading">
+            <div class="section-heading">
+                <h2 id="availability-heading">Data availability</h2>
+                <mat-slide-toggle
+                    labelPosition="before"
+                    [checked]="footprintsService.overlayVisible()"
+                    (change)="footprintsService.overlayVisible.set($event.checked)"
+                >
+                    <span class="coverage-label">
+                        <span class="stripe-swatch" aria-hidden="true"></span>
+                        Coverage on map
+                    </span>
+                </mat-slide-toggle>
+            </div>
+            @if (status(); as status) {
+                <p class="coverage-status" [class.coverage-stale]="footprintsService.overlayLoading()" role="status">
+                    <span class="status-dot" [class]="'status-' + status.kind" aria-hidden="true"></span>
+                    {{ status.text }}
+                </p>
             }
         </section>
         <mat-divider></mat-divider>
 
         <section class="panel-section" aria-labelledby="presets-heading">
-            <h2 id="presets-heading">Visualization</h2>
+            <div class="section-heading">
+                <h2 id="presets-heading">Visualization</h2>
+                <mat-slide-toggle
+                    labelPosition="before"
+                    class="data-on-map"
+                    [checked]="eodysseyLayerService.dataOnMap()"
+                    (change)="setDataOnMap($event.checked)"
+                >
+                    Data on map
+                </mat-slide-toggle>
+            </div>
             @if (eodysseyLayerService.catalogueLoading() || eodysseyLayerService.variantLoading()) {
                 <div class="catalogue-loading" role="status">
                     <mat-spinner diameter="24" aria-label="Loading visualization presets"></mat-spinner>
@@ -170,11 +216,6 @@ import {EOdysseyLayerService} from './layers.service';
                         [style.backgroundImage]="'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'"
                     >
                         <span matListItemTitle>{{ preset.displayName }}</span>
-                        @if (isOnMap(preset)) {
-                            <span class="preset-on-map-indicator" role="img" aria-label="On map" matTooltip="On map">
-                                <mat-icon aria-hidden="true">visibility</mat-icon>
-                            </span>
-                        }
                         @if (preset === eodysseyLayerService.selectedPreset()) {
                             <span matListItemMeta class="preset-selected-indicator" aria-hidden="true">
                                 <mat-icon>check</mat-icon>
@@ -183,35 +224,6 @@ import {EOdysseyLayerService} from './layers.service';
                     </mat-list-item>
                 }
             </mat-nav-list>
-            <div class="apply-preset-action">
-                @if (eodysseyLayerService.appliedPreset(); as applied) {
-                    <p class="catalogue-message on-map-status" role="status">
-                        <span>On map: {{ applied.displayName }}</span>
-                        <button
-                            mat-stroked-button
-                            type="button"
-                            class="remove-visualization"
-                            aria-label="Remove from map"
-                            (click)="eodysseyLayerService.removeVisualization()"
-                        >
-                            Remove
-                        </button>
-                    </p>
-                }
-                <!-- nothing to apply while the selected preset is the one on the map -->
-                @if (!eodysseyLayerService.appliedPreset() || eodysseyLayerService.canApplyPreset()) {
-                    <button
-                        mat-flat-button
-                        color="primary"
-                        type="button"
-                        class="apply-visualization"
-                        [disabled]="!eodysseyLayerService.canApplyPreset()"
-                        (click)="applySelectedPreset()"
-                    >
-                        {{ eodysseyLayerService.appliedPreset() ? 'Update map' : 'Show on map' }}
-                    </button>
-                }
-            </div>
         </section>
 
         @if (isLegendVisible()) {
@@ -300,10 +312,109 @@ import {EOdysseyLayerService} from './layers.service';
                 );
             }
 
+            .section-heading {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.5rem;
+
+                mat-slide-toggle {
+                    --mat-slide-toggle-label-text-size: #{$text2};
+                }
+            }
+
             .coverage-status {
                 display: flex;
                 align-items: center;
                 gap: 0.5rem;
+                margin: 0;
+                font-size: $text2;
+                line-height: 1.5;
+
+                // the answer of the view before, while the one of the moved view loads
+                &.coverage-stale {
+                    opacity: 0.5;
+                }
+            }
+
+            .status-dot {
+                flex: none;
+                box-sizing: border-box;
+                width: 0.8rem;
+                height: 0.8rem;
+                border: 2px solid var(--geoengine-foreground-secondary-text-color);
+                border-radius: 50%;
+
+                &.status-full {
+                    border-color: var(--geoengine-primary-color);
+                    background: var(--geoengine-primary-color);
+                }
+
+                &.status-part {
+                    border-color: var(--geoengine-primary-color);
+                    background: linear-gradient(90deg, var(--geoengine-primary-color) 50%, transparent 50%);
+                }
+
+                &.status-unknown {
+                    border-style: dashed;
+                }
+            }
+
+            .date-strip {
+                display: flex;
+                gap: 1px;
+                height: 1.75rem;
+            }
+
+            // the bar of a date: tall with scenes, short without, faint where the layer cannot tell
+            .tick {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                align-items: flex-end;
+                padding: 0;
+                border: none;
+                border-radius: 2px;
+                background: none;
+                cursor: pointer;
+
+                &::after {
+                    content: '';
+                    width: 100%;
+                    height: 25%;
+                    border-radius: 1px;
+                    background: var(--geoengine-foreground-secondary-text-color);
+                    opacity: 0.5;
+                }
+
+                &.tick-data::after {
+                    height: 100%;
+                    background: var(--geoengine-primary-color);
+                    opacity: 1;
+                }
+
+                &.tick-unknown::after {
+                    opacity: 0.2;
+                }
+
+                &.tick-selected {
+                    outline: 2px solid var(--geoengine-foreground-text-color);
+                    outline-offset: 1px;
+                }
+            }
+
+            .strip-legend {
+                display: flex;
+                justify-content: space-between;
+                gap: 0.5rem;
+
+                .tick {
+                    display: inline-flex;
+                    width: 0.3rem;
+                    height: 0.8rem;
+                    vertical-align: middle;
+                    cursor: default;
+                }
             }
 
             .catalogue-error {
@@ -344,16 +455,21 @@ import {EOdysseyLayerService} from './layers.service';
             }
 
             .time-selection {
-                mat-checkbox {
-                    --mat-checkbox-label-text-size: #{$text2};
-                }
-
                 .time-controls {
                     position: relative;
                     display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 0.25rem;
+                }
+
+                .time-jumps {
+                    display: flex;
+                    gap: 0.5rem;
+
+                    button {
+                        flex: 1;
+                        min-width: 0;
+                        border-radius: 0.5rem;
+                        font-size: $text2;
+                    }
                 }
 
                 // the date picker opens below its input, so the hidden input sits under the time controls
@@ -377,15 +493,6 @@ import {EOdysseyLayerService} from './layers.service';
                     border-radius: 0.5rem;
                     font-size: $text1;
                     font-weight: 600;
-                }
-
-                button[matIconButton] {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                    padding: 0;
-                    --mat-icon-button-state-layer-size: 2.5rem;
                 }
             }
 
@@ -471,47 +578,6 @@ import {EOdysseyLayerService} from './layers.service';
                 }
             }
 
-            .preset-on-map-indicator {
-                position: absolute;
-                top: 0.25rem;
-                left: 0.25rem;
-                z-index: 1;
-                display: grid;
-                place-items: center;
-                width: 1.5rem;
-                height: 1.5rem;
-                border-radius: 50%;
-                background-color: white;
-                color: black;
-
-                mat-icon {
-                    width: 1rem;
-                    height: 1rem;
-                    font-size: 1rem;
-                    line-height: 1;
-                }
-            }
-
-            .apply-preset-action {
-                display: flex;
-                flex-direction: column;
-                gap: 0.5rem;
-
-                > button {
-                    width: 100%;
-                    min-height: 2.75rem;
-                    border-radius: 0.5rem;
-                }
-
-                .on-map-status {
-                    display: flex;
-                    flex-wrap: wrap;
-                    align-items: center;
-                    justify-content: space-between;
-                    gap: 0.5rem;
-                }
-            }
-
             .legend {
                 .legend-layer-name {
                     display: block;
@@ -539,9 +605,9 @@ import {EOdysseyLayerService} from './layers.service';
         CoreModule,
         MatDatepickerModule,
         MatFormFieldModule,
-        MatCheckboxModule,
         MatListModule,
         MatSelectModule,
+        MatSlideToggleModule,
         MatProgressSpinnerModule,
         RasterLegendViewComponent,
         DataSourceNavigationComponent,
@@ -558,10 +624,8 @@ export class LayersComponent {
     readonly currentTime = this.footprintsService.time;
     readonly formattedTime = computed<string>(() => {
         const time = this.currentTime();
-        if (!time) return '';
-        return time.start.format('DD.MM.YYYY');
+        return time ? formatDate(time.start.valueOf()) : '';
     });
-    readonly timeStepDuration = toSignal(this.projectService.getTimeStepDurationStream());
     /** The calendar opens on the cell size of the time step: days, months or years. */
     readonly currentDate = computed<Date | undefined>(() => {
         const time = this.currentTime();
@@ -569,26 +633,45 @@ export class LayersComponent {
         return time.start.toDate();
     });
 
-    /** The areas the coverage on the map shows, once they are known. */
-    readonly areasText = computed<string | undefined>(() => {
-        const areas = this.footprintsService.overlayVisible() ? this.footprintsService.overlayAreaCount() : undefined;
-        if (areas === undefined) return undefined;
-        if (areas === 'unknown') return 'Where this layer has data on this date is not known.';
-        return `${areas} ${areas === 1 ? 'area' : 'areas'} in view on this date.`;
+    /** How much of the view the selected date covers, or why that is not known. */
+    readonly status = computed<{kind: 'full' | 'part' | 'none' | 'unknown'; text: string} | undefined>(() => {
+        const footprints = this.footprintsService;
+        if (footprints.overlayBlocked()) return {kind: 'unknown', text: 'Zoom in to load this layer.'};
+        if (footprints.overlayTooLarge()) return {kind: 'unknown', text: 'Zoom in to see where the scenes of this date are.'};
+        if (footprints.hasError()) return {kind: 'unknown', text: 'Could not load the data availability.'};
+        switch (footprints.viewCoverage()) {
+            case 'full':
+                return {kind: 'full', text: 'Scenes cover this view'};
+            case 'part':
+                return {kind: 'part', text: 'Scenes cover part of this view'};
+            case 'none':
+                return {kind: 'none', text: 'No scenes in this view on this date'};
+            case 'unknown':
+                return {kind: 'unknown', text: 'Not known for this data source'};
+            case undefined:
+                return footprints.overlayLoading() ? {kind: 'unknown', text: 'Checking this view…'} : undefined;
+        }
     });
-    readonly previousDateWithData = computed(() => this.footprintsService.dateWithData(-1));
-    readonly nextDateWithData = computed(() => this.footprintsService.dateWithData(1));
-    /** The arrows go to the next date with data when it is known, else by one time step. */
-    readonly backwardsLabel = computed(() =>
-        this.previousDateWithData()
-            ? 'Previous date with data'
-            : `Backwards ${this.timeStepDuration()?.durationAmount} ${this.timeStepDuration()?.durationUnit}`,
-    );
-    readonly forwardLabel = computed(() =>
-        this.nextDateWithData()
-            ? 'Next date with data'
-            : `Forward ${this.timeStepDuration()?.durationAmount} ${this.timeStepDuration()?.durationUnit}`,
-    );
+
+    /** The loaded dates around the selected one as bars, so the next date with scenes is seen without the calendar. */
+    readonly strip = computed(() => {
+        const now = this.currentTime()?.start.valueOf() ?? NaN;
+        return this.footprintsService.stepsAround(STRIP_DATES).map((step) => {
+            const date = formatDate(step.time.start);
+            const scenes = {data: 'scenes', empty: 'no scenes', unknown: 'not known'}[step.status];
+            return {
+                start: step.time.start,
+                date,
+                label: `${date}: ${scenes}`,
+                status: step.status,
+                isSelected: step.time.start <= now && now < step.time.end,
+            };
+        });
+    });
+
+    /** Where the buttons below the date go, which their labels say. */
+    readonly backwards = computed(() => this.jump(-1));
+    readonly forward = computed(() => this.jump(1));
 
     readonly legendLayer = resource({
         params: () => ({layerId: this.eodysseyLayerService.mapTileLayer()}),
@@ -633,13 +716,20 @@ export class LayersComponent {
     );
 
     constructor() {
+        // the panel shows the dates and the coverage of the selected one all the time
+        this.footprintsService.datesNeeded.set(true);
         inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
+        // while the data is on the map, the map follows the selection, so there is one active data source only
+        effect(() => {
+            if (this.eodysseyLayerService.dataOnMap() && this.eodysseyLayerService.canApplyPreset()) {
+                untracked(() => this.applySelectedPreset());
+            }
+        });
     }
 
-    /** A preset of another region or data source has other ids, so the eye only shows on the tile that is on the map. */
-    isOnMap(preset: {connectorId: string; layerId: string}): boolean {
-        const applied = this.eodysseyLayerService.appliedPreset();
-        return preset.connectorId === applied?.connectorId && preset.layerId === applied.layerId;
+    setDataOnMap(isOn: boolean): void {
+        this.eodysseyLayerService.dataOnMap.set(isOn);
+        if (!isOn) this.eodysseyLayerService.removeVisualization();
     }
 
     /** The time step of a data source is applied with it. */
@@ -664,19 +754,33 @@ export class LayersComponent {
         await this.stepTime(-1);
     }
 
-    /** Before the first step, the dates with data of the layer are not loaded, so selecting a layer costs no request. */
-    private async stepTime(direction: 1 | -1): Promise<void> {
-        this.footprintsService.datesNeeded.set(true);
+    /**
+     * The nearest date with scenes. Without one in the loaded dates, the first date beyond them, whose dates load then.
+     * One time step where the data source cannot tell its dates.
+     */
+    private jump(direction: 1 | -1): {time: Time; label: string} | undefined {
         const time = this.currentTime();
-        const timeStepDuration = this.timeStepDuration();
+        const timeStep = this.footprintsService.timeStep();
+        if (!time || !timeStep) return undefined;
 
-        if (!time || !timeStepDuration) return;
+        const withData = this.footprintsService.dateWithData(direction);
+        if (withData) return {time: withData, label: formatDate(withData.start.valueOf())};
+        const beyond = this.footprintsService.dateBeyondLoaded(direction);
+        if (beyond) return {time: beyond, label: 'Look further'};
 
-        const step =
-            direction === 1
-                ? time.add(timeStepDuration.durationAmount, timeStepDuration.durationUnit)
-                : time.subtract(timeStepDuration.durationAmount, timeStepDuration.durationUnit);
-        await this.projectService.setTime(this.footprintsService.dateWithData(direction) ?? step);
+        const amount = `${timeStep.durationAmount} ${timeStep.durationUnit}`;
+        return direction === 1
+            ? {time: time.add(timeStep.durationAmount, timeStep.durationUnit), label: `${amount} on`}
+            : {time: time.subtract(timeStep.durationAmount, timeStep.durationUnit), label: `${amount} back`};
+    }
+
+    private async stepTime(direction: 1 | -1): Promise<void> {
+        const jump = this.jump(direction);
+        if (jump) await this.projectService.setTime(jump.time);
+    }
+
+    async selectTime(start: number): Promise<void> {
+        await this.projectService.setTime(new Time(start));
     }
 
     async setDate(event: MatDatepickerInputEvent<Date>): Promise<void> {

@@ -1,4 +1,4 @@
-import {computed, effect, inject, resource, Service, signal, untracked} from '@angular/core';
+import {computed, effect, inject, linkedSignal, resource, Service, signal, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatCalendarCellClassFunction, MatCalendarView} from '@angular/material/datepicker';
 import OlFeature from 'ol/Feature';
@@ -8,7 +8,7 @@ import OlSourceVector from 'ol/source/Vector';
 import {Style} from 'ol/style';
 import {firstValueFrom} from 'rxjs';
 import {debounceTime} from 'rxjs/operators';
-import {RasterFootprintsPrecision, TimeInterval, TimeStepFootprintStatus} from '@geoengine/api-client';
+import {RasterFootprintsPrecision, TimeInterval, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {
     LayersService,
     ProcessingGraphsService,
@@ -18,7 +18,7 @@ import {
     TimeStepDuration,
     UUID,
 } from '@geoengine/common';
-import {boxFeatures, overlayStyle} from './footprint-overlay';
+import {boxFeatures, overlayStyle, viewCoverage, ViewCoverage} from './footprint-overlay';
 import {
     calendarHint,
     calendarStartView,
@@ -28,6 +28,7 @@ import {
     mergeFootprints,
     monthStartOfTime,
     stepAt,
+    stepsAround,
     visiblePeriod,
 } from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
@@ -57,7 +58,7 @@ export interface FootprintLayer {
 
 /**
  * Tells the calendar and the map overlay when and where the selected layer has data in the map's view.
- * Nothing is requested until the calendar is open or the overlay is on.
+ * Nothing is requested until the calendar is open, the overlay is on or the app says that it shows the dates.
  */
 @Service()
 export class FootprintsService {
@@ -83,9 +84,13 @@ export class FootprintsService {
     private readonly graphs = new Map<string, Promise<{processingGraphId: UUID; metadata: RasterLayerMetadata | undefined}>>();
 
     readonly calendarOpen = signal(false);
-    /** The app shows the dates of the layer outside of the calendar, e.g. next to the date with arrows. Set by the app. */
+    /**
+     * The app shows the dates of the layer and the coverage of the selected one outside of the calendar and the map, e.g.
+     * next to the date with arrows. Set by the app.
+     */
     readonly datesNeeded = signal(false);
     readonly overlayVisible = signal(false);
+    private readonly coverageNeeded = computed(() => this.overlayVisible() || this.datesNeeded());
     /** The map does not load the tiles of the layer at this zoom, so the overlay asks for nothing either. Set by the app. */
     readonly overlayBlocked = signal(false);
     /** Draw the overlay lighter, e.g. while the layer is on the map and its imagery lies below. Set by the app. */
@@ -164,7 +169,7 @@ export class FootprintsService {
             const mapSpatialReference = this.mapSpatialReference();
             const viewport = this.viewport();
             const time = this.time();
-            if (!this.overlayVisible() || this.overlayBlocked() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
+            if (!this.coverageNeeded() || this.overlayBlocked() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
             return {layer, mapSpatialReference, viewport, time};
         },
         loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<Footprints | undefined> => {
@@ -201,20 +206,48 @@ export class FootprintsService {
      * The boxes of the overlay need too many catalog searches. The dates with data may still be known, because counting
      * them needs no search where the catalog can count.
      */
-    readonly overlayTooLarge = computed(() => this.overlayVisible() && (this.overlayFootprints()?.tooLarge ?? false));
+    readonly overlayTooLarge = computed(() => this.coverageNeeded() && (this.overlayFootprints()?.tooLarge ?? false));
     readonly isLoading = computed(() => this.footprintsResource.isLoading());
     readonly hasError = computed(
-        () => this.footprintsResource.status() === 'error' || (this.overlayVisible() && this.overlayStepResource.status() === 'error'),
+        () => this.footprintsResource.status() === 'error' || (this.coverageNeeded() && this.overlayStepResource.status() === 'error'),
     );
 
-    readonly overlayLoading = computed(() => this.overlayVisible() && this.overlayStepResource.isLoading());
-    /** The areas of the selected time step in view, `unknown` if the layer cannot tell, undefined until they are loaded. */
-    readonly overlayAreaCount = computed((): number | 'unknown' | undefined => {
-        const time = this.time();
+    readonly overlayLoading = computed(() => this.coverageNeeded() && this.overlayStepResource.isLoading());
+    /** The boxes of the selected time step in the projection of the map, undefined until they are loaded. */
+    private readonly overlayFeatures = computed(() => {
         const footprints = this.overlayFootprints();
-        if (!time || !footprints) return undefined;
+        const mapSpatialReference = this.mapSpatialReference();
+        const time = this.time();
+        if (!footprints || footprints.tooLarge || !mapSpatialReference || !time) return undefined;
         const step = stepAt(footprints.steps, time.start.valueOf());
-        return step?.status === TimeStepFootprintStatus.Unknown ? 'unknown' : (step?.bounds.length ?? 0);
+        return {
+            date: time.start.valueOf(),
+            isUnknown: step?.status === TimeStepFootprintStatus.Unknown,
+            features: boxFeatures(step?.bounds ?? [], footprints.spatialReference, mapSpatialReference.srsString),
+        };
+    });
+    /**
+     * How much of the view the selected time step covers, `unknown` if the layer cannot tell, undefined until it is loaded.
+     * While the answer for a moved view loads (`overlayLoading`), the last one of the same layer and date stays.
+     */
+    readonly viewCoverage = linkedSignal<
+        {key: string; isLoading: boolean; loaded?: ViewCoverage | 'unknown'},
+        ViewCoverage | 'unknown' | undefined
+    >({
+        source: () => {
+            const overlay = this.overlayFeatures();
+            const viewport = this.viewport();
+            const mapSpatialReference = this.mapSpatialReference();
+            const extent =
+                viewport && mapSpatialReference && this.spatialReferenceService.clipBoundsIfAvailable(viewport.extent, mapSpatialReference);
+            return {
+                key: `${this.layer()?.key}/${this.time()?.start.valueOf()}`,
+                isLoading: this.overlayLoading(),
+                loaded: !overlay || !extent ? undefined : overlay.isUnknown ? 'unknown' : viewCoverage(overlay.features, extent),
+            };
+        },
+        computation: (source, previous) =>
+            source.loaded ?? (source.isLoading && previous?.source.key === source.key ? previous.value : undefined),
     });
 
     /** Stays one object, because replacing a layer redraws all layers of the map. */
@@ -256,6 +289,25 @@ export class FootprintsService {
         );
         const found = direction === 1 ? withData[0] : withData[withData.length - 1];
         return found && new Time(new Date(found.time.start));
+    }
+
+    /**
+     * Where to look on when `dateWithData` finds nothing: the first time step after (1) the loaded ones or the last
+     * before (-1) them. Undefined while no dates are loaded, if the layer cannot tell them, or if it has one step only.
+     */
+    dateBeyondLoaded(direction: 1 | -1): Time | undefined {
+        const steps = this.steps();
+        const timeStep = this.timeStep();
+        if (!timeStep || steps.length < 2 || steps.every((step) => step.status === TimeStepFootprintStatus.Unknown)) return undefined;
+        return direction === 1
+            ? new Time(new Date(steps[steps.length - 1].time.end))
+            : new Time(new Date(steps[0].time.start)).subtract(timeStep.durationAmount, timeStep.durationUnit);
+    }
+
+    /** At most `count` loaded time steps around the selected time, e.g. for a strip of dates. */
+    stepsAround(count: number): TimeStepFootprint[] {
+        const time = this.time();
+        return time ? stepsAround(this.steps(), time.start.valueOf(), count) : [];
     }
 
     /** The graph and the metadata of a layer. They do not change while the page is open, so they are asked for once. */
@@ -329,23 +381,20 @@ export class FootprintsService {
 
     private updateOverlay(): void {
         const source = this.overlayLayer.getSource();
-        const mapSpatialReference = this.mapSpatialReference();
-        const time = this.time();
 
         this.overlayLight();
         this.overlayStyleCache = undefined;
         // the calendar window only has availability, so the boxes come from the request of the overlay
-        const footprints = this.overlayFootprints();
+        const overlay = this.overlayFeatures();
         // like map tiles, the boxes of the date stay while those of a moved view load
-        const isSameDate = time?.start.valueOf() === this.overlayDate;
-        if (!footprints && this.overlayStepResource.isLoading() && isSameDate && this.overlayVisible()) return;
+        const isSameDate = this.time()?.start.valueOf() === this.overlayDate;
+        if (!overlay && this.overlayStepResource.isLoading() && isSameDate && this.overlayVisible()) return;
 
         source?.clear();
         this.overlayDate = undefined;
-        if (!source || !mapSpatialReference || !time || !this.overlayVisible() || !footprints) return;
+        if (!source || !this.overlayVisible() || !overlay) return;
 
-        const step = stepAt(footprints.steps, time.start.valueOf());
-        source.addFeatures(boxFeatures(step?.bounds ?? [], footprints.spatialReference, mapSpatialReference.srsString));
-        this.overlayDate = time.start.valueOf();
+        source.addFeatures(overlay.features);
+        this.overlayDate = overlay.date;
     }
 }

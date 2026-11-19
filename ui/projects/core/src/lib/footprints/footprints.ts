@@ -50,6 +50,14 @@ export function stepAt(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number):
     return steps.find((step) => step.time.start <= timeMs && timeMs < step.time.end);
 }
 
+/** At most `count` consecutive time steps with the one at `timeMs` in their middle, where enough steps are on both sides. */
+export function stepsAround(steps: ReadonlyArray<TimeStepFootprint>, timeMs: number, count: number): TimeStepFootprint[] {
+    const index = steps.findIndex((step) => step.time.start <= timeMs && timeMs < step.time.end);
+    if (index < 0) return [];
+    const start = Math.max(0, Math.min(index - Math.floor(count / 2), steps.length - count));
+    return steps.slice(start, start + count);
+}
+
 /** The first of the month of a UTC time. */
 export function monthStartOfTime(timeMs: number): number {
     const date = new Date(timeMs);

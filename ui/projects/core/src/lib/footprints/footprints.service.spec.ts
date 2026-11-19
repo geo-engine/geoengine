@@ -199,7 +199,7 @@ describe('FootprintsService overlay', () => {
 
         expect(service.hasError()).toBe(true);
         expect(() => service.tooLarge()).not.toThrow();
-        expect(service.overlayAreaCount()).toBeUndefined();
+        expect(service.viewCoverage()).toBeUndefined();
     });
 
     it("uses the time step the app sets instead of the project's", () => {
@@ -280,6 +280,17 @@ describe('FootprintsService overlay', () => {
             day(9, TimeStepFootprintStatus.Data),
         ];
 
+        /** The first request of the dates answers `steps`. The coverage of the selected date is asked for next to it. */
+        function answerDates(dates: RasterFootprints['steps'], coverage: RasterFootprints = FOOTPRINTS): void {
+            let isFirst = true;
+            getFootprints.mockImplementation((_id, query) => {
+                if (query.precision === RasterFootprintsPrecision.Coverage) return Promise.resolve(coverage);
+                const answer = isFirst ? {...FOOTPRINTS, steps: dates} : FOOTPRINTS;
+                isFirst = false;
+                return Promise.resolve(answer);
+            });
+        }
+
         it('loads the window of the selected time without the calendar when the app needs the dates', async () => {
             const service = createService();
             await settle();
@@ -294,7 +305,7 @@ describe('FootprintsService overlay', () => {
         });
 
         it('offers only the dates with data in the calendar and finds the nearest ones around the selected time', async () => {
-            getFootprints.mockResolvedValueOnce({...FOOTPRINTS, steps}).mockResolvedValue(FOOTPRINTS);
+            answerDates(steps);
             const service = createService();
             service.datesNeeded.set(true);
             await settle();
@@ -305,18 +316,40 @@ describe('FootprintsService overlay', () => {
             expect(service.dateFilter(new Date(2026, 5, 1))).toBe(true);
             expect(service.dateWithData(1)?.start.valueOf()).toBe(Date.UTC(2026, 3, 3));
             expect(service.dateWithData(-1)?.start.valueOf()).toBe(Date.UTC(2026, 3, -3));
+            // where to look on once no date with data is left in the loaded ones
+            expect(service.dateBeyondLoaded(1)?.start.valueOf()).toBe(Date.UTC(2026, 3, 10));
+            expect(service.dateBeyondLoaded(-1)?.start.valueOf()).toBe(Date.UTC(2026, 3, -4));
+            expect(service.stepsAround(3).map((step) => step.time.start)).toEqual(steps.slice(1, 4).map((step) => step.time.start));
         });
 
         it('finds no date with data beyond the loaded window', async () => {
-            getFootprints
-                .mockResolvedValueOnce({...FOOTPRINTS, steps: [day(1, TimeStepFootprintStatus.Data)]})
-                .mockResolvedValue(FOOTPRINTS);
+            answerDates([day(1, TimeStepFootprintStatus.Data)]);
             const service = createService();
             service.datesNeeded.set(true);
             await settle();
 
             expect(service.dateWithData(1)).toBeUndefined();
             expect(service.dateWithData(-1)).toBeUndefined();
+            expect(service.dateBeyondLoaded(1)).toBeUndefined();
+        });
+
+        it('tells how much of the view the selected date covers, without boxes on the map while the overlay is off', async () => {
+            // one degree is far more than the view of one metre
+            const box = {upperLeftCoordinate: {x: -1, y: 1}, lowerRightCoordinate: {x: 1, y: -1}};
+            answerDates(steps, {...FOOTPRINTS, steps: [{...day(1, TimeStepFootprintStatus.Data), bounds: [box]}]});
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+
+            expect(service.viewCoverage()).toBe('full');
+            expect(service.overlayLayer.getSource()?.getFeatures()).toHaveLength(0);
+
+            // the answer stays while the one of a moved view loads
+            getFootprints.mockReturnValue(new Promise(() => undefined));
+            viewport.next({extent: [0, 0, 2, 2], resolution: 1});
+            await settle();
+            expect(service.overlayLoading()).toBe(true);
+            expect(service.viewCoverage()).toBe('full');
         });
     });
 });
