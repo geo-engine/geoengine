@@ -332,6 +332,7 @@ export * from './SpatialReferenceSpecification';
 export * from './SpatialResolution';
 export * from './StacApiRetries';
 export * from './StacAssetBand';
+export * from './StacCoarserAsset';
 export * from './StacDataProviderDefinition';
 export * from './StacGrid';
 export * from './StacProviderAuthentication';

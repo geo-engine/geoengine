@@ -64,12 +64,18 @@ enum ReadPath<'a> {
 
 impl<'a> ReadPath<'a> {
     /// Blocks, if there is a block reader, the blocks read for the tile stay cached, and the
-    /// reader reads every file of the tile (with `block_reads = "auto"`: all are remote).
-    fn of(blocks: Option<&'a BlockIo>, plan: &TilePlan) -> Self {
+    /// reader reads every file of the tile: with `block_reads = "auto"` all are remote, and none
+    /// is coarser than the dataset. Such a file has no level of the dataset, GDAL resamples it.
+    fn of(blocks: Option<&'a BlockIo>, plan: &TilePlan, reader_mode: &GdalReaderMode) -> Self {
         match blocks {
             Some(blocks)
                 if blocks.caches(plan.cache_hint)
-                    && plan.files.iter().all(|file| blocks.reads(file)) =>
+                    && plan.files.iter().all(|file| {
+                        blocks.reads(file)
+                            && reader_mode
+                                .coarser_file_factor(&file.spatial_grid_definition())
+                                .is_none()
+                    }) =>
             {
                 ReadPath::Blocks(blocks)
             }
@@ -101,7 +107,7 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
     let factor = reader_mode.level_factor();
-    let path = ReadPath::of(blocks, &plan);
+    let path = ReadPath::of(blocks, &plan, &reader_mode);
 
     for params in plan.files {
         let Some(read_advise) = reader_mode
@@ -344,18 +350,45 @@ mod tests {
             files,
             cache_hint: CacheHint::max_duration(),
         };
+        let reader_mode = GdalReaderMode::OriginalResolution(ReaderState {
+            dataset_spatial_grid: local.spatial_grid_definition(),
+        });
         let all_remote = plan(vec![remote(remote_paths[0]), remote(remote_paths[1])]);
         let mixed = plan(vec![remote(remote_paths[0]), local.clone()]);
         assert!(matches!(
-            ReadPath::of(Some(&auto), &all_remote),
+            ReadPath::of(Some(&auto), &all_remote, &reader_mode),
             ReadPath::Blocks(_)
         ));
-        assert!(matches!(ReadPath::of(Some(&auto), &mixed), ReadPath::Gdal));
         assert!(matches!(
-            ReadPath::of(Some(&on), &mixed),
+            ReadPath::of(Some(&auto), &mixed, &reader_mode),
+            ReadPath::Gdal
+        ));
+        assert!(matches!(
+            ReadPath::of(Some(&on), &mixed, &reader_mode),
             ReadPath::Blocks(_)
         ));
-        assert!(matches!(ReadPath::of(None, &all_remote), ReadPath::Gdal));
+        assert!(matches!(
+            ReadPath::of(None, &all_remote, &reader_mode),
+            ReadPath::Gdal
+        ));
+
+        // a file twice as coarse as the dataset has no level of the dataset: its tile goes
+        // through GDAL as a whole
+        let coarser = GdalDatasetParameters {
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (-180., 90.).into(),
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(0.2),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-0.2),
+            },
+            width: 1800,
+            height: 900,
+            ..local.clone()
+        };
+        let with_coarser = plan(vec![local.clone(), coarser]);
+        assert!(matches!(
+            ReadPath::of(Some(&on), &with_coarser, &reader_mode),
+            ReadPath::Gdal
+        ));
     }
 
     fn ndvi_jan_2014_params() -> GdalDatasetParameters {
