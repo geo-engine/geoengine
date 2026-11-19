@@ -10,7 +10,6 @@ Name | Type
 `spatialReference` | string
 `steps` | [Array&lt;TimeStepFootprint&gt;](TimeStepFootprint.md)
 `next` | [TimeInterval](TimeInterval.md)
-`tooLarge` | boolean
 
 ## Example
 
@@ -22,7 +21,6 @@ const example = {
   "spatialReference": null,
   "steps": null,
   "next": null,
-  "tooLarge": null,
 } satisfies RasterFootprints
 
 console.log(example)

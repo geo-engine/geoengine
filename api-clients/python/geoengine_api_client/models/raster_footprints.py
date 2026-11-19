@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.time_interval import TimeInterval
 from geoengine_api_client.models.time_step_footprint import TimeStepFootprint
@@ -32,8 +32,7 @@ class RasterFootprints(BaseModel):
     spatial_reference: StrictStr = Field(description="The spatial reference of the `bounds`.", alias="spatialReference")
     steps: List[TimeStepFootprint]
     next: Optional[TimeInterval] = Field(default=None, description="The next time step to ask for, if more steps exist within the requested time interval.")
-    too_large: StrictBool = Field(description="Answering needs too many catalog searches. Query a smaller area or time range.", alias="tooLarge")
-    __properties: ClassVar[List[str]] = ["spatialReference", "steps", "next", "tooLarge"]
+    __properties: ClassVar[List[str]] = ["spatialReference", "steps", "next"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -102,8 +101,7 @@ class RasterFootprints(BaseModel):
         _obj = cls.model_validate({
             "spatialReference": obj.get("spatialReference"),
             "steps": [TimeStepFootprint.from_dict(_item) for _item in obj["steps"]] if obj.get("steps") is not None else None,
-            "next": TimeInterval.from_dict(obj["next"]) if obj.get("next") is not None else None,
-            "tooLarge": obj.get("tooLarge")
+            "next": TimeInterval.from_dict(obj["next"]) if obj.get("next") is not None else None
         })
         return _obj
 
