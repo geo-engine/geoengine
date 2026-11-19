@@ -132,8 +132,10 @@ function formatDate(timeMs: number): string {
                     </div>
                     <p class="catalogue-message strip-legend">
                         <span>{{ ticks[0].date }}</span>
-                        <span><span class="tick tick-data" aria-hidden="true"></span> scenes in or near this view</span>
                         <span>{{ ticks[ticks.length - 1].date }}</span>
+                    </p>
+                    <p class="catalogue-message strip-legend">
+                        <span><span class="tick tick-data" aria-hidden="true"></span> scenes in or near this view</span>
                     </p>
                 }
             }
