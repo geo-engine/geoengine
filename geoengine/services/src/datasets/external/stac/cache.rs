@@ -173,6 +173,11 @@ impl StacQueryCache {
             .await;
     }
 
+    /// Whether the cache keeps results at all. A search done only to fill it is wasted otherwise.
+    pub(crate) fn stores_results(&self) -> bool {
+        self.max_bytes > 0 && !self.ttl.is_zero()
+    }
+
     /// Stores what a wider search found for one cell and time step, so that step needs no search.
     pub(crate) async fn insert(
         &self,
@@ -182,11 +187,7 @@ impl StacQueryCache {
         files: Vec<StacTileFile>,
     ) {
         let bytes = result_bytes(&files);
-        if self.max_bytes == 0
-            || self.ttl.is_zero()
-            || bytes > self.max_bytes
-            || u32::try_from(bytes).is_err()
-        {
+        if !self.stores_results() || bytes > self.max_bytes || u32::try_from(bytes).is_err() {
             return;
         }
 

@@ -679,6 +679,10 @@ impl StacMultiBandMetaData {
         }
 
         self.reject_too_many_searches(searches.len())?;
+        if !self.query_cache.stores_results() {
+            // the steps are searched one by one afterwards anyway
+            return Ok(());
+        }
         self.search_spans(items_url, dataset_id, searches).await
     }
 
@@ -3407,6 +3411,35 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
 
         assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn without_a_cache_a_window_is_searched_only_step_by_step() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        // one search per step, no window search before them, whose result could not be kept
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                .times(2)
+                .respond_with(responders::json_encoded(collection(
+                    &[item("found", 0.)],
+                    None,
+                ))),
+        );
+        let provider = provider(
+            &server,
+            0,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).in_parts())
+            .await
+            .unwrap();
+        assert_eq!(info.time_steps().len(), 2);
     }
 
     #[tokio::test]
