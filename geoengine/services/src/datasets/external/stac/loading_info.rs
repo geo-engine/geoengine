@@ -482,14 +482,13 @@ impl StacMultiBandMetaData {
         number_of_steps: usize,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
     ) -> geoengine_operators::util::Result<()> {
-        if number_of_steps > 1 {
-            return self
-                .search_missing_steps(items_url, time_interval, cell_bboxes)
-                .await;
+        // A single step has no limit: it runs the searches the map tiles of that step run, with
+        // the same cache entries, so the coverage of a date works wherever its tiles do.
+        if number_of_steps <= 1 {
+            return Ok(());
         }
-        // A single step is read by the per-step lookup of the data path, which has no limit for map
-        // tiles. A footprint query over too many cells is still too large.
-        self.reject_too_many_searches(cell_bboxes.len())
+        self.search_missing_steps(items_url, time_interval, cell_bboxes)
+            .await
     }
 
     /// For each step whether any cell has an item in it, from one aggregation, if the server can
@@ -3963,14 +3962,44 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        for time in [window(3, 5), interval(3)] {
-            let result = meta.loading_info(query(world, time).in_parts()).await;
+        let result = meta.loading_info(query(world, window(3, 5)).in_parts()).await;
 
-            assert!(matches!(
-                result,
-                Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
-            ));
-        }
+        assert!(matches!(
+            result,
+            Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn one_step_is_searched_over_more_cells_than_the_footprint_limit() {
+        let server = Server::run();
+        expect_aggregation_unsupported(&server);
+        server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/test/items"))
+                .times(2..)
+                .respond_with(responders::json_encoded(collection(&[], None))),
+        );
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 8,
+            },
+        );
+        provider.query_cache = Arc::new(
+            StacQueryCache::new(1024 * 1024, Duration::from_mins(1)).with_max_footprint_searches(1),
+        );
+        let meta = metadata(&provider, 0).await;
+        let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
+
+        let one_step = meta.loading_info(query(world, interval(3)).in_parts()).await;
+        assert!(one_step.is_ok(), "{one_step:?}");
+
+        let window = meta.loading_info(query(world, window(3, 5)).in_parts()).await;
+        assert!(matches!(
+            window,
+            Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
+        ));
     }
 
     #[tokio::test]
