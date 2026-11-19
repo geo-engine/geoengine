@@ -157,13 +157,15 @@ function formatDate(timeMs: number): string {
             <div class="section-heading">
                 <h2 id="availability-heading">Data availability</h2>
                 <mat-slide-toggle
+                    hideIcon
                     labelPosition="before"
+                    aria-label="Coverage on map"
                     [checked]="footprintsService.overlayVisible()"
                     (change)="footprintsService.overlayVisible.set($event.checked)"
                 >
                     <span class="coverage-label">
                         <span class="stripe-swatch" aria-hidden="true"></span>
-                        Coverage on map
+                        On map
                     </span>
                 </mat-slide-toggle>
             </div>
@@ -180,12 +182,14 @@ function formatDate(timeMs: number): string {
             <div class="section-heading">
                 <h2 id="presets-heading">Visualization</h2>
                 <mat-slide-toggle
+                    hideIcon
                     labelPosition="before"
                     class="data-on-map"
+                    aria-label="Data on map"
                     [checked]="eodysseyLayerService.dataOnMap()"
                     (change)="setDataOnMap($event.checked)"
                 >
-                    Data on map
+                    On map
                 </mat-slide-toggle>
             </div>
             @if (eodysseyLayerService.catalogueLoading() || eodysseyLayerService.variantLoading()) {
@@ -317,6 +321,7 @@ function formatDate(timeMs: number): string {
                 align-items: center;
                 justify-content: space-between;
                 gap: 0.5rem;
+                white-space: nowrap;
 
                 mat-slide-toggle {
                     --mat-slide-toggle-label-text-size: #{$text2};
@@ -467,8 +472,10 @@ function formatDate(timeMs: number): string {
                     button {
                         flex: 1;
                         min-width: 0;
+                        padding: 0 0.5rem;
                         border-radius: 0.5rem;
                         font-size: $text2;
+                        white-space: nowrap;
                     }
                 }
 

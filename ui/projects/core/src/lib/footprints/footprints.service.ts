@@ -90,6 +90,8 @@ export class FootprintsService {
      */
     readonly datesNeeded = signal(false);
     readonly overlayVisible = signal(false);
+    /** Its own signal, so opening the calendar does not load dates again that the app shows already. */
+    private readonly datesWanted = computed(() => this.calendarOpen() || this.datesNeeded());
     private readonly coverageNeeded = computed(() => this.overlayVisible() || this.datesNeeded());
     /** The map does not load the tiles of the layer at this zoom, so the overlay asks for nothing either. Set by the app. */
     readonly overlayBlocked = signal(false);
@@ -109,9 +111,7 @@ export class FootprintsService {
             const timeStep = this.timeStep();
             const viewport = this.viewport();
             const window = this.window();
-            const isNeeded = this.calendarOpen() || this.datesNeeded();
-
-            if (!isNeeded || !layer || !mapSpatialReference || !timeStep || !viewport || !window) {
+            if (!this.datesWanted() || !layer || !mapSpatialReference || !timeStep || !viewport || !window) {
                 return undefined;
             }
             return {layer, mapSpatialReference, timeStep, viewport, window};

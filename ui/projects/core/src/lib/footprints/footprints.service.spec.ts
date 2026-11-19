@@ -304,6 +304,19 @@ describe('FootprintsService overlay', () => {
             expect(windowRequests.every(([, query]) => query.precision === RasterFootprintsPrecision.Availability)).toBe(true);
         });
 
+        it('does not load the dates again when the calendar opens on dates the app shows already', async () => {
+            answerDates(Array.from({length: 100}, (_, i) => day(1 + i, TimeStepFootprintStatus.Data)));
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            const requests = getFootprints.mock.calls.length;
+
+            openCalendar(service);
+            await settle();
+
+            expect(getFootprints.mock.calls.length).toBe(requests);
+        });
+
         it('offers only the dates with data in the calendar and finds the nearest ones around the selected time', async () => {
             answerDates(steps);
             const service = createService();
