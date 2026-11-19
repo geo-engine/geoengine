@@ -438,10 +438,17 @@ async fn export_loop(api: Api, graph: String, stop: Arc<AtomicBool>) -> u64 {
             "/tasks/{}/status",
             task["taskId"].as_str().unwrap_or_default()
         );
+        let mut failed_polls = 0;
         loop {
-            let status = api.get(&path).await?;
-            if status["status"] != "running" {
-                return reqwest::Result::Ok(status);
+            // the status request is idempotent: retry it if the server closed the connection under load
+            match api.get(&path).await {
+                Ok(status) if status["status"] != "running" => return reqwest::Result::Ok(status),
+                Ok(_) => failed_polls = 0,
+                Err(error) if failed_polls < 3 => {
+                    eprintln!("export status poll failed, retrying: {error}");
+                    failed_polls += 1;
+                }
+                Err(error) => return Err(error),
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
@@ -463,7 +470,9 @@ struct Usage {
     threads: u64,
 }
 
-/// Usage per thread group (thread name without its number) of `pid` and its child processes, and their summed peak RSS in kB
+/// Usage per thread group (thread name without its number) of `pid` and its child processes, and their summed peak RSS in kB.
+/// The CPU time of threads that ended (e.g. the decoding threads `OpenJPEG` starts per read) only shows in the
+/// process total, so each process also gets a group `ended threads` with the rest of its total.
 fn thread_groups(pid: u32) -> (BTreeMap<String, Usage>, u64) {
     let children = fs::read_dir("/proc").unwrap().filter_map(|entry| {
         let child: u32 = entry.ok()?.file_name().to_str()?.parse().ok()?;
@@ -483,6 +492,13 @@ fn thread_groups(pid: u32) -> (BTreeMap<String, Usage>, u64) {
         let Ok(tasks) = fs::read_dir(format!("/proc/{process}/task")) else {
             continue;
         };
+        let Some(process_ticks) = fs::read_to_string(format!("/proc/{process}/stat"))
+            .ok()
+            .and_then(|stat| cpu_ticks(&stat))
+        else {
+            continue; // the process exited
+        };
+        let mut thread_ticks = 0;
         for task in tasks.flatten() {
             let (Ok(stat), Ok(sched)) = (
                 fs::read_to_string(task.path().join("stat")),
@@ -493,21 +509,28 @@ fn thread_groups(pid: u32) -> (BTreeMap<String, Usage>, u64) {
             let name = stat[stat.find('(').unwrap() + 1..stat.rfind(')').unwrap()]
                 .trim_end_matches(|c: char| c.is_ascii_digit());
             let name = name.strip_suffix(['-', '_', ' ']).unwrap_or(name);
-            let fields: Vec<&str> = stat[stat.rfind(')').unwrap() + 2..]
-                .split_whitespace()
-                .collect();
             let usage = groups.entry(format!("{prefix}{name}")).or_default();
-            // fields 14 and 15 of `stat` are utime and stime
-            usage.cpu_ticks +=
-                fields[11].parse::<u64>().unwrap() + fields[12].parse::<u64>().unwrap();
+            let ticks = cpu_ticks(&stat).unwrap();
+            usage.cpu_ticks += ticks;
+            thread_ticks += ticks;
             usage.switches += proc_value(&sched, "nr_switches");
             usage.migrations += proc_value(&sched, "se.nr_migrations");
             usage.threads += 1;
         }
+        groups
+            .entry(format!("{prefix}ended threads"))
+            .or_default()
+            .cpu_ticks += process_ticks.saturating_sub(thread_ticks);
         peak_rss_kb += fs::read_to_string(format!("/proc/{process}/status"))
             .map_or(0, |status| proc_value(&status, "VmHWM"));
     }
     (groups, peak_rss_kb)
+}
+
+/// utime plus stime of a `/proc` `stat` file, fields 14 and 15; for a process, they include its ended threads
+fn cpu_ticks(stat: &str) -> Option<u64> {
+    let mut fields = stat[stat.rfind(')')? + 2..].split_whitespace().skip(11);
+    Some(fields.next()?.parse::<u64>().ok()? + fields.next()?.parse::<u64>().ok()?)
 }
 
 /// The number after `key` and a colon in a `/proc` file, e.g. `nr_switches : 42` or `VmHWM: 42 kB`
