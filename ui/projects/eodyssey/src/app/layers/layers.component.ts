@@ -132,10 +132,8 @@ function formatDate(timeMs: number): string {
                     </div>
                     <p class="catalogue-message strip-legend">
                         <span>{{ ticks[0].date }}</span>
+                        <span class="strip-key"><span class="tick tick-data" aria-hidden="true"></span> scenes in or near this view</span>
                         <span>{{ ticks[ticks.length - 1].date }}</span>
-                    </p>
-                    <p class="catalogue-message strip-legend">
-                        <span><span class="tick tick-data" aria-hidden="true"></span> scenes in or near this view</span>
                     </p>
                 }
             }
@@ -412,8 +410,17 @@ function formatDate(timeMs: number): string {
 
             .strip-legend {
                 display: flex;
+                flex-wrap: wrap;
                 justify-content: space-between;
-                gap: 0.5rem;
+                gap: 0 0.5rem;
+
+                // between the two dates where the panel is wide enough, else on a line of its own below them
+                @container (max-width: 24rem) {
+                    .strip-key {
+                        order: 1;
+                        flex-basis: 100%;
+                    }
+                }
 
                 .tick {
                     display: inline-flex;
@@ -462,6 +469,8 @@ function formatDate(timeMs: number): string {
             }
 
             .time-selection {
+                container-type: inline-size;
+
                 .time-controls {
                     position: relative;
                     display: flex;
