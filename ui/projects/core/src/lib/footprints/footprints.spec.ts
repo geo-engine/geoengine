@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
-import {TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
-import {calendarStartView, cellClasses, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
+import {ResponseError, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
+import {calendarStartView, cellClasses, footprintsOrTooLarge, mergeFootprints, monthStartUtc, stepAt, windowRequests} from './footprints';
 
 function step(startIso: string, endIso: string, status: TimeStepFootprintStatus): TimeStepFootprint {
     return {time: {start: Date.parse(startIso), end: Date.parse(endIso)}, status, bounds: []};
@@ -103,5 +103,15 @@ describe('footprints', () => {
         expect(merged.steps).toEqual([data, empty]);
         expect(merged.next).toBe(next);
         expect(merged.tooLarge).toBe(true);
+    });
+
+    it('turns the error of too many catalog searches into tooLarge and keeps other errors', async () => {
+        const failed = (error: string): Promise<never> =>
+            Promise.reject(new ResponseError(new Response(JSON.stringify({error, message: ''}), {status: 400})));
+
+        expect((await footprintsOrTooLarge(failed('FootprintQueryTooLarge'))).tooLarge).toBe(true);
+        await expect(footprintsOrTooLarge(failed('Operator'))).rejects.toBeInstanceOf(ResponseError);
+        const answer = await footprintsOrTooLarge(Promise.resolve({spatialReference: 'EPSG:4326', steps: [], next: null}));
+        expect(answer.tooLarge).toBe(false);
     });
 });

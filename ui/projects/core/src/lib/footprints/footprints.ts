@@ -1,5 +1,5 @@
 import {MatCalendarView} from '@angular/material/datepicker';
-import {RasterFootprints, TimeInterval, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
+import {RasterFootprints, ResponseError, TimeInterval, TimeStepFootprint, TimeStepFootprintStatus} from '@geoengine/api-client';
 
 /** The calendar's dates are UTC dates in the local fields of a `Date` (see `setDate` in the layers component). */
 export function calendarCellRange(date: Date, view: MatCalendarView): TimeInterval {
@@ -73,6 +73,22 @@ export function windowRequests(windowStartMs: number, windowEndMs: number): Time
 }
 
 /** The footprints of two consecutive requests of one window. */
-export function mergeFootprints(first: RasterFootprints, second: RasterFootprints): RasterFootprints {
+export function mergeFootprints(first: Footprints, second: Footprints): Footprints {
     return {...first, steps: [...first.steps, ...second.steps], next: second.next, tooLarge: first.tooLarge || second.tooLarge};
+}
+
+/** Footprints, and whether answering them needs too many catalog searches; then they have no steps. */
+export type Footprints = RasterFootprints & {tooLarge: boolean};
+
+/** The answer of a footprints request, with the error `FootprintQueryTooLarge` of the server as `tooLarge`. */
+export async function footprintsOrTooLarge(request: Promise<RasterFootprints>): Promise<Footprints> {
+    try {
+        return {...(await request), tooLarge: false};
+    } catch (error) {
+        const body: unknown = error instanceof ResponseError ? await error.response.json().catch(() => undefined) : undefined;
+        if (typeof body === 'object' && body !== null && 'error' in body && body.error === 'FootprintQueryTooLarge') {
+            return {spatialReference: '', steps: [], next: null, tooLarge: true};
+        }
+        throw error;
+    }
 }

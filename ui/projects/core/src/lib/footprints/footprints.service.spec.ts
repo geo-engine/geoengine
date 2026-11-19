@@ -8,7 +8,7 @@ import {MapService} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
 
-const FOOTPRINTS: RasterFootprints = {spatialReference: 'EPSG:4326', steps: [], next: null, tooLarge: false};
+const FOOTPRINTS: RasterFootprints = {spatialReference: 'EPSG:4326', steps: [], next: null};
 
 describe('FootprintsService overlay', () => {
     const registerLayer = vi.fn<(connector: string, layer: string) => Promise<string>>();

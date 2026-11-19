@@ -8,7 +8,7 @@ import OlSourceVector from 'ol/source/Vector';
 import {Style} from 'ol/style';
 import {firstValueFrom} from 'rxjs';
 import {debounceTime} from 'rxjs/operators';
-import {RasterFootprints, RasterFootprintsPrecision, TimeInterval, TimeStepFootprintStatus} from '@geoengine/api-client';
+import {RasterFootprintsPrecision, TimeInterval, TimeStepFootprintStatus} from '@geoengine/api-client';
 import {
     LayersService,
     ProcessingGraphsService,
@@ -19,7 +19,17 @@ import {
     UUID,
 } from '@geoengine/common';
 import {boxFeatures, overlayStyle} from './footprint-overlay';
-import {calendarStartView, cellClasses, mergeFootprints, monthStartOfTime, monthStartUtc, stepAt, windowRequests} from './footprints';
+import {
+    calendarStartView,
+    cellClasses,
+    Footprints,
+    footprintsOrTooLarge,
+    mergeFootprints,
+    monthStartOfTime,
+    monthStartUtc,
+    stepAt,
+    windowRequests,
+} from './footprints';
 import {MapService, ViewportSize} from '../map/map.service';
 import {ProjectService} from '../project/project.service';
 import {SpatialReferenceService} from '../spatial-references/spatial-reference.service';
@@ -75,7 +85,7 @@ export class FootprintsService {
     readonly overlayLight = signal(false);
     private readonly windowStart = signal<number | undefined>(undefined);
     /** The visible month of a window while the rest of it loads. */
-    private readonly partialFootprints = signal<RasterFootprints | undefined>(undefined);
+    private readonly partialFootprints = signal<Footprints | undefined>(undefined);
 
     private readonly footprintsResource = resource({
         params: () => {
@@ -94,7 +104,7 @@ export class FootprintsService {
         loader: async ({
             params: {layer, mapSpatialReference, timeStep, viewport, windowStart},
             abortSignal,
-        }): Promise<RasterFootprints | undefined> => {
+        }): Promise<Footprints | undefined> => {
             this.partialFootprints.set(undefined);
             const query = await this.queryOf(layer, mapSpatialReference, viewport);
             if (!query) return undefined;
@@ -102,18 +112,20 @@ export class FootprintsService {
             const start = new Time(new Date(windowStart));
             const end = start.add(timeStep.durationAmount * WINDOW_TIME_STEPS, timeStep.durationUnit);
             // aborting makes the server stop starting catalog searches for a view the user already left
-            const get = (range: TimeInterval): Promise<RasterFootprints> =>
-                this.processingGraphsService.getFootprints(
-                    query.processingGraphId,
-                    {
-                        spatialBounds: query.spatialBounds,
-                        timeInterval: new Time(new Date(range.start), new Date(range.end)).asRequestString(),
-                        attributes: '0',
-                        limit: WINDOW_TIME_STEPS,
-                        // the calendar only needs to know which days have data
-                        precision: RasterFootprintsPrecision.Availability,
-                    },
-                    abortSignal,
+            const get = (range: TimeInterval): Promise<Footprints> =>
+                footprintsOrTooLarge(
+                    this.processingGraphsService.getFootprints(
+                        query.processingGraphId,
+                        {
+                            spatialBounds: query.spatialBounds,
+                            timeInterval: new Time(new Date(range.start), new Date(range.end)).asRequestString(),
+                            attributes: '0',
+                            limit: WINDOW_TIME_STEPS,
+                            // the calendar only needs to know which days have data
+                            precision: RasterFootprintsPrecision.Availability,
+                        },
+                        abortSignal,
+                    ),
                 );
 
             const [month, rest] = windowRequests(start.start.valueOf(), end.start.valueOf());
@@ -136,19 +148,21 @@ export class FootprintsService {
             if (!this.overlayVisible() || !layer || !mapSpatialReference || !viewport || !time) return undefined;
             return {layer, mapSpatialReference, viewport, time};
         },
-        loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<RasterFootprints | undefined> => {
+        loader: async ({params: {layer, mapSpatialReference, viewport, time}, abortSignal}): Promise<Footprints | undefined> => {
             const query = await this.queryOf(layer, mapSpatialReference, viewport, OVERLAY_MARGIN);
             if (!query) return undefined;
-            return await this.processingGraphsService.getFootprints(
-                query.processingGraphId,
-                {
-                    spatialBounds: query.spatialBounds,
-                    timeInterval: time.asRequestString(),
-                    attributes: '0',
-                    limit: 1,
-                    precision: RasterFootprintsPrecision.Coverage,
-                },
-                abortSignal,
+            return await footprintsOrTooLarge(
+                this.processingGraphsService.getFootprints(
+                    query.processingGraphId,
+                    {
+                        spatialBounds: query.spatialBounds,
+                        timeInterval: time.asRequestString(),
+                        attributes: '0',
+                        limit: 1,
+                        precision: RasterFootprintsPrecision.Coverage,
+                    },
+                    abortSignal,
+                ),
             );
         },
     });
