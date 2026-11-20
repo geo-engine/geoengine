@@ -129,6 +129,11 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(default)]
     pub max_concurrent_cell_searches: Option<i32>,
+    /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
+    /// size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it
+    /// which time steps have items instead of searching them. Omitted values do not use it.
+    #[serde(default)]
+    pub datetime_frequency_aggregation: Option<bool>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -444,6 +449,8 @@ pub struct StacDataProvider {
     query_cache: Arc<StacQueryCache>,
     /// STAC searches one loading info request runs in parallel
     max_concurrent_cell_searches: usize,
+    /// Whether the server answers `datetime_frequency` aggregations in the size asked for
+    datetime_frequency_aggregation: bool,
     grid: StacGrid,
 }
 
@@ -475,6 +482,7 @@ impl StacDataProvider {
                 definition.query_timeout_secs as u64,
             ))
             .build()?;
+        let query_cache = Arc::new(request_registry.new_query_cache());
         let client = StacClient::new(client, &definition.api_url, request_registry)?;
 
         Ok(Self {
@@ -489,8 +497,11 @@ impl StacDataProvider {
             page_limit: definition.page_limit,
             client,
             cache_ttl_secs: definition.cache_ttl_secs,
-            query_cache: Arc::new(StacQueryCache::default()),
+            query_cache,
             max_concurrent_cell_searches,
+            datetime_frequency_aggregation: definition
+                .datetime_frequency_aggregation
+                .unwrap_or(false),
             grid,
         })
     }
@@ -581,6 +592,35 @@ mod tests {
             .unwrap();
         assert!(Arc::ptr_eq(&expected, &first_coordinator));
         assert!(Arc::ptr_eq(&expected, &second_coordinator));
+    }
+
+    #[test]
+    fn it_configures_the_cache_of_a_provider_with_the_settings_of_its_registry() {
+        use geoengine_datatypes::util::test::TestDefault;
+
+        let definition: StacDataProviderDefinition =
+            serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
+                include_str!("../../../../../test_data/provider_defs_api/stac_sentinel2.json"),
+            )
+            .unwrap()
+            .into();
+        let config = crate::config::StacCache {
+            search_chunk_steps: std::num::NonZeroU32::new(11).unwrap(),
+            max_footprint_searches: 7,
+            availability_search_cells: 3,
+            ..crate::config::StacCache::test_default()
+        };
+
+        let configured = StacDataProvider::from_definition_with_request_registry(
+            definition,
+            StacRequestRegistry::new().with_config(config),
+        )
+        .unwrap();
+
+        let cache = &configured.query_cache;
+        assert_eq!(cache.search_chunk_steps().get(), 11);
+        assert_eq!(cache.max_footprint_searches(), 7);
+        assert_eq!(cache.availability_search_cells(), 3);
     }
 
     type AuthenticationBucketArrivals =

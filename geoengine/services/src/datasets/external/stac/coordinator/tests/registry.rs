@@ -12,6 +12,7 @@ fn registry_with_capacity(capacity: usize) -> StacRequestRegistry {
             entries: DashMap::new(),
             capacity: Arc::new(Semaphore::new(capacity)),
         }),
+        ..StacRequestRegistry::default()
     }
 }
 

@@ -58,6 +58,9 @@ pub(crate) struct StacQueryCache {
     datasets: Mutex<Vec<StacProviderDataset>>,
     max_bytes: usize,
     ttl: Duration,
+    search_chunk_steps: std::num::NonZeroU32,
+    max_footprint_searches: usize,
+    availability_search_cells: usize,
 }
 
 impl std::fmt::Debug for StacQueryCache {
@@ -78,6 +81,17 @@ struct Key {
     time_end: i64,
 }
 
+impl Key {
+    fn new(dataset_id: u64, cell: GridIdx2D, time: TimeInterval) -> Self {
+        Self {
+            dataset_id,
+            cell,
+            time_start: time.start().inner(),
+            time_end: time.end().inner(),
+        }
+    }
+}
+
 #[derive(Debug)]
 enum InitError {
     Fetch(Arc<Error>),
@@ -86,23 +100,35 @@ enum InitError {
     Uncached(Arc<Vec<StacTileFile>>),
 }
 
-impl Default for StacQueryCache {
-    fn default() -> Self {
-        let config = get_config_element::<StacCache>()
-            .expect("StacCache config must be present in Settings-default.toml");
-        Self::new(
-            config.size_in_mb * 1024 * 1024,
-            Duration::from_secs(config.ttl_secs),
-        )
-    }
-}
-
 impl StacQueryCache {
+    /// A cache configured by `[stac_cache]`, which the context reads.
+    pub(crate) fn from_config(config: &StacCache) -> Self {
+        Self {
+            search_chunk_steps: config.search_chunk_steps,
+            max_footprint_searches: config.max_footprint_searches,
+            availability_search_cells: config.availability_search_cells,
+            ..Self::new(
+                config.size_in_mb * 1024 * 1024,
+                Duration::from_secs(config.ttl_secs),
+            )
+        }
+    }
+
+    /// A cache for use without a context, e.g. in the harvester, configured by `[stac_cache]` of
+    /// the settings like the one of a context.
+    pub(crate) fn standalone() -> Self {
+        let config = get_config_element::<StacCache>()
+            .expect("`[stac_cache]` is part of `Settings-default.toml`");
+        Self::from_config(&config)
+    }
+
     pub(crate) async fn clear(&self) {
         self.cache.invalidate_all();
         self.cache.run_pending_tasks().await;
     }
 
+    /// A cache of the given size, for tests and benches: the planning values are fixed so that
+    /// they do not change with the settings. The server uses [`Self::from_config`].
     pub(crate) fn new(max_bytes: usize, ttl: Duration) -> Self {
         let cache = Cache::builder()
             .max_capacity(max_bytes as u64)
@@ -116,7 +142,79 @@ impl StacQueryCache {
             datasets: Mutex::new(Vec::new()),
             max_bytes,
             ttl,
+            search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
+            max_footprint_searches: 1_000,
+            availability_search_cells: 0,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_max_footprint_searches(mut self, searches: usize) -> Self {
+        self.max_footprint_searches = searches;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_availability_search_cells(mut self, cells: usize) -> Self {
+        self.availability_search_cells = cells;
+        self
+    }
+
+    pub(crate) fn search_chunk_steps(&self) -> std::num::NonZeroU32 {
+        self.search_chunk_steps
+    }
+
+    pub(crate) fn max_footprint_searches(&self) -> usize {
+        self.max_footprint_searches
+    }
+
+    pub(crate) fn availability_search_cells(&self) -> usize {
+        self.availability_search_cells
+    }
+
+    /// `true` if a completed search for this cell and time step is cached. Makes no request.
+    pub(crate) fn contains(&self, dataset_id: u64, cell: GridIdx2D, time: TimeInterval) -> bool {
+        self.cache.contains_key(&Key::new(dataset_id, cell, time))
+    }
+
+    /// The files of a completed search for this cell and time step, if it is cached. Makes no
+    /// request.
+    pub(crate) async fn get(
+        &self,
+        dataset_id: u64,
+        cell: GridIdx2D,
+        time: TimeInterval,
+    ) -> Option<Arc<Vec<StacTileFile>>> {
+        self.cache.get(&Key::new(dataset_id, cell, time)).await
+    }
+
+    /// Removes one entry, e.g. the marker of a finished window search.
+    pub(crate) async fn remove(&self, dataset_id: u64, cell: GridIdx2D, time: TimeInterval) {
+        self.cache
+            .invalidate(&Key::new(dataset_id, cell, time))
+            .await;
+    }
+
+    /// Whether the cache keeps results at all. A search done only to fill it is wasted otherwise.
+    pub(crate) fn stores_results(&self) -> bool {
+        self.max_bytes > 0 && !self.ttl.is_zero()
+    }
+
+    /// Stores what a wider search found for one cell and time step, so that step needs no search.
+    pub(crate) async fn insert(
+        &self,
+        dataset: StacProviderDataset,
+        cell: GridIdx2D,
+        time: TimeInterval,
+        files: Vec<StacTileFile>,
+    ) {
+        let bytes = result_bytes(&files);
+        if !self.stores_results() || bytes > self.max_bytes || u32::try_from(bytes).is_err() {
+            return;
+        }
+
+        let key = Key::new(self.dataset_id(dataset), cell, time);
+        self.cache.insert(key, Arc::new(files)).await;
     }
 
     /// Fetches a cell once for concurrent callers and caches successful results that fit.
@@ -136,12 +234,7 @@ impl StacQueryCache {
         F: FnOnce() -> Fut + Send + 'static,
         Fut: Future<Output = Result<Vec<StacTileFile>, Error>> + Send + 'static,
     {
-        let key = Key {
-            dataset_id: self.dataset_id(dataset),
-            cell,
-            time_start: time.start().inner(),
-            time_end: time.end().inner(),
-        };
+        let key = Key::new(self.dataset_id(dataset), cell, time);
 
         // Keep warm hits off the task-spawn and try_get_with paths.
         if let Some(result) = self.cache.get(&key).await {
@@ -246,7 +339,7 @@ impl StacQueryCache {
         output
     }
 
-    fn dataset_id(&self, dataset: StacProviderDataset) -> u64 {
+    pub(crate) fn dataset_id(&self, dataset: StacProviderDataset) -> u64 {
         let mut datasets = self
             .datasets
             .lock()

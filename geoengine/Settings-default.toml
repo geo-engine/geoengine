@@ -19,6 +19,9 @@ list_limit = 20
 [dataset_service]
 list_limit = 20
 json_size_limit = 10240000 # 10MB
+# Time steps of one part of a dataset's answer. A raster source reads a longer time range in parts
+# of this many steps and reads the next part while it loads the tiles of the current one.
+loading_info_part_steps = 32
 
 [layer_service]
 list_limit = 20
@@ -51,6 +54,15 @@ rayon_threads = 0
 gdal_source_read_ahead = 8
 # GDAL tile reads a MultiBandGdalSource query keeps in flight
 multi_band_gdal_source_read_ahead = 16
+# A footprint tells for one time step of a raster (one interval of its time dimension) where it may
+# have data, as rectangles ("boxes") in its pixel space; outside of them there is none. The term is
+# the one of remote sensing for the outline of a scene. See `/processingGraphs/{id}/footprints`.
+# This is the most boxes a footprint keeps for one time step. If a step has more, the boxes whose
+# merge adds the least empty area are merged. Combining footprints, e.g. in an expression, takes
+# time in the product of the numbers of boxes.
+# The number of time steps has no limit here, because footprints are produced step by step. The
+# endpoint returns at most 100 time steps per request.
+footprint_boxes_per_step_limit = 64
 # Upper limit in MB for the memory that a Warp with the downsampling method `mode` keeps per output
 # tile. It keeps the sums of the weights per distinct value of each output pixel whose input pixels
 # it is still reading. Warp estimates the worst case when it is initialized and rejects the
@@ -361,6 +373,24 @@ min_block_ttl_seconds = 60
 size_in_mb = 100
 # TTL in seconds for STAC query cache entries
 ttl_secs = 3600
+# A query over several time steps is answered in parts of this many time steps (chunks). For footprints,
+# e.g. of a calendar, one search asks the STAC server for the steps of a chunk of one grid cell at once
+# and stores the result per step. The chunks start at the origin of the dataset's time axis, so they do
+# not follow the months. More steps mean fewer requests for a long window, but each one returns more
+# items (up to the pages of a whole chunk) even if only a few days are looked at. Must not be 0.
+search_chunk_steps = 30
+# A footprint request needing more STAC searches than this for one chunk of `search_chunk_steps` time steps
+# fails as too large (`FootprintQueryTooLarge`). The limit counts per chunk, because the provider answers
+# chunk by chunk. A request covers at most 100 time steps, so with the defaults
+# it needs at most five chunks of 50 searches. A request of one time step (the coverage of a date on the map)
+# runs the searches the map tiles of that date run. It counts only the ones that are not cached yet, so it costs
+# nothing where the map was loaded, and it is refused for a large area that nobody has looked at.
+# It also bounds the grid cells for which the days without items of an aggregation are stored in the cache.
+max_footprint_searches = 50
+# A calendar request for at most this many grid cells searches the files (exact days, warms the map's cache);
+# for more cells one aggregation counts the items of the cells, which also counts items next to the view. 0 always aggregates.
+# Aggregations are only asked from providers that are set up with `datetimeFrequencyAggregation`; all others search.
+availability_search_cells = 4
 
 [provider_cache]
 # maximum number of provider instances in the provider registry

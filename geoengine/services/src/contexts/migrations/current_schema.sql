@@ -932,7 +932,8 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     authentication "StacProviderAuthentication",
     cache_ttl_secs int,
     stac_grid "StacGrid",
-    max_concurrent_cell_searches int
+    max_concurrent_cell_searches int,
+    datetime_frequency_aggregation boolean
 );
 
 CREATE TYPE "DataProviderDefinition" AS (
