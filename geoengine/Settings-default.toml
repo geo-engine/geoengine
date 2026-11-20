@@ -266,7 +266,7 @@ endpoint = "http://127.0.0.1:4317"
 #    - GDAL_DISABLE_READDIR_ON_OPEN
 #    - CPL_VSIL_CURL_ALLOWED_EXTENSIONS
 #    - GDAL_HTTP_LOW_SPEED_LIMIT, GDAL_HTTP_LOW_SPEED_TIME, GDAL_HTTP_CONNECTTIMEOUT
-#    - GDAL_HTTP_MAX_RETRY, GDAL_HTTP_RETRY_DELAY (retries of failed HTTP requests, default none)
+#    - GDAL_HTTP_MAX_RETRY, GDAL_HTTP_RETRY_DELAY
 #
 # Every worker process has its own caches, so the GDAL memory bound of the pool is about
 # number_of_processes * (GDAL_CACHEMAX + VSI_CACHE_SIZE + CPL_VSIL_CURL_CACHE_SIZE (default 16mb)).
@@ -285,6 +285,10 @@ GDAL_CACHEMAX = "256"
 GDAL_HTTP_LOW_SPEED_LIMIT = "1024"
 GDAL_HTTP_LOW_SPEED_TIME = "30"
 GDAL_HTTP_CONNECTTIMEOUT = "10"
+# Retry requests that fail with HTTP 429 or 5xx, which object stores answer under load (GDAL's
+# default is no retry, so a single failed request fails the tile).
+GDAL_HTTP_MAX_RETRY = "5"
+GDAL_HTTP_RETRY_DELAY = "0.5"
 # Threads per worker for decoding (`ALL_CPUS` would start a thread per CPU in every worker). With
 # 4, JPEG 2000 reads several tiles of a file at once: zoomed-out Sentinel-2 views on CODE-DE were
 # about 40% faster than with 1 (level 16, 6.8 s -> 4.0 s) with the same download, and 2 to 3 times
