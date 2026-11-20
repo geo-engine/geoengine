@@ -287,22 +287,20 @@ where
                 let sub_query =
                     NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
 
-                let time_stream = self.source.time_query(query.time_interval(), ctx).await?;
-
                 let tiling_strat = self
                     .source
                     .result_descriptor()
                     .tiling_grid_definition(self.tiling_specification)
                     .generate_data_tiling_strategy();
 
-                let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+                let sq = RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
                     &self.source,
                     query,
                     tiling_strat,
                     ctx,
                     sub_query,
-                    time_stream,
-                );
+                )
+                .await?;
                 Ok(sq.box_pin())
             },
         )
@@ -333,6 +331,38 @@ where
     ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
     {
         self.source.time_query(query, ctx).await
+    }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        precision: crate::engine::FootprintPrecision,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<crate::engine::Footprint>>> {
+        let tiling_grid = self
+            .source
+            .result_descriptor()
+            .tiling_grid_definition(self.tiling_specification);
+        // the same grid; a pixel reads its neighborhood, so data reaches that far around its box
+        let output_bounds = crate::adapters::source_box_mapping(
+            [
+                self.neighborhood.y_radius() as isize,
+                self.neighborhood.x_radius() as isize,
+            ],
+            tiling_grid.tiling_geo_transform(),
+            tiling_grid.tiling_geo_transform(),
+            None,
+        );
+        crate::adapters::subquery_footprints(
+            &self.source,
+            query,
+            tiling_grid.generate_data_tiling_strategy(),
+            &NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone()),
+            precision,
+            ctx,
+            output_bounds,
+        )
+        .await
     }
 }
 
@@ -813,5 +843,25 @@ mod tests {
             assert_eq!(tile.grid_array.inner_grid.data, data[i]);
             assert_eq!(tile.grid_array.validity_mask.data, valid[i]);
         }
+    }
+
+    #[tokio::test]
+    async fn it_has_footprints_where_its_tiles_read_data() {
+        use crate::engine::footprint_test_util::{
+            assert_footprints_follow_the_data, one_of_four_tiles_source,
+        };
+
+        // the test tiles of 2 × 2 pixels allow no larger neighborhood
+        assert_footprints_follow_the_data(
+            NeighborhoodAggregate {
+                params: NeighborhoodAggregateParams {
+                    neighborhood: NeighborhoodParams::Rectangle { dimensions: [1, 1] },
+                    aggregate_function: AggregateFunctionParams::Sum,
+                },
+                sources: one_of_four_tiles_source().into(),
+            }
+            .typed(),
+        )
+        .await;
     }
 }

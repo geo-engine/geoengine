@@ -15,6 +15,7 @@ pub use raster_stacker::{
 pub use raster_subquery::{
     ApproxProjection, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
     TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
+    source_box_mapping, subquery_footprints,
 };
 pub use simple_raster_stacker::{
     SimpleRasterStackerAdapter, SimpleRasterStackerError, SimpleRasterStackerSource,

@@ -22,8 +22,12 @@
 use crate::adapters::{ApproxProjection, TileReprojectionSubqueryGridInfo};
 use crate::adapters::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
+    source_box_mapping, subquery_footprints,
 };
-use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor};
+use crate::engine::{
+    Footprint, FootprintPrecision, QueryContext, QueryProcessor, RasterQueryProcessor,
+    RasterResultDescriptor,
+};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
@@ -37,7 +41,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{
     GeoTransform, Grid, GridBoundingBox2D, GridBounds, GridIdx2D, GridIndexAccess,
     GridIntersection, GridOrEmpty, GridShape2D, GridSize, MapElementsParallel, MaskedGrid, Pixel,
-    RasterDataType, RasterTile2D, TileInformation, pixel_from_f64_rounded,
+    RasterDataType, RasterTile2D, TileInformation, TilingStrategy, pixel_from_f64_rounded,
 };
 use geoengine_datatypes::spatial_reference::{
     CoordinateProjection, DefaultCoordinateProjector, SpatialReference,
@@ -903,6 +907,34 @@ where
     }
 }
 
+impl<Q, P> WarpKernelProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    /// The tiles of the output and how each of them is computed from the source.
+    fn sub_query(&self, ctx: &dyn QueryContext) -> (TilingStrategy, WarpKernelSubQuery<P>) {
+        let in_spatial_grid = self.source.result_descriptor().spatial_grid_descriptor();
+        let out_tiling_grid = self
+            .out_result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification());
+
+        let sub_query = WarpKernelSubQuery::<P> {
+            kernel: self.kernel,
+            projection: self.projection,
+            input_geo_transform: in_spatial_grid
+                .tiling_grid_definition(ctx.tiling_specification())
+                .tiling_geo_transform(),
+            output_geo_transform: out_tiling_grid.tiling_geo_transform(),
+            mode_memory_budget: (self.kernel == WarpKernel::Mode && self.projection.is_some())
+                .then_some(self.mode_memory_budget),
+            tile_shape: ctx.tiling_specification().tile_size_in_pixels,
+            _phantom_pixel_type: PhantomData,
+        };
+        (out_tiling_grid.generate_data_tiling_strategy(), sub_query)
+    }
+}
 #[async_trait]
 impl<Q, P> RasterQueryProcessor for WarpKernelProcessor<Q, P>
 where
@@ -917,6 +949,38 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
         self.source.time_query(query, ctx).await
+    }
+
+    async fn _footprint_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        precision: FootprintPrecision,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<Footprint>>> {
+        let (tiling_strategy, sub_query) = self.sub_query(ctx);
+        // an output pixel reads the input pixels under it and, for `bilinear`, their neighbours
+        let output_bounds = source_box_mapping(
+            [1, 1],
+            sub_query.input_geo_transform,
+            sub_query.output_geo_transform,
+            self.projection.map(|projection| {
+                (
+                    projection.in_srs,
+                    projection.out_srs,
+                    projection.approximation_error,
+                )
+            }),
+        );
+        subquery_footprints(
+            &self.source,
+            query,
+            tiling_strategy,
+            &sub_query,
+            precision,
+            ctx,
+            output_bounds,
+        )
+        .await
     }
 }
 
@@ -936,35 +1000,19 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        let in_spatial_grid = self.source.result_descriptor().spatial_grid_descriptor();
-        let out_tiling_grid = self
-            .out_result_descriptor
-            .spatial_grid_descriptor()
-            .tiling_grid_definition(ctx.tiling_specification());
+        let (tiling_strategy, sub_query) = self.sub_query(ctx);
 
-        let sub_query = WarpKernelSubQuery::<P> {
-            kernel: self.kernel,
-            projection: self.projection,
-            input_geo_transform: in_spatial_grid
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
-            output_geo_transform: out_tiling_grid.tiling_geo_transform(),
-            mode_memory_budget: (self.kernel == WarpKernel::Mode && self.projection.is_some())
-                .then_some(self.mode_memory_budget),
-            tile_shape: ctx.tiling_specification().tile_size_in_pixels,
-            _phantom_pixel_type: PhantomData,
-        };
-
-        let time_stream = self.time_query(query.time_interval(), ctx).await?;
-
-        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
-            &self.source,
-            query,
-            out_tiling_grid.generate_data_tiling_strategy(),
-            ctx,
-            sub_query,
-            time_stream,
-        )))
+        Ok(
+            RasterSubQueryAdapter::<'a, P, _, _>::with_source_time_steps(
+                &self.source,
+                query,
+                tiling_strategy,
+                ctx,
+                sub_query,
+            )
+            .await?
+            .box_pin(),
+        )
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {

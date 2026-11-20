@@ -2250,4 +2250,101 @@ mod tests {
         )
         .await;
     }
+
+    #[tokio::test]
+    async fn it_has_footprints_where_its_tiles_read_data() {
+        use crate::engine::footprint_test_util::{
+            assert_footprints_follow_the_data, one_of_four_tiles_source,
+        };
+
+        let finer = WarpParams {
+            output_resolution: Some(SpatialResolution::new_unchecked(0.5, 0.5)),
+            ..Default::default()
+        };
+        let coarser = WarpParams {
+            output_resolution: Some(SpatialResolution::new_unchecked(2., 2.)),
+            ..Default::default()
+        };
+        let projected = WarpParams {
+            target_spatial_reference: Some(SpatialReference::new(
+                geoengine_datatypes::spatial_reference::SpatialReferenceAuthority::Epsg,
+                3857,
+            )),
+            ..Default::default()
+        };
+        // the kernels, which have their own processor, also with a projection
+        let bilinear = WarpParams {
+            upsampling: WarpUpsampling::Bilinear,
+            ..finer
+        };
+        let average = WarpParams {
+            downsampling: WarpDownsampling::Average,
+            ..coarser
+        };
+        let projected_bilinear = WarpParams {
+            upsampling: WarpUpsampling::Bilinear,
+            downsampling: WarpDownsampling::Average,
+            ..projected
+        };
+        for params in [
+            finer,
+            coarser,
+            projected,
+            bilinear,
+            average,
+            projected_bilinear,
+        ] {
+            assert_footprints_follow_the_data(
+                Warp {
+                    params,
+                    sources: one_of_four_tiles_source().into(),
+                }
+                .typed(),
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn it_skips_through_a_chain_of_two_warps() {
+        use crate::engine::footprint_test_util::{
+            assert_footprints_follow_the_data, one_of_four_tiles_source, tiles_with_skipping,
+        };
+
+        // the outer warp skips by the footprints of the inner one, which come from the source;
+        // both refine, as the margins of two warps would cover the whole row of a coarser grid
+        let chain = || {
+            let inner = Warp {
+                params: WarpParams {
+                    output_resolution: Some(SpatialResolution::new_unchecked(0.5, 0.5)),
+                    ..Default::default()
+                },
+                sources: one_of_four_tiles_source().into(),
+            };
+            Warp {
+                params: WarpParams {
+                    output_resolution: Some(SpatialResolution::new_unchecked(0.25, 0.25)),
+                    ..Default::default()
+                },
+                sources: inner.typed().into(),
+            }
+            .typed()
+        };
+
+        assert_footprints_follow_the_data(chain()).await;
+
+        // without the cache hint, which holds the time the tile was made
+        let pixels = |tiles: Vec<RasterTile2D<u8>>| {
+            tiles
+                .into_iter()
+                .map(|tile| (tile.time, tile.tile_position, tile.band, tile.grid_array))
+                .collect::<Vec<_>>()
+        };
+        let tiles = tiles_with_skipping(chain(), false).await;
+        assert!(tiles.iter().any(|tile| !tile.is_empty()));
+        assert_eq!(
+            pixels(tiles_with_skipping(chain(), true).await),
+            pixels(tiles)
+        );
+    }
 }

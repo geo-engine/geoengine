@@ -4,6 +4,7 @@ mod raster_subquery_reprojection;
 
 pub use raster_subquery_adapter::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
+    source_box_mapping, subquery_footprints,
 };
 
 pub use approx_projection::ApproxProjection;

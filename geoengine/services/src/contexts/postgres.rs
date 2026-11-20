@@ -63,6 +63,7 @@ where
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
     query_ctx_footprint_boxes_per_step_limit: usize,
+    query_ctx_footprint_skipping: bool,
     task_manager: Arc<TypedTaskManagerBackend>,
     oidc_manager: OidcManager,
     quota: QuotaTrackingFactory,
@@ -173,6 +174,8 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
+                .footprint_skipping,
             oidc_manager,
             quota,
             pool,
@@ -247,6 +250,8 @@ where
             exe_ctx_tiling_spec: TestDefault::test_default(),
             query_ctx_chunk_size: TestDefault::test_default(),
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
+                .footprint_skipping,
             oidc_manager: oidc_db,
             quota,
             pool,
@@ -336,6 +341,8 @@ where
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
             query_ctx_footprint_boxes_per_step_limit: Self::footprint_boxes_per_step_limit()?,
+            query_ctx_footprint_skipping: get_config_element::<crate::config::QueryContext>()?
+                .footprint_skipping,
             oidc_manager: OidcManager::from(oidc_config),
             quota,
             pool,
@@ -605,7 +612,18 @@ where
             self.context.gdal_read_ahead,
             self.context.processing_runtime.clone(),
         )
-        .with_footprint_boxes_per_step_limit(self.context.query_ctx_footprint_boxes_per_step_limit))
+        .with_footprint_boxes_per_step_limit(self.context.query_ctx_footprint_boxes_per_step_limit)
+        .with_footprint_skipping(self.context.query_ctx_footprint_skipping))
+    }
+
+    fn footprints_query_context(
+        &self,
+        processing_graph: ProcessingGraphId,
+        computation: ComputationId,
+    ) -> Result<Self::QueryContext> {
+        Ok(self
+            .query_context(processing_graph, computation)?
+            .with_footprints_for_display())
     }
 
     fn execution_context(&self) -> Result<Self::ExecutionContext> {
@@ -811,6 +829,28 @@ mod tests {
     use openidconnect::SubjectIdentifier;
     use serde_json::json;
     use std::str::FromStr;
+
+    #[ge_context::test]
+    async fn it_marks_only_the_footprints_query_context_for_display(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        use geoengine_operators::engine::QueryContext as _;
+
+        let ctx = app_ctx.session_context(admin_login(&app_ctx).await);
+        let processing_graph = ProcessingGraphId::new();
+
+        // only footprints to show are refused as too large, see `footprints_for_display`
+        assert!(
+            ctx.footprints_query_context(processing_graph, ComputationId::new())?
+                .footprints_for_display()
+        );
+        assert!(
+            !ctx.query_context(processing_graph, ComputationId::new())?
+                .footprints_for_display()
+        );
+
+        Ok(())
+    }
 
     #[ge_context::test]
     async fn it_clears_operator_cache_even_if_gdal_clearance_fails(
