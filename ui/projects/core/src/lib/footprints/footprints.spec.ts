@@ -3,6 +3,7 @@ import {ResponseError, TimeStepFootprint, TimeStepFootprintStatus} from '@geoeng
 import {
     calendarHint,
     calendarStartView,
+    canPickDate,
     cellClasses,
     footprintsOrTooLarge,
     mergeFootprints,
@@ -74,6 +75,21 @@ describe('footprints', () => {
         expect(['hours', 'minutes', 'day', 'days'].map(calendarStartView)).toEqual(['month', 'month', 'month', 'month']);
         expect(calendarStartView('months')).toBe('year');
         expect(calendarStartView('years')).toBe('multi-year');
+    });
+
+    it('lets a day be picked unless all of its steps are empty, also with several steps per day', () => {
+        const sixHours = (hour: number, status: TimeStepFootprintStatus): TimeStepFootprint =>
+            step(`2026-04-01T${String(hour).padStart(2, '0')}:00:00Z`, `2026-04-01T${String(hour + 6).padStart(2, '0')}:00:00Z`, status);
+        const day = new Date(2026, 3, 1);
+        const [DATA, EMPTY] = [TimeStepFootprintStatus.Data, TimeStepFootprintStatus.Empty];
+
+        // the step at midnight is empty, a later one has data
+        expect(canPickDate([sixHours(0, EMPTY), sixHours(6, EMPTY), sixHours(12, DATA), sixHours(18, EMPTY)], day)).toBe(true);
+        expect(canPickDate([sixHours(0, EMPTY), sixHours(6, EMPTY), sixHours(12, EMPTY), sixHours(18, EMPTY)], day)).toBe(false);
+        // not loaded, so it may have data
+        expect(canPickDate([], day)).toBe(true);
+        // a long step with data over the day
+        expect(canPickDate([eightDays], new Date(2026, 3, 3))).toBe(true);
     });
 
     it('finds the time step of a time and treats its end as excluded', () => {

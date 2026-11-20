@@ -22,6 +22,7 @@ import {boxFeatures, overlayStyle, viewCoverage, ViewCoverage} from './footprint
 import {
     calendarHint,
     calendarStartView,
+    canPickDate,
     cellClasses,
     Footprints,
     footprintsOrTooLarge,
@@ -369,9 +370,7 @@ export class FootprintsService {
         this.calendarHint(view) ? [] : cellClasses(this.steps(), date, view);
 
     /** Only dates with data can be picked; dates whose data is unknown or not loaded can too. */
-    readonly dateFilter = (date: Date | null): boolean =>
-        !date ||
-        stepAt(this.steps(), Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))?.status !== TimeStepFootprintStatus.Empty;
+    readonly dateFilter = (date: Date | null): boolean => !date || canPickDate(this.steps(), date);
 
     /** The hint of a view that is too coarse for the time step to show the dates with data, see `calendarHint`. */
     calendarHint(view: MatCalendarView): string | undefined {
