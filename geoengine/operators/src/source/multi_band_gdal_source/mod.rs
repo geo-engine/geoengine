@@ -95,7 +95,8 @@ type MultiBandGdalMetaData = Box<
         >,
 >;
 
-/// What a caller needs to know about the data of a loading-info query, from least to most.
+/// What a loading-info query asks for. Every case is a question a caller really has, so there is
+/// no combination that makes no sense.
 ///
 /// This is one query with levels and not one method per question, because a provider answers
 /// all of them from the same lookup, e.g. a STAC provider from the same searches and cache.
@@ -103,21 +104,23 @@ type MultiBandGdalMetaData = Box<
 pub enum LoadingInfoDetail {
     /// Only the time steps, without files.
     TimeSteps,
-    /// For each time step whether it has data. A provider that can tell without the files
-    /// answers with [`MultiBandGdalLoadingInfoPart::has_data`] and no files, others with the files.
-    Availability,
-    /// The files to read.
+    /// The files to read the data from.
     Files,
+    /// For footprints: for each time step whether it has data. A provider that can tell without
+    /// the files answers with [`MultiBandGdalLoadingInfoPart::has_data`] and no files, others
+    /// with the files.
+    Availability,
+    /// For footprints: the files, for their areas. Unlike for [`Self::Files`], a remote catalog
+    /// may search the steps of a part together and limit the number of searches, which a data
+    /// query must not get.
+    Coverage,
 }
 
-/// What a loading-info query is for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LoadingInfoPurpose {
-    /// Reading the data, or the time steps of the data.
-    Data,
-    /// Footprints. A remote catalog may search the steps of a part together and limit the
-    /// number of searches, which a data query must not get.
-    Footprints,
+impl LoadingInfoDetail {
+    /// Whether the query is for footprints and not for the data or its time steps.
+    pub fn is_for_footprints(self) -> bool {
+        matches!(self, Self::Availability | Self::Coverage)
+    }
 }
 
 /// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request
@@ -128,7 +131,6 @@ pub enum LoadingInfoPurpose {
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
     pub detail: LoadingInfoDetail,
-    pub purpose: LoadingInfoPurpose,
     /// The resolution the source produces its tiles in: the native resolution or an
     /// overview level.
     ///
@@ -167,15 +169,8 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         Self {
             query_rectangle,
             detail,
-            purpose: LoadingInfoPurpose::Data,
             resolution: LoadingInfoResolution::Native,
         }
-    }
-
-    #[must_use]
-    pub fn for_footprints(mut self) -> Self {
-        self.purpose = LoadingInfoPurpose::Footprints;
-        self
     }
 
     /// Sets the resolution the source produces its tiles in.
@@ -450,18 +445,15 @@ where
 
         let detail = match precision {
             FootprintPrecision::Availability => LoadingInfoDetail::Availability,
-            FootprintPrecision::Coverage => LoadingInfoDetail::Files,
+            FootprintPrecision::Coverage => LoadingInfoDetail::Coverage,
         };
         let parts = self
-            .loading_info_parts(
-                raster_query_rectangle_to_loading_info_query_rectangle(
-                    &query,
-                    tiling_grid,
-                    LoadingInfoResolution::Native,
-                    detail,
-                )
-                .for_footprints(),
-            )
+            .loading_info_parts(raster_query_rectangle_to_loading_info_query_rectangle(
+                &query,
+                tiling_grid,
+                LoadingInfoResolution::Native,
+                detail,
+            ))
             .await?;
 
         Ok(parts
