@@ -20,7 +20,7 @@ pub use self::gdal_worker_process::{
 };
 pub use self::multi_band_gdal_source::{
     GdalMultiBand, GdalSourceError as MultiBandGdalSourceError,
-    GdalSourceParameters as MultiBandGdalSourceParameters, LoadingInfoDetail,
+    GdalSourceParameters as MultiBandGdalSourceParameters, LoadingInfoDetail, LoadingInfoPurpose,
     LoadingInfoResolution, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     MultiBandGdalSource, TileFile,
 };

@@ -5675,9 +5675,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_answers_a_long_footprint_query_in_parts(
-        app_ctx: PostgresContext<NoTls>,
-    ) -> Result<()> {
+    async fn it_answers_a_long_time_range_in_parts(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, true).await?;
         let db = ctx.db();
         let dataset_id = db
@@ -5707,7 +5705,6 @@ mod tests {
                 BandSelection::first(),
                 geoengine_operators::source::LoadingInfoDetail::Files,
             )
-            .in_parts()
         };
 
         // 40 monthly steps, the tiles are in the last four months

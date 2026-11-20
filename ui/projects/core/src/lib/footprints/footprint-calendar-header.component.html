@@ -1,0 +1,7 @@
+<mat-calendar-header></mat-calendar-header>
+@if (footprintsService.isLoading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Loading the data"></mat-progress-bar>
+}
+@if (hint(); as hint) {
+    <p class="geoengine-footprint-calendar-hint">{{ hint }}</p>
+}

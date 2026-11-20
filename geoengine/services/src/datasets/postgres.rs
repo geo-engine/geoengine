@@ -1,6 +1,7 @@
 use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
+use crate::config::{DatasetService, get_config_element};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
@@ -751,11 +752,19 @@ where
 
         let data_path: DataPath = try_get_dataset_by_index_operators(&row, 1, &id)?;
 
+        let part_steps = get_config_element::<DatasetService>()
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+            .loading_info_part_steps
+            .max(1);
+
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
             dataset_cache_ttl,
             data_path,
+            part_steps,
             db: self.clone(),
         }))
     }
@@ -773,6 +782,8 @@ where
     result_descriptor: RasterResultDescriptor,
     dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
+    /// The most time steps of one answer, see `loading_info_part_steps` in the settings.
+    part_steps: usize,
     db: PostgresDb<Tls>,
 }
 
@@ -972,9 +983,6 @@ where
     Ok(time_steps)
 }
 
-/// Time steps of one part of a loading-info query in parts, see `in_parts`.
-const STEPS_PER_PART: usize = 32;
-
 #[async_trait]
 impl<Tls>
     MetaData<
@@ -1010,13 +1018,15 @@ where
             source: Box::new(e),
         })?;
 
-        // A footprint query of a long time range gets the files of the first steps only, so it does
-        // not hold the files of all steps at once. The source asks for `next` when it gets there.
+        // A long time range gets the files of the first steps only, so the source does not hold
+        // the files of all steps at once. It asks for `next` when it gets there.
+        // shortcut: each part computes the gap-free steps of the whole rest again, O(steps² / part
+        // size) rows for irregular datasets; limit that query to the part if long ranges get slow.
         let mut files_time = query.query_rectangle.time_interval();
         let mut next = None;
-        if query.in_parts && time_steps.len() > STEPS_PER_PART {
-            let part_end = time_steps[STEPS_PER_PART - 1].end();
-            time_steps.truncate(STEPS_PER_PART);
+        if time_steps.len() > self.part_steps {
+            let part_end = time_steps[self.part_steps - 1].end();
+            time_steps.truncate(self.part_steps);
             next = TimeInterval::new(part_end, files_time.end()).ok();
             files_time = TimeInterval::new(files_time.start(), part_end)?;
         }

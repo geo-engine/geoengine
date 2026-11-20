@@ -19,6 +19,9 @@ list_limit = 20
 [dataset_service]
 list_limit = 20
 json_size_limit = 10240000 # 10MB
+# Time steps a dataset answers at once. A raster source reads a longer time range in parts of this
+# many steps and reads the next part while it loads the tiles of the current one.
+loading_info_part_steps = 32
 
 [layer_service]
 list_limit = 20
