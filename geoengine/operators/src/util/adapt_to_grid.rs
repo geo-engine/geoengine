@@ -59,13 +59,23 @@ impl WarpMethods {
     }
 }
 
-pub struct WrapWithProjectionAndResample {
+/// The grid that [`AdaptToGrid::adapt_to_grid`] puts an operator onto
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TargetGrid {
+    pub spatial_reference: SpatialReference,
+    /// `None` keeps the resolution of the operator, reprojected if `spatial_reference` differs
+    pub resolution: Option<SpatialResolution>,
+    /// `None` keeps the origin of the operator's grid, reprojected if `spatial_reference` differs
+    pub origin: Option<Coordinate2D>,
+}
+
+pub struct AdaptToGrid {
     pub operator: TypedRasterOperator,
     pub initialized_operator: Box<dyn InitializedRasterOperator>,
     pub result_descriptor: RasterResultDescriptor,
 }
 
-impl WrapWithProjectionAndResample {
+impl AdaptToGrid {
     pub fn new_create_result_descriptor(
         operator: TypedRasterOperator,
         initialized: Box<dyn InitializedRasterOperator>,
@@ -86,18 +96,22 @@ impl WrapWithProjectionAndResample {
         }
     }
 
-    /// Puts the operator onto the query's grid: `target_sref`, and, if given, the resolution and
-    /// the origin, in one `Warp` that computes the output pixels with `methods`.
+    /// Puts the operator onto the `target` grid, in one `Warp` that computes the output pixels
+    /// with `methods`.
     /// If the output is coarser than the operator, the operator is optimized to an overview level
     /// first, so that it computes no more pixels than the output needs.
-    pub async fn wrap_with_projection_and_resample(
+    pub async fn adapt_to_grid(
         self,
-        target_origin_reference: Option<Coordinate2D>,
-        target_spatial_resolution: Option<SpatialResolution>,
-        target_sref: SpatialReference,
+        target: TargetGrid,
         methods: WarpMethods,
         exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
+        let TargetGrid {
+            spatial_reference: target_sref,
+            resolution: target_spatial_resolution,
+            origin: target_origin_reference,
+        } = target;
+
         let result_sref = self
             .result_descriptor
             .spatial_reference()
@@ -192,7 +206,7 @@ mod tests {
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterDataType};
     use geoengine_datatypes::util::test::TestDefault;
 
-    async fn wrap_with_resample(target_resolution: SpatialResolution) -> TypedRasterOperator {
+    async fn adapt_to_resolution(target_resolution: SpatialResolution) -> TypedRasterOperator {
         let exe_ctx = MockExecutionContext::test_default();
         let source = MockRasterSource::<u8> {
             params: MockRasterSourceParams {
@@ -216,17 +230,18 @@ mod tests {
             .await
             .unwrap();
 
-        let wrapped =
-            WrapWithProjectionAndResample::new_create_result_descriptor(source, initialized)
-                .wrap_with_projection_and_resample(
-                    None,
-                    Some(target_resolution),
-                    SpatialReference::epsg_4326(),
-                    WarpMethods::NEAREST,
-                    &exe_ctx,
-                )
-                .await
-                .unwrap();
+        let wrapped = AdaptToGrid::new_create_result_descriptor(source, initialized)
+            .adapt_to_grid(
+                TargetGrid {
+                    spatial_reference: SpatialReference::epsg_4326(),
+                    resolution: Some(target_resolution),
+                    origin: None,
+                },
+                WarpMethods::NEAREST,
+                &exe_ctx,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(
             wrapped
@@ -252,21 +267,21 @@ mod tests {
 
     #[tokio::test]
     async fn it_resamples_to_a_resolution_that_is_coarser_in_one_axis_and_finer_in_the_other() {
-        let operator = wrap_with_resample(SpatialResolution::new_unchecked(2., 0.5)).await;
+        let operator = adapt_to_resolution(SpatialResolution::new_unchecked(2., 0.5)).await;
 
         assert_single_warp(&operator);
     }
 
     #[tokio::test]
     async fn it_resamples_to_a_resolution_that_is_coarser_in_one_axis() {
-        let operator = wrap_with_resample(SpatialResolution::new_unchecked(3., 1.)).await;
+        let operator = adapt_to_resolution(SpatialResolution::new_unchecked(3., 1.)).await;
 
         assert_single_warp(&operator);
     }
 
     #[tokio::test]
     async fn it_resamples_to_a_finer_resolution() {
-        let operator = wrap_with_resample(SpatialResolution::new_unchecked(0.5, 0.5)).await;
+        let operator = adapt_to_resolution(SpatialResolution::new_unchecked(0.5, 0.5)).await;
 
         assert_single_warp(&operator);
     }
@@ -356,17 +371,18 @@ mod tests {
             .await
             .unwrap();
 
-        let wrapped =
-            WrapWithProjectionAndResample::new_create_result_descriptor(source, initialized)
-                .wrap_with_projection_and_resample(
-                    None,
-                    Some(SpatialResolution::new_unchecked(1.5, 1.5)),
-                    SpatialReference::epsg_4326(),
-                    WarpMethods::CLASSES,
-                    &exe_ctx,
-                )
-                .await
-                .unwrap();
+        let wrapped = AdaptToGrid::new_create_result_descriptor(source, initialized)
+            .adapt_to_grid(
+                TargetGrid {
+                    spatial_reference: SpatialReference::epsg_4326(),
+                    resolution: Some(SpatialResolution::new_unchecked(1.5, 1.5)),
+                    origin: None,
+                },
+                WarpMethods::CLASSES,
+                &exe_ctx,
+            )
+            .await
+            .unwrap();
 
         let TypedRasterOperator::Warp(warp) = wrapped.operator else {
             panic!("the operator should be warped");
@@ -412,22 +428,24 @@ mod tests {
     }
 
     /// Wraps `operator` as WMS and OGC API Tiles do, for an output of `resolution` in `srs`.
-    async fn wrap_graph(
+    async fn adapt_graph(
         operator: TypedRasterOperator,
         resolution: SpatialResolution,
         srs: SpatialReference,
         exe_ctx: &MockExecutionContext,
-    ) -> WrapWithProjectionAndResample {
+    ) -> AdaptToGrid {
         let initialized = operator
             .clone()
             .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
             .await
             .unwrap();
-        WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
-            .wrap_with_projection_and_resample(
-                None,
-                Some(resolution),
-                srs,
+        AdaptToGrid::new_create_result_descriptor(operator, initialized)
+            .adapt_to_grid(
+                TargetGrid {
+                    spatial_reference: srs,
+                    resolution: Some(resolution),
+                    origin: None,
+                },
                 WarpMethods::CONTINUOUS,
                 exe_ctx,
             )
@@ -468,7 +486,7 @@ mod tests {
 
     /// Queries the first tile of `wrapped` at the first time step of the NDVI.
     async fn query_first_tile(
-        wrapped: WrapWithProjectionAndResample,
+        wrapped: AdaptToGrid,
         exe_ctx: &MockExecutionContext,
     ) -> geoengine_datatypes::raster::RasterTile2D<u8> {
         use futures::StreamExt;
@@ -513,7 +531,7 @@ mod tests {
         let ndvi = ndvi(&mut exe_ctx);
         let graph = identity(warp(ndvi, resample(0.2)));
 
-        let wrapped = wrap_graph(
+        let wrapped = adapt_graph(
             graph,
             SpatialResolution::new_unchecked(0.8, 0.8),
             SpatialReference::epsg_4326(),
@@ -550,7 +568,7 @@ mod tests {
         let ndvi = ndvi(&mut exe_ctx);
 
         // 0.3° × 4 = 1.2° lies between the overview levels of 0.8° and 1.6°
-        let wrapped = wrap_graph(
+        let wrapped = adapt_graph(
             max_warp(ndvi, 0.3),
             SpatialResolution::new_unchecked(1.2, 1.2),
             SpatialReference::epsg_4326(),
@@ -573,7 +591,7 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::test_default();
         let ndvi = ndvi(&mut exe_ctx);
 
-        let wrapped = wrap_graph(
+        let wrapped = adapt_graph(
             max_warp(ndvi, 0.2),
             SpatialResolution::new_unchecked(0.8, 0.8),
             SpatialReference::epsg_4326(),
@@ -596,7 +614,7 @@ mod tests {
         let ndvi = ndvi(&mut exe_ctx);
         let graph = warp(warp(ndvi, resample(0.2)), resample(0.4));
 
-        let wrapped = wrap_graph(
+        let wrapped = adapt_graph(
             graph,
             SpatialResolution::new_unchecked(1.6, 1.6),
             SpatialReference::epsg_4326(),
@@ -652,7 +670,7 @@ mod tests {
             .origin_coordinate;
         let target = (native * 8.).unwrap();
 
-        let wrapped = wrap_graph(graph, target, web_mercator, &exe_ctx).await;
+        let wrapped = adapt_graph(graph, target, web_mercator, &exe_ctx).await;
 
         assert_eq!(
             wrapped.result_descriptor.spatial_grid.spatial_resolution(),

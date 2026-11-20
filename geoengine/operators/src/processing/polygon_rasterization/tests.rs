@@ -16,7 +16,7 @@ use crate::util::raster_stream_to_geotiff::{
 };
 use crate::util::raster_stream_to_png::raster_stream_to_png_bytes;
 use crate::util::test::AsciiRasterTilesExt;
-use crate::util::{WarpMethods, WrapWithProjectionAndResample};
+use crate::util::{AdaptToGrid, TargetGrid, WarpMethods};
 use geoengine_datatypes::collections::MultiPointCollection;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
@@ -1285,17 +1285,19 @@ async fn wrap_for_resolution(
     operator: TypedRasterOperator,
     resolution: f64,
     exe_ctx: &MockExecutionContext,
-) -> WrapWithProjectionAndResample {
+) -> AdaptToGrid {
     let initialized = operator
         .clone()
         .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
         .await
         .unwrap();
-    WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
-        .wrap_with_projection_and_resample(
-            None,
-            Some(SpatialResolution::new(resolution, resolution).unwrap()),
-            SpatialReference::epsg_4326(),
+    AdaptToGrid::new_create_result_descriptor(operator, initialized)
+        .adapt_to_grid(
+            TargetGrid {
+                spatial_reference: SpatialReference::epsg_4326(),
+                resolution: Some(SpatialResolution::new(resolution, resolution).unwrap()),
+                origin: None,
+            },
             WarpMethods::CONTINUOUS,
             exe_ctx,
         )
