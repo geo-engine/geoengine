@@ -126,9 +126,23 @@ pub enum ExpressionSemanticError {
         parameter: String,
     },
 
-    #[snafu(display("The variable `{variable}` was not defined"))]
+    #[snafu(display("The alias `{alias}` refers to the unknown parameter `{target}`"))]
+    AliasForUnknownParameter {
+        alias: String,
+        target: String,
+    },
+
+    #[snafu(display("The alias `{alias}` has the same name as a parameter"))]
+    AliasCollidesWithParameter {
+        alias: String,
+    },
+
+    #[snafu(display(
+        "The variable `{variable}` was not defined. Available variables: {available}"
+    ))]
     UnknownVariable {
         variable: String,
+        available: String,
     },
 
     #[snafu(display("The variable `{variable}` was already defined"))]

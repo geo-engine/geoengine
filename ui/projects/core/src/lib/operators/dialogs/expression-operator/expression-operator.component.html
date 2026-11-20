@@ -1,8 +1,8 @@
 <geoengine-sidenav-header>Calculate Expression on Raster</geoengine-sidenav-header>
 
-@if (projectHasRasterLayers$ | async) {
+@if (projectHasRasterLayers()) {
     <form [formGroup]="form" (ngSubmit)="add()">
-        <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+        <geoengine-operator-dialog-container [loading]="loading()">
             <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/expression.html" target="_blank">
                 <mat-icon>help_center</mat-icon>
             </a>
@@ -13,20 +13,24 @@
                 <mat-icon>help_center</mat-icon>
             </a>
             <ng-container operatorParameters>
-                <p>Use A to reference the existing pixel of the first band, B for the second one, etc.</p>
+                <p>
+                    Refer to the pixel values of the bands by their names, as listed in the function signature above the editor. Press
+                    Ctrl+Space for suggestions.
+                </p>
                 <geoengine-code-editor
                     formControlName="expression"
                     language="Rust"
-                    [header]="fnSignature | async | stringSanitizer"
+                    [header]="fnSignature()"
+                    [completions]="completions()"
                 ></geoengine-code-editor>
-                @if (lastError$ | async; as lastError) {
+                @if (lastError(); as lastError) {
                     <p class="error">{{ lastError }}</p>
                 }
                 <mat-checkbox formControlName="mapNoData">Map No-Data with expression</mat-checkbox>
                 <mat-form-field>
                     <mat-label>Output Data Type</mat-label>
                     <mat-select formControlName="dataType">
-                        @for (dataType of outputDataTypes$ | async; track dataType[0].getCode()) {
+                        @for (dataType of outputDataTypes(); track dataType[0].getCode()) {
                             <mat-option [value]="dataType[0]"> {{ dataType[0] }} {{ dataType[1] }} </mat-option>
                         }
                     </mat-select>
@@ -50,7 +54,7 @@
                     type="submit"
                     mat-raised-button
                     color="primary"
-                    [disabled]="form.invalid || symbologyCreator.form.invalid || (loading$ | async)"
+                    [disabled]="form.invalid || symbologyCreator.form.invalid || loading()"
                 >
                     Create
                 </button>

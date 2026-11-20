@@ -62,6 +62,7 @@ export * from './lib/layers/layer.model';
 export * from './lib/layers/measurement';
 export * from './lib/layer-collections/layer-collection.model';
 export * from './lib/operators/datatype.model';
+export * from './lib/operators/expression-variables';
 export * from './lib/operators/result-type.model';
 export * from './lib/plots/plot.model';
 export * from './lib/plots/statistics';

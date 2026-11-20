@@ -9,7 +9,7 @@ Users can specify an output data type.
 Internally, the expression is evaluated using floating-point numbers.
 
 An example usage scenario is to calculate NDVI for a red and a near-infrared raster channel.
-The expression uses a raster source with two bands, referred to as A and B, and calculates the formula `(A - B) / (A + B)`.
+The expression uses a raster source with the two bands `red` and `nir` and calculates the formula `(nir - red) / (nir + red)`.
 When the temporal resolution is months, our output NDVI will also be a monthly time series.
 
 ## Types
@@ -19,38 +19,38 @@ The following describes the types used in the parameters.
 ### Expression
 
 Expressions are simple scripts to perform pixel-wise computations.
-One can refer to the raster inputs as `A` for the first raster band, `B` for the second, and so on.
-Furthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for NO DATA values.
+One can refer to the raster bands by their names, e.g., `red` and `nir`.
+Furthermore, expressions can check with `red IS NODATA`, `nir IS NODATA`, etc. for NO DATA values.
 This is important if `mapNoData` is set to true.
 Otherwise, NO DATA values are mapped automatically to the output NO DATA value.
 Finally, the value `NODATA` can be used to output NO DATA.
 
-Users can think of this implicit function signature for, e.g., two inputs:
+Users can think of this implicit function signature for, e.g., the two bands `red` and `nir`:
 
 ```rust,ignore
-fn (A: f64, B: f64) -> f64
+fn (red: f64, nir: f64) -> f64
 ```
 
 As a start, expressions contain algebraic operations and mathematical functions.
 
 ```rust,ignore
-(A + B) / 2
+(red + nir) / 2
 ```
 
 In addition, branches can be used to check for conditions.
 
 ```rust,ignore
-if A IS NODATA {
-    B
+if red IS NODATA {
+    nir
 } else {
-    A
+    red
 }
 ```
 
 Function calls can be used to access utility functions.
 
 ```rust,ignore
-max(A, 0)
+max(red, 0)
 ```
 
 Currently, the following functions are available:
@@ -70,7 +70,7 @@ Currently, the following functions are available:
 To generate more complex expressions, it is possible to have variable assignments.
 
 ```rust,ignore
-let mean = (A + B) / 2;
+let mean = (red + nir) / 2;
 let coefficient = 0.357;
 mean * coefficient
 ```
@@ -78,11 +78,28 @@ mean * coefficient
 Note, that all assignments are separated by semicolons.
 However, the last expression must be without a semicolon.
 
+### Band names as variables
+
+Band names are adapted to be valid variable names:
+every character that is not a letter or a digit is replaced by an underscore, e.g., `nir 1` becomes `nir_1`.
+A band can only be referred to by its name if the name starts with an ASCII letter,
+consists of ASCII letters, digits and underscores only, and is not a keyword of the expression language
+(`if`, `else`, `let`, `nodata`, `is`, `true`, `false`, as well as the reserved words
+`and`, `or`, `not`, `in`, `for`, `while`, `loop`, `break`, `continue`, `return`, `fn` and `match`).
+Moreover, the adapted names of all bands must be different.
+To use other names, rename the bands with the `RasterStacker` operator (parameter `renameBands`).
+
+**Deprecated:** Bands can also be referred to as `A` for the first band, `B` for the second, and so on.
+This will be removed in the future.
+If a band is named like the letter of another band, e.g., the first band is named `B`,
+the band name is used if the expression also refers to another band by its name.
+Otherwise, the letter is used.
+
 ## Parameters
 
 | Name       | Type                 | Description                                                                                                 | Examples                                            |
 | ---------- | -------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| expression | string               | Expression script<br><br>Example: `"(A - B) / (A + B)"`                                                     | `"(A - B) / (A + B)"`                               |
+| expression | string               | Expression script<br><br>Example: `"(nir - red) / (nir + red)"`                                             | `"(nir - red) / (nir + red)"`                       |
 | outputType | RasterDataType       | A raster data type for the output                                                                           | `"F32"`                                             |
 | outputBand | RasterBandDescriptor | Description about the output                                                                                | `{"name":"NDVI","measurement":{"type":"unitless"}}` |
 | mapNoData  | boolean              | Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA. | `true`                                              |
@@ -99,7 +116,7 @@ However, the last expression must be without a semicolon.
 {
     "type": "Expression",
     "params": {
-        "expression": "(A - B) / (A + B)",
+        "expression": "(nir - red) / (nir + red)",
         "outputType": "F32",
         "outputBand": {
             "name": "NDVI",

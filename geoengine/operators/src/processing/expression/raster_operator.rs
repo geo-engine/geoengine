@@ -16,14 +16,17 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::{primitives::SpatialResolution, raster::RasterDataType};
-use geoengine_expression::{DataType, ExpressionParser, LinkedExpression, Parameter};
+use geoengine_expression::{
+    DataType, ExpressionParser, LinkedExpression, Parameter, is_valid_variable_name,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
 ///   calculations.
+///   It refers to the input bands by their names, see [`band_variables`].
 /// * `output_type` is the data type of the produced raster tiles.
 /// * `output_no_data_value` is the no data value of the output raster
 /// * `output_measurement` is the measurement description of the output
@@ -55,6 +58,96 @@ fn index_to_parameter(index: usize) -> String {
     parameter.to_string()
 }
 
+/// The variables of the input bands of an expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BandVariables {
+    /// One parameter name per band, in band order.
+    parameters: Vec<String>,
+    /// Deprecated letters as `(alias, parameter)` pairs.
+    aliases: Vec<(String, String)>,
+    /// Band names that the expression uses, but that are interpreted as letters of other bands.
+    ambiguous: Vec<String>,
+}
+
+/// Determines the variable names of the bands for an expression with the given free variables.
+///
+/// * A band is referred to by its canonicalized name if it is a valid variable name and unique among the bands.
+///   Otherwise, it is referred to by its letter (`A` for the first band, `B` for the second, …).
+/// * The letters are deprecated aliases for the bands.
+/// * If a band name is the letter of another band, it depends on the expression which band is meant:
+///   If the expression uses band names that are not letters, the band names win.
+///   Otherwise, the letters win, since old expressions could only use letters.
+fn band_variables<'n>(
+    band_names: impl IntoIterator<Item = &'n str>,
+    free_variables: &BTreeSet<String>,
+) -> BandVariables {
+    let canonical: Vec<String> = band_names.into_iter().map(canonicalize_name).collect();
+    let letters: Vec<String> = (0..canonical.len()).map(index_to_parameter).collect();
+
+    let mut usable: Vec<bool> = canonical
+        .iter()
+        .map(|name| {
+            is_valid_variable_name(name) && canonical.iter().filter(|n| *n == name).count() == 1
+        })
+        .collect();
+
+    let colliding: Vec<usize> = (0..canonical.len())
+        .filter(|&j| {
+            usable[j]
+                && letters
+                    .iter()
+                    .enumerate()
+                    .any(|(i, letter)| i != j && *letter == canonical[j])
+        })
+        .collect();
+
+    let mut ambiguous = Vec::new();
+    if !colliding.is_empty() {
+        let uses_band_names = (0..canonical.len()).any(|k| {
+            usable[k] && !letters.contains(&canonical[k]) && free_variables.contains(&canonical[k])
+        });
+
+        if !uses_band_names {
+            for j in colliding {
+                if free_variables.contains(&canonical[j]) {
+                    ambiguous.push(canonical[j].clone());
+                }
+                usable[j] = false;
+            }
+        }
+    }
+
+    let parameters: Vec<String> = (0..canonical.len())
+        .map(|i| {
+            if usable[i] {
+                return canonical[i].clone();
+            }
+
+            let letter_is_band_name =
+                (0..canonical.len()).any(|k| usable[k] && canonical[k] == letters[i]);
+            if letter_is_band_name {
+                // the band cannot be referred to, but needs a unique parameter name
+                format!("_{i}")
+            } else {
+                letters[i].clone()
+            }
+        })
+        .collect();
+
+    let aliases = letters
+        .iter()
+        .zip(&parameters)
+        .filter(|(letter, _)| !parameters.contains(letter))
+        .map(|(letter, parameter)| (letter.clone(), parameter.clone()))
+        .collect();
+
+    BandVariables {
+        parameters,
+        aliases,
+        ambiguous,
+    }
+}
+
 #[async_trait]
 impl RasterOperator for Expression {
     async fn _initialize(
@@ -79,12 +172,10 @@ impl RasterOperator for Expression {
             }
         );
 
-        // we refer to raster bands by A, B, C, …
-        let parameters = (0..in_descriptor.bands.len())
-            .map(|i| {
-                let parameter = index_to_parameter(i);
-                Parameter::Number(parameter.into())
-            })
+        let band_names = in_descriptor
+            .bands
+            .iter()
+            .map(|band| band.name.clone())
             .collect::<Vec<_>>();
 
         let function_name = self.params.output_band.as_ref().map_or_else(
@@ -95,14 +186,50 @@ impl RasterOperator for Expression {
         let code = self.params.expression;
 
         // users decide about the length of the expression, so it must not block a worker
-        let (expression, code) = crate::util::spawn_blocking(move || {
+        let (expression, code, variables) = crate::util::spawn_blocking(move || {
+            let free_variables = ExpressionParser::free_variables(&code)?;
+            let variables = band_variables(band_names.iter().map(String::as_str), &free_variables);
+
+            let parameters = variables
+                .parameters
+                .iter()
+                .map(|parameter| Parameter::Number(parameter.into()))
+                .collect::<Vec<_>>();
+
             ExpressionParser::new(&parameters, DataType::Number)?
+                .with_aliases(
+                    variables
+                        .aliases
+                        .iter()
+                        .map(|(alias, parameter)| (alias.into(), parameter.into())),
+                )?
+                // old expressions could assign variables with the names of bands
+                .with_parameter_shadowing(true)
                 .parse(&function_name, &code)
-                .map(|expression| (expression, code))
+                .map(|expression| (expression, code, variables))
         })
         .await
         .map_err(RasterExpressionError::from)?
         .map_err(RasterExpressionError::from)?;
+
+        if !variables.ambiguous.is_empty() {
+            tracing::warn!(
+                operator = %path,
+                ambiguous = ?variables.ambiguous,
+                "The expression uses band names that are also letters of other bands. \
+                 They are interpreted as letters. Rename the bands to refer to them by name."
+            );
+        }
+
+        let used_aliases = expression.used_aliases().collect::<Vec<_>>();
+        if !used_aliases.is_empty() {
+            tracing::debug!(
+                operator = %path,
+                aliases = ?used_aliases,
+                bands = ?variables.parameters,
+                "The expression refers to bands by letters, which is deprecated. Use the band names instead."
+            );
+        }
 
         let expression = context
             .expression_environment()
@@ -855,7 +982,15 @@ mod tests {
         no_data_value: Option<i8>,
         cache_hint: CacheHint,
     ) -> TypedRasterOperator {
-        let raster = Grid2D::<i8>::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6]).unwrap();
+        make_raster_with_values(vec![1, 2, 3, 4, 5, 6], no_data_value, cache_hint)
+    }
+
+    fn make_raster_with_values(
+        values: Vec<i8>,
+        no_data_value: Option<i8>,
+        cache_hint: CacheHint,
+    ) -> TypedRasterOperator {
+        let raster = Grid2D::<i8>::new([3, 2].into(), values).unwrap();
 
         let real_raster = if let Some(no_data_value) = no_data_value {
             MaskedGrid2D::from(raster)
@@ -1091,6 +1226,246 @@ mod tests {
                 .merged(&cache_hint_b)
                 .merged(&cache_hint_c)
                 .expires()
+        );
+    }
+
+    fn free_variables(names: &[&str]) -> BTreeSet<String> {
+        names.iter().map(ToString::to_string).collect()
+    }
+
+    fn strings(names: &[&str]) -> Vec<String> {
+        names.iter().map(ToString::to_string).collect()
+    }
+
+    fn pairs(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn it_names_band_variables() {
+        assert_eq!(
+            band_variables(["red", "nir"], &free_variables(&["nir", "red"])),
+            BandVariables {
+                parameters: strings(&["red", "nir"]),
+                aliases: pairs(&[("A", "red"), ("B", "nir")]),
+                ambiguous: vec![],
+            }
+        );
+
+        assert_eq!(
+            band_variables(["nir 1", "B04"], &free_variables(&[])),
+            BandVariables {
+                parameters: strings(&["nir_1", "B04"]),
+                aliases: pairs(&[("A", "nir_1"), ("B", "B04")]),
+                ambiguous: vec![],
+            },
+            "names are canonicalized"
+        );
+
+        assert_eq!(
+            band_variables(["A", "nir"], &free_variables(&["A"])),
+            BandVariables {
+                parameters: strings(&["A", "nir"]),
+                aliases: pairs(&[("B", "nir")]),
+                ambiguous: vec![],
+            },
+            "a band named like its own letter needs no alias"
+        );
+    }
+
+    #[test]
+    fn it_falls_back_to_letters_for_unusable_band_names() {
+        assert_eq!(
+            band_variables(["1st", "if", "while"], &free_variables(&[])),
+            BandVariables {
+                parameters: strings(&["A", "B", "C"]),
+                aliases: vec![],
+                ambiguous: vec![],
+            },
+            "invalid names and keywords"
+        );
+
+        assert_eq!(
+            band_variables(["nir-1", "nir_1", "red"], &free_variables(&[])),
+            BandVariables {
+                parameters: strings(&["A", "B", "red"]),
+                aliases: pairs(&[("C", "red")]),
+                ambiguous: vec![],
+            },
+            "names that are equal after canonicalization"
+        );
+    }
+
+    #[test]
+    fn it_resolves_band_names_that_are_letters_of_other_bands() {
+        // old expression: `B` is the second band
+        assert_eq!(
+            band_variables(["B", "x"], &free_variables(&["B"])),
+            BandVariables {
+                parameters: strings(&["A", "x"]),
+                aliases: pairs(&[("B", "x")]),
+                ambiguous: strings(&["B"]),
+            }
+        );
+
+        // new expression: `B` is the first band, since the expression uses the band name `x`
+        assert_eq!(
+            band_variables(["B", "x"], &free_variables(&["B", "x"])),
+            BandVariables {
+                parameters: strings(&["B", "x"]),
+                aliases: pairs(&[("A", "B")]),
+                ambiguous: vec![],
+            }
+        );
+
+        // swapped letters
+        assert_eq!(
+            band_variables(["B", "A"], &free_variables(&["A", "B"])),
+            BandVariables {
+                parameters: strings(&["A", "B"]),
+                aliases: vec![],
+                ambiguous: strings(&["B", "A"]),
+            }
+        );
+
+        // the letter of an unusable band is the name of another band
+        assert_eq!(
+            band_variables(["1st", "A", "x"], &free_variables(&["A", "x"])),
+            BandVariables {
+                parameters: strings(&["_0", "A", "x"]),
+                aliases: pairs(&[("B", "A"), ("C", "x")]),
+                ambiguous: vec![],
+            }
+        );
+    }
+
+    /// Computes `expression` on two bands with the values `1..=6` and `10..=60`.
+    async fn compute_on_two_bands(band_names: [&str; 2], expression: &str) -> Result<Vec<i8>> {
+        let tiling_specification = TilingSpecification {
+            tile_size_in_pixels: [3, 2].into(),
+        };
+        let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+
+        let o = Expression {
+            params: ExpressionParams {
+                expression: expression.to_string(),
+                output_type: RasterDataType::I8,
+                output_band: None,
+                map_no_data: false,
+            },
+            sources: SingleRasterSource {
+                raster: RasterStacker {
+                    params: RasterStackerParams {
+                        rename_bands: RenameBands::Rename(
+                            band_names.iter().map(ToString::to_string).collect(),
+                        ),
+                    },
+                    sources: MultipleRasterSources {
+                        rasters: vec![
+                            make_raster_with_values(
+                                vec![1, 2, 3, 4, 5, 6],
+                                None,
+                                CacheHint::no_cache(),
+                            ),
+                            make_raster_with_values(
+                                vec![10, 20, 30, 40, 50, 60],
+                                None,
+                                CacheHint::no_cache(),
+                            ),
+                        ],
+                    },
+                }
+                .typed(),
+            },
+        }
+        .typed()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), &ctx)
+        .await?;
+
+        let processor = o.query_processor()?.get_i8().expect("output type is i8");
+
+        let ctx = ctx.mock_query_context(1.into());
+        let result: Vec<Result<RasterTile2D<i8>>> = processor
+            .query(
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
+                &ctx,
+            )
+            .await?
+            .collect()
+            .await;
+
+        assert_eq!(result.len(), 1);
+        let tile = result.into_iter().next().expect("one tile")?;
+
+        Ok(tile
+            .grid_array
+            .into_materialized_masked_grid()
+            .inner_grid
+            .data)
+    }
+
+    #[tokio::test]
+    async fn it_uses_band_names_as_variables() {
+        let expected = vec![9, 18, 27, 36, 45, 54];
+
+        assert_eq!(
+            compute_on_two_bands(["red", "nir"], "nir - red")
+                .await
+                .unwrap(),
+            expected
+        );
+        assert_eq!(
+            compute_on_two_bands(["red", "nir"], "B - A").await.unwrap(),
+            expected,
+            "deprecated letters"
+        );
+        assert_eq!(
+            compute_on_two_bands(["red", "nir"], "nir - A")
+                .await
+                .unwrap(),
+            expected,
+            "mixed"
+        );
+        assert_eq!(
+            compute_on_two_bands(["red", "nir"], "let red = A * 2; B - red + A")
+                .await
+                .unwrap(),
+            expected,
+            "old expressions can assign band names"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_computes_band_names_that_are_letters_of_other_bands() {
+        assert_eq!(
+            compute_on_two_bands(["B", "x"], "B").await.unwrap(),
+            vec![10, 20, 30, 40, 50, 60],
+            "old expression: letters win"
+        );
+        assert_eq!(
+            compute_on_two_bands(["B", "x"], "x - B").await.unwrap(),
+            vec![9, 18, 27, 36, 45, 54],
+            "new expression: band names win"
+        );
+    }
+
+    #[tokio::test]
+    async fn it_reports_unknown_band_names() {
+        let error = compute_on_two_bands(["red", "nir"], "nri - red")
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            error.contains("The variable `nri` was not defined. Available variables: `nir`, `red`"),
+            "{error}"
         );
     }
 }

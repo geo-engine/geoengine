@@ -399,7 +399,7 @@ const INDICATORS: Array<Indicator> = [
                     raster: {
                         type: 'Expression',
                         params: {
-                            expression: 'if (C == 3 || (C >= 7 && C <= 11)) { NODATA } else { (A - B) / (A + B) }',
+                            expression: 'if (scl == 3 || (scl >= 7 && scl <= 11)) { NODATA } else { (nir - red) / (nir + red) }',
                             outputType: 'F32',
                             outputBand: {
                                 name: 'NDVI',
@@ -416,7 +416,8 @@ const INDICATORS: Array<Indicator> = [
                                 type: 'RasterStacker',
                                 params: {
                                     renameBands: {
-                                        type: 'default',
+                                        type: 'rename',
+                                        values: ['nir', 'red', 'scl'],
                                     },
                                 },
                                 sources: {

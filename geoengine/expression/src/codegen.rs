@@ -6,6 +6,12 @@ use std::{collections::BTreeSet, fmt::Debug, hash::Hash};
 
 type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;
 
+/// Prefix for all variables in the generated code.
+///
+/// User-defined names, like band names, can be Rust keywords (e.g., `type`) or names of items in scope (e.g., `None`).
+/// The prefix makes them valid Rust identifiers that cannot collide with anything else.
+pub const VARIABLE_PREFIX: &str = "var_";
+
 /// An expression as an abstract syntax tree.
 /// Allows genering Rust code.
 #[derive(Debug, Clone)]
@@ -16,6 +22,8 @@ pub struct ExpressionAst {
     parameters: Vec<Parameter>,
     out_type: DataType,
     functions: BTreeSet<AstFunction>,
+    /// Aliases that the expression uses, as `(alias, parameter)` pairs.
+    aliases: Vec<(Identifier, Identifier)>,
 }
 
 impl ExpressionAst {
@@ -36,7 +44,20 @@ impl ExpressionAst {
             parameters,
             out_type,
             functions,
+            aliases: Vec::new(),
         })
+    }
+
+    /// Sets the aliases that the expression uses, as `(alias, parameter)` pairs.
+    #[must_use]
+    pub fn with_aliases(mut self, aliases: Vec<(Identifier, Identifier)>) -> Self {
+        self.aliases = aliases;
+        self
+    }
+
+    /// The aliases that the expression uses.
+    pub fn used_aliases(&self) -> impl Iterator<Item = &str> {
+        self.aliases.iter().map(|(alias, _)| alias.as_ref())
     }
 
     /// Outputs the generated code (file) as a string.
@@ -62,11 +83,17 @@ impl ToTokens for ExpressionAst {
             .parameters
             .iter()
             .map(|p| {
-                let param = p.identifier();
+                let param = Variable(p.identifier());
                 let dtype = p.data_type();
                 quote! { #param: Option<#dtype> }
             })
             .collect();
+        // bind aliases before the content, so that shadowing a parameter does not affect its aliases
+        let aliases = self.aliases.iter().map(|(alias, target)| {
+            let alias = Variable(alias);
+            let target = Variable(target);
+            quote! { let #alias = #target; }
+        });
         let content = &self.root;
 
         let dtype = self.out_type;
@@ -74,6 +101,7 @@ impl ToTokens for ExpressionAst {
         tokens.extend(quote! {
             #[unsafe(no_mangle)]
             pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
+                #(#aliases)*
                 #content
             }
         });
@@ -144,7 +172,10 @@ impl ToTokens for AstNode {
         let new_tokens = match self {
             Self::Constant(n) => quote! { Some(#n) },
             Self::NoData => quote! { None },
-            Self::Variable { name, .. } => quote! { #name },
+            Self::Variable { name, .. } => {
+                let name = Variable(name);
+                quote! { #name }
+            }
             Self::Function { function, args } => {
                 let fn_name = function.name();
                 quote! { #fn_name(#(#args),*) }
@@ -205,6 +236,16 @@ pub struct Identifier(String);
 impl ToTokens for Identifier {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let identifier = format_ident!("{}", self.0);
+        tokens.extend(quote! { #identifier });
+    }
+}
+
+/// An identifier that is a variable in the generated code.
+struct Variable<'i>(&'i Identifier);
+
+impl ToTokens for Variable<'_> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let identifier = format_ident!("{VARIABLE_PREFIX}{}", self.0.0);
         tokens.extend(quote! { #identifier });
     }
 }
@@ -326,6 +367,7 @@ impl ToTokens for Assignment {
             identifier,
             expression,
         } = self;
+        let identifier = Variable(identifier);
         let new_tokens = quote! {
             let #identifier = #expression;
         };
