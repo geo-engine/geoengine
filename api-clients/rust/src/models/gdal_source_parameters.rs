@@ -16,7 +16,7 @@ pub struct GdalSourceParameters {
     /// Dataset name or identifier to be loaded.
     #[serde(rename = "data")]
     pub data: String,
-    /// *Optional*: overview level to use.  If not provided, the data source will determine the resolution, i.e., uses its native resolution.
+    /// *Optional*: overview level to use, i.e., how many times coarser than the native resolution the data is read. `1` is the native resolution.  If not provided, the data source will determine the resolution, i.e., uses its native resolution.
     #[serde(rename = "overviewLevel", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub overview_level: Option<Option<i32>>,
 }

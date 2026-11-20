@@ -68,12 +68,12 @@ impl SpatialResolution {
     }
 
     /// Scales the native resolution by the factor of the GDAL overview level.
-    /// Fails for overview level 0 and if the result overflows.
+    /// Fails if the result overflows.
     pub fn with_native_resolution_and_gdal_overview_level(
         native_resolution: SpatialResolution,
-        gdal_overview_level: u32,
+        gdal_overview_level: NonZeroU32,
     ) -> Result<SpatialResolution> {
-        native_resolution * f64::from(gdal_overview_level)
+        native_resolution * f64::from(gdal_overview_level.get())
     }
 
     /// Multiplies by a factor that is already known to be positive and finite.
@@ -218,14 +218,15 @@ impl PartialOrd for SpatialResolution {
     }
 }
 
-/// finds the coarsest overview level that is still at least as fine as the required resolution
+/// Finds the coarsest power-of-two overview level that is still at least as fine as the required
+/// resolution. Level 1 is the native resolution.
 // TODO: add option to only use overview levels available for a given gdal dataset.
 pub fn find_next_best_overview_level(
     native_resolution: SpatialResolution,
     target_resolution: SpatialResolution,
-) -> u32 {
-    let mut current_overview_level = 0;
-    let mut next_overview_level: u32 = 2;
+) -> NonZeroU32 {
+    let mut current_overview_level = NonZeroU32::MIN;
+    let mut next_overview_level = NonZeroU32::MIN.saturating_add(1);
 
     // stops if the level or the resolution would overflow
     while let Ok(next_resolution) =
@@ -236,7 +237,7 @@ pub fn find_next_best_overview_level(
         && next_resolution <= target_resolution
     {
         current_overview_level = next_overview_level;
-        let Some(level) = next_overview_level.checked_mul(2) else {
+        let Some(level) = next_overview_level.checked_mul(NonZeroU32::MIN.saturating_add(1)) else {
             break;
         };
         next_overview_level = level;
@@ -375,14 +376,14 @@ mod test {
         let native = SpatialResolution::new_unchecked(f64::MAX / 3., f64::MAX / 3.);
         let target = SpatialResolution::new_unchecked(f64::MAX, f64::MAX);
 
-        assert_eq!(find_next_best_overview_level(native, target), 2);
+        assert_eq!(find_next_best_overview_level(native, target).get(), 2);
         assert_eq!(
             find_next_best_overview_level_resolution(native, target),
             (native * 2.).unwrap()
         );
 
         let native = SpatialResolution::new_unchecked(f64::MIN_POSITIVE, f64::MIN_POSITIVE);
-        assert_eq!(find_next_best_overview_level(native, target), 1 << 31);
+        assert_eq!(find_next_best_overview_level(native, target).get(), 1 << 31);
     }
 
     #[test]
@@ -391,15 +392,17 @@ mod test {
             find_next_best_overview_level(
                 SpatialResolution::new_unchecked(0.1, 0.1),
                 SpatialResolution::new_unchecked(0.1, 0.1)
-            ),
-            0
+            )
+            .get(),
+            1
         );
 
         assert_eq!(
             find_next_best_overview_level(
                 SpatialResolution::new_unchecked(0.1, 0.1),
                 SpatialResolution::new_unchecked(0.2, 0.2)
-            ),
+            )
+            .get(),
             2
         );
 
@@ -407,7 +410,8 @@ mod test {
             find_next_best_overview_level(
                 SpatialResolution::new_unchecked(0.1, 0.1),
                 SpatialResolution::new_unchecked(0.3, 0.3)
-            ),
+            )
+            .get(),
             2
         );
 
@@ -415,7 +419,8 @@ mod test {
             find_next_best_overview_level(
                 SpatialResolution::new_unchecked(0.1, 0.1),
                 SpatialResolution::new_unchecked(0.4, 0.4)
-            ),
+            )
+            .get(),
             4
         );
     }

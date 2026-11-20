@@ -19,7 +19,8 @@ export interface GdalSourceParameters {
      */
     data: string;
     /**
-     * *Optional*: overview level to use.
+     * *Optional*: overview level to use, i.e., how many times coarser than the native resolution
+     * the data is read. `1` is the native resolution.
      *
      * If not provided, the data source will determine the resolution, i.e., uses its native resolution.
      */

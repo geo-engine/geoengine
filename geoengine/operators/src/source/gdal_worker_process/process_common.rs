@@ -131,12 +131,11 @@ impl RasterInfo {
     }
 
     /// The first of the power-of-two overview levels `2..=max_overview_level` the band lacks.
-    /// `max_overview_level` 0 or 1 declares no overview.
-    pub fn missing_overview_level(&self, max_overview_level: u32) -> Option<NonZeroU32> {
-        let missing = largest_overview_level(&self.levels).checked_mul(2)?;
-        (missing <= max_overview_level)
-            .then_some(missing)
-            .and_then(NonZeroU32::new)
+    /// `max_overview_level` 1 declares no overview.
+    pub fn missing_overview_level(&self, max_overview_level: NonZeroU32) -> Option<NonZeroU32> {
+        let two = NonZeroU32::MIN.saturating_add(1);
+        let missing = largest_overview_level(&self.levels).checked_mul(two)?;
+        (missing <= max_overview_level).then_some(missing)
     }
 }
 
@@ -162,15 +161,16 @@ pub fn level_of_factor(levels: &[RasterLevelLayout], factor: NonZeroUsize) -> Op
 
 /// The largest power-of-two level `f` such that `levels` has all the overviews `2, 4, …, f`. 1 if
 /// it has none.
-pub fn largest_overview_level(levels: &[RasterLevelLayout]) -> u32 {
-    std::iter::successors(Some(2_u32), |level| level.checked_mul(2))
+pub fn largest_overview_level(levels: &[RasterLevelLayout]) -> NonZeroU32 {
+    let two = NonZeroU32::MIN.saturating_add(1);
+    std::iter::successors(Some(two), |level| level.checked_mul(two))
         .take_while(|level| {
-            NonZeroUsize::new(*level as usize)
+            NonZeroUsize::new(level.get() as usize)
                 .and_then(|factor| level_of_factor(levels, factor))
                 .is_some()
         })
         .last()
-        .unwrap_or(1)
+        .unwrap_or(NonZeroU32::MIN)
 }
 
 /// The size and the natural block size of one level of a band, in pixels.

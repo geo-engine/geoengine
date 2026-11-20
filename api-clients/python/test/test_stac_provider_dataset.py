@@ -58,7 +58,7 @@ class TestStacProviderDataset(unittest.TestCase):
                                 y_idx = 56, 
                                 x_idx = 56, ), ), ), 
                     descriptor = 'source', 
-                    max_overview_level = 0, ),
+                    max_overview_level = 1, ),
                 bands = [
                     geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                         asset_band = null, 
@@ -95,7 +95,7 @@ class TestStacProviderDataset(unittest.TestCase):
                                 y_idx = 56, 
                                 x_idx = 56, ), ), ), 
                     descriptor = 'source', 
-                    max_overview_level = 0, ),
+                    max_overview_level = 1, ),
                 bands = [
                     geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
                         asset_band = null, 

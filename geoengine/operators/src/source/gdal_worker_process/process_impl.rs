@@ -2088,9 +2088,12 @@ mod tests {
             (16, 16)
         );
 
-        assert_eq!(layout.missing_overview_level(4), None);
         assert_eq!(
-            layout.missing_overview_level(8),
+            layout.missing_overview_level(std::num::NonZeroU32::new(4).unwrap()),
+            None
+        );
+        assert_eq!(
+            layout.missing_overview_level(std::num::NonZeroU32::new(8).unwrap()),
             std::num::NonZeroU32::new(8)
         );
 

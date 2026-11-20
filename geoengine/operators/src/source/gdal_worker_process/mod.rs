@@ -9,6 +9,7 @@ pub mod reader_mode;
 
 use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, SpatialGridDefinition};
 use num::integer::div_floor;
+use std::num::NonZeroU32;
 
 pub use gdal_dataset_params::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
@@ -26,12 +27,13 @@ pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 
 /// Computes a reduced-resolution spatial grid for a given overview level.
 ///
-/// Returns `None` if the overview level is 0 or 1, both the original resolution.
+/// Returns `None` if the overview level is 1, the original resolution.
 /// The overview level multiplies the pixel size and divides the grid bounds accordingly.
 pub(crate) fn overview_level_spatial_grid(
     source_spatial_grid: SpatialGridDefinition,
-    overview_level: u32,
+    overview_level: NonZeroU32,
 ) -> Option<SpatialGridDefinition> {
+    let overview_level = overview_level.get();
     if overview_level > 1 {
         tracing::trace!("Using overview level {overview_level}");
         // overview levels are small integers, so scaling a finite pixel size cannot overflow in practice
@@ -86,18 +88,15 @@ mod tests {
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
         );
 
-        // the sources read levels 0 and 1 at the original resolution, without an overview grid
+        let level = |level| NonZeroU32::new(level).unwrap();
+        // the sources read level 1 at the original resolution, without an overview grid
         assert_eq!(
-            overview_level_spatial_grid(spatial_grid_definition, 0),
-            None
-        );
-        assert_eq!(
-            overview_level_spatial_grid(spatial_grid_definition, 1),
+            overview_level_spatial_grid(spatial_grid_definition, level(1)),
             None
         );
 
         let spatial_grid_definition_2x =
-            overview_level_spatial_grid(spatial_grid_definition, 2).unwrap();
+            overview_level_spatial_grid(spatial_grid_definition, level(2)).unwrap();
         let expected = SpatialGridDefinition::new(
             GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.2, -0.2),
             GridBoundingBox2D::new([-450, -900], [449, 899]).unwrap(),
@@ -105,7 +104,7 @@ mod tests {
         assert_eq!(spatial_grid_definition_2x, expected);
 
         let spatial_grid_definition_4x =
-            overview_level_spatial_grid(spatial_grid_definition, 4).unwrap();
+            overview_level_spatial_grid(spatial_grid_definition, level(4)).unwrap();
         let expected = SpatialGridDefinition::new(
             GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.4, -0.4),
             GridBoundingBox2D::new([-225, -450], [224, 449]).unwrap(),
@@ -113,7 +112,7 @@ mod tests {
         assert_eq!(spatial_grid_definition_4x, expected);
 
         let spatial_grid_definition_8x =
-            overview_level_spatial_grid(spatial_grid_definition, 8).unwrap();
+            overview_level_spatial_grid(spatial_grid_definition, level(8)).unwrap();
         let expected = SpatialGridDefinition::new(
             GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.8, -0.8),
             GridBoundingBox2D::new([-113, -225], [112, 224]).unwrap(),

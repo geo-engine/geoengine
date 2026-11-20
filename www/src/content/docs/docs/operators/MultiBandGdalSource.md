@@ -6,10 +6,10 @@ The [`MultiBandGdalSource`] is a source operator that reads multi-band raster da
 
 ## Parameters
 
-| Name          | Type         | Description                                                                                                                                 | Examples                                        |
-| ------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| data          | string       | Dataset name or identifier to be loaded.                                                                                                    | `"ndvi"`<br>`"sentinel-2-l2a_EPSG32632_U16_10"` |
-| overviewLevel | integer,null | _Optional_: overview level to use.<br><br>If not provided, the data source will determine the resolution, i.e., uses its native resolution. | `3`<br>`null`                                   |
+| Name          | Type         | Description                                                                                                                                                                                                                                            | Examples                                        |
+| ------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| data          | string       | Dataset name or identifier to be loaded.                                                                                                                                                                                                               | `"ndvi"`<br>`"sentinel-2-l2a_EPSG32632_U16_10"` |
+| overviewLevel | integer,null | _Optional_: overview level to use, i.e., how many times coarser than the native resolution<br>the data is read. `1` is the native resolution.<br><br>If not provided, the data source will determine the resolution, i.e., uses its native resolution. | `2`<br>`null`                                   |
 
 ## Examples
 

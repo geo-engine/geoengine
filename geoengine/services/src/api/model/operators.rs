@@ -17,6 +17,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use snafu::ensure;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use utoipa::{PartialSchema, ToSchema};
 
@@ -44,12 +45,12 @@ pub enum SpatialGridDescriptorState {
 pub struct SpatialGridDescriptor {
     pub spatial_grid: SpatialGridDefinition,
     pub descriptor: SpatialGridDescriptorState,
-    /// The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset.
-    /// Sources read only these and downsample further themselves. Unset: the levels are unknown
-    /// and GDAL chooses, which may resample.
+    /// The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset;
+    /// `1` says that the files have no overviews. Sources read only these and downsample further
+    /// themselves. Unset: the levels are unknown and GDAL chooses, which may resample.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(minimum = 0)]
-    pub max_overview_level: Option<u32>,
+    #[schema(value_type = Option<u32>, minimum = 1)]
+    pub max_overview_level: Option<NonZeroU32>,
 }
 
 impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDescriptor {

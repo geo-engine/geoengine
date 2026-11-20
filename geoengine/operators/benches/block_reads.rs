@@ -234,7 +234,7 @@ fn add_dataset(
     let max_overview_level = result_descriptor
         .spatial_grid
         .max_overview_level()
-        .unwrap_or(1);
+        .map_or(1, std::num::NonZeroU32::get);
     if std::env::var_os("GEOENGINE_BENCH_UNDECLARED_LEVELS").is_some() {
         result_descriptor.spatial_grid =
             result_descriptor.spatial_grid.with_max_overview_level(None);
@@ -254,7 +254,8 @@ fn add_dataset(
 
 fn source(name: &NamedData, overview_level: Option<u32>) -> TypedRasterOperator {
     GdalSource {
-        params: GdalSourceParameters::new(name.clone()).with_overview_level(overview_level),
+        params: GdalSourceParameters::new(name.clone())
+            .with_overview_level(overview_level.and_then(std::num::NonZeroU32::new)),
     }
     .typed()
 }

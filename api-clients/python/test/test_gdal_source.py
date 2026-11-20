@@ -38,14 +38,14 @@ class TestGdalSource(unittest.TestCase):
                 type = 'GdalSource',
                 params = geoengine_api_client.models.gdal_source_parameters.GdalSourceParameters(
                     data = '', 
-                    overview_level = 0, )
+                    overview_level = 1, )
             )
         else:
             return GdalSource(
                 type = 'GdalSource',
                 params = geoengine_api_client.models.gdal_source_parameters.GdalSourceParameters(
                     data = '', 
-                    overview_level = 0, ),
+                    overview_level = 1, ),
         )
         """
 

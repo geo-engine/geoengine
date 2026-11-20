@@ -32,7 +32,7 @@ use geoengine_datatypes::raster::{
     GridShapeAccess, Pixel, RasterProperties, RasterTile2D, TileInformation,
 };
 use num::FromPrimitive;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use tracing::trace;
 
 /// Everything needed to produce one output tile.
@@ -251,18 +251,17 @@ fn is_covered(area: GridBoundingBox2D, above: &[GridBoundingBox2D]) -> bool {
 /// Returns an error if the dataset declares its levels and `overview_level` is not one of them.
 pub(crate) fn ensure_overview_level_exists(
     data: &NamedData,
-    overview_level: u32,
-    max_overview_level: Option<u32>,
+    overview_level: NonZeroU32,
+    max_overview_level: Option<NonZeroU32>,
 ) -> Result<()> {
     match max_overview_level {
         Some(max_overview_level)
-            if overview_level > 1
-                && (!overview_level.is_power_of_two() || overview_level > max_overview_level) =>
+            if !overview_level.is_power_of_two() || overview_level > max_overview_level =>
         {
             Err(Error::OverviewLevelNotAvailable {
                 data: data.to_string(),
-                overview_level,
-                max_overview_level,
+                overview_level: overview_level.get(),
+                max_overview_level: max_overview_level.get(),
             })
         }
         _ => Ok(()),
@@ -276,17 +275,14 @@ pub(crate) fn ensure_overview_level_exists(
 pub(crate) fn overview_source(
     native_resolution: SpatialResolution,
     target_resolution: SpatialResolution,
-    max_overview_level: Option<u32>,
-    source: impl FnOnce(u32) -> TypedRasterOperator,
+    max_overview_level: Option<NonZeroU32>,
+    source: impl FnOnce(NonZeroU32) -> TypedRasterOperator,
 ) -> TypedRasterOperator {
     let wanted = find_next_best_overview_level(native_resolution, target_resolution);
     let available = match max_overview_level {
-        // the largest declared power of two; 0 reads the full resolution
-        Some(max) if wanted > 1 => match wanted.min(1 << max.max(1).ilog2()) {
-            1 => 0,
-            level => level,
-        },
-        _ => wanted,
+        // the largest declared power of two; 1 reads the full resolution
+        Some(max) => wanted.min(NonZeroU32::new(1 << max.ilog2()).unwrap_or(NonZeroU32::MIN)),
+        None => wanted,
     };
     let source = source(available);
     if available >= wanted {
@@ -730,7 +726,8 @@ mod tests {
     fn it_reads_only_declared_overviews_and_downsamples_the_rest() {
         let native = SpatialResolution::new_unchecked(10., 10.);
         let target = SpatialResolution::new_unchecked(80., 80.);
-        let source = |level: u32| {
+        let level = |level| NonZeroU32::new(level).unwrap();
+        let source = |level: NonZeroU32| {
             crate::source::GdalSource {
                 params: crate::source::GdalSourceParameters::new(NamedData::with_system_name(
                     "data",
@@ -743,31 +740,33 @@ mod tests {
 
         assert_eq!(
             json(&overview_source(native, target, None, source)),
-            json(&source(8)),
+            json(&source(level(8))),
             "unknown levels: as before"
         );
         assert_eq!(
-            json(&overview_source(native, target, Some(16), source)),
-            json(&source(8))
+            json(&overview_source(native, target, Some(level(16)), source)),
+            json(&source(level(8)))
         );
 
-        let downsampled = json(&overview_source(native, target, Some(4), source));
+        let downsampled = json(&overview_source(native, target, Some(level(4)), source));
         assert_eq!(downsampled["type"], "Downsampling");
         assert_eq!(downsampled["params"]["outputResolution"]["x"], 80.);
-        assert_eq!(downsampled["sources"]["raster"], json(&source(4)));
+        assert_eq!(downsampled["sources"]["raster"], json(&source(level(4))));
 
-        let full = json(&overview_source(native, target, Some(1), source));
-        assert_eq!(full["sources"]["raster"], json(&source(0)));
+        let full = json(&overview_source(native, target, Some(level(1)), source));
+        assert_eq!(full["sources"]["raster"], json(&source(level(1))));
     }
 
     #[test]
     fn it_rejects_undeclared_overview_levels() {
         let data = NamedData::with_system_name("data");
-        assert!(ensure_overview_level_exists(&data, 8, None).is_ok());
-        assert!(ensure_overview_level_exists(&data, 4, Some(4)).is_ok());
-        assert!(ensure_overview_level_exists(&data, 0, Some(1)).is_ok());
-        assert!(ensure_overview_level_exists(&data, 8, Some(4)).is_err());
-        assert!(ensure_overview_level_exists(&data, 3, Some(4)).is_err());
+        let level = |level| std::num::NonZeroU32::new(level).unwrap();
+        assert!(ensure_overview_level_exists(&data, level(8), None).is_ok());
+        assert!(ensure_overview_level_exists(&data, level(4), Some(level(4))).is_ok());
+        assert!(ensure_overview_level_exists(&data, level(1), Some(level(1))).is_ok());
+        assert!(ensure_overview_level_exists(&data, level(8), Some(level(4))).is_err());
+        assert!(ensure_overview_level_exists(&data, level(3), Some(level(4))).is_err());
+        assert!(ensure_overview_level_exists(&data, level(2), Some(level(1))).is_err());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

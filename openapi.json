@@ -9193,11 +9193,11 @@
               "null"
             ],
             "format": "int32",
-            "description": "*Optional*: overview level to use.\n\nIf not provided, the data source will determine the resolution, i.e., uses its native resolution.",
+            "description": "*Optional*: overview level to use, i.e., how many times coarser than the native resolution\nthe data is read. `1` is the native resolution.\n\nIf not provided, the data source will determine the resolution, i.e., uses its native resolution.",
             "examples": [
-              3
+              2
             ],
-            "minimum": 0
+            "minimum": 1
           }
         }
       },
@@ -14698,8 +14698,8 @@
               "null"
             ],
             "format": "int32",
-            "description": "The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset.\nSources read only these and downsample further themselves. Unset: the levels are unknown\nand GDAL chooses, which may resample.",
-            "minimum": 0
+            "description": "The overview levels `2, 4, …, maxOverviewLevel` exist in every file of a source dataset;\n`1` says that the files have no overviews. Sources read only these and downsample further\nthemselves. Unset: the levels are unknown and GDAL chooses, which may resample.",
+            "minimum": 1
           }
         }
       },

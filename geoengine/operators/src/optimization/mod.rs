@@ -361,7 +361,7 @@ mod tests {
             serde_json::json!({
                     "params": {
                         "data": "ndvi_downscaled_3x",
-                        "overviewLevel": 0
+                        "overviewLevel": 1
                     },
                     "type": "GdalSource"
                 }
@@ -475,7 +475,7 @@ mod tests {
                                 "raster": {
                                     "params": {
                                         "data": "ndvi_downscaled_3x",
-                                        "overviewLevel": 0
+                                        "overviewLevel": 1
                                     },
                                     "type": "GdalSource"
                                 }
@@ -848,7 +848,7 @@ mod tests {
                     GdalSource {
                         params: GdalSourceParameters {
                             data: ndvi_id.clone(),
-                            overview_level: Some(2),
+                            overview_level: std::num::NonZeroU32::new(2),
                         },
                     }
                     .typed(),
@@ -1057,11 +1057,11 @@ mod tests {
                   "sources": {
                     "rasters": [
                       {
-                        "params": { "data": "ndvi", "overviewLevel": 0 },
+                        "params": { "data": "ndvi", "overviewLevel": 1 },
                         "type": "GdalSource"
                       },
                       {
-                        "params": { "data": "ndvi_downscaled_3x", "overviewLevel": 0 },
+                        "params": { "data": "ndvi_downscaled_3x", "overviewLevel": 1 },
                         "type": "GdalSource"
                       }
                     ],
@@ -1374,14 +1374,14 @@ mod tests {
                         {
                             "params": {
                                 "data": "ndvi",
-                                "overviewLevel": 0
+                                "overviewLevel": 1
                             },
                             "type": "GdalSource"
                         },
                         {
                             "params": {
                                 "data": "ndvi_downscaled_3x",
-                                "overviewLevel": 0
+                                "overviewLevel": 1
                             },
                             "type": "GdalSource"
                         }
@@ -1813,7 +1813,7 @@ mod tests {
         // the native resolution of the NDVI dataset is 0.1
         for (x, y, expected_overview_level) in [
             // finer than native resolution
-            (0.05, 0.05, 0),
+            (0.05, 0.05, 1),
             // not a multiple of the native resolution
             (0.3, 0.3, 2),
             (0.7, 0.7, 4),

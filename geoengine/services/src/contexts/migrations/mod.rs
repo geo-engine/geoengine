@@ -25,6 +25,7 @@ pub use crate::contexts::migrations::{
     migration_0038_stac_max_concurrent_cell_searches::Migration0038StacMaxConcurrentCellSearches,
     migration_0039_max_overview_level::Migration0039MaxOverviewLevel,
     migration_0040_stac_coarser_assets::Migration0040StacCoarserAssets,
+    migration_0041_non_zero_max_overview_level::Migration0041NonZeroMaxOverviewLevel,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -57,6 +58,7 @@ mod migration_0037_rename_workflows_to_processing_graphs;
 mod migration_0038_stac_max_concurrent_cell_searches;
 mod migration_0039_max_overview_level;
 mod migration_0040_stac_coarser_assets;
+mod migration_0041_non_zero_max_overview_level;
 
 #[cfg(test)]
 mod schema_info;
@@ -103,6 +105,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0038StacMaxConcurrentCellSearches),
         Box::new(Migration0039MaxOverviewLevel),
         Box::new(Migration0040StacCoarserAssets),
+        Box::new(Migration0041NonZeroMaxOverviewLevel),
     ]
 }
 
