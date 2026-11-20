@@ -301,7 +301,11 @@ GDAL_NUM_THREADS = "4"
 # for the dynamic loader and for libraries that read variables themselves, e.g. a different
 # OpenJPEG and its options:
 # LD_LIBRARY_PATH = "/opt/openjpeg/lib"
-# OPJ_PLT_MIN_GAP = "131072"
+#
+# No speculative tile search in the patched OpenJPEG of geoengine-container: for files without a
+# TLM index it would guess where a tile starts and scan for its marker, which a crafted file can
+# fool into decoding other data. Set "YES" only for trusted files. Stock OpenJPEG ignores it.
+OPJ_TILE_SEARCH = "NO"
 #
 # One thread for the OpenBLAS and OpenMP pools: GDAL links them via Armadillo, and a threaded
 # OpenBLAS starts one idle thread per core in every worker as soon as it is loaded, before any GDAL
