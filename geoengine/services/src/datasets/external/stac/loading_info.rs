@@ -344,14 +344,28 @@ impl StacMultiBandMetaData {
         // no search and nothing written to the cache. It counts the items of all cells, also next
         // to the view, so few cells are searched instead, which is exact and warms the cache of the
         // map. Without aggregation the files are searched as well.
+        // What is cached already needs no request at all, not even the aggregation.
         if query.detail == LoadingInfoDetail::Availability
             && cell_bboxes.len() > self.query_cache.availability_search_cells()
-            && let Some(has_data) = self
-                .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
-                .await
         {
-            return MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), self.cache_ttl_secs)
+            let has_data = match self
+                .cached_steps_with_items(&time_steps, &cell_bboxes)
+                .await
+            {
+                Some(has_data) => Some(has_data),
+                None => {
+                    self.steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
+                        .await
+                }
+            };
+            if let Some(has_data) = has_data {
+                return MultiBandGdalLoadingInfoPart::new(
+                    time_steps,
+                    Vec::new(),
+                    self.cache_ttl_secs,
+                )
                 .with_availability(has_data);
+            }
         }
 
         if query.detail.is_for_footprints() {
@@ -530,6 +544,27 @@ impl StacMultiBandMetaData {
         }
         self.search_missing_steps(items_url, time_interval, cell_bboxes)
             .await
+    }
+
+    /// For each step whether any cell has an item in it, from the cache alone: `None` unless every
+    /// cell and step is cached, e.g. because the map has loaded the view.
+    async fn cached_steps_with_items(
+        &self,
+        time_steps: &[TimeInterval],
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) -> Option<Vec<bool>> {
+        let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
+        let mut has_data = Vec::with_capacity(time_steps.len());
+        for step in time_steps {
+            let mut step_has_data = false;
+            for (cell, _) in cell_bboxes {
+                let files = self.query_cache.get(dataset_id, *cell, *step).await?;
+                // an item on the closed end of a search belongs to the next step
+                step_has_data |= files.iter().any(|file| file.file.time == *step);
+            }
+            has_data.push(step_has_data);
+        }
+        Some(has_data)
     }
 
     /// For each step whether any cell has an item in it, from one aggregation, if the server can
@@ -4027,6 +4062,52 @@ mod grid_request_tests {
         assert_eq!(info.has_data(0), None);
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn availability_of_a_cached_view_asks_nothing() {
+        // an aggregation request would be unexpected and fail
+        let server = Server::run();
+        let starts = new_starts();
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            vec![],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        // the map loads the two days
+        meta.first_part(query(bounds(0.1, 0.4), window(3, 5)))
+            .await
+            .unwrap();
+        assert_eq!(starts.lock().unwrap().len(), 2);
+
+        // the calendar of the same view is answered from what the map found
+        let info = meta
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .await
+            .unwrap();
+        assert_eq!(info.has_data(0), Some(true));
+        assert_eq!(info.has_data(1), Some(false));
+        assert_eq!(starts.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]
