@@ -44,7 +44,8 @@ export interface RasterFootprints {
      */
     steps: Array<TimeStepFootprint>;
     /**
-     * The next time step to ask for, if more steps exist within the requested time interval.
+     * The rest of the requested time interval, if it has more time steps than were answered.
+     * Send it as `timeInterval` to get the next steps.
      */
     next?: TimeInterval | null;
 }

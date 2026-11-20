@@ -1167,6 +1167,11 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_concurrent_cell_searches: Option<i32>,
+    /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
+    /// size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it
+    /// which time steps have items instead of searching them. Omitted values do not use it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datetime_frequency_aggregation: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -1206,6 +1211,7 @@ impl From<StacDataProviderDefinition>
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
             stac_grid: value.stac_grid.map(Into::into),
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
+            datetime_frequency_aggregation: value.datetime_frequency_aggregation,
         }
     }
 }
@@ -1231,6 +1237,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             cache_ttl_secs: value.cache_ttl_secs.map(Into::into),
             stac_grid: value.stac_grid.map(Into::into),
             max_concurrent_cell_searches: value.max_concurrent_cell_searches,
+            datetime_frequency_aggregation: value.datetime_frequency_aggregation,
         }
     }
 }

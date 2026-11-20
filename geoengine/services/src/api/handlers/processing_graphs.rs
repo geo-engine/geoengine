@@ -604,7 +604,8 @@ pub struct RasterFootprints {
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub steps: Vec<TimeStepFootprint>,
-    /// The next time step to ask for, if more steps exist within the requested time interval.
+    /// The rest of the requested time interval, if it has more time steps than were answered.
+    /// Send it as `timeInterval` to get the next steps.
     pub next: Option<TimeInterval>,
 }
 
@@ -1347,12 +1348,13 @@ mod tests {
         );
     }
 
-    /// A raster graph with one tile at 0 to 1000 ms that covers the pixels 0 to 1 of band 0.
+    /// A raster graph with a tile at 0 to 1000 ms and one at 1000 to 2000 ms. Both cover the pixels
+    /// 0 to 1 of band 0.
     async fn register_footprints_test_graph(
         ctx: &<PostgresContext<NoTls> as ApplicationContext>::SessionContext,
     ) -> ServicesProcessingGraphId {
-        let tile = geoengine_datatypes::raster::RasterTile2D::<u8> {
-            time: TimeInterval::new_unchecked(0, 1000),
+        let tile = |start| geoengine_datatypes::raster::RasterTile2D::<u8> {
+            time: TimeInterval::new_unchecked(start, start + 1000),
             tile_position: [0, 0].into(),
             band: 0,
             global_geo_transform: GeoTransform::test_default(),
@@ -1366,7 +1368,7 @@ mod tests {
         let processing_graph = ServicesProcessingGraph {
             operator: geoengine_operators::mock::MockRasterSource::<u8> {
                 params: MockRasterSourceParams::<u8> {
-                    data: vec![tile],
+                    data: vec![tile(0), tile(1000)],
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1427,6 +1429,53 @@ mod tests {
         assert_eq!(steps.len(), 1, "{body}");
         assert_eq!(steps[0]["status"], "data");
         assert_eq!(steps[0]["bounds"].as_array().unwrap().len(), 1);
+    }
+
+    #[ge_context::test(tiling_spec = "footprints_test_tiling_spec")]
+    async fn footprints_in_pages(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+        let id = register_footprints_test_graph(&ctx).await;
+        let api_time = |start, end| {
+            serde_json::to_value(crate::api::model::datatypes::TimeInterval::from(
+                TimeInterval::new_unchecked(start, end),
+            ))
+            .unwrap()
+        };
+
+        // two time steps, one per page
+        let mut pages = Vec::new();
+        for time_interval in [
+            "1970-01-01T00:00:00.000Z/1970-01-01T00:00:02.000Z",
+            // the `next` of the first page
+            "1970-01-01T00:00:01.000Z/1970-01-01T00:00:02.000Z",
+        ] {
+            let req = test::TestRequest::get()
+                .uri(&format!(
+                    "/processingGraphs/{id}/footprints?spatialBounds=0,-10,10,0&timeInterval={time_interval}&attributes=0&limit=1"
+                ))
+                .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+            let res = send_test_request(req, app_ctx.clone()).await;
+
+            let res_status = res.status();
+            let res_body = read_body_string(res).await;
+            assert_eq!(res_status, 200, "{res_body:?}");
+            pages.push(serde_json::from_str::<serde_json::Value>(&res_body).unwrap());
+        }
+
+        let steps = |page: &serde_json::Value| {
+            page["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|step| step["time"].clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(steps(&pages[0]), [api_time(0, 1000)]);
+        // the rest of the requested time, to send as it is
+        assert_eq!(pages[0]["next"], api_time(1000, 2000));
+        assert_eq!(steps(&pages[1]), [api_time(1000, 2000)]);
+        assert_eq!(pages[1]["next"], serde_json::Value::Null);
     }
 
     #[ge_context::test]

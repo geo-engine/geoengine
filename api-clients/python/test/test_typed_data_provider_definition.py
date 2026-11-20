@@ -158,6 +158,7 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 stac_grid = geoengine_api_client.models.stac_grid.StacGrid(
                     target_number_of_cells = 1, ),
                 max_concurrent_cell_searches = 56,
+                datetime_frequency_aggregation = True,
                 user = '',
                 refresh_token = '',
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')

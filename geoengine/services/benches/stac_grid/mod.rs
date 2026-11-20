@@ -13,10 +13,7 @@ use geoengine_datatypes::{
     raster::{GeoTransform, GridIdx2D, GridShape, TileInformation},
     spatial_reference::SpatialReference,
 };
-use geoengine_operators::{
-    engine::MetaData,
-    source::{LoadingInfoDetail, MultiBandGdalLoadingInfoQueryRectangle},
-};
+use geoengine_operators::source::{LoadingInfoDetail, MultiBandGdalLoadingInfoQueryRectangle};
 use geoengine_services::{
     datasets::external::stac::{StacGrid, StacMultiBandMetaData},
     util::join_base_url_and_path,
@@ -475,8 +472,7 @@ async fn run_case(case: &BenchCase<'_>, repeat: u64, output: &mut BenchOutput) -
                     BandSelection::first(),
                     LoadingInfoDetail::Files,
                 );
-                let info = meta
-                    .loading_info(query)
+                let info = first_part(meta, query)
                     .await
                     .expect("production loading_info succeeds");
                 info.tile_files(time, tile_information(&tile), 0)
