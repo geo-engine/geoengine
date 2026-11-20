@@ -2,7 +2,7 @@
 //!
 //! One `datetime_frequency` request tells which times have items at all. A step without any
 //! item can then be stored as empty for every cell, and its search is skipped.
-use super::{RequestLane, StacClient};
+use super::StacClient;
 use crate::util::{format_stac_wgs84_bbox, retry::RetryPolicy};
 use chrono::DateTime;
 use geoengine_datatypes::primitives::{
@@ -68,7 +68,6 @@ impl StacClient {
         bbox: BoundingBox2D,
         range: TimeInterval,
         step: TimeStep,
-        lane: RequestLane,
     ) -> Option<Vec<TimeInterval>> {
         let (bucket, bucket_name) = bucket_of(step)?;
         let datetime = format!(
@@ -87,14 +86,13 @@ impl StacClient {
         ]);
 
         let response = self
-            .execute_json_in_lane::<Response>(
+            .execute_json::<Response>(
                 request,
                 // planning is optional, so a failing server costs one short retry, not a long backoff
                 &RetryPolicy::new()
                     .max_retries(1)
                     .initial_delay_ms(200)
                     .stop_on_status(&UNSUPPORTED_STATUSES),
-                lane,
             )
             .await;
         let response = match response {

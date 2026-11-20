@@ -2,7 +2,7 @@ use super::common;
 use super::{
     StacClient, StacDataProvider, StacProviderDataset, StacProviderS3Config,
     cache::StacQueryCache,
-    coordinator::{RequestLane, step_has_items},
+    coordinator::step_has_items,
     grid::{ProjectedStacGrid, StacGrid, StacGridCells},
 };
 use crate::error::Result;
@@ -78,7 +78,6 @@ enum StacQueryState {
 async fn query_stac_item_collection(
     client: &StacClient,
     query_state: &StacQueryState,
-    priority: RequestLane,
 ) -> geoengine_operators::util::Result<(stac::ItemCollection, StacQueryState)> {
     let request_policy = RetryPolicy::new().stop_on_status(&[400, 404]);
 
@@ -93,7 +92,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(query_url.clone()).query(query_params);
             let item_collection: stac::ItemCollection = client
-                .execute_json_in_lane(request, &request_policy, priority)
+                .execute_json(request, &request_policy)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -124,7 +123,7 @@ async fn query_stac_item_collection(
 
             let request = client.get(next_url.clone());
             let item_collection: stac::ItemCollection = client
-                .execute_json_in_lane(request, &request_policy, priority)
+                .execute_json(request, &request_policy)
                 .await
                 .map_err(
                     |e| geoengine_operators::error::Error::QueryingProcessorFailed {
@@ -236,18 +235,12 @@ impl
         }
 
         if query.purpose == LoadingInfoPurpose::Footprints {
-            // footprints that answer a raster query search like the raster query would
-            let lane = if query.for_display {
-                RequestLane::Footprints
-            } else {
-                RequestLane::Data
-            };
             self.prepare_window_search(
                 &items_url,
                 time_interval,
                 time_steps.len(),
                 &cell_bboxes,
-                lane,
+                query.for_display,
             )
             .await?;
         }
@@ -262,11 +255,7 @@ impl
                     self.dataset.clone(),
                     cell,
                     step,
-                    move || async move {
-                        metadata
-                            .search_bbox(url, bbox, step, RequestLane::Data)
-                            .await
-                    },
+                    move || async move { metadata.search_bbox(url, bbox, step).await },
                 )
             })
             .buffer_unordered(self.max_concurrent_cell_searches)
@@ -490,14 +479,14 @@ impl StacMultiBandMetaData {
         time_interval: TimeInterval,
         number_of_steps: usize,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
-        lane: RequestLane,
+        for_display: bool,
     ) -> geoengine_operators::util::Result<()> {
         // A single step has no limit: it runs the searches the map tiles of that step run, with
         // the same cache entries, so the coverage of a date works wherever its tiles do.
         if number_of_steps <= 1 {
             return Ok(());
         }
-        self.search_missing_steps(items_url, time_interval, cell_bboxes, lane)
+        self.search_missing_steps(items_url, time_interval, cell_bboxes, for_display)
             .await
     }
 
@@ -515,13 +504,7 @@ impl StacMultiBandMetaData {
             return None;
         };
         let with_items = self
-            .intervals_with_items(
-                items_url,
-                regular.step,
-                &[time_interval],
-                cell_bboxes,
-                RequestLane::Footprints,
-            )
+            .intervals_with_items(items_url, regular.step, &[time_interval], cell_bboxes)
             .await?;
         if cell_bboxes.len() <= self.query_cache.max_footprint_searches() {
             let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
@@ -545,7 +528,6 @@ impl StacMultiBandMetaData {
         step: TimeStep,
         chunks: &[TimeInterval],
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
-        lane: RequestLane,
     ) -> Option<Vec<TimeInterval>> {
         let range = TimeInterval::new(chunks.first()?.start(), chunks.last()?.end()).ok()?;
         let bbox = cell_bboxes
@@ -555,7 +537,7 @@ impl StacMultiBandMetaData {
         let aggregate_url = items_url.join("aggregate").ok()?;
 
         self.client
-            .datetime_frequency(aggregate_url, bbox, range, step, lane)
+            .datetime_frequency(aggregate_url, bbox, range, step)
             .await
     }
 
@@ -625,10 +607,10 @@ impl StacMultiBandMetaData {
     fn reject_too_many_searches(
         &self,
         searches: usize,
-        lane: RequestLane,
+        for_display: bool,
     ) -> geoengine_operators::util::Result<()> {
         let limit = self.query_cache.max_footprint_searches();
-        if lane == RequestLane::Footprints && searches > limit {
+        if for_display && searches > limit {
             return Err(geoengine_operators::error::Error::FootprintQueryTooLarge {
                 searches,
                 limit,
@@ -648,7 +630,7 @@ impl StacMultiBandMetaData {
         items_url: &Url,
         time_interval: TimeInterval,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
-        lane: RequestLane,
+        for_display: bool,
     ) -> geoengine_operators::util::Result<()> {
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return Ok(());
@@ -679,7 +661,7 @@ impl StacMultiBandMetaData {
 
         let chunk_intervals = chunks.iter().map(|(chunk, _)| *chunk).collect::<Vec<_>>();
         let with_items = self
-            .intervals_with_items(items_url, regular.step, &chunk_intervals, cell_bboxes, lane)
+            .intervals_with_items(items_url, regular.step, &chunk_intervals, cell_bboxes)
             .await;
 
         let mut searches = Vec::new();
@@ -700,13 +682,12 @@ impl StacMultiBandMetaData {
             }
         }
 
-        self.reject_too_many_searches(searches.len(), lane)?;
+        self.reject_too_many_searches(searches.len(), for_display)?;
         if !self.query_cache.stores_results() {
             // the steps are searched one by one afterwards anyway
             return Ok(());
         }
-        self.search_spans(items_url, dataset_id, searches, lane)
-            .await
+        self.search_spans(items_url, dataset_id, searches).await
     }
 
     /// Runs the searches of spans of missing steps, each for one cell, and stores their results.
@@ -715,7 +696,6 @@ impl StacMultiBandMetaData {
         items_url: &Url,
         dataset_id: u64,
         searches: Vec<(GridIdx2D, BoundingBox2D, TimeInterval, bool)>,
-        lane: RequestLane,
     ) -> geoengine_operators::util::Result<()> {
         futures::stream::iter(searches)
             .map(|(cell, bbox, span, single_step)| {
@@ -725,25 +705,20 @@ impl StacMultiBandMetaData {
                 async move {
                     if single_step {
                         // The span is the step itself, so the normal step entry is the shared search.
-                        // A map tile for the same step joins it, so it waits in the data lane.
+                        // A map tile for the same step joins it.
                         return cache
                             .get_or_fetch(
                                 metadata.dataset.clone(),
                                 cell,
                                 span,
-                                move || async move {
-                                    metadata
-                                        .search_bbox(url, bbox, span, RequestLane::Data)
-                                        .await
-                                },
+                                move || async move { metadata.search_bbox(url, bbox, span).await },
                             )
                             .await;
                     }
                     // The entry for the span only makes concurrent callers share one search.
                     let result = cache
                         .get_or_fetch(metadata.dataset.clone(), cell, span, move || async move {
-                            // a window search to show takes turns with map tiles instead of holding them up
-                            let files = metadata.search_bbox(url, bbox, span, lane).await?;
+                            let files = metadata.search_bbox(url, bbox, span).await?;
                             for step in regular_time_steps(metadata.time_dimension, span)? {
                                 let step = step?;
                                 // An item on the span's closed end belongs to the next step and is dropped here.
@@ -786,7 +761,6 @@ impl StacMultiBandMetaData {
         items_url: Url,
         bbox: geoengine_datatypes::primitives::BoundingBox2D,
         time_interval: TimeInterval,
-        priority: RequestLane,
     ) -> geoengine_operators::util::Result<Vec<StacTileFile>> {
         let mut files = Vec::new();
         let mut state = StacQueryState::FirstPage {
@@ -795,8 +769,7 @@ impl StacMultiBandMetaData {
         };
 
         while !matches!(state, StacQueryState::Finished) {
-            let (collection, next_state) =
-                query_stac_item_collection(&self.client, &state, priority).await?;
+            let (collection, next_state) = query_stac_item_collection(&self.client, &state).await?;
 
             for item in collection.items {
                 self.process_stac_item(&item, &mut files).map_err(|error| {
@@ -2425,7 +2398,7 @@ mod tests {
             query_url: Url::parse(&server.url_str("/initial-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&client, &initial_query, RequestLane::Data)
+        query_stac_item_collection(&client, &initial_query)
             .await
             .expect("initial authenticated STAC request should succeed");
 
@@ -2433,7 +2406,7 @@ mod tests {
             next_url: Url::parse(&server.url_str("/next-items")).unwrap(),
         };
         let cloned_client = client.clone();
-        query_stac_item_collection(&cloned_client, &next_page_query, RequestLane::Data)
+        query_stac_item_collection(&cloned_client, &next_page_query)
             .await
             .expect("authenticated STAC pagination request should succeed");
 
@@ -2453,7 +2426,7 @@ mod tests {
             query_url: Url::parse(&server.url_str("/refreshed-items")).unwrap(),
             query_params: vec![],
         };
-        query_stac_item_collection(&cloned_client, &refreshed_query, RequestLane::Data)
+        query_stac_item_collection(&cloned_client, &refreshed_query)
             .await
             .expect("refreshed authenticated STAC request should succeed");
     }
@@ -4524,11 +4497,7 @@ mod grid_request_tests {
         };
         let result = tokio::time::timeout(
             Duration::from_secs(12),
-            super::query_stac_item_collection(
-                &client,
-                &state,
-                crate::datasets::external::stac::coordinator::RequestLane::Data,
-            ),
+            super::query_stac_item_collection(&client, &state),
         )
         .await
         .expect("ten rate-limit attempts should finish with fixed cooldowns");
