@@ -251,6 +251,29 @@ describe('FootprintsService overlay', () => {
             expect(service.steps().length).toBe(365);
         });
 
+        it('asks for the rest after the last step, so a step over the end of the first month is not loaded twice', async () => {
+            // steps of ten days from the fifth of April, so 25 April to 5 May crosses the end of the
+            // first request (the month); answered whole and without a cursor
+            const TEN_DAYS = 10 * DAY;
+            const origin = Date.UTC(2026, 3, 5);
+            getFootprints.mockImplementation((_, query) => {
+                const [start, end] = (query.timeInterval ?? '').split('/').map((time) => Date.parse(time));
+                const steps = [];
+                for (let time = origin + Math.floor((start - origin) / TEN_DAYS) * TEN_DAYS; time < end; time += TEN_DAYS) {
+                    steps.push({time: {start: time, end: time + TEN_DAYS}, status: TimeStepFootprintStatus.Data, bounds: []});
+                }
+                return Promise.resolve({...FOOTPRINTS, steps});
+            });
+            const service = createService();
+            service.timeStepOverride.set({durationAmount: 10, durationUnit: 'days'});
+            service.datesNeeded.set(true);
+            await settle();
+
+            const starts = service.steps().map((step) => step.time.start);
+            expect(starts.length).toBeGreaterThan(3);
+            expect(new Set(starts).size).toBe(starts.length);
+        });
+
         it('stops following the cursor after eight requests', async () => {
             getFootprints.mockImplementation(answerDays(1));
             const service = createService();

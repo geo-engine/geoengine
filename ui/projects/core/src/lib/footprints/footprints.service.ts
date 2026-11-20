@@ -156,7 +156,8 @@ export class FootprintsService {
                 // a newer load has reset the partial answer, which this one must not bring back
                 if (abortSignal.aborted) return undefined;
                 footprints = footprints ? mergeFootprints(footprints, part) : part;
-                const next = part.next?.start ?? range.end;
+                // a step that crosses the end of the range is answered whole, so the rest starts after it
+                const next = part.next?.start ?? Math.max(range.end, part.steps.at(-1)?.time.end ?? range.end);
                 if (part.tooLarge || next >= end) break;
                 this.partialFootprints.set(footprints);
                 range = {start: next, end};
