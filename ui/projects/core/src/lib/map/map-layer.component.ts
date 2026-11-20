@@ -520,6 +520,8 @@ export class OlOgcApiMapTileLayerComponent
     /** Keep the map cutoff tied to this grid when imagery switches to a different tile matrix set. */
     readonly minTileMatrixSetId = input<TMSId>();
     readonly zoomRequired = output<boolean>();
+    /** Whether tiles load at the current zoom. Unlike `zoomRequired`, false while the zoom limit is not known yet. */
+    readonly tilesLoadable = output<boolean>();
     private readonly mapService = inject(MapService);
     private readonly destroyRef = inject(DestroyRef);
     private readonly viewport = toSignal(this.mapService.getViewportSizeStream(), {requireSync: true});
@@ -680,6 +682,7 @@ export class OlOgcApiMapTileLayerComponent
             this._mapLayer.setVisible(this.isVisible());
             this.loader?.setEnabled(valid && this.isVisible() && !blocked);
             this.zoomRequired.emit(blocked);
+            this.tilesLoadable.emit(valid && !blocked);
         });
 
         effect(() => {

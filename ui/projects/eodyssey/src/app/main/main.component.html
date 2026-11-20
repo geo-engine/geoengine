@@ -102,7 +102,7 @@
     <mat-drawer-content>
         <geoengine-map-container #map [grid]="false">
             @if (sessionToken()) {
-                @let activeLayer = mapTileLayer();
+                @let activeLayer = tileLayer();
                 @let currentSessionToken = sessionToken();
                 @let currentSpatialReference = spatialReference();
                 @let mapTileDate = currentTime();
@@ -115,11 +115,12 @@
                         [spatialReference]="currentSpatialReference"
                         [time]="mapTileDate"
                         [tmsId]="tileMatrixSet()"
-                        [minTileMatrixIndex]="minTileMatrixIndex()"
+                        [minTileMatrixIndex]="activeLayer.minTileMatrixIndex"
                         [minTileMatrixSetId]="'CustomWebMercator'"
-                        [isVisible]="testIsVisible()"
+                        [isVisible]="activeLayer.isVisible"
                         (loading)="onTileLoading($event)"
                         (zoomRequired)="zoomRequired.set($event)"
+                        (tilesLoadable)="tilesLoadable.set($event)"
                     ></geoengine-ol-ogc-api-map-tile-layer>
                 }
             }
@@ -129,6 +130,11 @@
             <div class="zoom-prompt" role="status">
                 <mat-icon aria-hidden="true">zoom_in</mat-icon>
                 <span>Zoom in further to load the selected layer.</span>
+            </div>
+        } @else if (coverageZoomRequired()) {
+            <div class="zoom-prompt" role="status">
+                <mat-icon aria-hidden="true">zoom_in</mat-icon>
+                <span>Zoom in to see where the scenes of this date are. The calendar knows the dates with data for larger areas.</span>
             </div>
         }
 

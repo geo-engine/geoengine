@@ -70,13 +70,31 @@ export class EOdysseyLayerService {
         source: () => this.selectedDataSource()?.key,
         computation: () => !untracked(this.mapCenter),
     });
+    /**
+     * What the map shows of the data source: nothing, where the scenes of the date are, or the selected preset.
+     * Nothing for a new data source, so choosing one loads no data.
+     */
+    readonly shown = linkedSignal<string | undefined, 'none' | 'availability' | 'preset'>({
+        source: () => this.selectedDataSource()?.key,
+        computation: () => 'none',
+    });
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
+    /**
+     * The data source whose time step was applied last. Removing the visualization keeps it, so applying the same
+     * data source again does not reset the step.
+     */
+    private readonly timeSource = signal<DataSourceDefinition | undefined>(undefined);
+    readonly dataSourceOfTime = this.timeSource.asReadonly();
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();
         return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
     });
+    /** The zoom limit of the selected visualization, also while it is not on the map. */
+    readonly selectedMinTileMatrixIndex = computed(
+        () => this.selectedPreset()?.minTileMatrixIndex ?? this.selectedDataSource()?.minTileMatrixIndex ?? 0,
+    );
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -237,7 +255,13 @@ export class EOdysseyLayerService {
         const preset = this.selectedPreset();
         if (source && preset && this.canApplyPreset()) {
             this.appliedVisualization.set({source, preset});
+            this.timeSource.set(source);
         }
+    }
+
+    /** Takes the visualization off the map, e.g. to see only the boxes where data exists. */
+    removeVisualization(): void {
+        this.appliedVisualization.set(undefined);
     }
 
     /** Load EDV -> category -> data source -> region, leaving preset layers lazy. */
@@ -289,6 +313,7 @@ export class EOdysseyLayerService {
             key,
             name: dataset.name,
             variants,
+            // read but not applied: selecting a data source keeps the date the user chose
             defaultTime: parseFiniteNumber(metadata.get('edv:defaultTime')),
             defaultTimeStep: timeStep ? timeStepDictTotimeStepDuration(TimeStepFromJSON(JSON.parse(timeStep))) : undefined,
             citation: metadata.get('edv:citation') ?? '',
