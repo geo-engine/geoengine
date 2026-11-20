@@ -17,7 +17,6 @@ use geoengine_operators::{
     engine::MetaData,
     source::{LoadingInfoDetail, MultiBandGdalLoadingInfoQueryRectangle},
 };
-use geoengine_services::datasets::external::stac::RequestLane;
 use geoengine_services::{
     datasets::external::stac::{StacGrid, StacMultiBandMetaData},
     util::join_base_url_and_path,
@@ -459,7 +458,7 @@ async fn run_case(case: &BenchCase<'_>, repeat: u64, output: &mut BenchOutput) -
                     (tile.bbox.2, tile.bbox.3).into(),
                 )
                 .expect("tile bbox");
-                meta.search_bbox(items_url, bbox, time, RequestLane::Data)
+                meta.search_bbox(items_url, bbox, time)
                     .await
                     .expect("baseline STAC search succeeds")
                     .into_iter()

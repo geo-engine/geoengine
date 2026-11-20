@@ -903,28 +903,10 @@ pub struct StacCache {
     pub search_chunk_steps: u32,
     /// Footprint queries needing more searches than this are rejected as too large.
     pub max_footprint_searches: usize,
-    /// Share of a STAC server's requests that footprint searches (the calendar) get while map tiles
-    /// also wait, between 0 and 1 (both excluded). While only one kind waits, it gets all requests.
-    pub footprints_share: f64,
     /// A calendar request for at most this many grid cells searches the files, which gives exact
     /// days and warms the cache of the map. For more cells, one aggregation counts the items of the
     /// cells, which is cheaper but also counts items next to the view. 0 always aggregates.
     pub availability_search_cells: usize,
-}
-
-impl StacCache {
-    pub fn validate(&self) -> Result<()> {
-        // 0 or 1 would let one kind of request wait forever while the other keeps coming
-        if !(self.footprints_share > 0.0 && self.footprints_share < 1.0) {
-            return Err(crate::error::Error::InvalidConfig {
-                reason: format!(
-                    "footprints_share must be between 0 and 1 (both excluded), got {}",
-                    self.footprints_share
-                ),
-            });
-        }
-        Ok(())
-    }
 }
 
 impl TestDefault for StacCache {
@@ -934,7 +916,6 @@ impl TestDefault for StacCache {
             ttl_secs: 3_600,
             search_chunk_steps: 30,
             max_footprint_searches: 50,
-            footprints_share: 0.5,
             availability_search_cells: 4,
         }
     }

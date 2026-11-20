@@ -114,7 +114,6 @@ where
     /// The registry of the STAC request coordinators, configured by `[stac_cache]`.
     fn stac_request_registry() -> Result<StacRequestRegistry> {
         let config = get_config_element::<crate::config::StacCache>()?;
-        config.validate()?;
         Ok(StacRequestRegistry::new().with_config(config))
     }
 
