@@ -16,6 +16,7 @@ use crate::util::raster_stream_to_geotiff::{
 };
 use crate::util::raster_stream_to_png::raster_stream_to_png_bytes;
 use crate::util::test::AsciiRasterTilesExt;
+use crate::util::{AdaptToGrid, TargetGrid, WarpMethods};
 use geoengine_datatypes::collections::MultiPointCollection;
 use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
 use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
@@ -1281,5 +1282,155 @@ async fn it_optimizes_to_a_coarser_resolution() {
             .optimize(SpatialResolution::new(0.5, 0.5).unwrap())
             .is_err(),
         "a finer resolution is rejected"
+    );
+}
+
+/// Wraps `operator` as WMS and OGC API Tiles do, for an output of `resolution` in EPSG:4326.
+async fn wrap_for_resolution(
+    operator: TypedRasterOperator,
+    resolution: f64,
+    exe_ctx: &MockExecutionContext,
+) -> AdaptToGrid {
+    let initialized = operator
+        .clone()
+        .initialize(ProcessingGraphOperatorPath::initialize_root(), exe_ctx)
+        .await
+        .unwrap();
+    AdaptToGrid::new_create_result_descriptor(operator, initialized)
+        .adapt_to_grid(
+            TargetGrid {
+                spatial_reference: SpatialReference::epsg_4326(),
+                resolution: Some(SpatialResolution::new(resolution, resolution).unwrap()),
+                origin: None,
+            },
+            WarpMethods::CONTINUOUS,
+            exe_ctx,
+        )
+        .await
+        .unwrap()
+}
+
+/// The inputs of the [`RasterStacker`] below the [`Expression`] of [`clip`]
+fn clipped_inputs(operator: &TypedRasterOperator) -> &[TypedRasterOperator] {
+    let TypedRasterOperator::Expression(expression) = operator else {
+        panic!("the root should be the expression of the clip, was {operator:?}");
+    };
+    let TypedRasterOperator::RasterStacker(stacker) = &expression.sources.raster else {
+        panic!("the expression should stack its inputs");
+    };
+    &stacker.sources.rasters
+}
+
+#[tokio::test]
+async fn it_rewrites_the_resolution_of_a_rasterization_in_the_graph_for_overviews() {
+    let mut exe_ctx = MockExecutionContext::test_default();
+    let rasterization = germany_rasterization(&mut exe_ctx, RasterizationTime::AllFeatures);
+    let graph = Expression {
+        params: ExpressionParams {
+            expression: "A".to_string(),
+            output_type: RasterDataType::U8,
+            output_band: None,
+            map_no_data: false,
+        },
+        sources: SingleRasterSource {
+            raster: rasterization.typed(),
+        },
+    }
+    .typed();
+
+    let wrapped = wrap_for_resolution(graph, 0.4, &exe_ctx).await;
+
+    // the rasterization computes the output grid itself, so there is no warp
+    let TypedRasterOperator::Expression(expression) = &wrapped.operator else {
+        panic!(
+            "the root should still be the expression, was {:?}",
+            wrapped.operator
+        );
+    };
+    let TypedRasterOperator::PolygonRasterization(rasterization) = &expression.sources.raster
+    else {
+        panic!("the expression should still rasterize");
+    };
+    assert_eq!(
+        rasterization.params.spatial_resolution,
+        SpatialResolution::new(0.4, 0.4).unwrap()
+    );
+    assert_eq!(
+        rasterization.params.origin_coordinate,
+        Coordinate2D::new(0., 0.)
+    );
+    assert_eq!(
+        wrapped.result_descriptor.spatial_grid.spatial_resolution(),
+        SpatialResolution::new(0.4, 0.4).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn it_rewrites_the_resolution_of_a_rasterization_and_its_sibling_for_overviews() {
+    let mut exe_ctx = MockExecutionContext::test_default();
+    let ndvi = GdalSource {
+        params: GdalSourceParameters::new(add_ndvi_dataset(&mut exe_ctx)),
+    }
+    .typed();
+    let mask = germany_rasterization(
+        &mut exe_ctx,
+        RasterizationTime::Regular {
+            step: TimeStep {
+                granularity: TimeGranularity::Months,
+                step: 1,
+            },
+            reference: None,
+        },
+    )
+    .typed();
+
+    let wrapped = wrap_for_resolution(clip(ndvi, mask), 0.4, &exe_ctx).await;
+
+    let [ndvi, mask] = clipped_inputs(&wrapped.operator) else {
+        panic!("the clip should have two inputs");
+    };
+    let TypedRasterOperator::GdalSource(ndvi) = ndvi else {
+        panic!("the NDVI should still be read directly, was {ndvi:?}");
+    };
+    assert_eq!(ndvi.params.overview_level, Some(4));
+    let TypedRasterOperator::PolygonRasterization(mask) = mask else {
+        panic!("the mask should still be rasterized, was {mask:?}");
+    };
+    assert_eq!(
+        mask.params.spatial_resolution,
+        SpatialResolution::new(0.4, 0.4).unwrap()
+    );
+
+    let processor = wrapped
+        .initialized_operator
+        .query_processor()
+        .unwrap()
+        .get_u8()
+        .unwrap();
+    // Germany at 0.4°: 5.6°–15.2° E and 47.2°–55.2° N
+    let tiles = query_tiles(
+        processor,
+        &exe_ctx,
+        GridBoundingBox2D::new([-138, 14], [-119, 37]).unwrap(),
+        TimeInstance::from(DateTime::new_utc(2014, 4, 1, 0, 0, 0)).into(),
+    )
+    .await;
+
+    let values: Vec<Option<u8>> = tiles
+        .into_iter()
+        .flat_map(|tile| {
+            tile.grid_array
+                .into_materialized_masked_grid()
+                .masked_element_deref_iterator()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(
+        values.iter().any(Option::is_some),
+        "the NDVI inside Germany is kept"
+    );
+    assert!(
+        values.iter().any(Option::is_none),
+        "the NDVI outside Germany is clipped"
     );
 }

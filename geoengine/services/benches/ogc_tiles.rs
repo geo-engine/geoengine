@@ -8,7 +8,7 @@
 //! One 256 px OGC API tile of the NDVI test data (EPSG:4326) as `render_tile` builds it
 //! (`queries::ogc_tile::tile_on_grid`, then PNG encoding), without the database, for each kind of
 //! tile matrix set at two tile matrices; plus the same `WebMercatorQuad` tile through the WMS
-//! wrapper (`WrapWithProjectionAndResample`) as the reference.
+//! wrapper (`AdaptToGrid`) as the reference.
 //!
 //! With `GEOENGINE_BENCH_METRICS=1`, prints per case the operator grid and the tile's pixels, the
 //! mean wall time per stage (the spans of `tile_on_grid`), the stream metrics per operator and the
@@ -41,8 +41,7 @@ use geoengine_operators::{
     },
     source::{GdalSource, GdalSourceParameters},
     util::{
-        WarpMethods, WrapWithProjectionAndResample,
-        raster_stream_to_png::raster_stream_to_png_bytes,
+        AdaptToGrid, TargetGrid, WarpMethods, raster_stream_to_png::raster_stream_to_png_bytes,
     },
 };
 use geoengine_services::{
@@ -179,19 +178,18 @@ async fn render(env: &Env, source: &TypedRasterOperator, tile: Tile, describe: b
                     .initialize(ProcessingGraphOperatorPath::initialize_root(), exec_ctx)
                     .await
                     .unwrap();
-                WrapWithProjectionAndResample::new_create_result_descriptor(
-                    source.clone(),
-                    initialized,
-                )
-                .wrap_with_projection_and_resample(
-                    None,
-                    Some(resolution),
-                    SpatialReference::web_mercator(),
-                    WarpMethods::NEAREST,
-                    exec_ctx,
-                )
-                .await
-                .unwrap()
+                AdaptToGrid::new_create_result_descriptor(source.clone(), initialized)
+                    .adapt_to_grid(
+                        TargetGrid {
+                            spatial_reference: SpatialReference::web_mercator(),
+                            resolution: Some(resolution),
+                            origin: None,
+                        },
+                        WarpMethods::NEAREST,
+                        exec_ctx,
+                    )
+                    .await
+                    .unwrap()
             }
             .instrument(tracing::debug_span!("initialize"))
             .await;

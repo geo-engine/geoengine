@@ -73,7 +73,7 @@ use geoengine_operators::{
         gdal_worker_process::{DEFAULT_HEADER_CACHE_ENTRIES, WorkerConfig},
     },
     util::{
-        WarpMethods, WrapWithProjectionAndResample, create_rayon_thread_pool,
+        AdaptToGrid, TargetGrid, WarpMethods, create_rayon_thread_pool,
         gdal::create_ndvi_meta_data_with_cache_ttl,
     },
 };
@@ -423,7 +423,7 @@ impl Env {
     }
 
     /// The operator as the server wraps it for a query in `srs` with `resolution`, e.g. for a WMS
-    /// `GetMap` request (`WrapWithProjectionAndResample`, as in `services::queries::raster_grid`).
+    /// `GetMap` request (`AdaptToGrid`, as in `services::queries::raster_grid`).
     pub fn resample(
         &self,
         operator: TypedRasterOperator,
@@ -439,11 +439,13 @@ impl Env {
                 )
                 .await
                 .unwrap();
-            WrapWithProjectionAndResample::new_create_result_descriptor(operator, initialized)
-                .wrap_with_projection_and_resample(
-                    None,
-                    Some(resolution),
-                    srs,
+            AdaptToGrid::new_create_result_descriptor(operator, initialized)
+                .adapt_to_grid(
+                    TargetGrid {
+                        spatial_reference: srs,
+                        resolution: Some(resolution),
+                        origin: None,
+                    },
                     WarpMethods::NEAREST,
                     &self.exe_ctx,
                 )
