@@ -149,6 +149,7 @@ describe('LayersComponent', () => {
                         dateClass: (): string => '',
                         calendarOpen: signal(false),
                         overlayVisible: signal(false),
+                        overlayLight: signal(false),
                         tooLarge: signal(false),
                         hasError: signal(false),
                         steps: signal([]),
@@ -353,7 +354,7 @@ describe('LayersComponent', () => {
         }
         const footprints = (): FootprintsMock => TestBed.inject(FootprintsService) as unknown as FootprintsMock;
 
-        it('says in the legend how much of the view the date covers while the availability is on the map', async () => {
+        it('says how much of the view the date covers while the availability is on the map', async () => {
             footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
             const element = fixture.nativeElement as HTMLElement;
             const status = (): string => element.querySelector('.coverage-status')?.textContent?.trim() ?? '';
@@ -365,12 +366,12 @@ describe('LayersComponent', () => {
 
             footprints().viewCoverage.set('part');
             fixture.detectChanges();
-            expect(status()).toBe('');
+            expect(statusLine()).toBe('');
 
-            element.querySelector<HTMLElement>('.preset-availability')!.click();
+            element.querySelector<HTMLElement>('.availability-toggle button')!.click();
             fixture.detectChanges();
             expect(footprints().overlayVisible()).toBe(true);
-            expect(status()).toBe('Scenes of 01.04.2026');
+            expect(status()).toContain('on 01.04.2026');
             expect(statusLine()).toBe('Scenes cover part of this view');
             expect(element.querySelector('.status-dot.status-part')).not.toBeNull();
 
@@ -382,7 +383,7 @@ describe('LayersComponent', () => {
 
             footprints().viewCoverage.set('unknown');
             fixture.detectChanges();
-            expect(statusLine()).toBe('Not known for this data source');
+            expect(statusLine()).toBe('Not known for this visualization');
 
             footprints().overlayBlocked.set(true);
             fixture.detectChanges();
@@ -813,7 +814,7 @@ describe('LayersComponent', () => {
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
     });
 
-    it('shows nothing for a new data source, then what is chosen: a preset, the availability or nothing', async () => {
+    it('shows nothing for a new data source, then the chosen preset, with the availability alone or over it', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
@@ -821,7 +822,8 @@ describe('LayersComponent', () => {
         const tiles = (): HTMLElement[] => Array.from(element.querySelectorAll<HTMLElement>('.visualization-presets mat-list-item'));
         const active = (): string[] =>
             tiles().flatMap((tile) => (tile.classList.contains('preset-active') ? [tile.textContent.replace('check', '').trim()] : []));
-        const overlayVisible = TestBed.inject(FootprintsService).overlayVisible;
+        const footprints = TestBed.inject(FootprintsService);
+        const toggle = (): HTMLElement => element.querySelector<HTMLElement>('.availability-toggle button')!;
         const presets = eodysseyLayerService.currentPresets();
         expect(eodysseyLayerService.selectedPresetKey()).toBe('Default');
         expect(active()).toEqual(['None']);
@@ -841,20 +843,27 @@ describe('LayersComponent', () => {
         await fixture.whenStable();
         expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(presets[1].layerId);
 
-        // one thing on the map: the availability takes the data off
+        // the availability lies over the imagery as outlines
+        toggle().click();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        expect(footprints.overlayVisible()).toBe(true);
+        expect(footprints.overlayLight()).toBe(true);
+        expect(eodysseyLayerService.mapTileLayer()?.layerId).toBe(presets[1].layerId);
+
+        // "None" takes the imagery off, keeps the availability and goes back to the default preset for the dates
         tiles()[2].click();
         fixture.detectChanges();
         await fixture.whenStable();
-        expect(active()).toEqual(['Data availability']);
-        expect(overlayVisible()).toBe(true);
-        expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
-
-        tiles()[3].click();
-        fixture.detectChanges();
-        await fixture.whenStable();
         expect(active()).toEqual(['None']);
-        expect(overlayVisible()).toBe(false);
+        expect(footprints.overlayVisible()).toBe(true);
+        expect(footprints.overlayLight()).toBe(false);
         expect(eodysseyLayerService.mapTileLayer()).toBeUndefined();
+        expect(eodysseyLayerService.selectedPresetKey()).toBe(presets[0].key);
+
+        toggle().click();
+        fixture.detectChanges();
+        expect(footprints.overlayVisible()).toBe(false);
     });
 
     it('removes the visualization from the map without resetting the time when it is applied again', async () => {
@@ -881,7 +890,7 @@ describe('LayersComponent', () => {
     it('preserves the applied layer and time when returning to the layers panel', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
-        fixture.componentInstance.show('preset', eodysseyLayerService.currentPresets()[0].key);
+        fixture.componentInstance.show(eodysseyLayerService.currentPresets()[0].key);
         fixture.detectChanges();
         await fixture.whenStable();
         const appliedLayer = eodysseyLayerService.mapTileLayer();
