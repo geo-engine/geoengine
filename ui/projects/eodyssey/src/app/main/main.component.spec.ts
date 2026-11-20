@@ -188,6 +188,20 @@ describe('EOdyssey debug reprojection', () => {
         (TestBed.inject(FootprintsService).overlayTooLarge as WritableSignal<boolean>).set(true);
         fixture.detectChanges();
 
-        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in to see where the scenes of this date are');
+        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
+    });
+
+    it('asks to zoom in on the map when the availability is shown where the tiles of the layer do not load', () => {
+        fixture.detectChanges();
+        const element = fixture.nativeElement as HTMLElement;
+        const footprints = TestBed.inject(FootprintsService);
+        // blocked until a layer says that its tiles load
+        expect(footprints.overlayBlocked()).toBe(true);
+        expect(element.querySelector('.zoom-prompt')).toBeNull();
+
+        footprints.overlayVisible.set(true);
+        fixture.detectChanges();
+
+        expect(element.querySelector('.zoom-prompt')?.textContent).toContain('Zoom in further to see the data availability');
     });
 });

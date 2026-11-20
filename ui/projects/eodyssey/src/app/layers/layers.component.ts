@@ -5,6 +5,7 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatListModule} from '@angular/material/list';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatSelectModule} from '@angular/material/select';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle';
 import {LayersService, RasterColorizer, RasterLayer, RasterLayerMetadata, RasterSymbology, Time} from '@geoengine/common';
 import {CoreModule, FootprintCalendarHeaderComponent, FootprintsService, ProjectService, RasterLegendViewComponent} from '@geoengine/core';
 import {DataSourceNavigationComponent} from './data-source-navigation.component';
@@ -137,6 +138,9 @@ function formatDate(timeMs: number): string {
                         <span>{{ ticks[0].date }}</span>
                         <span>{{ ticks[ticks.length - 1].date }}</span>
                     </p>
+                    @if (eodysseyLayerService.selectedPreset(); as preset) {
+                        <p class="catalogue-message dates-of">Dates with scenes for {{ preset.displayName }}</p>
+                    }
                 }
             }
             <div class="time-jumps">
@@ -151,6 +155,34 @@ function formatDate(timeMs: number): string {
             </div>
             @if (footprintsService.tooLarge()) {
                 <p class="catalogue-message" role="status">Zoom in to see the dates with data.</p>
+            }
+        </section>
+        <mat-divider></mat-divider>
+        <section class="panel-section" aria-labelledby="availability-heading">
+            <div class="availability-heading">
+                <h2 id="availability-heading">Data availability</h2>
+                <mat-slide-toggle
+                    class="availability-toggle"
+                    labelPosition="before"
+                    [checked]="availabilityShown()"
+                    (change)="availabilityShown.set($event.checked)"
+                >
+                    Show on map
+                </mat-slide-toggle>
+            </div>
+            @if (eodysseyLayerService.selectedPreset(); as preset) {
+                <p class="coverage-status">
+                    <span class="stripe-swatch" [class.outline-swatch]="shown() === 'preset'" aria-hidden="true"></span>
+                    Scenes of {{ preset.displayName }} on {{ formattedTime() }}
+                </p>
+            }
+            @if (availabilityShown()) {
+                @if (status(); as status) {
+                    <p class="coverage-status" [class.coverage-stale]="footprintsService.overlayLoading()" role="status">
+                        <span class="status-dot" [class]="'status-' + status.kind" aria-hidden="true"></span>
+                        {{ status.text }}
+                    </p>
+                }
             }
         </section>
         <mat-divider></mat-divider>
@@ -180,7 +212,7 @@ function formatDate(timeMs: number): string {
                         [activated]="preset === shownPreset()"
                         [class.preset-active]="preset === shownPreset()"
                         [attr.aria-current]="preset === shownPreset() ? 'true' : null"
-                        (click)="show('preset', preset.key)"
+                        (click)="show(preset.key)"
                         [matTooltip]="preset.displayName"
                         [style.backgroundImage]="'linear-gradient(transparent, rgba(0, 0, 0, 0.65)), url(' + preset.backgroundImage + ')'"
                     >
@@ -193,26 +225,11 @@ function formatDate(timeMs: number): string {
                     </mat-list-item>
                 }
                 <mat-list-item
-                    class="preset-availability"
-                    [activated]="shown() === 'availability'"
-                    [class.preset-active]="shown() === 'availability'"
-                    [attr.aria-current]="shown() === 'availability' ? 'true' : null"
-                    (click)="show('availability')"
-                    matTooltip="Where the scenes of the selected date are"
-                >
-                    <span matListItemTitle>Data availability</span>
-                    @if (shown() === 'availability') {
-                        <span matListItemMeta class="preset-selected-indicator" aria-hidden="true">
-                            <mat-icon>check</mat-icon>
-                        </span>
-                    }
-                </mat-list-item>
-                <mat-list-item
                     class="preset-none"
                     [activated]="shown() === 'none'"
                     [class.preset-active]="shown() === 'none'"
                     [attr.aria-current]="shown() === 'none' ? 'true' : null"
-                    (click)="show('none')"
+                    (click)="show()"
                 >
                     <span matListItemTitle>None</span>
                     @if (shown() === 'none') {
@@ -224,22 +241,8 @@ function formatDate(timeMs: number): string {
             </mat-nav-list>
         </section>
 
-        @if (shown() === 'availability') {
-            <mat-divider></mat-divider>
-            <section class="panel-section legend" aria-labelledby="legend-heading">
-                <h2 id="legend-heading">Data availability</h2>
-                <p class="coverage-status">
-                    <span class="stripe-swatch" aria-hidden="true"></span>
-                    Scenes of {{ formattedTime() }}
-                </p>
-                @if (status(); as status) {
-                    <p class="coverage-status" [class.coverage-stale]="footprintsService.overlayLoading()" role="status">
-                        <span class="status-dot" [class]="'status-' + status.kind" aria-hidden="true"></span>
-                        {{ status.text }}
-                    </p>
-                }
-            </section>
-        } @else if (isLegendVisible()) {
+        <!-- last, because a legend can be long -->
+        @if (isLegendVisible()) {
             <mat-divider></mat-divider>
             <section class="panel-section legend" aria-labelledby="legend-heading">
                 <h2 id="legend-heading">Legend</h2>
@@ -315,6 +318,24 @@ function formatDate(timeMs: number): string {
                     var(--geoengine-accent-color) 0 2px,
                     var(--geoengine-faded-accent-color) 2px 5px
                 );
+            }
+
+            // over imagery the map draws the boxes as outlines only
+            .stripe-swatch.outline-swatch {
+                background: none;
+                border-width: 2px;
+            }
+
+            .availability-heading {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 0.5rem;
+
+                h2 {
+                    margin: 0;
+                }
             }
 
             .coverage-status {
@@ -560,16 +581,6 @@ function formatDate(timeMs: number): string {
                     }
 
                     // the stripes of the overlay on the map
-                    &.preset-availability {
-                        background-image:
-                            linear-gradient(transparent, rgba(0, 0, 0, 0.65)),
-                            repeating-linear-gradient(
-                                45deg,
-                                var(--geoengine-accent-color) 0 3px,
-                                var(--geoengine-faded-accent-color) 3px 9px
-                            );
-                    }
-
                     &.preset-active {
                         border-style: solid;
                         border-color: white;
@@ -638,6 +649,7 @@ function formatDate(timeMs: number): string {
         MatListModule,
         MatSelectModule,
         MatProgressSpinnerModule,
+        MatSlideToggleModule,
         RasterLegendViewComponent,
         DataSourceNavigationComponent,
     ],
@@ -662,9 +674,10 @@ export class LayersComponent {
         return time.start.toDate();
     });
 
-    /** What the map shows of the data source, see `EOdysseyLayerService.shown`. */
+    /** The imagery on the map, see `EOdysseyLayerService.shown`. */
     readonly shown = this.eodysseyLayerService.shown;
-    /** The preset on the map. The selected one stays selected while it is not shown, because the dates are those of its layer. */
+    readonly availabilityShown = this.eodysseyLayerService.availabilityShown;
+    /** The preset on the map. With "None", the default preset is selected, because the dates and the availability need a layer. */
     readonly shownPreset = computed(() => (this.shown() === 'preset' ? this.eodysseyLayerService.selectedPreset() : undefined));
 
     /** How much of the view the selected date covers, or why that is not known. */
@@ -681,7 +694,7 @@ export class LayersComponent {
             case 'none':
                 return {kind: 'none', text: 'No scenes in this view on this date'};
             case 'unknown':
-                return {kind: 'unknown', text: 'Not known for this data source'};
+                return {kind: 'unknown', text: 'Not known for this visualization'};
             case undefined:
                 return footprints.overlayLoading() ? {kind: 'unknown', text: 'Checking this view…'} : undefined;
         }
@@ -753,11 +766,14 @@ export class LayersComponent {
         // the panel shows the dates all the time
         this.footprintsService.datesNeeded.set(true);
         inject(DestroyRef).onDestroy(() => this.footprintsService.datesNeeded.set(false));
-        // the map shows one thing: nothing, the availability, or the selected preset, which it follows
+        // the boxes of the availability lie alone or, as outlines, over the imagery
         effect(() => {
-            const shown = this.shown();
-            untracked(() => this.footprintsService.overlayVisible.set(shown === 'availability'));
-            if (shown !== 'preset') {
+            this.footprintsService.overlayVisible.set(this.availabilityShown());
+            this.footprintsService.overlayLight.set(this.shown() === 'preset');
+        });
+        // the map follows the selected preset while imagery is shown
+        effect(() => {
+            if (this.shown() !== 'preset') {
                 untracked(() => this.eodysseyLayerService.removeVisualization());
             } else if (this.eodysseyLayerService.canApplyPreset()) {
                 untracked(() => this.applySelectedPreset());
@@ -765,9 +781,11 @@ export class LayersComponent {
         });
     }
 
-    show(shown: 'none' | 'availability' | 'preset', presetKey?: string): void {
-        if (presetKey) this.eodysseyLayerService.setSelectedPreset(presetKey);
-        this.shown.set(shown);
+    /** Shows a preset, or no imagery. Then the default preset is selected, whose dates and availability the panel names. */
+    show(presetKey?: string): void {
+        const key = presetKey ?? this.eodysseyLayerService.currentPresets()[0]?.key;
+        if (key) this.eodysseyLayerService.setSelectedPreset(key);
+        this.shown.set(presetKey ? 'preset' : 'none');
     }
 
     /** The time step of a data source is applied with it. */

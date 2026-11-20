@@ -41,16 +41,18 @@ function stripePattern(fill: string | undefined, stripe: string, stripeAlpha: nu
     return pattern ?? undefined;
 }
 
-/** The theme's accent colors, which are CSS variables of the app. */
-export function overlayStyle(): Style {
+/**
+ * The theme's accent colors, which are CSS variables of the app. The light style is an outline only, so imagery
+ * below the boxes stays readable; its dark casing keeps the outline visible on bright imagery.
+ */
+export function overlayStyle(light: boolean): Style[] {
     const css = getComputedStyle(document.documentElement);
     const color = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
     const accent = color('--geoengine-accent-color', '#ffc107');
     const faded = color('--geoengine-faded-accent-color', 'rgba(255, 193, 7, 0.32)');
-    return new Style({
-        fill: new Fill({color: stripePattern(faded, accent, 1) ?? faded}),
-        stroke: new Stroke({color: accent, width: 2}),
-    });
+    const outline = new Style({stroke: new Stroke({color: accent, width: 2})});
+    if (light) return [new Style({stroke: new Stroke({color: 'rgba(0, 0, 0, 0.6)', width: 4})}), outline];
+    return [new Style({fill: new Fill({color: stripePattern(faded, accent, 1) ?? faded})}), outline];
 }
 
 const BOX_EDGE_STEPS = 16;

@@ -115,7 +115,15 @@ export class MainComponent {
     });
     readonly zoomRequired = signal(false);
     readonly tilesLoadable = signal(false);
-    readonly coverageZoomRequired = computed(() => this.footprintsService.overlayTooLarge());
+    /** One prompt on the map for the imagery and the data availability, which have the same zoom limit. */
+    readonly zoomPrompt = computed(() => {
+        if (this.mapTileLayer() && this.zoomRequired()) return 'Zoom in further to load the selected layer.';
+        const footprints = this.footprintsService;
+        if (footprints.overlayTooLarge() || (footprints.overlayVisible() && footprints.overlayBlocked())) {
+            return 'Zoom in further to see the data availability.';
+        }
+        return undefined;
+    });
     readonly tileLoading = signal(false);
     readonly isLoading = computed(() => this.eodysseyLayerService.catalogueLoading() || (this.tileLoading() && !this.zoomRequired()));
 
