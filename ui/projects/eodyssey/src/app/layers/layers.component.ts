@@ -324,7 +324,7 @@ function formatDate(timeMs: number): string {
             .stripe-swatch.light-swatch {
                 background: repeating-linear-gradient(
                     45deg,
-                    color-mix(in srgb, var(--geoengine-accent-color) 45%, transparent) 0 2px,
+                    color-mix(in srgb, var(--geoengine-accent-color) 85%, transparent) 0 2px,
                     transparent 2px 5px
                 );
             }
