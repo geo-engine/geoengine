@@ -70,13 +70,26 @@ export class EOdysseyLayerService {
         source: () => this.selectedDataSource()?.key,
         computation: () => !untracked(this.mapCenter),
     });
+    /** The user wants the selected visualization on the map. Off at first, so choosing a data source loads no data. */
+    readonly dataOnMap = signal(false);
     /** Snapshot of the visualization on the map, independent of the pending catalogue selection. */
     private readonly appliedVisualization = signal<{source: DataSourceDefinition; preset: VisualizationPreset} | undefined>(undefined);
+    /**
+     * The data source whose default time and time step were set last. Removing the visualization keeps it, so
+     * applying the same data source again does not reset the time the user chose since.
+     */
+    private readonly timeSource = signal<DataSourceDefinition | undefined>(undefined);
+    readonly dataSourceOfTime = this.timeSource.asReadonly();
+    readonly appliedPreset = computed(() => this.appliedVisualization()?.preset);
     readonly appliedDataSource = computed(() => this.appliedVisualization()?.source);
     readonly appliedMinTileMatrixIndex = computed(() => {
         const applied = this.appliedVisualization();
         return applied?.preset.minTileMatrixIndex ?? applied?.source.minTileMatrixIndex ?? 0;
     });
+    /** The zoom limit of the selected visualization, also while it is not on the map. */
+    readonly selectedMinTileMatrixIndex = computed(
+        () => this.selectedPreset()?.minTileMatrixIndex ?? this.selectedDataSource()?.minTileMatrixIndex ?? 0,
+    );
     private readonly variantPresetCache = signal(new Map<string, VisualizationPreset[]>());
     private variantLoadGeneration = 0;
     private readonly variantLoadEpochs = new Map<string, number>();
@@ -237,7 +250,13 @@ export class EOdysseyLayerService {
         const preset = this.selectedPreset();
         if (source && preset && this.canApplyPreset()) {
             this.appliedVisualization.set({source, preset});
+            this.timeSource.set(source);
         }
+    }
+
+    /** Takes the visualization off the map, e.g. to see only the boxes where data exists. */
+    removeVisualization(): void {
+        this.appliedVisualization.set(undefined);
     }
 
     /** Load EDV -> category -> data source -> region, leaving preset layers lazy. */

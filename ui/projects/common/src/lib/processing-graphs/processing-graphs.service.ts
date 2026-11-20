@@ -1,6 +1,13 @@
 import {Injectable, inject} from '@angular/core';
 import {ReplaySubject, firstValueFrom} from 'rxjs';
-import {ProcessingGraph, ProcessingGraphsApi, ProvenanceEntry, TypedResultDescriptor} from '@geoengine/api-client';
+import {
+    GetProcessingGraphFootprintsHandlerRequest,
+    ProcessingGraph,
+    ProcessingGraphsApi,
+    ProvenanceEntry,
+    RasterFootprints,
+    TypedResultDescriptor,
+} from '@geoengine/api-client';
 import {UUID} from '../datasets/dataset.model';
 import {UserService, apiConfigurationWithAccessKey} from '../user/user.service';
 
@@ -32,6 +39,16 @@ export class ProcessingGraphsService {
         return processingGraphsApi.getProcessingGraphMetadataHandler({
             id,
         });
+    }
+
+    async getFootprints(
+        id: UUID,
+        query: Omit<GetProcessingGraphFootprintsHandlerRequest, 'id'>,
+        signal?: AbortSignal,
+    ): Promise<RasterFootprints> {
+        const processingGraphsApi = await firstValueFrom(this.processingGraphsApi);
+
+        return processingGraphsApi.getProcessingGraphFootprintsHandler({id, ...query}, {signal});
     }
 
     async getProvenance(id: UUID): Promise<Array<ProvenanceEntry>> {
