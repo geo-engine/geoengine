@@ -25,6 +25,16 @@ pub struct MultiBandGdalLoadingInfo {
     time_steps: Vec<TimeInterval>,
     /// Fallback TTL used when a tile does not provide its own TTL.
     cache_ttl: Option<CacheTtlSeconds>,
+    /// The queried time after this answer, as one interval from the end of this answer to the end
+    /// of the query, if the provider answered only the first part of a long time range. Query it
+    /// for the next part. That answer can have a `next` again, so follow it until there is none.
+    /// It is part of the answer, because only the provider knows how far its answer reaches.
+    next: Option<TimeInterval>,
+    /// For each time step whether it has data, if the provider could tell without the files.
+    /// The answer then has no files. This holds for the whole answer: either every time step has
+    /// an entry, or the answer has files. Each part of a long time range (see `next`) decides
+    /// this for itself.
+    availability: Option<Vec<bool>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -75,7 +85,46 @@ impl MultiBandGdalLoadingInfo {
             files,
             time_steps,
             cache_ttl,
+            next: None,
+            availability: None,
         }
+    }
+
+    /// Marks this answer as telling for each time step whether it has data, without its files.
+    ///
+    /// # Errors
+    /// If `has_data` does not have one entry per time step, because a missing entry would read as
+    /// a step without data.
+    pub fn with_availability(mut self, has_data: Vec<bool>) -> crate::util::Result<Self> {
+        snafu::ensure!(
+            has_data.len() == self.time_steps.len(),
+            crate::error::LoadingInfoAvailabilityLength {
+                entries: has_data.len(),
+                time_steps: self.time_steps.len(),
+            }
+        );
+        self.availability = Some(has_data);
+        Ok(self)
+    }
+
+    /// Whether the time step with this index has data, if the provider told without files.
+    pub fn has_data(&self, time_step_index: usize) -> Option<bool> {
+        self.availability
+            .as_ref()
+            .and_then(|has_data| has_data.get(time_step_index).copied())
+    }
+
+    /// Marks this answer as covering only the start of the queried time. `next` is the rest.
+    #[must_use]
+    pub fn with_next(mut self, next: Option<TimeInterval>) -> Self {
+        self.next = next;
+        self
+    }
+
+    /// The queried time after this answer, as one interval, if any. Its answer can have a `next`
+    /// again, so the parts form a chain.
+    pub fn next(&self) -> Option<TimeInterval> {
+        self.next
     }
 
     /// Return a gap-free list of time steps for the current loading info and query time.
@@ -106,6 +155,18 @@ impl MultiBandGdalLoadingInfo {
             .collect()
     }
 
+    /// The areas of all files of a time step and bands, regardless of which tile needs them.
+    pub fn file_bounds<'a>(
+        &'a self,
+        time: TimeInterval,
+        bands: &'a [u32],
+    ) -> impl Iterator<Item = SpatialPartition2D> + 'a {
+        self.files
+            .iter()
+            .filter(move |file| time.intersects(&file.time) && bands.contains(&file.band))
+            .map(|file| file.spatial_partition)
+    }
+
     pub fn cache_hint(&self, default_ttl: CacheTtlSeconds) -> CacheHint {
         self.cache_ttl.unwrap_or(default_ttl).into()
     }
@@ -127,5 +188,33 @@ impl MultiBandGdalLoadingInfo {
             files,
             cache_hint: self.cache_hint(default_ttl),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_rejects_an_availability_without_one_entry_per_time_step() {
+        let info = || {
+            MultiBandGdalLoadingInfo::new(
+                vec![
+                    TimeInterval::new_unchecked(0, 5),
+                    TimeInterval::new_unchecked(5, 10),
+                ],
+                Vec::new(),
+                None,
+            )
+        };
+
+        assert!(info().with_availability(vec![true]).is_err());
+        assert_eq!(
+            info()
+                .with_availability(vec![true, false])
+                .unwrap()
+                .has_data(1),
+            Some(false)
+        );
     }
 }

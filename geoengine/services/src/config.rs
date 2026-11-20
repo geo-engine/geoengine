@@ -251,6 +251,8 @@ pub struct QueryContext {
     pub gdal_source_read_ahead: NonZeroUsize,
     /// GDAL tile reads a `MultiBandGdalSource` query keeps in flight
     pub multi_band_gdal_source_read_ahead: NonZeroUsize,
+    /// The most boxes a footprint keeps for one time step. Footprints with more boxes are merged.
+    pub footprint_boxes_per_step_limit: usize,
     /// Upper limit in MB for the memory that a `Warp` with the downsampling method `mode` keeps per
     /// output tile
     pub warp_mode_max_memory_per_tile_mb: NonZeroUsize,
@@ -327,6 +329,7 @@ impl ConfigElement for ProcessingRuntime {
 pub struct DatasetService {
     pub list_limit: u32,
     pub json_size_limit: usize,
+    pub loading_info_part_steps: usize,
 }
 
 impl ConfigElement for DatasetService {
@@ -936,6 +939,16 @@ pub struct StacCache {
     pub size_in_mb: usize,
     /// TTL in seconds for STAC query cache entries.
     pub ttl_secs: u64,
+    /// Number of time steps of one part (chunk) of an answer, and of one footprint search per grid
+    /// cell. The result is stored per step. Chunks start at the origin of the time axis, not at months.
+    pub search_chunk_steps: u32,
+    /// Footprint queries of several time steps needing more searches than this for one chunk are
+    /// rejected as too large, see `Settings-default.toml`.
+    pub max_footprint_searches: usize,
+    /// A calendar request for at most this many grid cells searches the files, which gives exact
+    /// days and warms the cache of the map. For more cells, one aggregation counts the items of the
+    /// cells, which is cheaper but also counts items next to the view. 0 always aggregates.
+    pub availability_search_cells: usize,
 }
 
 impl TestDefault for StacCache {
@@ -943,6 +956,9 @@ impl TestDefault for StacCache {
         Self {
             size_in_mb: 1_000, // 1 GB
             ttl_secs: 3_600,
+            search_chunk_steps: 30,
+            max_footprint_searches: 50,
+            availability_search_cells: 4,
         }
     }
 }

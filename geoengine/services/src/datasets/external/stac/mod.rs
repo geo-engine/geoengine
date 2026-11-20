@@ -475,6 +475,7 @@ impl StacDataProvider {
                 definition.query_timeout_secs as u64,
             ))
             .build()?;
+        let query_cache = Arc::new(request_registry.new_query_cache());
         let client = StacClient::new(client, &definition.api_url, request_registry)?;
 
         Ok(Self {
@@ -489,7 +490,7 @@ impl StacDataProvider {
             page_limit: definition.page_limit,
             client,
             cache_ttl_secs: definition.cache_ttl_secs,
-            query_cache: Arc::new(StacQueryCache::default()),
+            query_cache,
             max_concurrent_cell_searches,
             grid,
         })
@@ -581,6 +582,35 @@ mod tests {
             .unwrap();
         assert!(Arc::ptr_eq(&expected, &first_coordinator));
         assert!(Arc::ptr_eq(&expected, &second_coordinator));
+    }
+
+    #[test]
+    fn it_configures_the_cache_of_a_provider_with_the_settings_of_its_registry() {
+        use geoengine_datatypes::util::test::TestDefault;
+
+        let definition: StacDataProviderDefinition =
+            serde_json::from_str::<crate::api::model::services::StacDataProviderDefinition>(
+                include_str!("../../../../../test_data/provider_defs_api/stac_sentinel2.json"),
+            )
+            .unwrap()
+            .into();
+        let config = crate::config::StacCache {
+            search_chunk_steps: 11,
+            max_footprint_searches: 7,
+            availability_search_cells: 3,
+            ..crate::config::StacCache::test_default()
+        };
+
+        let configured = StacDataProvider::from_definition_with_request_registry(
+            definition,
+            StacRequestRegistry::new().with_config(config),
+        )
+        .unwrap();
+
+        let cache = &configured.query_cache;
+        assert_eq!(cache.search_chunk_steps(), 11);
+        assert_eq!(cache.max_footprint_searches(), 7);
+        assert_eq!(cache.availability_search_cells(), 3);
     }
 
     type AuthenticationBucketArrivals =

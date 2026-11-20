@@ -563,6 +563,22 @@ pub enum Error {
         source: OptimizationError,
     },
 
+    #[snafu(display(
+        "A loading info tells whether {entries} time steps have data, but it has {time_steps} time steps."
+    ))]
+    LoadingInfoAvailabilityLength {
+        entries: usize,
+        time_steps: usize,
+    },
+
+    #[snafu(display(
+        "Footprint query needs {searches} catalog searches, the limit is {limit}. Query a smaller area or time range."
+    ))]
+    FootprintQueryTooLarge {
+        searches: usize,
+        limit: usize,
+    },
+
     #[snafu(display("Error in the SimpleRasterStacker: {source}"))]
     SimpleRasterStacker {
         source: SimpleRasterStackerError,

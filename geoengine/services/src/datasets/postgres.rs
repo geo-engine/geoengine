@@ -1,6 +1,7 @@
 use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
+use crate::config::{DatasetService, get_config_element};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
@@ -35,7 +36,7 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    GdalDatasetParameters, GdalLoadingInfo, LoadingInfoDetail, MultiBandGdalLoadingInfo,
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
@@ -751,11 +752,19 @@ where
 
         let data_path: DataPath = try_get_dataset_by_index_operators(&row, 1, &id)?;
 
+        let part_steps = get_config_element::<DatasetService>()
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+            .loading_info_part_steps
+            .max(1);
+
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
             dataset_cache_ttl,
             data_path,
+            part_steps,
             db: self.clone(),
         }))
     }
@@ -773,6 +782,8 @@ where
     result_descriptor: RasterResultDescriptor,
     dataset_cache_ttl: Option<geoengine_datatypes::primitives::CacheTtlSeconds>,
     data_path: DataPath,
+    /// The most time steps of one answer, see `loading_info_part_steps` in the settings.
+    part_steps: usize,
     db: PostgresDb<Tls>,
 }
 
@@ -997,7 +1008,33 @@ where
             }
         })?;
 
-        let files = if query.fetch_tiles {
+        let mut time_steps = create_gap_free_time_steps(
+            self.dataset_id,
+            query.query_rectangle.time_interval(),
+            &conn,
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+        // A long time range gets the files of the first steps only, so the source does not hold
+        // the files of all steps at once. It asks for `next` when it gets there.
+        // shortcut: each part computes the gap-free steps of the whole rest again, O(steps² / part
+        // size) rows for irregular datasets; limit that query to the part if long ranges get slow.
+        let mut files_time = query.query_rectangle.time_interval();
+        let mut next = None;
+        if time_steps.len() > self.part_steps {
+            let part_end = time_steps[self.part_steps - 1].end();
+            time_steps.truncate(self.part_steps);
+            next = TimeInterval::new(part_end, files_time.end()).ok();
+            files_time = TimeInterval::new(files_time.start(), part_end)?;
+        }
+
+        let files = if matches!(
+            query.detail,
+            LoadingInfoDetail::Availability | LoadingInfoDetail::Files
+        ) {
             // query the files
             let rows = conn
                 .query(
@@ -1016,7 +1053,7 @@ where
                     &[
                         &self.dataset_id,
                         &query.query_rectangle.spatial_bounds(),
-                        &query.query_rectangle.time_interval(),
+                        &files_time,
                         &query.query_rectangle.attributes().as_slice(),
                     ],
                 )
@@ -1055,21 +1092,12 @@ where
             vec![]
         };
 
-        let time_steps = create_gap_free_time_steps(
-            self.dataset_id,
-            query.query_rectangle.time_interval(),
-            &conn,
-        )
-        .await
-        .map_err(|e| geoengine_operators::error::Error::MetaData {
-            source: Box::new(e),
-        })?;
-
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
             files,
             self.dataset_cache_ttl, // fall back to the dataset TTL, then the context default
-        ))
+        )
+        .with_next(next))
     }
 
     async fn result_descriptor(
