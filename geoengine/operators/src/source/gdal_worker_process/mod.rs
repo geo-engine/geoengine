@@ -26,13 +26,13 @@ pub use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 
 /// Computes a reduced-resolution spatial grid for a given overview level.
 ///
-/// Returns `None` if the overview level is 0 (original resolution).
+/// Returns `None` if the overview level is 0 or 1, both the original resolution.
 /// The overview level multiplies the pixel size and divides the grid bounds accordingly.
 pub(crate) fn overview_level_spatial_grid(
     source_spatial_grid: SpatialGridDefinition,
     overview_level: u32,
 ) -> Option<SpatialGridDefinition> {
-    if overview_level > 0 {
+    if overview_level > 1 {
         tracing::trace!("Using overview level {overview_level}");
         // overview levels are small integers, so scaling a finite pixel size cannot overflow in practice
         let geo_transform = GeoTransform::new_unchecked(
@@ -84,6 +84,16 @@ mod tests {
         let spatial_grid_definition = SpatialGridDefinition::new(
             GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 0.1, -0.1),
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+        );
+
+        // the sources read levels 0 and 1 at the original resolution, without an overview grid
+        assert_eq!(
+            overview_level_spatial_grid(spatial_grid_definition, 0),
+            None
+        );
+        assert_eq!(
+            overview_level_spatial_grid(spatial_grid_definition, 1),
+            None
         );
 
         let spatial_grid_definition_2x =

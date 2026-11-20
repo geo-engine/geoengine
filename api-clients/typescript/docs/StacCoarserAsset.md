@@ -1,23 +1,25 @@
 
-# PolygonRasterizationTimeIgnore
+# StacCoarserAsset
 
-One time slice that is valid forever and contains all features, regardless of their times.
+A coarser asset that holds the same band as a dataset band, e.g. the 60 m file of a band whose dataset has a resolution of 10 m.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`type` | string
+`factor` | number
+`assetBand` | [StacAssetBand](StacAssetBand.md)
 
 ## Example
 
 ```typescript
-import type { PolygonRasterizationTimeIgnore } from '@geoengine/api-client'
+import type { StacCoarserAsset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "type": null,
-} satisfies PolygonRasterizationTimeIgnore
+  "factor": null,
+  "assetBand": null,
+} satisfies StacCoarserAsset
 
 console.log(example)
 
@@ -26,7 +28,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as PolygonRasterizationTimeIgnore
+const exampleParsed = JSON.parse(exampleJSON) as StacCoarserAsset
 console.log(exampleParsed)
 ```
 

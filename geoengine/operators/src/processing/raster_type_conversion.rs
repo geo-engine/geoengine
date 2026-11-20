@@ -126,6 +126,8 @@ pub struct RasterTypeConversionQueryProcessor<
     POut: Pixel,
 > {
     query_processor: Q,
+    /// the one of `query_processor` with the data type of `POut`
+    result_descriptor: RasterResultDescriptor,
     _p_out: std::marker::PhantomData<POut>,
 }
 
@@ -137,8 +139,13 @@ where
     POut: Pixel,
 {
     pub fn new(query_processor: Q) -> Self {
+        let result_descriptor = RasterResultDescriptor {
+            data_type: POut::TYPE,
+            ..query_processor.raster_result_descriptor().clone()
+        };
         Self {
             query_processor,
+            result_descriptor,
             _p_out: std::marker::PhantomData,
         }
     }
@@ -173,7 +180,7 @@ where
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
-        self.query_processor.raster_result_descriptor()
+        &self.result_descriptor
     }
 }
 
@@ -294,6 +301,10 @@ mod tests {
         let TypedRasterQueryProcessor::F32(typed_processor) = query_processor else {
             panic!("expected TypedRasterQueryProcessor::F32");
         };
+        assert_eq!(
+            typed_processor.raster_result_descriptor().data_type,
+            RasterDataType::F32
+        );
 
         let stream = typed_processor
             .raster_query(query, &query_ctx)

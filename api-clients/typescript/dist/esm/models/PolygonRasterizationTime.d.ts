@@ -8,8 +8,8 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+import type { PolygonRasterizationTimeAllFeatures } from './PolygonRasterizationTimeAllFeatures';
 import type { PolygonRasterizationTimeFeatureTimes } from './PolygonRasterizationTimeFeatureTimes';
-import type { PolygonRasterizationTimeIgnore } from './PolygonRasterizationTimeIgnore';
 import type { PolygonRasterizationTimeRegular } from './PolygonRasterizationTimeRegular';
 /**
  * @type PolygonRasterizationTime
@@ -17,10 +17,10 @@ import type { PolygonRasterizationTimeRegular } from './PolygonRasterizationTime
  * @export
  */
 export type PolygonRasterizationTime = {
+    type: 'allFeatures';
+} & PolygonRasterizationTimeAllFeatures | {
     type: 'featureTimes';
 } & PolygonRasterizationTimeFeatureTimes | {
-    type: 'ignore';
-} & PolygonRasterizationTimeIgnore | {
     type: 'regular';
 } & PolygonRasterizationTimeRegular;
 export declare function PolygonRasterizationTimeFromJSON(json: any): PolygonRasterizationTime;

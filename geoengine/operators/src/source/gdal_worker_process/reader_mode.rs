@@ -1,6 +1,6 @@
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridShapeAccess, GridSize,
-    SpatialGridDefinition,
+    GeoTransform, GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridShapeAccess,
+    GridSize, SpatialGridDefinition,
 };
 use std::num::NonZeroUsize;
 use tracing::trace;
@@ -138,16 +138,23 @@ impl GdalReaderMode {
         }
     }
 
-    /// The level of the files that reads map onto pixel by pixel: 1 for the full resolution,
-    /// the overview level if the dataset declares it. `None`: GDAL picks an overview and may
-    /// resample.
-    pub fn level_factor(&self) -> Option<NonZeroUsize> {
+    /// How many times coarser than the dataset's native resolution a file is, if it is coarser.
+    ///
+    /// Metadata returns such files for overview levels, to read less data. GDAL resamples them
+    /// to the tile: a tile with such a file is read through GDAL as a whole, not through blocks.
+    pub fn coarser_file_factor(&self, file: &SpatialGridDefinition) -> Option<NonZeroUsize> {
+        let native = match self {
+            GdalReaderMode::OriginalResolution(rs) => rs.dataset_spatial_grid,
+            GdalReaderMode::OverviewLevel(rs) => rs.original_dataset_grid,
+        };
+        coarser_file_factor(&native, file).filter(|factor| factor.get() > 1)
+    }
+
+    /// How many times coarser than the full resolution the reads are: 1 at the full resolution.
+    pub fn level_factor(&self) -> NonZeroUsize {
         match self {
-            GdalReaderMode::OriginalResolution(_) => Some(NonZeroUsize::MIN),
-            GdalReaderMode::OverviewLevel(rs) if rs.files_have_level => {
-                Some(NonZeroUsize::new(rs.overview_level as usize).unwrap_or(NonZeroUsize::MIN))
-            }
-            GdalReaderMode::OverviewLevel(_) => None,
+            GdalReaderMode::OriginalResolution(_) => NonZeroUsize::MIN,
+            GdalReaderMode::OverviewLevel(rs) => rs.overview_level,
         }
     }
 }
@@ -155,10 +162,9 @@ impl GdalReaderMode {
 #[derive(Copy, Clone, Debug)]
 pub struct OverviewReaderState {
     pub original_dataset_grid: SpatialGridDefinition,
-    pub overview_level: u32,
-    /// The dataset declares its overview levels (`max_overview_level`), so every file has
-    /// `overview_level`: it is read from that level as is, never resampled.
-    pub files_have_level: bool,
+    /// How many times coarser than the full resolution the read level is, 2 or more: the
+    /// sources read levels 0 and 1 in [`GdalReaderMode::OriginalResolution`].
+    pub overview_level: NonZeroUsize,
 }
 
 impl OverviewReaderState {
@@ -176,12 +182,16 @@ impl OverviewReaderState {
         actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition, // This is the spatial grid of an actual gdal file
         tile: &SpatialGridDefinition, // This is a tile inside the grid we use for the global dataset consisting of potentially many gdal files...
     ) -> Option<GdalReadAdvise> {
+        let (native_file_grid, coarseness) =
+            self.native_file_grid(actual_gdal_dataset_spatial_grid_definition)?;
+        let actual_gdal_dataset_spatial_grid_definition = &native_file_grid;
+
         // Check if the y_axis is fliped.
         let (file_grid, flip_y) =
             self.normalize_y_axis(actual_gdal_dataset_spatial_grid_definition);
 
         let file_geo_transform = file_grid.geo_transform();
-        let overview_level = self.overview_level as isize;
+        let overview_level = self.overview_level.get() as isize;
 
         debug_assert!(
             float_cmp::approx_eq!(
@@ -261,12 +271,15 @@ impl OverviewReaderState {
             axis_y.window_start
         };
 
-        let read_window = GdalReadWindow {
-            start_x: axis_x.window_start,
-            start_y: window_start_y,
-            size_x: axis_x.window_size,
-            size_y: axis_y.window_size,
-        };
+        let read_window = coarsen_read_window(
+            GdalReadWindow {
+                start_x: axis_x.window_start,
+                start_y: window_start_y,
+                size_x: axis_x.window_size,
+                size_y: axis_y.window_size,
+            },
+            coarseness,
+        );
 
         let read_window_bounds = GridBoundingBox2D::new_unchecked(
             [axis_y.target_bounds[0], axis_x.target_bounds[0]],
@@ -284,6 +297,26 @@ impl OverviewReaderState {
             bounds_of_target: tile.grid_bounds,
             flip_y,
         })
+    }
+
+    /// A file coarser than the dataset is treated as a file of the dataset's resolution: the
+    /// read window is computed in the dataset's pixels and then rounded to the file's pixels.
+    /// Returns the file's grid in the dataset's resolution and how many times coarser the file is.
+    fn native_file_grid(
+        &self,
+        file: &SpatialGridDefinition,
+    ) -> Option<(SpatialGridDefinition, NonZeroUsize)> {
+        let Some(coarseness) = coarser_file_factor(&self.original_dataset_grid, file) else {
+            trace!(
+                "file grid {file:?} is not an integer multiple of dataset grid {:?}, skipping it",
+                self.original_dataset_grid
+            );
+            return None;
+        };
+        if coarseness.get() == 1 {
+            return Some((*file, coarseness));
+        }
+        Some((refine_grid(file, coarseness)?, coarseness))
     }
 
     fn normalize_y_axis(
@@ -310,6 +343,69 @@ impl OverviewReaderState {
                 true,
             )
         }
+    }
+}
+
+/// How many times coarser than `native` the pixels of `file` are, if that is an integer.
+/// Both axes must have the same factor.
+fn coarser_file_factor(
+    native: &SpatialGridDefinition,
+    file: &SpatialGridDefinition,
+) -> Option<NonZeroUsize> {
+    let factor = file
+        .geo_transform()
+        .spatial_resolution()
+        .integer_multiple_of(native.geo_transform().spatial_resolution())?;
+    NonZeroUsize::new(factor.get() as usize)
+}
+
+/// The grid that covers the same area as `grid` with `factor` times finer pixels.
+fn refine_grid(
+    grid: &SpatialGridDefinition,
+    factor: NonZeroUsize,
+) -> Option<SpatialGridDefinition> {
+    let factor_f64 = factor.get() as f64;
+    let factor = factor.get() as isize;
+    let geo_transform = grid.geo_transform();
+    let refined_geo_transform = GeoTransform::new(
+        geo_transform.origin_coordinate(),
+        geo_transform.x_pixel_size().get() / factor_f64,
+        geo_transform.y_pixel_size().get() / factor_f64,
+    )
+    .ok()?;
+    let bounds = grid.grid_bounds();
+    let refined_bounds = GridBoundingBox2D::new(
+        [bounds.y_min() * factor, bounds.x_min() * factor],
+        [
+            (bounds.y_max() + 1) * factor - 1,
+            (bounds.x_max() + 1) * factor - 1,
+        ],
+    )
+    .ok()?;
+    Some(SpatialGridDefinition::new(
+        refined_geo_transform,
+        refined_bounds,
+    ))
+}
+
+/// Turns a read window in pixels `factor` times finer than the file into the file's pixels.
+/// The window grows to whole file pixels, so its edges move by less than one file pixel.
+fn coarsen_read_window(window: GdalReadWindow, factor: NonZeroUsize) -> GdalReadWindow {
+    if factor.get() == 1 {
+        return window;
+    }
+    let factor_isize = factor.get() as isize;
+    let start_x = window.start_x.div_euclid(factor_isize);
+    let start_y = window.start_y.div_euclid(factor_isize);
+    let end_x =
+        (window.start_x + window.size_x as isize + factor_isize - 1).div_euclid(factor_isize);
+    let end_y =
+        (window.start_y + window.size_y as isize + factor_isize - 1).div_euclid(factor_isize);
+    GdalReadWindow {
+        start_x,
+        start_y,
+        size_x: (end_x - start_x) as usize,
+        size_y: (end_y - start_y) as usize,
     }
 }
 
@@ -344,8 +440,10 @@ impl OverviewAxisReadAdvise {
         overview_level: isize,
         tile_bounds: [isize; 2],
     ) -> Option<Self> {
-        // tile pixel = file overview pixel + shift
-        let shift = (file_offset + phase).div_euclid(overview_level);
+        // tile pixel = file overview pixel + shift: each tile pixel takes the overview pixel under
+        // its center, as GDAL's nearest resampling does, so a file shifted against the tile grid
+        // is off by at most half an overview pixel. `ceil((offset - level / 2) / level)`
+        let shift = (file_offset + phase + overview_level / 2 - 1).div_euclid(overview_level);
 
         let first_overview_pixel = (readable[0] - phase)
             .div_euclid(overview_level)
@@ -595,8 +693,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 2,
-            files_have_level: false,
+            overview_level: std::num::NonZeroUsize::new(2).unwrap(),
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -643,8 +740,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
-            files_have_level: false,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -683,6 +779,110 @@ mod tests {
     }
 
     #[test]
+    fn it_reads_a_coarser_file_from_an_overview_level() {
+        // a dataset of 10 m pixels, a file of 60 m pixels, tiles of overview level 8 (80 m)
+        let original_spatial_grid = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 10., -10.),
+            GridShape2D::new([10980, 10980]).bounding_box(),
+        );
+        let coarser_file = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 60., -60.),
+            GridShape2D::new([1830, 1830]).bounding_box(),
+        );
+        let reader_state = OverviewReaderState {
+            original_dataset_grid: original_spatial_grid,
+            overview_level: std::num::NonZeroUsize::new(8).unwrap(),
+        };
+        let tile = |x_tile: isize| {
+            SpatialGridDefinition::new(
+                GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 80., -80.),
+                GridBoundingBox2D::new(
+                    GridIdx2D::new([0, x_tile * 512]),
+                    GridIdx2D::new([511, x_tile * 512 + 511]),
+                )
+                .unwrap(),
+            )
+        };
+
+        assert_eq!(
+            GdalReaderMode::OverviewLevel(reader_state)
+                .coarser_file_factor(&coarser_file)
+                .map(NonZeroUsize::get),
+            Some(6)
+        );
+
+        let first = reader_state
+            .tiling_to_dataset_read_advise(&coarser_file, &tile(0))
+            .unwrap();
+        // 512 tile pixels are 4096 dataset pixels, i.e. 682 2/3 file pixels, rounded up
+        assert_eq!(
+            first.gdal_read_widow,
+            GdalReadWindow {
+                start_x: 0,
+                start_y: 0,
+                size_x: 683,
+                size_y: 683,
+            },
+        );
+        assert_eq!(
+            first.read_window_bounds,
+            GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([511, 511])).unwrap()
+        );
+
+        // the second tile starts inside a file pixel: the window grows to whole file pixels
+        let second = reader_state
+            .tiling_to_dataset_read_advise(&coarser_file, &tile(1))
+            .unwrap();
+        assert_eq!(
+            second.gdal_read_widow,
+            GdalReadWindow {
+                start_x: 682,
+                start_y: 0,
+                size_x: 684,
+                size_y: 683,
+            },
+        );
+        assert_eq!(
+            second.read_window_bounds,
+            GridBoundingBox2D::new(GridIdx2D::new([0, 512]), GridIdx2D::new([511, 1023])).unwrap()
+        );
+    }
+
+    #[test]
+    fn it_skips_files_that_are_no_integer_multiple_of_the_dataset() {
+        let original_spatial_grid = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 10., -10.),
+            GridShape2D::new([100, 100]).bounding_box(),
+        );
+        let file = SpatialGridDefinition::new(
+            GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 15., -15.),
+            GridShape2D::new([66, 66]).bounding_box(),
+        );
+        let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+            original_dataset_grid: original_spatial_grid,
+            overview_level: std::num::NonZeroUsize::new(2).unwrap(),
+        });
+
+        assert_eq!(reader_mode.coarser_file_factor(&file), None);
+        assert_eq!(
+            reader_mode.coarser_file_factor(&original_spatial_grid),
+            None,
+            "a file at the dataset's resolution is not coarser"
+        );
+        assert!(
+            reader_mode
+                .tiling_to_dataset_read_advise(
+                    &file,
+                    &SpatialGridDefinition::new(
+                        GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 20., -20.),
+                        GridShape2D::new([50, 50]).bounding_box(),
+                    ),
+                )
+                .is_none()
+        );
+    }
+
+    #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_4_tile_22() {
         let original_spatial_grid = SpatialGridDefinition::new(
             GeoTransform::new_unchecked(Coordinate2D::new(0., 0.), 1., -1.),
@@ -691,8 +891,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
-            files_have_level: false,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -742,8 +941,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
-            files_have_level: false,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -796,8 +994,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
-            files_have_level: false,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -844,8 +1041,7 @@ mod tests {
 
         let reader_state = OverviewReaderState {
             original_dataset_grid: original_spatial_grid,
-            overview_level: 4,
-            files_have_level: false,
+            overview_level: std::num::NonZeroUsize::new(4).unwrap(),
         };
 
         let tiling_to_dataset_read_advise = reader_state.tiling_to_dataset_read_advise(
@@ -894,8 +1090,7 @@ mod tests {
                 ),
                 grid_bounds: GridBoundingBox2D::new_unchecked([0, 0], [899, 1799]),
             },
-            overview_level: 2,
-            files_have_level: false,
+            overview_level: std::num::NonZeroUsize::new(2).unwrap(),
         };
 
         let actual_gdal_dataset_spatial_grid_definition = SpatialGridDefinition {
@@ -923,6 +1118,28 @@ mod tests {
             read_advise.read_window_bounds,
             GridBoundingBox2D::new_unchecked([-56, -113], [-1, -1])
         );
+    }
+
+    /// Each tile pixel takes the overview pixel under its center, as GDAL's nearest resampling.
+    #[test]
+    fn it_maps_tile_pixels_to_the_overview_pixel_under_their_center() {
+        // file_offset, expected target bounds of the 16 overview pixels of a 64 px file at level 4
+        for (file_offset, target) in [
+            (0, [0, 15]),
+            // the overview pixel 0 covers [1, 5) and holds the center 2 of tile pixel 0
+            (1, [0, 15]),
+            // the edge case: the center 2 of tile pixel 0 is on the left edge of overview pixel 0
+            (2, [0, 15]),
+            // [3, 7) holds the center 6 of tile pixel 1, tile pixel 0 has its center outside the file
+            (3, [1, 16]),
+            // [-3, 1) holds the center -2 of tile pixel -1
+            (-3, [-1, 14]),
+        ] {
+            let advise =
+                OverviewAxisReadAdvise::new(file_offset, 64, [0, 63], 0, 4, [-100, 100]).unwrap();
+            assert_eq!(advise.target_bounds, target, "file offset {file_offset}");
+            assert_eq!((advise.window_start, advise.window_size), (0, 64));
+        }
     }
 
     /// A mosaic of 2x2 files whose edges are not aligned to the overview grid must still fill every overview pixel
@@ -983,8 +1200,7 @@ mod tests {
 
                 let reader_state = OverviewReaderState {
                     original_dataset_grid: mosaic_grid,
-                    overview_level: overview_level as u32,
-                    files_have_level: false,
+                    overview_level: std::num::NonZeroUsize::new(overview_level as usize).unwrap(),
                 };
 
                 // global overview pixel grid with the tiling origin at (0, 0)

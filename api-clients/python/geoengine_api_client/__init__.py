@@ -288,8 +288,8 @@ __all__ = [
     "PolygonRasterizationAggregation",
     "PolygonRasterizationParameters",
     "PolygonRasterizationTime",
+    "PolygonRasterizationTimeAllFeatures",
     "PolygonRasterizationTimeFeatureTimes",
-    "PolygonRasterizationTimeIgnore",
     "PolygonRasterizationTimeRegular",
     "PolygonRasterizationValue",
     "PolygonRasterizationValueAttribute",
@@ -379,6 +379,7 @@ __all__ = [
     "SpatialResolution",
     "StacApiRetries",
     "StacAssetBand",
+    "StacCoarserAsset",
     "StacDataProviderDefinition",
     "StacGrid",
     "StacProviderAuthentication",
@@ -775,8 +776,8 @@ from geoengine_api_client.models.polygon_rasterization import PolygonRasterizati
 from geoengine_api_client.models.polygon_rasterization_aggregation import PolygonRasterizationAggregation as PolygonRasterizationAggregation
 from geoengine_api_client.models.polygon_rasterization_parameters import PolygonRasterizationParameters as PolygonRasterizationParameters
 from geoengine_api_client.models.polygon_rasterization_time import PolygonRasterizationTime as PolygonRasterizationTime
+from geoengine_api_client.models.polygon_rasterization_time_all_features import PolygonRasterizationTimeAllFeatures as PolygonRasterizationTimeAllFeatures
 from geoengine_api_client.models.polygon_rasterization_time_feature_times import PolygonRasterizationTimeFeatureTimes as PolygonRasterizationTimeFeatureTimes
-from geoengine_api_client.models.polygon_rasterization_time_ignore import PolygonRasterizationTimeIgnore as PolygonRasterizationTimeIgnore
 from geoengine_api_client.models.polygon_rasterization_time_regular import PolygonRasterizationTimeRegular as PolygonRasterizationTimeRegular
 from geoengine_api_client.models.polygon_rasterization_value import PolygonRasterizationValue as PolygonRasterizationValue
 from geoengine_api_client.models.polygon_rasterization_value_attribute import PolygonRasterizationValueAttribute as PolygonRasterizationValueAttribute
@@ -866,6 +867,7 @@ from geoengine_api_client.models.spatial_reference_specification import SpatialR
 from geoengine_api_client.models.spatial_resolution import SpatialResolution as SpatialResolution
 from geoengine_api_client.models.stac_api_retries import StacApiRetries as StacApiRetries
 from geoengine_api_client.models.stac_asset_band import StacAssetBand as StacAssetBand
+from geoengine_api_client.models.stac_coarser_asset import StacCoarserAsset as StacCoarserAsset
 from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition as StacDataProviderDefinition
 from geoengine_api_client.models.stac_grid import StacGrid as StacGrid
 from geoengine_api_client.models.stac_provider_authentication import StacProviderAuthentication as StacProviderAuthentication

@@ -18,9 +18,10 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from geoengine_api_client.models.raster_band_descriptor import RasterBandDescriptor
 from geoengine_api_client.models.stac_asset_band import StacAssetBand
+from geoengine_api_client.models.stac_coarser_asset import StacCoarserAsset
 from typing import Optional, Set
 from typing_extensions import Self
 from pydantic_core import to_jsonable_python
@@ -31,7 +32,8 @@ class StacProviderDatasetBand(BaseModel):
     """ # noqa: E501
     asset_band: StacAssetBand = Field(description="The band inside the STAC asset that this dataset band reads from (addressing: which asset file + which raster channel within it).", alias="assetBand")
     band_descriptor: RasterBandDescriptor = Field(description="The band descriptor of the resulting geo engine dataset layer.", alias="bandDescriptor")
-    __properties: ClassVar[List[str]] = ["assetBand", "bandDescriptor"]
+    coarser_assets: Optional[List[StacCoarserAsset]] = Field(default=None, description="Coarser assets with the same band, finest first.  When the source reads an overview level, it reads the coarsest of these assets whose factor is not larger than the overview level, so it transfers less data.", alias="coarserAssets")
+    __properties: ClassVar[List[str]] = ["assetBand", "bandDescriptor", "coarserAssets"]
 
     model_config = ConfigDict(
         validate_by_name=True,
@@ -78,6 +80,12 @@ class StacProviderDatasetBand(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of band_descriptor
         if self.band_descriptor:
             _dict['bandDescriptor'] = self.band_descriptor.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of each item in coarser_assets (list)
+        _items = []
+        if self.coarser_assets:
+            for _item_coarser_assets in self.coarser_assets:
+                _items.append(_item_coarser_assets.to_dict() if _item_coarser_assets is not None else None)
+            _dict['coarserAssets'] = _items
         return _dict
 
     @classmethod
@@ -91,7 +99,8 @@ class StacProviderDatasetBand(BaseModel):
 
         _obj = cls.model_validate({
             "assetBand": StacAssetBand.from_dict(obj["assetBand"]) if obj.get("assetBand") is not None else None,
-            "bandDescriptor": RasterBandDescriptor.from_dict(obj["bandDescriptor"]) if obj.get("bandDescriptor") is not None else None
+            "bandDescriptor": RasterBandDescriptor.from_dict(obj["bandDescriptor"]) if obj.get("bandDescriptor") is not None else None,
+            "coarserAssets": [StacCoarserAsset.from_dict(_item) for _item in obj["coarserAssets"]] if obj.get("coarserAssets") is not None else None
         })
         return _obj
 

@@ -189,7 +189,7 @@ async fn it_respects_holes() {
     );
 
     let rasterization = initialize(
-        params(BurnValue::default(), RasterizationTime::Ignore),
+        params(BurnValue::default(), RasterizationTime::AllFeatures),
         source,
         &exe_ctx,
         TIME_SCAN_BATCH_SIZE,
@@ -230,7 +230,7 @@ async fn it_counts_overlaps() {
     );
 
     let rasterization = initialize(
-        params(BurnValue::Count, RasterizationTime::Ignore),
+        params(BurnValue::Count, RasterizationTime::AllFeatures),
         source,
         &exe_ctx,
         TIME_SCAN_BATCH_SIZE,
@@ -303,7 +303,7 @@ async fn it_burns_attribute_with_aggregations() {
                     aggregation,
                     ignore_no_data: true,
                 },
-                RasterizationTime::Ignore,
+                RasterizationTime::AllFeatures,
             ),
             attribute_source(),
             &exe_ctx,
@@ -365,7 +365,7 @@ async fn it_propagates_no_data_of_attributes() {
                     aggregation: OverlapAggregation::Sum,
                     ignore_no_data,
                 },
-                RasterizationTime::Ignore,
+                RasterizationTime::AllFeatures,
             ),
             source(),
             &exe_ctx,
@@ -418,7 +418,7 @@ async fn it_estimates_the_median_of_many_overlaps() {
                 aggregation: OverlapAggregation::MedianEstimate,
                 ignore_no_data: true,
             },
-            RasterizationTime::Ignore,
+            RasterizationTime::AllFeatures,
         ),
         source,
         &exe_ctx,
@@ -643,10 +643,10 @@ async fn it_creates_regular_time_slices() {
 }
 
 #[tokio::test]
-async fn it_ignores_time() {
+async fn it_rasterizes_all_features_into_one_slice() {
     let exe_ctx = exe_ctx_4x4();
     let rasterization = initialize(
-        params(BurnValue::Count, RasterizationTime::Ignore),
+        params(BurnValue::Count, RasterizationTime::AllFeatures),
         timed_source(),
         &exe_ctx,
         TIME_SCAN_BATCH_SIZE,
@@ -769,7 +769,7 @@ async fn it_derives_measurements() {
         let rasterization = initialize(
             PolygonRasterizationParams {
                 output_measurement,
-                ..params(value.clone(), RasterizationTime::Ignore)
+                ..params(value.clone(), RasterizationTime::AllFeatures)
             },
             source(),
             &exe_ctx,
@@ -805,7 +805,7 @@ async fn it_rejects_invalid_columns() {
     let text_column = initialize(
         params(
             attribute("name", OverlapAggregation::First),
-            RasterizationTime::Ignore,
+            RasterizationTime::AllFeatures,
         ),
         source(),
         &exe_ctx,
@@ -820,7 +820,7 @@ async fn it_rejects_invalid_columns() {
     let missing_column = initialize(
         params(
             attribute("missing", OverlapAggregation::First),
-            RasterizationTime::Ignore,
+            RasterizationTime::AllFeatures,
         ),
         source(),
         &exe_ctx,
@@ -848,7 +848,7 @@ async fn it_rejects_invalid_inputs() {
     )
     .typed();
     let result = initialize(
-        params(BurnValue::default(), RasterizationTime::Ignore),
+        params(BurnValue::default(), RasterizationTime::AllFeatures),
         points,
         &exe_ctx,
         TIME_SCAN_BATCH_SIZE,
@@ -864,7 +864,7 @@ async fn it_rejects_invalid_inputs() {
             BurnValue::Constant {
                 value: FiniteF64::new_unchecked(300.),
             },
-            RasterizationTime::Ignore,
+            RasterizationTime::AllFeatures,
         ),
         timed_source(),
         &exe_ctx,
@@ -933,6 +933,11 @@ fn it_deserializes_params_with_defaults() {
             },
             reference: None,
         }
+    );
+    assert_eq!(
+        serde_json::from_value::<RasterizationTime>(serde_json::json!({ "type": "allFeatures" }))
+            .unwrap(),
+        RasterizationTime::AllFeatures
     );
 
     // JSON has no infinity, so a number out of range is the closest to it
@@ -1110,7 +1115,7 @@ fn germany_rasterization(
 #[tokio::test]
 async fn it_rasterizes_germany() {
     let mut exe_ctx = MockExecutionContext::test_default();
-    let rasterization = germany_rasterization(&mut exe_ctx, RasterizationTime::Ignore);
+    let rasterization = germany_rasterization(&mut exe_ctx, RasterizationTime::AllFeatures);
 
     let processor = rasterization
         .typed()
@@ -1238,7 +1243,7 @@ async fn it_clips_ndvi_with_germany() {
 async fn it_optimizes_to_a_coarser_resolution() {
     let exe_ctx = exe_ctx_4x4();
     let rasterization = initialize(
-        params(BurnValue::Count, RasterizationTime::Ignore),
+        params(BurnValue::Count, RasterizationTime::AllFeatures),
         timed_source(),
         &exe_ctx,
         TIME_SCAN_BATCH_SIZE,
@@ -1257,7 +1262,7 @@ async fn it_optimizes_to_a_coarser_resolution() {
         optimized.params,
         PolygonRasterizationParams {
             spatial_resolution: SpatialResolution::new(4., 4.).unwrap(),
-            ..params(BurnValue::Count, RasterizationTime::Ignore)
+            ..params(BurnValue::Count, RasterizationTime::AllFeatures)
         }
     );
 
