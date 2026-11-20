@@ -3962,7 +3962,9 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let result = meta.loading_info(query(world, window(3, 5)).in_parts()).await;
+        let result = meta
+            .loading_info(query(world, window(3, 5)).in_parts())
+            .await;
 
         assert!(matches!(
             result,
@@ -3992,10 +3994,14 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
-        let one_step = meta.loading_info(query(world, interval(3)).in_parts()).await;
+        let one_step = meta
+            .loading_info(query(world, interval(3)).in_parts())
+            .await;
         assert!(one_step.is_ok(), "{one_step:?}");
 
-        let window = meta.loading_info(query(world, window(3, 5)).in_parts()).await;
+        let window = meta
+            .loading_info(query(world, window(3, 5)).in_parts())
+            .await;
         assert!(matches!(
             window,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
