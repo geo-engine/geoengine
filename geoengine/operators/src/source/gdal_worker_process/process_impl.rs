@@ -116,6 +116,10 @@ impl Drop for ChildProcessGuard {
 pub struct WorkerConfig {
     #[serde(default)]
     pub gdal_config_options: Option<Vec<(String, String)>>,
+    /// Environment variables of the worker process, e.g. for libraries that read them with
+    /// `getenv` instead of GDAL's config options.
+    #[serde(default)]
+    pub environment: Vec<(String, String)>,
     #[serde(default)]
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
@@ -133,6 +137,7 @@ impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
             gdal_config_options: None,
+            environment: Vec::new(),
             logging: WorkerLoggingConfig::default(),
             open_telemetry: OpenTelemetryConfig::default(),
             blas_threads: default_blas_threads(),
@@ -214,6 +219,9 @@ pub fn spawn_ipc_server_process<S, R>(
     cmd.arg(token)
         .arg(&config_json)
         .stderr(std::process::Stdio::inherit())
+        // set at `exec`, so they also reach the dynamic loader (`LD_LIBRARY_PATH`) and libraries
+        // that read variables only at load time; the BLAS variables below still win
+        .envs(worker_config.environment.iter().cloned())
         // GDAL links Armadillo, which links BLAS. A threaded OpenBLAS starts one idle thread per
         // core as soon as it is loaded, i.e. dozens per worker, before any GDAL config applies.
         // Both libraries read these variables only at load time, so they must be set here.
@@ -1076,6 +1084,28 @@ mod tests {
         let recv = receiver.recv().unwrap();
 
         assert_eq!(msg, recv);
+    }
+
+    #[test]
+    fn it_starts_workers_with_the_configured_environment() {
+        let config = WorkerConfig {
+            environment: vec![
+                ("OPJ_PLT_MIN_GAP".to_string(), "131072".to_string()),
+                // the BLAS variables come from `blas_threads`
+                ("OPENBLAS_NUM_THREADS".to_string(), "7".to_string()),
+            ],
+            blas_threads: 2,
+            ..WorkerConfig::default()
+        };
+        let (child_guard, _sender, _receiver) =
+            spawn_ipc_server_process::<WorkerRequest, WorkerResponse>(&config).unwrap();
+
+        let environment =
+            std::fs::read(format!("/proc/{}/environ", child_guard.child.id())).unwrap();
+        let environment: Vec<&[u8]> = environment.split(|&byte| byte == 0).collect();
+        assert!(environment.contains(&b"OPJ_PLT_MIN_GAP=131072".as_slice()));
+        assert!(environment.contains(&b"OPENBLAS_NUM_THREADS=2".as_slice()));
+        assert!(!environment.contains(&b"OPENBLAS_NUM_THREADS=7".as_slice()));
     }
 
     #[test]
