@@ -13,11 +13,13 @@ use crate::error::Error;
 use crate::processing::{
     Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
 };
-use crate::source::gdal_worker_process::process_common::{GdalReadAdvise, GdalReadWindow};
+use crate::source::gdal_worker_process::process_common::{
+    GdalReadAdvise, GdalReadWindow, IpcProcessError,
+};
 use crate::source::gdal_worker_process::reader::GdalPoolReader;
 use crate::source::gdal_worker_process::{
     GdalDatasetParameters, GdalPoolDispatcher, GdalProcessPoolError, GdalProcessReadResult,
-    GdalReaderMode,
+    GdalReaderMode, GridAndProperties,
 };
 use crate::util::Result;
 use futures::stream::{BoxStream, FuturesOrdered};
@@ -28,8 +30,9 @@ use geoengine_datatypes::primitives::{
     CacheHint, SpatialResolution, TimeInterval, find_next_best_overview_level,
 };
 use geoengine_datatypes::raster::{
-    BoundedGrid, ChangeGridBounds, EmptyGrid, GridBlit, GridBoundingBox2D, GridIdx2D, GridOrEmpty,
-    GridShapeAccess, Pixel, RasterProperties, RasterTile2D, TileInformation,
+    BoundedGrid, ChangeGridBounds, EmptyGrid, GridBlit, GridBoundingBox2D, GridIdx2D,
+    GridIntersection, GridOrEmpty, GridShapeAccess, GridSize, Pixel, RasterProperties,
+    RasterTile2D, SpatialGridDefinition, TileInformation,
 };
 use num::FromPrimitive;
 use std::num::{NonZeroU32, NonZeroUsize};
@@ -94,6 +97,12 @@ impl<'a> ReadPath<'a> {
 /// are read as one after another, and merging in the order of the files gives the same pixels.
 /// The properties come from the first file that was read. A tile no file covers is empty.
 ///
+/// A reduced resolution level of a JPEG 2000 file blends the edges of its data with the fill
+/// value, so its pixels next to the fill value are uncertain (see [`reads_low_pass_level`]): the
+/// valid pixels of the files below replace them, and only where none does, they keep their
+/// value. Such a file is read with a margin of one pixel around the tile, so that this also
+/// holds for the pixels at the edge of the tile.
+///
 /// The traces of the reads are in a span per tile, so that the reads of one tile, which run at
 /// the same time, can be told apart from those of other tiles.
 ///
@@ -113,72 +122,57 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     blocks: Option<&BlockIo>,
 ) -> Result<RasterTile2D<T>, GdalProcessPoolError> {
     let tile_bounds = plan.tile.global_pixel_bounds();
-    let tile_spatial_grid = plan.tile.spatial_grid_definition();
     let mut raster: GridOrEmpty<GridBoundingBox2D, T> =
+        GridOrEmpty::from(EmptyGrid::new(tile_bounds));
+    // the uncertain pixels of the files, of the highest file where several have one
+    let mut uncertain: GridOrEmpty<GridBoundingBox2D, T> =
         GridOrEmpty::from(EmptyGrid::new(tile_bounds));
     let mut properties = None;
     let reader = GdalPoolReader::from(gdal_worker.clone());
     let factor = reader_mode.level_factor();
     let path = ReadPath::of(blocks, &plan, &reader_mode);
 
-    let files: Vec<(GdalDatasetParameters, GdalReadAdvise)> = plan
-        .files
-        .into_iter()
-        .filter_map(|params| {
-            let read_advise = reader_mode.tiling_to_dataset_read_advise(
-                &params.spatial_grid_definition(),
-                &tile_spatial_grid,
-            );
-            if read_advise.is_none() {
-                trace!(
-                    file = %params.file_path.display(),
-                    "file does not intersect tile {:?}",
-                    plan.tile.global_tile_position,
-                );
-            }
-            read_advise.map(|read_advise| (params, read_advise))
-        })
-        .collect();
-    let areas: Vec<GridBoundingBox2D> = files
-        .iter()
-        .map(|(_, read_advise)| read_advise.read_window_bounds)
-        .collect();
+    let files = FileRead::of_tile(plan.files, &plan.tile, &reader_mode);
+    let areas: Vec<GridBoundingBox2D> = files.iter().map(|file| file.area).collect();
 
     // reads in flight, merged in the order of the files (highest z-index first) as they finish
     let mut reads = FuturesOrdered::new();
-    for (index, (params, read_advise)) in files.into_iter().enumerate() {
-        if is_covered(areas[index], &areas[..index]) {
+    for (index, file) in files.into_iter().enumerate() {
+        if is_covered(file.area, &areas[..index]) {
             // the files above may fill this one's area: merge them first, then decide
             while let Some(read) = reads.next().await {
-                merge(&mut raster, &mut properties, tile_bounds, read?);
+                merge(
+                    &mut raster,
+                    &mut uncertain,
+                    &mut properties,
+                    tile_bounds,
+                    read?,
+                );
             }
             if raster
                 .as_masked_grid()
-                .is_some_and(|grid| grid.all_valid_in_bbox(&read_advise.read_window_bounds))
+                .is_some_and(|grid| grid.all_valid_in_bbox(&file.area))
             {
                 trace!(
-                    file = %params.file_path.display(),
+                    file = %file.params.file_path.display(),
                     "skipping file whose read area is covered by valid pixels of files above it"
                 );
                 continue;
             }
         }
-        let reader = &reader;
-        let cache_hint = plan.cache_hint;
-        reads.push_back(async move {
-            match path {
-                ReadPath::Blocks(blocks) => {
-                    blocks
-                        .read::<T>(&params, read_advise, factor, cache_hint)
-                        .await
-                }
-                ReadPath::Gdal => reader.read_tile_data::<T>(params, read_advise).await,
-            }
-        });
+        reads.push_back(read_file::<T>(file, path, &reader, factor, plan.cache_hint));
     }
     while let Some(read) = reads.next().await {
-        merge(&mut raster, &mut properties, tile_bounds, read?);
+        merge(
+            &mut raster,
+            &mut uncertain,
+            &mut properties,
+            tile_bounds,
+            read?,
+        );
     }
+    // uncertain pixels that no file below replaced keep their value
+    raster.grid_blit_fill_no_data(&uncertain);
 
     Ok(RasterTile2D::new_with_properties(
         plan.time,
@@ -191,14 +185,19 @@ pub async fn assemble_tile<T: Pixel + GdalType + FromPrimitive + SupportedRaster
     ))
 }
 
-/// Merges one file's read into the tile below the pixels of the files merged before it.
+/// Merges one file's read into the tile below the pixels of the files merged before it, and its
+/// uncertain pixels below those of the files before it.
 fn merge<T: Pixel>(
     raster: &mut GridOrEmpty<GridBoundingBox2D, T>,
+    uncertain: &mut GridOrEmpty<GridBoundingBox2D, T>,
     properties: &mut Option<RasterProperties>,
     tile_bounds: GridBoundingBox2D,
-    read: GdalProcessReadResult<T>,
+    read: FileData<T>,
 ) {
-    let file_data = match read {
+    if let Some(file_uncertain) = &read.uncertain {
+        uncertain.grid_blit_fill_no_data(file_uncertain);
+    }
+    let file_data = match read.read {
         GdalProcessReadResult::Grid(grid_and_properties) => *grid_and_properties,
         GdalProcessReadResult::FileNotFoundAsNoData => return,
     };
@@ -213,6 +212,231 @@ fn merge<T: Pixel>(
         raster.grid_blit_fill_no_data(&file_data.grid);
     }
     properties.get_or_insert(file_data.properties);
+}
+
+/// The read of a file of a tile.
+struct FileData<T: Pixel> {
+    /// the pixels the file gives for sure
+    read: GdalProcessReadResult<T>,
+    /// the valid pixels next to the fill value of a reduced JPEG 2000 level, which the files
+    /// below replace, see [`split_next_to_no_data`]
+    uncertain: Option<GridOrEmpty<GridBoundingBox2D, T>>,
+}
+
+/// A file of a tile and how it is read.
+struct FileRead {
+    params: GdalDatasetParameters,
+    read_advise: GdalReadAdvise,
+    /// the pixels of the tile the read gives, the read advise's bounds cut to the tile
+    area: GridBoundingBox2D,
+    /// whether the read has a margin of one pixel around the tile, and its pixels next to no data
+    /// are uncertain, see [`reads_low_pass_level`]
+    erodes: bool,
+}
+
+impl FileRead {
+    /// The reads of the files of `tile` that intersect it, in their order.
+    fn of_tile(
+        files: Vec<GdalDatasetParameters>,
+        tile: &TileInformation,
+        reader_mode: &GdalReaderMode,
+    ) -> Vec<Self> {
+        let tile_bounds = tile.global_pixel_bounds();
+        let tile_spatial_grid = tile.spatial_grid_definition();
+        // the tile and a margin of one pixel, for the files whose pixels next to no data are invalid
+        let margin_grid = SpatialGridDefinition::new(
+            tile.global_geo_transform,
+            GridBoundingBox2D::new_unchecked(
+                [tile_bounds.y_min() - 1, tile_bounds.x_min() - 1],
+                [tile_bounds.y_max() + 1, tile_bounds.x_max() + 1],
+            ),
+        );
+
+        files
+            .into_iter()
+            .filter_map(|params| {
+                let file_grid = params.spatial_grid_definition();
+                let erodes = reads_low_pass_level(&params, reader_mode);
+                let read_advise = if erodes {
+                    reader_mode.tiling_to_dataset_read_advise(&file_grid, &margin_grid)
+                } else {
+                    reader_mode.tiling_to_dataset_read_advise(&file_grid, &tile_spatial_grid)
+                };
+                // the part of the read inside the tile, which the read is cut to
+                let area = read_advise.and_then(|read_advise| {
+                    read_advise.read_window_bounds.intersection(&tile_bounds)
+                });
+                let Some((read_advise, area)) = read_advise.zip(area) else {
+                    trace!(
+                        file = %params.file_path.display(),
+                        "file does not intersect tile {:?}",
+                        tile.global_tile_position,
+                    );
+                    return None;
+                };
+                Some(Self {
+                    params,
+                    read_advise,
+                    area,
+                    erodes,
+                })
+            })
+            .collect()
+    }
+}
+
+/// Reads `file` on `path`. If its pixels next to no data are uncertain, they are split off off the
+/// task that polls all tiles of the query, as the composition of blocks does.
+async fn read_file<T: Pixel + GdalType + FromPrimitive + SupportedRasterDataType>(
+    file: FileRead,
+    path: ReadPath<'_>,
+    reader: &GdalPoolReader,
+    factor: NonZeroUsize,
+    cache_hint: CacheHint,
+) -> Result<FileData<T>, GdalProcessPoolError> {
+    let FileRead {
+        params,
+        read_advise,
+        area,
+        erodes,
+    } = file;
+    let read = match path {
+        ReadPath::Blocks(blocks) => {
+            blocks
+                .read::<T>(&params, read_advise, factor, cache_hint)
+                .await?
+        }
+        ReadPath::Gdal => reader.read_tile_data::<T>(params, read_advise).await?,
+    };
+    let read = match read {
+        GdalProcessReadResult::Grid(read) if erodes => read,
+        read => {
+            return Ok(FileData {
+                read,
+                uncertain: None,
+            });
+        }
+    };
+    let GridAndProperties { grid, properties } = *read;
+    let (grid, uncertain) = crate::util::spawn_blocking(move || split_next_to_no_data(grid, area))
+        .await
+        .map_err(|source| IpcProcessError::IpcOther {
+            msg: format!("could not split off the pixels next to no data: {source}"),
+        })?;
+    Ok(FileData {
+        read: GdalProcessReadResult::Grid(Box::new(GridAndProperties { grid, properties })),
+        uncertain: Some(uncertain),
+    })
+}
+
+/// Whether the read of the file is of a reduced resolution level of a JPEG 2000 file.
+///
+/// The levels of JPEG 2000 are the low-pass bands of its wavelet transform, so they blend the
+/// pixels at the edge of the data with the fill value next to it. Such mixed pixels are neither
+/// no data nor correct, and they would cover the correct pixels of the files below. So pixels next
+/// to no data in such a level are uncertain (see [`split_next_to_no_data`]): the files below
+/// replace them where they have valid pixels. Elsewhere, e.g. at the outer edge of the data, they
+/// keep their value, as no file has a better one.
+///
+/// A level is read if the reads are at least twice as coarse as the file: a file coarser than
+/// the dataset is read at its full resolution up to a level twice its own factor, and resampled
+/// by the nearest pixel.
+fn reads_low_pass_level(params: &GdalDatasetParameters, reader_mode: &GdalReaderMode) -> bool {
+    let is_jpeg_2000 = params
+        .file_path
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("jp2") || extension.eq_ignore_ascii_case("j2k")
+        });
+    let file_factor = reader_mode
+        .coarser_file_factor(&params.spatial_grid_definition())
+        .map_or(1, NonZeroUsize::get);
+    is_jpeg_2000 && reader_mode.level_factor().get() >= 2 * file_factor
+}
+
+/// Splits the valid pixels of `grid` next to an area of invalid pixels of it (including
+/// diagonally) off as uncertain, and cuts both to `area`: the first grid has the other valid
+/// pixels, the second the uncertain ones. Pixels outside of `grid`, e.g. beyond the edge of a
+/// file, do not count.
+///
+/// An invalid pixel belongs to an area if at least two of its neighbors are invalid as well, as
+/// along the edge of the fill value or a line of it. A single invalid pixel, or two, inside the
+/// data is where the low-pass filter undershoots to the fill value, e.g. at dark water next to
+/// snow. Its neighbors are not mixed with the fill value, so they stay certain.
+fn split_next_to_no_data<T: Pixel>(
+    grid: GridOrEmpty<GridBoundingBox2D, T>,
+    area: GridBoundingBox2D,
+) -> (
+    GridOrEmpty<GridBoundingBox2D, T>,
+    GridOrEmpty<GridBoundingBox2D, T>,
+) {
+    let GridOrEmpty::Grid(mut grid) = grid else {
+        return (EmptyGrid::new(area).into(), EmptyGrid::new(area).into());
+    };
+    let [height, width] = grid.validity_mask.shape.axis_size();
+    let valid = &grid.validity_mask.data;
+    let uncertain = if valid.iter().all(|&valid| valid) {
+        GridOrEmpty::from(EmptyGrid::new(area))
+    } else {
+        let invalid: Vec<bool> = valid.iter().map(|&valid| !valid).collect();
+        let invalid_around = count_in_neighborhoods(&invalid, height, width);
+        // the pixel itself and at least two of its neighbors
+        let in_area: Vec<bool> = invalid
+            .iter()
+            .zip(&invalid_around)
+            .map(|(&invalid, &count)| invalid && count >= 3)
+            .collect();
+        let in_area_around = count_in_neighborhoods(&in_area, height, width);
+        let (certain, uncertain): (Vec<bool>, Vec<bool>) = valid
+            .iter()
+            .zip(&in_area_around)
+            .map(|(&valid, &count)| (valid && count == 0, valid && count > 0))
+            .unzip();
+        let mut uncertain_grid = grid.clone();
+        uncertain_grid.validity_mask.data = uncertain;
+        grid.validity_mask.data = certain;
+        cut_to(uncertain_grid.into(), area)
+    };
+    (cut_to(grid.into(), area), uncertain)
+}
+
+/// `grid` cut to `area`.
+fn cut_to<T: Pixel>(
+    grid: GridOrEmpty<GridBoundingBox2D, T>,
+    area: GridBoundingBox2D,
+) -> GridOrEmpty<GridBoundingBox2D, T> {
+    if grid.bounding_box() == area {
+        return grid;
+    }
+    let mut cut: GridOrEmpty<GridBoundingBox2D, T> = EmptyGrid::new(area).into();
+    cut.grid_blit_from(&grid);
+    cut
+}
+
+/// For each pixel of a `height` x `width` grid in row order, how many of the pixels of its 3 x 3
+/// neighborhood inside the grid, itself included, are set in `flags`.
+fn count_in_neighborhoods(flags: &[bool], height: usize, width: usize) -> Vec<u8> {
+    // separable: first the neighbors in a row, then those in a column
+    let mut rows = vec![0_u8; flags.len()];
+    for y in 0..height {
+        let row = &flags[y * width..(y + 1) * width];
+        for x in 0..width {
+            rows[y * width + x] = row[x.saturating_sub(1)..(x + 2).min(width)]
+                .iter()
+                .map(|&flag| u8::from(flag))
+                .sum();
+        }
+    }
+    let mut counts = vec![0_u8; flags.len()];
+    for y in 0..height {
+        for x in 0..width {
+            counts[y * width + x] = (y.saturating_sub(1)..(y + 2).min(height))
+                .map(|y| rows[y * width + x])
+                .sum();
+        }
+    }
+    counts
 }
 
 /// Whether every pixel of `area` lies in one of `above`. Only then can the files above fill it.
@@ -367,8 +591,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{
-        GeoTransform, GridShape2D, RasterPropertiesEntry, RasterPropertiesEntryType,
-        RasterPropertiesKey, SpatialGridDefinition,
+        GeoTransform, Grid, GridShape2D, MaskedGrid, RasterPropertiesEntry,
+        RasterPropertiesEntryType, RasterPropertiesKey,
     };
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::NonZeroFiniteF64;
@@ -408,6 +632,386 @@ mod tests {
     /// stick out of each other and are read together; the copy of A lies in A's area, waits
     /// for it and is skipped, since A's pixels are all valid. The pixels are those of A where A
     /// lies and of B elsewhere, as if the files were read one after another.
+    #[test]
+    fn it_splits_off_pixels_next_to_no_data_and_cuts_to_the_area() {
+        let bounds = GridBoundingBox2D::new_min_max(-1, 4, -1, 4).unwrap();
+        // 6 x 6, the fill value in the first column and in a single pixel at [2, 3]
+        let valid: Vec<bool> = (0..36).map(|i| i % 6 != 0 && i != 3 * 6 + 4).collect();
+        let grid: GridOrEmpty<GridBoundingBox2D, u8> = MaskedGrid::new(
+            Grid::new(bounds, (0..36).collect()).unwrap(),
+            Grid::new(bounds, valid).unwrap(),
+        )
+        .unwrap()
+        .into();
+
+        let area = GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap();
+        let (certain, uncertain) = split_next_to_no_data(grid, area);
+        let cut = certain.into_materialized_masked_grid();
+        let uncertain = uncertain.into_materialized_masked_grid();
+
+        assert_eq!(cut.inner_grid.shape, area);
+        assert_eq!(uncertain.inner_grid.data, cut.inner_grid.data);
+        assert_eq!(
+            cut.inner_grid.data,
+            vec![7, 8, 9, 10, 13, 14, 15, 16, 19, 20, 21, 22, 25, 26, 27, 28]
+        );
+        // next to the column of fill values, but not next to the single one
+        assert_eq!(
+            cut.validity_mask.data,
+            [
+                [false, true, true, true],
+                [false, true, true, true],
+                [false, true, true, false],
+                [false, true, true, true],
+            ]
+            .concat()
+        );
+        assert_eq!(
+            uncertain.validity_mask.data,
+            [
+                [true, false, false, false],
+                [true, false, false, false],
+                [true, false, false, false],
+                [true, false, false, false],
+            ]
+            .concat()
+        );
+
+        let empty: GridOrEmpty<GridBoundingBox2D, u8> = EmptyGrid::new(bounds).into();
+        let (certain, uncertain) = split_next_to_no_data(empty, area);
+        assert!(certain.is_empty() && uncertain.is_empty());
+    }
+
+    /// A lossless JPEG 2000 file of 256 / `pixel_size` px in 32 px tiles over (0, 0) to
+    /// (256, 256) with levels down to 16 times coarser. It has 5000 east of a diagonal edge and
+    /// the fill value 0 west of it, which STAC declares as no data.
+    fn jp2_with_edge(dir: &std::path::Path, pixel_size: usize) -> GdalDatasetParameters {
+        let size = 256 / pixel_size;
+        let file_path = dir.join(format!("edge_{pixel_size}.jp2"));
+        let mut dataset = gdal::DriverManager::get_driver_by_name("MEM")
+            .unwrap()
+            .create_with_band_type::<u16, _>("", size, size, 1)
+            .unwrap();
+        dataset
+            .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(32632).unwrap())
+            .unwrap();
+        let pixel = pixel_size as f64;
+        dataset
+            .set_geo_transform(&[0., pixel, 0., 256., 0., -pixel])
+            .unwrap();
+        let data = (0..size * size)
+            .map(|i| {
+                let (x, y) = ((i % size) as f64 + 0.5, (i / size) as f64 + 0.5);
+                if x * pixel > 0.5 * y * pixel + 60.3 {
+                    5000
+                } else {
+                    0
+                }
+            })
+            .collect();
+        dataset
+            .rasterband(1)
+            .unwrap()
+            .write(
+                (0, 0),
+                (size, size),
+                &mut gdal::raster::Buffer::new((size, size), data),
+            )
+            .unwrap();
+        let mut options = gdal::raster::RasterCreationOptions::new();
+        for (name, value) in [
+            ("REVERSIBLE", "YES"),
+            ("QUALITY", "100"),
+            ("RESOLUTIONS", "5"),
+            ("BLOCKXSIZE", "32"),
+            ("BLOCKYSIZE", "32"),
+        ] {
+            options.add_name_value(name, value).unwrap();
+        }
+        dataset
+            .create_copy(
+                &gdal::DriverManager::get_driver_by_name("JP2OpenJPEG")
+                    .expect("GDAL should have the JP2OpenJPEG driver"),
+                &file_path,
+                &options,
+            )
+            .unwrap();
+
+        GdalDatasetParameters {
+            file_path,
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (0., 256.).into(),
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(pixel),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-pixel),
+            },
+            width: size,
+            height: size,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: Some(0.),
+            properties_mapping: None,
+            gdal_open_options: Some(vec!["USE_TILE_AS_BLOCK=YES".to_string()]),
+            gdal_config_options: None,
+            allow_alphaband_as_mask: false,
+            retry: None,
+        }
+    }
+
+    /// A 256 px `GeoTIFF` over the same area as [`jp2_with_edge`] that is 3000 everywhere.
+    fn tiff_filled_with_3000(dir: &std::path::Path) -> GdalDatasetParameters {
+        let file_path = dir.join("below.tif");
+        let mut dataset = gdal::DriverManager::get_driver_by_name("GTiff")
+            .unwrap()
+            .create_with_band_type::<u16, _>(&file_path, 256, 256, 1)
+            .unwrap();
+        dataset
+            .set_spatial_ref(&gdal::spatial_ref::SpatialRef::from_epsg(32632).unwrap())
+            .unwrap();
+        dataset
+            .set_geo_transform(&[0., 1., 0., 256., 0., -1.])
+            .unwrap();
+        dataset
+            .rasterband(1)
+            .unwrap()
+            .write(
+                (0, 0),
+                (256, 256),
+                &mut gdal::raster::Buffer::new((256, 256), vec![3000; 256 * 256]),
+            )
+            .unwrap();
+        dataset.build_overviews("NEAREST", &[2, 4], &[]).unwrap();
+        dataset.close().unwrap();
+
+        GdalDatasetParameters {
+            file_path,
+            rasterband_channel: 1,
+            geo_transform: GdalDatasetGeoTransform {
+                origin_coordinate: (0., 256.).into(),
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(1.),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-1.),
+            },
+            width: 256,
+            height: 256,
+            file_not_found_handling: FileNotFoundHandling::Error,
+            no_data_value: None,
+            properties_mapping: None,
+            gdal_open_options: None,
+            gdal_config_options: None,
+            allow_alphaband_as_mask: false,
+            retry: None,
+        }
+    }
+
+    /// The levels of a JPEG 2000 file blend its data with the fill value at the edge of the
+    /// data. Those mixed pixels must not cover the file below: each pixel is the data of the
+    /// file above (5000, give or take the few percent its wavelet filter over- and undershoots
+    /// next to the edge) or that of the file below (3000), never a mix. This holds at the
+    /// levels of the file itself and of a file that is coarser than the dataset, on both
+    /// read paths, also where the edge crosses the border of a tile.
+    #[tokio::test]
+    async fn it_reads_no_mixed_edge_pixels_from_jpeg_2000_levels() {
+        let dir = tempfile::tempdir().unwrap();
+        let above = jp2_with_edge(dir.path(), 1);
+        let coarser_above = jp2_with_edge(dir.path(), 2);
+        let below = tiff_filled_with_3000(dir.path());
+        let dataset_grid = below.spatial_grid_definition();
+        let is_above = |value: u16| value.abs_diff(5000) <= 250;
+
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+        let cache = Arc::new(NewRasterCacheEnum::new_lru(100_000_000));
+        let blocks = BlockIo::new(cache.clone(), gdal_worker.clone(), CacheTtlSeconds::new(60));
+
+        for (above, level) in [
+            (&above, 2_usize),
+            (&above, 4),
+            (&coarser_above, 2),
+            (&coarser_above, 4),
+        ] {
+            let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: dataset_grid,
+                overview_level: NonZeroUsize::new(level).unwrap(),
+            });
+            // 4 x 4 tiles, so that the edge crosses tile borders
+            let level_size = 256 / level;
+            let tile_size = level_size / 4;
+            for blocks in [None, Some(&blocks)] {
+                let mut level_pixels = vec![0_u16; level_size * level_size];
+                for tile_y in 0..4 {
+                    for tile_x in 0..4 {
+                        let plan = TilePlan {
+                            tile: TileInformation::new(
+                                [tile_y as isize, tile_x as isize].into(),
+                                GridShape2D::new([tile_size, tile_size]),
+                                GeoTransform::new_unchecked(
+                                    (0., 256.).into(),
+                                    level as f64,
+                                    -(level as f64),
+                                ),
+                            ),
+                            time: TimeInterval::default(),
+                            band: 0,
+                            files: vec![above.clone(), below.clone()],
+                            cache_hint: CacheHint::max_duration(),
+                        };
+                        let tile = assemble_tile::<u16>(plan, reader_mode, &gdal_worker, blocks)
+                            .await
+                            .unwrap()
+                            .grid_array
+                            .into_materialized_masked_grid();
+                        assert!(
+                            tile.validity_mask.data.iter().all(|&valid| valid),
+                            "the file below fills the tile"
+                        );
+                        for y in 0..tile_size {
+                            for x in 0..tile_size {
+                                level_pixels[(tile_y * tile_size + y) * level_size
+                                    + tile_x * tile_size
+                                    + x] = tile.inner_grid.data[y * tile_size + x];
+                            }
+                        }
+                    }
+                }
+
+                let case = format!(
+                    "{} at level {level} through {}",
+                    above.file_path.display(),
+                    if blocks.is_some() { "blocks" } else { "GDAL" }
+                );
+                let mixed: Vec<(usize, usize, u16)> = level_pixels
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, &value)| value != 3000 && !is_above(value))
+                    .map(|(i, &value)| (i / level_size, i % level_size, value))
+                    .collect();
+                assert!(mixed.is_empty(), "{case}: mixed pixels {mixed:?}");
+                // in each row the file below west of the edge, the file above east of it
+                for row in level_pixels.chunks(level_size) {
+                    let east = row.iter().position(|&value| is_above(value));
+                    assert!(
+                        east.is_some(),
+                        "{case}: every row has data of the file above"
+                    );
+                    assert!(
+                        row[east.unwrap_or_default()..]
+                            .iter()
+                            .all(|&value| is_above(value)),
+                        "{case}: the file above has no gaps east of its edge: {row:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn it_treats_only_reduced_levels_of_jpeg_2000_files_as_low_pass() {
+        let dir = tempfile::tempdir().unwrap();
+        let tiff = tiled_tiff(dir.path(), 64, &[2]);
+        let jp2 = GdalDatasetParameters {
+            file_path: dir.path().join("a.JP2"),
+            ..tiff.clone()
+        };
+        let coarser_jp2 = GdalDatasetParameters {
+            geo_transform: GdalDatasetGeoTransform {
+                x_pixel_size: NonZeroFiniteF64::new_unchecked(2.),
+                y_pixel_size: NonZeroFiniteF64::new_unchecked(-2.),
+                ..tiff.geo_transform
+            },
+            width: 32,
+            height: 32,
+            ..jp2.clone()
+        };
+        let dataset_grid = tiff.spatial_grid_definition();
+        let full = GdalReaderMode::OriginalResolution(ReaderState {
+            dataset_spatial_grid: dataset_grid,
+        });
+        let level = |level| {
+            GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: dataset_grid,
+                overview_level: NonZeroUsize::new(level).unwrap(),
+            })
+        };
+
+        // other files are read as they are at every level
+        for mode in [full, level(2), level(4)] {
+            assert!(!reads_low_pass_level(&tiff, &mode));
+        }
+        assert!(!reads_low_pass_level(&jp2, &full));
+        assert!(reads_low_pass_level(&jp2, &level(2)));
+        // a file twice as coarse is read at its full resolution at level 2
+        assert!(!reads_low_pass_level(&coarser_jp2, &level(2)));
+        assert!(reads_low_pass_level(&coarser_jp2, &level(4)));
+    }
+
+    /// Without a file below, the uncertain pixels next to the fill value keep their value: the
+    /// tiles are those of the same file read without the rule for JPEG 2000 levels.
+    #[tokio::test]
+    async fn it_keeps_uncertain_pixels_no_file_below_replaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let jp2 = jp2_with_edge(dir.path(), 1);
+        // GDAL opens the file by its content, so the rule does not apply to it
+        let plain = GdalDatasetParameters {
+            file_path: dir.path().join("edge_1.raw"),
+            ..jp2.clone()
+        };
+        std::fs::copy(&jp2.file_path, &plain.file_path).unwrap();
+        let dataset_grid = jp2.spatial_grid_definition();
+        let gpp = GdalProcessPool::new(
+            2,
+            2,
+            2,
+            DEFAULT_HEADER_CACHE_ENTRIES,
+            WorkerConfig::default(),
+        );
+        let gdal_worker = gpp.get_gdal_worker();
+
+        for level in [2_usize, 4] {
+            let reader_mode = GdalReaderMode::OverviewLevel(OverviewReaderState {
+                original_dataset_grid: dataset_grid,
+                overview_level: NonZeroUsize::new(level).unwrap(),
+            });
+            let tile_size = 256 / level / 4;
+            for tile_y in 0..4 {
+                for tile_x in 0..4 {
+                    let plan = |file: &GdalDatasetParameters| TilePlan {
+                        tile: TileInformation::new(
+                            [tile_y, tile_x].into(),
+                            GridShape2D::new([tile_size, tile_size]),
+                            GeoTransform::new_unchecked(
+                                (0., 256.).into(),
+                                level as f64,
+                                -(level as f64),
+                            ),
+                        ),
+                        time: TimeInterval::default(),
+                        band: 0,
+                        files: vec![file.clone()],
+                        cache_hint: CacheHint::max_duration(),
+                    };
+                    let with_rule =
+                        assemble_tile::<u16>(plan(&jp2), reader_mode, &gdal_worker, None)
+                            .await
+                            .unwrap();
+                    let without_rule =
+                        assemble_tile::<u16>(plan(&plain), reader_mode, &gdal_worker, None)
+                            .await
+                            .unwrap();
+                    assert_eq!(
+                        with_rule.grid_array.into_materialized_masked_grid(),
+                        without_rule.grid_array.into_materialized_masked_grid(),
+                        "level {level}, tile [{tile_y}, {tile_x}]"
+                    );
+                }
+            }
+        }
+    }
+
     #[tokio::test]
     async fn it_reads_files_of_a_tile_together_and_merges_them_in_file_order() {
         let dir = tempfile::tempdir().unwrap();
