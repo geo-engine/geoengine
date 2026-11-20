@@ -290,9 +290,11 @@ GDAL_CACHEMAX = "256"
 GDAL_HTTP_LOW_SPEED_LIMIT = "1024"
 GDAL_HTTP_LOW_SPEED_TIME = "30"
 GDAL_HTTP_CONNECTTIMEOUT = "10"
-# Decode with one thread per worker: the pool already runs one read per worker in parallel, and
-# JP2OpenJPEG would otherwise start a thread per CPU in every worker.
-GDAL_NUM_THREADS = "1"
+# Threads per worker for decoding (`ALL_CPUS` would start a thread per CPU in every worker). With
+# 4, JPEG 2000 reads several tiles of a file at once: zoomed-out Sentinel-2 views on CODE-DE were
+# about 40% faster than with 1 (level 16, 6.8 s -> 4.0 s) with the same download, and 2 to 3 times
+# faster on a local bench. 8 was not faster and downloaded up to 45% more. COG reads did not change.
+GDAL_NUM_THREADS = "4"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because
