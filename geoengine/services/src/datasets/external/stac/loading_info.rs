@@ -344,28 +344,14 @@ impl StacMultiBandMetaData {
         // no search and nothing written to the cache. It counts the items of all cells, also next
         // to the view, so few cells are searched instead, which is exact and warms the cache of the
         // map. Without aggregation the files are searched as well.
-        // What is cached already needs no request at all, not even the aggregation.
         if query.detail == LoadingInfoDetail::Availability
             && cell_bboxes.len() > self.query_cache.availability_search_cells()
-        {
-            let has_data = match self
-                .cached_steps_with_items(&time_steps, &cell_bboxes)
+            && let Some(has_data) = self
+                .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
                 .await
-            {
-                Some(has_data) => Some(has_data),
-                None => {
-                    self.steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
-                        .await
-                }
-            };
-            if let Some(has_data) = has_data {
-                return MultiBandGdalLoadingInfoPart::new(
-                    time_steps,
-                    Vec::new(),
-                    self.cache_ttl_secs,
-                )
+        {
+            return MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), self.cache_ttl_secs)
                 .with_availability(has_data);
-            }
         }
 
         if query.detail.is_for_footprints() {
@@ -567,8 +553,8 @@ impl StacMultiBandMetaData {
         Some(has_data)
     }
 
-    /// For each step whether any cell has an item in it, from one aggregation, if the server can
-    /// tell. Nothing is searched. A step without items is empty for every cell, so it is stored
+    /// For each step whether any cell has an item in it, from the cache or else from one
+    /// aggregation, if the server can tell. Nothing is searched. A step without items is empty for every cell, so it is stored
     /// as such, unless the cells are so many that storing them would flood the cache.
     async fn steps_with_items(
         &self,
@@ -577,6 +563,10 @@ impl StacMultiBandMetaData {
         time_steps: &[TimeInterval],
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
     ) -> Option<Vec<bool>> {
+        // what is cached already needs no request at all, not even the aggregation
+        if let Some(has_data) = self.cached_steps_with_items(time_steps, cell_bboxes).await {
+            return Some(has_data);
+        }
         let TimeDimension::Regular(regular) = self.time_dimension else {
             return None;
         };
