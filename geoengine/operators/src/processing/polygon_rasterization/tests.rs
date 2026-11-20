@@ -1324,7 +1324,7 @@ fn clipped_inputs(operator: &TypedRasterOperator) -> &[TypedRasterOperator] {
 #[tokio::test]
 async fn it_rewrites_the_resolution_of_a_rasterization_in_the_graph_for_overviews() {
     let mut exe_ctx = MockExecutionContext::test_default();
-    let rasterization = germany_rasterization(&mut exe_ctx, RasterizationTime::Ignore);
+    let rasterization = germany_rasterization(&mut exe_ctx, RasterizationTime::AllFeatures);
     let graph = Expression {
         params: ExpressionParams {
             expression: "A".to_string(),
