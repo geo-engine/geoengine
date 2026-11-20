@@ -228,7 +228,7 @@ export class FootprintsService {
         if (!footprints || footprints.tooLarge || !mapSpatialReference || !time) return undefined;
         const step = stepAt(footprints.steps, time.start.valueOf());
         return {
-            date: time.start.valueOf(),
+            key: this.overlayKey(),
             isUnknown: step?.status === TimeStepFootprintStatus.Unknown,
             features: boxFeatures(step?.bounds ?? [], footprints.spatialReference, mapSpatialReference.srsString),
         };
@@ -248,7 +248,7 @@ export class FootprintsService {
             const extent =
                 viewport && mapSpatialReference && this.spatialReferenceService.clipBoundsIfAvailable(viewport.extent, mapSpatialReference);
             return {
-                key: `${this.layer()?.key}/${this.time()?.start.valueOf()}`,
+                key: this.overlayKey(),
                 isLoading: this.overlayLoading(),
                 loaded: !overlay || !extent ? undefined : overlay.isUnknown ? 'unknown' : viewCoverage(overlay.features, extent),
             };
@@ -265,8 +265,8 @@ export class FootprintsService {
     });
     /** Read from the CSS when the overlay is drawn anew, so a theme change shows up then. */
     private overlayStyleCache?: Style;
-    /** The date whose boxes the overlay shows. */
-    private overlayDate?: number;
+    /** The layer and date whose boxes the overlay shows, see `overlayKey`. */
+    private overlayShows?: string;
 
     constructor() {
         effect(() => this.updateOverlay());
@@ -394,16 +394,21 @@ export class FootprintsService {
         this.overlayLight();
         // the calendar window only has availability, so the boxes come from the request of the overlay
         const overlay = this.overlayFeatures();
-        // like map tiles, the boxes of the date stay while those of a moved view load;
-        // a new date clears them at once, else the map would show the coverage of the wrong date
-        const isSameDate = this.time()?.start.valueOf() === this.overlayDate;
-        if (!overlay && this.overlayStepResource.isLoading() && isSameDate && this.overlayVisible()) return;
+        // like map tiles, the boxes of the layer and date stay while those of a moved view load;
+        // a new layer or date clears them at once, else the map would show the coverage of the wrong one
+        const isSame = this.overlayKey() === this.overlayShows;
+        if (!overlay && this.overlayStepResource.isLoading() && isSame && this.overlayVisible()) return;
 
         source?.clear();
-        this.overlayDate = undefined;
+        this.overlayShows = undefined;
         if (!source || !this.overlayVisible() || !overlay) return;
 
         source.addFeatures(overlay.features);
-        this.overlayDate = overlay.date;
+        this.overlayShows = overlay.key;
+    }
+
+    /** What the boxes of the overlay belong to: the layer and the date. */
+    private overlayKey(): string {
+        return `${this.layer()?.key}/${this.time()?.start.valueOf()}`;
     }
 }

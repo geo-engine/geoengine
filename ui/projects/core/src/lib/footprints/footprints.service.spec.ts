@@ -168,6 +168,26 @@ describe('FootprintsService overlay', () => {
         expect(boxesOnMap()).toBe(1);
     });
 
+    it('clears the boxes of a layer at once when another layer is set on the same date', async () => {
+        const box = {upperLeftCoordinate: {x: 0, y: 1}, lowerRightCoordinate: {x: 1, y: 0}};
+        getFootprints.mockResolvedValueOnce({
+            ...FOOTPRINTS,
+            steps: [{time: {start: Date.UTC(2026, 3, 1), end: Date.UTC(2026, 3, 2)}, status: TimeStepFootprintStatus.Data, bounds: [box]}],
+        });
+        const service = createService();
+        const boxesOnMap = (): number => service.overlayLayer.getSource()?.getFeatures().length ?? 0;
+        service.overlayVisible.set(true);
+        await settle();
+        expect(boxesOnMap()).toBe(1);
+
+        // the boxes of the other layer do not arrive
+        getFootprints.mockReturnValue(new Promise(() => undefined));
+        service.layer.set({key: 'provider/other', processingGraphId: () => registerLayer('provider', 'other')});
+        await settle();
+
+        expect(boxesOnMap()).toBe(0);
+    });
+
     it('asks for the graph of a layer once, however often the view changes', async () => {
         const service = createService();
 
