@@ -617,7 +617,7 @@ impl GdalProcessPool {
 }
 
 /// Configuration for GDAL worker processes, passed from the main process at spawn time.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct GdalProcessPoolWorkerConfig {
     #[serde(default)]
     pub gdal_config_options: Option<std::collections::HashMap<String, String>>,
@@ -629,25 +629,6 @@ pub struct GdalProcessPoolWorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
-    /// Size of the `OpenBLAS` and OpenMP thread pools of each worker process.
-    #[serde(default = "default_blas_threads")]
-    pub blas_threads: NonZeroUsize,
-}
-
-fn default_blas_threads() -> NonZeroUsize {
-    NonZeroUsize::MIN
-}
-
-impl Default for GdalProcessPoolWorkerConfig {
-    fn default() -> Self {
-        Self {
-            gdal_config_options: None,
-            environment: None,
-            logging: WorkerLoggingConfig::default(),
-            open_telemetry: OpenTelemetryConfig::default(),
-            blas_threads: default_blas_threads(),
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -726,7 +707,6 @@ impl From<GdalProcessPoolWorkerConfig>
                 enabled: config.open_telemetry.enabled,
                 endpoint: config.open_telemetry.endpoint,
             },
-            blas_threads: config.blas_threads.get(),
         }
     }
 }
@@ -1163,8 +1143,19 @@ mod tests {
         let local =
             |name: &str| format!("[gdal_process_pool.worker.environment]\n{name} = \"131072\"\n");
 
-        // the default sets no variable
+        // the default sets no such variable, but one BLAS thread; a local table keeps those
         assert_eq!(gaps(None, None), vec![]);
+        for local in [None, Some(local("OPJ_PLT_MIN_GAP"))] {
+            let mut environment =
+                worker_config(local.as_deref(), "ENVIRONMENT__OPJ_PLT_MIN_GAP", None).environment;
+            environment.retain(|(name, _)| name.ends_with("_NUM_THREADS"));
+            environment.sort();
+            assert_eq!(
+                environment,
+                [("OMP_NUM_THREADS", "1"), ("OPENBLAS_NUM_THREADS", "1")]
+                    .map(|(name, value)| (name.to_string(), value.to_string()))
+            );
+        }
         assert_eq!(gaps(None, Some("65536")), gap("65536"));
         // a local file sets it in any spelling, as one upper-case name; the environment wins
         for name in ["OPJ_PLT_MIN_GAP", "opj_plt_min_gap", "Opj_Plt_Min_Gap"] {

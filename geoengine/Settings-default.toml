@@ -253,12 +253,6 @@ scopes = []
 enabled = false
 endpoint = "http://127.0.0.1:4317"
 
-[gdal_process_pool.worker]
-# Threads of the OpenBLAS and OpenMP pools in each worker process. GDAL links them via Armadillo,
-# and a threaded OpenBLAS otherwise starts one idle thread per core in every worker. GDAL reads do
-# not use them.
-blas_threads = 1
-
 [gdal_process_pool.worker.gdal_config_options]
 # Process-global GDAL config options applied once when a GDAL worker process starts.
 #
@@ -304,6 +298,12 @@ GDAL_NUM_THREADS = "4"
 # OpenJPEG and its options:
 # LD_LIBRARY_PATH = "/opt/openjpeg/lib"
 # OPJ_PLT_MIN_GAP = "131072"
+#
+# One thread for the OpenBLAS and OpenMP pools: GDAL links them via Armadillo, and a threaded
+# OpenBLAS starts one idle thread per core in every worker as soon as it is loaded, before any GDAL
+# option applies. GDAL reads do not use them.
+OPENBLAS_NUM_THREADS = "1"
+OMP_NUM_THREADS = "1"
 
 [gdal_process_pool.worker.logging]
 # Logging for the GDAL worker processes. Independent from the main `[logging]` section because

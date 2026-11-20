@@ -321,7 +321,6 @@ impl Env {
                 .into_iter()
                 .map(|(name, value)| (name.to_ascii_uppercase(), value))
                 .collect(),
-                blas_threads: setting(&settings, "gdal_process_pool.worker.blas_threads", 1),
                 ..WorkerConfig::default()
             },
         );

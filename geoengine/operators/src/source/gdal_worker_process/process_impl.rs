@@ -124,23 +124,20 @@ pub struct WorkerConfig {
     pub logging: WorkerLoggingConfig,
     #[serde(default)]
     pub open_telemetry: OpenTelemetryConfig,
-    /// Size of the `OpenBLAS` and OpenMP thread pools of a worker process.
-    #[serde(default = "default_blas_threads")]
-    pub blas_threads: usize,
-}
-
-fn default_blas_threads() -> usize {
-    1
 }
 
 impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
             gdal_config_options: None,
-            environment: Vec::new(),
+            // as `Settings-default.toml`: GDAL links Armadillo, which links BLAS, and a threaded
+            // OpenBLAS starts one idle thread per core in every worker as soon as it is loaded
+            environment: vec![
+                ("OPENBLAS_NUM_THREADS".to_string(), "1".to_string()),
+                ("OMP_NUM_THREADS".to_string(), "1".to_string()),
+            ],
             logging: WorkerLoggingConfig::default(),
             open_telemetry: OpenTelemetryConfig::default(),
-            blas_threads: default_blas_threads(),
         }
     }
 }
@@ -215,18 +212,12 @@ pub fn spawn_ipc_server_process<S, R>(
 
     let mut cmd = Command::new(exe_path);
 
-    let blas_threads = worker_config.blas_threads.to_string();
     cmd.arg(token)
         .arg(&config_json)
         .stderr(std::process::Stdio::inherit())
         // set at `exec`, so they also reach the dynamic loader (`LD_LIBRARY_PATH`) and libraries
-        // that read variables only at load time; the BLAS variables below still win
-        .envs(worker_config.environment.iter().cloned())
-        // GDAL links Armadillo, which links BLAS. A threaded OpenBLAS starts one idle thread per
-        // core as soon as it is loaded, i.e. dozens per worker, before any GDAL config applies.
-        // Both libraries read these variables only at load time, so they must be set here.
-        .env("OPENBLAS_NUM_THREADS", &blas_threads)
-        .env("OMP_NUM_THREADS", &blas_threads);
+        // that read variables only at load time, such as OpenBLAS (`OPENBLAS_NUM_THREADS`)
+        .envs(worker_config.environment.iter().cloned());
 
     if std::cfg!(debug_assertions) {
         // llcov inserts these env params. We need to remove them from the gdal-processor processes. Otherwise the processes overwrite the main process data and the files become corrupt.
@@ -1088,15 +1079,10 @@ mod tests {
 
     #[test]
     fn it_starts_workers_with_the_configured_environment() {
-        let config = WorkerConfig {
-            environment: vec![
-                ("OPJ_PLT_MIN_GAP".to_string(), "131072".to_string()),
-                // the BLAS variables come from `blas_threads`
-                ("OPENBLAS_NUM_THREADS".to_string(), "7".to_string()),
-            ],
-            blas_threads: 2,
-            ..WorkerConfig::default()
-        };
+        let mut config = WorkerConfig::default();
+        config
+            .environment
+            .push(("OPJ_PLT_MIN_GAP".to_string(), "131072".to_string()));
         let (child_guard, _sender, _receiver) =
             spawn_ipc_server_process::<WorkerRequest, WorkerResponse>(&config).unwrap();
 
@@ -1104,8 +1090,8 @@ mod tests {
             std::fs::read(format!("/proc/{}/environ", child_guard.child.id())).unwrap();
         let environment: Vec<&[u8]> = environment.split(|&byte| byte == 0).collect();
         assert!(environment.contains(&b"OPJ_PLT_MIN_GAP=131072".as_slice()));
-        assert!(environment.contains(&b"OPENBLAS_NUM_THREADS=2".as_slice()));
-        assert!(!environment.contains(&b"OPENBLAS_NUM_THREADS=7".as_slice()));
+        assert!(environment.contains(&b"OPENBLAS_NUM_THREADS=1".as_slice()));
+        assert!(environment.contains(&b"OMP_NUM_THREADS=1".as_slice()));
     }
 
     #[test]
