@@ -45,6 +45,7 @@ Name | Type
 `cacheTtlSecs` | number
 `stacGrid` | [StacGrid](StacGrid.md)
 `maxConcurrentCellSearches` | number
+`datetimeFrequencyAggregation` | boolean
 `user` | string
 `refreshToken` | string
 `expiryDate` | Date
@@ -95,6 +96,7 @@ const example = {
   "cacheTtlSecs": null,
   "stacGrid": null,
   "maxConcurrentCellSearches": null,
+  "datetimeFrequencyAggregation": null,
   "user": null,
   "refreshToken": null,
   "expiryDate": null,

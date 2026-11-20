@@ -18,7 +18,7 @@ pub struct RasterFootprints {
     pub spatial_reference: String,
     #[serde(rename = "steps")]
     pub steps: Vec<models::TimeStepFootprint>,
-    /// The next time step to ask for, if more steps exist within the requested time interval.
+    /// The rest of the requested time interval, if it has more time steps than were answered. Send it as `timeInterval` to get the next steps.
     #[serde(rename = "next", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub next: Option<Option<Box<models::TimeInterval>>>,
 }

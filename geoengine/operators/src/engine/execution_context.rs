@@ -256,7 +256,8 @@ impl MockExecutionContext {
         named_data: NamedData,
         meta_data: Box<dyn MetaData<L, R, Q>>,
     ) where
-        L: Send + Sync + 'static,
+        // a loading info can be a stream, which is not `Sync`; the boxed metadata is anyway
+        L: 'static,
         R: Send + Sync + 'static + ResultDescriptor,
         Q: Send + Sync + 'static,
     {

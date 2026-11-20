@@ -83,6 +83,12 @@ export interface StacDataProviderDefinition {
      * STAC searches one loading info request runs in parallel; omitted values use 8.
      */
     maxConcurrentCellSearches?: number | null;
+    /**
+     * Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
+     * size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it
+     * which time steps have items instead of searching them. Omitted values do not use it.
+     */
+    datetimeFrequencyAggregation?: boolean | null;
 }
 /**
  * @export

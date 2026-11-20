@@ -102,8 +102,9 @@ pub async fn raster_footprints<C: SessionContext>(
     })
 }
 
-/// The first `limit` time steps. Asking for them first keeps a long time range from
-/// making the footprint query itself look at all of its time steps.
+/// The first `limit` time steps and, if there are more, the rest of `time_interval` after them.
+/// Asking for them first keeps a long time range from making the footprint query itself look at
+/// all of its time steps.
 async fn bounded_time_steps(
     processor: &TypedRasterQueryProcessor,
     time_interval: TimeInterval,
@@ -117,9 +118,14 @@ async fn bounded_time_steps(
     .try_collect()
     .await?;
 
-    let next = (time_steps.len() > limit)
-        .then(|| time_steps.pop())
-        .flatten();
+    let next = if time_steps.len() > limit {
+        time_steps
+            .pop()
+            .map(|step| TimeInterval::new(step.start(), time_interval.end()))
+            .transpose()?
+    } else {
+        None
+    };
 
     Ok((time_steps, next))
 }

@@ -129,6 +129,11 @@ pub struct StacDataProviderDefinition {
     /// STAC searches one loading info request runs in parallel; omitted values use 8.
     #[serde(default)]
     pub max_concurrent_cell_searches: Option<i32>,
+    /// Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
+    /// size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it
+    /// which time steps have items instead of searching them. Omitted values do not use it.
+    #[serde(default)]
+    pub datetime_frequency_aggregation: Option<bool>,
 }
 
 fn default_query_timeout() -> i64 {
@@ -444,6 +449,8 @@ pub struct StacDataProvider {
     query_cache: Arc<StacQueryCache>,
     /// STAC searches one loading info request runs in parallel
     max_concurrent_cell_searches: usize,
+    /// Whether the server answers `datetime_frequency` aggregations in the size asked for
+    datetime_frequency_aggregation: bool,
     grid: StacGrid,
 }
 
@@ -492,6 +499,9 @@ impl StacDataProvider {
             cache_ttl_secs: definition.cache_ttl_secs,
             query_cache,
             max_concurrent_cell_searches,
+            datetime_frequency_aggregation: definition
+                .datetime_frequency_aggregation
+                .unwrap_or(false),
             grid,
         })
     }
@@ -595,7 +605,7 @@ mod tests {
             .unwrap()
             .into();
         let config = crate::config::StacCache {
-            search_chunk_steps: 11,
+            search_chunk_steps: std::num::NonZeroU32::new(11).unwrap(),
             max_footprint_searches: 7,
             availability_search_cells: 3,
             ..crate::config::StacCache::test_default()
@@ -608,7 +618,7 @@ mod tests {
         .unwrap();
 
         let cache = &configured.query_cache;
-        assert_eq!(cache.search_chunk_steps(), 11);
+        assert_eq!(cache.search_chunk_steps().get(), 11);
         assert_eq!(cache.max_footprint_searches(), 7);
         assert_eq!(cache.availability_search_cells(), 3);
     }

@@ -118,6 +118,12 @@ export interface StacDataProviderDefinition {
      * STAC searches one loading info request runs in parallel; omitted values use 8.
      */
     maxConcurrentCellSearches?: number | null;
+    /**
+     * Whether the STAC server has the `datetime_frequency` aggregation and answers in the bucket
+     * size it is asked for with `datetime_frequency_interval`. Footprint requests then ask it
+     * which time steps have items instead of searching them. Omitted values do not use it.
+     */
+    datetimeFrequencyAggregation?: boolean | null;
 }
 
 
@@ -173,6 +179,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json: any, ignoreDiscrim
         'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
+        'datetimeFrequencyAggregation': json['datetimeFrequencyAggregation'] === undefined ? undefined : json['datetimeFrequencyAggregation'] === null ? null : json['datetimeFrequencyAggregation'],
     };
 }
 
@@ -203,6 +210,7 @@ export function StacDataProviderDefinitionToJSONTyped(value?: StacDataProviderDe
         'cacheTtlSecs': value['cacheTtlSecs'],
         'stacGrid': StacGridToJSON(value['stacGrid']),
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
+        'datetimeFrequencyAggregation': value['datetimeFrequencyAggregation'],
     };
 }
 

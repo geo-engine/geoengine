@@ -941,13 +941,15 @@ pub struct StacCache {
     pub ttl_secs: u64,
     /// Number of time steps of one part (chunk) of an answer, and of one footprint search per grid
     /// cell. The result is stored per step. Chunks start at the origin of the time axis, not at months.
-    pub search_chunk_steps: u32,
-    /// Footprint queries of several time steps needing more searches than this for one chunk are
-    /// rejected as too large, see `Settings-default.toml`.
+    pub search_chunk_steps: std::num::NonZeroU32,
+    /// Footprint queries needing more searches than this, for one chunk of time steps or for the
+    /// cells of one time step that are not cached, are rejected as too large, see
+    /// `Settings-default.toml`.
     pub max_footprint_searches: usize,
     /// A calendar request for at most this many grid cells searches the files, which gives exact
     /// days and warms the cache of the map. For more cells, one aggregation counts the items of the
-    /// cells, which is cheaper but also counts items next to the view. 0 always aggregates.
+    /// cells, which is cheaper but also counts items next to the view. 0 always aggregates. Only
+    /// providers with `datetime_frequency_aggregation` are asked for aggregations.
     pub availability_search_cells: usize,
 }
 
@@ -956,7 +958,7 @@ impl TestDefault for StacCache {
         Self {
             size_in_mb: 1_000, // 1 GB
             ttl_secs: 3_600,
-            search_chunk_steps: 30,
+            search_chunk_steps: std::num::NonZeroU32::new(30).expect("is not zero"),
             max_footprint_searches: 50,
             availability_search_cells: 4,
         }

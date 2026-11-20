@@ -32,7 +32,8 @@ use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
     GdalRetryOptions, LoadingInfoDetail, LoadingInfoPurpose, LoadingInfoResolution,
-    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
+    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset, TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
@@ -60,6 +61,8 @@ pub struct StacMultiBandMetaData {
     query_cache: Arc<StacQueryCache>,
     /// Upper bound of STAC cell searches one loading info request runs in parallel.
     max_concurrent_cell_searches: usize,
+    /// Whether the server answers `datetime_frequency` aggregations in the size asked for.
+    datetime_frequency_aggregation: bool,
     grid: StacGrid,
 }
 
@@ -173,105 +176,39 @@ impl
         if query.detail == LoadingInfoDetail::TimeSteps {
             // Regular layers expose every step, including steps without any assets.
             // Their time axis is defined by the provider, so no STAC search is needed.
-            return Ok(MultiBandGdalLoadingInfo::new(
+            let part = MultiBandGdalLoadingInfoPart::new(
                 regular_time_steps(self.time_dimension, time_interval)?
                     .collect::<geoengine_operators::util::Result<Vec<_>>>()?,
                 Vec::new(),
                 self.cache_ttl_secs,
-            ));
-        }
-
-        // A long time range is answered one chunk at a time, and `next` tells where the rest
-        // starts. A query of one step, like a map tile's, fits into one chunk.
-        let (time_interval, next) = self.first_chunk(time_interval)?;
-
-        let spatial_bounds = query.query_rectangle.spatial_bounds();
-
-        let base_url = Url::from_str(&self.api_url).map_err(|e| {
-            geoengine_operators::error::Error::InvalidDataProviderConfig {
-                reason: format!("invalid STAC API URL: {e}"),
-            }
-        })?;
-        let items_url = join_base_url_and_path(
-            &base_url,
-            &format!("collections/{}/items", self.collection_name),
-        )
-        .map_err(
-            |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
-                reason: format!("could not construct STAC items URL: {e}"),
-            },
-        )?;
-
-        let (grid, cells) = self.grid_cells(spatial_bounds)?;
-        if cells.clone().next().is_none() {
-            // Preserve the existing empty result for queries outside the CRS area of use.
-            let time_steps = regular_time_steps(self.time_dimension, time_interval)?
-                .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
-            return Ok(
-                MultiBandGdalLoadingInfo::new(time_steps, Vec::new(), self.cache_ttl_secs)
-                    .with_next(next),
             );
+            return Ok(futures::stream::once(futures::future::ready(Ok(part))).boxed());
         }
 
-        let time_steps = regular_time_steps(self.time_dimension, time_interval)?
-            .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
+        // Decided for the whole request, not for each of its parts: a window that a chunk border
+        // cuts into parts of one step is still a window.
+        let one_step_request = regular_time_steps(self.time_dimension, time_interval)?
+            .take(2)
+            .count()
+            <= 1;
 
-        let cell_bboxes = self.cell_bboxes(grid, cells)?;
-
-        // The calendar only needs to know which steps have items. One aggregation tells it, with
-        // no search and nothing written to the cache. It counts the items of all cells, also next
-        // to the view, so few cells are searched instead, which is exact and warms the cache of the
-        // map. Without aggregation the files are searched as well.
-        if query.detail == LoadingInfoDetail::Availability
-            && cell_bboxes.len() > self.query_cache.availability_search_cells()
-            && let Some(has_data) = self
-                .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
-                .await
-        {
-            return MultiBandGdalLoadingInfo::new(time_steps, Vec::new(), self.cache_ttl_secs)
-                .with_next(next)
-                .with_availability(has_data);
-        }
-
-        if query.purpose == LoadingInfoPurpose::Footprints {
-            self.prepare_window_search(&items_url, time_interval, time_steps.len(), &cell_bboxes)
-                .await?;
-        }
-
-        // Searches are created lazily and are independent; the result is sorted and deduplicated below.
-        let searches = time_steps.iter().copied().cartesian_product(cell_bboxes);
-        let mut tile_files = futures::stream::iter(searches)
-            .map(|(step, (cell, bbox))| {
-                let metadata = self.clone();
-                let url = items_url.clone();
-                self.query_cache.get_or_fetch(
-                    self.dataset.clone(),
-                    cell,
-                    step,
-                    move || async move { metadata.search_bbox(url, bbox, step).await },
-                )
-            })
-            .buffer_unordered(self.max_concurrent_cell_searches)
-            .map_err(
-                |error| geoengine_operators::error::Error::QueryingProcessorFailed {
-                    source: Box::new(error),
-                },
-            )
-            .try_fold(Vec::new(), |mut files, output| async move {
-                files.extend(output.iter().cloned());
-                Ok(files)
-            })
-            .await?;
-
-        tile_files.retain(|file| {
-            time_interval.intersects(&file.file.time)
-                && file.file.spatial_partition.intersects(&spatial_bounds)
-        });
-        let tile_files = self.select_files(tile_files, query.resolution);
-
+        // A long time range is answered one chunk at a time, each when the caller gets there.
+        // A query of one step, like a map tile's, fits into one chunk.
+        let metadata = self.clone();
         Ok(
-            MultiBandGdalLoadingInfo::new(time_steps, tile_files, self.cache_ttl_secs)
-                .with_next(next),
+            futures::stream::try_unfold(Some(time_interval), move |rest| {
+                let metadata = metadata.clone();
+                let query = query.clone();
+                async move {
+                    let Some(rest) = rest else {
+                        return Ok(None);
+                    };
+                    let (chunk, rest) = metadata.first_chunk(rest)?;
+                    let part = metadata.part(&query, chunk, one_step_request).await?;
+                    Ok(Some((part, rest)))
+                }
+            })
+            .boxed(),
         )
     }
 
@@ -362,6 +299,113 @@ impl
 }
 
 impl StacMultiBandMetaData {
+    /// The part of the answer to `query` for `time_interval`, which lies in one chunk.
+    async fn part(
+        &self,
+        query: &MultiBandGdalLoadingInfoQueryRectangle,
+        time_interval: TimeInterval,
+        one_step_request: bool,
+    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart> {
+        let spatial_bounds = query.query_rectangle.spatial_bounds();
+
+        let base_url = Url::from_str(&self.api_url).map_err(|e| {
+            geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("invalid STAC API URL: {e}"),
+            }
+        })?;
+        let items_url = join_base_url_and_path(
+            &base_url,
+            &format!("collections/{}/items", self.collection_name),
+        )
+        .map_err(
+            |e| geoengine_operators::error::Error::InvalidDataProviderConfig {
+                reason: format!("could not construct STAC items URL: {e}"),
+            },
+        )?;
+
+        let (grid, cells) = self.grid_cells(spatial_bounds)?;
+        if cells.clone().next().is_none() {
+            // Preserve the existing empty result for queries outside the CRS area of use.
+            let time_steps = regular_time_steps(self.time_dimension, time_interval)?
+                .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
+            return Ok(MultiBandGdalLoadingInfoPart::new(
+                time_steps,
+                Vec::new(),
+                self.cache_ttl_secs,
+            ));
+        }
+
+        let time_steps = regular_time_steps(self.time_dimension, time_interval)?
+            .collect::<geoengine_operators::util::Result<Vec<_>>>()?;
+
+        let cell_bboxes = self.cell_bboxes(grid, cells)?;
+
+        // The calendar only needs to know which steps have items. One aggregation tells it, with
+        // no search and nothing written to the cache. It counts the items of all cells, also next
+        // to the view, so few cells are searched instead, which is exact and warms the cache of the
+        // map. Without aggregation the files are searched as well.
+        if query.detail == LoadingInfoDetail::Availability
+            && cell_bboxes.len() > self.query_cache.availability_search_cells()
+            && let Some(has_data) = self
+                .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
+                .await
+        {
+            return MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), self.cache_ttl_secs)
+                .with_availability(has_data);
+        }
+
+        if query.purpose == LoadingInfoPurpose::Footprints {
+            if one_step_request {
+                self.reject_too_many_searches(self.missing_searches(&time_steps, &cell_bboxes))?;
+            } else {
+                self.prepare_window_search(
+                    &items_url,
+                    time_interval,
+                    time_steps.len(),
+                    &cell_bboxes,
+                )
+                .await?;
+            }
+        }
+
+        // Searches are created lazily and are independent; the result is sorted and deduplicated below.
+        let searches = time_steps.iter().copied().cartesian_product(cell_bboxes);
+        let mut tile_files = futures::stream::iter(searches)
+            .map(|(step, (cell, bbox))| {
+                let metadata = self.clone();
+                let url = items_url.clone();
+                self.query_cache.get_or_fetch(
+                    self.dataset.clone(),
+                    cell,
+                    step,
+                    move || async move { metadata.search_bbox(url, bbox, step).await },
+                )
+            })
+            .buffer_unordered(self.max_concurrent_cell_searches)
+            .map_err(
+                |error| geoengine_operators::error::Error::QueryingProcessorFailed {
+                    source: Box::new(error),
+                },
+            )
+            .try_fold(Vec::new(), |mut files, output| async move {
+                files.extend(output.iter().cloned());
+                Ok(files)
+            })
+            .await?;
+
+        tile_files.retain(|file| {
+            time_interval.intersects(&file.file.time)
+                && file.file.spatial_partition.intersects(&spatial_bounds)
+        });
+        let tile_files = self.select_files(tile_files, query.resolution);
+
+        Ok(MultiBandGdalLoadingInfoPart::new(
+            time_steps,
+            tile_files,
+            self.cache_ttl_secs,
+        ))
+    }
+
     /// Sorts the found files, keeps one resolution per item and band for `resolution`, and
     /// removes duplicates.
     fn select_files(
@@ -405,6 +449,7 @@ impl StacMultiBandMetaData {
             cache_ttl_secs: provider.cache_ttl_secs,
             query_cache: provider.query_cache.clone(),
             max_concurrent_cell_searches: provider.max_concurrent_cell_searches,
+            datetime_frequency_aggregation: provider.datetime_frequency_aggregation,
             grid: provider.grid,
         }
     }
@@ -465,7 +510,12 @@ impl StacMultiBandMetaData {
         Ok(cell_bboxes)
     }
 
-    /// Fills the cache for a window, so that the per-step lookups of the loading info find it.
+    /// Fills the cache for a part of a window, so that the per-step lookups of the loading info
+    /// find it, and refuses a window that needs too many searches.
+    ///
+    /// Not called for a request of one time step. That has no window to prepare: it runs the
+    /// searches the map tiles of that step run, with the same cache entries. It is only limited
+    /// by the searches it still needs, see `missing_searches`.
     async fn prepare_window_search(
         &self,
         items_url: &Url,
@@ -473,10 +523,10 @@ impl StacMultiBandMetaData {
         number_of_steps: usize,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
     ) -> geoengine_operators::util::Result<()> {
-        // A single step has no limit: it runs the searches the map tiles of that step run, with
-        // the same cache entries, so the coverage of a date works wherever its tiles do.
-        if number_of_steps <= 1 {
-            return Ok(());
+        if !self.query_cache.stores_results() {
+            // Nothing found for the window would be kept, so the loading info searches every
+            // step of every cell afterwards. These are the searches the limit has to count.
+            return self.reject_too_many_searches(number_of_steps * cell_bboxes.len());
         }
         self.search_missing_steps(items_url, time_interval, cell_bboxes)
             .await
@@ -511,8 +561,8 @@ impl StacMultiBandMetaData {
         )
     }
 
-    /// The intervals of `range` with at least one item in any of the cells, if the server can
-    /// tell. The box is the union of the cells' search boxes, so that an interval
+    /// The intervals of `range` with at least one item in any of the cells, if the provider says
+    /// that its server can tell. The box is the union of the cells' search boxes, so that an interval
     /// without items is empty for every cell.
     async fn intervals_with_items(
         &self,
@@ -521,6 +571,9 @@ impl StacMultiBandMetaData {
         range: TimeInterval,
         cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
     ) -> Option<Vec<TimeInterval>> {
+        if !self.datetime_frequency_aggregation {
+            return None;
+        }
         let bbox = cell_bboxes
             .iter()
             .map(|(_, bbox)| *bbox)
@@ -564,7 +617,7 @@ impl StacMultiBandMetaData {
                 step: regular
                     .step
                     .step
-                    .saturating_mul(self.query_cache.search_chunk_steps()),
+                    .saturating_mul(self.query_cache.search_chunk_steps().get()),
             },
         )
     }
@@ -594,9 +647,25 @@ impl StacMultiBandMetaData {
         ))
     }
 
+    /// The searches that the steps of a part still need: one per cell and step that is not cached.
+    /// A request of one time step counts them, so the coverage of a date costs nothing where its
+    /// map tiles were loaded, and a view that nobody has looked at cannot use up the rate limit of
+    /// the STAC server with one request.
+    fn missing_searches(
+        &self,
+        time_steps: &[TimeInterval],
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) -> usize {
+        let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
+        time_steps
+            .iter()
+            .cartesian_product(cell_bboxes)
+            .filter(|(step, (cell, _))| !self.query_cache.contains(dataset_id, *cell, **step))
+            .count()
+    }
+
     /// The limit counts the searches of one part (one chunk of `search_chunk_steps` steps), not of
-    /// the whole request: `loading_info` answers one part per call and keeps no state between the
-    /// calls. The whole request is bounded by its number of time steps.
+    /// the whole request. The whole request is bounded by its number of time steps.
     fn reject_too_many_searches(&self, searches: usize) -> geoengine_operators::util::Result<()> {
         let limit = self.query_cache.max_footprint_searches();
         if searches > limit {
@@ -646,9 +715,12 @@ impl StacMultiBandMetaData {
             return Ok(());
         }
 
-        if let Some(with_items) = self
-            .intervals_with_items(items_url, regular.step, chunk, cell_bboxes)
-            .await
+        // More cells than the limit of searches are not planned: storing their empty steps would
+        // flood the cache, as in `steps_with_items`, and the window is most likely refused below.
+        if cell_bboxes.len() <= self.query_cache.max_footprint_searches()
+            && let Some(with_items) = self
+                .intervals_with_items(items_url, regular.step, chunk, cell_bboxes)
+                .await
         {
             self.store_empty_steps(dataset_id, &steps, &with_items, cell_bboxes)
                 .await;
@@ -667,10 +739,6 @@ impl StacMultiBandMetaData {
         }
 
         self.reject_too_many_searches(searches.len())?;
-        if !self.query_cache.stores_results() {
-            // the steps are searched one by one afterwards anyway
-            return Ok(());
-        }
         self.search_spans(items_url, dataset_id, searches).await
     }
 
@@ -1358,6 +1426,36 @@ impl
     }
 }
 
+/// The first part of the answer to a query, which is all of it if the queried time lies in one
+/// chunk, as for a map tile.
+#[cfg(test)]
+#[async_trait]
+trait FirstPart {
+    async fn first_part(
+        &self,
+        query: MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart>;
+}
+
+#[cfg(test)]
+#[async_trait]
+impl<M> FirstPart for M
+where
+    M: MetaData<
+            MultiBandGdalLoadingInfo,
+            RasterResultDescriptor,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        > + ?Sized,
+{
+    async fn first_part(
+        &self,
+        query: MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfoPart> {
+        let part = self.loading_info(query).await?.try_next().await?;
+        Ok(part.expect("a loading info has at least one part"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1444,6 +1542,7 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            datetime_frequency_aggregation: None,
         }
     }
 
@@ -1818,6 +1917,7 @@ mod tests {
                 .unwrap(),
                 query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
                 max_concurrent_cell_searches: 8,
+                datetime_frequency_aggregation: false,
                 cache_ttl_secs: None,
                 grid: StacGrid::default(),
             };
@@ -1839,7 +1939,7 @@ mod tests {
             // The second lookup must reuse the cached file parameters without another request.
             for _ in 0..2 {
                 let info = meta
-                    .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                    .first_part(MultiBandGdalLoadingInfoQueryRectangle::new(
                         bounds,
                         time,
                         BandSelection::first(),
@@ -1933,6 +2033,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            datetime_frequency_aggregation: false,
             cache_ttl_secs: None,
             grid: StacGrid::default(),
         };
@@ -1964,7 +2065,7 @@ mod tests {
                     NonZeroU32::new(level).unwrap(),
                 ));
             }
-            let info = meta.loading_info(query).await.unwrap();
+            let info = meta.first_part(query).await.unwrap();
             let tile = TileInformation::new(
                 GridIdx2D::new([0, 0]),
                 GridShape::new([2, 2]),
@@ -2005,6 +2106,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            datetime_frequency_aggregation: false,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2042,7 +2144,7 @@ mod tests {
             ),
         ] {
             let info = meta
-                .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                .first_part(MultiBandGdalLoadingInfoQueryRectangle::new(
                     bounds,
                     interval,
                     BandSelection::first(),
@@ -2093,6 +2195,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            datetime_frequency_aggregation: false,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2190,6 +2293,7 @@ mod tests {
             .unwrap(),
             query_cache: Arc::new(StacQueryCache::new(1024 * 1024, Duration::from_mins(1))),
             max_concurrent_cell_searches: 8,
+            datetime_frequency_aggregation: false,
             grid: StacGrid::default(),
             cache_ttl_secs: definition.cache_ttl_secs,
         };
@@ -2488,7 +2592,7 @@ mod tests {
         );
 
         let loading_info = meta
-            .loading_info(query)
+            .first_part(query)
             .await
             .expect("loading_info should succeed");
 
@@ -2676,6 +2780,7 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            datetime_frequency_aggregation: None,
         };
 
         admin_ctx
@@ -2795,7 +2900,8 @@ mod grid_request_tests {
         StacAssetBand, StacDataProvider, StacDataProviderDefinition, StacGrid, StacProviderDataset,
         StacProviderDatasetBand, cache::StacQueryCache,
     };
-    use super::{LoadingInfoDetail, stac_query_bbox};
+    use super::{FirstPart as _, LoadingInfoDetail, stac_query_bbox};
+    use futures::TryStreamExt as _;
     use geoengine_datatypes::{
         dataset::{DataId, DataProviderId, ExternalDataId, LayerId},
         primitives::{
@@ -2811,7 +2917,10 @@ mod grid_request_tests {
     };
     use geoengine_operators::{
         engine::{MetaData, MetaDataProvider, RasterResultDescriptor, SpatialGridDescriptor},
-        source::{MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle},
+        source::{
+            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        },
     };
     use httptest::{
         Expectation, Server, all_of,
@@ -2949,6 +3058,8 @@ mod grid_request_tests {
                 cache_ttl_secs: None,
                 stac_grid: Some(grid),
                 max_concurrent_cell_searches: None,
+                // most tests are about a server that aggregates
+                datetime_frequency_aggregation: Some(true),
             },
             request_registry,
         )
@@ -3008,7 +3119,7 @@ mod grid_request_tests {
         for (time, expected) in daily_cases {
             let info = tokio::time::timeout(
                 Duration::from_secs(2),
-                metadata(&provider, 0).await.loading_info(
+                metadata(&provider, 0).await.first_part(
                     MultiBandGdalLoadingInfoQueryRectangle::new(
                         world,
                         time,
@@ -3040,7 +3151,7 @@ mod grid_request_tests {
         let april = DateTime::new_utc(2024, 4, 1, 0, 0, 0);
         let info = metadata(&provider, 0)
             .await
-            .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+            .first_part(MultiBandGdalLoadingInfoQueryRectangle::new(
                 world,
                 TimeInterval::new(DateTime::new_utc(2024, 2, 15, 12, 0, 0), april).unwrap(),
                 BandSelection::first(),
@@ -3077,7 +3188,7 @@ mod grid_request_tests {
             provider.time_dimension = dimension;
             let result = metadata(&provider, 0)
                 .await
-                .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
+                .first_part(MultiBandGdalLoadingInfoQueryRectangle::new(
                     bounds(0., 1.),
                     interval(3),
                     BandSelection::first(),
@@ -3099,7 +3210,7 @@ mod grid_request_tests {
         )
     }
 
-    fn assert_file(info: &MultiBandGdalLoadingInfo, left: f64, expected_id: &str) {
+    fn assert_file(info: &MultiBandGdalLoadingInfoPart, left: f64, expected_id: &str) {
         assert_eq!(info.time_steps(), &[interval(3)]);
         let files = info.tile_files(interval(3), tile(left), 0);
         assert_eq!(files.len(), 1);
@@ -3245,15 +3356,15 @@ mod grid_request_tests {
                 },
             );
             let meta = metadata(&provider, 0).await;
-            let first = tokio::spawn(async move {
-                meta.loading_info(query(bounds(0.1, 0.4), interval(3)))
-                    .await
-            });
+            let first =
+                tokio::spawn(
+                    async move { meta.first_part(query(bounds(0.1, 0.4), interval(3))).await },
+                );
             wait_for_starts(&starts, 1).await;
             let meta = metadata(&provider, 0).await;
             let (neighbor, other) = tokio::join!(
-                meta.loading_info(query(bounds(0.6, 0.9), interval(3))),
-                meta.loading_info(query(bounds(0.4, 0.6), interval(3))),
+                meta.first_part(query(bounds(0.6, 0.9), interval(3))),
+                meta.first_part(query(bounds(0.4, 0.6), interval(3))),
             );
             assert_file(&first.await.unwrap().unwrap(), 0., "shared");
             assert_file(&neighbor.unwrap(), 0., "shared");
@@ -3261,7 +3372,7 @@ mod grid_request_tests {
             if cache_bytes > 1 {
                 assert_file(
                     &meta
-                        .loading_info(query(bounds(0., 1.), interval(3)))
+                        .first_part(query(bounds(0., 1.), interval(3)))
                         .await
                         .unwrap(),
                     0.,
@@ -3321,7 +3432,7 @@ mod grid_request_tests {
         let area = SpatialPartition2D::new((0.5, 1.5).into(), (1.5, 0.5).into()).unwrap();
         let result = tokio::time::timeout(
             Duration::from_secs(3),
-            meta.loading_info(query(area, interval(3))),
+            meta.first_part(query(area, interval(3))),
         )
         .await
         .unwrap()
@@ -3342,7 +3453,7 @@ mod grid_request_tests {
                 .len(),
             5
         );
-        let warm = meta.loading_info(query(area, interval(3))).await.unwrap();
+        let warm = meta.first_part(query(area, interval(3))).await.unwrap();
         assert_eq!(warm.tile_files(interval(3), tile, 0).len(), 5);
     }
 
@@ -3369,21 +3480,21 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
 
         // the data query of the same step
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .first_part(query(bounds(0.1, 0.4), interval(3)))
             .await
             .unwrap();
         assert_file(&info, 0., "found");
 
         // another step of the chunk, which has no items
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(4)))
+            .first_part(query(bounds(0.1, 0.4), interval(4)))
             .await
             .unwrap();
         assert_eq!(info.time_steps(), &[interval(4)]);
@@ -3415,7 +3526,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.time_steps().len(), 2);
@@ -3446,7 +3557,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(5, 7)).for_footprints())
+            .first_part(query(bounds(0.1, 0.4), window(5, 7)).for_footprints())
             .await
             .unwrap();
 
@@ -3489,14 +3600,14 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(6)))
+            .first_part(query(bounds(0.1, 0.4), interval(6)))
             .await
             .unwrap();
         assert_eq!(info.time_steps(), &[interval(6)]);
         assert_eq!(info.tile_files(interval(6), tile(0.), 0).len(), 1);
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -3504,12 +3615,12 @@ mod grid_request_tests {
 
         // a warm window costs no request, and neither does a step it filled
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(4)))
+            .first_part(query(bounds(0.1, 0.4), interval(4)))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
@@ -3538,7 +3649,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(3)).for_footprints())
+            .first_part(query(bounds(0.1, 0.4), interval(3)).for_footprints())
             .await
             .unwrap();
         assert_file(&info, 0., "found");
@@ -3582,34 +3693,30 @@ mod grid_request_tests {
             },
         );
         let meta = metadata(&provider, 0).await;
-        let mut rest = Some(
-            TimeInterval::new(
-                DateTime::new_utc(2026, 1, 1, 0, 0, 0),
-                DateTime::new_utc(2026, 2, 15, 0, 0, 0),
-            )
-            .unwrap(),
-        );
+        let window = TimeInterval::new(
+            DateTime::new_utc(2026, 1, 1, 0, 0, 0),
+            DateTime::new_utc(2026, 2, 15, 0, 0, 0),
+        )
+        .unwrap();
 
         // the window is answered chunk by chunk
-        let mut answers = 0;
-        while let Some(time) = rest {
-            rest = meta
-                .loading_info(query(bounds(0.1, 0.4), time).for_footprints())
-                .await
-                .unwrap()
-                .next();
-            answers += 1;
-        }
-        assert_eq!(answers, 3);
+        let parts = meta
+            .loading_info(query(bounds(0.1, 0.4), window).for_footprints())
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+        assert_eq!(parts.len(), 3);
 
         // the day with items has its files, and the empty ones are known without another request
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .first_part(query(bounds(0.1, 0.4), interval(3)))
             .await
             .unwrap();
         assert_file(&info, 0., "found");
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(20)))
+            .first_part(query(bounds(0.1, 0.4), interval(20)))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(20), tile(0.), 0).len(), 0);
@@ -3617,7 +3724,7 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn a_window_search_answers_the_first_chunk_and_names_the_rest() {
+    async fn a_window_search_answers_chunk_by_chunk() {
         let server = Server::run();
         let starts = new_starts();
         expect_aggregation_unsupported(&server);
@@ -3626,6 +3733,14 @@ mod grid_request_tests {
             "0.00000,0.00000,1.00000,1.00000",
             "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
             vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-07T00:00:00.000Z/2026-02-06T00:00:00.000Z",
+            vec![],
             Duration::ZERO,
             starts.clone(),
         );
@@ -3643,44 +3758,37 @@ mod grid_request_tests {
         )
         .unwrap();
 
-        let info = meta
+        let mut parts = meta
             .loading_info(query(bounds(0.1, 0.4), window).for_footprints())
             .await
             .unwrap();
 
-        // the steps up to the end of the chunk, and the rest of the window
+        // the first part has the steps up to the end of the chunk, the second one the next chunk
+        let first = parts.try_next().await.unwrap().unwrap();
+        assert_eq!(first.time_steps().first().copied(), Some(interval(1)));
         assert_eq!(
-            info.time_steps().first().copied(),
-            Some(interval(1)),
-            "the first step is the window's first"
+            first.time_steps().last().map(TimeInterval::end),
+            Some(DateTime::new_utc(2026, 1, 7, 0, 0, 0).into())
+        );
+        let second = parts.try_next().await.unwrap().unwrap();
+        assert_eq!(
+            second.time_steps().first().map(TimeInterval::start),
+            Some(DateTime::new_utc(2026, 1, 7, 0, 0, 0).into())
         );
         assert_eq!(
-            info.time_steps().last().copied(),
-            Some(
-                TimeInterval::new(
-                    DateTime::new_utc(2026, 1, 6, 0, 0, 0),
-                    DateTime::new_utc(2026, 1, 7, 0, 0, 0)
-                )
-                .unwrap()
-            )
-        );
-        assert_eq!(
-            info.next(),
-            Some(
-                TimeInterval::new(
-                    DateTime::new_utc(2026, 1, 7, 0, 0, 0),
-                    DateTime::new_utc(2026, 2, 15, 0, 0, 0)
-                )
-                .unwrap()
-            )
+            second.time_steps().last().map(TimeInterval::end),
+            Some(DateTime::new_utc(2026, 2, 6, 0, 0, 0).into())
         );
 
-        // a window inside one chunk and a map tile have no rest
-        let info = meta
+        // a window inside one chunk and a map tile are one part
+        let parts = meta
             .loading_info(query(bounds(0.1, 0.4), interval(3)))
             .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await
             .unwrap();
-        assert_eq!(info.next(), None);
+        assert_eq!(parts.len(), 1);
     }
 
     #[tokio::test]
@@ -3712,7 +3820,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
 
@@ -3724,7 +3832,7 @@ mod grid_request_tests {
 
         // the day without items is known to be empty
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(4)))
+            .first_part(query(bounds(0.1, 0.4), interval(4)))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(4), tile(0.), 0).len(), 0);
@@ -3732,7 +3840,7 @@ mod grid_request_tests {
 
         // the day with items is not, and gets its search
         let info = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .first_part(query(bounds(0.1, 0.4), interval(3)))
             .await
             .unwrap();
         assert_file(&info, 0., "found");
@@ -3773,12 +3881,12 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let info = meta
-            .loading_info(availability_query(world, window(3, 5)).for_footprints())
+            .first_part(availability_query(world, window(3, 5)).for_footprints())
             .await
             .unwrap();
         assert_eq!(info.has_data(1), Some(false));
 
-        meta.loading_info(query(bounds(0.1, 0.4), interval(4)))
+        meta.first_part(query(bounds(0.1, 0.4), interval(4)))
             .await
             .unwrap();
         assert_eq!(starts.lock().unwrap().len(), 1);
@@ -3807,7 +3915,40 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .await
+            .unwrap();
+
+        assert_eq!(info.has_data(0), None);
+        assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
+        assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_provider_that_does_not_aggregate_never_asks_for_an_aggregation() {
+        let server = Server::run();
+        let starts = new_starts();
+        // an aggregation request would be unexpected and fail
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2025-12-08T00:00:00.000Z/2026-01-07T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let mut provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.datetime_frequency_aggregation = false;
+        let meta = metadata(&provider, 0).await;
+
+        let info = meta
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
 
@@ -3849,7 +3990,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .loading_info(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
             .await
             .unwrap();
 
@@ -3886,7 +4027,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         for _ in 0..2 {
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            meta.first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
                 .await
                 .unwrap();
         }
@@ -3916,8 +4057,8 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let (first, second) = futures::join!(
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
-            meta.loading_info(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
+            meta.first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
+            meta.first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
         );
         assert_eq!(first.unwrap().tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(
@@ -3929,9 +4070,8 @@ mod grid_request_tests {
 
     #[tokio::test]
     async fn chunk_search_rejects_too_many_searches_without_requests() {
-        // no requests are expected
+        // no requests are expected, not even the aggregation that plans the searches
         let server = Server::run();
-        expect_aggregation_unsupported(&server);
         let provider = provider(
             &server,
             1024 * 1024,
@@ -3943,7 +4083,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let result = meta
-            .loading_info(query(world, window(3, 5)).for_footprints())
+            .first_part(query(world, window(3, 5)).for_footprints())
             .await;
 
         assert!(matches!(
@@ -3953,9 +4093,38 @@ mod grid_request_tests {
     }
 
     #[tokio::test]
-    async fn one_step_is_searched_over_more_cells_than_the_footprint_limit() {
+    async fn a_window_without_a_cache_counts_the_searches_of_every_step() {
+        // no requests are expected
         let server = Server::run();
-        expect_aggregation_unsupported(&server);
+        let mut provider = provider(
+            &server,
+            0,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        provider.query_cache =
+            Arc::new(StacQueryCache::new(0, Duration::from_mins(1)).with_max_footprint_searches(1));
+        let meta = metadata(&provider, 0).await;
+
+        // one cell, but two steps: without a cache each step is a search of its own
+        let result = meta
+            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(geoengine_operators::error::Error::FootprintQueryTooLarge {
+                searches: 2,
+                limit: 1
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn footprints_count_the_searches_they_still_need() {
+        let server = Server::run();
+        // only the data query below searches
         server.expect(
             Expectation::matching(request::method_path("GET", "/collections/test/items"))
                 .times(2..)
@@ -3974,16 +4143,45 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
+        // one step over more cells than the limit, and none of them is cached
         let one_step = meta
-            .loading_info(query(world, interval(3)).for_footprints())
+            .first_part(query(world, interval(3)).for_footprints())
+            .await;
+        assert!(matches!(
+            one_step,
+            Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
+        ));
+
+        // the data of the step, as for its map tiles, has no limit and fills the cache
+        meta.first_part(query(world, interval(3))).await.unwrap();
+
+        // now the step needs no search, so its footprints are answered
+        let one_step = meta
+            .first_part(query(world, interval(3)).for_footprints())
             .await;
         assert!(one_step.is_ok(), "{one_step:?}");
 
         let window = meta
-            .loading_info(query(world, window(3, 5)).for_footprints())
+            .first_part(query(world, window(3, 5)).for_footprints())
             .await;
         assert!(matches!(
             window,
+            Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
+        ));
+
+        // A chunk ends on January 7, so these two days are two parts of one step each. They are
+        // still a window.
+        let across_chunks = meta
+            .first_part(
+                query(
+                    world,
+                    TimeInterval::new(interval(6).start(), interval(7).end()).unwrap(),
+                )
+                .for_footprints(),
+            )
+            .await;
+        assert!(matches!(
+            across_chunks,
             Err(geoengine_operators::error::Error::FootprintQueryTooLarge { .. })
         ));
     }
@@ -4018,7 +4216,7 @@ mod grid_request_tests {
         // Four sequential 300 ms searches would take 1.2 s.
         let result = tokio::time::timeout(
             Duration::from_millis(800),
-            meta.loading_info(query(area, interval(3))),
+            meta.first_part(query(area, interval(3))),
         )
         .await
         .expect("cell searches of one query must run concurrently")
@@ -4072,15 +4270,15 @@ mod grid_request_tests {
             .await
             .unwrap();
         let meta = metadata(&provider, 0).await;
-        let first = tokio::spawn(async move {
-            meta.loading_info(query(bounds(0.1, 0.4), interval(3)))
-                .await
-        });
+        let first =
+            tokio::spawn(
+                async move { meta.first_part(query(bounds(0.1, 0.4), interval(3))).await },
+            );
         wait_for_starts(&starts, 1).await;
         let meta = metadata(&provider, 0).await;
         let other = tokio::time::timeout(
             Duration::from_millis(400),
-            meta.loading_info(query(bounds(2.1, 2.4), interval(3))),
+            meta.first_part(query(bounds(2.1, 2.4), interval(3))),
         )
         .await
         .unwrap()
@@ -4109,16 +4307,16 @@ mod grid_request_tests {
             },
         );
         let meta = metadata(&provider, 0).await;
-        let first = tokio::spawn(async move {
-            meta.loading_info(query(bounds(0.1, 0.4), interval(3)))
-                .await
-        });
+        let first =
+            tokio::spawn(
+                async move { meta.first_part(query(bounds(0.1, 0.4), interval(3))).await },
+            );
         wait_for_starts(&starts, 1).await;
         first.abort();
         assert!(first.await.unwrap_err().is_cancelled());
         let neighbor = metadata(&provider, 0)
             .await
-            .loading_info(query(bounds(0.6, 0.9), interval(3)))
+            .first_part(query(bounds(0.6, 0.9), interval(3)))
             .await
             .unwrap();
         assert_file(&neighbor, 0., "neighbor");
@@ -4153,12 +4351,12 @@ mod grid_request_tests {
         );
         let meta = metadata(&provider, 0).await;
         let result = meta
-            .loading_info(query(bounds(0.1, 0.9), interval(3)))
+            .first_part(query(bounds(0.1, 0.9), interval(3)))
             .await
             .unwrap();
         assert_eq!(result.tile_files(interval(3), tile(0.), 0).len(), 2);
         let cached = meta
-            .loading_info(query(bounds(0.6, 0.9), interval(3)))
+            .first_part(query(bounds(0.6, 0.9), interval(3)))
             .await
             .unwrap();
         assert_eq!(cached.tile_files(interval(3), tile(0.), 0).len(), 2);
@@ -4184,7 +4382,7 @@ mod grid_request_tests {
         );
         let result = metadata(&provider, 0)
             .await
-            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .first_part(query(bounds(0.1, 0.4), interval(3)))
             .await
             .unwrap();
         assert_file(&result, 0., "coarse");
@@ -4250,7 +4448,7 @@ mod grid_request_tests {
             Duration::from_secs(3),
             metadata(&provider, 0)
                 .await
-                .loading_info(query(first_area, interval(3))),
+                .first_part(query(first_area, interval(3))),
         )
         .await
         .unwrap()
@@ -4263,7 +4461,7 @@ mod grid_request_tests {
         assert_eq!(result.tile_files(interval(3), tile, 0).len(), 1);
         metadata(&provider, 0)
             .await
-            .loading_info(query(adjacent_area, interval(3)))
+            .first_part(query(adjacent_area, interval(3)))
             .await
             .unwrap();
         assert_eq!(starts.lock().unwrap().len(), 1);
@@ -4314,9 +4512,7 @@ mod grid_request_tests {
         )
         .unwrap();
         let wide =
-            tokio::spawn(
-                async move { meta.loading_info(query(bounds(0.1, 0.4), wide_time)).await },
-            );
+            tokio::spawn(async move { meta.first_part(query(bounds(0.1, 0.4), wide_time)).await });
         wait_for_starts(&starts, 1).await;
         let narrow_time = TimeInterval::new(
             DateTime::new_utc(2026, 1, 4, 3, 0, 0),
@@ -4325,7 +4521,7 @@ mod grid_request_tests {
         .unwrap();
         let narrow = metadata(&provider, 0)
             .await
-            .loading_info(query(bounds(0.6, 0.9), narrow_time))
+            .first_part(query(bounds(0.6, 0.9), narrow_time))
             .await
             .unwrap();
         assert_eq!(narrow.time_steps(), &[interval(4)]);
@@ -4372,20 +4568,20 @@ mod grid_request_tests {
             },
         );
         let meta = metadata(&provider, 0).await;
-        let first = tokio::spawn(async move {
-            meta.loading_info(query(bounds(0.1, 0.4), interval(3)))
-                .await
-        });
+        let first =
+            tokio::spawn(
+                async move { meta.first_part(query(bounds(0.1, 0.4), interval(3))).await },
+            );
         wait_for_starts(&starts, 1).await;
         let meta = metadata(&provider, 0).await;
         assert!(
-            meta.loading_info(query(bounds(0.6, 0.9), interval(3)))
+            meta.first_part(query(bounds(0.6, 0.9), interval(3)))
                 .await
                 .is_err()
         );
         assert!(first.await.unwrap().is_err());
         let retry = meta
-            .loading_info(query(bounds(0.1, 0.4), interval(3)))
+            .first_part(query(bounds(0.1, 0.4), interval(3)))
             .await
             .unwrap();
         assert_file(&retry, 0., "retry");
@@ -4420,14 +4616,14 @@ mod grid_request_tests {
             },
         );
         let meta = metadata(&provider, 0).await;
-        let first = tokio::spawn(async move {
-            meta.loading_info(query(bounds(0.1, 0.4), interval(3)))
-                .await
-        });
+        let first =
+            tokio::spawn(
+                async move { meta.first_part(query(bounds(0.1, 0.4), interval(3))).await },
+            );
         wait_for_starts(&starts, 1).await;
         let neighbor = metadata(&provider, 0)
             .await
-            .loading_info(query(bounds(0.6, 0.9), interval(3)))
+            .first_part(query(bounds(0.6, 0.9), interval(3)))
             .await
             .unwrap();
         assert_file(&neighbor, 0., "retried");
@@ -4525,14 +4721,14 @@ mod grid_request_tests {
             let initiating_meta = metadata(&query_provider, 0).await;
             let initiating = tokio::spawn(async move {
                 initiating_meta
-                    .loading_info(query(bounds(0.1, 0.4), interval(3)))
+                    .first_part(query(bounds(0.1, 0.4), interval(3)))
                     .await
             });
             tokio::time::sleep(Duration::from_millis(25)).await;
             let follower_meta = metadata(&query_provider, 0).await;
             let follower = tokio::spawn(async move {
                 follower_meta
-                    .loading_info(query(bounds(0.6, 0.9), interval(3)))
+                    .first_part(query(bounds(0.6, 0.9), interval(3)))
                     .await
             });
             tokio::time::sleep(Duration::from_millis(25)).await;
@@ -4585,12 +4781,12 @@ mod grid_request_tests {
         );
         let meta = metadata(&provider, 0).await;
         assert!(
-            meta.loading_info(query(bounds(0.1, 0.4), interval(3)))
+            meta.first_part(query(bounds(0.1, 0.4), interval(3)))
                 .await
                 .is_err()
         );
         let retry = meta
-            .loading_info(query(bounds(0.6, 0.9), interval(3)))
+            .first_part(query(bounds(0.6, 0.9), interval(3)))
             .await
             .unwrap();
         assert_file(&retry, 0., "complete");

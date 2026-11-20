@@ -539,6 +539,7 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            datetime_frequency_aggregation: None,
         })
         .unwrap()
     }
@@ -614,6 +615,7 @@ mod tests {
             cache_ttl_secs: None,
             stac_grid: None,
             max_concurrent_cell_searches: None,
+            datetime_frequency_aggregation: None,
         })
         .unwrap()
     }

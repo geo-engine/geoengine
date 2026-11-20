@@ -5736,36 +5736,35 @@ mod tests {
                 .into(),
             )
             .await?;
-        let query = |time| {
-            MultiBandGdalLoadingInfoQueryRectangle::new(
+        // 40 monthly steps, the tiles are in the last four months
+        let parts: Vec<_> = meta_data
+            .loading_info(MultiBandGdalLoadingInfoQueryRectangle::new(
                 SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
-                time,
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2022-01-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-01T00:00:00Z")
+                        .unwrap(),
+                )?,
                 BandSelection::first(),
                 geoengine_operators::source::LoadingInfoDetail::Files,
-            )
+            ))
+            .await?
+            .try_collect()
+            .await?;
+        let [first, rest] = parts.as_slice() else {
+            panic!("expected two parts, got {}", parts.len());
         };
 
-        // 40 monthly steps, the tiles are in the last four months
-        let first = meta_data
-            .loading_info(query(TimeInterval::new(
-                geoengine_datatypes::primitives::TimeInstance::from_str("2022-01-01T00:00:00Z")
-                    .unwrap(),
-                geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-01T00:00:00Z")
-                    .unwrap(),
-            )?))
-            .await?;
         assert_eq!(first.time_steps().len(), 32);
         assert_eq!(first.file_bounds(first.time_steps()[0], &[0]).count(), 0);
-        let next = first.next().expect("the rest of the time comes next");
+
         assert_eq!(
-            next.start(),
+            rest.time_steps()[0].start(),
             geoengine_datatypes::primitives::TimeInstance::from_str("2024-09-01T00:00:00Z")
                 .unwrap()
         );
-
-        let rest = meta_data.loading_info(query(next)).await?;
         assert_eq!(rest.time_steps().len(), 8);
-        assert_eq!(rest.next(), None);
         let last = *rest.time_steps().last().unwrap();
         assert!(rest.file_bounds(last, &[0]).count() > 0);
 

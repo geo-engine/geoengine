@@ -69,6 +69,7 @@ export function StacDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         'cacheTtlSecs': json['cacheTtlSecs'] === undefined ? undefined : json['cacheTtlSecs'] === null ? null : json['cacheTtlSecs'],
         'stacGrid': json['stacGrid'] === undefined ? undefined : json['stacGrid'] === null ? null : StacGridFromJSON(json['stacGrid']),
         'maxConcurrentCellSearches': json['maxConcurrentCellSearches'] === undefined ? undefined : json['maxConcurrentCellSearches'] === null ? null : json['maxConcurrentCellSearches'],
+        'datetimeFrequencyAggregation': json['datetimeFrequencyAggregation'] === undefined ? undefined : json['datetimeFrequencyAggregation'] === null ? null : json['datetimeFrequencyAggregation'],
     };
 }
 export function StacDataProviderDefinitionToJSON(json) {
@@ -95,5 +96,6 @@ export function StacDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         'cacheTtlSecs': value['cacheTtlSecs'],
         'stacGrid': StacGridToJSON(value['stacGrid']),
         'maxConcurrentCellSearches': value['maxConcurrentCellSearches'],
+        'datetimeFrequencyAggregation': value['datetimeFrequencyAggregation'],
     };
 }

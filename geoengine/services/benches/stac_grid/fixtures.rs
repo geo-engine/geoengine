@@ -444,6 +444,7 @@ pub(super) fn provider(
         cache_ttl_secs: None,
         stac_grid: Some(grid),
         max_concurrent_cell_searches: None,
+        datetime_frequency_aggregation: None,
     })
     .expect("benchmark provider config is valid");
     // Fresh, local cache for every scenario; cache=0 keeps in-flight coalescing.
@@ -467,15 +468,25 @@ pub(super) fn metadata(provider: &ProviderFixture) -> StacMultiBandMetaData {
     provider.metadata.clone()
 }
 
+/// The first part of the answer to a query, which is all of it for the queries of one time step
+/// of these benches.
+pub(super) async fn first_part(
+    meta: &StacMultiBandMetaData,
+    query: geoengine_operators::source::MultiBandGdalLoadingInfoQueryRectangle,
+) -> geoengine_operators::util::Result<geoengine_operators::source::MultiBandGdalLoadingInfoPart> {
+    use futures::TryStreamExt as _;
+    use geoengine_operators::engine::MetaData as _;
+
+    let part = meta.loading_info(query).await?.try_next().await?;
+    Ok(part.expect("a loading info has at least one part"))
+}
+
 /// Check trace classification once before measurements, when TRACE events are available.
 pub(super) async fn validate_trace_capture() {
     use geoengine_datatypes::primitives::{
         BandSelection, DateTime, SpatialPartition2D, TimeInterval,
     };
-    use geoengine_operators::{
-        engine::MetaData,
-        source::{LoadingInfoDetail, MultiBandGdalLoadingInfoQueryRectangle},
-    };
+    use geoengine_operators::source::{LoadingInfoDetail, MultiBandGdalLoadingInfoQueryRectangle};
 
     if !CacheTraceCapture::enabled() {
         return;
@@ -508,10 +519,10 @@ pub(super) async fn validate_trace_capture() {
             )
         };
         let (first, follower) =
-            tokio::join!(meta.loading_info(query()), meta.loading_info(query()));
+            tokio::join!(first_part(&meta, query()), first_part(&meta, query()));
         first.expect("search succeeds");
         follower.expect("in-flight waiter succeeds");
-        meta.loading_info(query())
+        first_part(&meta, query())
             .await
             .expect("subsequent lookup succeeds");
         let observations = logs.observations();

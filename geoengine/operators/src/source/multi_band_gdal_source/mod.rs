@@ -33,7 +33,9 @@ use geoengine_datatypes::{
     },
 };
 
-pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
+pub use loading_info::{
+    GdalMultiBand, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart, TileFile,
+};
 use num::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -102,7 +104,7 @@ pub enum LoadingInfoDetail {
     /// Only the time steps, without files.
     TimeSteps,
     /// For each time step whether it has data. A provider that can tell without the files
-    /// answers with [`MultiBandGdalLoadingInfo::has_data`] and no files, others with the files.
+    /// answers with [`MultiBandGdalLoadingInfoPart::has_data`] and no files, others with the files.
     Availability,
     /// The files to read.
     Files,
@@ -121,8 +123,7 @@ pub enum LoadingInfoPurpose {
 /// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request
 /// tiles that are anchored in coordinates space.
 ///
-/// A provider may answer a long time range part by part and say where the rest starts with
-/// [`MultiBandGdalLoadingInfo::next`]. Callers follow it.
+/// A provider may answer a long time range in several parts, see [`MultiBandGdalLoadingInfo`].
 #[derive(Clone, Debug)]
 pub struct MultiBandGdalLoadingInfoQueryRectangle {
     pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
@@ -177,14 +178,6 @@ impl MultiBandGdalLoadingInfoQueryRectangle {
         self
     }
 
-    #[must_use]
-    fn with_time_interval(&self, time_interval: TimeInterval) -> Self {
-        Self {
-            query_rectangle: self.query_rectangle.select_time_interval(time_interval),
-            ..self.clone()
-        }
-    }
-
     /// Sets the resolution the source produces its tiles in.
     #[must_use]
     pub fn with_resolution(mut self, resolution: LoadingInfoResolution) -> Self {
@@ -237,39 +230,27 @@ where
             )
     }
 
-    /// The loading info of `query`, part by part, following [`MultiBandGdalLoadingInfo::next`].
-    /// The first part is read before this returns, so its errors come right away. The next part is
-    /// read in the background while the caller works on the current one, so at most two parts are
-    /// held at a time.
+    /// The parts of the loading info of `query`. The first part is read before this returns, so
+    /// its errors come right away. The next part is read in the background while the caller works
+    /// on the current one, so at most two parts are held at a time.
     async fn loading_info_parts(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
-    ) -> Result<BoxStream<'static, Result<MultiBandGdalLoadingInfo>>> {
-        let first = self.meta_data.loading_info(query.clone()).await?;
-        let rest = rest_after(&first, query.query_rectangle.time_interval());
-        let first_part = stream::once(async { Ok(first) });
-        let Some(rest) = rest else {
-            return Ok(first_part.boxed());
+    ) -> Result<MultiBandGdalLoadingInfo> {
+        let mut parts = self.meta_data.loading_info(query).await?;
+        let Some(first) = parts.try_next().await? else {
+            return Ok(parts);
         };
 
-        let meta_data = self.meta_data.box_clone();
         let (sender, receiver) = tokio::sync::mpsc::channel(1);
         let task = AbortOnDropHandle::new(tokio::spawn(
             async move {
-                let mut time = Some(rest);
-                while let Some(part_time) = time {
-                    // wait until the caller took the part before, then read the next one
-                    let Ok(permit) = sender.reserve().await else {
-                        return;
-                    };
-                    let part = meta_data
-                        .loading_info(query.with_time_interval(part_time))
-                        .await;
-                    time = part
-                        .as_ref()
-                        .ok()
-                        .and_then(|part| rest_after(part, part_time));
-                    permit.send(part);
+                // wait until the caller took the part before, then read the next one
+                while let Ok(permit) = sender.reserve().await {
+                    match parts.next().await {
+                        Some(part) => permit.send(part),
+                        None => return,
+                    }
                 }
             }
             .in_current_span(),
@@ -284,14 +265,8 @@ where
             }
         });
 
-        Ok(first_part.chain(rest_parts).boxed())
+        Ok(stream::once(async { Ok(first) }).chain(rest_parts).boxed())
     }
-}
-
-/// The time after `part` that is still to be read, if the provider answered only a part of `time`.
-fn rest_after(part: &MultiBandGdalLoadingInfo, time: TimeInterval) -> Option<TimeInterval> {
-    // a rest that does not start later would loop forever
-    part.next().filter(|next| next.start() > time.start())
 }
 
 #[async_trait]
@@ -1154,7 +1129,7 @@ mod tests {
         )));
 
         let meta: MultiBandGdalMetaData = Box::new(StaticMetaData {
-            loading_info: MultiBandGdalLoadingInfo::new(time_steps, files, None),
+            loading_info: MultiBandGdalLoadingInfoPart::new(time_steps, files, None),
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U16,
                 spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1226,8 +1201,8 @@ mod tests {
             .collect()
     }
 
-    /// A provider that answers a long time range three steps at a time, like a STAC provider
-    /// that searches in chunks. It has no files and records the times it was asked for.
+    /// A provider that answers a long time range in parts of three steps, like a STAC provider
+    /// that searches in chunks. It has no files and records the times of the parts that were read.
     #[derive(Debug, Clone)]
     struct ChunkedMetaData {
         result_descriptor: RasterResultDescriptor,
@@ -1252,30 +1227,36 @@ mod tests {
             query: MultiBandGdalLoadingInfoQueryRectangle,
         ) -> Result<MultiBandGdalLoadingInfo> {
             let time = query.query_rectangle.time_interval();
-            self.asked.lock().unwrap().push(time);
-
             let first = time.start().inner().div_euclid(STEP_MS);
             let last = (time.end().inner() - 1).div_euclid(STEP_MS);
-            let answered_last = last.min(first + STEPS_PER_ANSWER as i64 - 1);
-            let steps = (first..=answered_last)
-                .map(|i| TimeInterval::new(i * STEP_MS, (i + 1) * STEP_MS))
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            let next = (answered_last < last)
-                .then(|| TimeInterval::new((answered_last + 1) * STEP_MS, time.end()))
-                .transpose()?;
+            let parts = (first..=last)
+                .collect::<Vec<_>>()
+                .chunks(STEPS_PER_ANSWER)
+                .map(<[i64]>::to_vec)
+                .collect::<Vec<_>>();
 
-            let has_data = (query.detail == LoadingInfoDetail::Availability
-                && self.knows_availability)
-                .then(|| {
-                    (first..=answered_last)
-                        .map(|i| i % 2 == 0)
-                        .collect::<Vec<_>>()
-                });
-            let info = MultiBandGdalLoadingInfo::new(steps, Vec::new(), None).with_next(next);
-            match has_data {
-                Some(has_data) => info.with_availability(has_data),
-                None => Ok(info),
-            }
+            let asked = self.asked.clone();
+            let knows_availability =
+                query.detail == LoadingInfoDetail::Availability && self.knows_availability;
+            Ok(stream::iter(parts)
+                .map(move |steps| {
+                    let time_steps = steps
+                        .iter()
+                        .map(|i| TimeInterval::new(i * STEP_MS, (i + 1) * STEP_MS))
+                        .collect::<std::result::Result<Vec<_>, _>>()?;
+                    asked.lock().unwrap().push(TimeInterval::new(
+                        time_steps[0].start(),
+                        time_steps[time_steps.len() - 1].end(),
+                    )?);
+
+                    let part = MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), None);
+                    if knows_availability {
+                        part.with_availability(steps.iter().map(|i| i % 2 == 0).collect())
+                    } else {
+                        Ok(part)
+                    }
+                })
+                .boxed())
         }
 
         async fn result_descriptor(&self) -> Result<RasterResultDescriptor> {
@@ -1295,7 +1276,7 @@ mod tests {
         }
     }
 
-    /// A source on the fake provider, the context to query it with and the times it was asked for.
+    /// A source on the fake provider, the context to query it with and the times of the parts that were read.
     async fn chunked_source(
         knows_availability: bool,
     ) -> Result<(
@@ -1359,12 +1340,12 @@ mod tests {
     async fn the_footprint_stream_asks_for_a_long_range_part_by_part() -> Result<()> {
         let (processor, query_ctx, asked) = chunked_source(true).await?;
 
-        // ten steps, so four answers of at most three steps
+        // ten steps, so four parts of at most three steps
         let mut stream = processor
             .footprint_query(ten_steps_query(), FootprintPrecision::Coverage, &query_ctx)
             .await?;
 
-        // only one answer ahead of the stream is asked for, however long the stream waits
+        // only one part ahead of the stream is read, however long the stream waits
         let first = stream.try_next().await?.unwrap();
         assert_eq!(first.time, TimeInterval::new(0, STEP_MS).unwrap());
         for _ in 0..20 {
@@ -1386,7 +1367,7 @@ mod tests {
         );
         assert_eq!(
             *asked.lock().unwrap(),
-            [(0, 100), (30, 100), (60, 100), (90, 100)]
+            [(0, 30), (30, 60), (60, 90), (90, 100)]
                 .map(|(start, end)| TimeInterval::new(start, end).unwrap())
         );
         Ok(())
@@ -1397,7 +1378,7 @@ mod tests {
         let steps = (0..10)
             .map(|i| TimeInterval::new(i * STEP_MS, (i + 1) * STEP_MS).unwrap())
             .collect::<Vec<_>>();
-        let parts = [(0, 100), (30, 100), (60, 100), (90, 100)]
+        let parts = [(0, 30), (30, 60), (60, 90), (90, 100)]
             .map(|(start, end)| TimeInterval::new(start, end).unwrap());
 
         let (processor, query_ctx, asked) = chunked_source(false).await?;
@@ -2644,8 +2625,17 @@ mod tests {
                         );
 
                         let tile = std::panic::AssertUnwindSafe(assemble_tile::<u16>(
-                            MultiBandGdalLoadingInfo::new(vec![time_interval], files.clone(), None)
-                                .tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
+                            MultiBandGdalLoadingInfoPart::new(
+                                vec![time_interval],
+                                files.clone(),
+                                None,
+                            )
+                            .tile_plan(
+                                time_interval,
+                                tile_info,
+                                0,
+                                CacheTtlSeconds::new(0),
+                            ),
                             reader_mode,
                             &gpp.get_gdal_worker(),
                             None,
@@ -2835,19 +2825,16 @@ mod tests {
                 GridShape2D::new([TILE_SIZE as usize, TILE_SIZE as usize]),
                 GeoTransform::new_unchecked((0.0, 0.0).into(), LEVEL as f64, -LEVEL as f64),
             );
-            let tile = assemble_tile::<u16>(
-                MultiBandGdalLoadingInfo::new(vec![time_interval], vec![file], None).tile_plan(
-                    time_interval,
-                    tile_info,
-                    0,
-                    CacheTtlSeconds::new(0),
-                ),
-                reader_mode,
-                &gpp.get_gdal_worker(),
-                None,
-            )
-            .await
-            .unwrap();
+            let tile =
+                assemble_tile::<u16>(
+                    MultiBandGdalLoadingInfoPart::new(vec![time_interval], vec![file], None)
+                        .tile_plan(time_interval, tile_info, 0, CacheTtlSeconds::new(0)),
+                    reader_mode,
+                    &gpp.get_gdal_worker(),
+                    None,
+                )
+                .await
+                .unwrap();
 
             // tile pixels that lie completely inside the file
             let x_min = -(-origin_x).div_euclid(LEVEL);
@@ -2958,7 +2945,7 @@ mod tests {
         }
         files.extend([tile_a, tile_b]);
         files.sort_by_key(|file| file.z_index);
-        let loading_info = MultiBandGdalLoadingInfo::new(vec![time_interval], files, None);
+        let loading_info = MultiBandGdalLoadingInfoPart::new(vec![time_interval], files, None);
 
         // Both files and tile share the same spatial grid
         let data_grid = SpatialGridDefinition::new(
