@@ -2237,8 +2237,9 @@ mod tests {
         );
 
         let mut failures = Vec::new();
-        // an origin aligned to the tiles, and one that is not
-        for (origin_x, origin_y) in [(0_isize, 0_isize), (3, -9)] {
+        // an origin aligned to the tiles, and two that are not: (5, -13) lies where the level pixel
+        // under the tile pixel centers differs from the one the tile pixel starts in
+        for (origin_x, origin_y) in [(0_isize, 0_isize), (3, -9), (5, -13)] {
             let file_path = temp_dir
                 .path()
                 .join(format!("coarser_{origin_x}_{origin_y}.tif"));
@@ -2329,10 +2330,11 @@ mod tests {
             let y_min = -origin_y.div_euclid(LEVEL);
             let y_max = (DATASET_SIZE - origin_y).div_euclid(LEVEL) - 1;
             // Overview reads assign the file's level pixels, which start at the file's first
-            // pixel, to tile pixels with a constant integer shift. A coarser file must give the
-            // file pixel under the center of the same dataset pixels.
-            let shift_x = origin_x.div_euclid(LEVEL);
-            let shift_y = (-origin_y).div_euclid(LEVEL);
+            // pixel, to tile pixels with a constant integer shift: each tile pixel takes the level
+            // pixel under its center. A coarser file must give the file pixel under the center of
+            // the same dataset pixels.
+            let shift_x = (origin_x + LEVEL / 2 - 1).div_euclid(LEVEL);
+            let shift_y = (-origin_y + LEVEL / 2 - 1).div_euclid(LEVEL);
             // several tiles, so that tile edges cut file pixels
             for (tile_y, tile_x) in itertools::iproduct!(
                 y_min.div_euclid(TILE_SIZE)..=y_max.div_euclid(TILE_SIZE),

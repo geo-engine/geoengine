@@ -1178,7 +1178,7 @@ mod tests {
             let advise =
                 OverviewAxisReadAdvise::new(file_offset, 64, [0, 63], 0, 4, [-100, 100]).unwrap();
             assert_eq!(advise.target_bounds, target, "file offset {file_offset}");
-            assert_eq!((advise.window_start, advise.window_size), (0, 64));
+            assert_eq!((advise.window_start, advise.window_size.get()), (0, 64));
         }
     }
 
