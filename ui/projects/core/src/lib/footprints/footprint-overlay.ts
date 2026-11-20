@@ -50,7 +50,7 @@ export function overlayStyle(light: boolean): Style {
     const color = (name: string, fallback: string): string => css.getPropertyValue(name).trim() || fallback;
     const accent = color('--geoengine-accent-color', '#ffc107');
     const faded = color('--geoengine-faded-accent-color', 'rgba(255, 193, 7, 0.32)');
-    const fill = light ? (stripePattern(undefined, accent, 0.45) ?? 'transparent') : (stripePattern(faded, accent, 1) ?? faded);
+    const fill = light ? (stripePattern(undefined, accent, 0.85) ?? 'transparent') : (stripePattern(faded, accent, 1) ?? faded);
     return new Style({fill: new Fill({color: fill}), stroke: new Stroke({color: accent, width: 2})});
 }
 
