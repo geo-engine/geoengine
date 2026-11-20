@@ -402,6 +402,29 @@ describe('FootprintsService overlay', () => {
             expect(service.dateBeyondLoaded(1)).toBeUndefined();
         });
 
+        it('keeps the dates of the layer while those of a moved view load, but not those of another layer', async () => {
+            answerDates(steps);
+            const service = createService();
+            service.datesNeeded.set(true);
+            await settle();
+            expect(service.steps()).toHaveLength(steps.length);
+            expect(service.datesStale()).toBe(false);
+
+            // the dates of the moved view do not arrive
+            getFootprints.mockReturnValue(new Promise(() => undefined));
+            viewport.next({extent: [0, 0, 2, 2], resolution: 1});
+            await settle();
+            expect(service.isLoading()).toBe(true);
+            expect(service.steps()).toHaveLength(steps.length);
+            expect(service.datesStale()).toBe(true);
+            expect(service.freshSteps()).toEqual([]);
+
+            service.layer.set({key: 'provider/other', processingGraphId: () => registerLayer('provider', 'other')});
+            await settle();
+            expect(service.steps()).toEqual([]);
+            expect(service.datesStale()).toBe(false);
+        });
+
         it('tells how much of the view the selected date covers while the overlay is on, and asks nothing while it is off', async () => {
             // one degree is far more than the view of one metre
             const box = {upperLeftCoordinate: {x: -1, y: 1}, lowerRightCoordinate: {x: 1, y: -1}};

@@ -201,10 +201,28 @@ export class FootprintsService {
         this.overlayStepResource.hasValue() ? this.overlayStepResource.value() : undefined,
     );
 
-    private readonly footprints = computed(() =>
+    /** The dates of the current request, or the loaded part of them. */
+    private readonly currentFootprints = computed(() =>
         this.footprintsResource.hasValue() ? this.footprintsResource.value() : this.partialFootprints(),
     );
+    /**
+     * The dates to show. While those of a moved view load, the ones of the same layer and time step stay, like map
+     * tiles, so a strip of dates does not blink; `datesStale` tells. Another layer or time step clears them at once.
+     */
+    private readonly footprints = linkedSignal<{key: string; current?: Footprints; isLoading: boolean}, Footprints | undefined>({
+        source: () => ({
+            key: `${this.layer()?.key}/${this.timeStep()?.durationAmount} ${this.timeStep()?.durationUnit}`,
+            current: this.currentFootprints(),
+            isLoading: this.footprintsResource.isLoading(),
+        }),
+        computation: (source, previous) =>
+            source.current ?? (source.isLoading && previous?.source.key === source.key ? previous.value : undefined),
+    });
     readonly steps = computed(() => this.footprints()?.steps ?? []);
+    /** The dates shown are those of an earlier view, kept while the ones of this view load. */
+    readonly datesStale = computed(() => !this.currentFootprints() && this.footprints() !== undefined);
+    /** The dates of this view only, never kept ones. For decisions that must not act on an earlier view. */
+    readonly freshSteps = computed(() => this.currentFootprints()?.steps ?? []);
     /** The dates with data of the view need too many catalog searches, so the user has to zoom in. */
     readonly tooLarge = computed(() => this.footprints()?.tooLarge ?? false);
     /**

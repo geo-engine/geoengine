@@ -162,6 +162,7 @@ describe('LayersComponent', () => {
                         stepsAround: vi.fn().mockReturnValue([]),
                         timeStep: signal({durationAmount: 1, durationUnit: 'month'}),
                         isLoading: signal(false),
+                        datesStale: signal(false),
                         overlayLoading: signal(false),
                         overlayBlocked: signal(false),
                         overlayTooLarge: signal(false),
@@ -347,6 +348,8 @@ describe('LayersComponent', () => {
             dateWithData: Mock;
             dateBeyondLoaded: Mock;
             stepsAround: Mock;
+            isLoading: WritableSignal<boolean>;
+            datesStale: WritableSignal<boolean>;
             overlayVisible: WritableSignal<boolean>;
             overlayLoading: WritableSignal<boolean>;
             overlayBlocked: WritableSignal<boolean>;
@@ -411,6 +414,40 @@ describe('LayersComponent', () => {
             setTime.mockClear();
             ticks[0].click();
             expect(setTime).toHaveBeenCalledWith(new Time(Date.UTC(2026, 3, 1)));
+        });
+
+        it('keeps the place of the strip while the dates load, so the panel does not move', async () => {
+            const day = (d: number, status: string): unknown => ({
+                time: {start: Date.UTC(2026, 3, d), end: Date.UTC(2026, 3, d + 1)},
+                status,
+            });
+            const element = fixture.nativeElement as HTMLElement;
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+
+            // the first dates of a layer load: an empty strip with a bar, and the line below it keeps its height
+            footprints().isLoading.set(true);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            expect(element.querySelector('.date-strip')).not.toBeNull();
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(0);
+            expect(element.querySelector('.date-strip .strip-loading')).not.toBeNull();
+            expect(element.querySelector('.strip-range')?.textContent?.trim()).toBe('');
+            expect(element.querySelector('.date-strip')?.getAttribute('aria-busy')).toBe('true');
+
+            // the dates of an earlier view stay, faded, while those of a moved view load
+            footprints().stepsAround.mockReturnValue([day(1, 'data'), day(2, 'empty')]);
+            footprints().datesStale.set(true);
+            // the strip is computed from signals, which the mocked `stepsAround` is not
+            footprints().time.set(new Time(Date.UTC(2026, 3, 1)));
+            fixture.detectChanges();
+            expect(element.querySelectorAll('.date-strip .tick')).toHaveLength(2);
+            expect(element.querySelector('.date-strip.strip-stale')).not.toBeNull();
+
+            footprints().isLoading.set(false);
+            footprints().datesStale.set(false);
+            fixture.detectChanges();
+            expect(element.querySelector('.strip-loading')).toBeNull();
+            expect(element.querySelector('.strip-stale')).toBeNull();
         });
 
         it('names where the buttons below the date go', async () => {
