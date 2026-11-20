@@ -313,7 +313,14 @@ impl Env {
                     .map(|(name, value)| (name.to_ascii_uppercase(), value))
                     .collect(),
                 ),
-                blas_threads: setting(&settings, "gdal_process_pool.worker.blas_threads", 1),
+                environment: setting::<HashMap<String, String>>(
+                    &settings,
+                    "gdal_process_pool.worker.environment",
+                    HashMap::new(),
+                )
+                .into_iter()
+                .map(|(name, value)| (name.to_ascii_uppercase(), value))
+                .collect(),
                 ..WorkerConfig::default()
             },
         );
@@ -605,10 +612,10 @@ fn raster_meta_data() -> GdalMetaDataRegular {
 fn settings() -> Config {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     Config::builder()
-        .add_source(GdalOptionNamesInLowerCase(File::from(
+        .add_source(WorkerOptionNamesInLowerCase(File::from(
             dir.join("Settings-default.toml"),
         )))
-        .add_source(GdalOptionNamesInLowerCase(
+        .add_source(WorkerOptionNamesInLowerCase(
             File::from(dir.join("Settings.toml")).required(false),
         ))
         .add_source(Environment::with_prefix("geoengine").separator("__"))
@@ -616,13 +623,13 @@ fn settings() -> Config {
         .unwrap()
 }
 
-/// A copy of `GdalOptionNamesInLowerCase` in `services::config`, which the benches cannot use:
-/// names the GDAL options of a settings file in lower case, as environment variables are, so
+/// A copy of `WorkerOptionNamesInLowerCase` in `services::config`, which the benches cannot use:
+/// names the GDAL options and environment variables of the workers in a settings file in lower case, as environment variables are, so
 /// that the order of the settings decides between them.
 #[derive(Debug, Clone)]
-struct GdalOptionNamesInLowerCase<S>(S);
+struct WorkerOptionNamesInLowerCase<S>(S);
 
-impl<S: Source + Clone + Send + Sync + 'static> Source for GdalOptionNamesInLowerCase<S> {
+impl<S: Source + Clone + Send + Sync + 'static> Source for WorkerOptionNamesInLowerCase<S> {
     fn clone_into_box(&self) -> Box<dyn Source + Send + Sync> {
         Box::new(self.clone())
     }
@@ -636,15 +643,17 @@ impl<S: Source + Clone + Send + Sync + 'static> Source for GdalOptionNamesInLowe
         }
 
         let mut settings = self.0.collect()?;
-        let options = table(
-            table(settings.get_mut("gdal_process_pool"), "worker"),
-            "gdal_config_options",
-        );
-        if let Some(ValueKind::Table(options)) = options.map(|options| &mut options.kind) {
-            *options = std::mem::take(options)
-                .into_iter()
-                .map(|(name, value)| (name.to_ascii_lowercase(), value))
-                .collect();
+        for options in ["gdal_config_options", "environment"] {
+            let options = table(
+                table(settings.get_mut("gdal_process_pool"), "worker"),
+                options,
+            );
+            if let Some(ValueKind::Table(options)) = options.map(|options| &mut options.kind) {
+                *options = std::mem::take(options)
+                    .into_iter()
+                    .map(|(name, value)| (name.to_ascii_lowercase(), value))
+                    .collect();
+            }
         }
         Ok(settings)
     }
