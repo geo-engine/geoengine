@@ -1093,7 +1093,9 @@ where
 
         let files = if matches!(
             query.detail,
-            LoadingInfoDetail::Availability | LoadingInfoDetail::Files
+            LoadingInfoDetail::Files
+                | LoadingInfoDetail::Availability
+                | LoadingInfoDetail::Coverage
         ) {
             // query the files
             let rows = conn
