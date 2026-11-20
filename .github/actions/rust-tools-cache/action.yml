@@ -1,0 +1,17 @@
+name: "Rust Tools Cache"
+description: >
+  Cache the binaries that `just backend install` installs with `cargo install` (`~/.cargo/bin`), so that the recipe
+  still runs in CI but skips the tools that are already installed. Does not cache any build targets.
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Rust Tools Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: "cache-rust"
+        shared-key: "tools"
+        add-job-id-key: false
+        env-vars: ""
+        workspaces: "geoengine"
+        cache-targets: false
+        save-if: ${{ github.ref == 'refs/heads/main' }}

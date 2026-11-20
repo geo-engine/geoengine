@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 
 TEST_CODE_PATH_VAR = "GEOENGINE_TEST_CODE_PATH"
 TEST_BUILD_TYPE_VAR = "GEOENGINE_TEST_BUILD_TYPE"
+# Set to `true` to use pre-built binaries in `target/<build type>/` instead of building them with cargo, e.g., in CI
+SKIP_BUILD_VAR = "GEOENGINE_TEST_SKIP_BUILD"
 
 POSTGRES_HOST = "localhost"
 POSTGRES_PORT = 5432
@@ -116,24 +118,27 @@ class GeoEngineBinaries:
     def _build_geo_engine(self) -> None:
         """Build the Geo Engine binaries."""
 
-        cargo_bin = shutil.which("cargo")
+        if os.environ.get(SKIP_BUILD_VAR, "false").lower() == "true":
+            logging.info("Skipping the build of the Geo Engine binaries, since %s is set.", SKIP_BUILD_VAR)
+        else:
+            cargo_bin = shutil.which("cargo")
 
-        if cargo_bin is None:
-            raise RuntimeError("Cargo not found")
+            if cargo_bin is None:
+                raise RuntimeError("Cargo not found")
 
-        logging.info("Building Geo Engine binaries in %s mode… this may take a while.", self._build_type.value)
+            logging.info("Building Geo Engine binaries in %s mode… this may take a while.", self._build_type.value)
 
-        subprocess.run(
-            [
-                cargo_bin,
-                "build",
-                "--locked",
-                "--bins",
-            ]
-            + (["--release"] if self._build_type == BuildType.RELEASE else []),
-            check=True,
-            cwd=self._code_path,
-        )
+            subprocess.run(
+                [
+                    cargo_bin,
+                    "build",
+                    "--locked",
+                    "--bins",
+                ]
+                + (["--release"] if self._build_type == BuildType.RELEASE else []),
+                check=True,
+                cwd=self._code_path,
+            )
 
         self._server_binary_path = self._code_path / "target" / self._build_type.value / "geoengine-server"
         self._cli_binary_path = self._code_path / "target" / self._build_type.value / "geoengine-cli"

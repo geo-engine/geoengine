@@ -1,0 +1,19 @@
+name: "Download Geo Engine Binaries"
+description: >
+  Download the debug binaries (`geoengine-server`, `geoengine-cli`, `gdalsource-process`) that the `geoengine / build` job
+  built in this workflow run, and unpack them into `geoengine/target/debug/`, where cargo would have put them.
+runs:
+  using: "composite"
+  steps:
+    - name: Download binaries
+      uses: actions/download-artifact@v8
+      with:
+        name: geoengine-binaries-debug-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}
+    - name: Unpack binaries
+      shell: bash
+      run: |
+        mkdir -p geoengine/target/debug
+        tar -xf "$RUNNER_TEMP/geoengine-binaries.tar" -C geoengine/target/debug
+        rm "$RUNNER_TEMP/geoengine-binaries.tar"
+        ls -l geoengine/target/debug

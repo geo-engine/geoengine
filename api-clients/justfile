@@ -206,11 +206,13 @@ _update-config version:
 [group('test')]
 test: common::_clear test-python test-rust test-typescript
 
+# Test the Python API client. Pass a `python` interpreter (e.g. `python3.12`) to test a specific version in a fresh virtual environment.
 [group('test')]
 [working-directory("python")]
-test-python: common::_clear
+test-python python="": common::_clear
     #!/usr/bin/env bash
-    python3 -m venv .venv && source .venv/bin/activate || source .venv/bin/activate
+    {{ if python == "" { "" } else { "rm -rf .venv" } }}
+    {{ if python == "" { "python3" } else { python } }} -m venv .venv && source .venv/bin/activate || source .venv/bin/activate
 
     python -m pip install --upgrade pip
     if [ -f requirements.txt ]; then pip install -r requirements.txt; fi

@@ -15,6 +15,12 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+# Cancel superseded runs of the same pull request. Every other run gets its own group, since GitHub would otherwise
+# drop pending runs of the same group, e.g., on `main`.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   BENCH_UPLOAD_NAME: benchmark-results
