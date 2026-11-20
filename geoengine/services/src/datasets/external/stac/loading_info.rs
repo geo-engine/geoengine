@@ -31,9 +31,9 @@ use geoengine_operators::engine::{
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
-    GdalRetryOptions, LoadingInfoDetail, LoadingInfoPurpose, LoadingInfoResolution,
-    MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile,
+    GdalRetryOptions, LoadingInfoDetail, LoadingInfoResolution, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoPart, MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+    TileFile,
 };
 use itertools::Itertools;
 use stac::Item;
@@ -345,17 +345,31 @@ impl StacMultiBandMetaData {
         // no search and nothing written to the cache. It counts the items of all cells, also next
         // to the view, so few cells are searched instead, which is exact and warms the cache of the
         // map. Without aggregation the files are searched as well.
+        // What is cached already needs no request at all, not even the aggregation.
         if query.detail == LoadingInfoDetail::Availability
             && cell_bboxes.len() > self.query_cache.availability_search_cells()
-            && let Some(has_data) = self
-                .steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
-                .await
         {
-            return MultiBandGdalLoadingInfoPart::new(time_steps, Vec::new(), self.cache_ttl_secs)
+            let has_data = match self
+                .cached_steps_with_items(&time_steps, &cell_bboxes)
+                .await
+            {
+                Some(has_data) => Some(has_data),
+                None => {
+                    self.steps_with_items(&items_url, time_interval, &time_steps, &cell_bboxes)
+                        .await
+                }
+            };
+            if let Some(has_data) = has_data {
+                return MultiBandGdalLoadingInfoPart::new(
+                    time_steps,
+                    Vec::new(),
+                    self.cache_ttl_secs,
+                )
                 .with_availability(has_data);
+            }
         }
 
-        if query.purpose == LoadingInfoPurpose::Footprints {
+        if query.detail.is_for_footprints() {
             if one_step_request {
                 self.reject_too_many_searches(
                     self.missing_searches(&time_steps, &cell_bboxes),
@@ -536,6 +550,27 @@ impl StacMultiBandMetaData {
         }
         self.search_missing_steps(items_url, time_interval, cell_bboxes, for_display)
             .await
+    }
+
+    /// For each step whether any cell has an item in it, from the cache alone: `None` unless every
+    /// cell and step is cached, e.g. because the map has loaded the view.
+    async fn cached_steps_with_items(
+        &self,
+        time_steps: &[TimeInterval],
+        cell_bboxes: &[(GridIdx2D, BoundingBox2D)],
+    ) -> Option<Vec<bool>> {
+        let dataset_id = self.query_cache.dataset_id(self.dataset.clone());
+        let mut has_data = Vec::with_capacity(time_steps.len());
+        for step in time_steps {
+            let mut step_has_data = false;
+            for (cell, _) in cell_bboxes {
+                let files = self.query_cache.get(dataset_id, *cell, *step).await?;
+                // an item on the closed end of a search belongs to the next step
+                step_has_data |= files.iter().any(|file| file.file.time == *step);
+            }
+            has_data.push(step_has_data);
+        }
+        Some(has_data)
     }
 
     /// For each step whether any cell has an item in it, from one aggregation, if the server can
@@ -3005,6 +3040,19 @@ mod grid_request_tests {
         )
     }
 
+    /// The query of the coverage of a date or a window: the files, for their areas.
+    fn coverage_query(
+        bounds: SpatialPartition2D,
+        time: TimeInterval,
+    ) -> MultiBandGdalLoadingInfoQueryRectangle {
+        MultiBandGdalLoadingInfoQueryRectangle::new(
+            bounds,
+            time,
+            BandSelection::first(),
+            LoadingInfoDetail::Coverage,
+        )
+    }
+
     /// The query of a calendar: which steps have data, not the files.
     fn availability_query(
         bounds: SpatialPartition2D,
@@ -3510,7 +3558,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -3556,7 +3604,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
         assert_eq!(info.time_steps().len(), 2);
@@ -3587,7 +3635,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(query(bounds(0.1, 0.4), window(5, 7)).for_footprints())
+            .first_part(coverage_query(bounds(0.1, 0.4), window(5, 7)))
             .await
             .unwrap();
 
@@ -3637,7 +3685,7 @@ mod grid_request_tests {
         assert_eq!(info.tile_files(interval(6), tile(0.), 0).len(), 1);
 
         let info = meta
-            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -3645,7 +3693,7 @@ mod grid_request_tests {
 
         // a warm window costs no request, and neither does a step it filled
         let info = meta
-            .first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
@@ -3679,7 +3727,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(query(bounds(0.1, 0.4), interval(3)).for_footprints())
+            .first_part(coverage_query(bounds(0.1, 0.4), interval(3)))
             .await
             .unwrap();
         assert_file(&info, 0., "found");
@@ -3731,7 +3779,7 @@ mod grid_request_tests {
 
         // the window is answered chunk by chunk
         let parts = meta
-            .loading_info(query(bounds(0.1, 0.4), window).for_footprints())
+            .loading_info(coverage_query(bounds(0.1, 0.4), window))
             .await
             .unwrap()
             .try_collect::<Vec<_>>()
@@ -3789,7 +3837,7 @@ mod grid_request_tests {
         .unwrap();
 
         let mut parts = meta
-            .loading_info(query(bounds(0.1, 0.4), window).for_footprints())
+            .loading_info(coverage_query(bounds(0.1, 0.4), window))
             .await
             .unwrap();
 
@@ -3850,7 +3898,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
 
@@ -3911,7 +3959,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let info = meta
-            .first_part(availability_query(world, window(3, 5)).for_footprints())
+            .first_part(availability_query(world, window(3, 5)))
             .await
             .unwrap();
         assert_eq!(info.has_data(1), Some(false));
@@ -3945,7 +3993,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
 
@@ -3978,7 +4026,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
 
@@ -4020,7 +4068,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let info = meta
-            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
             .await
             .unwrap();
 
@@ -4028,6 +4076,52 @@ mod grid_request_tests {
         assert_eq!(info.has_data(0), None);
         assert_eq!(info.tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(starts.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn availability_of_a_cached_view_asks_nothing() {
+        // an aggregation request would be unexpected and fail
+        let server = Server::run();
+        let starts = new_starts();
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-03T00:00:00.000Z/2026-01-04T00:00:00.000Z",
+            vec![item("found", 0.)],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        expect_search_at(
+            &server,
+            "0.00000,0.00000,1.00000,1.00000",
+            "2026-01-04T00:00:00.000Z/2026-01-05T00:00:00.000Z",
+            vec![],
+            Duration::ZERO,
+            starts.clone(),
+        );
+        let provider = provider(
+            &server,
+            1024 * 1024,
+            StacGrid {
+                target_number_of_cells: 64_800,
+            },
+        );
+        let meta = metadata(&provider, 0).await;
+
+        // the map loads the two days
+        meta.first_part(query(bounds(0.1, 0.4), window(3, 5)))
+            .await
+            .unwrap();
+        assert_eq!(starts.lock().unwrap().len(), 2);
+
+        // the calendar of the same view is answered from what the map found
+        let info = meta
+            .first_part(availability_query(bounds(0.1, 0.4), window(3, 5)))
+            .await
+            .unwrap();
+        assert_eq!(info.has_data(0), Some(true));
+        assert_eq!(info.has_data(1), Some(false));
+        assert_eq!(starts.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]
@@ -4057,7 +4151,7 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         for _ in 0..2 {
-            meta.first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints())
+            meta.first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)))
                 .await
                 .unwrap();
         }
@@ -4087,8 +4181,8 @@ mod grid_request_tests {
         let meta = metadata(&provider, 0).await;
 
         let (first, second) = futures::join!(
-            meta.first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
-            meta.first_part(query(bounds(0.1, 0.4), window(3, 5)).for_footprints()),
+            meta.first_part(coverage_query(bounds(0.1, 0.4), window(3, 5))),
+            meta.first_part(coverage_query(bounds(0.1, 0.4), window(3, 5))),
         );
         assert_eq!(first.unwrap().tile_files(interval(3), tile(0.), 0).len(), 1);
         assert_eq!(
@@ -4113,7 +4207,7 @@ mod grid_request_tests {
         let world = SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap();
 
         let result = meta
-            .first_part(query(world, window(3, 5)).for_footprints().for_display())
+            .first_part(coverage_query(world, window(3, 5)).for_display())
             .await;
 
         assert!(matches!(
@@ -4139,11 +4233,7 @@ mod grid_request_tests {
 
         // one cell, but two steps: without a cache each step is a search of its own
         let result = meta
-            .first_part(
-                query(bounds(0.1, 0.4), window(3, 5))
-                    .for_footprints()
-                    .for_display(),
-            )
+            .first_part(coverage_query(bounds(0.1, 0.4), window(3, 5)).for_display())
             .await;
 
         assert!(matches!(
@@ -4179,7 +4269,7 @@ mod grid_request_tests {
 
         // one step over more cells than the limit, and none of them is cached
         let one_step = meta
-            .first_part(query(world, interval(3)).for_footprints().for_display())
+            .first_part(coverage_query(world, interval(3)).for_display())
             .await;
         assert!(matches!(
             one_step,
@@ -4191,12 +4281,12 @@ mod grid_request_tests {
 
         // now the step needs no search, so its footprints are answered
         let one_step = meta
-            .first_part(query(world, interval(3)).for_footprints().for_display())
+            .first_part(coverage_query(world, interval(3)).for_display())
             .await;
         assert!(one_step.is_ok(), "{one_step:?}");
 
         let window = meta
-            .first_part(query(world, window(3, 5)).for_footprints().for_display())
+            .first_part(coverage_query(world, window(3, 5)).for_display())
             .await;
         assert!(matches!(
             window,
@@ -4207,11 +4297,10 @@ mod grid_request_tests {
         // still a window.
         let across_chunks = meta
             .first_part(
-                query(
+                coverage_query(
                     world,
                     TimeInterval::new(interval(6).start(), interval(7).end()).unwrap(),
                 )
-                .for_footprints()
                 .for_display(),
             )
             .await;
@@ -4242,7 +4331,7 @@ mod grid_request_tests {
 
         // more cells than `max_footprint_searches` (50 in tests), which only bounds footprints to show
         let loading_info = meta
-            .first_part(query(world, window(3, 5)).for_footprints())
+            .first_part(coverage_query(world, window(3, 5)))
             .await
             .unwrap();
 

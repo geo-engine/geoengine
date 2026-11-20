@@ -177,6 +177,17 @@ impl StacQueryCache {
         self.cache.contains_key(&Key::new(dataset_id, cell, time))
     }
 
+    /// The files of a completed search for this cell and time step, if it is cached. Makes no
+    /// request.
+    pub(crate) async fn get(
+        &self,
+        dataset_id: u64,
+        cell: GridIdx2D,
+        time: TimeInterval,
+    ) -> Option<Arc<Vec<StacTileFile>>> {
+        self.cache.get(&Key::new(dataset_id, cell, time)).await
+    }
+
     /// Removes one entry, e.g. the marker of a finished window search.
     pub(crate) async fn remove(&self, dataset_id: u64, cell: GridIdx2D, time: TimeInterval) {
         self.cache
