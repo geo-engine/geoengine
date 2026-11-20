@@ -199,6 +199,15 @@ describe('OGC map tile minimum matrix index', () => {
         expect(tileRequests).toHaveLength(0);
     });
 
+    it('is loadable some matrix levels before the zoom limit when asked for', async () => {
+        fixture.componentRef.setInput('tilesLoadableLevelsOut', 1);
+        await setResolution(1999);
+        expect(zoomRequired).toHaveBeenLastCalledWith(true);
+        expect(tilesLoadable).toHaveBeenLastCalledWith(true);
+        await setResolution(2000);
+        expect(tilesLoadable).toHaveBeenLastCalledWith(false);
+    });
+
     it('uses the source matrix resolution as the exclusive cutoff and excludes coarser source tiles', async () => {
         await setResolution(1000.01);
         expect(zoomRequired).toHaveBeenLastCalledWith(true);

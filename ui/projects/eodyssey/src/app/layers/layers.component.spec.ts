@@ -387,7 +387,7 @@ describe('LayersComponent', () => {
 
             footprints().overlayBlocked.set(true);
             fixture.detectChanges();
-            expect(statusLine()).toBe('Zoom in to load this layer.');
+            expect(statusLine()).toBe('Zoom in to see where the scenes of this date are.');
         });
 
         it('shows the dates around the selected one as bars that select their date', async () => {

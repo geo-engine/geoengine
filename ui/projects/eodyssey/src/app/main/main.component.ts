@@ -98,7 +98,7 @@ export class MainComponent {
     readonly mapTileLayer = computed(() => this.eodysseyLayerService.mapTileLayer());
     /**
      * The layer on the map, or the selected one hidden while nothing or the data availability is shown. A hidden layer loads no tiles, but tells
-     * whether its tiles would load at this zoom, so the coverage of a date is not asked for where they would not.
+     * how far the zoom is from loading them, so the coverage of a date is not asked for far zoomed out.
      */
     readonly tileLayer = computed(() => {
         const onMap = this.mapTileLayer();
@@ -114,8 +114,15 @@ export class MainComponent {
         );
     });
     readonly zoomRequired = signal(false);
+    /**
+     * The data availability of a date is shown this many matrix levels before the tiles load.
+     * shortcut: estimated, not measured: one level out is about 16 to 77 catalog searches for a cold view, and the server refuses above its
+     * limit. Raise it only with a measurement of the searches per level.
+     */
+    readonly AVAILABILITY_LEVELS_OUT = 1;
+    /** Whether the map is zoomed in far enough for the data availability, which is a bit before the tiles load. */
     readonly tilesLoadable = signal(false);
-    /** One prompt on the map for the imagery and the data availability, which have the same zoom limit. */
+    /** One prompt on the map for the imagery and the data availability. */
     readonly zoomPrompt = computed(() => {
         if (this.mapTileLayer() && this.zoomRequired()) return 'Zoom in further to load the selected layer.';
         const footprints = this.footprintsService;
