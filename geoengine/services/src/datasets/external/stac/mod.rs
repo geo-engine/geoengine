@@ -22,7 +22,7 @@ mod loading_info;
 mod storage;
 use cache::StacQueryCache;
 pub(crate) use coordinator::StacClient;
-pub use coordinator::{RequestLane, StacRequestRegistry};
+pub use coordinator::StacRequestRegistry;
 pub use grid::{ProjectedStacGrid, StacGrid, StacGridCell, StacGridCells};
 pub use loading_info::{StacMultiBandMetaData, StacTileFile};
 

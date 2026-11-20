@@ -51,74 +51,6 @@ const MAX_PENDING_ATTEMPTS: usize = 256;
 /// Bound retained quota identities per application or harvesting operation.
 const MAX_COORDINATORS: usize = 1024;
 
-/// The queue a request of a STAC server waits in. While both lanes have requests waiting, they take
-/// turns by `footprints_share`, so a burst in one lane cannot hold up the other. A lane with nothing
-/// waiting leaves the whole limit of the server to the other.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum RequestLane {
-    /// Requests of raster queries, such as map tiles.
-    #[default]
-    Data,
-    /// Searches that tell where data exists, such as the calendar's.
-    Footprints,
-}
-
-/// Admissions of each lane while both lanes have requests waiting.
-#[derive(Debug, Default)]
-struct LaneTurns {
-    data: u32,
-    footprints: u32,
-    /// Whether both lanes waited when the last lane was chosen, so its admission counts.
-    both_waiting: bool,
-}
-
-impl LaneTurns {
-    /// The lane whose request is admitted next. While both wait, the footprint lane gets
-    /// `footprints_share` of the admissions.
-    fn next(
-        &mut self,
-        data_waiting: bool,
-        footprints_waiting: bool,
-        footprints_share: f64,
-    ) -> Option<RequestLane> {
-        self.both_waiting = data_waiting && footprints_waiting;
-        match (data_waiting, footprints_waiting) {
-            (true, true) => {
-                let admitted = f64::from(self.data) + f64::from(self.footprints);
-                let footprints_turn =
-                    f64::from(self.footprints) + 1. <= footprints_share * (admitted + 1.);
-                Some(if footprints_turn {
-                    RequestLane::Footprints
-                } else {
-                    RequestLane::Data
-                })
-            }
-            // the turns count only while both lanes wait
-            (true, false) => {
-                *self = Self::default();
-                Some(RequestLane::Data)
-            }
-            (false, true) => {
-                *self = Self::default();
-                Some(RequestLane::Footprints)
-            }
-            (false, false) => {
-                *self = Self::default();
-                None
-            }
-        }
-    }
-
-    fn admitted(&mut self, lane: RequestLane) {
-        if !self.both_waiting {
-            return;
-        }
-        match lane {
-            RequestLane::Data => self.data = self.data.saturating_add(1),
-            RequestLane::Footprints => self.footprints = self.footprints.saturating_add(1),
-        }
-    }
-}
 /// Keep recent starts and idle coordinators long enough to learn further policies
 /// and preserve quota accounting when providers are reconstructed.
 const MIN_RETENTION: Duration = Duration::from_mins(5);
@@ -404,7 +336,6 @@ struct AttemptJob {
     client: reqwest::Client,
     request: reqwest::Request,
     authentication: Option<StacAuthentication>,
-    lane: RequestLane,
     reply: oneshot::Sender<Result<AttemptReply, StacClientError>>,
     permit: OwnedSemaphorePermit,
 }
@@ -487,13 +418,9 @@ impl Default for CoordinatorMap {
 pub struct StacRequestRegistry {
     coordinators: Arc<CoordinatorMap>,
     /// The settings of `[stac_cache]`, which the contexts read. Without them (tests, harvester)
-    /// the registry uses [`DEFAULT_FOOTPRINTS_SHARE`] and providers get a standalone cache.
+    /// providers get a standalone cache.
     config: Option<crate::config::StacCache>,
 }
-
-/// The footprint lane's share of a registry that is not configured, e.g. in tests and the harvester,
-/// which send no footprint searches.
-const DEFAULT_FOOTPRINTS_SHARE: f64 = 0.5;
 
 impl StacRequestRegistry {
     /// Create an empty request registry.
@@ -573,8 +500,6 @@ impl StacRequestRegistry {
                 channels.cancellations.clone(),
                 Arc::downgrade(&channels),
                 dispatch,
-                self.config
-                    .map_or(DEFAULT_FOOTPRINTS_SHARE, |config| config.footprints_share),
             ));
         }
         Ok(channels)
@@ -755,17 +680,6 @@ impl StacClient {
         request: reqwest::RequestBuilder,
         policy: &RetryPolicy,
     ) -> Result<T, StacClientError> {
-        self.execute_json_in_lane(request, policy, RequestLane::Data)
-            .await
-    }
-
-    /// Like [`Self::execute_json`], queued in the given lane.
-    pub(crate) async fn execute_json_in_lane<T: DeserializeOwned>(
-        &self,
-        request: reqwest::RequestBuilder,
-        policy: &RetryPolicy,
-        lane: RequestLane,
-    ) -> Result<T, StacClientError> {
         let request = request.build()?;
         let channels = self
             .request_registry
@@ -773,7 +687,7 @@ impl StacClient {
         let operation_name = format!("Fetch STAC items from {}", request.url());
         retry_http_with_action(
             || async {
-                let reply = match self.execute_attempt(&channels, &request, lane).await {
+                let reply = match self.execute_attempt(&channels, &request).await {
                     Ok(reply) => reply,
                     Err(error) => return (Err(error), RetryAction::Abort),
                 };
@@ -797,7 +711,6 @@ impl StacClient {
         &self,
         channels: &ActorChannels,
         request: &reqwest::Request,
-        lane: RequestLane,
     ) -> Result<AttemptReply, StacClientError> {
         let request_copy = request
             .try_clone()
@@ -821,7 +734,6 @@ impl StacClient {
                 .as_ref()
                 .filter(|_| self.origin.origin() == request.url().origin())
                 .cloned(),
-            lane,
             reply,
             permit,
         };
@@ -843,7 +755,6 @@ async fn run_attempt(job: AttemptJob, completed_before: usize) -> AttemptComplet
         client,
         request,
         authentication,
-        lane: _,
         mut reply,
         permit,
     } = job;
@@ -871,7 +782,6 @@ async fn run_actor<F>(
     cancellations: Arc<Notify>,
     coordinator: Weak<ActorChannels>,
     dispatch: F,
-    footprints_share: f64,
 ) where
     F: Fn(AttemptJob, usize) -> RunningAttempt + Send + 'static,
 {
@@ -885,9 +795,7 @@ async fn run_actor<F>(
         cooldown_until: None,
         last_activity: now,
     };
-    let mut data: VecDeque<AttemptJob> = VecDeque::new();
-    let mut footprints: VecDeque<AttemptJob> = VecDeque::new();
-    let mut turns = LaneTurns::default();
+    let mut queued: VecDeque<AttemptJob> = VecDeque::new();
     let mut running: FuturesUnordered<RunningAttempt> = FuturesUnordered::new();
     let mut jobs_open = true;
 
@@ -897,29 +805,22 @@ async fn run_actor<F>(
         }
 
         let mut deadline = None;
-        if let Some(lane) = turns.next(!data.is_empty(), !footprints.is_empty(), footprints_share) {
-            let queue = match lane {
-                RequestLane::Data => &mut data,
-                RequestLane::Footprints => &mut footprints,
-            };
-            let job = queue.pop_front().expect("the lane has a waiting job");
+        if let Some(job) = queued.pop_front() {
             if job.reply.is_closed() {
                 continue;
             } else if let Some(until) = state.reserve(Instant::now()) {
                 deadline = Some(until);
-                queue.push_front(job);
+                queued.push_front(job);
             } else {
-                turns.admitted(lane);
                 running.push(dispatch(job, state.completed_requests));
                 continue;
             }
         }
 
-        let queued_empty = data.is_empty() && footprints.is_empty();
-        if !jobs_open && queued_empty && running.is_empty() {
+        if !jobs_open && queued.is_empty() && running.is_empty() {
             return;
         }
-        let idle_deadline = (queued_empty && running.is_empty()).then(|| {
+        let idle_deadline = (queued.is_empty() && running.is_empty()).then(|| {
             let now = Instant::now();
             let deadline = state.retain_until();
             if deadline <= now && coordinator.strong_count() > 1 {
@@ -935,20 +836,14 @@ async fn run_actor<F>(
                     complete_attempt(&mut state, completion);
                 }
             },
-            () = cancellations.notified() => {
-                data.retain(|job| !job.reply.is_closed());
-                footprints.retain(|job| !job.reply.is_closed());
-            },
+            () = cancellations.notified() => queued.retain(|job| !job.reply.is_closed()),
             job = receiver.recv(), if jobs_open => match job {
-                Some(job) => match job.lane {
-                    RequestLane::Data => data.push_back(job),
-                    RequestLane::Footprints => footprints.push_back(job),
-                },
+                Some(job) => queued.push_back(job),
                 None => jobs_open = false,
             },
             () = async { if let Some(deadline) = deadline { tokio::time::sleep_until(deadline.into()).await } }, if deadline.is_some() => {},
             () = async { if let Some(deadline) = idle_deadline { tokio::time::sleep_until(deadline.into()).await } }, if idle_deadline.is_some() => {
-                if state.retain_until() <= Instant::now() && data.is_empty() && footprints.is_empty() && running.is_empty()
+                if state.retain_until() <= Instant::now() && queued.is_empty() && running.is_empty()
                     && ActorChannels::try_retire(&coordinator) {
                     return;
                 }
